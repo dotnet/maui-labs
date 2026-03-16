@@ -60,9 +60,8 @@ parameters:
 - name: WindowsPool
   type: object
   default:
-    name: NetCore1ESPool-Internal
-    demands:
-      - ImageOverride -equals 1es-windows-2022
+    name: Azure Pipelines
+    vmImage: windows-latest
     os: windows
 
 - name: MacOSPool
