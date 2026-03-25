@@ -53,8 +53,10 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	public static void MapSelectedIndex(PickerHandler handler, IPicker picker)
 	{
-		if (picker.SelectedIndex >= 0)
-			handler.PlatformView?.SetSelected((uint)picker.SelectedIndex);
+		handler.PlatformView?.SetSelected(
+			picker.SelectedIndex >= 0
+				? (uint)picker.SelectedIndex
+				: uint.MaxValue);
 	}
 
 	public static void MapItems(PickerHandler handler, IPicker picker)

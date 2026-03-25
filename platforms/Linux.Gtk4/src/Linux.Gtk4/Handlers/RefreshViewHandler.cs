@@ -58,7 +58,8 @@ public class RefreshViewHandler : GtkViewHandler<IView, Gtk.Box>
 		base.PlatformArrange(rect);
 		if (_contentWidget != null)
 		{
-			_contentWidget.SetSizeRequest((int)rect.Width, (int)rect.Height - 40);
+			var contentHeight = Math.Max(0, (int)rect.Height - 40);
+			_contentWidget.SetSizeRequest((int)rect.Width, contentHeight);
 		}
 	}
 

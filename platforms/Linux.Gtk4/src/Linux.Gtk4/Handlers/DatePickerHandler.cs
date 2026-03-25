@@ -98,9 +98,8 @@ public class DatePickerHandler : GtkViewHandler<IDatePicker, Gtk.Box>
 			if (VirtualView != null)
 			{
 				var year = calendar.GetYear();
-				var month = calendar.GetMonth();
-				if (month < 1 || month > 12)
-					month += 1;
+				// Gtk.Calendar.GetMonth() returns 0-based (0–11)
+				var month = calendar.GetMonth() + 1;
 				month = Math.Clamp(month, 1, 12);
 
 				year = Math.Clamp(year, 1, 9999);

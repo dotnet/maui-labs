@@ -67,9 +67,9 @@ internal class LinuxScreenshotResult : IScreenshotResult
 		return Task.FromResult<Stream>(File.OpenRead(_filePath));
 	}
 
-	public Task CopyToAsync(Stream destination, ScreenshotFormat format = ScreenshotFormat.Png, int quality = 100)
+	public async Task CopyToAsync(Stream destination, ScreenshotFormat format = ScreenshotFormat.Png, int quality = 100)
 	{
 		using var source = File.OpenRead(_filePath);
-		return source.CopyToAsync(destination);
+		await source.CopyToAsync(destination);
 	}
 }

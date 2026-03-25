@@ -35,6 +35,8 @@ internal class CairoStringSizeService : IStringSizeService
 
 		layout.GetPixelSize(out int textW, out int textH);
 
+		fontDesc.Dispose();
+		layout.Dispose();
 		cr.Dispose();
 		surface.Dispose();
 

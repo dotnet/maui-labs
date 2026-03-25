@@ -39,16 +39,18 @@ public class LinuxTextToSpeech : ITextToSpeech
 			("espeak", BuildEspeakArgs(text, options)),
 		};
 
-		foreach (var (cmd, args) in commands)
+		foreach (var (cmd, argList) in commands)
 		{
 			try
 			{
-				var psi = new ProcessStartInfo(cmd, args)
+				var psi = new ProcessStartInfo(cmd)
 				{
 					UseShellExecute = false,
 					RedirectStandardOutput = true,
 					RedirectStandardError = true
 				};
+				foreach (var arg in argList)
+					psi.ArgumentList.Add(arg);
 				using var process = Process.Start(psi);
 				if (process is null) continue;
 				await process.WaitForExitAsync(cancelToken);
@@ -61,23 +63,35 @@ public class LinuxTextToSpeech : ITextToSpeech
 			"Text-to-speech requires speech-dispatcher (spd-say) or espeak-ng to be installed.");
 	}
 
-	private static string BuildSpdSayArgs(string text, SpeechOptions? options)
+	private static string[] BuildSpdSayArgs(string text, SpeechOptions? options)
 	{
-		var args = $"\"{text.Replace("\"", "\\\"")}\"";
+		var args = new List<string> { text };
 		if (options?.Pitch.HasValue == true)
-			args += $" -p {((int)((options.Pitch.Value - 1.0f) * 100)).ToString(CultureInfo.InvariantCulture)}";
+		{
+			args.Add("-p");
+			args.Add(((int)((options.Pitch.Value - 1.0f) * 100)).ToString(CultureInfo.InvariantCulture));
+		}
 		if (options?.Volume.HasValue == true)
-			args += $" -i {((int)(options.Volume.Value * 100)).ToString(CultureInfo.InvariantCulture)}";
-		return args;
+		{
+			args.Add("-i");
+			args.Add(((int)(options.Volume.Value * 100)).ToString(CultureInfo.InvariantCulture));
+		}
+		return args.ToArray();
 	}
 
-	private static string BuildEspeakArgs(string text, SpeechOptions? options)
+	private static string[] BuildEspeakArgs(string text, SpeechOptions? options)
 	{
-		var args = $"\"{text.Replace("\"", "\\\"")}\"";
+		var args = new List<string> { text };
 		if (options?.Pitch.HasValue == true)
-			args += $" -p {((int)(options.Pitch.Value * 50)).ToString(CultureInfo.InvariantCulture)}";
+		{
+			args.Add("-p");
+			args.Add(((int)(options.Pitch.Value * 50)).ToString(CultureInfo.InvariantCulture));
+		}
 		if (options?.Volume.HasValue == true)
-			args += $" -a {((int)(options.Volume.Value * 200)).ToString(CultureInfo.InvariantCulture)}";
-		return args;
+		{
+			args.Add("-a");
+			args.Add(((int)(options.Volume.Value * 200)).ToString(CultureInfo.InvariantCulture));
+		}
+		return args.ToArray();
 	}
 }

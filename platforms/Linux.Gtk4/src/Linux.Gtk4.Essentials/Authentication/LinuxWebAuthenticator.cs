@@ -90,6 +90,10 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 			{
 				throw new OperationCanceledException(cancellationToken);
 			}
+			catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
+			{
+				throw new OperationCanceledException(cancellationToken);
+			}
 		}
 	}
 

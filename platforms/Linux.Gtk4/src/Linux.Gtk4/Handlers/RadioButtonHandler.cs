@@ -46,6 +46,11 @@ public class RadioButtonHandler : GtkViewHandler<IRadioButton, Gtk.CheckButton>
 		if (VirtualView is not Microsoft.Maui.Controls.RadioButton rb || string.IsNullOrEmpty(rb.GroupName))
 			return;
 
+		// Prune dead weak references
+		var deadKeys = _groupLeaders.Where(kvp => !kvp.Value.TryGetTarget(out _)).Select(kvp => kvp.Key).ToList();
+		foreach (var key in deadKeys)
+			_groupLeaders.Remove(key);
+
 		if (_groupLeaders.TryGetValue(rb.GroupName, out var leaderRef) &&
 			leaderRef.TryGetTarget(out var leader) && leader != PlatformView)
 		{
