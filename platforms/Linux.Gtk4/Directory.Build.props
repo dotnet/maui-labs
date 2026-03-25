@@ -18,7 +18,7 @@
   <PropertyGroup>
     <VersionPrefix>0.6.0</VersionPrefix>
     <Version>$(VersionPrefix)</Version>
-    <Authors>Microsoft.Maui.Platforms.Linux.Gtk4 Contributors</Authors>
+    <Authors>Microsoft</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Linux.Gtk4</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
