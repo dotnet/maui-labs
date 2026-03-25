@@ -165,6 +165,16 @@ internal static class LibSecretInterop
 	}
 
 	/// <summary>
+	/// Creates an empty GHashTable (no key-value entries).
+	/// When used with SecretPasswordClearVSync, this clears all items matching the schema.
+	/// Caller must free with <see cref="GHashTableDestroy"/>.
+	/// </summary>
+	public static IntPtr CreateEmptyAttributesTable()
+	{
+		return GHashTableNew(s_strHashPtr, s_strEqualPtr);
+	}
+
+	/// <summary>
 	/// Returns true if libsecret-1.so.0 can be loaded on this system.
 	/// </summary>
 	public static bool IsAvailable()

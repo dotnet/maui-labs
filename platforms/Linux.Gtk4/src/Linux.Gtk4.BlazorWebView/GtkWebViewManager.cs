@@ -96,10 +96,10 @@ public class GtkWebViewManager : WebViewManager
 		string messageJsStringLiteral = JavaScriptEncoder.Default.Encode(message);
 		string script = $"__dispatchMessageCallback(\"{messageJsStringLiteral}\")";
 
-		while (!_channel.Writer.TryWrite(script))
-		{
-			Thread.Sleep(200);
-		}
+		// TryWrite only returns false on an unbounded channel when the writer
+		// has been completed (disposal in progress). Drop the message in that case
+		// rather than retrying indefinitely.
+		_channel.Writer.TryWrite(script);
 	}
 
 	private async Task SendMessagePump()

@@ -16,9 +16,32 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		var authUrl = webAuthenticatorOptions.Url
 			?? throw new ArgumentException("Url is required.");
 
-		// Start a local HTTP listener to receive the callback
-		var port = GetAvailablePort();
-		var redirectUri = new Uri($"http://127.0.0.1:{port}/");
+		// Start a local HTTP listener to receive the callback.
+		// Retry with new ports to avoid TOCTOU races between port discovery and bind.
+		const int maxRetries = 5;
+		HttpListener? listener = null;
+		Uri? redirectUri = null;
+
+		for (int attempt = 0; attempt < maxRetries; attempt++)
+		{
+			var port = GetAvailablePort();
+			redirectUri = new Uri($"http://127.0.0.1:{port}/");
+			listener = new HttpListener();
+			listener.Prefixes.Add(redirectUri.ToString());
+			try
+			{
+				listener.Start();
+				break;
+			}
+			catch (HttpListenerException) when (attempt < maxRetries - 1)
+			{
+				listener.Close();
+				listener = null;
+			}
+		}
+
+		if (listener is null || redirectUri is null)
+			throw new InvalidOperationException("Failed to bind a loopback HTTP listener after multiple attempts.");
 
 		// Replace the callback in the auth URL
 		var authUriBuilder = new UriBuilder(authUrl);
@@ -26,48 +49,47 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		query["redirect_uri"] = redirectUri.ToString();
 		authUriBuilder.Query = query.ToString();
 
-		using var listener = new HttpListener();
-		listener.Prefixes.Add(redirectUri.ToString());
-		listener.Start();
-
-		// Open browser
-		Process.Start(new ProcessStartInfo("xdg-open", authUriBuilder.Uri.AbsoluteUri)
-			{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
-
-		// Wait for callback
-		var contextTask = listener.GetContextAsync();
-		using var reg = cancellationToken.Register(() => listener.Stop());
-
-		try
+		using (listener)
 		{
-			var context = await contextTask;
-			var responseUrl = context.Request.Url;
+			// Open browser
+			Process.Start(new ProcessStartInfo("xdg-open", authUriBuilder.Uri.AbsoluteUri)
+				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
 
-			// Send a simple response to the browser
-			var responseBytes = System.Text.Encoding.UTF8.GetBytes(
-				"<html><body><h1>Authentication complete</h1><p>You can close this window.</p></body></html>");
-			context.Response.ContentType = "text/html";
-			context.Response.ContentLength64 = responseBytes.Length;
-			await context.Response.OutputStream.WriteAsync(responseBytes, cancellationToken);
-			context.Response.Close();
+			// Wait for callback
+			var contextTask = listener.GetContextAsync();
+			using var reg = cancellationToken.Register(() => listener.Stop());
 
-			if (responseUrl is null)
-				throw new InvalidOperationException("No response URL received.");
-
-			// Parse the query/fragment for tokens
-			var responseQuery = System.Web.HttpUtility.ParseQueryString(responseUrl.Query);
-			var properties = new Dictionary<string, string>();
-			foreach (string key in responseQuery.AllKeys)
+			try
 			{
-				if (key is not null)
-					properties[key] = responseQuery[key] ?? "";
-			}
+				var context = await contextTask;
+				var responseUrl = context.Request.Url;
 
-			return new WebAuthenticatorResult(properties);
-		}
-		catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
-		{
-			throw new OperationCanceledException(cancellationToken);
+				// Send a simple response to the browser
+				var responseBytes = System.Text.Encoding.UTF8.GetBytes(
+					"<html><body><h1>Authentication complete</h1><p>You can close this window.</p></body></html>");
+				context.Response.ContentType = "text/html";
+				context.Response.ContentLength64 = responseBytes.Length;
+				await context.Response.OutputStream.WriteAsync(responseBytes, cancellationToken);
+				context.Response.Close();
+
+				if (responseUrl is null)
+					throw new InvalidOperationException("No response URL received.");
+
+				// Parse the query/fragment for tokens
+				var responseQuery = System.Web.HttpUtility.ParseQueryString(responseUrl.Query);
+				var properties = new Dictionary<string, string>();
+				foreach (string key in responseQuery.AllKeys)
+				{
+					if (key is not null)
+						properties[key] = responseQuery[key] ?? "";
+				}
+
+				return new WebAuthenticatorResult(properties);
+			}
+			catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+			{
+				throw new OperationCanceledException(cancellationToken);
+			}
 		}
 	}
 

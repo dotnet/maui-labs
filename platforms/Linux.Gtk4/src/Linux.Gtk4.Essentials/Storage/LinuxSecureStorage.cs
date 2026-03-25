@@ -93,11 +93,10 @@ public class LinuxSecureStorage : ISecureStorage
 		{
 			if (TryEnsureLibSecret())
 			{
-				// libsecret has no "remove all" — fall through to file cleanup,
-				// but also note that individual items remain in the keyring.
-				// Users who stored via libsecret should remove keys individually.
+				LibSecretClearAll();
 			}
 
+			// Always clean up file-based fallback artifacts
 			if (File.Exists(DataFilePath))
 				File.Delete(DataFilePath);
 			if (File.Exists(KeyFilePath))
@@ -227,6 +226,22 @@ public class LinuxSecureStorage : ISecureStorage
 		finally
 		{
 			LibSecretInterop.FreeAttributesTable(ht, kPtr, vPtr);
+		}
+	}
+
+	private void LibSecretClearAll()
+	{
+		var ht = LibSecretInterop.CreateEmptyAttributesTable();
+		try
+		{
+			LibSecretInterop.SecretPasswordClearVSync(
+				ref _schema, ht, IntPtr.Zero, out var err);
+			// Ignore errors on bulk clear — best-effort removal
+			LibSecretInterop.ConsumeError(err);
+		}
+		finally
+		{
+			LibSecretInterop.FreeAttributesTable(ht);
 		}
 	}
 

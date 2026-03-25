@@ -49,9 +49,6 @@ public sealed class GtkBlazorWebView : IDisposable
 	private string? _hostPage;
 	private static bool _moduleInitialized;
 
-	[System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
-	private static extern int setenv(string name, string value, int overwrite);
-
 	/// <summary>
 	/// Ensures WebKitGTK native libraries are properly resolved and the sandbox
 	/// is disabled for environments (VMs, containers) where bubblewrap fails.
@@ -62,9 +59,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		if (_moduleInitialized) return;
 		_moduleInitialized = true;
 
-		// Disable WebKit's bubblewrap sandbox — required in VMs/containers
-		// where user namespace cloning is restricted
-		setenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1", 0);
+		WebKitSandboxHelper.ConfigureSandbox();
 
 		// Register GirCore DLL import resolver so "WebKit" maps to libwebkitgtk-6.0.so
 		WebKit.Module.Initialize();

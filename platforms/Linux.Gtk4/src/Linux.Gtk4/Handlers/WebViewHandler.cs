@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.Maui;
 using WebKit;
 
@@ -9,9 +8,6 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 	static bool _moduleInitialized;
 	WebNavigationEvent _currentNavigationEvent = WebNavigationEvent.NewPage;
 	string _lastUrl = "about:blank";
-
-	[DllImport("libc", SetLastError = true)]
-	static extern int setenv(string name, string value, int overwrite);
 
 	public static new IPropertyMapper<IWebView, WebViewHandler> Mapper =
 		new PropertyMapper<IWebView, WebViewHandler>(ViewMapper)
@@ -213,7 +209,7 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 			return;
 
 		_moduleInitialized = true;
-		setenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1", 0);
+		WebKitSandboxHelper.ConfigureSandbox();
 		WebKit.Module.Initialize();
 	}
 }

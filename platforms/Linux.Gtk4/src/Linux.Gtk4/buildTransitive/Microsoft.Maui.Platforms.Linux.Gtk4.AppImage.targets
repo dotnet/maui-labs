@@ -33,6 +33,11 @@
 
     <!-- appimagetool path -->
     <AppImageToolPath Condition="'$(AppImageToolPath)' == ''">$(_AppImageToolCacheDir)/appimagetool-$(AppImageArch).AppImage</AppImageToolPath>
+    <!-- appimagetool version: pin to a specific release tag for reproducible builds.
+         When using 'continuous', set AppImageToolSha256 to verify integrity. -->
+    <AppImageToolVersion Condition="'$(AppImageToolVersion)' == ''">continuous</AppImageToolVersion>
+    <!-- Optional SHA-256 checksum for appimagetool verification after download -->
+    <AppImageToolSha256 Condition="'$(AppImageToolSha256)' == ''"></AppImageToolSha256>
 
     <!-- Output filename -->
     <AppImageFileName Condition="'$(AppImageFileName)' == ''">$(ApplicationTitle)-$(ApplicationDisplayVersion)-$(AppImageArch).AppImage</AppImageFileName>
@@ -327,15 +332,25 @@ _APPRUN_EOF_" />
           BeforeTargets="CreateAppImage">
 
     <PropertyGroup>
-      <_AppImageToolUrl>https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$(AppImageArch).AppImage</_AppImageToolUrl>
+      <_AppImageToolUrl>https://github.com/AppImage/appimagetool/releases/download/$(AppImageToolVersion)/appimagetool-$(AppImageArch).AppImage</_AppImageToolUrl>
     </PropertyGroup>
 
     <MakeDir Directories="$(_AppImageToolCacheDir)" />
 
-    <Message Importance="high" Text="AppImage: Downloading appimagetool for $(AppImageArch)..." />
+    <Message Importance="high" Text="AppImage: Downloading appimagetool $(AppImageToolVersion) for $(AppImageArch)..." />
 
     <Exec Command="curl -fSL --retry 3 -o &quot;$(AppImageToolPath)&quot; &quot;$(_AppImageToolUrl)&quot;" />
     <Exec Command="chmod +x &quot;$(AppImageToolPath)&quot;" />
+
+    <!-- Verify SHA-256 checksum when provided -->
+    <Exec Condition="'$(AppImageToolSha256)' != ''"
+          Command="echo &quot;$(AppImageToolSha256)  $(AppImageToolPath)&quot; | sha256sum --check --strict"
+          IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ExitCode" PropertyName="_AppImageToolChecksumExitCode" />
+    </Exec>
+    <Delete Condition="'$(AppImageToolSha256)' != '' and '$(_AppImageToolChecksumExitCode)' != '0'" Files="$(AppImageToolPath)" />
+    <Error Condition="'$(AppImageToolSha256)' != '' and '$(_AppImageToolChecksumExitCode)' != '0'"
+           Text="AppImage: SHA-256 checksum verification failed for appimagetool. Expected: $(AppImageToolSha256). The downloaded file has been deleted. Verify the checksum or update the AppImageToolSha256 property." />
 
     <Message Importance="high" Text="AppImage: appimagetool cached at $(AppImageToolPath)" />
   </Target>
