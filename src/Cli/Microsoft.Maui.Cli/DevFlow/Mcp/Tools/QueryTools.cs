@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.DevFlow.Driver;
@@ -9,13 +8,6 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class QueryTools
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
-    };
-
     [McpServerTool(Name = "maui_query"), Description("Query visual tree elements by type, AutomationId, or text content. Returns matching elements with their IDs and properties.")]
     public static async Task<string> Query(
         McpAgentSession session,
@@ -32,7 +24,7 @@ public sealed class QueryTools
         if (results == null || results.Count == 0)
             return "No matching elements found.";
 
-        return JsonSerializer.Serialize(results, JsonOptions);
+        return CliJson.SerializeUntyped(results, indented: false);
     }
 
     [McpServerTool(Name = "maui_query_css"), Description("Query Blazor WebView elements using CSS selectors. Returns matching elements.")]
@@ -46,7 +38,7 @@ public sealed class QueryTools
         if (results == null || results.Count == 0)
             return $"No elements matching selector '{selector}'.";
 
-        return JsonSerializer.Serialize(results, JsonOptions);
+        return CliJson.SerializeUntyped(results, indented: false);
     }
 
     [McpServerTool(Name = "maui_element"), Description("Get detailed info about a single element by its visual tree ID.")]
@@ -60,7 +52,7 @@ public sealed class QueryTools
         if (element == null)
             return $"Element '{elementId}' not found.";
 
-        return JsonSerializer.Serialize(element, JsonOptions);
+        return CliJson.SerializeUntyped(element, indented: false);
     }
 
     [McpServerTool(Name = "maui_hittest"), Description("Find which element is at specific screen coordinates (hit test).")]

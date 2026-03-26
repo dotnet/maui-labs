@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 
@@ -32,20 +33,19 @@ public sealed class LogsTool
 		if (!levelOrder.TryGetValue(minLevel, out var minOrd))
 			return response;
 
-		var entries = JsonSerializer.Deserialize<JsonElement>(response);
+		var entries = CliJson.ParseElement(response);
 		if (entries.ValueKind != JsonValueKind.Array)
 			return response;
 
-		var filtered = entries.EnumerateArray()
-			.Where(e =>
-			{
-				var level = e.TryGetProperty("l", out var l) ? l.GetString() :
-				            e.TryGetProperty("level", out var lv) ? lv.GetString() : null;
-				if (level == null) return true;
-				return levelOrder.TryGetValue(level, out var ord) && ord >= minOrd;
-			})
-			.ToList();
+		var filtered = new JsonArray();
+		foreach (var entry in entries.EnumerateArray())
+		{
+			var level = entry.TryGetProperty("l", out var l) ? l.GetString() :
+			            entry.TryGetProperty("level", out var lv) ? lv.GetString() : null;
+			if (level == null || (levelOrder.TryGetValue(level, out var ord) && ord >= minOrd))
+				filtered.Add(JsonNode.Parse(entry.GetRawText()));
+		}
 
-		return JsonSerializer.Serialize(filtered);
+		return CliJson.SerializeUntyped(filtered, indented: false);
 	}
 }

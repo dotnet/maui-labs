@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using System.Text.Json;
+using System.Text.Json.Nodes;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using ModelContextProtocol.Protocol;
@@ -18,9 +18,11 @@ public sealed class CdpTools
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         var agent = await session.GetAgentClientAsync(agentPort);
-        var paramsEl = JsonSerializer.Deserialize<JsonElement>(
-            JsonSerializer.Serialize(new { expression, returnByValue = true }));
-        var content = await agent.SendCdpCommandAsync("Runtime.evaluate", paramsEl, webviewId);
+        var content = await agent.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
+        {
+            ["expression"] = expression,
+            ["returnByValue"] = true
+        }, webviewId);
 
         try
         {
@@ -45,9 +47,10 @@ public sealed class CdpTools
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         var agent = await session.GetAgentClientAsync(agentPort);
-        var paramsEl = JsonSerializer.Deserialize<JsonElement>(
-            JsonSerializer.Serialize(new { format = "png" }));
-        var json = await agent.SendCdpCommandAsync("Page.captureScreenshot", paramsEl, webviewId);
+        var json = await agent.SendCdpCommandAsync("Page.captureScreenshot", new JsonObject
+        {
+            ["format"] = "png"
+        }, webviewId);
 
         if (json.TryGetProperty("result", out var result) &&
             result.TryGetProperty("data", out var data))

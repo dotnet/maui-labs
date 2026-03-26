@@ -59,3 +59,27 @@ public record BrokerState
     [JsonPropertyName("startedAt")]
     public DateTime StartedAt { get; init; }
 }
+
+internal record RegistrationMessage
+{
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = "";
+
+    [JsonPropertyName("project")]
+    public string Project { get; init; } = "";
+
+    [JsonPropertyName("tfm")]
+    public string Tfm { get; init; } = "";
+
+    [JsonPropertyName("platform")]
+    public string Platform { get; init; } = "";
+
+    [JsonPropertyName("appName")]
+    public string AppName { get; init; } = "";
+
+    [JsonPropertyName("currentPort")]
+    public int? CurrentPort { get; init; }
+
+    [JsonPropertyName("version")]
+    public string? Version { get; init; }
+}

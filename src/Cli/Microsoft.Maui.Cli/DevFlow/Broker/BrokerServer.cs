@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
-using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
@@ -101,10 +101,17 @@ public class BrokerServer : IDisposable
             // HTTP endpoints for CLI
             var (statusCode, body) = (method, path) switch
             {
-                ("GET", "/api/health") => (200, JsonSerializer.Serialize(new { status = "ok", agents = _agents.Count })),
+                ("GET", "/api/health") => (200, CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["status"] = "ok",
+                    ["agents"] = _agents.Count
+                }, indented: false)),
                 ("GET", "/api/agents") => (200, HandleListAgents()),
                 ("POST", "/api/shutdown") => HandleShutdown(),
-                _ => (404, JsonSerializer.Serialize(new { error = "Not found" }))
+                _ => (404, CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["error"] = "Not found"
+                }, indented: false))
             };
 
             context.Response.StatusCode = statusCode;
@@ -147,7 +154,7 @@ public class BrokerServer : IDisposable
             if (result.MessageType == WebSocketMessageType.Close) return;
 
             var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-            var registration = JsonSerializer.Deserialize<RegistrationMessage>(message);
+            var registration = CliJson.Deserialize<RegistrationMessage>(message);
             if (registration == null || registration.Type != "register")
             {
                 await ws.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Expected register message", CancellationToken.None);
@@ -167,7 +174,11 @@ public class BrokerServer : IDisposable
                 var newPort = AssignPort();
                 if (newPort == null)
                 {
-                    var errorMsg = JsonSerializer.Serialize(new { type = "error", message = "No ports available" });
+                    var errorMsg = CliJson.SerializeUntyped(new JsonObject
+                    {
+                        ["type"] = "error",
+                        ["message"] = "No ports available"
+                    }, indented: false);
                     await ws.SendAsync(Encoding.UTF8.GetBytes(errorMsg), WebSocketMessageType.Text, true, CancellationToken.None);
                     await ws.CloseAsync(WebSocketCloseStatus.InternalServerError, "No ports available", CancellationToken.None);
                     return;
@@ -202,7 +213,12 @@ public class BrokerServer : IDisposable
             Log($"Agent connected: {agent.AppName}|{agent.Tfm} → port {assignedPort} (id: {id})");
 
             // Send registration response
-            var response = JsonSerializer.Serialize(new { type = "registered", id, port = assignedPort });
+            var response = CliJson.SerializeUntyped(new JsonObject
+            {
+                ["type"] = "registered",
+                ["id"] = id,
+                ["port"] = assignedPort
+            }, indented: false);
             await ws.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, CancellationToken.None);
 
             // Keep connection alive — wait for disconnect
@@ -242,7 +258,7 @@ public class BrokerServer : IDisposable
     private string HandleListAgents()
     {
         var agents = _agents.Values.Select(c => c.Registration).ToArray();
-        return JsonSerializer.Serialize(agents, new JsonSerializerOptions { WriteIndented = true });
+        return CliJson.SerializeUntyped(agents, indented: true);
     }
 
     private (int, string) HandleShutdown()
@@ -253,7 +269,10 @@ public class BrokerServer : IDisposable
             await Task.Delay(100); // Let response send first
             _cts?.Cancel();
         });
-        return (200, JsonSerializer.Serialize(new { status = "shutting_down" }));
+        return (200, CliJson.SerializeUntyped(new JsonObject
+        {
+            ["status"] = "shutting_down"
+        }, indented: false));
     }
 
     private int? AssignPort()
@@ -344,7 +363,7 @@ public class BrokerServer : IDisposable
                 StartedAt = DateTime.UtcNow
             };
 
-            var json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+            var json = CliJson.SerializeUntyped(state, indented: true);
             var tmpPath = BrokerPaths.StateFile + ".tmp";
             File.WriteAllText(tmpPath, json);
             File.Move(tmpPath, BrokerPaths.StateFile, overwrite: true);
@@ -388,30 +407,5 @@ public class BrokerServer : IDisposable
         try { _listener?.Close(); } catch { }
         _cts?.Dispose();
     }
-
-    private record RegistrationMessage
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("type")]
-        public string Type { get; init; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName("project")]
-        public string Project { get; init; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName("tfm")]
-        public string Tfm { get; init; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName("platform")]
-        public string Platform { get; init; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName("appName")]
-        public string AppName { get; init; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName("currentPort")]
-        public int? CurrentPort { get; init; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("version")]
-        public string? Version { get; init; }
-    }
-
     private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket);
 }

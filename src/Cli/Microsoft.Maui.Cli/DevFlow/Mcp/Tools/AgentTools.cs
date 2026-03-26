@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using System.Text.Json;
+using System.Text.Json.Nodes;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.Cli.DevFlow.Broker;
@@ -10,13 +10,6 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class AgentTools
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
-    };
-
     [McpServerTool(Name = "maui_list_agents"), Description("List all connected MAUI DevFlow agents (running apps). Shows app name, platform, port, and uptime.")]
     public static async Task<string> ListAgents(McpAgentSession session)
     {
@@ -24,18 +17,22 @@ public sealed class AgentTools
         if (agents == null || agents.Length == 0)
             return "No agents connected. Build and run a MAUI app with Microsoft.Maui.DevFlow.Agent configured.";
 
-        var result = agents.Select(a => new
+        var result = new JsonArray();
+        foreach (var agent in agents)
         {
-            a.Id,
-            a.AppName,
-            a.Platform,
-            a.Tfm,
-            a.Port,
-            a.Version,
-            uptime = (DateTime.UtcNow - a.ConnectedAt).ToString(@"hh\:mm\:ss")
-        });
+            result.Add((JsonNode)new JsonObject
+            {
+                ["id"] = agent.Id,
+                ["appName"] = agent.AppName,
+                ["platform"] = agent.Platform,
+                ["tfm"] = agent.Tfm,
+                ["port"] = agent.Port,
+                ["version"] = agent.Version,
+                ["uptime"] = (DateTime.UtcNow - agent.ConnectedAt).ToString(@"hh\:mm\:ss")
+            });
+        }
 
-        return JsonSerializer.Serialize(result, JsonOptions);
+        return CliJson.SerializeUntyped(result, indented: false);
     }
 
     [McpServerTool(Name = "maui_status"), Description("Get detailed status of a connected MAUI DevFlow agent including platform, device type, app name, and version.")]
@@ -49,7 +46,7 @@ public sealed class AgentTools
         if (status == null)
             return "Agent not responding. Is the app running?";
 
-        return JsonSerializer.Serialize(status, JsonOptions);
+        return CliJson.SerializeUntyped(status, indented: false);
     }
 
     [McpServerTool(Name = "maui_wait"), Description("Wait for a MAUI DevFlow agent to connect. Blocks until an agent registers with the broker or timeout is reached.")]
@@ -73,15 +70,15 @@ public sealed class AgentTools
                 if (match != null)
                 {
                     session.DefaultAgentPort = match.Port;
-                    return JsonSerializer.Serialize(new
+                    return CliJson.SerializeUntyped(new JsonObject
                     {
-                        match.Id,
-                        match.AppName,
-                        match.Platform,
-                        match.Tfm,
-                        match.Port,
-                        match.Version
-                    }, JsonOptions);
+                        ["id"] = match.Id,
+                        ["appName"] = match.AppName,
+                        ["platform"] = match.Platform,
+                        ["tfm"] = match.Tfm,
+                        ["port"] = match.Port,
+                        ["version"] = match.Version
+                    }, indented: false);
                 }
             }
 
