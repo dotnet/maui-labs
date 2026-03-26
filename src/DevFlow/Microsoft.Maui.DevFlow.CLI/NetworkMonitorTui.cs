@@ -298,8 +298,7 @@ public static class NetworkMonitorTui
     {
         try
         {
-            using var doc = JsonDocument.Parse(text);
-            return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+            return CliJson.PrettyPrint(text);
         }
         catch { return text; }
     }

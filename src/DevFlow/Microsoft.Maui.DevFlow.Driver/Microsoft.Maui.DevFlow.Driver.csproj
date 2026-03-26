@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS_BUILD</DefineConstants>
+    <IsAotCompatible>true</IsAotCompatible>
     <IsPackable>true</IsPackable>
 
     <PackageId>Microsoft.Maui.DevFlow.Driver</PackageId>

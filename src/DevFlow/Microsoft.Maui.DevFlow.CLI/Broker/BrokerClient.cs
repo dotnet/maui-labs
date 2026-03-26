@@ -38,7 +38,7 @@ public static class BrokerClient
         try
         {
             var response = await _http.GetStringAsync($"http://localhost:{brokerPort}/api/agents");
-            return JsonSerializer.Deserialize<AgentRegistration[]>(response);
+            return CliJson.Deserialize<AgentRegistration[]>(response);
         }
         catch
         {
@@ -125,7 +125,7 @@ public static class BrokerClient
         {
             if (!File.Exists(BrokerPaths.StateFile)) return null;
             var json = File.ReadAllText(BrokerPaths.StateFile);
-            var state = JsonSerializer.Deserialize<BrokerState>(json);
+            var state = CliJson.Deserialize<BrokerState>(json);
             return state?.Port;
         }
         catch
@@ -181,7 +181,7 @@ public static class BrokerClient
         if (!File.Exists(configPath)) return null;
         try
         {
-            var json = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(configPath));
+            var json = CliJson.ParseElement(File.ReadAllText(configPath));
             if (json.TryGetProperty("port", out var portEl) && portEl.TryGetInt32(out var p))
                 return p;
         }
@@ -195,7 +195,7 @@ public static class BrokerClient
         {
             if (!File.Exists(BrokerPaths.StateFile)) return;
             var json = File.ReadAllText(BrokerPaths.StateFile);
-            var state = JsonSerializer.Deserialize<BrokerState>(json);
+            var state = CliJson.Deserialize<BrokerState>(json);
             if (state == null) return;
 
             // Try to kill hung process
@@ -220,7 +220,7 @@ public static class BrokerClient
         try
         {
             // Find the CLI executable path
-            var exePath = Process.GetCurrentProcess().MainModule?.FileName;
+            var exePath = Environment.ProcessPath;
             if (exePath == null) return null;
 
             string fileName;
@@ -228,11 +228,10 @@ public static class BrokerClient
 
             // If running via `dotnet run` or `dotnet <dll>`, exePath is the dotnet host.
             // In that case, use `dotnet <entryDll> broker start --foreground` instead.
-            var entryAsm = System.Reflection.Assembly.GetEntryAssembly();
             if (exePath.EndsWith("dotnet", StringComparison.OrdinalIgnoreCase)
                 || exePath.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
             {
-                var dllPath = entryAsm?.Location;
+                var dllPath = ResolveManagedEntryAssemblyPath();
                 if (string.IsNullOrEmpty(dllPath)) return null;
                 fileName = exePath;
                 arguments = $"\"{dllPath}\" broker start --foreground";
@@ -282,5 +281,15 @@ public static class BrokerClient
         {
             return null;
         }
+    }
+
+    private static string? ResolveManagedEntryAssemblyPath()
+    {
+        var assemblyName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+        if (string.IsNullOrEmpty(assemblyName))
+            return null;
+
+        var candidate = Path.Combine(AppContext.BaseDirectory, $"{assemblyName}.dll");
+        return File.Exists(candidate) ? candidate : null;
     }
 }

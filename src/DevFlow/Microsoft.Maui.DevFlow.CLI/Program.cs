@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.DevFlow.CLI;
 
@@ -598,7 +599,12 @@ class Program
         prefsSetCmd.SetHandler(async (host, port, json, noJson, key, value, type, sharedName) =>
         {
             var isJson = OutputWriter.ResolveJsonMode(json, noJson);
-            var body = new { value, type, sharedName };
+            var body = new JsonObject
+            {
+                ["value"] = value,
+                ["type"] = type,
+                ["sharedName"] = sharedName
+            };
             await SimplePostAsync(host, port, $"/api/preferences/{Uri.EscapeDataString(key)}", body, isJson);
         }, agentHostOption, agentPortOption, jsonOption, noJsonOption, prefsSetKeyArg, prefsSetValueArg, prefsSetTypeOption, prefsSetSharedNameOption);
         prefsCommand.Add(prefsSetCmd);
@@ -644,7 +650,10 @@ class Program
         secureSetCmd.SetHandler(async (host, port, json, noJson, key, value) =>
         {
             var isJson = OutputWriter.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, $"/api/secure-storage/{Uri.EscapeDataString(key)}", new { value }, isJson);
+            await SimplePostAsync(host, port, $"/api/secure-storage/{Uri.EscapeDataString(key)}", new JsonObject
+            {
+                ["value"] = value
+            }, isJson);
         }, agentHostOption, agentPortOption, jsonOption, noJsonOption, secureSetKeyArg, secureSetValueArg);
         secureCommand.Add(secureSetCmd);
 
@@ -911,22 +920,19 @@ class Program
     
     // ===== CDP Helper: Send command via AgentClient =====
 
-    private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, object? parameters = null, string? webview = null)
+    private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
     {
         using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
-        JsonElement? paramsEl = parameters != null
-            ? JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(parameters))
-            : null;
-        var result = await client.SendCdpCommandAsync(method, paramsEl, webview);
+        var result = await client.SendCdpCommandAsync(method, parameters, webview);
         return result;
     }
 
     private static async Task<string> CdpEvaluateAsync(string host, int port, string expression, string? webview = null)
     {
-        var result = await SendCdpCommandAsync(host, port, "Runtime.evaluate", new
+        var result = await SendCdpCommandAsync(host, port, "Runtime.evaluate", new JsonObject
         {
-            expression,
-            returnByValue = true
+            ["expression"] = expression,
+            ["returnByValue"] = true
         }, webview);
 
         if (result == null) return "null";
@@ -941,7 +947,7 @@ class Program
                     if (value.ValueKind == JsonValueKind.String)
                         return value.GetString() ?? "null";
                     if (value.ValueKind == JsonValueKind.Object || value.ValueKind == JsonValueKind.Array)
-                        return JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true });
+                        return CliJson.PrettyPrint(value);
                     return value.ToString();
                 }
             }
@@ -1001,7 +1007,7 @@ class Program
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const el = document.querySelector({JsonSerializer.Serialize(selector)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
                     if (!el) return null;
                     return {{
                         tagName: el.tagName.toLowerCase(),
@@ -1022,7 +1028,7 @@ class Program
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const els = document.querySelectorAll({JsonSerializer.Serialize(selector)}, webview);
+                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)}, webview);
                     return Array.from(els).map((el, i) => ({{
                         index: i,
                         tagName: el.tagName.toLowerCase(),
@@ -1041,7 +1047,7 @@ class Program
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"document.querySelector({JsonSerializer.Serialize(selector)})?.outerHTML || null", webview);
+            var result = await CdpEvaluateAsync(host, port, $@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -1053,7 +1059,10 @@ class Program
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Page.navigate", new { url }, webview);
+            await SendCdpCommandAsync(host, port, "Page.navigate", new JsonObject
+            {
+                ["url"] = url
+            }, webview);
             Console.WriteLine($"Navigated to: {url}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -1096,7 +1105,7 @@ class Program
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 (function() {{
-                    const el = document.querySelector({JsonSerializer.Serialize(selector)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
                     if (!el) return 'Error: Element not found';
                     el.click();
                     return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
@@ -1111,7 +1120,10 @@ class Program
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Input.insertText", new { text }, webview);
+            await SendCdpCommandAsync(host, port, "Input.insertText", new JsonObject
+            {
+                ["text"] = text
+            }, webview);
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -1123,10 +1135,10 @@ class Program
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 (function() {{
-                    const el = document.querySelector({JsonSerializer.Serialize(selector)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
                     if (!el) return 'Error: Element not found';
                     
-                    const text = {JsonSerializer.Serialize(text)};
+                    const text = {CliJson.SerializeUntyped(text, indented: false)};
                     if (el.isContentEditable) {{
                         el.textContent = text;
                     }} else {{
@@ -1283,7 +1295,7 @@ class Program
     
     private static string FormatJson(JsonElement element)
     {
-        return JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = true });
+        return CliJson.PrettyPrint(element);
     }
 
     // ===== Generic agent HTTP helpers (for preferences, platform, sensors, etc.) =====
@@ -1304,8 +1316,7 @@ class Program
             {
                 try
                 {
-                    var doc = JsonDocument.Parse(body);
-                    Console.WriteLine(JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine(CliJson.PrettyPrint(body));
                 }
                 catch
                 {
@@ -1321,7 +1332,7 @@ class Program
         }
     }
 
-    private static async Task SimplePostAsync(string host, int port, string path, object? bodyObj, bool json)
+    private static async Task SimplePostAsync(string host, int port, string path, JsonNode? bodyObj, bool json)
     {
         try
         {
@@ -1330,8 +1341,8 @@ class Program
             HttpResponseMessage response;
             if (bodyObj != null)
             {
-                var content = new StringContent(
-                    JsonSerializer.Serialize(bodyObj),
+                using var content = new StringContent(
+                    CliJson.SerializeUntyped(bodyObj, indented: false),
                     Encoding.UTF8,
                     "application/json");
                 response = await http.PostAsync($"http://{host}:{port}{path}", content);
@@ -1520,7 +1531,14 @@ class Program
             var passed = string.Equals(actualValue, expectedValue, StringComparison.Ordinal);
             if (json)
             {
-                OutputWriter.WriteResult(new { passed, property = propertyName, expected = expectedValue, actual = actualValue, elementId = resolvedId }, json);
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["passed"] = passed,
+                    ["property"] = propertyName,
+                    ["expected"] = expectedValue,
+                    ["actual"] = actualValue,
+                    ["elementId"] = resolvedId
+                }, json);
             }
             else
             {
@@ -1538,8 +1556,6 @@ class Program
     }
 
     // ===== Command Descriptions (Schema Discovery) =====
-
-    private record CommandDescription(string Command, string Description, bool Mutating);
 
     private static List<CommandDescription> GetCommandDescriptions() => new()
     {
@@ -1715,15 +1731,14 @@ class Program
             var sha = await GetRemoteSkillCommitShaAsync(http, branch);
             if (sha == null) return;
 
-            var versionInfo = new
+            var versionInfo = new JsonObject
             {
-                commit = sha,
-                updatedAt = DateTime.UtcNow.ToString("o"),
-                branch
+                ["commit"] = sha,
+                ["updatedAt"] = DateTime.UtcNow.ToString("o"),
+                ["branch"] = branch
             };
             var versionPath = Path.Combine(destBase, ".skill-version");
-            await File.WriteAllTextAsync(versionPath,
-                JsonSerializer.Serialize(versionInfo, new JsonSerializerOptions { WriteIndented = true }));
+            await File.WriteAllTextAsync(versionPath, CliJson.SerializeUntyped(versionInfo, indented: true));
         }
         catch { /* non-fatal — version tracking is best-effort */ }
     }
@@ -1732,7 +1747,7 @@ class Program
     {
         var url = $"https://api.github.com/repos/{SkillRepo}/commits?path={SkillBasePath}&sha={branch}&per_page=1";
         var json = await http.GetStringAsync(url);
-        var commits = JsonSerializer.Deserialize<JsonElement>(json);
+        var commits = CliJson.ParseElement(json);
         foreach (var commit in commits.EnumerateArray())
             return commit.GetProperty("sha").GetString();
         return null;
@@ -1753,7 +1768,7 @@ class Program
             try
             {
                 var json = await File.ReadAllTextAsync(versionPath);
-                var doc = JsonSerializer.Deserialize<JsonElement>(json);
+                var doc = CliJson.ParseElement(json);
                 localSha = doc.TryGetProperty("commit", out var c) ? c.GetString() : null;
                 localDate = doc.TryGetProperty("updatedAt", out var d) ? d.GetString() : null;
                 localBranch = doc.TryGetProperty("branch", out var b) ? b.GetString() : null;
@@ -1811,7 +1826,7 @@ class Program
         var apiPath = string.IsNullOrEmpty(relativePath) ? basePath : $"{basePath}/{relativePath}";
         var url = $"https://api.github.com/repos/{SkillRepo}/contents/{apiPath}?ref={branch}";
         var json = await http.GetStringAsync(url);
-        var items = JsonSerializer.Deserialize<JsonElement>(json);
+        var items = CliJson.ParseElement(json);
 
         foreach (var item in items.EnumerateArray())
         {
@@ -1860,7 +1875,7 @@ class Program
             if (json)
             {
                 var projected = ProjectElements(tree, fields, format);
-                Console.WriteLine(JsonSerializer.Serialize(projected, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
+                Console.WriteLine(CliJson.SerializeUntyped(projected, indented: true));
             }
             else
             {
@@ -1931,7 +1946,7 @@ class Program
         if (json)
         {
             var projected = ProjectElements(results, fields, format);
-            Console.WriteLine(JsonSerializer.Serialize(projected, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
+            Console.WriteLine(CliJson.SerializeUntyped(projected, indented: true));
         }
         else
         {
@@ -2059,7 +2074,13 @@ class Program
             var fullPath = Path.GetFullPath(filename);
             if (json)
             {
-                OutputWriter.WriteResult(new { path = fullPath, size = data.Length, maxWidth = maxWidth, scale = scale ?? "auto" }, json);
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["path"] = fullPath,
+                    ["size"] = data.Length,
+                    ["maxWidth"] = maxWidth,
+                    ["scale"] = scale ?? "auto"
+                }, json);
             }
             else
             {
@@ -2224,7 +2245,11 @@ class Program
             var value = await client.GetPropertyAsync(elementId, propertyName);
             if (json)
             {
-                OutputWriter.WriteResult(new { property = propertyName, value }, json);
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["property"] = propertyName,
+                    ["value"] = value
+                }, json);
             }
             else
             {
@@ -2610,7 +2635,7 @@ class Program
             if (json)
             {
                 foreach (var r in requests)
-                    Console.WriteLine(JsonSerializer.Serialize(r, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
+                    Console.WriteLine(CliJson.SerializeUntyped(r, indented: false));
             }
             else
             {
@@ -2766,8 +2791,7 @@ class Program
             // Try to pretty-print JSON
             try
             {
-                using var doc = JsonDocument.Parse(body);
-                Console.WriteLine(JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine(CliJson.PrettyPrint(body));
             }
             catch
             {
@@ -2853,12 +2877,16 @@ class Program
         if (fieldSet == null)
             return elements;
 
-        return elements.Select(el => ProjectElement(el, fieldSet)).ToList();
+        var projected = new JsonArray();
+        foreach (var element in elements)
+            projected.Add((JsonNode)ProjectElement(element, fieldSet));
+
+        return projected;
     }
 
-    private static Dictionary<string, object?> ProjectElement(Microsoft.Maui.DevFlow.Driver.ElementInfo el, HashSet<string> fields)
+    private static JsonObject ProjectElement(Microsoft.Maui.DevFlow.Driver.ElementInfo el, HashSet<string> fields)
     {
-        var dict = new Dictionary<string, object?>();
+        var dict = new JsonObject();
         if (fields.Contains("id")) dict["id"] = el.Id;
         if (fields.Contains("parentId")) dict["parentId"] = el.ParentId;
         if (fields.Contains("type")) dict["type"] = el.Type;
@@ -2870,12 +2898,37 @@ class Program
         if (fields.Contains("isFocused")) dict["isFocused"] = el.IsFocused;
         if (fields.Contains("opacity")) dict["opacity"] = el.Opacity;
         if (fields.Contains("bounds") && el.Bounds != null)
-            dict["bounds"] = new { el.Bounds.X, el.Bounds.Y, el.Bounds.Width, el.Bounds.Height };
-        if (fields.Contains("gestures") && el.Gestures != null) dict["gestures"] = el.Gestures;
+        {
+            dict["bounds"] = new JsonObject
+            {
+                ["x"] = el.Bounds.X,
+                ["y"] = el.Bounds.Y,
+                ["width"] = el.Bounds.Width,
+                ["height"] = el.Bounds.Height
+            };
+        }
+        if (fields.Contains("gestures") && el.Gestures != null)
+        {
+            var gestures = new JsonArray();
+            foreach (var gesture in el.Gestures)
+                gestures.Add((JsonNode?)JsonValue.Create(gesture));
+            dict["gestures"] = gestures;
+        }
         if (fields.Contains("nativeType")) dict["nativeType"] = el.NativeType;
-        if (fields.Contains("nativeProperties") && el.NativeProperties != null) dict["nativeProperties"] = el.NativeProperties;
+        if (fields.Contains("nativeProperties") && el.NativeProperties != null)
+        {
+            var nativeProperties = new JsonObject();
+            foreach (var (key, value) in el.NativeProperties)
+                nativeProperties[key] = value;
+            dict["nativeProperties"] = nativeProperties;
+        }
         if (fields.Contains("children") && el.Children != null && el.Children.Count > 0)
-            dict["children"] = el.Children.Select(c => ProjectElement(c, fields)).ToList();
+        {
+            var children = new JsonArray();
+            foreach (var child in el.Children)
+                children.Add((JsonNode)ProjectElement(child, fields));
+            dict["children"] = children;
+        }
         return dict;
     }
 
@@ -3071,11 +3124,30 @@ class Program
 
             if (alert is null)
             {
-                OutputWriter.WriteResult(new { detected = false }, json, _ => Console.WriteLine("No alert detected"));
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["detected"] = false
+                }, json, _ => Console.WriteLine("No alert detected"));
                 return;
             }
 
-            OutputWriter.WriteResult(new { detected = true, title = alert.Title, buttons = alert.Buttons.Select(b => new { label = b.Label, centerX = b.CenterX, centerY = b.CenterY }) }, json, _ =>
+            var buttons = new JsonArray();
+            foreach (var button in alert.Buttons)
+            {
+                buttons.Add((JsonNode)new JsonObject
+                {
+                    ["label"] = button.Label,
+                    ["centerX"] = button.CenterX,
+                    ["centerY"] = button.CenterY
+                });
+            }
+
+            OutputWriter.WriteResult(new JsonObject
+            {
+                ["detected"] = true,
+                ["title"] = alert.Title,
+                ["buttons"] = buttons
+            }, json, _ =>
             {
                 Console.WriteLine($"Alert: {alert.Title ?? "(no title)"}");
                 foreach (var btn in alert.Buttons)
@@ -3117,9 +3189,16 @@ class Program
             }
 
             if (alert is null)
-                OutputWriter.WriteResult(new { dismissed = false }, json, _ => Console.WriteLine("No alert to dismiss"));
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["dismissed"] = false
+                }, json, _ => Console.WriteLine("No alert to dismiss"));
             else
-                OutputWriter.WriteResult(new { dismissed = true, title = alert.Title }, json, _ => Console.WriteLine($"Dismissed: {alert.Title ?? "(alert)"}"));
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["dismissed"] = true,
+                    ["title"] = alert.Title
+                }, json, _ => Console.WriteLine($"Dismissed: {alert.Title ?? "(alert)"}"));
         }
         catch (Exception ex) { OutputWriter.WriteError(ex.Message, json); _errorOccurred = true; }
     }
@@ -3160,12 +3239,14 @@ class Program
                 // Try to parse as JSON and output directly; if not valid JSON, wrap as string
                 try
                 {
-                    using var doc = JsonDocument.Parse(treeResult);
-                    Console.WriteLine(JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine(CliJson.PrettyPrint(treeResult));
                 }
                 catch (JsonException)
                 {
-                    OutputWriter.WriteResult(new { tree = treeResult }, json);
+                    OutputWriter.WriteResult(new JsonObject
+                    {
+                        ["tree"] = treeResult
+                    }, json);
                 }
             }
             else
@@ -3287,13 +3368,22 @@ class Program
                 var response = await http.GetStringAsync($"http://localhost:{Broker.BrokerServer.DefaultPort}/api/health");
                 var doc = JsonDocument.Parse(response);
                 var agents = doc.RootElement.GetProperty("agents").GetInt32();
-                OutputWriter.WriteResult(new { running = true, port = Broker.BrokerServer.DefaultPort, agents, stateFile = false }, json,
+                OutputWriter.WriteResult(new JsonObject
+                {
+                    ["running"] = true,
+                    ["port"] = Broker.BrokerServer.DefaultPort,
+                    ["agents"] = agents,
+                    ["stateFile"] = false
+                }, json,
                     _ => Console.WriteLine($"Broker: running on port {Broker.BrokerServer.DefaultPort} ({agents} agent(s) connected) [no state file]"));
                 return;
             }
             catch { }
 
-            OutputWriter.WriteResult(new { running = false }, json,
+            OutputWriter.WriteResult(new JsonObject
+            {
+                ["running"] = false
+            }, json,
                 _ => Console.WriteLine("Broker: not running"));
             return;
         }
@@ -3304,12 +3394,22 @@ class Program
             var response = await http.GetStringAsync($"http://localhost:{port}/api/health");
             var doc = JsonDocument.Parse(response);
             var agents = doc.RootElement.GetProperty("agents").GetInt32();
-            OutputWriter.WriteResult(new { running = true, port, agents }, json,
+            OutputWriter.WriteResult(new JsonObject
+            {
+                ["running"] = true,
+                ["port"] = port,
+                ["agents"] = agents
+            }, json,
                 _ => Console.WriteLine($"Broker: running on port {port} ({agents} agent(s) connected)"));
         }
         catch
         {
-            OutputWriter.WriteResult(new { running = false, port, stale = true }, json,
+            OutputWriter.WriteResult(new JsonObject
+            {
+                ["running"] = false,
+                ["port"] = port,
+                ["stale"] = true
+            }, json,
                 _ => Console.WriteLine($"Broker: not responding on port {port} (stale state file?)"));
         }
     }
@@ -3343,7 +3443,7 @@ class Program
         var agents = await Broker.BrokerClient.ListAgentsAsync(port.Value);
         if (agents == null || agents.Length == 0)
         {
-            OutputWriter.WriteResult(Array.Empty<object>(), json, _ => Console.WriteLine("No agents connected"));
+            OutputWriter.WriteResult(new JsonArray(), json, _ => Console.WriteLine("No agents connected"));
             return;
         }
 
@@ -3410,7 +3510,7 @@ class Program
 
         if (json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(matched));
+            Console.WriteLine(CliJson.SerializeUntyped(matched, indented: false));
         }
         else
         {
@@ -3463,7 +3563,12 @@ class Program
                     }
                     else
                     {
-                        var errJson = JsonSerializer.Serialize(new { command = rawCmd, exit_code = 1, output = $"Error: {errMsg}" });
+                        var errJson = CliJson.SerializeUntyped(new JsonObject
+                        {
+                            ["command"] = rawCmd,
+                            ["exit_code"] = 1,
+                            ["output"] = $"Error: {errMsg}"
+                        }, indented: false);
                         originalOut.WriteLine(errJson);
                         originalOut.Flush();
                     }
@@ -3509,7 +3614,12 @@ class Program
                 }
                 else
                 {
-                    var jsonResponse = JsonSerializer.Serialize(new { command = rawCmd, exit_code = exitCode, output = combinedOutput });
+                    var jsonResponse = CliJson.SerializeUntyped(new JsonObject
+                    {
+                        ["command"] = rawCmd,
+                        ["exit_code"] = exitCode,
+                        ["output"] = combinedOutput
+                    }, indented: false);
                     originalOut.WriteLine(jsonResponse);
                     originalOut.Flush();
                 }

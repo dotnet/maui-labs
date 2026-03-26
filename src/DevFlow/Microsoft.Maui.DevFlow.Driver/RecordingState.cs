@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.DevFlow.Driver;
@@ -50,15 +49,10 @@ public static class RecordingStateManager
 
     private static readonly string StateFile = Path.Combine(StateDir, "recording-state.json");
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true
-    };
-
     public static void Save(RecordingState state)
     {
         Directory.CreateDirectory(StateDir);
-        var json = JsonSerializer.Serialize(state, JsonOptions);
+        var json = DriverJson.SerializeUntyped(state, indented: true);
         File.WriteAllText(StateFile, json);
     }
 
@@ -68,7 +62,7 @@ public static class RecordingStateManager
         try
         {
             var json = File.ReadAllText(StateFile);
-            return JsonSerializer.Deserialize<RecordingState>(json);
+            return DriverJson.Deserialize<RecordingState>(json);
         }
         catch
         {
