@@ -51,8 +51,15 @@ internal static class WebKitSandboxHelper
 			// If the file exists and contains "1", user namespaces are enabled.
 			// If the file doesn't exist, the kernel likely enables them by default (5.x+).
 			const string sysctlPath = "/proc/sys/kernel/unprivileged_userns_clone";
-			if (File.Exists(sysctlPath))
-				return File.ReadAllText(sysctlPath).Trim() == "1";
+			if (File.Exists(sysctlPath) && File.ReadAllText(sysctlPath).Trim() != "1")
+				return false;
+
+			// Ubuntu 24.04+ restricts unprivileged user namespaces via AppArmor even
+			// when the kernel sysctl allows them. If this is set to "1", bubblewrap
+			// will fail with "setting up uid map: Permission denied".
+			const string appArmorPath = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns";
+			if (File.Exists(appArmorPath) && File.ReadAllText(appArmorPath).Trim() == "1")
+				return false;
 
 			return true;
 		}
