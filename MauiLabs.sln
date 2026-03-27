@@ -5,7 +5,7 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DevFlow", "DevFlow", "{C0FFC53F-FDFB-A1DA-15F9-43B3CCBD9458}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{C0FFC53F-FDFB-A1DA-15F9-43B3CCBD9458}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.DevFlow.Agent.Core", "src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj", "{362FCC25-73ED-4AA2-BD63-9547E91BB3EE}"
 EndProject
@@ -27,7 +27,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.DevFlow.Test
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DevFlow", "DevFlow", "{647032D4-0A86-7275-F62A-7051CC39D1D8}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{647032D4-0A86-7275-F62A-7051CC39D1D8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
 EndProject
@@ -41,11 +41,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DevFlow.Sample", "samples\D
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DevFlow.Sample.MacOS", "samples\DevFlow.Sample.MacOS\DevFlow.Sample.MacOS.csproj", "{AFD6683E-10FC-445C-9139-7F4FDFBFA232}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DevFlow", "DevFlow", "{79F3B28B-5908-7582-5384-B77713FD2B1E}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{79F3B28B-5908-7582-5384-B77713FD2B1E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Client", "src\DevFlow\Microsoft.Maui.Client\Microsoft.Maui.Client.csproj", "{C48C1D82-906D-4626-96BD-43D9D49B7A79}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Client", "src\Client\Microsoft.Maui.Client\Microsoft.Maui.Client.csproj", "{C48C1D82-906D-4626-96BD-43D9D49B7A79}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Client.UnitTests", "src\DevFlow\Microsoft.Maui.Client.UnitTests\Microsoft.Maui.Client.UnitTests.csproj", "{74377069-050C-4C39-A34D-88307E0C19B8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Client.UnitTests", "src\Client\Microsoft.Maui.Client.UnitTests\Microsoft.Maui.Client.UnitTests.csproj", "{74377069-050C-4C39-A34D-88307E0C19B8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -259,5 +259,6 @@ Global
 		{AFD6683E-10FC-445C-9139-7F4FDFBFA232} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{C48C1D82-906D-4626-96BD-43D9D49B7A79} = {79F3B28B-5908-7582-5384-B77713FD2B1E}
 		{74377069-050C-4C39-A34D-88307E0C19B8} = {79F3B28B-5908-7582-5384-B77713FD2B1E}
+		{79F3B28B-5908-7582-5384-B77713FD2B1E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
