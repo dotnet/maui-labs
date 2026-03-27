@@ -62,24 +62,6 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
 
-      - name: Build Client (Windows)
-        if: matrix.os == 'windows-latest'
-        run: dotnet build src\Client\Microsoft.Maui.Client\Microsoft.Maui.Client.csproj -c Release
-        shell: cmd
-
-      - name: Build Client (macOS)
-        if: matrix.os == 'macos-latest'
-        run: dotnet build src/Client/Microsoft.Maui.Client/Microsoft.Maui.Client.csproj -c Release
-
-      - name: Test Client (Windows)
-        if: matrix.os == 'windows-latest'
-        run: dotnet test src\Client\Microsoft.Maui.Client.UnitTests\Microsoft.Maui.Client.UnitTests.csproj -c Release --logger "trx;LogFileName=client-results.trx" --results-directory artifacts\TestResults\Release
-        shell: cmd
-
-      - name: Test Client (macOS)
-        if: matrix.os == 'macos-latest'
-        run: dotnet test src/Client/Microsoft.Maui.Client.UnitTests/Microsoft.Maui.Client.UnitTests.csproj -c Release --logger "trx;LogFileName=client-results.trx" --results-directory artifacts/TestResults/Release
-
       - name: Upload test results
         if: inputs.run-tests && always()
         uses: actions/upload-artifact@v7

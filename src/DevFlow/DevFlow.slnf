@@ -10,7 +10,9 @@
       "src\\DevFlow\\Microsoft.Maui.DevFlow.CLI\\Microsoft.Maui.DevFlow.CLI.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Driver\\Microsoft.Maui.DevFlow.Driver.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Logging\\Microsoft.Maui.DevFlow.Logging.csproj",
-      "src\\DevFlow\\Microsoft.Maui.DevFlow.Tests\\Microsoft.Maui.DevFlow.Tests.csproj"
+      "src\\DevFlow\\Microsoft.Maui.DevFlow.Tests\\Microsoft.Maui.DevFlow.Tests.csproj",
+      "src\\Client\\Microsoft.Maui.Client\\Microsoft.Maui.Client.csproj",
+      "src\\Client\\Microsoft.Maui.Client.UnitTests\\Microsoft.Maui.Client.UnitTests.csproj"
     ]
   }
 }
