@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
@@ -8,12 +9,14 @@ internal static class CliJson
 {
     private static readonly JsonSerializerOptions s_nodeIndentedOptions = new()
     {
-        WriteIndented = true
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     private static readonly JsonSerializerOptions s_nodeCompactOptions = new()
     {
-        WriteIndented = false
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     public static T? Deserialize<T>(string json) where T : class
