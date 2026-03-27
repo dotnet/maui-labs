@@ -19,7 +19,7 @@
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="Spectre.Console" />
-    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="System.CommandLine" VersionOverride="$(SystemCommandLineVersion)" />
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="XenoAtom.Terminal.UI" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
