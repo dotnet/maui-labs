@@ -153,7 +153,6 @@ public record Device
 	public Dictionary<string, object>? Details { get; init; }
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DeviceType
 {
 	Physical,
@@ -161,7 +160,6 @@ public enum DeviceType
 	Simulator
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DeviceState
 {
 	Unknown,

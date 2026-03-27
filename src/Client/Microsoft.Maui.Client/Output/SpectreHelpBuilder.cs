@@ -133,12 +133,10 @@ static class SpectreHelpBuilder
 		// Include the command's own options and any global options from parents
 		var options = command.Options.Where(o => !o.Hidden).ToList();
 
-		// For root command, global options are already included
-		// For subcommands, add inherited global options
-		var parent = command.Parents.OfType<Command>().FirstOrDefault();
-		if (parent != null)
+		// Walk all ancestor commands to collect inherited/recursive options
+		foreach (var ancestor in command.Parents.OfType<Command>())
 		{
-			foreach (var globalOpt in parent.Options.Where(o => !o.Hidden))
+			foreach (var globalOpt in ancestor.Options.Where(o => !o.Hidden && o.Recursive))
 			{
 				if (!options.Any(o => o.Name == globalOpt.Name))
 					options.Add(globalOpt);

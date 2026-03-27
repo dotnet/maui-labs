@@ -34,11 +34,13 @@ public class AvdManager
 		var emulatorPath = ResolveEmulatorPath(sdkPath);
 		if (emulatorPath != null)
 			_emulatorRunner = new EmulatorRunner(emulatorPath, env);
+		_emulatorPath = emulatorPath;
 	}
 
 	public bool IsAvailable => _runner != null;
 
-	public string? EmulatorPath => _emulatorRunner != null ? "emulator" : null;
+	readonly string? _emulatorPath;
+	public string? EmulatorPath => _emulatorPath;
 
 	static string? ResolveAvdManagerPath(string? sdkPath)
 	{

@@ -150,18 +150,56 @@ public class DoctorService : IDoctorService
 			var endQuote = trimmed.IndexOf('"', 1);
 			if (endQuote > 0)
 			{
-				var fileName = trimmed[1..endQuote];
-				var rest = trimmed[(endQuote + 1)..].Trim();
-				var args = string.IsNullOrEmpty(rest) ? [] : rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-				return (fileName, args);
+				var quotedName = trimmed[1..endQuote];
+				var remainder = trimmed[(endQuote + 1)..].Trim();
+				return (quotedName, TokenizeArguments(remainder));
 			}
 		}
 
-		var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-		if (parts.Length == 0)
+		var spaceIdx = trimmed.IndexOf(' ');
+		if (spaceIdx < 0)
 			return (trimmed, []);
 
-		return (parts[0], parts[1..]);
+		return (trimmed[..spaceIdx], TokenizeArguments(trimmed[(spaceIdx + 1)..]));
+	}
+
+	/// <summary>
+	/// Tokenizes a command-line string respecting quoted arguments.
+	/// e.g., '--path "C:\Program Files\foo"' → ["--path", "C:\Program Files\foo"]
+	/// </summary>
+	internal static string[] TokenizeArguments(string input)
+	{
+		if (string.IsNullOrWhiteSpace(input))
+			return [];
+
+		var args = new List<string>();
+		var current = new System.Text.StringBuilder();
+		var inQuotes = false;
+
+		foreach (var ch in input)
+		{
+			if (ch == '"')
+			{
+				inQuotes = !inQuotes;
+			}
+			else if (ch == ' ' && !inQuotes)
+			{
+				if (current.Length > 0)
+				{
+					args.Add(current.ToString());
+					current.Clear();
+				}
+			}
+			else
+			{
+				current.Append(ch);
+			}
+		}
+
+		if (current.Length > 0)
+			args.Add(current.ToString());
+
+		return args.ToArray();
 	}
 
 	async Task<HealthCheck> CheckDotNetSdkAsync(CancellationToken cancellationToken)

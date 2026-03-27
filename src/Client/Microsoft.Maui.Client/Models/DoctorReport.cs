@@ -97,7 +97,6 @@ public record FixInfo
 	public string[]? ManualSteps { get; init; }
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum HealthStatus
 {
 	Healthy,
@@ -105,7 +104,6 @@ public enum HealthStatus
 	Degraded
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum CheckStatus
 {
 	Ok,

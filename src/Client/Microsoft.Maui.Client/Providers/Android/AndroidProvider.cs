@@ -401,7 +401,7 @@ public class AndroidProvider : IAndroidProvider
 		{
 			progress?.Report($"  Installing {pkg}...");
 		}
-		await InstallPackagesAsync(packages, true, cancellationToken);
+		await InstallPackagesAsync(packages, acceptLicenses, cancellationToken);
 		progress?.Report("All packages installed ✓");
 	}
 

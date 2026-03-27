@@ -36,7 +36,13 @@ public static class DeviceCommand
 			var deviceManager = Program.DeviceManager;
 			var formatter = Program.GetFormatter(parseResult);
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
-			var platform = parseResult.GetValue(platformOption);
+			var platform = Platforms.Normalize(parseResult.GetValue(platformOption) ?? "all");
+
+			if (platform != "all" && !Platforms.IsValid(platform))
+			{
+				formatter.WriteWarning($"Unknown platform '{platform}'. Valid values: {string.Join(", ", Platforms.All)}");
+				return 1;
+			}
 
 			try
 			{

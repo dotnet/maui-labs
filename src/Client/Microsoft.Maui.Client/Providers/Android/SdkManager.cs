@@ -22,7 +22,7 @@ public class SdkManager : IDisposable
 
 	/// <summary>
 	/// Creates a logger that forwards android-tools diagnostics when verbose mode is active.
-	/// When verbose is false, only Error/Warning levels are forwarded; others are suppressed
+	/// When verbose is false, only Error levels are forwarded; others are suppressed
 	/// to avoid polluting CLI output with expected warnings about missing JDK paths, etc.
 	/// </summary>
 	static Action<TraceLevel, string> CreateLogger(bool verbose = false)
@@ -131,7 +131,9 @@ public class SdkManager : IDisposable
 	{
 		SyncPaths();
 		EnsureAvailable();
+		onProgress?.Invoke("Accepting SDK licenses...");
 		await _sdkManager.AcceptLicensesAsync(cancellationToken);
+		onProgress?.Invoke("SDK licenses accepted");
 	}
 
 	public async Task UninstallPackagesAsync(IEnumerable<string> packages, CancellationToken cancellationToken = default)

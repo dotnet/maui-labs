@@ -133,7 +133,7 @@ public static partial class AndroidCommands
 						// Step 4: Install packages
 						var pkgTask = ctx.AddTask($"Installing packages (0/{pkgList.Count})");
 						pkgTask.Update(0, $"Installing packages (0/{pkgList.Count})...");
-						await androidProvider.InstallPackagesAsync(pkgList, true,
+						await androidProvider.InstallPackagesAsync(pkgList, acceptLicenses,
 							onProgress: (pkg, idx, total) =>
 							{
 								var pct = (double)idx / total * 100;

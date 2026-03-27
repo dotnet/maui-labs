@@ -138,6 +138,10 @@ public class Program
 		Command current = rootCommand;
 		foreach (var arg in args)
 		{
+			// Skip option tokens and their values
+			if (arg.StartsWith('-'))
+				continue;
+
 			var sub = current.Subcommands.FirstOrDefault(c =>
 				string.Equals(c.Name, arg, StringComparison.OrdinalIgnoreCase));
 			if (sub == null)
