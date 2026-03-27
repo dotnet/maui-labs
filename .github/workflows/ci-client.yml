@@ -1,0 +1,61 @@
+name: CI - Client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Client/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Client/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build src/Client/Microsoft.Maui.Client/Microsoft.Maui.Client.csproj -c Release
+
+      - name: Test
+        run: dotnet test src/Client/Microsoft.Maui.Client.UnitTests/Microsoft.Maui.Client.UnitTests.csproj -c Release --logger "trx;LogFileName=results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-client-${{ matrix.os }}
+          path: artifacts/TestResults/**/*.trx
+
+      - name: Pack
+        if: matrix.os == 'windows-latest'
+        run: dotnet pack src/Client/Microsoft.Maui.Client/Microsoft.Maui.Client.csproj -c Release --no-build
+
+      - name: Upload packages
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-client
+          path: artifacts/packages/**/*.nupkg
