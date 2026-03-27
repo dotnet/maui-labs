@@ -17,6 +17,9 @@ public class AotCompatibilityTests
         var json = CliJson.SerializeUntyped(commands, indented: false);
         var deserialized = CliJson.Deserialize<List<CommandDescription>>(json);
 
+        Assert.Contains("\"command\":\"MAUI status\"", json);
+        Assert.Contains("\"description\":\"Check agent connection and app info\"", json);
+        Assert.Contains("\"mutating\":false", json);
         Assert.NotNull(deserialized);
         var command = Assert.Single(deserialized);
         Assert.Equal("MAUI status", command.Command);

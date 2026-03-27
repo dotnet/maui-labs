@@ -109,7 +109,7 @@ jobs:
 
           assert isinstance(commands, list), "Expected commands output to be a JSON array"
           assert commands, "Expected at least one command description"
-          assert all("Command" in item and "Description" in item for item in commands), "Command entries must include Command and Description"
+          assert all("command" in item and "description" in item for item in commands), "Command entries must include command and description"
           assert isinstance(agents, list), "Expected list --json output to be a JSON array"
           PY
 
