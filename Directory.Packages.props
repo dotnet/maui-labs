@@ -26,7 +26,7 @@
     <PackageVersion Include="Fizzler" Version="$(FizzlerVersion)" />
     <PackageVersion Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
     <PackageVersion Include="Spectre.Console" Version="$(SpectreConsoleVersion)" />
-    <PackageVersion Include="Spectre.Console.Testing" Version="$(SpectreConsoleTestingVersion)" />
+    <PackageVersion Include="Spectre.Console.Testing" Version="$(SpectreConsoleVersion)" />
     <PackageVersion Include="System.CommandLine" Version="$(SystemCommandLineStableVersion)" />
     <PackageVersion Include="System.Text.Json" Version="$(SystemTextJsonVersion)" />
     <PackageVersion Include="Websocket.Client" Version="$(WebsocketClientVersion)" />
