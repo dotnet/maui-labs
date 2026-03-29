@@ -1,0 +1,340 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    Flatpak packaging targets for .NET MAUI Linux GTK4 apps.
+    Usage: dotnet publish -r linux-x64 -p:CreateFlatpak=true
+
+    Prerequisites:
+      - flatpak and flatpak-builder installed
+      - org.gnome.Platform runtime installed:
+        flatpak install flathub org.gnome.Platform//47
+  -->
+
+  <!-- ================= Property Defaults ================= -->
+  <PropertyGroup Condition="'$(CreateFlatpak)' == 'true'">
+    <_FlatpakEnabled>true</_FlatpakEnabled>
+
+    <!-- Application metadata from MAUI conventions -->
+    <ApplicationTitle Condition="'$(ApplicationTitle)' == ''">$(AssemblyName)</ApplicationTitle>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(Version)</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">1.0.0</ApplicationDisplayVersion>
+
+    <!-- Flatpak-specific properties -->
+    <FlatpakRuntime Condition="'$(FlatpakRuntime)' == ''">org.gnome.Platform</FlatpakRuntime>
+    <FlatpakSdk Condition="'$(FlatpakSdk)' == ''">org.gnome.Sdk</FlatpakSdk>
+    <FlatpakRuntimeVersion Condition="'$(FlatpakRuntimeVersion)' == ''">47</FlatpakRuntimeVersion>
+    <FlatpakCategories Condition="'$(FlatpakCategories)' == ''">$(AppImageCategories)</FlatpakCategories>
+    <FlatpakCategories Condition="'$(FlatpakCategories)' == ''">Utility;</FlatpakCategories>
+    <FlatpakDescription Condition="'$(FlatpakDescription)' == ''">$(Description)</FlatpakDescription>
+    <FlatpakDescription Condition="'$(FlatpakDescription)' == ''">$(ApplicationTitle)</FlatpakDescription>
+
+    <!-- Output -->
+    <FlatpakOutputDir Condition="'$(FlatpakOutputDir)' == ''">$(MSBuildProjectDirectory)/bin/Flatpak</FlatpakOutputDir>
+    <FlatpakFileName Condition="'$(FlatpakFileName)' == ''">$(ApplicationId).flatpak</FlatpakFileName>
+
+    <!-- Working directories -->
+    <_FlatpakWorkDir>$(MSBuildProjectDirectory)/obj/Flatpak</_FlatpakWorkDir>
+    <_FlatpakBuildDir>$(_FlatpakWorkDir)/build</_FlatpakBuildDir>
+    <_FlatpakRepoDir>$(_FlatpakWorkDir)/repo</_FlatpakRepoDir>
+    <_FlatpakStateDir>$(_FlatpakWorkDir)/.flatpak-builder</_FlatpakStateDir>
+  </PropertyGroup>
+
+  <!-- ================= Validate Properties ================= -->
+  <Target Name="_ValidateFlatpakProperties"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          BeforeTargets="CreateFlatpak">
+
+    <Error Condition="'$(ApplicationId)' == ''"
+           Text="Flatpak packaging requires ApplicationId to be set. Add &lt;ApplicationId&gt;com.example.myapp&lt;/ApplicationId&gt; to your project file." />
+
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="Flatpak packaging requires a RuntimeIdentifier. Use: dotnet publish -r linux-x64 -p:CreateFlatpak=true" />
+
+    <Error Condition="!$(RuntimeIdentifier.StartsWith('linux-'))"
+           Text="Flatpak packaging only supports Linux RuntimeIdentifiers (e.g., linux-x64, linux-arm64). Got: $(RuntimeIdentifier)" />
+
+    <Warning Condition="'$(SelfContained)' != 'true'"
+             Text="Flatpak packaging works best with self-contained publish. Consider adding --self-contained to your publish command." />
+  </Target>
+
+  <!-- ================= Detect Dependencies ================= -->
+  <Target Name="_DetectFlatpakDependencies"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          BeforeTargets="_GenerateFlatpakManifest"
+          DependsOnTargets="ResolvePackageAssets">
+
+    <PropertyGroup>
+      <_FlatpakNeedsWebKit>false</_FlatpakNeedsWebKit>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="@(ResolvedCompileFileDefinitions->AnyHaveMetadataValue('NuGetPackageId', 'Platform.Maui.Linux.Gtk4.BlazorWebView'))">
+      <_FlatpakNeedsWebKit>true</_FlatpakNeedsWebKit>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(_FlatpakNeedsWebKit)' != 'true' and @(ProjectReference->AnyHaveMetadataValue('Filename', 'Platform.Maui.Linux.Gtk4.BlazorWebView'))">
+      <_FlatpakNeedsWebKit>true</_FlatpakNeedsWebKit>
+    </PropertyGroup>
+
+    <Message Importance="normal" Text="Flatpak: WebKitGTK dependency detected (BlazorWebView referenced)"
+             Condition="'$(_FlatpakNeedsWebKit)' == 'true'" />
+  </Target>
+
+  <!-- ================= Generate Flatpak Manifest ================= -->
+  <Target Name="_GenerateFlatpakManifest"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          AfterTargets="_DetectFlatpakDependencies"
+          BeforeTargets="CreateFlatpak"
+          DependsOnTargets="_ValidateFlatpakProperties">
+
+    <MakeDir Directories="$(_FlatpakWorkDir)" />
+
+    <!--
+      Build finish-args. GTK4 apps need Wayland/X11 sockets, IPC, and DRI.
+      WebKitGTK additionally needs network access for web content.
+    -->
+    <PropertyGroup>
+      <_FlatpakFinishArgs>$(FlatpakFinishArgs)</_FlatpakFinishArgs>
+      <_FlatpakFinishArgs Condition="'$(_FlatpakFinishArgs)' == ''">--socket=wayland --socket=fallback-x11 --share=ipc --device=dri --share=network --filesystem=xdg-documents:ro</_FlatpakFinishArgs>
+    </PropertyGroup>
+
+    <!-- Convert finish-args to JSON array entries -->
+    <PropertyGroup>
+      <_FlatpakFinishArgsJson>$(_FlatpakFinishArgs.Replace(' --', '",&#10;        "--'))</_FlatpakFinishArgsJson>
+    </PropertyGroup>
+
+    <PropertyGroup>
+      <_FlatpakManifest>{
+    "id": "$(ApplicationId)",
+    "runtime": "$(FlatpakRuntime)",
+    "runtime-version": "$(FlatpakRuntimeVersion)",
+    "sdk": "$(FlatpakSdk)",
+    "command": "$(AssemblyName)",
+    "finish-args": [
+        "$(_FlatpakFinishArgsJson)"
+    ],
+    "modules": [
+        {
+            "name": "$(AssemblyName)",
+            "buildsystem": "simple",
+            "build-commands": [
+                "mkdir -p /app/bin",
+                "cp -r * /app/bin/",
+                "chmod +x /app/bin/$(AssemblyName)",
+                "if [ -d share ]; then mkdir -p /app/share &amp;&amp; cp -r share/* /app/share/; fi"
+            ],
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": "publish"
+                }
+            ]
+        }
+    ]
+}
+</_FlatpakManifest>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(_FlatpakWorkDir)/$(ApplicationId).json"
+                     Lines="$(_FlatpakManifest)"
+                     Overwrite="true" />
+
+    <Message Importance="normal" Text="Flatpak: Generated manifest at $(_FlatpakWorkDir)/$(ApplicationId).json" />
+  </Target>
+
+  <!-- ================= Generate Desktop and Metadata Files ================= -->
+  <Target Name="_GenerateFlatpakMetadata"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          AfterTargets="_GenerateFlatpakManifest;_DetectFlatpakDependencies"
+          BeforeTargets="CreateFlatpak">
+
+    <!-- Create the desktop file that flatpak-builder will install -->
+    <PropertyGroup>
+      <_FlatpakDesktopContent>[Desktop Entry]
+Type=Application
+Name=$(ApplicationTitle)
+Exec=$(AssemblyName)
+Icon=$(ApplicationId)
+Terminal=false
+StartupWMClass=$(ApplicationId)
+X-GNOME-WMClass=$(ApplicationId)
+Categories=$(FlatpakCategories)
+</_FlatpakDesktopContent>
+
+      <_FlatpakDesktopContent Condition="'$(FlatpakDescription)' != ''">$(_FlatpakDesktopContent)Comment=$(FlatpakDescription)
+</_FlatpakDesktopContent>
+    </PropertyGroup>
+
+    <!-- Create the AppStream metadata -->
+    <PropertyGroup>
+      <_FlatpakWebKitRecommends Condition="'$(_FlatpakNeedsWebKit)' == 'true'">
+    &lt;recommends&gt;
+      &lt;id&gt;org.webkit.WebKitGTK&lt;/id&gt;
+    &lt;/recommends&gt;</_FlatpakWebKitRecommends>
+
+      <_FlatpakAppStreamComment Condition="'$(FlatpakDescription)' != ''">
+    &lt;summary&gt;$(FlatpakDescription)&lt;/summary&gt;</_FlatpakAppStreamComment>
+
+      <_FlatpakAppStreamDescription Condition="'$(FlatpakDescription)' != ''">
+    &lt;description&gt;&lt;p&gt;$(FlatpakDescription)&lt;/p&gt;&lt;/description&gt;</_FlatpakAppStreamDescription>
+      <_FlatpakAppStreamDescription Condition="'$(FlatpakDescription)' == ''">
+    &lt;description&gt;&lt;p&gt;$(ApplicationTitle) - a .NET MAUI application for Linux.&lt;/p&gt;&lt;/description&gt;</_FlatpakAppStreamDescription>
+
+      <_FlatpakAppStream>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;component type="desktop-application"&gt;
+    &lt;id&gt;$(ApplicationId)&lt;/id&gt;
+    &lt;metadata_license&gt;CC0-1.0&lt;/metadata_license&gt;
+    &lt;name&gt;$(ApplicationTitle)&lt;/name&gt;$(_FlatpakAppStreamComment)$(_FlatpakAppStreamDescription)
+    &lt;launchable type="desktop-id"&gt;$(ApplicationId).desktop&lt;/launchable&gt;
+    &lt;provides&gt;
+      &lt;binary&gt;$(AssemblyName)&lt;/binary&gt;
+    &lt;/provides&gt;
+    &lt;requires&gt;
+      &lt;id&gt;org.gtk.libgtk&lt;/id&gt;
+    &lt;/requires&gt;$(_FlatpakWebKitRecommends)
+&lt;/component&gt;
+</_FlatpakAppStream>
+    </PropertyGroup>
+
+    <!-- Write desktop and appstream files into the publish dir so flatpak-builder picks them up -->
+    <MakeDir Directories="$(_FlatpakWorkDir)/publish/share/applications" />
+    <MakeDir Directories="$(_FlatpakWorkDir)/publish/share/metainfo" />
+    <MakeDir Directories="$(_FlatpakWorkDir)/publish/share/icons/hicolor/scalable/apps" />
+
+    <WriteLinesToFile File="$(_FlatpakWorkDir)/publish/share/applications/$(ApplicationId).desktop"
+                     Lines="$(_FlatpakDesktopContent)"
+                     Overwrite="true" />
+
+    <WriteLinesToFile File="$(_FlatpakWorkDir)/publish/share/metainfo/$(ApplicationId).appdata.xml"
+                     Lines="$(_FlatpakAppStream)"
+                     Overwrite="true" />
+
+    <Message Importance="normal" Text="Flatpak: Generated desktop and AppStream metadata" />
+  </Target>
+
+  <!-- ================= Copy Publish Output and Icon ================= -->
+  <Target Name="_PrepareFlatpakPublishDir"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          BeforeTargets="_GenerateFlatpakManifest"
+          DependsOnTargets="_ValidateFlatpakProperties">
+
+    <!-- Clean and copy publish output to Flatpak work dir -->
+    <RemoveDir Directories="$(_FlatpakWorkDir)/publish" Condition="Exists('$(_FlatpakWorkDir)/publish')" />
+    <MakeDir Directories="$(_FlatpakWorkDir)/publish" />
+
+    <ItemGroup>
+      <_FlatpakPublishFiles Include="$(PublishDir)**/*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_FlatpakPublishFiles)"
+          DestinationFiles="@(_FlatpakPublishFiles->'$(_FlatpakWorkDir)/publish/%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="normal" Text="Flatpak: Copied publish output" />
+  </Target>
+
+  <!-- ================= Copy Icon ================= -->
+  <Target Name="_CopyFlatpakIcon"
+          Condition="'$(_FlatpakEnabled)' == 'true' and '@(MauiIcon)' != ''"
+          AfterTargets="_GenerateFlatpakMetadata"
+          BeforeTargets="CreateFlatpak">
+
+    <PropertyGroup>
+      <_FlatpakIconSource>%(MauiIcon.Identity)</_FlatpakIconSource>
+      <_FlatpakIconExtension>%(MauiIcon.Extension)</_FlatpakIconExtension>
+    </PropertyGroup>
+
+    <Copy SourceFiles="$(_FlatpakIconSource)"
+          DestinationFiles="$(_FlatpakWorkDir)/publish/share/icons/hicolor/scalable/apps/$(ApplicationId)$(_FlatpakIconExtension)"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="normal" Text="Flatpak: Copied app icon" />
+  </Target>
+
+  <!-- ================= Update Manifest to Include Share Files ================= -->
+  <!--
+    The manifest's build-commands need to also install the desktop/icon/appstream files.
+    We regenerate the manifest after metadata files are created.
+  -->
+  <Target Name="_FinalizeFlatpakManifest"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          AfterTargets="_GenerateFlatpakMetadata;_CopyFlatpakIcon"
+          BeforeTargets="CreateFlatpak">
+
+    <PropertyGroup>
+      <_FlatpakFinishArgsJson>$(_FlatpakFinishArgs.Replace(' --', '",&#10;        "--'))</_FlatpakFinishArgsJson>
+    </PropertyGroup>
+
+    <PropertyGroup>
+      <_FlatpakFinalManifest>{
+    "id": "$(ApplicationId)",
+    "runtime": "$(FlatpakRuntime)",
+    "runtime-version": "$(FlatpakRuntimeVersion)",
+    "sdk": "$(FlatpakSdk)",
+    "command": "$(AssemblyName)",
+    "finish-args": [
+        "$(_FlatpakFinishArgsJson)"
+    ],
+    "modules": [
+        {
+            "name": "$(AssemblyName)",
+            "buildsystem": "simple",
+            "build-commands": [
+                "mkdir -p /app/bin",
+                "cp -r * /app/bin/",
+                "chmod +x /app/bin/$(AssemblyName)",
+                "if [ -d share ]; then mkdir -p /app/share &amp;&amp; cp -r share/* /app/share/; fi"
+            ],
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": "publish"
+                }
+            ]
+        }
+    ]
+}
+</_FlatpakFinalManifest>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(_FlatpakWorkDir)/$(ApplicationId).json"
+                     Lines="$(_FlatpakFinalManifest)"
+                     Overwrite="true" />
+  </Target>
+
+  <!-- ================= Build Flatpak ================= -->
+  <Target Name="CreateFlatpak"
+          Condition="'$(_FlatpakEnabled)' == 'true'"
+          AfterTargets="Publish"
+          DependsOnTargets="_ValidateFlatpakProperties;_DetectFlatpakDependencies;_PrepareFlatpakPublishDir;_GenerateFlatpakManifest;_GenerateFlatpakMetadata;_CopyFlatpakIcon;_FinalizeFlatpakManifest">
+
+    <MakeDir Directories="$(FlatpakOutputDir)" />
+
+    <PropertyGroup>
+      <_FlatpakOutputPath>$(FlatpakOutputDir)/$(FlatpakFileName)</_FlatpakOutputPath>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Flatpak: Building $(ApplicationId) with flatpak-builder..." />
+
+    <!-- Build with flatpak-builder -->
+    <Exec Command="flatpak-builder --force-clean --state-dir=&quot;$(_FlatpakStateDir)&quot; --repo=&quot;$(_FlatpakRepoDir)&quot; &quot;$(_FlatpakBuildDir)&quot; &quot;$(_FlatpakWorkDir)/$(ApplicationId).json&quot;"
+          WorkingDirectory="$(_FlatpakWorkDir)" />
+
+    <!-- Create a single-file .flatpak bundle from the repo -->
+    <Message Importance="high" Text="Flatpak: Creating bundle $(FlatpakFileName)..." />
+
+    <Exec Command="flatpak build-bundle &quot;$(_FlatpakRepoDir)&quot; &quot;$(_FlatpakOutputPath)&quot; $(ApplicationId)" />
+
+    <Message Importance="high" Text="Flatpak: Created $(_FlatpakOutputPath)" />
+  </Target>
+
+  <!-- ================= Build-time Warning ================= -->
+  <Target Name="_WarnFlatpakRequiresPublish"
+          Condition="'$(CreateFlatpak)' == 'true'"
+          AfterTargets="Build"
+          BeforeTargets="Publish">
+
+    <Warning Text="CreateFlatpak=true has no effect with 'dotnet build'. Use 'dotnet publish -r linux-x64 -p:CreateFlatpak=true' instead."
+             Condition="'$(IsPublishing)' != 'true' and '$(DeployOnBuild)' != 'true'" />
+  </Target>
+
+</Project>

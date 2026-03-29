@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <MauiVersion>10.0.31</MauiVersion>
+    <!-- Set to false in CI or when MauiDevFlow repo is not available -->
+    <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">true</EnableMauiDevFlow>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+    <DefineConstants>$(DefineConstants);MAUIDEVFLOW</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Common NuGet package properties for all src/ projects -->
+  <PropertyGroup>
+    <Version>0.6.0</Version>
+    <Authors>Platform.Maui.Linux.Gtk4 Contributors</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Redth/Platform.Maui.Linux.Gtk4</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Redth/Platform.Maui.Linux.Gtk4.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+</Project>

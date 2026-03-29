@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Platform.Maui.Linux.Gtk4 Contributors",
+  "classifications": ["MAUI", "Linux", "GTK4", "Desktop"],
+  "identity": "Platform.Maui.Linux.Gtk4.App",
+  "name": ".NET MAUI Linux App (GTK4)",
+  "shortName": "maui-linux-gtk4",
+  "description": "A project template for creating a .NET MAUI app that runs on Linux using GTK4.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "MauiLinuxApp",
+  "preferNameDirectory": true,
+  "symbols": {
+    "Framework": {
+      "type": "parameter",
+      "description": "The target framework for the project.",
+      "datatype": "choice",
+      "choices": [
+        { "choice": "net10.0", "description": ".NET 10" }
+      ],
+      "defaultValue": "net10.0",
+      "replaces": "net10.0"
+    },
+    "essentials": {
+      "type": "parameter",
+      "datatype": "bool",
+      "description": "Include Platform.Maui.Linux.Gtk4.Essentials (clipboard, device info, preferences, etc.).",
+      "defaultValue": "true"
+    },
+    "blazor": {
+      "type": "parameter",
+      "datatype": "bool",
+      "description": "Include Blazor Hybrid support via WebKitGTK.",
+      "defaultValue": "false"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!blazor)",
+          "exclude": ["Components/**"]
+        }
+      ]
+    }
+  ]
+}

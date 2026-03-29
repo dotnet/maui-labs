@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Platform.Maui.Linux.Gtk4.Sample.Pages.XamlRuntimePage"
+             Title="XAML Runtime">
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="12">
+            <Label Text="🧩 XAML Runtime Demo"
+                   FontSize="28"
+                   FontAttributes="Bold" />
+            <Label Text="This page is defined in XAML and wired via generated code."
+                   FontSize="14"
+                   TextColor="Gray" />
+            <Label x:Name="StatusLabel"
+                   FontSize="14"
+                   TextColor="DodgerBlue" />
+            <Button Text="Update Timestamp"
+                    Clicked="OnUpdateTimestampClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

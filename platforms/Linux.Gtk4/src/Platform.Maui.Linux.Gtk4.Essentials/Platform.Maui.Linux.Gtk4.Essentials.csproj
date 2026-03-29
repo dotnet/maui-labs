@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Platform.Maui.Linux.Gtk4.Essentials</RootNamespace>
+    <AssemblyName>Platform.Maui.Linux.Gtk4.Essentials</AssemblyName>
+    <PackageId>Platform.Maui.Linux.Gtk4.Essentials</PackageId>
+    <Description>MAUI Essentials implementations for Linux — clipboard, preferences, device info, connectivity, and more using GTK4, DBus, and freedesktop.org APIs.</Description>
+    <PackageTags>maui;linux;essentials;gtk;gtk4;dbus;freedesktop;clipboard;preferences</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.20.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Platform.Maui.Linux.Gtk4\Platform.Maui.Linux.Gtk4.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+</Project>

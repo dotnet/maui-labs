@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageType>Template</PackageType>
+    <PackageId>Platform.Maui.Linux.Gtk4.Templates</PackageId>
+    <Version>0.1.0-preview.1</Version>
+    <Authors>Platform.Maui.Linux.Gtk4 Contributors</Authors>
+    <Description>Project templates for .NET MAUI apps running on Linux with GTK4.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>dotnet-new;templates;maui;linux;gtk;gtk4</PackageTags>
+    <PackageProjectUrl>https://github.com/Redth/Platform.Maui.Linux.Gtk4</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Redth/Platform.Maui.Linux.Gtk4.git</RepositoryUrl>
+
+    <TargetFramework>net10.0</TargetFramework>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="" />
+    <Content Include="maui-linux-gtk4-app\**\*" Exclude="maui-linux-gtk4-app\**\bin\**;maui-linux-gtk4-app\**\obj\**" />
+    <Compile Remove="**\*" />
+  </ItemGroup>
+
+</Project>

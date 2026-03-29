@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Platform.Maui.Linux.Gtk4.BlazorWebView</RootNamespace>
+    <AssemblyName>Platform.Maui.Linux.Gtk4.BlazorWebView</AssemblyName>
+    <PackageId>Platform.Maui.Linux.Gtk4.BlazorWebView</PackageId>
+    <Description>Blazor Hybrid support for Platform.Maui.Linux.Gtk4 — host Blazor components in a native GTK4 window using WebKitGTK.</Description>
+    <PackageTags>maui;linux;blazor;webview;gtk;gtk4;webkit;webkitgtk;hybrid</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
+    <PackageReference Include="GirCore.WebKit-6.0" Version="0.7.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Platform.Maui.Linux.Gtk4\Platform.Maui.Linux.Gtk4.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+</Project>

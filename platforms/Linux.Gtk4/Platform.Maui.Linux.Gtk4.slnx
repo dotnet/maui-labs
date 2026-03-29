@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Platform.Maui.Linux.Gtk4.Sample/Platform.Maui.Linux.Gtk4.Sample.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Platform.Maui.Linux.Gtk4.BlazorWebView/Platform.Maui.Linux.Gtk4.BlazorWebView.csproj" />
+    <Project Path="src/Platform.Maui.Linux.Gtk4.Essentials/Platform.Maui.Linux.Gtk4.Essentials.csproj" />
+    <Project Path="src/Platform.Maui.Linux.Gtk4/Platform.Maui.Linux.Gtk4.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,245 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    Debian (.deb) packaging targets for .NET MAUI Linux GTK4 apps.
+    Usage: dotnet publish -r linux-x64 -p:CreateDeb=true
+  -->
+
+  <!-- ================= Property Defaults ================= -->
+  <PropertyGroup Condition="'$(CreateDeb)' == 'true'">
+    <_DebEnabled>true</_DebEnabled>
+
+    <!-- Application metadata from MAUI conventions -->
+    <ApplicationTitle Condition="'$(ApplicationTitle)' == ''">$(AssemblyName)</ApplicationTitle>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(Version)</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">1.0.0</ApplicationDisplayVersion>
+
+    <!-- Derive a Debian-friendly package name from ApplicationId (com.example.myapp -> myapp) -->
+    <_DebPackageNameFromId>$([System.Text.RegularExpressions.Regex]::Replace('$(ApplicationId)', '^.*\.', ''))</_DebPackageNameFromId>
+    <DebPackageName Condition="'$(DebPackageName)' == ''">$(_DebPackageNameFromId.ToLowerInvariant())</DebPackageName>
+
+    <!-- Deb-specific properties -->
+    <DebSection Condition="'$(DebSection)' == ''">utils</DebSection>
+    <DebPriority Condition="'$(DebPriority)' == ''">optional</DebPriority>
+    <DebMaintainer Condition="'$(DebMaintainer)' == ''">$(Authors)</DebMaintainer>
+    <DebMaintainer Condition="'$(DebMaintainer)' == ''">MAUI Developer</DebMaintainer>
+    <DebHomepage Condition="'$(DebHomepage)' == ''">$(PackageProjectUrl)</DebHomepage>
+    <DebDescription Condition="'$(DebDescription)' == ''">$(Description)</DebDescription>
+    <DebDescription Condition="'$(DebDescription)' == ''">$(ApplicationTitle)</DebDescription>
+
+    <!-- Categories for .desktop file -->
+    <DebCategories Condition="'$(DebCategories)' == ''">$(AppImageCategories)</DebCategories>
+    <DebCategories Condition="'$(DebCategories)' == ''">Utility;</DebCategories>
+
+    <!-- Architecture mapping from RID -->
+    <_DebRidArch>$([System.Text.RegularExpressions.Regex]::Match('$(RuntimeIdentifier)', 'linux-(.+)').Groups[1].Value)</_DebRidArch>
+    <DebArch Condition="'$(DebArch)' == '' and '$(_DebRidArch)' == 'x64'">amd64</DebArch>
+    <DebArch Condition="'$(DebArch)' == '' and '$(_DebRidArch)' == 'arm64'">arm64</DebArch>
+    <DebArch Condition="'$(DebArch)' == ''">amd64</DebArch>
+
+    <!-- Output -->
+    <DebOutputDir Condition="'$(DebOutputDir)' == ''">$(MSBuildProjectDirectory)/bin/Deb</DebOutputDir>
+    <DebFileName Condition="'$(DebFileName)' == ''">$(DebPackageName)_$(ApplicationDisplayVersion)_$(DebArch).deb</DebFileName>
+
+    <!-- Install paths (inside the .deb) -->
+    <_DebInstallPrefix>/usr/lib/$(DebPackageName)</_DebInstallPrefix>
+
+    <!-- Working directory -->
+    <_DebStagingDir>$(MSBuildProjectDirectory)/obj/Deb/$(DebPackageName)_$(ApplicationDisplayVersion)_$(DebArch)</_DebStagingDir>
+  </PropertyGroup>
+
+  <!-- ================= Validate Properties ================= -->
+  <Target Name="_ValidateDebProperties"
+          Condition="'$(_DebEnabled)' == 'true'"
+          BeforeTargets="CreateDeb">
+
+    <Error Condition="'$(ApplicationId)' == ''"
+           Text="Deb packaging requires ApplicationId to be set. Add &lt;ApplicationId&gt;com.example.myapp&lt;/ApplicationId&gt; to your project file." />
+
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="Deb packaging requires a RuntimeIdentifier. Use: dotnet publish -r linux-x64 -p:CreateDeb=true" />
+
+    <Error Condition="!$(RuntimeIdentifier.StartsWith('linux-'))"
+           Text="Deb packaging only supports Linux RuntimeIdentifiers (e.g., linux-x64, linux-arm64). Got: $(RuntimeIdentifier)" />
+
+    <Warning Condition="'$(SelfContained)' != 'true'"
+             Text="Deb packaging works best with self-contained publish. Consider adding --self-contained to your publish command." />
+  </Target>
+
+  <!-- ================= Detect Dependencies ================= -->
+  <Target Name="_DetectDebDependencies"
+          Condition="'$(_DebEnabled)' == 'true'"
+          BeforeTargets="_GenerateDebControlFile"
+          DependsOnTargets="ResolvePackageAssets">
+
+    <PropertyGroup>
+      <_DebNeedsWebKit>false</_DebNeedsWebKit>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="@(ResolvedCompileFileDefinitions->AnyHaveMetadataValue('NuGetPackageId', 'Platform.Maui.Linux.Gtk4.BlazorWebView'))">
+      <_DebNeedsWebKit>true</_DebNeedsWebKit>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(_DebNeedsWebKit)' != 'true' and @(ProjectReference->AnyHaveMetadataValue('Filename', 'Platform.Maui.Linux.Gtk4.BlazorWebView'))">
+      <_DebNeedsWebKit>true</_DebNeedsWebKit>
+    </PropertyGroup>
+
+    <!-- Build the Depends field -->
+    <PropertyGroup>
+      <DebDepends Condition="'$(DebDepends)' == '' and '$(_DebNeedsWebKit)' == 'true'">libgtk-4-1, libwebkitgtk-6.0-4</DebDepends>
+      <DebDepends Condition="'$(DebDepends)' == ''">libgtk-4-1</DebDepends>
+    </PropertyGroup>
+
+    <Message Importance="normal" Text="Deb: Dependencies: $(DebDepends)"  />
+  </Target>
+
+  <!-- ================= Prepare Staging Directory ================= -->
+  <Target Name="_PrepareDebStagingDir"
+          Condition="'$(_DebEnabled)' == 'true'"
+          BeforeTargets="CreateDeb"
+          DependsOnTargets="_ValidateDebProperties">
+
+    <!-- Clean and create staging structure -->
+    <RemoveDir Directories="$(_DebStagingDir)" />
+    <MakeDir Directories="$(_DebStagingDir)/DEBIAN" />
+    <MakeDir Directories="$(_DebStagingDir)$(_DebInstallPrefix)" />
+    <MakeDir Directories="$(_DebStagingDir)/usr/bin" />
+    <MakeDir Directories="$(_DebStagingDir)/usr/share/applications" />
+    <MakeDir Directories="$(_DebStagingDir)/usr/share/icons/hicolor/scalable/apps" />
+
+    <!-- Copy all publish output to /usr/lib/packagename/ -->
+    <ItemGroup>
+      <_DebPublishFiles Include="$(PublishDir)**/*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_DebPublishFiles)"
+          DestinationFiles="@(_DebPublishFiles->'$(_DebStagingDir)$(_DebInstallPrefix)/%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="normal" Text="Deb: Prepared staging directory at $(_DebStagingDir)" />
+  </Target>
+
+  <!-- ================= Generate DEBIAN/control ================= -->
+  <Target Name="_GenerateDebControlFile"
+          Condition="'$(_DebEnabled)' == 'true'"
+          AfterTargets="_PrepareDebStagingDir;_DetectDebDependencies"
+          BeforeTargets="CreateDeb">
+
+    <PropertyGroup>
+      <_DebHomepageLine Condition="'$(DebHomepage)' != ''">
+Homepage: $(DebHomepage)</_DebHomepageLine>
+
+      <_DebControlContent>Package: $(DebPackageName)
+Version: $(ApplicationDisplayVersion)
+Section: $(DebSection)
+Priority: $(DebPriority)
+Architecture: $(DebArch)
+Depends: $(DebDepends)
+Maintainer: $(DebMaintainer)
+Description: $(DebDescription)$(_DebHomepageLine)
+</_DebControlContent>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(_DebStagingDir)/DEBIAN/control"
+                     Lines="$(_DebControlContent)"
+                     Overwrite="true" />
+
+    <Message Importance="normal" Text="Deb: Generated DEBIAN/control" />
+  </Target>
+
+  <!-- ================= Generate Launcher Script ================= -->
+  <Target Name="_GenerateDebLauncher"
+          Condition="'$(_DebEnabled)' == 'true'"
+          AfterTargets="_PrepareDebStagingDir"
+          BeforeTargets="CreateDeb">
+
+    <!-- Write launcher via Exec to avoid MSBuild interpreting shell $ syntax -->
+    <Exec Command="cat &gt; &quot;$(_DebStagingDir)/usr/bin/$(DebPackageName)&quot; &lt;&lt; '_LAUNCHER_EOF_'
+#!/bin/sh
+exec $(_DebInstallPrefix)/$(AssemblyName) &quot;%24@&quot;
+_LAUNCHER_EOF_" />
+
+    <Exec Command="chmod +x &quot;$(_DebStagingDir)/usr/bin/$(DebPackageName)&quot;" />
+    <!-- Ensure the main binary is executable too -->
+    <Exec Command="chmod +x &quot;$(_DebStagingDir)$(_DebInstallPrefix)/$(AssemblyName)&quot;" Condition="Exists('$(_DebStagingDir)$(_DebInstallPrefix)/$(AssemblyName)')" />
+
+    <Message Importance="normal" Text="Deb: Generated launcher script at /usr/bin/$(DebPackageName)" />
+  </Target>
+
+  <!-- ================= Generate .desktop File ================= -->
+  <Target Name="_GenerateDebDesktopFile"
+          Condition="'$(_DebEnabled)' == 'true'"
+          AfterTargets="_PrepareDebStagingDir"
+          BeforeTargets="CreateDeb">
+
+    <PropertyGroup>
+      <_DebDesktopContent>[Desktop Entry]
+Type=Application
+Name=$(ApplicationTitle)
+Exec=$(DebPackageName)
+Icon=$(ApplicationId)
+Terminal=false
+StartupWMClass=$(ApplicationId)
+X-GNOME-WMClass=$(ApplicationId)
+Categories=$(DebCategories)
+</_DebDesktopContent>
+
+      <_DebDesktopContent Condition="'$(DebDescription)' != ''">$(_DebDesktopContent)Comment=$(DebDescription)
+</_DebDesktopContent>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(_DebStagingDir)/usr/share/applications/$(ApplicationId).desktop"
+                     Lines="$(_DebDesktopContent)"
+                     Overwrite="true" />
+
+    <Message Importance="normal" Text="Deb: Generated .desktop file" />
+  </Target>
+
+  <!-- ================= Copy Icon ================= -->
+  <Target Name="_CopyDebIcon"
+          Condition="'$(_DebEnabled)' == 'true' and '@(MauiIcon)' != ''"
+          AfterTargets="_PrepareDebStagingDir"
+          BeforeTargets="CreateDeb">
+
+    <PropertyGroup>
+      <_DebIconSource>%(MauiIcon.Identity)</_DebIconSource>
+      <_DebIconExtension>%(MauiIcon.Extension)</_DebIconExtension>
+    </PropertyGroup>
+
+    <Copy SourceFiles="$(_DebIconSource)"
+          DestinationFiles="$(_DebStagingDir)/usr/share/icons/hicolor/scalable/apps/$(ApplicationId)$(_DebIconExtension)"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="normal" Text="Deb: Copied app icon" />
+  </Target>
+
+  <!-- ================= Build .deb Package ================= -->
+  <Target Name="CreateDeb"
+          Condition="'$(_DebEnabled)' == 'true'"
+          AfterTargets="Publish"
+          DependsOnTargets="_ValidateDebProperties;_DetectDebDependencies;_PrepareDebStagingDir;_GenerateDebControlFile;_GenerateDebLauncher;_GenerateDebDesktopFile;_CopyDebIcon">
+
+    <MakeDir Directories="$(DebOutputDir)" />
+
+    <PropertyGroup>
+      <_DebOutputPath>$(DebOutputDir)/$(DebFileName)</_DebOutputPath>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Deb: Creating $(DebFileName)..." />
+
+    <Exec Command="dpkg-deb --root-owner-group --build &quot;$(_DebStagingDir)&quot; &quot;$(_DebOutputPath)&quot;" />
+
+    <Message Importance="high" Text="Deb: Created $(_DebOutputPath)" />
+  </Target>
+
+  <!-- ================= Build-time Warning ================= -->
+  <Target Name="_WarnDebRequiresPublish"
+          Condition="'$(CreateDeb)' == 'true'"
+          AfterTargets="Build"
+          BeforeTargets="Publish">
+
+    <Warning Text="CreateDeb=true has no effect with 'dotnet build'. Use 'dotnet publish -r linux-x64 -p:CreateDeb=true' instead."
+             Condition="'$(IsPublishing)' != 'true' and '$(DeployOnBuild)' != 'true'" />
+  </Target>
+
+</Project>

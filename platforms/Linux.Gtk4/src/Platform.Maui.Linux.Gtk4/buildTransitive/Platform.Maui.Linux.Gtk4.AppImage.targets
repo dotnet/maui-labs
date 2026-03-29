@@ -1,0 +1,380 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    AppImage packaging targets for .NET MAUI Linux GTK4 apps.
+    Usage: dotnet publish -r linux-x64 -p:CreateAppImage=true
+  -->
+
+  <!-- ================= Property Defaults ================= -->
+  <PropertyGroup Condition="'$(CreateAppImage)' == 'true'">
+    <_AppImageEnabled>true</_AppImageEnabled>
+
+    <!-- Application metadata from MAUI conventions -->
+    <ApplicationTitle Condition="'$(ApplicationTitle)' == ''">$(AssemblyName)</ApplicationTitle>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(Version)</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">1.0.0</ApplicationDisplayVersion>
+
+    <!-- AppImage-specific properties -->
+    <AppImageCategories Condition="'$(AppImageCategories)' == ''">Utility;</AppImageCategories>
+    <AppImageComment Condition="'$(AppImageComment)' == ''">$(Description)</AppImageComment>
+    <AppImageGenericName Condition="'$(AppImageGenericName)' == ''"></AppImageGenericName>
+    <AppImageCheckDependencies Condition="'$(AppImageCheckDependencies)' == ''">true</AppImageCheckDependencies>
+    <SelfContainedAppImage Condition="'$(SelfContainedAppImage)' == ''">true</SelfContainedAppImage>
+
+    <!-- Tool and output paths -->
+    <_AppImageToolCacheDir>$(HOME)/.maui-gtk/tools</_AppImageToolCacheDir>
+    <AppImageOutputDir Condition="'$(AppImageOutputDir)' == ''">$(MSBuildProjectDirectory)/bin/AppImage</AppImageOutputDir>
+
+    <!-- Architecture mapping from RID -->
+    <_AppImageRidArch>$([System.Text.RegularExpressions.Regex]::Match('$(RuntimeIdentifier)', 'linux-(.+)').Groups[1].Value)</_AppImageRidArch>
+    <AppImageArch Condition="'$(AppImageArch)' == '' and '$(_AppImageRidArch)' == 'x64'">x86_64</AppImageArch>
+    <AppImageArch Condition="'$(AppImageArch)' == '' and '$(_AppImageRidArch)' == 'arm64'">aarch64</AppImageArch>
+    <AppImageArch Condition="'$(AppImageArch)' == ''">x86_64</AppImageArch>
+
+    <!-- appimagetool path -->
+    <AppImageToolPath Condition="'$(AppImageToolPath)' == ''">$(_AppImageToolCacheDir)/appimagetool-$(AppImageArch).AppImage</AppImageToolPath>
+
+    <!-- Output filename -->
+    <AppImageFileName Condition="'$(AppImageFileName)' == ''">$(ApplicationTitle)-$(ApplicationDisplayVersion)-$(AppImageArch).AppImage</AppImageFileName>
+
+    <!-- Working directories (use absolute paths to avoid CWD issues) -->
+    <_AppDirPath>$(MSBuildProjectDirectory)/obj/AppImage/$(AssemblyName).AppDir</_AppDirPath>
+    <_AppDirBinPath>$(_AppDirPath)/usr/bin</_AppDirBinPath>
+    <_AppDirMetainfoPath>$(_AppDirPath)/usr/share/metainfo</_AppDirMetainfoPath>
+  </PropertyGroup>
+
+  <!-- ================= Validate Properties ================= -->
+  <Target Name="_ValidateAppImageProperties"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          BeforeTargets="CreateAppImage">
+
+    <Error Condition="'$(ApplicationId)' == ''"
+           Text="AppImage packaging requires ApplicationId to be set. Add &lt;ApplicationId&gt;com.example.myapp&lt;/ApplicationId&gt; to your project file." />
+
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="AppImage packaging requires a RuntimeIdentifier. Use: dotnet publish -r linux-x64 -p:CreateAppImage=true" />
+
+    <Error Condition="!$(RuntimeIdentifier.StartsWith('linux-'))"
+           Text="AppImage packaging only supports Linux RuntimeIdentifiers (e.g., linux-x64, linux-arm64). Got: $(RuntimeIdentifier)" />
+
+    <Warning Condition="'$(SelfContained)' != 'true' and '$(SelfContainedAppImage)' == 'true'"
+             Text="AppImage packaging works best with self-contained publish. Consider adding --self-contained to your publish command." />
+  </Target>
+
+  <!-- ================= Detect Dependencies ================= -->
+  <Target Name="_DetectAppImageDependencies"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          BeforeTargets="_GenerateAppImageAppRun;_GenerateAppImageAppStreamMetadata"
+          DependsOnTargets="ResolvePackageAssets">
+
+    <PropertyGroup>
+      <_AppImageNeedsWebKit>false</_AppImageNeedsWebKit>
+    </PropertyGroup>
+
+    <!--
+      Check if Platform.Maui.Linux.Gtk4.BlazorWebView is in the resolved references.
+      This covers both direct PackageReference and transitive dependencies.
+    -->
+    <PropertyGroup Condition="@(ResolvedCompileFileDefinitions->AnyHaveMetadataValue('NuGetPackageId', 'Platform.Maui.Linux.Gtk4.BlazorWebView'))">
+      <_AppImageNeedsWebKit>true</_AppImageNeedsWebKit>
+    </PropertyGroup>
+
+    <!-- Also check direct project references (for development/sample scenarios) -->
+    <PropertyGroup Condition="'$(_AppImageNeedsWebKit)' != 'true' and @(ProjectReference->AnyHaveMetadataValue('Filename', 'Platform.Maui.Linux.Gtk4.BlazorWebView'))">
+      <_AppImageNeedsWebKit>true</_AppImageNeedsWebKit>
+    </PropertyGroup>
+
+    <Message Importance="normal" Text="AppImage: WebKitGTK dependency detected (BlazorWebView referenced)"
+             Condition="'$(_AppImageNeedsWebKit)' == 'true'" />
+  </Target>
+
+  <!-- ================= Prepare AppDir ================= -->
+  <Target Name="_PrepareAppImageDir"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          BeforeTargets="CreateAppImage"
+          DependsOnTargets="_ValidateAppImageProperties">
+
+    <!-- Clean and create AppDir structure -->
+    <RemoveDir Directories="$(_AppDirPath)" />
+    <MakeDir Directories="$(_AppDirPath)" />
+    <MakeDir Directories="$(_AppDirBinPath)" />
+    <MakeDir Directories="$(_AppDirMetainfoPath)" />
+    <MakeDir Directories="$(_AppDirPath)/usr/share/applications" />
+
+    <!-- Copy all publish output to usr/bin/ -->
+    <ItemGroup>
+      <_PublishFiles Include="$(PublishDir)**/*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_PublishFiles)"
+          DestinationFiles="@(_PublishFiles->'$(_AppDirBinPath)/%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="normal" Text="AppImage: Prepared AppDir at $(_AppDirPath)" />
+  </Target>
+
+  <!-- ================= Generate .desktop File ================= -->
+  <Target Name="_GenerateAppImageDesktopFile"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          AfterTargets="_PrepareAppImageDir"
+          BeforeTargets="CreateAppImage">
+
+    <PropertyGroup>
+      <_DesktopFileContent>[Desktop Entry]
+Type=Application
+Name=$(ApplicationTitle)
+Exec=$(AssemblyName)
+Icon=$(ApplicationId)
+Terminal=false
+StartupWMClass=$(ApplicationId)
+X-GNOME-WMClass=$(ApplicationId)
+Categories=$(AppImageCategories)
+X-AppImage-Version=$(ApplicationDisplayVersion)
+</_DesktopFileContent>
+
+      <_DesktopFileContent Condition="'$(AppImageComment)' != ''">$(_DesktopFileContent)Comment=$(AppImageComment)
+</_DesktopFileContent>
+
+      <_DesktopFileContent Condition="'$(AppImageGenericName)' != ''">$(_DesktopFileContent)GenericName=$(AppImageGenericName)
+</_DesktopFileContent>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(_AppDirPath)/$(ApplicationId).desktop"
+                     Lines="$(_DesktopFileContent)"
+                     Overwrite="true" />
+
+    <!-- Also place in usr/share/applications/ for AppStream validation -->
+    <WriteLinesToFile File="$(_AppDirPath)/usr/share/applications/$(ApplicationId).desktop"
+                     Lines="$(_DesktopFileContent)"
+                     Overwrite="true" />
+
+    <Message Importance="normal" Text="AppImage: Generated .desktop file" />
+  </Target>
+
+  <!-- ================= Generate AppRun Script ================= -->
+  <Target Name="_GenerateAppImageAppRun"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          AfterTargets="_PrepareAppImageDir;_DetectAppImageDependencies"
+          BeforeTargets="CreateAppImage">
+
+    <PropertyGroup>
+      <!-- Install hints vary based on whether WebKit is needed -->
+      <_InstallHintDebian Condition="'$(_AppImageNeedsWebKit)' == 'true'">sudo apt install libgtk-4-1 libwebkitgtk-6.0-4</_InstallHintDebian>
+      <_InstallHintDebian Condition="'$(_AppImageNeedsWebKit)' != 'true'">sudo apt install libgtk-4-1</_InstallHintDebian>
+      <_InstallHintFedora Condition="'$(_AppImageNeedsWebKit)' == 'true'">sudo dnf install gtk4 webkitgtk6.0</_InstallHintFedora>
+      <_InstallHintFedora Condition="'$(_AppImageNeedsWebKit)' != 'true'">sudo dnf install gtk4</_InstallHintFedora>
+      <_InstallHintArch Condition="'$(_AppImageNeedsWebKit)' == 'true'">sudo pacman -S gtk4 webkitgtk-6.0</_InstallHintArch>
+      <_InstallHintArch Condition="'$(_AppImageNeedsWebKit)' != 'true'">sudo pacman -S gtk4</_InstallHintArch>
+    </PropertyGroup>
+
+    <!--
+      Write AppRun via Exec+cat heredoc to avoid MSBuild interpreting shell $() syntax.
+      The heredoc delimiter is _APPRUN_EOF_ and is not subject to MSBuild evaluation.
+    -->
+    <Exec Condition="'$(AppImageCheckDependencies)' == 'true' and '$(_AppImageNeedsWebKit)' == 'true'"
+          Command="cat &gt; &quot;$(_AppDirPath)/AppRun&quot; &lt;&lt; '_APPRUN_EOF_'
+#!/bin/sh
+HERE=&quot;%24(dirname &quot;%24(readlink -f &quot;%240&quot;)&quot;)&quot;
+
+# --- System dependency checks ---
+MISSING=&quot;&quot;
+
+# GTK4 (required)
+if ! ldconfig -p 2>/dev/null | grep -q &quot;libgtk-4.so&quot;; then
+  MISSING=&quot;%24{MISSING}  - GTK4 (libgtk-4-1 / gtk4)\n&quot;
+fi
+
+# WebKitGTK 6.0 (required for Blazor WebView)
+if ! ldconfig -p 2>/dev/null | grep -q &quot;libwebkitgtk-6.0.so&quot;; then
+  MISSING=&quot;%24{MISSING}  - WebKitGTK 6.0 (libwebkitgtk-6.0-4 / webkitgtk6.0)\n&quot;
+fi
+
+if [ -n &quot;%24MISSING&quot; ]; then
+  echo &quot;Error: Missing required system libraries:&quot; &gt;&amp;2
+  printf &quot;%24MISSING&quot; &gt;&amp;2
+  echo &quot;&quot; &gt;&amp;2
+  echo &quot;Install them with your package manager:&quot; &gt;&amp;2
+  echo &quot;  Ubuntu/Debian: $(_InstallHintDebian)&quot; &gt;&amp;2
+  echo &quot;  Fedora:        $(_InstallHintFedora)&quot; &gt;&amp;2
+  echo &quot;  Arch:          $(_InstallHintArch)&quot; &gt;&amp;2
+  if command -v zenity &gt;/dev/null 2&gt;&amp;1; then
+    zenity --error --title=&quot;Missing Dependencies&quot; --text=&quot;Missing required system libraries. See terminal for details.&quot; 2&gt;/dev/null
+  fi
+  exit 1
+fi
+
+export DOTNET_ROOT=&quot;%24HERE/usr/bin&quot;
+export PATH=&quot;%24HERE/usr/bin:%24PATH&quot;
+export XDG_DATA_DIRS=&quot;%24HERE/usr/share:%24{XDG_DATA_DIRS:-/usr/share}&quot;
+exec &quot;%24HERE/usr/bin/$(AssemblyName)&quot; &quot;%24@&quot;
+_APPRUN_EOF_" />
+
+    <Exec Condition="'$(AppImageCheckDependencies)' == 'true' and '$(_AppImageNeedsWebKit)' != 'true'"
+          Command="cat &gt; &quot;$(_AppDirPath)/AppRun&quot; &lt;&lt; '_APPRUN_EOF_'
+#!/bin/sh
+HERE=&quot;%24(dirname &quot;%24(readlink -f &quot;%240&quot;)&quot;)&quot;
+
+# --- System dependency checks ---
+MISSING=&quot;&quot;
+
+# GTK4 (required)
+if ! ldconfig -p 2>/dev/null | grep -q &quot;libgtk-4.so&quot;; then
+  MISSING=&quot;%24{MISSING}  - GTK4 (libgtk-4-1 / gtk4)\n&quot;
+fi
+
+if [ -n &quot;%24MISSING&quot; ]; then
+  echo &quot;Error: Missing required system libraries:&quot; &gt;&amp;2
+  printf &quot;%24MISSING&quot; &gt;&amp;2
+  echo &quot;&quot; &gt;&amp;2
+  echo &quot;Install them with your package manager:&quot; &gt;&amp;2
+  echo &quot;  Ubuntu/Debian: $(_InstallHintDebian)&quot; &gt;&amp;2
+  echo &quot;  Fedora:        $(_InstallHintFedora)&quot; &gt;&amp;2
+  echo &quot;  Arch:          $(_InstallHintArch)&quot; &gt;&amp;2
+  if command -v zenity &gt;/dev/null 2&gt;&amp;1; then
+    zenity --error --title=&quot;Missing Dependencies&quot; --text=&quot;Missing required system libraries. See terminal for details.&quot; 2&gt;/dev/null
+  fi
+  exit 1
+fi
+
+export DOTNET_ROOT=&quot;%24HERE/usr/bin&quot;
+export PATH=&quot;%24HERE/usr/bin:%24PATH&quot;
+export XDG_DATA_DIRS=&quot;%24HERE/usr/share:%24{XDG_DATA_DIRS:-/usr/share}&quot;
+exec &quot;%24HERE/usr/bin/$(AssemblyName)&quot; &quot;%24@&quot;
+_APPRUN_EOF_" />
+
+    <Exec Condition="'$(AppImageCheckDependencies)' != 'true'"
+          Command="cat &gt; &quot;$(_AppDirPath)/AppRun&quot; &lt;&lt; '_APPRUN_EOF_'
+#!/bin/sh
+HERE=&quot;%24(dirname &quot;%24(readlink -f &quot;%240&quot;)&quot;)&quot;
+export DOTNET_ROOT=&quot;%24HERE/usr/bin&quot;
+export PATH=&quot;%24HERE/usr/bin:%24PATH&quot;
+export XDG_DATA_DIRS=&quot;%24HERE/usr/share:%24{XDG_DATA_DIRS:-/usr/share}&quot;
+exec &quot;%24HERE/usr/bin/$(AssemblyName)&quot; &quot;%24@&quot;
+_APPRUN_EOF_" />
+
+    <!-- Make AppRun executable -->
+    <Exec Command="chmod +x &quot;$(_AppDirPath)/AppRun&quot;" />
+
+    <Message Importance="normal" Text="AppImage: Generated AppRun script (dependency checks: $(AppImageCheckDependencies), WebKit: $(_AppImageNeedsWebKit))" />
+  </Target>
+
+  <!-- ================= Generate AppStream Metadata ================= -->
+  <Target Name="_GenerateAppImageAppStreamMetadata"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          AfterTargets="_PrepareAppImageDir;_DetectAppImageDependencies"
+          BeforeTargets="CreateAppImage">
+
+    <PropertyGroup>
+      <_WebKitRecommends Condition="'$(_AppImageNeedsWebKit)' == 'true'">
+    &lt;recommends&gt;
+      &lt;id&gt;org.webkit.WebKitGTK&lt;/id&gt;
+    &lt;/recommends&gt;</_WebKitRecommends>
+      <_WebKitRecommends Condition="'$(_AppImageNeedsWebKit)' != 'true'"></_WebKitRecommends>
+
+      <_AppStreamComment Condition="'$(AppImageComment)' != ''">
+    &lt;summary&gt;$(AppImageComment)&lt;/summary&gt;</_AppStreamComment>
+      <_AppStreamComment Condition="'$(AppImageComment)' == ''"></_AppStreamComment>
+
+      <_AppStreamDescriptionText Condition="'$(AppImageComment)' != ''">$(AppImageComment)</_AppStreamDescriptionText>
+      <_AppStreamDescriptionText Condition="'$(AppImageComment)' == ''">$(ApplicationTitle)</_AppStreamDescriptionText>
+
+      <_AppStreamContent>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;component type="desktop-application"&gt;
+    &lt;id&gt;$(ApplicationId)&lt;/id&gt;
+    &lt;metadata_license&gt;CC0-1.0&lt;/metadata_license&gt;
+    &lt;name&gt;$(ApplicationTitle)&lt;/name&gt;$(_AppStreamComment)
+    &lt;description&gt;&lt;p&gt;$(_AppStreamDescriptionText)&lt;/p&gt;&lt;/description&gt;
+    &lt;launchable type="desktop-id"&gt;$(ApplicationId).desktop&lt;/launchable&gt;
+    &lt;provides&gt;
+      &lt;binary&gt;$(AssemblyName)&lt;/binary&gt;
+    &lt;/provides&gt;
+    &lt;requires&gt;
+      &lt;id&gt;org.gtk.libgtk&lt;/id&gt;
+    &lt;/requires&gt;$(_WebKitRecommends)
+&lt;/component&gt;
+</_AppStreamContent>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(_AppDirMetainfoPath)/$(ApplicationId).appdata.xml"
+                     Lines="$(_AppStreamContent)"
+                     Overwrite="true" />
+
+    <Message Importance="normal" Text="AppImage: Generated AppStream metadata" />
+  </Target>
+
+  <!-- ================= Copy Icon ================= -->
+  <Target Name="_CopyAppImageIcon"
+          Condition="'$(_AppImageEnabled)' == 'true' and '@(MauiIcon)' != ''"
+          AfterTargets="_PrepareAppImageDir"
+          BeforeTargets="CreateAppImage">
+
+    <PropertyGroup>
+      <_FirstMauiIcon>%(MauiIcon.Identity)</_FirstMauiIcon>
+      <_IconExtension>%(MauiIcon.Extension)</_IconExtension>
+    </PropertyGroup>
+
+    <!-- Copy the app icon to the AppDir root with ApplicationId as the name -->
+    <Copy SourceFiles="$(_FirstMauiIcon)"
+          DestinationFiles="$(_AppDirPath)/$(ApplicationId)$(_IconExtension)"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="normal" Text="AppImage: Copied app icon to AppDir root" />
+  </Target>
+
+  <!-- ================= Download appimagetool ================= -->
+  <Target Name="_DownloadAppImageTool"
+          Condition="'$(_AppImageEnabled)' == 'true' and !Exists('$(AppImageToolPath)')"
+          BeforeTargets="CreateAppImage">
+
+    <PropertyGroup>
+      <_AppImageToolUrl>https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$(AppImageArch).AppImage</_AppImageToolUrl>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(_AppImageToolCacheDir)" />
+
+    <Message Importance="high" Text="AppImage: Downloading appimagetool for $(AppImageArch)..." />
+
+    <Exec Command="curl -fSL --retry 3 -o &quot;$(AppImageToolPath)&quot; &quot;$(_AppImageToolUrl)&quot;" />
+    <Exec Command="chmod +x &quot;$(AppImageToolPath)&quot;" />
+
+    <Message Importance="high" Text="AppImage: appimagetool cached at $(AppImageToolPath)" />
+  </Target>
+
+  <!-- ================= Create AppImage ================= -->
+  <Target Name="CreateAppImage"
+          Condition="'$(_AppImageEnabled)' == 'true'"
+          AfterTargets="Publish"
+          DependsOnTargets="_ValidateAppImageProperties;_DetectAppImageDependencies;_PrepareAppImageDir;_GenerateAppImageDesktopFile;_GenerateAppImageAppRun;_GenerateAppImageAppStreamMetadata;_CopyAppImageIcon;_DownloadAppImageTool">
+
+    <MakeDir Directories="$(AppImageOutputDir)" />
+
+    <PropertyGroup>
+      <_AppImageOutputPath>$(AppImageOutputDir)/$(AppImageFileName)</_AppImageOutputPath>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="AppImage: Creating $(AppImageFileName)..." />
+
+    <!--
+      Run appimagetool. Use - -appimage-extract-and-run to avoid requiring FUSE on the build host.
+      Set ARCH env var to match the target architecture.
+    -->
+    <Exec Command="ARCH=$(AppImageArch) &quot;$(AppImageToolPath)&quot; --appimage-extract-and-run --no-appstream &quot;$(_AppDirPath)&quot; &quot;$(_AppImageOutputPath)&quot;" />
+
+    <Message Importance="high" Text="AppImage: Created $(_AppImageOutputPath)" />
+  </Target>
+
+  <!-- ================= Build-time Warning ================= -->
+  <!--
+    If someone uses -p:CreateAppImage=true with 'dotnet build' instead of 'dotnet publish',
+    emit a clear warning. The CreateAppImage target only hooks AfterTargets="Publish".
+  -->
+  <Target Name="_WarnAppImageRequiresPublish"
+          Condition="'$(CreateAppImage)' == 'true'"
+          AfterTargets="Build"
+          BeforeTargets="Publish">
+
+    <Warning Text="CreateAppImage=true has no effect with 'dotnet build'. Use 'dotnet publish -r linux-x64 -p:CreateAppImage=true' instead."
+             Condition="'$(IsPublishing)' != 'true' and '$(DeployOnBuild)' != 'true'" />
+  </Target>
+
+</Project>
