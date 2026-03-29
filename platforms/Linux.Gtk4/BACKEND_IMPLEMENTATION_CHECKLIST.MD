@@ -1,4 +1,4 @@
-# Platform.Maui.Linux.Gtk4 — Backend Implementation Checklist
+# Microsoft.Maui.Platforms.Linux.Gtk4 — Backend Implementation Checklist
 
 Implementation status of the .NET MAUI backend for Linux using GTK4. Adapted from the generic MAUI backend checklist.
 

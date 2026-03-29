@@ -21,7 +21,7 @@ This produces `YourApp-1.0.0-x86_64.AppImage` in the publish output parent direc
 When `CreateAppImage=true` is set during `dotnet publish`, the build:
 
 1. **Validates** that `ApplicationId` and a Linux `RuntimeIdentifier` are set
-2. **Detects dependencies** — checks if `Platform.Maui.Linux.Gtk4.BlazorWebView` is referenced to include WebKitGTK checks
+2. **Detects dependencies** — checks if `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced to include WebKitGTK checks
 3. **Constructs an AppDir** from the publish output
 4. **Generates a `.desktop` file** using MAUI project properties
 5. **Generates an `AppRun` script** with system dependency checks
@@ -76,7 +76,7 @@ All properties are optional (except `ApplicationId` which is required by MAUI co
 The generated AppImage automatically checks for required system libraries at launch:
 
 - **GTK4** (`libgtk-4.so`) — always checked
-- **WebKitGTK 6.0** (`libwebkitgtk-6.0.so`) — checked only when `Platform.Maui.Linux.Gtk4.BlazorWebView` is referenced
+- **WebKitGTK 6.0** (`libwebkitgtk-6.0.so`) — checked only when `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced
 
 If libraries are missing, the user sees a friendly error message with install commands for Ubuntu/Debian, Fedora, and Arch Linux. If `zenity` is available, a graphical error dialog is also shown.
 

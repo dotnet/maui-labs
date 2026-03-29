@@ -11,12 +11,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Platform.Maui.Linux.Gtk4" Version="0.1.0-preview.*" />
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4" Version="0.1.0-preview.*" />
 <!--#if (essentials) -->
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.Essentials" Version="0.1.0-preview.*" />
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.*" />
 <!--#endif -->
 <!--#if (blazor) -->
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.BlazorWebView" Version="0.1.0-preview.*" />
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView" Version="0.1.0-preview.*" />
 <!--#endif -->
   </ItemGroup>
 

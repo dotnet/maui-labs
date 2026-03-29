@@ -3,7 +3,7 @@
 Last updated: 2026-02-18 (+ MenuBar navigation fix, ToolbarItems in nav bar, rendering bug fixes)
 
 ## Purpose
-Track MAUI handler property/command wiring parity work for `src/Platform.Maui.Linux.Gtk4/Handlers`, including visual controls and container/navigation handlers.
+Track MAUI handler property/command wiring parity work for `src/Microsoft.Maui.Platforms.Linux.Gtk4/Handlers`, including visual controls and container/navigation handlers.
 
 ## Audit Snapshot
 - Handlers reviewed: **42** (was 34 at start)

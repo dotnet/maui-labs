@@ -25,7 +25,7 @@ flatpak install flathub org.gnome.Sdk//47
 When `CreateFlatpak=true` is set during `dotnet publish`, the build:
 
 1. **Validates** that `ApplicationId` and a Linux `RuntimeIdentifier` are set
-2. **Detects dependencies** — checks if `Platform.Maui.Linux.Gtk4.BlazorWebView` is referenced
+2. **Detects dependencies** — checks if `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced
 3. **Copies publish output** to a Flatpak work directory
 4. **Generates a flatpak-builder manifest** (`$(ApplicationId).json`) using the `simple` buildsystem
 5. **Generates `.desktop` and AppStream metadata** files
@@ -86,7 +86,7 @@ Customize by setting `FlatpakFinishArgs` in your project file.
 
 ## Automatic Dependency Detection
 
-When `Platform.Maui.Linux.Gtk4.BlazorWebView` is referenced:
+When `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced:
 - AppStream metadata includes a WebKitGTK `<recommends>` entry
 - The GNOME Platform runtime already includes WebKitGTK, so no additional Flatpak permissions are needed
 

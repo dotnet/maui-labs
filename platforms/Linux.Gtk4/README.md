@@ -1,4 +1,4 @@
-# Platform.Maui.Linux.Gtk4
+# Microsoft.Maui.Platforms.Linux.Gtk4
 
 A community-driven .NET MAUI backend for Linux, powered by **GTK4**. Run your .NET MAUI applications natively on Linux desktops with GTK4 rendering via [GirCore](https://github.com/gircore/gir.core) bindings.
 
@@ -125,7 +125,7 @@ sudo dnf install gtk4-devel webkitgtk6.0-devel
 
 ```bash
 # Install the template
-dotnet new install Platform.Maui.Linux.Gtk4.Templates
+dotnet new install Microsoft.Maui.Platforms.Linux.Gtk4.Templates
 
 # Create a new Linux MAUI app
 dotnet new maui-linux-gtk4 -n MyApp.Linux
@@ -138,8 +138,8 @@ dotnet run
 Add the NuGet package:
 
 ```bash
-dotnet add package Platform.Maui.Linux.Gtk4 --prerelease
-dotnet add package Platform.Maui.Linux.Gtk4.Essentials --prerelease   # optional
+dotnet add package Microsoft.Maui.Platforms.Linux.Gtk4 --prerelease
+dotnet add package Microsoft.Maui.Platforms.Linux.Gtk4.Essentials --prerelease   # optional
 ```
 
 Then set up your entry point:
@@ -147,7 +147,7 @@ Then set up your entry point:
 **Program.cs**
 
 ```csharp
-using Platform.Maui.Linux.Gtk4.Platform;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Microsoft.Maui.Hosting;
 
 public class Program : GtkMauiApplication
@@ -165,7 +165,7 @@ public class Program : GtkMauiApplication
 **MauiProgram.cs**
 
 ```csharp
-using Platform.Maui.Linux.Gtk4.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Hosting;
 
 public static class MauiProgram
@@ -183,7 +183,7 @@ public static class MauiProgram
 
 ## XAML Support
 
-`Platform.Maui.Linux.Gtk4` relies on MAUI's normal transitive build assets for XAML.
+`Microsoft.Maui.Platforms.Linux.Gtk4` relies on MAUI's normal transitive build assets for XAML.
 In Linux head projects, `*.xaml` files are still collected as `MauiXaml` and compiled by MAUI's XAML build pipeline without extra package-specific overrides.
 
 ## Resource Item Support
@@ -215,7 +215,7 @@ MyApp/                              ← Your existing multi-targeted MAUI projec
     └── ...
 
 MyApp.Linux/                        ← New Linux-specific project
-├── MyApp.Linux.csproj                 (net10.0, references Platform.Maui.Linux.Gtk4)
+├── MyApp.Linux.csproj                 (net10.0, references Microsoft.Maui.Platforms.Linux.Gtk4)
 ├── Program.cs                         (GtkMauiApplication entry point)
 └── MauiProgram.cs                     (builder.UseMauiAppLinuxGtk4<App>())
 ```
@@ -252,8 +252,8 @@ The separate project approach is the same pattern used by [OpenMaui](https://git
 ## Building from Source
 
 ```bash
-git clone https://github.com/Redth/Platform.Maui.Linux.Gtk4.git
-cd Platform.Maui.Linux.Gtk4
+git clone https://github.com/dotnet/maui-labs.git
+cd maui-labs/platforms/Linux.Gtk4
 dotnet restore
 dotnet build
 ```
@@ -262,22 +262,22 @@ dotnet build
 
 ```bash
 # Sample app (includes native controls, Blazor Hybrid, essentials, and more)
-dotnet run --project samples/Platform.Maui.Linux.Gtk4.Sample
+dotnet run --project samples/Linux.Gtk4.Sample
 ```
 
 ## Project Structure
 
 ```
-Platform.Maui.Linux.Gtk4.slnx                          # Solution file
+Linux.Gtk4.slnx                                            # Platform-local solution file
 ├── src/
-│   ├── Platform.Maui.Linux.Gtk4/                       # Core MAUI backend
+│   ├── Linux.Gtk4/                                         # Core MAUI backend
 │   │   ├── Handlers/                     # GTK4 handler implementations
 │   │   ├── Hosting/                      # AppHostBuilderExtensions (UseMauiAppLinuxGtk4)
 │   │   └── Platform/                     # GTK application, context, layout, theming
-│   ├── Platform.Maui.Linux.Gtk4.Essentials/            # MAUI Essentials for Linux (clipboard, etc.)
-│   └── Platform.Maui.Linux.Gtk4.BlazorWebView/         # BlazorWebView support via WebKitGTK
+│   ├── Linux.Gtk4.Essentials/                             # MAUI Essentials for Linux (clipboard, etc.)
+│   └── Linux.Gtk4.BlazorWebView/                          # BlazorWebView support via WebKitGTK
 ├── samples/
-│   └── Platform.Maui.Linux.Gtk4.Sample/                # Sample app (controls, Blazor, essentials)
+│   └── Linux.Gtk4.Sample/                                 # Sample app (controls, Blazor, essentials)
 ├── templates/                            # dotnet new templates
 └── docs/                                 # Documentation
 ```
@@ -286,10 +286,10 @@ Platform.Maui.Linux.Gtk4.slnx                          # Solution file
 
 | Package | Purpose |
 |---|---|
-| `Platform.Maui.Linux.Gtk4` | Core GTK4 backend — handlers, hosting, platform services |
-| `Platform.Maui.Linux.Gtk4.Essentials` | MAUI Essentials (clipboard, preferences, device info, etc.) |
-| `Platform.Maui.Linux.Gtk4.BlazorWebView` | Blazor Hybrid support via WebKitGTK |
-| `Platform.Maui.Linux.Gtk4.Templates` | `dotnet new` project templates |
+| `Microsoft.Maui.Platforms.Linux.Gtk4` | Core GTK4 backend — handlers, hosting, platform services |
+| `Microsoft.Maui.Platforms.Linux.Gtk4.Essentials` | MAUI Essentials (clipboard, preferences, device info, etc.) |
+| `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` | Blazor Hybrid support via WebKitGTK |
+| `Microsoft.Maui.Platforms.Linux.Gtk4.Templates` | `dotnet new` project templates |
 
 ## Key Dependencies
 

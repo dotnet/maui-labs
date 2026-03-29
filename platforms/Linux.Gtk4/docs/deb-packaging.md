@@ -20,7 +20,7 @@ This produces `myapp_1.0.0_amd64.deb` in the publish output parent directory.
 When `CreateDeb=true` is set during `dotnet publish`, the build:
 
 1. **Validates** that `ApplicationId` and a Linux `RuntimeIdentifier` are set
-2. **Detects dependencies** — checks if `Platform.Maui.Linux.Gtk4.BlazorWebView` is referenced to add `libwebkitgtk-6.0-4` to the `Depends` field
+2. **Detects dependencies** — checks if `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced to add `libwebkitgtk-6.0-4` to the `Depends` field
 3. **Creates the staging directory** with standard Debian package layout
 4. **Generates `DEBIAN/control`** from MAUI project properties
 5. **Generates a launcher script** in `/usr/bin/`
@@ -76,7 +76,7 @@ When `CreateDeb=true` is set during `dotnet publish`, the build:
 The `Depends` field in `DEBIAN/control` is automatically populated:
 
 - **GTK4** (`libgtk-4-1`) — always included
-- **WebKitGTK** (`libwebkitgtk-6.0-4`) — included when `Platform.Maui.Linux.Gtk4.BlazorWebView` is referenced
+- **WebKitGTK** (`libwebkitgtk-6.0-4`) — included when `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced
 
 Override with `DebDepends` if your app has additional system dependencies.
 

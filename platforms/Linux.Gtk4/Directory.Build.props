@@ -1,11 +1,13 @@
 <Project>
+  <Import Project="../../Directory.Build.props" />
+
   <PropertyGroup>
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <MauiVersion>10.0.31</MauiVersion>
-    <!-- Set to false in CI or when MauiDevFlow repo is not available -->
-    <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">true</EnableMauiDevFlow>
+    <!-- Set to false when the maui-labs DevFlow projects should not be referenced by the sample -->
+    <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
@@ -14,11 +16,12 @@
 
   <!-- Common NuGet package properties for all src/ projects -->
   <PropertyGroup>
-    <Version>0.6.0</Version>
-    <Authors>Platform.Maui.Linux.Gtk4 Contributors</Authors>
+    <VersionPrefix>0.6.0</VersionPrefix>
+    <Version>$(VersionPrefix)</Version>
+    <Authors>Microsoft.Maui.Platforms.Linux.Gtk4 Contributors</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/Redth/Platform.Maui.Linux.Gtk4</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Redth/Platform.Maui.Linux.Gtk4.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Linux.Gtk4</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
