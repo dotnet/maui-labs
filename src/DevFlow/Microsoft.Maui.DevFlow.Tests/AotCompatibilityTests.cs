@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using Microsoft.Maui.DevFlow.CLI;
+using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Tests;

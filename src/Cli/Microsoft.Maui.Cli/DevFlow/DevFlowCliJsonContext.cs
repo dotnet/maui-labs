@@ -1,8 +1,8 @@
 using System.Text.Json.Serialization;
-using Microsoft.Maui.DevFlow.CLI.Broker;
+using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.DevFlow.Driver;
 
-namespace Microsoft.Maui.DevFlow.CLI;
+namespace Microsoft.Maui.Cli.DevFlow;
 
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(string))]
