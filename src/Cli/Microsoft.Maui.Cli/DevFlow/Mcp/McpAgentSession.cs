@@ -1,7 +1,7 @@
-using Microsoft.Maui.DevFlow.CLI.Broker;
+using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.DevFlow.Driver;
 
-namespace Microsoft.Maui.DevFlow.CLI.Mcp;
+namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 
 public class McpAgentSession
 {

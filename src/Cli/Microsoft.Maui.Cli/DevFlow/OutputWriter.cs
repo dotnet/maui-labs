@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Microsoft.Maui.DevFlow.CLI;
+namespace Microsoft.Maui.Cli.DevFlow;
 
 /// <summary>
 /// Central output abstraction for consistent JSON/human output across all CLI commands.

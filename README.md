@@ -8,12 +8,13 @@ Experimental packages and tooling for .NET MAUI. This repository hosts pre-relea
 
 ### Cli
 
-A command-line tool for .NET MAUI development environment setup and device management.
+A command-line tool for .NET MAUI development environment setup, device management, and app automation.
 
 - **Environment diagnostics** (`maui doctor`) with auto-fix capabilities
 - **Android SDK and JDK management** — install, update, and configure
 - **Emulator management** — create, start, stop, and delete Android emulators
 - **Device listing** across all connected platforms
+- **DevFlow app automation** (`maui devflow`) — visual tree inspection, screenshots, CDP, MCP server
 - **JSON output** (`--json`) for CI pipelines and scripting
 
 | Package | Description |
@@ -27,12 +28,11 @@ maui doctor
 
 ### DevFlow
 
-A comprehensive MAUI testing, automation, and debugging toolkit.
+A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
 
 - **In-app HTTP agent** for visual tree inspection, element interaction, and screenshots
 - **Blazor CDP bridge** for Chrome DevTools Protocol on Blazor WebViews
-- **CLI global tool** (`maui-devflow`) with 50+ commands
-- **MCP server** for AI agent integration
+- **MCP server** for AI agent integration (via `maui devflow mcp`)
 - **Platform drivers** for iOS, Android, Mac Catalyst, Windows, and Linux/GTK
 - **Network monitoring** and **performance profiling**
 
@@ -43,7 +43,6 @@ A comprehensive MAUI testing, automation, and debugging toolkit.
 | `Microsoft.Maui.DevFlow.Agent.Gtk` | GTK/Linux agent |
 | `Microsoft.Maui.DevFlow.Blazor` | Blazor WebView CDP bridge |
 | `Microsoft.Maui.DevFlow.Blazor.Gtk` | WebKitGTK CDP bridge |
-| `Microsoft.Maui.DevFlow.CLI` | CLI global tool |
 | `Microsoft.Maui.DevFlow.Driver` | Platform driver library |
 | `Microsoft.Maui.DevFlow.Logging` | Buffered JSONL file logger |
 

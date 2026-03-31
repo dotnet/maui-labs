@@ -8,7 +8,7 @@ using XenoAtom.Terminal.UI.DataGrid;
 using XenoAtom.Terminal.UI.Geometry;
 using XenoAtom.Terminal.UI.Styling;
 
-namespace Microsoft.Maui.DevFlow.CLI;
+namespace Microsoft.Maui.Cli.DevFlow;
 
 /// <summary>
 /// Bindable model for a network request row in the DataGrid.

@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Microsoft.Maui.DevFlow.CLI.Broker;
+namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
 /// <summary>
 /// Represents a registered agent in the broker.

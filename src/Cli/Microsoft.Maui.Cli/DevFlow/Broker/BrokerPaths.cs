@@ -1,4 +1,4 @@
-namespace Microsoft.Maui.DevFlow.CLI.Broker;
+namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
 /// <summary>
 /// Well-known paths for broker state and logs.

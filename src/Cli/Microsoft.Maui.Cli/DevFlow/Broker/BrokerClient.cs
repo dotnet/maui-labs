@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 
-namespace Microsoft.Maui.DevFlow.CLI.Broker;
+namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
 /// <summary>
 /// Client-side logic for ensuring the broker is running and querying it.

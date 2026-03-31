@@ -90,6 +90,9 @@ public class Program
 		// Platform-specific command groups
 		rootCommand.Add(AndroidCommands.Create());
 
+		// DevFlow automation commands (maui devflow ...)
+		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));
+
 		return rootCommand;
 	}
 

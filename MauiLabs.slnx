@@ -23,7 +23,6 @@
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor.Gtk/Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor/Microsoft.Maui.DevFlow.Blazor.csproj" />
-    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.CLI/Microsoft.Maui.DevFlow.CLI.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Driver/Microsoft.Maui.DevFlow.Driver.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Logging/Microsoft.Maui.DevFlow.Logging.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Tests/Microsoft.Maui.DevFlow.Tests.csproj" />

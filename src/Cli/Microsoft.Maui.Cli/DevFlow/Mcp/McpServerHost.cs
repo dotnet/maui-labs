@@ -2,9 +2,9 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol;
-using Microsoft.Maui.DevFlow.CLI.Mcp.Tools;
+using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 
-namespace Microsoft.Maui.DevFlow.CLI.Mcp;
+namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 
 public static class McpServerHost
 {

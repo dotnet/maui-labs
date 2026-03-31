@@ -12,13 +12,23 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="SkiaSharp" />
     <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
+    <PackageReference Include="XenoAtom.Terminal.UI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
   </ItemGroup>
 
   <ItemGroup>

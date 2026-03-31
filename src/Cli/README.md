@@ -61,6 +61,12 @@ maui android emulator start --name MyEmulator
 | `maui android emulator start` | Start an Android emulator |
 | `maui android emulator stop` | Stop a running emulator |
 | `maui android emulator delete` | Delete an emulator |
+| `maui devflow` | MAUI app automation via Agent API and Blazor WebViews via CDP |
+| `maui devflow MAUI tree` | Dump the visual tree of a running MAUI app |
+| `maui devflow MAUI screenshot` | Take a screenshot of a running MAUI app |
+| `maui devflow cdp` | Blazor WebView automation via Chrome DevTools Protocol |
+| `maui devflow mcp` | Start MCP server for AI agent integration |
+| `maui devflow broker` | Manage the DevFlow agent broker |
 
 ## Global Options
 

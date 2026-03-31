@@ -3,9 +3,9 @@ using System.Text.Json.Nodes;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using ModelContextProtocol.Protocol;
-using Microsoft.Maui.DevFlow.CLI.Mcp;
+using Microsoft.Maui.Cli.DevFlow.Mcp;
 
-namespace Microsoft.Maui.DevFlow.CLI.Mcp.Tools;
+namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 
 [McpServerToolType]
 public sealed class CdpTools

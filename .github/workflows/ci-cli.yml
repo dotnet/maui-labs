@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/Cli/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -15,6 +16,7 @@ on:
     branches: [main]
     paths:
       - 'src/Cli/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'

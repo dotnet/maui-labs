@@ -5,7 +5,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace Microsoft.Maui.DevFlow.CLI.Broker;
+namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
 /// <summary>
 /// Central broker daemon that manages agent registration and port assignment.

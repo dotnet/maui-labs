@@ -1,9 +1,9 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using Microsoft.Maui.DevFlow.CLI.Mcp;
+using Microsoft.Maui.Cli.DevFlow.Mcp;
 
-namespace Microsoft.Maui.DevFlow.CLI.Mcp.Tools;
+namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 
 [McpServerToolType]
 public sealed class PreferencesTools
