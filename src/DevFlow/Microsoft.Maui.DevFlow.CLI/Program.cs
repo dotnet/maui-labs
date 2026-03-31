@@ -843,6 +843,11 @@ class Program
         listCmd.SetHandler(async (json, noJson) => await ListAgentsCommandAsync(OutputWriter.ResolveJsonMode(json, noJson)), jsonOption, noJsonOption);
         rootCommand.Add(listCmd);
 
+        // ===== diagnose command (end-to-end diagnostics) =====
+        var diagnoseCmd = new Command("diagnose", "Check DevFlow health: broker, agents, and project integration");
+        diagnoseCmd.SetHandler(async (json, noJson) => await DiagnoseCommandAsync(OutputWriter.ResolveJsonMode(json, noJson)), jsonOption, noJsonOption);
+        rootCommand.Add(diagnoseCmd);
+
         // ===== wait command (wait for agent to connect) =====
         var waitTimeoutOption = new Option<int>(
             ["--timeout", "-t"],
@@ -3443,7 +3448,34 @@ class Program
         var agents = await Broker.BrokerClient.ListAgentsAsync(port.Value);
         if (agents == null || agents.Length == 0)
         {
-            OutputWriter.WriteResult(new JsonArray(), json, _ => Console.WriteLine("No agents connected"));
+            // Scan current directory for devflow-enabled projects
+            var projects = ScanForDevFlowProjects();
+            
+            if (json)
+            {
+                var result = new { agents = Array.Empty<object>(), projects };
+                OutputWriter.WriteResult(result, json);
+            }
+            else
+            {
+                Console.WriteLine("No agents connected.");
+                
+                if (projects.Length > 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("DevFlow-enabled projects found:");
+                    foreach (var proj in projects)
+                    {
+                        Console.WriteLine($"  📦 {proj}");
+                    }
+                    Console.WriteLine();
+                    Console.WriteLine("Hint: Launch your app in Debug mode, then run 'maui-devflow wait'");
+                }
+                else
+                {
+                    Console.WriteLine("No DevFlow-enabled projects found in current directory.");
+                }
+            }
             return;
         }
 
@@ -3464,6 +3496,96 @@ class Program
                 var version = a.Version ?? "-";
                 Console.WriteLine($"{a.Id,-14} {a.AppName,-20} {a.Platform,-14} {a.Tfm,-24} {a.Port,-6} {version,-12} {uptimeStr}");
             }
+        }
+    }
+
+    private static async Task DiagnoseCommandAsync(bool json)
+    {
+        var diagnostics = new Dictionary<string, object>();
+        
+        // Get CLI version
+        var version = typeof(Program).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        diagnostics["cli_version"] = version;
+        
+        // Check broker status
+        var brokerPort = await Broker.BrokerClient.EnsureBrokerRunningAsync();
+        var brokerRunning = brokerPort != null;
+        diagnostics["broker_running"] = brokerRunning;
+        if (brokerRunning)
+            diagnostics["broker_port"] = brokerPort!.Value;
+        
+        // List connected agents
+        var agents = brokerRunning ? await Broker.BrokerClient.ListAgentsAsync(brokerPort!.Value) : null;
+        var agentCount = agents?.Length ?? 0;
+        diagnostics["agent_count"] = agentCount;
+        diagnostics["agents"] = agents ?? Array.Empty<object>();
+        
+        // Scan for devflow-enabled projects
+        var projects = ScanForDevFlowProjects();
+        diagnostics["projects"] = projects;
+        
+        if (json)
+        {
+            OutputWriter.WriteResult(diagnostics, json);
+            return;
+        }
+        
+        // Human-readable output
+        Console.WriteLine("DevFlow Diagnostics");
+        Console.WriteLine("━━━━━━━━━━━━━━━━━━");
+        Console.WriteLine($"✅ CLI version:     {version}");
+        
+        if (brokerRunning)
+        {
+            Console.WriteLine($"✅ Broker:          Running on port {brokerPort} ({agentCount} agent(s) connected)");
+        }
+        else
+        {
+            Console.WriteLine($"❌ Broker:          Not running → Run 'maui-devflow broker start'");
+        }
+        
+        Console.WriteLine();
+        
+        if (agentCount > 0)
+        {
+            Console.WriteLine("✅ Connected agents:");
+            foreach (var agent in agents!)
+            {
+                var uptime = DateTime.UtcNow - agent.ConnectedAt;
+                var totalHours = (int)uptime.TotalHours;
+                var uptimeStr = uptime.TotalHours >= 1
+                    ? $"{totalHours}h {uptime.Minutes}m"
+                    : $"{uptime.Minutes}m {uptime.Seconds}s";
+                Console.WriteLine($"   • {agent.AppName} ({agent.Platform}, port {agent.Port}, uptime {uptimeStr})");
+            }
+        }
+        else
+        {
+            Console.WriteLine("⚠️  No agents connected");
+        }
+        
+        Console.WriteLine();
+        
+        if (projects.Length > 0)
+        {
+            Console.WriteLine("📦 DevFlow-enabled projects:");
+            foreach (var proj in projects)
+            {
+                Console.WriteLine($"   • {proj}");
+            }
+            
+            if (agentCount == 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("💡 Suggestion: Your project has DevFlow but no agent is connected.");
+                Console.WriteLine("   1. Ensure the app is running in Debug configuration");
+                Console.WriteLine($"   2. Run: maui-devflow wait --project \"{projects[0].Replace("\"", "\\\"")}\"");
+            }
+        }
+        else
+        {
+            Console.WriteLine("📦 DevFlow-enabled projects: (none found in current directory)");
         }
     }
 
@@ -3700,5 +3822,79 @@ class Program
             tokens.Add(current.ToString());
 
         return tokens.ToArray();
+    }
+
+    /// <summary>
+    /// Scans the current directory for csproj files containing DevFlow package references.
+    /// Returns relative paths to projects that have DevFlow enabled.
+    /// </summary>
+    private static readonly HashSet<string> _scanExcludedDirs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin", "obj", "node_modules", ".git", ".vs", ".idea", "packages"
+    };
+
+    private static string[] ScanForDevFlowProjects()
+    {
+        var cwd = Directory.GetCurrentDirectory();
+        var projects = new List<string>();
+
+        try
+        {
+            var pending = new Queue<string>();
+            pending.Enqueue(cwd);
+
+            while (pending.Count > 0)
+            {
+                var dir = pending.Dequeue();
+
+                // Search for .csproj files in this directory only (not recursive)
+                try
+                {
+                    foreach (var csproj in Directory.EnumerateFiles(dir, "*.csproj", SearchOption.TopDirectoryOnly))
+                    {
+                        try
+                        {
+                            var content = File.ReadAllText(csproj);
+                            if (content.Contains("Redth.MauiDevFlow.Agent") ||
+                                content.Contains("Microsoft.Maui.DevFlow.Agent"))
+                            {
+                                projects.Add(Path.GetRelativePath(cwd, csproj));
+                            }
+                        }
+                        catch
+                        {
+                            // Skip files we can't read
+                        }
+                    }
+                }
+                catch
+                {
+                    // Skip directories we can't enumerate
+                    continue;
+                }
+
+                // Enqueue subdirectories, pruning excluded ones before recursing
+                try
+                {
+                    foreach (var subDir in Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        var dirName = Path.GetFileName(subDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                        if (!string.IsNullOrEmpty(dirName) && !_scanExcludedDirs.Contains(dirName))
+                            pending.Enqueue(subDir);
+                    }
+                }
+                catch
+                {
+                    // Skip directories we can't enumerate
+                }
+            }
+        }
+        catch
+        {
+            // If scanning fails, return empty array
+        }
+
+        projects.Sort(StringComparer.OrdinalIgnoreCase);
+        return projects.ToArray();
     }
 }

@@ -45,6 +45,43 @@ For complete setup instructions, see [references/setup.md](references/setup.md).
 
 ## Core Workflow
 
+### 0. Verify DevFlow Availability
+
+Before building or launching anything, determine if DevFlow is available for the current project.
+
+**Check integration (project files — the source of truth):**
+```bash
+# Check if any csproj in the project has DevFlow packages
+grep -rl "MauiDevFlow\|Maui\.DevFlow" --include="*.csproj" .
+```
+
+If grep returns results, DevFlow IS integrated — even if `maui-devflow list` shows nothing.
+
+**Check runtime connection:**
+```bash
+maui-devflow list                          # shows connected agents
+maui-devflow broker status                 # shows broker health
+maui-devflow diagnose                      # full end-to-end health check (recommended)
+```
+
+**Decision tree — what to do based on results:**
+
+| Project has DevFlow packages? | Agent in `list`? | Action |
+|-------------------------------|------------------|--------|
+| ✅ Yes | ✅ Yes | Ready — proceed to inspection/interaction |
+| ✅ Yes | ❌ No | App not running in Debug, or broker issue. Launch app, then `maui-devflow wait` |
+| ❌ No | — | Need to integrate DevFlow (see "Integrating MauiDevFlow into a MAUI App") |
+
+**⚠️ CRITICAL:** `maui-devflow list` shows RUNTIME state (connected agents), NOT project integration.
+An empty list does NOT mean "DevFlow is not installed." Always check project files first.
+
+**After launching the app (via `dotnet build -t:Run` or through Aspire):**
+```bash
+maui-devflow wait                          # blocks until agent connects (default 120s)
+maui-devflow wait --project path/to/App.csproj  # filter to specific project
+```
+ALWAYS run `wait` after launching. Never assume the agent is connected — verify it.
+
 ### 1. Ensure a Device/Simulator/Emulator is Running
 
 **⚠️ Multi-project conflict avoidance:** When multiple projects may run simultaneously
@@ -52,7 +89,7 @@ For complete setup instructions, see [references/setup.md](references/setup.md).
 prevent apps from replacing each other. Check what's already in use first:
 
 ```bash
-maui-devflow list                                             # see all registered agents
+maui-devflow list     # check if any agents are already connected (runtime state only — see Step 0 for integration check)
 ```
 
 If another iOS or Android agent is already registered, **create a new simulator/emulator**
@@ -139,7 +176,8 @@ maui-devflow wait --project path/to/App.csproj   # filter to specific project
 ```
 
 `maui-devflow wait` prints the assigned port as soon as the agent connects. Exit code 1
-means timeout — check async shell output for build errors.
+means timeout. If `wait` times out, run `maui-devflow diagnose` to identify the issue.
+Check async shell output for build errors.
 
 **Android only** — set up port forwarding after the agent connects:
 ```bash
@@ -524,6 +562,10 @@ their input.
 
 ## Tips
 
+- **`maui-devflow list` shows runtime state, not project integration.** Empty list ≠ "not installed."
+  Always check project files (`grep -rl "MauiDevFlow" --include="*.csproj" .`) before concluding DevFlow is unavailable.
+- **`maui-devflow diagnose`** is the fastest way to check the entire chain: CLI → broker → agents → projects.
+- After launching through Aspire, always run `maui-devflow wait` before attempting any interaction.
 - **Use `maui-devflow batch`** for multi-step interactions — resolves port once, adds delays,
   returns structured JSONL. See [references/batch.md](references/batch.md).
 - **Always use `maui-devflow MAUI screenshot`** — captures in-process, app does NOT need

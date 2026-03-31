@@ -28,48 +28,53 @@ public static class AgentServiceExtensions
         var project = ReadAssemblyMetadataProject() ?? "unknown";
         var tfm = ReadAssemblyMetadataTfm() ?? "unknown";
 
-        // Try broker for port assignment first (must run on thread pool to avoid deadlock
-        // with SynchronizationContext — AddMauiDevFlowAgent runs on the main thread)
+        // Always register with the broker for discoverability (must run on thread pool
+        // to avoid deadlock with SynchronizationContext — AddMauiDevFlowAgent runs on
+        // the main thread). When a custom port is set, we tell the broker our port so it
+        // uses it instead of assigning from the pool; the agent stays discoverable via
+        // `maui-devflow list` regardless of port configuration.
         BrokerRegistration? brokerReg = null;
-        if (options.Port == AgentOptions.DefaultPort)
+        bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
+        try
         {
+            string platform;
+            string appName;
             try
             {
-                string platform;
-                string appName;
-                try
-                {
-                    platform = DeviceInfo.Platform.ToString();
-                    appName = AppInfo.Name ?? "unknown";
-                }
-                catch
-                {
-                    // MAUI not fully initialized yet during DI registration
-                    platform = OperatingSystem.IsAndroid() ? "Android"
-                        : OperatingSystem.IsIOS() ? "iOS"
-                        : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
-                        : OperatingSystem.IsMacOS() ? "macOS"
-                        : OperatingSystem.IsWindows() ? "Windows"
-                        : "Unknown";
-                    appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-                }
-                brokerReg = new BrokerRegistration(project, tfm, platform, appName);
-                // Task.Run avoids deadlock: TryRegisterAsync uses await internally,
-                // and the main thread has a SynchronizationContext that would deadlock
-                // if we called .GetAwaiter().GetResult() directly.
-                var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
-                if (assignedPort.HasValue)
-                {
-                    options.Port = assignedPort.Value;
-                    Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
-                }
+                platform = DeviceInfo.Platform.ToString();
+                appName = AppInfo.Name ?? "unknown";
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker registration failed: {ex.Message}");
-                brokerReg?.Dispose();
-                brokerReg = null;
+                // MAUI not fully initialized yet during DI registration
+                platform = OperatingSystem.IsAndroid() ? "Android"
+                    : OperatingSystem.IsIOS() ? "iOS"
+                    : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
+                    : OperatingSystem.IsMacOS() ? "macOS"
+                    : OperatingSystem.IsWindows() ? "Windows"
+                    : "Unknown";
+                appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
             }
+            brokerReg = new BrokerRegistration(project, tfm, platform, appName);
+            // If the user set a custom port, tell the broker upfront so it registers
+            // with that port instead of assigning one from the pool.
+            if (hasCustomPort)
+                brokerReg.CurrentPort = options.Port;
+            // Task.Run avoids deadlock: TryRegisterAsync uses await internally,
+            // and the main thread has a SynchronizationContext that would deadlock
+            // if we called .GetAwaiter().GetResult() directly.
+            var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
+            if (assignedPort.HasValue)
+            {
+                options.Port = assignedPort.Value;
+                Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker registration failed: {ex.Message}");
+            brokerReg?.Dispose();
+            brokerReg = null;
         }
 
         // Fall back to assembly metadata port if broker didn't assign one

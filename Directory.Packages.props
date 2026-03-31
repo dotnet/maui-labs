@@ -26,12 +26,19 @@
     <PackageVersion Include="Fizzler" Version="$(FizzlerVersion)" />
     <PackageVersion Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
     <PackageVersion Include="Spectre.Console" Version="$(SpectreConsoleVersion)" />
-    <PackageVersion Include="System.CommandLine" Version="$(SystemCommandLineVersion)" />
+    <PackageVersion Include="Spectre.Console.Testing" Version="$(SpectreConsoleVersion)" />
+    <PackageVersion Include="System.CommandLine" Version="$(SystemCommandLineStableVersion)" />
     <PackageVersion Include="System.Text.Json" Version="$(SystemTextJsonVersion)" />
     <PackageVersion Include="Websocket.Client" Version="$(WebsocketClientVersion)" />
     <PackageVersion Include="XenoAtom.Terminal.UI" Version="$(XenoAtomTerminalUIVersion)" />
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="$(InteropUIAutomationClientVersion)" />
+  </ItemGroup>
+
+  <!-- MAUI Cli Tool dependencies -->
+  <ItemGroup Label="Cli">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
+    <PackageVersion Include="Xamarin.Android.Tools.AndroidSdk" Version="$(XamarinAndroidToolsAndroidSdkVersion)" />
   </ItemGroup>
 
   <!-- Platform extensions (pinned) -->

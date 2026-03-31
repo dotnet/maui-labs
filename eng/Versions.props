@@ -22,6 +22,7 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
     <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
@@ -34,10 +35,15 @@
     <SkiaSharpVersion>3.119.2</SkiaSharpVersion>
     <SpectreConsoleVersion>0.54.0</SpectreConsoleVersion>
     <SystemCommandLineVersion>2.0.0-beta4.22272.1</SystemCommandLineVersion>
+    <SystemCommandLineStableVersion>2.0.5</SystemCommandLineStableVersion>
     <WebsocketClientVersion>5.3.0</WebsocketClientVersion>
     <XenoAtomTerminalUIVersion>1.7.1</XenoAtomTerminalUIVersion>
     <ModelContextProtocolVersion>1.1.0</ModelContextProtocolVersion>
     <InteropUIAutomationClientVersion>10.19041.0</InteropUIAutomationClientVersion>
+  </PropertyGroup>
+  <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
+  <PropertyGroup Label="Android Tools">
+    <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.8</XamarinAndroidToolsAndroidSdkVersion>
   </PropertyGroup>
   <PropertyGroup Label="Platform Extensions">
     <PlatformMauiMacOSVersion>0.3.0</PlatformMauiMacOSVersion>

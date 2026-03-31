@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      install-workloads:
+        required: false
+        type: boolean
+        default: true
+        description: 'Install MAUI workloads and Android SDK (not needed for net10.0-only projects)'
 
 jobs:
   build:
@@ -34,15 +39,16 @@ jobs:
           global-json-file: global.json
 
       - name: Install workloads
+        if: inputs.install-workloads
         run: dotnet workload install maui macos maui-tizen
 
       - name: Install Android SDK dependencies (Windows)
-        if: matrix.os == 'windows-latest'
+        if: inputs.install-workloads && matrix.os == 'windows-latest'
         run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
         shell: cmd
 
       - name: Install Android SDK dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+        if: inputs.install-workloads && matrix.os == 'macos-latest'
         run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj
 
       - name: Build, Test and Pack (Windows)

@@ -25,28 +25,29 @@ public static class GtkAgentServiceExtensions
         var project = ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject") ?? "unknown";
         var tfm = ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm") ?? "unknown";
 
-        // Try broker for port assignment first
+        // Always register with the broker for discoverability. When a custom port is
+        // set, we tell the broker our port so it uses it instead of assigning from the pool.
         BrokerRegistration? brokerReg = null;
-        if (options.Port == AgentOptions.DefaultPort)
+        bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
+        try
         {
-            try
+            var platform = "Linux";
+            var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
+            brokerReg = new BrokerRegistration(project, tfm, platform, appName);
+            if (hasCustomPort)
+                brokerReg.CurrentPort = options.Port;
+            var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
+            if (assignedPort.HasValue)
             {
-                var platform = "Linux";
-                var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-                brokerReg = new BrokerRegistration(project, tfm, platform, appName);
-                var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
-                if (assignedPort.HasValue)
-                {
-                    options.Port = assignedPort.Value;
-                    Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
-                }
+                options.Port = assignedPort.Value;
+                Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker registration failed: {ex.Message}");
-                brokerReg?.Dispose();
-                brokerReg = null;
-            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker registration failed: {ex.Message}");
+            brokerReg?.Dispose();
+            brokerReg = null;
         }
 
         // Fall back to assembly metadata port if broker didn't assign one

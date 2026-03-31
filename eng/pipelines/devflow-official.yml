@@ -1,5 +1,6 @@
-# Azure DevOps official build pipeline for DevFlow
+# Azure DevOps official build pipeline for DevFlow and Cli
 # Uses Arcade build system with 1ES Pipeline Templates for security compliance.
+# Both products build in parallel; each can be published to NuGet.org independently.
 
 trigger:
   batch: true
@@ -11,8 +12,12 @@ trigger:
 pr: none
 
 parameters:
-- name: publishPackagesNuget
-  displayName: 'Publish packages to nuget.org'
+- name: publishDevFlowNuget
+  displayName: 'Publish DevFlow packages to NuGet.org'
+  type: boolean
+  default: false
+- name: publishCliNuget
+  displayName: 'Publish Cli packages to NuGet.org'
   type: boolean
   default: false
 
@@ -56,7 +61,8 @@ extends:
           testResultsFormat: xunit
           enableTelemetry: true
           jobs:
-          - job: Windows
+          - job: DevFlow
+            displayName: DevFlow - Windows
             pool:
               name: NetCore1ESPool-Internal
               demands: ImageOverride -equals windows.vs2026preview.scout.amd64
@@ -81,7 +87,31 @@ extends:
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\DevFlow\DevFlow.slnf
                 $(_OfficialBuildArgs)
-              displayName: Build and Test
+              displayName: Build and Test DevFlow
+
+          - job: Cli
+            displayName: Cli - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\Cli\Cli.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test Cli
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
@@ -89,20 +119,16 @@ extends:
         enableSigningValidation: true
         enableNugetValidation: true
 
-    # Publish to NuGet.org using 1ES.PublishNuget task
-    # Pattern from dotnet/aspire release-publish-nuget.yml:
-    # - PrepareArtifacts job re-publishes PackageArtifacts through 1ES outputs
-    #   so that SBOM manifest is generated (required for releaseJob validation)
-    # - PublishNuGet job consumes the SBOM-annotated artifact and pushes to NuGet.org
-    - ${{ if eq(parameters.publishPackagesNuget, true) }}:
-      - stage: publish_nuget
-        displayName: 'Publish to NuGet.org'
+    # Publish DevFlow packages to NuGet.org
+    - ${{ if eq(parameters.publishDevFlowNuget, true) }}:
+      - stage: publish_devflow_nuget
+        displayName: 'Publish DevFlow to NuGet.org'
         dependsOn:
         - Validate
         - publish_using_darc
         jobs:
         - job: PrepareArtifacts
-          displayName: 'Prepare Artifacts with SBOM'
+          displayName: 'Prepare DevFlow Artifacts'
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
@@ -111,16 +137,20 @@ extends:
           templateContext:
             outputs:
             - output: pipelineArtifact
-              displayName: Publish PackageArtifacts
-              targetPath: '$(Pipeline.Workspace)/PackageArtifacts'
-              artifactName: PackageArtifactsForNuGet
+              displayName: Publish DevFlow Packages
+              targetPath: '$(Pipeline.Workspace)/DevFlowPackages'
+              artifactName: DevFlowPackagesForNuGet
           steps:
           - download: current
             artifact: PackageArtifacts
             displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/DevFlowPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose
+            displayName: Filter DevFlow packages
 
         - job: PublishNuGet
-          displayName: 'Push Packages to NuGet.org'
+          displayName: 'Push DevFlow to NuGet.org'
           dependsOn: PrepareArtifacts
           timeoutInMinutes: 30
           pool:
@@ -132,14 +162,69 @@ extends:
             isProduction: true
             inputs:
             - input: pipelineArtifact
-              artifactName: PackageArtifactsForNuGet
-              targetPath: '$(Pipeline.Workspace)/PackageArtifacts'
+              artifactName: DevFlowPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/DevFlowPackages'
           steps:
           - task: 1ES.PublishNuget@1
-            displayName: 'Push Packages to NuGet.org'
+            displayName: 'Push DevFlow to NuGet.org'
             inputs:
               useDotNetTask: false
-              packagesToPush: '$(Pipeline.Workspace)/PackageArtifacts/*.nupkg'
-              packageParentPath: '$(Pipeline.Workspace)/PackageArtifacts'
+              packagesToPush: '$(Pipeline.Workspace)/DevFlowPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/DevFlowPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish Cli packages to NuGet.org
+    - ${{ if eq(parameters.publishCliNuget, true) }}:
+      - stage: publish_cli_nuget
+        displayName: 'Publish Cli to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare Cli Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish Cli Packages
+              targetPath: '$(Pipeline.Workspace)/CliPackages'
+              artifactName: CliPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/CliPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose
+            displayName: Filter Cli packages
+
+        - job: PublishNuGet
+          displayName: 'Push Cli to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: CliPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/CliPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push Cli to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/CliPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/CliPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'

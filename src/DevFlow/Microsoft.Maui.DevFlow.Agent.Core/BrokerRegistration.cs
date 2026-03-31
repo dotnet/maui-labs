@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
@@ -25,6 +26,8 @@ public class BrokerRegistration : IDisposable
     private readonly string _appName;
     private int _brokerPort;
     private int? _assignedPort;
+    private ILogger? _logger;
+    private static ILogger? _staticLogger;
 
     /// <summary>
     /// The port assigned by the broker, or null if not registered.
@@ -42,13 +45,19 @@ public class BrokerRegistration : IDisposable
     /// </summary>
     public bool IsConnected => _ws?.State == WebSocketState.Open;
 
-    public BrokerRegistration(string project, string tfm, string platform, string appName, int brokerPort = DefaultBrokerPort)
+    /// <summary>
+    /// Sets the static logger to be used by all BrokerRegistration instances that don't have an instance logger.
+    /// </summary>
+    public static void SetLogger(ILogger logger) => _staticLogger = logger;
+
+    public BrokerRegistration(string project, string tfm, string platform, string appName, int brokerPort = DefaultBrokerPort, ILogger? logger = null)
     {
         _project = project;
         _tfm = tfm;
         _platform = platform;
         _appName = appName;
         _brokerPort = brokerPort;
+        _logger = logger;
     }
 
     /// <summary>
@@ -59,6 +68,9 @@ public class BrokerRegistration : IDisposable
     {
         timeout ??= TimeSpan.FromSeconds(3);
         _cts = new CancellationTokenSource();
+        
+        var logger = _logger ?? _staticLogger;
+        logger?.LogInformation("DevFlow agent connecting to broker at ws://localhost:{BrokerPort}/ws/agent", _brokerPort);
 
         try
         {
@@ -80,6 +92,7 @@ public class BrokerRegistration : IDisposable
             if (response?.Type == "registered" && response.Port > 0)
             {
                 _assignedPort = response.Port;
+                logger?.LogInformation("DevFlow agent registered. Broker assigned port: {Port}", _assignedPort);
 
                 // Start background task to keep connection alive
                 _ = Task.Run(() => MonitorConnectionAsync(_cts.Token));
@@ -88,14 +101,16 @@ public class BrokerRegistration : IDisposable
             }
 
             // Registration failed
+            logger?.LogWarning("DevFlow agent failed to register with broker: Invalid response");
             _ws.Dispose();
             _ws = null;
             StartReconnection();
             return null;
         }
-        catch
+        catch (Exception ex)
         {
             // Broker unavailable — start background retries so we register when it comes up
+            logger?.LogDebug("Broker unavailable at ws://localhost:{BrokerPort}/ws/agent — starting background reconnection: {Message}", _brokerPort, ex.Message);
             _ws?.Dispose();
             _ws = null;
             StartReconnection();
@@ -119,7 +134,11 @@ public class BrokerRegistration : IDisposable
 
         // Connection lost — start reconnection
         if (!_disposed && !ct.IsCancellationRequested)
+        {
+            var logger = _logger ?? _staticLogger;
+            logger?.LogWarning("DevFlow agent lost broker connection — starting reconnection");
             StartReconnection();
+        }
     }
 
     private void StartReconnection()
@@ -128,10 +147,14 @@ public class BrokerRegistration : IDisposable
 
         var delays = new[] { 2000, 5000, 10000, 15000 };
         var attempt = 0;
+        var logger = _logger ?? _staticLogger;
 
         _reconnectTimer = new Timer(async _ =>
         {
             if (_disposed) return;
+
+            attempt++;
+            logger?.LogDebug("DevFlow agent reconnection attempt {Attempt} to broker...", attempt);
 
             try
             {
@@ -153,16 +176,19 @@ public class BrokerRegistration : IDisposable
                 if (response?.Type == "registered")
                 {
                     _assignedPort = response.Port;
+                    logger?.LogInformation("DevFlow agent reconnected to broker after {Attempt} attempts", attempt);
                     _reconnectTimer?.Dispose();
                     _reconnectTimer = null;
                     _ = Task.Run(() => MonitorConnectionAsync(_cts?.Token ?? CancellationToken.None));
                     return;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                logger?.LogDebug("DevFlow agent reconnection attempt {Attempt} failed — retrying: {Message}", attempt, ex.Message);
+            }
 
             // Keep retrying with backoff up to 15s, indefinitely
-            attempt++;
             var delay = delays[Math.Min(attempt, delays.Length - 1)];
             try { _reconnectTimer?.Change(delay, Timeout.Infinite); } catch { }
         }, null, 2000, Timeout.Infinite);

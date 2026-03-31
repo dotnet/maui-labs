@@ -1,0 +1,33 @@
+name: CI - Cli
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Cli/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Cli/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/Cli/Cli.slnf
+      project-name: cli
+      run-tests: true
+      pack: true
+      install-workloads: false

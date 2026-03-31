@@ -1,0 +1,17 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using Microsoft.Maui.Cli.Models;
+
+namespace Microsoft.Maui.Cli.Services;
+
+/// <summary>
+/// Service for managing devices across all platforms.
+/// </summary>
+public interface IDeviceManager
+{
+	Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default);
+	Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default);
+	Task<Device> GetRunningDeviceOrThrowAsync(CancellationToken cancellationToken = default);
+}

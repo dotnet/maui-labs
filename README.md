@@ -6,6 +6,25 @@ Experimental packages and tooling for .NET MAUI. This repository hosts pre-relea
 
 ## Products
 
+### Cli
+
+A command-line tool for .NET MAUI development environment setup and device management.
+
+- **Environment diagnostics** (`maui doctor`) with auto-fix capabilities
+- **Android SDK and JDK management** — install, update, and configure
+- **Emulator management** — create, start, stop, and delete Android emulators
+- **Device listing** across all connected platforms
+- **JSON output** (`--json`) for CI pipelines and scripting
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Cli` | CLI global tool (`maui`) |
+
+```bash
+dotnet tool install -g Microsoft.Maui.Cli
+maui doctor
+```
+
 ### DevFlow
 
 A comprehensive MAUI testing, automation, and debugging toolkit.

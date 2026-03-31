@@ -1,6 +1,6 @@
 {
   "solution": {
-    "path": "../../MauiLabs.sln",
+    "path": "../../MauiLabs.slnx",
     "projects": [
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Core\\Microsoft.Maui.DevFlow.Agent.Core.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent\\Microsoft.Maui.DevFlow.Agent.csproj",

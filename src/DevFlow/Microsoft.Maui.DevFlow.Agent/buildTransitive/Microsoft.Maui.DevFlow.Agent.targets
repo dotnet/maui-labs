@@ -25,7 +25,8 @@
     </PropertyGroup>
     <WriteLinesToFile File="$(_MauiDevFlowPortFile)"
                      Lines="$(_MauiDevFlowMetadata)"
-                     Overwrite="true" />
+                     Overwrite="true"
+                     WriteOnlyWhenDifferent="true" />
     <ItemGroup>
       <Compile Include="$(_MauiDevFlowPortFile)" />
     </ItemGroup>
