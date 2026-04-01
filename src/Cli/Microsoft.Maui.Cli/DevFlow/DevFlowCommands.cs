@@ -3827,7 +3827,7 @@ public class DevFlowCommands
             OutputWriter.WriteError("Broker unavailable", json);
             if (json)
             {
-                Console.WriteLine("[]");
+                OutputWriter.WriteResult(new JsonArray(), json);
             }
             _errorOccurred = true;
             return;
@@ -3841,15 +3841,12 @@ public class DevFlowCommands
             
             if (json)
             {
-                var projectsArray = new JsonArray();
-                foreach (var p in projects)
-                    projectsArray.Add((JsonNode?)JsonValue.Create(p));
-
-                OutputWriter.WriteResult(new JsonObject
+                OutputWriter.WriteResult(new JsonArray(), json);
+                // Log project scan info to stderr so it doesn't pollute JSON output
+                if (projects.Length > 0)
                 {
-                    ["agents"] = new JsonArray(),
-                    ["projects"] = projectsArray
-                }, json);
+                    Console.Error.WriteLine($"DevFlow-enabled projects found: {string.Join(", ", projects)}");
+                }
             }
             else
             {
