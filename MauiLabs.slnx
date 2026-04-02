@@ -16,6 +16,7 @@
   <Folder Name="/src/Cli/">
     <Project Path="src/Cli/Microsoft.Maui.Cli.UnitTests/Microsoft.Maui.Cli.UnitTests.csproj" />
     <Project Path="src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj" />
+    <Project Path="src/Cli/Microsoft.Maui.StartupProfiling/Microsoft.Maui.StartupProfiling.csproj" />
   </Folder>
   <Folder Name="/src/DevFlow/">
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj" />

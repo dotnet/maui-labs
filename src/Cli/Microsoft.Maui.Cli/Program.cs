@@ -85,6 +85,7 @@ public class Program
 		// Top-level commands (per spec)
 		rootCommand.Add(DoctorCommand.Create());
 		rootCommand.Add(DeviceCommand.Create());
+		rootCommand.Add(ProfileCommand.Create());
 		rootCommand.Add(VersionCommand.Create());
 
 		// Platform-specific command groups

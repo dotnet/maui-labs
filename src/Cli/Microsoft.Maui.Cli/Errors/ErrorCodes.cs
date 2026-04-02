@@ -43,4 +43,5 @@ public static class ErrorCodes
 	// Platform/SDK errors - .NET (E24xx)
 	public const string DotNetNotFound = "E2401";
 	public const string MauiWorkloadMissing = "E2402";
+	public const string DiagnosticsToolNotFound = "E2403";
 }

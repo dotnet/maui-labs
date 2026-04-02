@@ -151,6 +151,11 @@ public class SpectreOutputFormatter : IOutputFormatter
 	{
 		_console.MarkupLine($"[red]Error [[{Markup.Escape(error.Code)}]]:[/] {Markup.Escape(error.Message)}");
 
+		if (!string.IsNullOrWhiteSpace(error.NativeError))
+		{
+			_console.MarkupLine($"  [grey]{Markup.Escape(error.NativeError.Trim())}[/]");
+		}
+
 		if (error.Remediation != null)
 		{
 			if (error.Remediation.Command != null)

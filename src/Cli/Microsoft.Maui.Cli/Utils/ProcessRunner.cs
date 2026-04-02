@@ -146,6 +146,7 @@ public static class ProcessRunner
 		Dictionary<string, string>? environmentVariables = null,
 		TimeSpan? timeout = null,
 		string? continuousInput = null,
+		IEnumerable<string>? environmentVariablesToRemove = null,
 		CancellationToken cancellationToken = default)
 	{
 		var stopwatch = Stopwatch.StartNew();
@@ -166,6 +167,13 @@ public static class ProcessRunner
 
 		foreach (var arg in args)
 			process.StartInfo.ArgumentList.Add(arg);
+
+		// Remove inherited env vars first (e.g. MSBuild SDK path vars set by a parent dotnet run)
+		if (environmentVariablesToRemove != null)
+		{
+			foreach (var key in environmentVariablesToRemove)
+				process.StartInfo.EnvironmentVariables.Remove(key);
+		}
 
 		if (environmentVariables != null)
 		{
