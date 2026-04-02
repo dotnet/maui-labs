@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Services;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
@@ -22,6 +23,7 @@ public class ServiceConfigurationTests
 		Assert.NotNull(provider.GetService<IAndroidProvider>());
 		Assert.NotNull(provider.GetService<IDoctorService>());
 		Assert.NotNull(provider.GetService<IDeviceManager>());
+		Assert.NotNull(provider.GetService<IDevFlowOutputWriter>());
 	}
 
 	[Fact]

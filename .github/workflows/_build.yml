@@ -69,7 +69,7 @@ jobs:
           --projects $(pwd)/${{ inputs.project-path }}
 
       - name: NativeAOT publish smoke test (macOS)
-        if: matrix.os == 'macos-latest' && inputs.project-name == 'devflow'
+        if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'
         shell: bash
         run: |
           set -euo pipefail
@@ -84,7 +84,7 @@ jobs:
               ;;
           esac
 
-          dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.CLI/Microsoft.Maui.DevFlow.CLI.csproj \
+          dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
             -c Release \
             -r "$rid" \
             -p:PublishAot=true \
@@ -93,16 +93,16 @@ jobs:
             -p:TreatWarningsAsErrors=true \
             --self-contained true
 
-          publish_dir="artifacts/bin/Microsoft.Maui.DevFlow.CLI/Release/net10.0/$rid/publish"
-          cli_path="$publish_dir/Microsoft.Maui.DevFlow.CLI"
+          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/$rid/publish"
+          cli_path="$publish_dir/maui"
           commands_json="$(mktemp)"
           agents_json="$(mktemp)"
 
-          "$cli_path" version
-          "$cli_path" commands --json > "$commands_json"
-          "$cli_path" broker stop >/dev/null 2>&1 || true
-          "$cli_path" list --json > "$agents_json"
-          "$cli_path" broker stop >/dev/null 2>&1 || true
+          "$cli_path" devflow version
+          "$cli_path" devflow commands --json > "$commands_json"
+          "$cli_path" devflow broker stop >/dev/null 2>&1 || true
+          "$cli_path" devflow list --json > "$agents_json"
+          "$cli_path" devflow broker stop >/dev/null 2>&1 || true
 
           python - "$commands_json" "$agents_json" <<'PY'
           import json

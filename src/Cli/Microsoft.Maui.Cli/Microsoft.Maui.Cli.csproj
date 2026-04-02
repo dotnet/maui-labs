@@ -13,6 +13,9 @@
     <IsShipping>true</IsShipping>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,12 +30,26 @@
     <PackageReference Include="XenoAtom.Terminal.UI" />
   </ItemGroup>
 
+  <!-- Exclude native debug symbols (e.g. SkiaSharp PDBs) from the tool package to reduce size.
+       PackTool globs everything from PublishDir — delete PDBs from there before the glob runs.
+       Only runs during 'dotnet pack', not standalone 'dotnet publish'. -->
+  <Target Name="RemoveNativeRuntimePdbsBeforeToolPack"
+          BeforeTargets="PackTool"
+          DependsOnTargets="Publish"
+          Condition="'$(PackAsTool)' == 'true' and '$(IsPackable)' != 'false'">
+    <ItemGroup>
+      <_PdbsToRemove Include="$(PublishDir)runtimes/**/*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_PdbsToRemove)" />
+  </Target>
+
   <ItemGroup>
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Cli.UnitTests" />
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
   </ItemGroup>
 
 </Project>

@@ -3,8 +3,11 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS_BUILD</DefineConstants>
+    <!-- Only pack from the DevFlow pipeline job; the Cli job includes this project
+         as a ProjectReference but the DevFlow job owns the package. -->
+    <IsPackable>false</IsPackable>
+    <IsPackable Condition="'$(PackDriverNuGet)' == 'true'">true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
-    <IsPackable>true</IsPackable>
 
     <PackageId>Microsoft.Maui.DevFlow.Driver</PackageId>
     <IsShipping>true</IsShipping>

@@ -87,6 +87,7 @@ extends:
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\DevFlow\DevFlow.slnf
                 $(_OfficialBuildArgs)
+                /p:PackDriverNuGet=true
               displayName: Build and Test DevFlow
 
           - job: Cli

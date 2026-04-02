@@ -72,7 +72,7 @@ public class Program
 		}
 	}
 
-	static RootCommand BuildRootCommand()
+	internal static RootCommand BuildRootCommand()
 	{
 		var rootCommand = new RootCommand("MAUI Development Tools - Device management and environment setup");
 
