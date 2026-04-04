@@ -12,10 +12,12 @@
     <IsShipping>true</IsShipping>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- No dependencies on MAUI or any other runtime packages -->
-    <NoWarn>$(NoWarn);CS1572;CS1573;CA2255</NoWarn>
+    <!-- NU5118: suppress duplicate README warning — eng/Common.props adds the repo-root README
+         at "/README.md"; we override it with this package's own README below. -->
+    <NoWarn>$(NoWarn);CS1572;CS1573;CA2255;NU5118</NoWarn>
   </PropertyGroup>
 
-  <!-- Include a package-specific README -->
+  <!-- Use this package's own README instead of the repo-root one. -->
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
