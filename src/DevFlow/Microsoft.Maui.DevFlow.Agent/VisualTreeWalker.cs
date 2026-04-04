@@ -222,6 +222,164 @@ public class PlatformVisualTreeWalker : VisualTreeWalker
         catch { return null; }
     }
 
+    protected override BoundsInfo? ResolveIViewWindowBounds(IView iView)
+    {
+        try
+        {
+            var platformView = iView.Handler?.PlatformView;
+            if (platformView == null) return null;
+
+#if IOS || MACCATALYST
+            if (platformView is UIKit.UIView uiView && uiView.Window != null)
+            {
+                var windowRect = uiView.ConvertRectToView(uiView.Bounds, uiView.Window.RootViewController?.View ?? uiView.Window);
+                return new BoundsInfo
+                {
+                    X = windowRect.X,
+                    Y = windowRect.Y,
+                    Width = windowRect.Width,
+                    Height = windowRect.Height
+                };
+            }
+#elif ANDROID
+            if (platformView is global::Android.Views.View androidView)
+            {
+                var location = new int[2];
+                androidView.GetLocationInWindow(location);
+                var density = androidView.Context?.Resources?.DisplayMetrics?.Density ?? 1f;
+                return new BoundsInfo
+                {
+                    X = location[0] / density,
+                    Y = location[1] / density,
+                    Width = androidView.Width / density,
+                    Height = androidView.Height / density
+                };
+            }
+#elif WINDOWS
+            if (platformView is Microsoft.UI.Xaml.UIElement uiElement)
+            {
+                var transform = uiElement.TransformToVisual(null);
+                var point = transform.TransformPoint(new global::Windows.Foundation.Point(0, 0));
+                if (uiElement is Microsoft.UI.Xaml.FrameworkElement fe)
+                {
+                    return new BoundsInfo
+                    {
+                        X = point.X,
+                        Y = point.Y,
+                        Width = fe.ActualWidth,
+                        Height = fe.ActualHeight
+                    };
+                }
+            }
+#endif
+            return null;
+        }
+        catch { return null; }
+    }
+
+    protected override bool? ResolveIViewPlatformVisibility(IView iView)
+    {
+        try
+        {
+            var platformView = iView.Handler?.PlatformView;
+            if (platformView == null) return null;
+
+#if IOS || MACCATALYST
+            if (platformView is UIKit.UIView uiView)
+            {
+                if (uiView.Hidden) return false;
+                if (uiView.Alpha <= 0) return false;
+                if (uiView.Bounds.Width <= 0 && uiView.Bounds.Height <= 0) return false;
+                return true;
+            }
+#elif ANDROID
+            if (platformView is global::Android.Views.View androidView)
+            {
+                if (androidView.Visibility != global::Android.Views.ViewStates.Visible) return false;
+                if (androidView.Alpha <= 0) return false;
+                if (androidView.Width <= 0 && androidView.Height <= 0) return false;
+                return true;
+            }
+#elif WINDOWS
+            if (platformView is Microsoft.UI.Xaml.FrameworkElement winFe)
+            {
+                if (winFe.Visibility != Microsoft.UI.Xaml.Visibility.Visible) return false;
+                if (winFe.Opacity <= 0) return false;
+                return true;
+            }
+#endif
+            return null;
+        }
+        catch { return null; }
+    }
+
+    protected override void PopulateIViewNativeInfo(ElementInfo info, IView iView)
+    {
+        try
+        {
+            var platformView = iView.Handler?.PlatformView;
+            if (platformView == null) return;
+
+            info.NativeType = platformView.GetType().FullName;
+
+#if IOS || MACCATALYST
+            if (platformView is UIKit.UIView uiView)
+            {
+                var props = new Dictionary<string, string?>();
+                if (!string.IsNullOrEmpty(uiView.AccessibilityIdentifier))
+                    props["accessibilityIdentifier"] = uiView.AccessibilityIdentifier;
+                if (!string.IsNullOrEmpty(uiView.AccessibilityLabel))
+                    props["accessibilityLabel"] = uiView.AccessibilityLabel;
+                if (uiView is UIKit.UIControl)
+                    props["isUIControl"] = "true";
+                if (uiView is UIKit.UITextField textField)
+                    props["isSecureTextEntry"] = textField.SecureTextEntry.ToString();
+                if (props.Count > 0)
+                {
+                    info.NativeProperties ??= new Dictionary<string, string?>();
+                    foreach (var kvp in props)
+                        info.NativeProperties[kvp.Key] = kvp.Value;
+                }
+            }
+#elif ANDROID
+            if (platformView is global::Android.Views.View androidView)
+            {
+                var props = new Dictionary<string, string?>();
+                if (!string.IsNullOrEmpty(androidView.ContentDescription))
+                    props["contentDescription"] = androidView.ContentDescription;
+                if (androidView is global::Android.Widget.EditText editText)
+                    props["inputType"] = editText.InputType.ToString();
+                if (androidView.Clickable)
+                    props["clickable"] = "true";
+                if (props.Count > 0)
+                {
+                    info.NativeProperties ??= new Dictionary<string, string?>();
+                    foreach (var kvp in props)
+                        info.NativeProperties[kvp.Key] = kvp.Value;
+                }
+            }
+#elif WINDOWS
+            if (platformView is Microsoft.UI.Xaml.FrameworkElement frameworkElement)
+            {
+                var props = new Dictionary<string, string?>();
+                var automationName = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(frameworkElement);
+                if (!string.IsNullOrEmpty(automationName))
+                    props["automationName"] = automationName;
+                if (props.Count > 0)
+                {
+                    info.NativeProperties ??= new Dictionary<string, string?>();
+                    foreach (var kvp in props)
+                        info.NativeProperties[kvp.Key] = kvp.Value;
+                }
+            }
+#endif
+        }
+        catch
+        {
+            // Native info is best-effort; don't fail the tree walk
+        }
+    }
+
 #if IOS || MACCATALYST
     private BoundsInfo? ResolveBoundsApple(object marker)
     {

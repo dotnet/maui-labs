@@ -299,6 +299,117 @@ internal static class CometViewResolver
 	}
 
 	/// <summary>
+	/// Attempts to extract display text from a Comet view via reflection.
+	/// Checks for common text-bearing properties: Value (generated Text control),
+	/// Text (Button, TextField), and environment-based text storage.
+	/// </summary>
+	public static string? TryExtractText(object cometView)
+	{
+		if (cometView == null) return null;
+
+		try
+		{
+			var viewType = cometView.GetType();
+
+			// Comet's generated Text control stores text in a "Value" property (from ILabel.Text:Value mapping)
+			var valueProp = viewType.GetProperty("Value", BindingFlags.Public | BindingFlags.Instance);
+			if (valueProp != null && valueProp.PropertyType == typeof(string))
+			{
+				var val = valueProp.GetValue(cometView) as string;
+				if (!string.IsNullOrEmpty(val))
+					return val;
+			}
+
+			// Also check Binding<string> Value (generated controls use Binding<T> wrapper)
+			if (valueProp != null && valueProp.PropertyType.IsGenericType)
+			{
+				try
+				{
+					var bindingObj = valueProp.GetValue(cometView);
+					if (bindingObj != null)
+					{
+						// Binding<T> has a CurrentValue or Value property
+						var currentValueProp = bindingObj.GetType().GetProperty("CurrentValue", BindingFlags.Public | BindingFlags.Instance)
+							?? bindingObj.GetType().GetProperty("Value", BindingFlags.Public | BindingFlags.Instance);
+						if (currentValueProp != null)
+						{
+							var val = currentValueProp.GetValue(bindingObj)?.ToString();
+							if (!string.IsNullOrEmpty(val))
+								return val;
+						}
+					}
+				}
+				catch { /* Ignore binding resolution errors */ }
+			}
+
+			// Check "Text" property directly (some Comet controls use it)
+			var textProp = viewType.GetProperty("Text", BindingFlags.Public | BindingFlags.Instance);
+			if (textProp != null)
+			{
+				if (textProp.PropertyType == typeof(string))
+				{
+					var val = textProp.GetValue(cometView) as string;
+					if (!string.IsNullOrEmpty(val))
+						return val;
+				}
+				else if (textProp.PropertyType.IsGenericType)
+				{
+					try
+					{
+						var bindingObj = textProp.GetValue(cometView);
+						if (bindingObj != null)
+						{
+							var currentValueProp = bindingObj.GetType().GetProperty("CurrentValue", BindingFlags.Public | BindingFlags.Instance)
+								?? bindingObj.GetType().GetProperty("Value", BindingFlags.Public | BindingFlags.Instance);
+							if (currentValueProp != null)
+							{
+								var val = currentValueProp.GetValue(bindingObj)?.ToString();
+								if (!string.IsNullOrEmpty(val))
+									return val;
+							}
+						}
+					}
+					catch { /* Ignore binding resolution errors */ }
+				}
+			}
+
+			// Try GetEnvironment<string>("Text.Value") — Comet stores text in environment
+			if (_cometViewType != null && _cometViewType.IsInstanceOfType(cometView))
+			{
+				var getEnvMethods = _cometViewType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+					.Where(m => m.Name == "GetEnvironment" && m.IsGenericMethod && m.GetParameters().Length >= 1)
+					.ToList();
+
+				foreach (var getEnvMethod in getEnvMethods)
+				{
+					try
+					{
+						var genericMethod = getEnvMethod.MakeGenericMethod(typeof(string));
+						var paramCount = genericMethod.GetParameters().Length;
+						object? result = null;
+
+						if (paramCount == 1)
+							result = genericMethod.Invoke(cometView, new object[] { "Text.Value" });
+						else if (paramCount == 2)
+							result = genericMethod.Invoke(cometView, new object[] { "Text.Value", false });
+
+						if (result is string envText && !string.IsNullOrEmpty(envText))
+							return envText;
+						break;
+					}
+					catch { continue; }
+				}
+			}
+		}
+		catch
+		{
+			// Reflection failures should not break the tree walk
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	/// Gets the list of environment keys defined in Comet.EnvironmentKeys.
 	/// Returns empty list if Comet not available or reflection fails.
 	/// </summary>

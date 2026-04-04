@@ -92,6 +92,26 @@ namespace Comet
 			return title;
 		}
 
+		/// <summary>
+		/// Sets toolbar items on a view for display in the navigation bar when pushed.
+		/// </summary>
+		public static T ToolbarItems<T>(this T view, params ToolbarItem[] items) where T : View
+		{
+			view.SetEnvironment(EnvironmentKeys.View.ToolbarItems, items.ToList(), false);
+			return view;
+		}
+
+		/// <summary>
+		/// Gets toolbar items from a view (set via the .ToolbarItems() extension).
+		/// Returns an empty list if none are set.
+		/// </summary>
+		public static List<ToolbarItem> GetToolbarItems(this View view)
+		{
+			var items = view?.GetEnvironment<List<ToolbarItem>>(EnvironmentKeys.View.ToolbarItems);
+			items ??= view?.BuiltView?.GetEnvironment<List<ToolbarItem>>(EnvironmentKeys.View.ToolbarItems, true);
+			return items ?? new List<ToolbarItem>();
+		}
+
 		public static T AddGesture<T>(this T view, Gesture gesture) where T : View
 		{
 			var gestures = (List<Gesture>)(view.Gestures ?? (view.Gestures = new List<Gesture>()));

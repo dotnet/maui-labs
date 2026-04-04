@@ -59,6 +59,7 @@ namespace Comet
 			public const string AutomationId = nameof(AutomationId);
 			public const string Opacity = nameof(Microsoft.Maui.IView.Opacity);
 			public const string Key = "View.Key";
+			public const string ToolbarItems = "View.ToolbarItems";
 		}
 
 		public static class Shape

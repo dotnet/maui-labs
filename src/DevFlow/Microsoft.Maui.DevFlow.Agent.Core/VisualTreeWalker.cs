@@ -284,6 +284,26 @@ public class VisualTreeWalker
     public BoundsInfo? ResolveWindowBoundsPublic(VisualElement ve) => ResolveWindowBounds(ve);
 
     /// <summary>
+    /// Override in platform-specific subclasses to resolve window-absolute bounds
+    /// for an IView (e.g. Comet views) that are NOT VisualElement.
+    /// Uses the IView's Handler?.PlatformView to get native coordinates.
+    /// </summary>
+    protected virtual BoundsInfo? ResolveIViewWindowBounds(IView iView) => null;
+
+    /// <summary>
+    /// Override in platform-specific subclasses to determine actual visibility
+    /// for an IView by checking its platform native view (e.g. UIView.Hidden, Alpha).
+    /// Returns null if platform visibility cannot be determined.
+    /// </summary>
+    protected virtual bool? ResolveIViewPlatformVisibility(IView iView) => null;
+
+    /// <summary>
+    /// Override in platform-specific subclasses to populate native view info
+    /// for an IView (e.g. Comet views) that are NOT VisualElement.
+    /// </summary>
+    protected virtual void PopulateIViewNativeInfo(ElementInfo info, IView iView) { }
+
+    /// <summary>
     /// Walks the visual tree starting from the application's windows.
     /// When windowIndex is null, walks all windows. Otherwise walks only the specified window.
     /// </summary>
@@ -1255,7 +1275,10 @@ public class VisualTreeWalker
         // Comet views implement IView but NOT VisualElement — extract info from IView + handler
         else if (element is IView iView)
         {
-            info.IsVisible = iView.Visibility != Visibility.Collapsed;
+            // Check platform-native visibility first (handler's UIView.Hidden/Alpha on iOS, etc.)
+            // Falls back to IView.Visibility if platform check is unavailable
+            var platformVisible = ResolveIViewPlatformVisibility(iView);
+            info.IsVisible = platformVisible ?? (iView.Visibility != Visibility.Collapsed);
             info.IsEnabled = iView.IsEnabled;
             info.Opacity = double.IsFinite(iView.Opacity) ? iView.Opacity : 1;
 
@@ -1272,9 +1295,47 @@ public class VisualTreeWalker
                 };
             }
 
-            // Try to extract text from Comet views via IText interface
-            if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
+            // Resolve window-absolute bounds via platform handler (same as VisualElement path)
+            info.WindowBounds = ResolveIViewWindowBounds(iView);
+
+            // If IView.Frame had no bounds but platform handler resolved real bounds,
+            // back-fill Bounds from WindowBounds so the element isn't reported as zero-size
+            if (info.Bounds == null && info.WindowBounds != null)
+            {
+                info.Bounds = new BoundsInfo
+                {
+                    X = info.WindowBounds.X,
+                    Y = info.WindowBounds.Y,
+                    Width = info.WindowBounds.Width,
+                    Height = info.WindowBounds.Height
+                };
+            }
+
+            // Populate native view info from handler (type, accessibility, etc.)
+            PopulateIViewNativeInfo(info, iView);
+
+            // Extract text from MAUI interfaces that Comet generated controls implement
+            if (element is ILabel iLabel && !string.IsNullOrEmpty(iLabel.Text))
+                info.Text = iLabel.Text;
+            else if (element is ITextButton iTextButton && !string.IsNullOrEmpty(iTextButton.Text))
+                info.Text = iTextButton.Text;
+            else if (element is IEntry iEntry && !string.IsNullOrEmpty(iEntry.Text))
+                info.Text = iEntry.Text;
+            else if (element is IEditor iEditor && !string.IsNullOrEmpty(iEditor.Text))
+                info.Text = iEditor.Text;
+            else if (element is ISearchBar iSearchBar && !string.IsNullOrEmpty(iSearchBar.Text))
+                info.Text = iSearchBar.Text;
+            else if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
                 info.Text = iText.Text;
+
+            // Fallback: try extracting text via Comet reflection for views that
+            // don't implement standard MAUI text interfaces directly
+            if (string.IsNullOrEmpty(info.Text) && cometResolved != null)
+            {
+                var cometText = CometViewResolver.TryExtractText(cometResolved.Value.CometView);
+                if (!string.IsNullOrEmpty(cometText))
+                    info.Text = cometText;
+            }
         }
 
         // Extract text from common controls (including Shell elements)

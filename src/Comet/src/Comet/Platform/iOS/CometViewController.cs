@@ -37,9 +37,19 @@ namespace Comet.iOS
 
 		public override void LoadView()
 		{
-			// Prevent content from extending under the navigation bar.
-			// Views that explicitly call .IgnoreSafeArea() can override this.
-			EdgesForExtendedLayout = UIRectEdge.None;
+			// Check if the view wants to ignore safe area for edge-to-edge rendering.
+			// When IgnoreSafeArea is set, content extends under the status bar and
+			// navigation bar, allowing background colors to fill the entire screen.
+			var view = _startingCurrentView;
+			if (view is ISafeAreaView safeAreaView && safeAreaView.IgnoreSafeArea)
+			{
+				EdgesForExtendedLayout = UIRectEdge.All;
+				ExtendedLayoutIncludesOpaqueBars = true;
+			}
+			else
+			{
+				EdgesForExtendedLayout = UIRectEdge.None;
+			}
 
 			base.View = _containerView = new CometView(MauiContext);
 			_containerView.CurrentView = _startingCurrentView;
@@ -64,6 +74,30 @@ namespace Comet.iOS
 		public override void ViewWillAppear(bool animated)
 		{
 			base.ViewWillAppear(animated);
+
+			// Re-check safe area setting when the view appears (pushed views may differ)
+			var view = CurrentView;
+			if (view is ISafeAreaView safeAreaView && safeAreaView.IgnoreSafeArea)
+			{
+				EdgesForExtendedLayout = UIRectEdge.All;
+				ExtendedLayoutIncludesOpaqueBars = true;
+			}
+			else
+			{
+				EdgesForExtendedLayout = UIRectEdge.None;
+			}
+
+			// Propagate background color to the container view so it extends
+			// into safe area insets (prevents white/black letterboxing)
+			if (view != null && _containerView != null)
+			{
+				var bg = view.GetBackground();
+				if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
+				{
+					_containerView.BackgroundColor = solid.Color.ToPlatform();
+				}
+			}
+
 			ApplyStyle();
 		}
 
