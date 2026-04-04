@@ -258,3 +258,34 @@ Session history for holden.
 - DevFlow.Agent.Core: 0 errors, 0 warnings
 - DevFlow.Agent: 0 errors, 0 warnings
 - Comet.Tests: 973 passed, 1 pre-existing failure (template test), 26 skipped
+
+### 2025-07-24 — FIX 4: DevFlow _app Binding for Comet Apps
+
+**Problem:** `CometApp` implements `IApplication` (MAUI interface) but NOT `Microsoft.Maui.Controls.Application`. DevFlow's startup loop retried `Application.Current` 30 times (15 seconds) and always failed for Comet apps. It fell back to `StartServerOnly()` which left `_app = null`, causing ALL DevFlow endpoints to return "Agent not bound to app" errors.
+
+**Root cause chain:**
+1. `CometApp` registered via `builder.Services.TryAddSingleton<IApplication, TApp>()` in `UseCometApp<T>()`
+2. `Application.Current` is a static on `Microsoft.Maui.Controls.Application` — never set for Comet
+3. DevFlow `AgentServiceExtensions` only checked `Application.Current`, no fallback
+4. All endpoint handlers gated on `_app == null`
+
+**What was done:**
+- **DevFlowAgentService.cs:**
+  - Added `_iApp` field (`IApplication?`) alongside `_app` (`Application?`)
+  - Added `BoundApplication` property: returns `(IApplication?)_app ?? _iApp`
+  - Added `StartServerOnly()` method that calls `TryResolveIApplicationFromDI()` using `IPlatformApplication.Current?.Services?.GetService<IApplication>()`
+  - Added `BindIApp(IApplication)` for late-binding (routes to `_app` if it's a Controls Application)
+  - Replaced ALL `_app` read-access with `BoundApplication` across every endpoint handler
+  - Added `TryBubbleCometGestureTap()` — walks parent chain to find Comet tap gestures (child Text views don't carry their own gestures)
+  - Added `case IView iViewNoHandler:` in HandleTap switch for views without platform handlers
+- **VisualTreeWalker.cs:**
+  - Added `IApplication` overloads for `WalkTree`, `GetElementById`, `HitTestByBounds`, `Query`, `QueryCss`
+  - Original `Application` overloads delegate to new `IApplication` overloads
+  - Fixed `HitTestByBounds` to safely cast `IWindow → Window` for `Page`/`Navigation` access
+- **AgentServiceExtensions.cs:**
+  - iOS and macOS fallback paths now call `service.StartServerOnly(mainDispatcher)` instead of just logging failure
+  - Captured `mainDispatcher` before `Task.Run()` to ensure correct thread for dispatch
+
+**Key architectural insight:** The `IApplication` interface provides `Windows` collection and `IVisualTreeElement` tree walking. `Page`, `Navigation.ModalStack`, and `Application.Current` are Controls-specific. All endpoint code must use safe casts (`window as Window`) when accessing these.
+
+**Build status:** All projects build clean, 970 tests pass (4 pre-existing failures, 26 skipped).

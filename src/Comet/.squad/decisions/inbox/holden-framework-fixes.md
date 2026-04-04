@@ -37,3 +37,17 @@
 **Rationale:** Previously, toolbar items were only set during `CreatePlatformView()` on the root view controller. Pushed views had no way to specify their own toolbar items. The environment-based approach is consistent with how Comet handles all per-view metadata (title, background, safe area, etc.).
 
 **Impact:** All squad members writing navigation. To add toolbar items to a pushed view: `new DetailPage().Title("Detail").ToolbarItems(new ToolbarItem("plus", () => { ... }))`.
+
+---
+
+### DevFlow IApplication Binding: Support CometApp and Non-Controls Hosts
+
+**Author:** Holden (Lead Architect)
+**Date:** 2025-07-24
+**Status:** Implemented
+
+**Decision:** DevFlowAgentService now tracks both `_app` (Application, Controls) and `_iApp` (IApplication, interface-only hosts). A `BoundApplication` property returns whichever is available (preferring Controls). When `Application.Current` is null after 30 retries, the agent falls back to `StartServerOnly()` which resolves `IApplication` from DI via `IPlatformApplication.Current.Services`. All endpoint handlers gate on `BoundApplication` instead of `_app`. VisualTreeWalker methods have `IApplication` overloads; `HitTestByBounds` safely casts `IWindow → Window` for Controls-specific members.
+
+**Rationale:** `CometApp` implements `IApplication` but not `Application`, so `Application.Current` is never set. The previous code had no fallback, leaving the agent unbound and all endpoints returning errors. The dual-field approach avoids breaking any existing code that passes `Application` directly while enabling Comet and any future non-Controls host.
+
+**Impact:** All DevFlow consumers using Comet or custom `IApplication` implementations. DevFlow endpoints now work immediately for Comet apps. Controls-based apps are unaffected.
