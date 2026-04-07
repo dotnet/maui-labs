@@ -31,13 +31,16 @@
     <AppImageArch Condition="'$(AppImageArch)' == '' and '$(_AppImageRidArch)' == 'arm64'">aarch64</AppImageArch>
     <AppImageArch Condition="'$(AppImageArch)' == ''">x86_64</AppImageArch>
 
-    <!-- appimagetool path -->
-    <AppImageToolPath Condition="'$(AppImageToolPath)' == ''">$(_AppImageToolCacheDir)/appimagetool-$(AppImageArch).AppImage</AppImageToolPath>
-    <!-- appimagetool version: pin to a specific release tag for reproducible builds.
-         When using 'continuous', set AppImageToolSha256 to verify integrity. -->
+    <!-- appimagetool version and cache path -->
     <AppImageToolVersion Condition="'$(AppImageToolVersion)' == ''">continuous</AppImageToolVersion>
-    <!-- Optional SHA-256 checksum for appimagetool verification after download -->
-    <AppImageToolSha256 Condition="'$(AppImageToolSha256)' == ''"></AppImageToolSha256>
+    <AppImageToolPath Condition="'$(AppImageToolPath)' == ''">$(_AppImageToolCacheDir)/appimagetool-$(AppImageToolVersion)-$(AppImageArch).AppImage</AppImageToolPath>
+
+    <!-- Secure defaults for the currently published upstream assets.
+         If you override AppImageToolVersion/AppImageArch, also override AppImageToolSha256. -->
+    <AppImageToolSha256 Condition="'$(AppImageToolSha256)' == '' and '$(AppImageToolVersion)' == 'continuous' and '$(AppImageArch)' == 'x86_64'">a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0</AppImageToolSha256>
+    <AppImageToolSha256 Condition="'$(AppImageToolSha256)' == '' and '$(AppImageToolVersion)' == 'continuous' and '$(AppImageArch)' == 'aarch64'">1b00524ba8c6b678dc15ef88a5c25ec24def36cdfc7e3abb32ddcd068e8007fe</AppImageToolSha256>
+    <AppImageToolSha256 Condition="'$(AppImageToolSha256)' == '' and '$(AppImageToolVersion)' == 'continuous' and '$(AppImageArch)' == 'armhf'">32aeca26db15a7d029b76adb8d5836f98acbf4a37b2a3101758b094f721e4b67</AppImageToolSha256>
+    <AppImageToolSha256 Condition="'$(AppImageToolSha256)' == '' and '$(AppImageToolVersion)' == 'continuous' and '$(AppImageArch)' == 'i686'">ba04b9ecb2869993173bd38516dbafcfbe3064aca942500e94e7a3c3c2ea578d</AppImageToolSha256>
 
     <!-- Output filename -->
     <AppImageFileName Condition="'$(AppImageFileName)' == ''">$(ApplicationTitle)-$(ApplicationDisplayVersion)-$(AppImageArch).AppImage</AppImageFileName>
@@ -61,6 +64,9 @@
 
     <Error Condition="!$(RuntimeIdentifier.StartsWith('linux-'))"
            Text="AppImage packaging only supports Linux RuntimeIdentifiers (e.g., linux-x64, linux-arm64). Got: $(RuntimeIdentifier)" />
+
+    <Error Condition="'$(AppImageToolSha256)' == ''"
+           Text="AppImage packaging requires AppImageToolSha256 to be set for $(AppImageToolVersion) / $(AppImageArch) so the downloaded appimagetool can be verified." />
 
     <Warning Condition="'$(SelfContained)' != 'true' and '$(SelfContainedAppImage)' == 'true'"
              Text="AppImage packaging works best with self-contained publish. Consider adding --self-contained to your publish command." />
@@ -345,7 +351,8 @@ _APPRUN_EOF_" />
     <!-- Verify SHA-256 checksum when provided -->
     <Exec Condition="'$(AppImageToolSha256)' != ''"
           Command="echo &quot;$(AppImageToolSha256)  $(AppImageToolPath)&quot; | sha256sum --check --strict"
-          IgnoreStandardErrorWarningFormat="true">
+          IgnoreStandardErrorWarningFormat="true"
+          IgnoreExitCode="true">
       <Output TaskParameter="ExitCode" PropertyName="_AppImageToolChecksumExitCode" />
     </Exec>
     <Delete Condition="'$(AppImageToolSha256)' != '' and '$(_AppImageToolChecksumExitCode)' != '0'" Files="$(AppImageToolPath)" />

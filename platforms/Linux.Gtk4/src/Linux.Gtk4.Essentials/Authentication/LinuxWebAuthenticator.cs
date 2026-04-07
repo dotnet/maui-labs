@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using Microsoft.Maui.Authentication;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Authentication;
@@ -16,94 +17,137 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		var authUrl = webAuthenticatorOptions.Url
 			?? throw new ArgumentException("Url is required.");
 
-		// Start a local HTTP listener to receive the callback.
-		// Retry with new ports to avoid TOCTOU races between port discovery and bind.
-		const int maxRetries = 5;
-		HttpListener? listener = null;
-		Uri? redirectUri = null;
+		ValidateCallbackUrl(callbackUrl);
+		using var listener = CreateLoopbackListener(callbackUrl, out var redirectUri);
 
-		for (int attempt = 0; attempt < maxRetries; attempt++)
-		{
-			var port = GetAvailablePort();
-			redirectUri = new Uri($"http://127.0.0.1:{port}/");
-			listener = new HttpListener();
-			listener.Prefixes.Add(redirectUri.ToString());
-			try
-			{
-				listener.Start();
-				break;
-			}
-			catch (HttpListenerException) when (attempt < maxRetries - 1)
-			{
-				listener.Close();
-				listener = null;
-			}
-		}
-
-		if (listener is null || redirectUri is null)
-			throw new InvalidOperationException("Failed to bind a loopback HTTP listener after multiple attempts.");
-
-		// Replace the callback in the auth URL
+		// Honor the caller-provided callback path/host while using the listener's bound port.
 		var authUriBuilder = new UriBuilder(authUrl);
 		var query = System.Web.HttpUtility.ParseQueryString(authUriBuilder.Query);
 		query["redirect_uri"] = redirectUri.ToString();
 		authUriBuilder.Query = query.ToString();
 
-		using (listener)
+		cancellationToken.ThrowIfCancellationRequested();
+
+		// Open browser
+		Process.Start(new ProcessStartInfo("xdg-open", authUriBuilder.Uri.AbsoluteUri)
+			{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+
+		while (true)
 		{
-			// Open browser
-			Process.Start(new ProcessStartInfo("xdg-open", authUriBuilder.Uri.AbsoluteUri)
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			using var client = await listener.AcceptTcpClientAsync(cancellationToken);
 
-			// Wait for callback
-			var contextTask = listener.GetContextAsync();
-			using var reg = cancellationToken.Register(() => listener.Stop());
+			var responseUrl = await TryHandleCallbackAsync(client, redirectUri, cancellationToken);
+			if (responseUrl is null)
+				continue;
 
-			try
+			var responseQuery = System.Web.HttpUtility.ParseQueryString(responseUrl.Query);
+			var properties = new Dictionary<string, string>();
+			foreach (string key in responseQuery.AllKeys)
 			{
-				var context = await contextTask;
-				var responseUrl = context.Request.Url;
-
-				// Send a simple response to the browser
-				var responseBytes = System.Text.Encoding.UTF8.GetBytes(
-					"<html><body><h1>Authentication complete</h1><p>You can close this window.</p></body></html>");
-				context.Response.ContentType = "text/html";
-				context.Response.ContentLength64 = responseBytes.Length;
-				await context.Response.OutputStream.WriteAsync(responseBytes, cancellationToken);
-				context.Response.Close();
-
-				if (responseUrl is null)
-					throw new InvalidOperationException("No response URL received.");
-
-				// Parse the query/fragment for tokens
-				var responseQuery = System.Web.HttpUtility.ParseQueryString(responseUrl.Query);
-				var properties = new Dictionary<string, string>();
-				foreach (string key in responseQuery.AllKeys)
-				{
-					if (key is not null)
-						properties[key] = responseQuery[key] ?? "";
-				}
-
-				return new WebAuthenticatorResult(properties);
+				if (key is not null)
+					properties[key] = responseQuery[key] ?? string.Empty;
 			}
-			catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
-			{
-				throw new OperationCanceledException(cancellationToken);
-			}
-			catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
-			{
-				throw new OperationCanceledException(cancellationToken);
-			}
+
+			return new WebAuthenticatorResult(properties);
 		}
 	}
 
 	public Task<WebAuthenticatorResult> AuthenticateAsync(WebAuthenticatorOptions webAuthenticatorOptions)
 		=> AuthenticateAsync(webAuthenticatorOptions, CancellationToken.None);
 
-	private static int GetAvailablePort()
+	private static TcpListener CreateLoopbackListener(Uri callbackUrl, out Uri redirectUri)
 	{
-		using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-		socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-		return ((IPEndPoint)socket.LocalEndPoint!).Port;
+		var requestedPort = callbackUrl.IsDefaultPort || callbackUrl.Port == 0 ? 0 : callbackUrl.Port;
+		var listener = new TcpListener(GetLoopbackAddress(callbackUrl), requestedPort);
+		listener.Start();
+
+		var endpoint = (IPEndPoint)listener.LocalEndpoint;
+		var redirectUriBuilder = new UriBuilder(callbackUrl)
+		{
+			Scheme = Uri.UriSchemeHttp,
+			Port = endpoint.Port,
+			Path = string.IsNullOrEmpty(callbackUrl.AbsolutePath) ? "/" : callbackUrl.AbsolutePath,
+			Fragment = string.Empty
+		};
+
+		redirectUri = redirectUriBuilder.Uri;
+		return listener;
+	}
+
+	private static void ValidateCallbackUrl(Uri callbackUrl)
+	{
+		if (!string.Equals(callbackUrl.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+			|| !callbackUrl.IsLoopback)
+		{
+			throw new NotSupportedException(
+				"Linux WebAuthenticator requires a loopback HTTP callback URL (for example, http://127.0.0.1/callback).");
+		}
+	}
+
+	private static IPAddress GetLoopbackAddress(Uri callbackUrl)
+	{
+		if (IPAddress.TryParse(callbackUrl.DnsSafeHost, out var address))
+			return address;
+
+		return IPAddress.Loopback;
+	}
+
+	private static async Task<Uri?> TryHandleCallbackAsync(TcpClient client, Uri redirectUri, CancellationToken cancellationToken)
+	{
+		using var stream = client.GetStream();
+		using var reader = new StreamReader(stream, Encoding.ASCII, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+
+		var requestLine = await reader.ReadLineAsync(cancellationToken);
+		if (string.IsNullOrWhiteSpace(requestLine))
+		{
+			await WriteResponseAsync(stream, HttpStatusCode.BadRequest, "Invalid authentication callback.", cancellationToken);
+			return null;
+		}
+
+		string? headerLine;
+		do
+		{
+			headerLine = await reader.ReadLineAsync(cancellationToken);
+		}
+		while (!string.IsNullOrEmpty(headerLine));
+
+		var parts = requestLine.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+		if (parts.Length < 2 || !string.Equals(parts[0], "GET", StringComparison.OrdinalIgnoreCase))
+		{
+			await WriteResponseAsync(stream, HttpStatusCode.MethodNotAllowed, "Only GET callbacks are supported.", cancellationToken);
+			return null;
+		}
+
+		Uri responseUri;
+		try
+		{
+			responseUri = new Uri(redirectUri, parts[1]);
+		}
+		catch (UriFormatException)
+		{
+			await WriteResponseAsync(stream, HttpStatusCode.BadRequest, "Invalid authentication callback.", cancellationToken);
+			return null;
+		}
+
+		if (!string.Equals(responseUri.AbsolutePath, redirectUri.AbsolutePath, StringComparison.Ordinal))
+		{
+			await WriteResponseAsync(stream, HttpStatusCode.NotFound, "Waiting for the configured authentication callback.", cancellationToken);
+			return null;
+		}
+
+		await WriteResponseAsync(stream, HttpStatusCode.OK, "Authentication complete", cancellationToken);
+		return responseUri;
+	}
+
+	private static async Task WriteResponseAsync(Stream stream, HttpStatusCode statusCode, string message, CancellationToken cancellationToken)
+	{
+		var body = statusCode == HttpStatusCode.OK
+			? "<html><body><h1>Authentication complete</h1><p>You can close this window.</p></body></html>"
+			: $"<html><body><h1>{(int)statusCode} {statusCode}</h1><p>{WebUtility.HtmlEncode(message)}</p></body></html>";
+
+		var response = $"HTTP/1.1 {(int)statusCode} {statusCode}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+		var responseBytes = Encoding.UTF8.GetBytes(response);
+		await stream.WriteAsync(responseBytes, cancellationToken);
+		await stream.FlushAsync(cancellationToken);
 	}
 }
