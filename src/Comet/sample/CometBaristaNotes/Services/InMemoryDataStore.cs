@@ -102,6 +102,43 @@ public class InMemoryDataStore : IDataStore
         return _shots.Where(s => bagIds.Contains(s.BagId)).OrderByDescending(s => s.Timestamp).ToList();
     }
 
+    public List<ShotRecord> GetShotsForBag(int bagId)
+    {
+        return _shots.Where(s => s.BagId == bagId).OrderByDescending(s => s.Timestamp).ToList();
+    }
+
+    public List<ShotRecord> GetFilteredShots(ShotFilterCriteria criteria)
+    {
+        var shots = _shots.AsEnumerable();
+
+        if (criteria.BeanIds.Count > 0)
+        {
+            var bagIds = _bags.Where(b => criteria.BeanIds.Contains(b.BeanId)).Select(b => b.Id).ToHashSet();
+            shots = shots.Where(s => bagIds.Contains(s.BagId));
+        }
+
+        if (criteria.MadeForIds.Count > 0)
+            shots = shots.Where(s => s.MadeForId.HasValue && criteria.MadeForIds.Contains(s.MadeForId.Value));
+
+        if (criteria.Ratings.Count > 0)
+            shots = shots.Where(s => s.Rating.HasValue && criteria.Ratings.Contains(s.Rating.Value));
+
+        return shots.OrderByDescending(s => s.Timestamp).ToList();
+    }
+
+    public List<(int Id, string Name)> GetBeansWithShots()
+    {
+        var bagIdsWithShots = _shots.Select(s => s.BagId).ToHashSet();
+        var beanIds = _bags.Where(b => bagIdsWithShots.Contains(b.Id)).Select(b => b.BeanId).ToHashSet();
+        return _beans.Where(b => beanIds.Contains(b.Id)).Select(b => (b.Id, b.Name)).ToList();
+    }
+
+    public List<(int Id, string Name)> GetPeopleWithShots()
+    {
+        var profileIds = _shots.Where(s => s.MadeForId.HasValue).Select(s => s.MadeForId!.Value).ToHashSet();
+        return _profiles.Where(p => profileIds.Contains(p.Id)).Select(p => (p.Id, p.Name)).ToList();
+    }
+
     // BEAN SERVICE
     public List<Bean> GetAllBeans() => _beans.Where(b => b.IsActive).ToList();
     public Bean? GetBean(int id) => _beans.FirstOrDefault(b => b.Id == id);
@@ -199,6 +236,9 @@ public class InMemoryDataStore : IDataStore
     private RatingAggregate BuildAggregate(List<ShotRecord> shots)
     {
         var rated = shots.Where(s => s.Rating.HasValue).ToList();
+        var dist = new Dictionary<int, int>();
+        for (int i = 0; i <= 4; i++)
+            dist[i] = rated.Count(s => s.Rating!.Value == i);
         return new RatingAggregate
         {
             TotalShots = shots.Count,
@@ -206,6 +246,7 @@ public class InMemoryDataStore : IDataStore
             AverageRating = rated.Any() ? rated.Average(s => s.Rating!.Value) : 0,
             BestRating = rated.Any() ? rated.Max(s => s.Rating!.Value) : null,
             WorstRating = rated.Any() ? rated.Min(s => s.Rating!.Value) : null,
+            Distribution = dist,
         };
     }
 

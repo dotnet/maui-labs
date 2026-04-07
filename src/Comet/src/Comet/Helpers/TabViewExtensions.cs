@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.Maui.Graphics;
 namespace Comet
 {
 	public static class TabViewExtensions
@@ -18,5 +19,11 @@ namespace Comet
 		public static T Tab<T>(this T view, Func<string> text, Func<string> image) where T : View
 			=> view.TabIcon(image()).TabText(text());
 
+		public static TabView TabBarBackgroundColor(this TabView view, Color color)
+			=> (TabView)view.SetEnvironment(EnvironmentKeys.TabView.BarBackgroundColor, color, false);
+		public static TabView TabBarTintColor(this TabView view, Color color)
+			=> (TabView)view.SetEnvironment(EnvironmentKeys.TabView.BarTintColor, color, false);
+		public static TabView TabBarUnselectedColor(this TabView view, Color color)
+			=> (TabView)view.SetEnvironment(EnvironmentKeys.TabView.BarUnselectedColor, color, false);
 	}
 }

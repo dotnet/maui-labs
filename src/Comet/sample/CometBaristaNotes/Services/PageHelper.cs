@@ -1,34 +1,54 @@
 namespace CometBaristaNotes.Services;
 
 /// <summary>
-/// Provides access to the current MAUI Page for displaying alerts and action sheets
-/// in a pure CometApp context where Application.Current is null.
+/// Provides access to the active Comet-hosted page for displaying platform alerts
+/// without reaching into the app's page hierarchy from individual views.
 /// </summary>
 public static class PageHelper
 {
-	/// <summary>
-	/// Gets the current visible Page from the CometApp window hierarchy.
-	/// Falls back to Application.Current for hybrid scenarios.
-	/// </summary>
-	public static Microsoft.Maui.Controls.Page? GetCurrentPage()
+	public static async Task DisplayAlertAsync(string title, string message, string cancel)
 	{
-		// Try IPlatformApplication to find the IApplication and its windows
+		var page = GetCurrentPage();
+		if (page is not null)
+			await page.DisplayAlertAsync(title, message, cancel);
+	}
+
+	public static async Task<bool> DisplayAlertAsync(string title, string message, string accept, string cancel)
+	{
+		var page = GetCurrentPage();
+		if (page is null)
+			return false;
+
+		return await page.DisplayAlertAsync(title, message, accept, cancel);
+	}
+
+	static dynamic? GetCurrentPage()
+	{
 		var app = IPlatformApplication.Current;
 		if (app != null)
 		{
 			var application = app.Services.GetService<Microsoft.Maui.IApplication>();
-			if (application != null)
-			{
-				foreach (var window in application.Windows)
-				{
-					if (window is Microsoft.Maui.Controls.Window mauiWindow)
-						return mauiWindow.Page;
-				}
-			}
+			var page = GetPageFromWindows(application?.Windows);
+			if (page is not null)
+				return page;
 		}
 
-		// Fallback to Application.Current (hybrid mode)
-		return Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Page;
+		return null;
+	}
+
+	static dynamic? GetPageFromWindows(IEnumerable<Microsoft.Maui.IWindow>? windows)
+	{
+		if (windows == null)
+			return null;
+
+		foreach (var window in windows)
+		{
+			var page = window?.GetType().GetProperty("Page")?.GetValue(window);
+			if (page is not null)
+				return page;
+		}
+
+		return null;
 	}
 
 	/// <summary>

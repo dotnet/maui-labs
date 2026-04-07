@@ -43,6 +43,20 @@ namespace Comet
 		}
 
 		/// <summary>
+		/// Creates a <see cref="TextEditor"/> with bidirectional binding to a <see cref="Signal{T}"/>
+		/// via <see cref="PropertySubscription{T}"/>. When the signal changes, the editor updates;
+		/// when the user types, the signal receives the new value through WriteBack.
+		/// </summary>
+		public static TextEditor TextEditor(Signal<string> text)
+		{
+			var editor = new TextEditor(text);
+
+			var sub = new PropertySubscription<string>(text);
+			editor.AttachPropertySubscription(sub, nameof(IEditor.Text));
+			return editor;
+		}
+
+		/// <summary>
 		/// Creates a <see cref="Toggle"/> with bidirectional binding to a <see cref="Signal{T}"/>
 		/// via <see cref="PropertySubscription{T}"/>.
 		/// </summary>

@@ -1,7 +1,13 @@
+using Comet;
+using Comet.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Storage;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -15,7 +21,7 @@ public class ProfileFormPageState
 
 public class ProfileFormPage : Component<ProfileFormPageState>
 {
-	const double AvatarSize = 100;
+	const double AvatarSize = 120;
 
 	readonly int _profileId;
 
@@ -80,19 +86,16 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 	async void Delete()
 	{
 		if (_profileId <= 0) return;
+
+		var confirmed = await Services.PageHelper.DisplayAlertAsync(
+			"Delete Profile?",
+			$"Are you sure you want to delete '{State.Name}'? This action cannot be undone.",
+			"Delete",
+			"Cancel");
+		if (!confirmed) return;
+
 		var store = InMemoryDataStore.Instance;
 		if (store == null) return;
-
-		var page = CometBaristaNotes.Services.PageHelper.GetCurrentPage();
-		if (page != null)
-		{
-			var confirmed = await page.DisplayAlertAsync(
-				"Delete Profile?",
-				$"Are you sure you want to delete '{State.Name}'? This action cannot be undone.",
-				"Delete",
-				"Cancel");
-			if (!confirmed) return;
-		}
 
 		store.DeleteProfile(_profileId);
 		Navigation?.Pop();
@@ -118,67 +121,8 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 		}
 		catch
 		{
-			// Photo pick cancelled or failed — ignore silently
+			// Photo pick cancelled or failed
 		}
-	}
-
-	View BuildAvatar()
-	{
-		var hasPhoto = !string.IsNullOrEmpty(State.AvatarPath) && System.IO.File.Exists(State.AvatarPath);
-
-		var items = new List<View>();
-
-		if (hasPhoto)
-		{
-			items.Add(
-				Border(
-					Image(State.AvatarPath)
-						.Aspect(Aspect.AspectFill)
-						.Frame(width: (float)AvatarSize, height: (float)AvatarSize)
-				)
-				.CornerRadius((float)(AvatarSize / 2))
-				.StrokeColor(Theme.Primary)
-				.StrokeThickness(2)
-				.Frame(width: (float)AvatarSize, height: (float)AvatarSize)
-			);
-		}
-		else
-		{
-			items.Add(
-				Border(
-					Text(Icons.Person)
-						.FontFamily(Icons.FontFamily)
-						.FontSize(48)
-						.Color(Theme.TextMuted)
-						.HorizontalTextAlignment(TextAlignment.Center)
-						.VerticalTextAlignment(TextAlignment.Center)
-						.Frame(width: (float)AvatarSize, height: (float)AvatarSize)
-				)
-				.CornerRadius((float)(AvatarSize / 2))
-				.StrokeColor(Theme.Outline)
-				.StrokeThickness(2)
-				.Background(Theme.SurfaceVariant)
-				.Frame(width: (float)AvatarSize, height: (float)AvatarSize)
-			);
-		}
-
-		if (_profileId > 0)
-		{
-			items.Add(
-				Button(hasPhoto ? "Change Photo" : "Add Photo", PickPhoto)
-					.FontFamily(Theme.FontSemibold)
-					.FontSize(14)
-					.Color(Theme.Primary)
-					.Background(Colors.Transparent)
-					.Frame(height: 36)
-			);
-		}
-
-		var stack = VStack(Theme.SpacingS);
-		foreach (var item in items)
-			stack.Add(item);
-
-		return stack.Padding(new Thickness(0, Theme.SpacingS));
 	}
 
 	public override View Render()
@@ -188,28 +132,66 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 
 		var isEdit = _profileId > 0;
 
-		var items = new List<View>
+		var items = new List<View>();
+
+		// ── Header ──────────────────────────────────────────────────
+		items.Add(FormHelpers.MakeSectionHeader(isEdit ? "EDIT PROFILE" : "NEW PROFILE"));
+
+		// ── Avatar section ──────────────────────────────────────────
+		if (isEdit)
 		{
-			FormHelpers.MakeSectionHeader(isEdit ? "EDIT PROFILE" : "NEW PROFILE"),
-			BuildAvatar(),
-			FormHelpers.MakeFormEntry("Name *", State.Name, "Profile name", v => SetState(s => s.Name = v)),
-		};
+			items.Add(
+				VStack(CoffeeColors.SpacingS,
+					new ProfileImagePicker(State.AvatarPath, AvatarSize, _ => PickPhoto())
+				)
+				.Alignment(Alignment.Center)
+				.Padding(new Thickness(0, CoffeeColors.SpacingS))
+			);
+		}
+		else
+		{
+			items.Add(
+				VStack(CoffeeColors.SpacingS,
+					new CircularAvatar(null, AvatarSize),
+					Text("Save the profile first to add a photo")
+						.Modifier(CoffeeModifiers.SecondaryText)
+						.HorizontalTextAlignment(TextAlignment.Center)
+				)
+				.Alignment(Alignment.Center)
+				.Padding(new Thickness(0, CoffeeColors.SpacingS))
+			);
+		}
 
+		// ── Name field ──────────────────────────────────────────────
+		items.Add(FormHelpers.MakeFormEntry("Name *", State.Name, "Profile name", v => SetState(s => s.Name = v)));
+
+		// ── Error display ───────────────────────────────────────────
 		if (!string.IsNullOrEmpty(State.Error))
-			items.Add(Text(State.Error).Color(Theme.Error).FontFamily(Theme.FontRegular).FontSize(14));
+		{
+			items.Add(
+				Border(
+					Text(State.Error)
+						.Modifier(CoffeeModifiers.BodyError)
+						.Padding(new Thickness(12))
+				)
+				.Modifier(CoffeeModifiers.ErrorCard)
+			);
+		}
 
+		// ── Save button ─────────────────────────────────────────────
 		items.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Create Profile", Save));
 
+		// ── Delete button (edit mode only) ──────────────────────────
 		if (isEdit)
 			items.Add(FormHelpers.MakeDangerButton("Delete Profile", Delete));
 
-		var stack = VStack(Theme.SpacingS);
+		var stack = VStack(CoffeeColors.SpacingS);
 		foreach (var item in items)
 			stack.Add(item);
 
 		return ScrollView(
-			stack.Padding(new Thickness(Theme.SpacingM))
+			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Background(Theme.Background);
+		.Modifier(CoffeeModifiers.PageContainer);
 	}
 }

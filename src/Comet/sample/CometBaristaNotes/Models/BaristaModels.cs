@@ -84,4 +84,8 @@ public class RatingAggregate
     public int RatedShots { get; set; }
     public int? BestRating { get; set; }
     public int? WorstRating { get; set; }
+    /// <summary>
+    /// Rating level (0-4) → count of shots with that rating.
+    /// </summary>
+    public Dictionary<int, int> Distribution { get; set; } = new();
 }

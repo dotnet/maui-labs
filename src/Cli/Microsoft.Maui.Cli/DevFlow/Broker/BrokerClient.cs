@@ -221,7 +221,11 @@ public static class BrokerClient
         {
             // Find the CLI executable path
             var exePath = Environment.ProcessPath;
-            if (exePath == null) return null;
+            if (exePath == null)
+            {
+                Console.Error.WriteLine("[DevFlow Broker] Cannot resolve CLI executable path (Environment.ProcessPath is null)");
+                return null;
+            }
 
             string fileName;
             string arguments;
@@ -232,7 +236,11 @@ public static class BrokerClient
                 || exePath.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
             {
                 var dllPath = ResolveManagedEntryAssemblyPath();
-                if (string.IsNullOrEmpty(dllPath)) return null;
+                if (string.IsNullOrEmpty(dllPath))
+                {
+                    Console.Error.WriteLine("[DevFlow Broker] Cannot resolve managed entry assembly path for daemon spawn");
+                    return null;
+                }
                 fileName = exePath;
                 arguments = $"\"{dllPath}\" broker start --foreground";
             }
@@ -254,11 +262,17 @@ public static class BrokerClient
             };
 
             var process = Process.Start(startInfo);
-            if (process == null) return null;
+            if (process == null)
+            {
+                Console.Error.WriteLine("[DevFlow Broker] Process.Start returned null — failed to launch daemon");
+                return null;
+            }
 
-            // Close inherited handles so the child doesn't block on broken pipes
+            // Capture stderr asynchronously so we can report startup errors
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            // Close stdout and stdin — we only need stderr for diagnostics
             process.StandardOutput.Close();
-            process.StandardError.Close();
             process.StandardInput.Close();
 
             // Poll until broker is ready
@@ -267,18 +281,48 @@ public static class BrokerClient
             {
                 await Task.Delay(200);
 
+                // Check if the child process has crashed during startup
+                if (process.HasExited)
+                {
+                    var stderr = await stderrTask;
+                    var exitCode = process.ExitCode;
+                    Console.Error.WriteLine($"[DevFlow Broker] Daemon process exited prematurely with code {exitCode}");
+                    if (!string.IsNullOrWhiteSpace(stderr))
+                        Console.Error.WriteLine($"[DevFlow Broker] stderr: {stderr.Trim()}");
+                    return null;
+                }
+
                 // Check if state file was written (may have a different port)
                 var statePort = ReadBrokerPort();
                 if (statePort.HasValue) port = statePort.Value;
 
                 if (await IsBrokerAliveAsync(port))
+                {
+                    // Broker is alive — close stderr reader (don't block on it)
+                    process.StandardError.Close();
                     return port;
+                }
             }
 
-            return null; // Timeout
+            // Timeout — check if the child is still running or crashed
+            if (process.HasExited)
+            {
+                var stderr = await stderrTask;
+                Console.Error.WriteLine($"[DevFlow Broker] Daemon exited with code {process.ExitCode} before becoming ready");
+                if (!string.IsNullOrWhiteSpace(stderr))
+                    Console.Error.WriteLine($"[DevFlow Broker] stderr: {stderr.Trim()}");
+            }
+            else
+            {
+                Console.Error.WriteLine($"[DevFlow Broker] Daemon process started (PID {process.Id}) but TCP listener not reachable after 5s");
+                process.StandardError.Close();
+            }
+
+            return null;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"[DevFlow Broker] Failed to start daemon: {ex.Message}");
             return null;
         }
     }

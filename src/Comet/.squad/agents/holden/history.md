@@ -289,3 +289,65 @@ Session history for holden.
 **Key architectural insight:** The `IApplication` interface provides `Windows` collection and `IVisualTreeElement` tree walking. `Page`, `Navigation.ModalStack`, and `Application.Current` are Controls-specific. All endpoint code must use safe casts (`window as Window`) when accessing these.
 
 **Build status:** All projects build clean, 970 tests pass (4 pre-existing failures, 26 skipped).
+
+### 2025-07-25 — Theming Architecture: Comet vs MauiReactor ThemeKey
+
+**Context:** David requested research comparing Comet's theming system to MauiReactor's `ThemeKey()` pattern. Full analysis produced as decision document in `.squad/decisions/inbox/holden-theming-architecture.md`.
+
+**Key findings:**
+- Comet's token system (Token<T>, ThemeManager, ViewModifier) is architecturally **more powerful** than MauiReactor's ThemeKey pattern
+- MauiReactor's `ThemeKey` is a string-indexed, per-control-type dictionary lookup wrapping MAUI's Style system
+- Comet's `ViewModifier` + `.Modifier()` achieves the same ergonomics without string indirection: `.Modifier(CoffeeModifiers.CardTitle)` ≈ `.ThemeKey(ThemeKeys.CardTitle)`
+- The real gap: CoffeeModifiers currently use `CoffeeColors.X` (static constants) instead of `CoffeeTokens.X` (theme-resolving tokens), so they don't switch with light/dark mode
+- **No framework changes needed** — fix is entirely at the app level
+
+**Architecture decision: Do NOT add `.ThemeKey()` to framework.** Reasons:
+1. Type safety — concrete modifier references vs string keys
+2. No per-control-type dispatch tables needed — ViewModifier.Apply works on any View
+3. Composability — `.Then()` chains work out of the box
+4. Pattern already exists and is in production use
+
+**Recommended pattern — TypographyModifier:**
+```csharp
+public class TypographyModifier : ViewModifier
+{
+    readonly Token<FontSpec> _typography;
+    readonly Token<Color> _color;
+    public TypographyModifier(Token<FontSpec> typography, Token<Color> color) { ... }
+    public override View Apply(View view) => view
+        .Typography(_typography)
+        .Color(ThemeManager.TokenBinding(_color));
+}
+```
+
+**Work items identified (all app-level):**
+1. Add TypographyModifier class to CoffeeModifiers.cs
+2. Rewrite all CoffeeModifiers to use Token<T> resolvers
+3. Add semantic modifier names (Headline, SubHeadline, SecondaryText, CardTitle, etc.)
+4. Migrate pages from inline `.FontFamily().FontSize().Color()` to `.Modifier()`
+
+**Key file paths:**
+- MauiReactor reference: `~/work/BaristaNotes/BaristaNotes/BaristaNotes/Resources/Styles/ApplicationTheme.cs` (ThemeKey definitions)
+- MauiReactor reference: `~/work/BaristaNotes/BaristaNotes/BaristaNotes/Resources/Styles/ThemeKeys.cs` (string constants)
+- Comet modifiers: `sample/CometBaristaNotes/Styles/CoffeeModifiers.cs`
+- Comet tokens: `sample/CometBaristaNotes/Styles/CoffeeTheme.cs` (CoffeeTokens + CoffeeThemeData)
+- Framework ViewModifier: `src/Comet/Styles/ViewModifier.cs`
+- Framework token resolution: `src/Comet/Styles/Token.cs`, `src/Comet/Styles/ThemeManager.cs`
+
+## 2026-04-05 — Theming Architecture Research (Scribe Orchestration)
+
+**Status:** ✅ Complete
+
+**Task:** Research Comet's theming architecture vs MauiReactor's ThemeKey pattern. Produce architecture proposal.
+
+**Findings:**
+- Comet has deep, production-ready token-based system (Token<T>, ThemeManager, ViewModifier, ControlStyle<T>)
+- Gap vs MauiReactor is **purely adoption** — modifiers use hardcoded statics instead of theme-aware tokens
+- Recommendation: Make CoffeeModifiers token-aware (use TypographyTokens + CoffeeTokens + ThemeManager.TokenBinding)
+- Add semantic modifier names (Headline, SubHeadline, Card, FormField, etc.) mirroring MauiReactor vocabulary
+- Create reusable TypographyModifier class for typography token + color token combinations
+- **No framework changes needed** — all work is app-level
+
+**Deliverable:** `.squad/decisions/inbox/holden-theming-architecture.md` (merged to decisions.md)
+
+**Handoff:** Ready for Amos implementation.

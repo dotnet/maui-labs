@@ -1,10 +1,11 @@
 using BaristaNotes.Styles;
 using CometBaristaNotes.Services;
+using CommunityToolkit.Maui;
+using CommunityToolkit.Maui.Media;
 using Fonts;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Maui.Hosting;
-using Microsoft.Maui.LifecycleEvents;
-using Syncfusion.Maui.Core.Hosting;
-using UXDivers.Popups.Maui;
+using Microsoft.Maui.Platform;
 
 namespace CometBaristaNotes;
 
@@ -15,27 +16,28 @@ public static class MauiProgram
 		var builder = MauiApp.CreateBuilder();
 
 #if DEBUG
-		builder.UseCometSampleDebugHost(BaristaApp.CreateRootView);
+		builder.UseCometSampleDebugHost(BaristaApp.CreateRootView)
+			.UseMauiCommunityToolkit();
 #else
-		builder.UseCometApp<BaristaApp>();
+		builder.UseCometApp<BaristaApp>()
+			.UseMauiCommunityToolkit();
 #endif
-		builder.ConfigureSyncfusionCore();
-		builder.UseUXDiversPopups();
 
-		// Add UXDivers popup theme resources
-		builder.ConfigureLifecycleEvents(events => {
-#if IOS || MACCATALYST
-			events.AddiOS(ios => ios.FinishedLaunching((app, options) => {
-				// CometApp does not set Application.Current, so we skip
-				// Application.Current.Resources merging. UXDivers popups
-				// will use their default dark theme styling.
-				return true;
-			}));
-#endif
-		});
+		// Load embedded appsettings.json into IConfiguration
+		var assembly = typeof(MauiProgram).Assembly;
+		var configStream = assembly.GetManifestResourceStream("CometBaristaNotes.appsettings.json");
+		if (configStream is not null)
+		{
+			var config = new ConfigurationBuilder()
+				.AddJsonStream(configStream)
+				.Build();
+			builder.Configuration.AddConfiguration(config);
+			builder.Services.AddSingleton<IConfiguration>(config);
+		}
 
 		// Configure platform-specific handler customizations
-		builder.ConfigureMauiHandlers(handlers => {
+		builder.ConfigureMauiHandlers(handlers =>
+		{
 			ModifyEntrys();
 		});
 
@@ -43,7 +45,8 @@ public static class MauiProgram
 		builder.EnableSampleRuntimeDebugging();
 #endif
 
-		builder.ConfigureFonts(fonts => {
+		builder.ConfigureFonts(fonts =>
+		{
 			fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
 			fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			fonts.AddFont("Manrope-Regular.ttf", "Manrope");
@@ -71,14 +74,18 @@ public static class MauiProgram
 		builder.Services.AddSingleton<IDataChangeNotifier>(notifier);
 		store.DataChangeNotifier = notifier;
 
-		// Register AI services
-		builder.Services.AddSingleton<IAIAdviceService, MockAIAdviceService>();
+		// Register AI services (real implementations)
+		builder.Services.AddSingleton<IAIAdviceService, AIAdviceService>();
 		builder.Services.AddSingleton<IVisionService, MockVisionService>();
 
 		// Register navigation and voice command services
 		builder.Services.AddSingleton<INavigationRegistry, NavigationRegistry>();
-		builder.Services.AddSingleton<IVoiceCommandService, MockVoiceCommandService>();
-		builder.Services.AddSingleton<ISpeechRecognitionService, MockSpeechRecognitionService>();
+		builder.Services.AddSingleton<IVoiceCommandService, VoiceCommandService>();
+
+		// Explicit ISpeechToText registration — UseMauiCommunityToolkit() should
+		// register this, but Comet's debug host path may skip it.
+		builder.Services.AddSingleton<ISpeechToText>(SpeechToText.Default);
+		builder.Services.AddSingleton<ISpeechRecognitionService, SpeechRecognitionService>();
 
 		var app = builder.Build();
 		ServiceHelper.Services = app.Services;

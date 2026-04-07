@@ -14,6 +14,13 @@ namespace Comet
 			return view;
 		}
 
+		// TextEditor placeholder text
+		public static TextEditor Placeholder(this TextEditor view, string placeholder)
+		{
+			view.SetEnvironment("Placeholder", (object)placeholder, false);
+			return view;
+		}
+
 		public static T Keyboard<T>(this T view, Microsoft.Maui.Keyboard keyboard) where T : View
 		{
 			view.SetEnvironment(EnvironmentKeys.Entry.Keyboard, keyboard, false);

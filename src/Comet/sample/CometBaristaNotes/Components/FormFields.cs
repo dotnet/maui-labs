@@ -1,149 +1,122 @@
 using Comet;
+using Comet.Styles;
+using CometBaristaNotes.Styles;
+using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
 
 namespace CometBaristaNotes.Components;
 
 /// <summary>
 /// Factory methods returning Comet views for form fields and UI components.
+/// Applies CoffeeModifiers for consistent styling.
 /// </summary>
 public static class FormHelpers
 {
 	public static View MakeIcon(string glyph, double size, Color color)
 	{
 		return Text(glyph)
-			.FontFamily(Icons.FontFamily)
-			.FontSize(size)
-			.Color(color)
-			.HorizontalTextAlignment(TextAlignment.Center)
-			.VerticalTextAlignment(TextAlignment.Center);
+			.Modifier(CoffeeModifiers.Icon(size, color));
 	}
 
 	public static View MakeCard(View content)
 	{
 		return Border(content)
-			.CornerRadius(Theme.RadiusCard)
-			.Background(Theme.CardBackground)
-			.StrokeColor(Theme.CardStroke)
-			.StrokeThickness(1)
-			.Padding(new Thickness(Theme.SpacingM));
+			.Modifier(CoffeeModifiers.Card);
 	}
 
 	public static View MakeSectionHeader(string title)
 	{
 		return Text(title.ToUpperInvariant())
-			.FontFamily(Theme.FontSemibold)
-			.FontSize(13)
-			.FontWeight(FontWeight.Bold)
-			.Color(Theme.TextSecondary)
-			.Margin(new Thickness(0, Theme.SpacingM, 0, Theme.SpacingXS));
+			.Modifier(CoffeeModifiers.SectionHeader);
 	}
 
 	public static View MakeFormEntry(string label, string value, string placeholder, Action<string> onChanged)
 	{
-		return VStack(
+		return new Comet.Grid(
+			columns: new object[] { "*" },
+			rows: new object[] { "Auto", CoffeeColors.FormFieldHeight.ToString() })
+		{
 			Text(label)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextSecondary)
-				.Margin(new Thickness(16, 0, 0, 4)),
+				.Modifier(CoffeeModifiers.FormLabel)
+				.Margin(new Thickness(16, 0, 0, 4))
+				.Cell(row: 0, column: 0),
 
-			Border(
-				TextField(value, placeholder)
-					.FontSize(16)
-					.Color(Theme.TextPrimary)
-					.Background(Colors.Transparent)
-					.Frame(height: Theme.FormFieldHeight)
-					.Margin(new Thickness(16, 0))
-					.OnTextChanged(onChanged)
-			)
-			.CornerRadius(Theme.RadiusPill)
-			.Background(Theme.SurfaceVariant)
-			.StrokeThickness(0)
-		);
+			Border(new Spacer())
+				.Modifier(CoffeeModifiers.FormField)
+				.Cell(row: 1, column: 0),
+
+			TextField(value, placeholder)
+				.Modifier(CoffeeModifiers.FormTextField)
+				.OnTextChanged(onChanged)
+				.Cell(row: 1, column: 0)
+		};
 	}
 
 	public static View MakeReadOnlyField(string label, string value)
 	{
 		return VStack(
 			Text(label)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextSecondary)
+				.Modifier(CoffeeModifiers.FormLabel)
 				.Margin(new Thickness(16, 0, 0, 4)),
 
-			Border(
+			new Comet.Grid(
+				columns: new object[] { "*" },
+				rows: new object[] { CoffeeColors.FormFieldHeight.ToString() })
+			{
+				Border(new Spacer())
+					.Modifier(CoffeeModifiers.SurfaceVariantField)
+					.Cell(row: 0, column: 0),
 				Text(value)
-					.FontFamily(Theme.FontSemibold)
-					.FontSize(16)
-					.FontWeight(FontWeight.Bold)
-					.Color(Theme.TextPrimary)
+					.Modifier(CoffeeModifiers.CardTitle)
 					.VerticalTextAlignment(TextAlignment.Center)
-					.Frame(height: Theme.FormFieldHeight)
-					.Padding(new Thickness(Theme.SpacingM, 0))
-			)
-			.CornerRadius(Theme.RadiusPill)
-			.Background(Theme.SurfaceVariant)
-			.StrokeThickness(0)
+					.VerticalLayoutAlignment(LayoutAlignment.Center)
+					.Padding(new Thickness(CoffeeColors.SpacingM, 0))
+					.Cell(row: 0, column: 0)
+			}
 		);
 	}
 
 	public static View MakePrimaryButton(string title, Action action)
 	{
 		return Button(title, action)
-			.FontFamily(Theme.FontSemibold)
-			.Background(Theme.Primary)
-			.Color(Colors.White)
-			.FontSize(16)
-			.FontWeight(FontWeight.Bold)
-			.Frame(height: Theme.ButtonHeight)
-			.CornerRadius((int)Theme.RadiusPill);
+			.Modifier(CoffeeModifiers.PrimaryButton);
 	}
 
 	public static View MakeSecondaryButton(string title, Action action)
 	{
 		return Button(title, action)
-			.FontFamily(Theme.FontSemibold)
-			.Background(Theme.SurfaceVariant)
-			.Color(Theme.Primary)
-			.FontSize(16)
-			.FontWeight(FontWeight.Bold)
-			.Frame(height: Theme.ButtonHeight)
-			.CornerRadius((int)Theme.RadiusPill);
+			.Modifier(CoffeeModifiers.SecondaryButton);
 	}
 
 	public static View MakeDangerButton(string title, Action action)
 	{
 		return Button(title, action)
-			.FontFamily(Theme.FontSemibold)
-			.Background(Theme.Error)
-			.Color(Colors.White)
-			.FontSize(16)
-			.FontWeight(FontWeight.Bold)
-			.Frame(height: Theme.ButtonHeight)
-			.CornerRadius((int)Theme.RadiusPill);
+			.Modifier(CoffeeModifiers.DangerButton);
 	}
 
-	public static View MakeEmptyState(string icon, string title, string description)
+	public static View MakeEmptyState(string icon, string title, string description, Action? action = null, string? actionLabel = null, string? iconFontFamily = null)
 	{
-		return VStack(12,
+		var views = new List<View>
+		{
 			Text(icon)
-				.FontFamily(Icons.FontFamily)
-				.FontSize(48)
-				.HorizontalTextAlignment(TextAlignment.Center),
+				.Modifier(CoffeeModifiers.IconFont(48, iconFontFamily ?? Icons.FontFamily)),
 
 			Text(title)
-				.FontFamily(Theme.FontSemibold)
-				.FontSize(18)
-				.FontWeight(FontWeight.Bold)
-				.Color(Theme.TextPrimary)
+				.Modifier(CoffeeModifiers.TitleSmall)
 				.HorizontalTextAlignment(TextAlignment.Center),
 
 			Text(description)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(14)
-				.Color(Theme.TextSecondary)
+				.Modifier(CoffeeModifiers.SecondaryText)
 				.HorizontalTextAlignment(TextAlignment.Center)
-		)
-		.Padding(new Thickness(Theme.SpacingXL));
+		};
+
+		if (action != null && actionLabel != null)
+			views.Add(MakePrimaryButton(actionLabel, action));
+
+		var stack = VStack(12);
+		foreach (var v in views)
+			stack.Add(v);
+
+		return stack.Padding(new Thickness(CoffeeColors.SpacingXL));
 	}
 
 	public static View MakeListCard(string title, string? subtitle, string? detail, Action? onTap)
@@ -151,46 +124,32 @@ public static class FormHelpers
 		var infoViews = new List<View>
 		{
 			Text(title)
-				.FontFamily(Theme.FontSemibold)
-				.FontSize(16)
-				.FontWeight(FontWeight.Bold)
-				.Color(Theme.TextPrimary),
+				.Modifier(CoffeeModifiers.CardTitle),
 		};
 		if (subtitle != null)
 			infoViews.Add(
 				Text(subtitle)
-					.FontFamily(Theme.FontRegular)
-					.FontSize(14)
-					.Color(Theme.TextSecondary));
+					.Modifier(CoffeeModifiers.CardSubtitle));
 		if (detail != null)
 			infoViews.Add(
 				Text(detail)
-					.FontFamily(Theme.FontRegular)
-					.FontSize(12)
-					.Color(Theme.TextMuted));
+					.Modifier(CoffeeModifiers.Caption));
 
 		var infoStack = VStack(2);
 		foreach (var v in infoViews)
 			infoStack.Add(v);
 
 		var chevron = Text(Icons.ChevronRight)
-			.FontFamily(Icons.FontFamily)
-			.FontSize(20)
-			.Color(Theme.TextMuted)
-			.VerticalTextAlignment(TextAlignment.Center)
-			.Padding(new Thickness(Theme.SpacingS, 0));
+			.Modifier(CoffeeModifiers.IconMedium(CoffeeColors.TextMuted))
+			.Padding(new Thickness(CoffeeColors.SpacingS, 0));
 
-		var row = HStack(Theme.SpacingS,
+		var row = HStack(CoffeeColors.SpacingS,
 			infoStack.FillHorizontal(),
 			chevron
 		);
 
 		View card = Border(row)
-			.CornerRadius(Theme.RadiusCard)
-			.Background(Theme.CardBackground)
-			.StrokeColor(Theme.CardStroke)
-			.StrokeThickness(1)
-			.Padding(new Thickness(Theme.SpacingM));
+			.Modifier(CoffeeModifiers.ListCard);
 
 		if (onTap != null)
 			card = card.OnTap(_ => onTap());
@@ -202,22 +161,21 @@ public static class FormHelpers
 	{
 		return VStack(
 			Text(label)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextSecondary)
+				.Modifier(CoffeeModifiers.FormLabel)
 				.Margin(new Thickness(16, 0, 0, 4)),
 
-			Border(
+			new Comet.Grid(
+				columns: new object[] { "*" },
+				rows: new object[] { CoffeeColors.FormFieldHeight.ToString() })
+			{
+				Border(new Spacer())
+					.Modifier(CoffeeModifiers.FormField)
+					.Cell(row: 0, column: 0),
 				Picker(selectedIndex, items)
-					.Color(Theme.TextPrimary)
-					.Background(Colors.Transparent)
-					.Frame(height: Theme.FormFieldHeight)
-					.Margin(new Thickness(16, 0))
+					.Modifier(CoffeeModifiers.FormPicker)
 					.OnSelectedIndexChanged(onChanged)
-			)
-			.CornerRadius(Theme.RadiusPill)
-			.Background(Theme.SurfaceVariant)
-			.StrokeThickness(0)
+					.Cell(row: 0, column: 0)
+			}
 		);
 	}
 
@@ -225,46 +183,31 @@ public static class FormHelpers
 	{
 		return VStack(
 			Text(label)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextSecondary)
+				.Modifier(CoffeeModifiers.FormLabel)
 				.Margin(new Thickness(16, 0, 0, 4)),
 
-			Border(
-				Slider(value, min, max)
-					.MinimumTrackColor(Theme.Primary)
-					.MaximumTrackColor(Theme.SurfaceVariant)
-					.Margin(new Thickness(16, 0))
-					.OnValueChanged(onChanged)
-			)
-			.CornerRadius(Theme.RadiusPill)
-			.Background(Theme.SurfaceVariant)
-			.StrokeThickness(0)
-			.Frame(height: Theme.FormFieldHeight)
+			Slider(value, min, max)
+				.Modifier(CoffeeModifiers.FormSlider(
+					CoffeeColors.Primary,
+					CoffeeColors.SurfaceVariant,
+					margin: new Thickness(16, 0)))
+				.OnValueChanged(onChanged)
 		);
 	}
 
-	public static View MakeFormEditor(string label, string value, Action<string> onChanged)
+	public static View MakeFormEditor(string label, string value, Action<string> onChanged, double height = 80)
 	{
 		return VStack(
 			Text(label)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextSecondary)
+				.Modifier(CoffeeModifiers.FormLabel)
 				.Margin(new Thickness(16, 0, 0, 4)),
 
 			Border(
 				TextEditor(value)
-					.FontSize(16)
-					.Color(Theme.TextPrimary)
-					.Background(Colors.Transparent)
-					.Frame(height: 80)
-					.Margin(new Thickness(16, 8))
+					.Modifier(CoffeeModifiers.FormEditor((float)height))
 					.OnTextChanged(onChanged)
 			)
-			.CornerRadius(Theme.RadiusEditor)
-			.Background(Theme.SurfaceVariant)
-			.StrokeThickness(0)
+			.Modifier(CoffeeModifiers.FormEditorContainer)
 		);
 	}
 
@@ -273,18 +216,21 @@ public static class FormHelpers
 		var currentLength = value?.Length ?? 0;
 
 		return VStack(
-			Text(label)
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextSecondary)
-				.Margin(new Thickness(16, 0, 0, 4)),
+			new Comet.Grid(
+				columns: new object[] { "*" },
+				rows: new object[] { "Auto", CoffeeColors.FormFieldHeight.ToString() })
+			{
+				Text(label)
+					.Modifier(CoffeeModifiers.FormLabel)
+					.Margin(new Thickness(16, 0, 0, 4))
+					.Cell(row: 0, column: 0),
 
-			Border(
+				Border(new Spacer())
+					.Modifier(CoffeeModifiers.FormField)
+					.Cell(row: 1, column: 0),
+
 				TextField(value, placeholder)
-					.FontSize(16)
-					.Color(Theme.TextPrimary)
-					.Background(Theme.SurfaceVariant)
-					.Frame(height: Theme.FormFieldHeight)
+					.Modifier(CoffeeModifiers.FormTextField)
 					.OnTextChanged(text =>
 					{
 						text ??= string.Empty;
@@ -292,15 +238,12 @@ public static class FormHelpers
 							text = text[..maxLength];
 						onChanged(text);
 					})
-			)
-			.CornerRadius(Theme.RadiusPill)
-			.Background(Theme.SurfaceVariant)
-			.StrokeThickness(0),
+					.Cell(row: 1, column: 0)
+			},
 
 			Text($"{currentLength}/{maxLength}")
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(currentLength >= maxLength ? Theme.Warning : Theme.TextMuted)
+				.Modifier(CoffeeModifiers.Caption)
+				.Modifier(CoffeeModifiers.TextColor(currentLength >= maxLength ? CoffeeColors.Warning : CoffeeColors.TextMuted))
 				.HorizontalTextAlignment(TextAlignment.End)
 		);
 	}
@@ -309,15 +252,12 @@ public static class FormHelpers
 	{
 		var grid = Grid(columns: new object[] { "*", "Auto" }, rows: new object[] { "Auto" },
 			Text(label)
-				.FontFamily(Theme.FontSemibold)
-				.FontSize(14)
-				.FontWeight(FontWeight.Bold)
-				.Color(Theme.TextPrimary)
+				.Modifier(CoffeeModifiers.BodyStrong)
 				.VerticalTextAlignment(TextAlignment.Center)
 				.Cell(row: 0, column: 0),
 
 			Toggle(isOn)
-				.OnColor(Theme.Primary)
+				.Modifier(CoffeeModifiers.FormToggle(CoffeeColors.Primary))
 				.OnToggled(onChanged)
 				.Cell(row: 0, column: 1)
 		);

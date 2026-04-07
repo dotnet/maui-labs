@@ -14,11 +14,7 @@ public class FeedbackService : IFeedbackService
 		await _semaphore.WaitAsync();
 		try
 		{
-			var page = PageHelper.GetCurrentPage();
-			if (page is not null)
-			{
-				await page.DisplayAlertAsync(title, message, "OK");
-			}
+			await PageHelper.DisplayAlertAsync(title, message, "OK");
 		}
 		finally
 		{

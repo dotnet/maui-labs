@@ -1,6 +1,12 @@
+using Comet;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -32,29 +38,55 @@ public class EquipmentManagementPage : Component<EquipmentManagementPageState>
 
 		if (items.Count == 0)
 		{
-			return VStack(Theme.SpacingM,
-				FormHelpers.MakeEmptyState(Icons.Build, "No Equipment Yet", "Add your coffee machines, grinders, and accessories"),
-				FormHelpers.MakePrimaryButton("+ Add Equipment", () => Navigation?.Navigate(new EquipmentDetailPage(0)))
+			return VStack(CoffeeColors.SpacingM,
+				FormHelpers.MakeEmptyState(
+					Icons.Machine,
+					"No Equipment Yet",
+					"Add your coffee machines, grinders, and accessories",
+					iconFontFamily: Icons.CoffeeFontFamily),
+				FormHelpers.MakePrimaryButton("+ Add Equipment", () =>
+					Comet.NavigationView.Navigate(this, new EquipmentDetailPage(0)))
 			)
-			.Padding(new Thickness(Theme.SpacingL))
-			.Background(Theme.Background);
+			.Padding(new Thickness(CoffeeColors.SpacingL))
+			.FillHorizontal()
+			.Modifier(CoffeeModifiers.PageContainer);
 		}
 
-		var stack = VStack(Theme.SpacingS,
-			FormHelpers.MakePrimaryButton("+ Add Equipment", () => Navigation?.Navigate(new EquipmentDetailPage(0)))
+		var stack = VStack(CoffeeColors.SpacingS,
+			FormHelpers.MakePrimaryButton("+ Add Equipment", () =>
+				Comet.NavigationView.Navigate(this, new EquipmentDetailPage(0)))
 		);
 
 		foreach (var eq in items)
 		{
-			stack.Add(FormHelpers.MakeListCard(
-				eq.Name,
-				eq.Type.ToString(),
-				eq.Notes,
-				() => Navigation?.Navigate(new EquipmentDetailPage(eq.Id))
-			));
+			stack.Add(MakeEquipmentCard(eq));
 		}
 
-		return ScrollView(stack.Padding(new Thickness(Theme.SpacingM)))
-			.Background(Theme.Background);
+		return ScrollView(stack.Padding(new Thickness(CoffeeColors.SpacingM)))
+			.Modifier(CoffeeModifiers.PageContainer);
+	}
+
+	View MakeEquipmentCard(Equipment eq)
+	{
+		var details = VStack(4,
+			Text(eq.Name)
+				.Modifier(CoffeeModifiers.CardTitle),
+			Text(eq.Type.ToString())
+				.Modifier(CoffeeModifiers.CardSubtitle)
+		);
+
+		var chevron = FormHelpers.MakeIcon(Icons.ChevronRight, 20, CoffeeColors.TextMuted);
+
+		var row = HStack(CoffeeColors.SpacingS,
+			details.FillHorizontal(),
+			chevron
+		);
+
+		View card = Border(row)
+			.Modifier(CoffeeModifiers.Card);
+
+		card = card.OnTap(_ => Comet.NavigationView.Navigate(this, new EquipmentDetailPage(eq.Id)));
+
+		return card;
 	}
 }

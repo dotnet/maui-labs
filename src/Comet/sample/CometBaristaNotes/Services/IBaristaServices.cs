@@ -15,6 +15,10 @@ public interface IShotService
     ShotRecord UpdateShot(ShotRecord shot);
     void DeleteShot(int id);
     List<ShotRecord> GetShotsByBean(int beanId);
+    List<ShotRecord> GetShotsForBag(int bagId);
+    List<ShotRecord> GetFilteredShots(ShotFilterCriteria criteria);
+    List<(int Id, string Name)> GetBeansWithShots();
+    List<(int Id, string Name)> GetPeopleWithShots();
 }
 
 public interface IBeanService

@@ -17,6 +17,8 @@ namespace Comet.Handlers
 			base.SetVirtualView(view);
 
 			PlatformView?.Setup(this.VirtualView);
+			PlatformView?.ApplyTabBarAppearance(this.VirtualView);
+			PlatformView?.ApplySelectedIndex(this.VirtualView.SelectedIndex);
 		}
 
 	}

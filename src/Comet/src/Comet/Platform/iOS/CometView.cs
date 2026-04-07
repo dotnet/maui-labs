@@ -45,6 +45,7 @@ namespace Comet.iOS
 					ihr1.ReloadHandler = this;
 					MauiHotReloadHelper.AddActiveView(ihr1);
 				}
+				PropagateContentBackground();
 				return;
 			}
 
@@ -67,6 +68,29 @@ namespace Comet.iOS
 			currentPlatformView?.RemoveFromSuperview();
 			if (newPlatformView != this && newPlatformView != null)
 				AddSubview(currentPlatformView = newPlatformView);
+
+			PropagateContentBackground();
+		}
+
+		/// <summary>
+		/// Copies the content view's background to this container so the safe area
+		/// regions (behind status bar, home indicator) show the correct color
+		/// instead of the default SystemBackground.
+		/// </summary>
+		void PropagateContentBackground()
+		{
+			if (_view is not View cometView) return;
+
+			var bg = cometView.GetBackground();
+			// Walk into the rendered body if the component itself has no background
+			if (bg == null && cometView.Body != null)
+			{
+				var bodyView = cometView.GetView() as View;
+				bg = bodyView?.GetBackground();
+			}
+
+			if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
+				BackgroundColor = solid.Color.ToPlatform();
 		}
 
 

@@ -179,7 +179,6 @@ namespace Comet.Android.Controls
 
 		public bool OnTouch(AView v, MotionEvent e)
 		{
-			Console.WriteLine($"Touching view:{v}");
 			return gestureDetector.OnTouchEvent(this, e);
 		}
 		protected override void Dispose(bool disposing)

@@ -58,6 +58,10 @@ namespace Comet.Handlers
 				if (!string.IsNullOrEmpty(title))
 					vc.Title = title;
 			});
+			// Enable large titles (iOS convention matching original BaristaNotes)
+			navigationController.NavigationBar.PrefersLargeTitles = true;
+			vc.NavigationItem.LargeTitleDisplayMode = UINavigationItemLargeTitleDisplayMode.Always;
+
 			navigationController.PushViewController(vc, true);
 
 			// Add leading bar button (hamburger icon) if configured
@@ -112,7 +116,7 @@ namespace Comet.Handlers
 					if (image != null)
 					{
 						barItem = new UIBarButtonItem(
-							image,
+							image.ImageWithRenderingMode(UIImageRenderingMode.AlwaysTemplate),
 							UIBarButtonItemStyle.Plain,
 							(s, e) => toolbarAction?.Invoke());
 					}
@@ -176,18 +180,11 @@ namespace Comet.Handlers
 		{
 			if (viewController is CUINavigationController navController)
 			{
-				var bgPaint = VirtualView?.GetBackground();
-				if (bgPaint is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
-				{
-					var uiColor = solid.Color.ToPlatform();
-					var appearance = new UINavigationBarAppearance();
-					appearance.ConfigureWithOpaqueBackground();
-					appearance.BackgroundColor = uiColor;
-					appearance.ShadowColor = UIColor.Clear;
-					navController.NavigationBar.StandardAppearance = appearance;
-					navController.NavigationBar.ScrollEdgeAppearance = appearance;
-					navController.NavigationBar.CompactAppearance = appearance;
-				}
+				// Let CometViewController.ApplyStyle() handle the nav bar appearance.
+				// We only set TintColor here for toolbar item icons.
+				var textPrimaryColor = UIColor.FromRGBA(53, 43, 35, 255); // CoffeeColors.TextPrimary
+				navController.NavigationBar.TintColor = textPrimaryColor;
+				navController.NavigationBar.Translucent = true;
 			}
 		}
 

@@ -1,10 +1,17 @@
 using Comet;
+using Comet.Styles;
 using CometBaristaNotes.Models;
+using CometBaristaNotes.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Components;
 
 /// <summary>
-/// Factory for creating shot record card using Comet fluent UI.
+/// Factory for creating shot record cards matching the original BaristaNotes layout.
+/// Card shows: DrinkType + smiley badge, BeanName, Recipe, Timestamp • By • For.
+/// Equipment is hidden (matches original which has it commented out).
 /// </summary>
 public static class ShotRecordCardFactory
 {
@@ -12,105 +19,74 @@ public static class ShotRecordCardFactory
 	{
 		var beanName = shot.BeanName ?? shot.BagDisplayName ?? "Unknown Bean";
 
-		var footer = BuildFooter(shot);
+		// Tuned for visual density parity with original: spacing 6, padding 10.
+		// Original MauiReactor uses spacing:8/padding:12 but CollectionView renders more compactly
+		// than ScrollView+VStack, so we compensate with tighter values.
+		var card = VStack(spacing: 6f,
+			// Header: coffee icon + drink type + rating smiley badge
+			HStack(spacing: 4f,
+				FormHelpers.MakeIcon(Icons.Coffee, 18, CoffeeColors.Primary),
+				Text(shot.DrinkType)
+					.Modifier(CoffeeModifiers.TitleSmall),
+				new Spacer(),
+				MakeRatingBadge(shot)
+			),
 
-		var card = Border(
-			VStack(6,
-				Grid(columns: new object[] { "*", "Auto" }, rows: new object[] { "Auto" },
-					HStack(6,
-						Text(Icons.Coffee)
-							.FontFamily(Icons.FontFamily)
-							.FontSize(18)
-							.Color(Theme.TextPrimary),
-						Text(shot.DrinkType)
-							.FontFamily(Theme.FontSemibold)
-							.FontWeight(FontWeight.Bold)
-							.FontSize(16)
-							.Color(Theme.TextPrimary)
-					)
-					.Cell(row: 0, column: 0),
+			// Bean name
+			Text(beanName)
+				.Modifier(CoffeeModifiers.FormValue),
 
-					MakeRatingBadge(shot)
-						.Cell(row: 0, column: 1)
-				),
+			// Recipe line
+			Text(FormatRecipeLine(shot))
+				.Modifier(CoffeeModifiers.SecondaryText),
 
-				Text(beanName)
-					.FontFamily(Theme.FontRegular)
-					.FontSize(14)
-					.Color(Theme.TextSecondary),
-
-				Text(FormatRecipeLine(shot))
-					.FontFamily(Theme.FontRegular)
-					.FontSize(14)
-					.Color(Theme.TextSecondary),
-
-				footer
-			)
+			// Footer: single line "Timestamp • By: Name • For: Name"
+			Text(FormatFooterLine(shot))
+				.Modifier(CoffeeModifiers.Caption)
 		)
-		.CornerRadius(Theme.RadiusCard)
-		.Background(Theme.CardBackground)
-		.StrokeColor(Theme.CardStroke)
-		.StrokeThickness(1)
-		.Padding(new Thickness(Theme.SpacingM))
-		.Margin(new Thickness(Theme.SpacingM, Theme.SpacingXS));
+		.Modifier(CoffeeModifiers.ShotCard);
 
 		if (onTap != null)
-			card.OnTap(_ => onTap());
+			card = card.OnTap(_ => onTap());
 
 		return card;
-	}
-
-	static View BuildFooter(ShotRecord shot)
-	{
-		var items = new List<View>
-		{
-			Text(FormatTimestamp(shot))
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextMuted),
-		};
-
-		if (shot.MadeByName != null)
-			items.Add(Text($"• By: {shot.MadeByName}")
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextMuted));
-
-		if (shot.MadeForName != null)
-			items.Add(Text($"• For: {shot.MadeForName}")
-				.FontFamily(Theme.FontRegular)
-				.FontSize(12)
-				.Color(Theme.TextMuted));
-
-		var stack = HStack(4);
-		foreach (var item in items)
-			stack.Add(item);
-
-		return stack;
 	}
 
 	static View MakeRatingBadge(ShotRecord shot)
 	{
 		if (!shot.Rating.HasValue)
-			return Text("—")
-				.FontFamily(Theme.FontRegular)
-				.FontSize(14)
-				.Color(Theme.TextMuted);
+			return Text("").Frame(width: 0, height: 0).Opacity(0);
 
-		var sentiments = new[] { Icons.SentimentVeryDissatisfied, Icons.SentimentDissatisfied, Icons.SentimentNeutral, Icons.SentimentSatisfied, Icons.SentimentVerySatisfied };
-		var idx = Math.Clamp(shot.Rating.Value - 1, 0, sentiments.Length - 1);
-		return Text(sentiments[idx])
-			.FontFamily(Icons.FontFamily)
-			.FontSize(18)
-			.Color(Theme.StarFilled);
+		var rating = shot.Rating.Value;
+		var glyph = rating switch
+		{
+			0 => Icons.SentimentVeryDissatisfied,
+			1 => Icons.SentimentDissatisfied,
+			2 => Icons.SentimentNeutral,
+			3 => Icons.SentimentSatisfied,
+			4 => Icons.SentimentVerySatisfied,
+			_ => Icons.SentimentNeutral,
+		};
+
+		return FormHelpers.MakeIcon(glyph, 24, CoffeeColors.Primary);
 	}
 
 	static string FormatRecipeLine(ShotRecord shot)
 	{
 		var doseIn = $"{shot.DoseIn:F1}g in";
-		var doseOut = shot.ActualOutput.HasValue ? $"{shot.ActualOutput:F1}g out" : "—";
+		var doseOut = shot.ActualOutput.HasValue ? $"{shot.ActualOutput:F1}g out" : "\u2014";
 		var time = shot.ActualTime.HasValue ? $"({shot.ActualTime:F1}s)" : "";
-		return $"{doseIn} → {doseOut} {time}".Trim();
+		return $"{doseIn} \u2192 {doseOut} {time}".Trim();
+	}
+
+	static string FormatFooterLine(ShotRecord shot)
+	{
+		var parts = new List<string> { FormatTimestamp(shot) };
+		if (shot.MadeByName != null)
+			parts.Add($"By: {shot.MadeByName}");
+		if (shot.MadeForName != null)
+			parts.Add($"For: {shot.MadeForName}");
+		return string.Join(" \u2022 ", parts);
 	}
 
 	static string FormatTimestamp(ShotRecord shot)
@@ -118,8 +94,8 @@ public static class ShotRecordCardFactory
 		var diff = DateTime.Now - shot.Timestamp;
 		if (diff.TotalMinutes < 1) return "Just now";
 		if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-		if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-		if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-		return shot.Timestamp.ToString("MMM d");
+		if (diff.TotalHours < 24) return shot.Timestamp.ToString("h:mm tt");
+		if (diff.TotalDays < 7) return shot.Timestamp.ToString("ddd h:mm tt");
+		return shot.Timestamp.ToString("MMM d, h:mm tt");
 	}
 }

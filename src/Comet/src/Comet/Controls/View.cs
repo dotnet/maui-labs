@@ -146,7 +146,6 @@ namespace Comet
 		{
 			lock (ActiveViewsLock)
 				ActiveViews.Add(this);
-			Debug.WriteLine($"Active View Count: {ActiveViews.Count}");
 			MauiHotReloadHelper.Register(this);
 			SetEnvironmentFields();
 
@@ -371,7 +370,6 @@ namespace Comet
 
 			if (BuiltView == null)
 			{
-				Debug.WriteLine($"Building View: {this.GetType().Name}");
 				try
 				{
 					var view = GetRenderViewReactive();
@@ -743,8 +741,6 @@ namespace Comet
 					ViewHandler?.Invoke(Gesture.RemoveGestureProperty, g);
 			}
 
-			Debug.WriteLine($"Active View Count: {ActiveViews.Count}");
-
 			MauiHotReloadHelper.UnRegister(this);
 
 			try
@@ -861,10 +857,6 @@ namespace Comet
 				MeasuredSize = GetDesiredSize(new Size(widthConstraint, heightConstraint));
 				if (ViewHandler != null)
 					lastAvailableSize = availableSize;
-				if (MeasuredSize.Width <= 0 || MeasuredSize.Height <= 0)
-				{
-					Console.WriteLine($"Why :( - {this}");
-				}
 			}
 
 			MeasurementValid = ViewHandler != null;

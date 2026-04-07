@@ -162,6 +162,53 @@ public class SqliteDataStore : IDataStore
 		return shots;
 	}
 
+	public List<ShotRecord> GetShotsForBag(int bagId)
+	{
+		using var db = CreateContext();
+		var shots = db.Shots.Where(s => s.BagId == bagId).OrderByDescending(s => s.Timestamp).ToList();
+		foreach (var shot in shots)
+			PopulateShotNames(db, shot);
+		return shots;
+	}
+
+	public List<ShotRecord> GetFilteredShots(ShotFilterCriteria criteria)
+	{
+		using var db = CreateContext();
+		var query = db.Shots.AsQueryable();
+
+		if (criteria.BeanIds.Count > 0)
+		{
+			var bagIds = db.Bags.Where(b => criteria.BeanIds.Contains(b.BeanId)).Select(b => b.Id).ToHashSet();
+			query = query.Where(s => bagIds.Contains(s.BagId));
+		}
+
+		if (criteria.MadeForIds.Count > 0)
+			query = query.Where(s => s.MadeForId.HasValue && criteria.MadeForIds.Contains(s.MadeForId.Value));
+
+		if (criteria.Ratings.Count > 0)
+			query = query.Where(s => s.Rating.HasValue && criteria.Ratings.Contains(s.Rating.Value));
+
+		var shots = query.OrderByDescending(s => s.Timestamp).ToList();
+		foreach (var shot in shots)
+			PopulateShotNames(db, shot);
+		return shots;
+	}
+
+	public List<(int Id, string Name)> GetBeansWithShots()
+	{
+		using var db = CreateContext();
+		var bagIdsWithShots = db.Shots.Select(s => s.BagId).Distinct().ToHashSet();
+		var beanIds = db.Bags.Where(b => bagIdsWithShots.Contains(b.Id)).Select(b => b.BeanId).Distinct().ToHashSet();
+		return db.Beans.Where(b => beanIds.Contains(b.Id)).Select(b => new { b.Id, b.Name }).ToList().Select(b => (b.Id, b.Name)).ToList();
+	}
+
+	public List<(int Id, string Name)> GetPeopleWithShots()
+	{
+		using var db = CreateContext();
+		var profileIds = db.Shots.Where(s => s.MadeForId.HasValue).Select(s => s.MadeForId!.Value).Distinct().ToHashSet();
+		return db.Profiles.Where(p => profileIds.Contains(p.Id)).Select(p => new { p.Id, p.Name }).ToList().Select(p => (p.Id, p.Name)).ToList();
+	}
+
 	// BEAN SERVICE
 	public List<Bean> GetAllBeans()
 	{

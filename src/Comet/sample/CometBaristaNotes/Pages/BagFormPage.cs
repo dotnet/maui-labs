@@ -1,6 +1,12 @@
+using Comet;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -11,6 +17,7 @@ public class BagFormPageState
 	public string Error { get; set; } = "";
 	public string BeanName { get; set; } = "";
 	public bool IsLoaded { get; set; }
+	public bool IsSaving { get; set; }
 }
 
 public class BagFormPage : Component<BagFormPageState>
@@ -30,21 +37,34 @@ public class BagFormPage : Component<BagFormPageState>
 		SetState(s => s.IsLoaded = true);
 	}
 
-	void Save()
+	bool Validate()
 	{
 		if (!DateTime.TryParse(State.RoastDate, out var roastDate))
 		{
 			SetState(s => s.Error = "Please enter a valid date (yyyy-MM-dd)");
-			return;
+			return false;
 		}
 
 		if (roastDate.Date > DateTime.Now.Date)
 		{
 			SetState(s => s.Error = "Roast date cannot be in the future");
-			return;
+			return false;
 		}
 
-		SetState(s => s.Error = "");
+		if (!string.IsNullOrEmpty(State.Notes) && State.Notes.Length > 500)
+		{
+			SetState(s => s.Error = "Notes cannot exceed 500 characters");
+			return false;
+		}
+
+		return true;
+	}
+
+	void Save()
+	{
+		if (!Validate()) return;
+
+		SetState(s => { s.Error = ""; s.IsSaving = true; });
 
 		var store = InMemoryDataStore.Instance;
 		if (store == null) return;
@@ -52,11 +72,12 @@ public class BagFormPage : Component<BagFormPageState>
 		store.CreateBag(new Bag
 		{
 			BeanId = _beanId,
-			RoastDate = roastDate,
+			RoastDate = DateTime.Parse(State.RoastDate),
 			Notes = string.IsNullOrWhiteSpace(State.Notes) ? null : State.Notes,
 		});
 
-		Navigation?.Pop();
+		SetState(s => s.IsSaving = false);
+		Comet.NavigationView.Pop(this);
 	}
 
 	public override View Render()
@@ -64,21 +85,50 @@ public class BagFormPage : Component<BagFormPageState>
 		if (!State.IsLoaded)
 			LoadBeanName();
 
-		var errorView = !string.IsNullOrEmpty(State.Error)
-			? Text(State.Error).Color(Theme.Error).FontFamily(Theme.FontRegular).FontSize(14)
-			: null;
+		var items = new List<View>
+		{
+			// Header
+			Text($"Add Bag for {State.BeanName}")
+				.Modifier(CoffeeModifiers.Headline)
+				.Padding(new Thickness(0, 0, 0, CoffeeColors.SpacingS)),
+
+			// Bean name (read-only)
+			FormHelpers.MakeReadOnlyField("Bean", State.BeanName),
+
+			// Roast Date
+			FormHelpers.MakeFormEntry("Roast Date", State.RoastDate, "yyyy-MM-dd",
+				v => SetState(s => s.RoastDate = v)),
+
+			// Notes with char limit
+			FormHelpers.MakeFormEntryWithLimit("Notes (optional)", State.Notes,
+				"e.g., From Trader Joe's, Gift from friend", 500,
+				v => SetState(s => s.Notes = v)),
+		};
+
+		// Validation error
+		if (!string.IsNullOrEmpty(State.Error))
+		{
+			items.Add(
+				Border(
+					Text(State.Error)
+						.Modifier(CoffeeModifiers.BodyError)
+						.Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
+				)
+				.Modifier(CoffeeModifiers.ErrorCard)
+			);
+		}
+
+		// Add Bag button
+		items.Add(FormHelpers.MakePrimaryButton(
+			State.IsSaving ? "Saving..." : "Add Bag", Save));
+
+		var stack = VStack(CoffeeColors.SpacingM);
+		foreach (var item in items) stack.Add(item);
 
 		return ScrollView(
-			VStack(Theme.SpacingS,
-				FormHelpers.MakeSectionHeader("ADD BAG"),
-				FormHelpers.MakeReadOnlyField("Bean", State.BeanName),
-				FormHelpers.MakeFormEntry("Roast Date", State.RoastDate, "yyyy-MM-dd", v => SetState(s => s.RoastDate = v)),
-				FormHelpers.MakeFormEntryWithLimit("Notes (optional)", State.Notes, "e.g., From Trader Joe's, Gift from friend", 500, v => SetState(s => s.Notes = v)),
-				errorView,
-				FormHelpers.MakePrimaryButton("Add Bag", Save)
-			)
-			.Padding(new Thickness(Theme.SpacingM))
+			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Background(Theme.Background);
+		.Modifier(CoffeeModifiers.PageContainer)
+		.Title("Add Bag");
 	}
 }

@@ -1,3 +1,6 @@
+using Comet.Styles;
+using CometBaristaNotes.Styles;
+
 namespace CometBaristaNotes.Services;
 
 public class ThemeService : IThemeService
@@ -30,9 +33,7 @@ public class ThemeService : IThemeService
 
 	private static void ApplyTheme(AppThemeMode mode)
 	{
-		// In pure CometApp mode, Application.Current is null.
-		// Theme switching is handled by the Comet view layer
-		// through State<AppThemeMode> reactivity — views re-render
-		// when the theme mode changes via the ThemeChanged event.
+		var theme = CoffeeTheme.ForMode(mode);
+		ThemeManager.SetTheme(theme);
 	}
 }

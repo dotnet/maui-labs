@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
 
 namespace CometBaristaNotes.Pages;
 
@@ -26,30 +28,43 @@ public class SettingsPage : Component<SettingsPageState>
 			SetState(s => s.ThemeMode = _themeService.CurrentMode);
 
 		return ScrollView(
-			VStack(Theme.SpacingM,
-				FormHelpers.MakeSectionHeader("APPEARANCE"),
+			VStack(CoffeeColors.SpacingM,
+				MakeSectionLabel("Appearance")
+					.Padding(new Thickness(0, CoffeeColors.SpacingM, 0, CoffeeColors.SpacingS)),
 				BuildAppearanceButtons(),
-				FormHelpers.MakeSectionHeader("MANAGE"),
-				BuildManageItem("Equipment", "Manage machines, grinders", () =>
+				MakeSectionLabel("Manage")
+					.Padding(new Thickness(0, CoffeeColors.SpacingL, 0, CoffeeColors.SpacingS)),
+				BuildManageItem("Equipment", "Manage machines, grinders, and accessories", () =>
 					Navigation?.Navigate(new EquipmentManagementPage())),
-				BuildManageItem("Beans", "Manage coffee beans", () =>
+				BuildManageItem("Beans", "Manage coffee beans and roasters", () =>
 					Navigation?.Navigate(new BeanManagementPage())),
 				BuildManageItem("User Profiles", "Manage household members", () =>
 					Navigation?.Navigate(new UserProfileManagementPage())),
-				FormHelpers.MakeSectionHeader("ABOUT"),
+				MakeSectionLabel("About")
+					.Padding(new Thickness(0, CoffeeColors.SpacingL, 0, CoffeeColors.SpacingS)),
 				BuildAboutCard()
 			)
-			.Padding(new Thickness(Theme.SpacingM))
+			.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Background(Theme.Background);
+		.Modifier(CoffeeModifiers.PageContainer)
+		.Title("Settings");
 	}
 
+	static View MakeSectionLabel(string title) =>
+		Text(title)
+			.Modifier(CoffeeModifiers.SecondaryText);
+
 	View BuildAppearanceButtons() =>
-		HStack(Theme.SpacingS,
-			BuildThemeButton(Icons.LightMode, "Light", AppThemeMode.Light),
-			BuildThemeButton(Icons.DarkMode, "Dark", AppThemeMode.Dark),
+		Grid(
+			columns: new object[] { "*", "*", "*" },
+			rows: new object[] { "Auto" },
+			BuildThemeButton(Icons.LightMode, "Light", AppThemeMode.Light)
+				.Cell(row: 0, column: 0),
+			BuildThemeButton(Icons.DarkMode, "Dark", AppThemeMode.Dark)
+				.Cell(row: 0, column: 1),
 			BuildThemeButton(Icons.BrightnessAuto, "Auto", AppThemeMode.System)
-		);
+				.Cell(row: 0, column: 2)
+		).ColumnSpacing(CoffeeColors.SpacingS);
 
 	View BuildThemeButton(string icon, string label, AppThemeMode mode)
 	{
@@ -57,22 +72,19 @@ public class SettingsPage : Component<SettingsPageState>
 		return Border(
 			VStack(4,
 				Text(icon)
-					.FontFamily(Icons.FontFamily)
-					.FontSize(24)
+					.Modifier(CoffeeModifiers.IconLarge(isSelected ? CoffeeColors.Primary : CoffeeColors.TextPrimary))
 					.HorizontalTextAlignment(TextAlignment.Center),
 				Text(label)
-					.FontFamily(Theme.FontRegular)
-					.FontSize(12)
-					.Color(isSelected ? Theme.Primary : Theme.TextSecondary)
+					.Modifier(CoffeeModifiers.Caption)
+					.Modifier(CoffeeModifiers.TextColor(isSelected ? CoffeeColors.Primary : CoffeeColors.TextPrimary))
 					.HorizontalTextAlignment(TextAlignment.Center)
 			)
+			.Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
 		)
-		.CornerRadius(Theme.RadiusCard)
-		.Background(isSelected ? Theme.Primary.WithAlpha(0.15f) : Theme.CardBackground)
-		.StrokeColor(isSelected ? Theme.Primary : Theme.CardStroke)
-		.StrokeThickness(1)
-		.Frame(width: 100, height: 64)
-		.Padding(new Thickness(8))
+		.Modifier(CoffeeModifiers.CornerRadius(8))
+		.Modifier(CoffeeModifiers.Background(isSelected ? CoffeeColors.Primary.WithAlpha(0.15f) : CoffeeColors.SurfaceVariant))
+		.Modifier(CoffeeModifiers.StrokeColor(isSelected ? CoffeeColors.Primary : Colors.Transparent))
+		.StrokeThickness(isSelected ? 2 : 0)
 		.OnTap(_ => {
 			SetState(s => s.ThemeMode = mode);
 			_themeService.SetTheme(mode);
@@ -84,21 +96,14 @@ public class SettingsPage : Component<SettingsPageState>
 
 	View BuildAboutCard() =>
 		FormHelpers.MakeCard(
-			VStack(Theme.SpacingXS,
+			VStack(CoffeeColors.SpacingXS,
 				Text("BaristaNotes")
-					.FontFamily(Theme.FontSemibold)
-					.FontSize(18)
-					.FontWeight(FontWeight.Bold)
-					.Color(Theme.TextPrimary),
+					.Modifier(CoffeeModifiers.TitleSmall),
 				Text("Version 1.0")
-					.FontFamily(Theme.FontRegular)
-					.FontSize(14)
-					.Color(Theme.TextSecondary),
+					.Modifier(CoffeeModifiers.SecondaryText),
 				Text("Track your espresso journey")
-					.FontFamily(Theme.FontRegular)
-					.FontSize(14)
-					.Color(Theme.TextSecondary)
-					.Margin(new Thickness(0, Theme.SpacingXS, 0, 0))
+					.Modifier(CoffeeModifiers.SecondaryText)
+					.Margin(new Thickness(0, CoffeeColors.SpacingXS, 0, 0))
 			)
 		);
 }

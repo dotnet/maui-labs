@@ -1,5 +1,14 @@
+using System;
+
 namespace BaristaNotes.Styles;
 
+/// <summary>
+/// Original color definitions from the MauiReactor BaristaNotes app.
+/// DEPRECATED: Use <see cref="CometBaristaNotes.Styles.CoffeeTheme"/> and
+/// <see cref="CometBaristaNotes.Styles.CoffeeTokens"/> for theme-aware colors.
+/// Retained as a reference during migration.
+/// </summary>
+[Obsolete("Use CoffeeTheme.Light/Dark and CoffeeTokens instead.")]
 public static class AppColors
 {
     // Semantic colors (same in both themes)

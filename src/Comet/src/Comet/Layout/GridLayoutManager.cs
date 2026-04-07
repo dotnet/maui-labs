@@ -77,7 +77,6 @@ namespace Comet.Layout
 					var constraint = view.GetLayoutConstraints() as GridConstraints ?? GridConstraints.Default;
 					autoGrid?.SetupConstraints(view, ref correntColumn, ref currentRow, ref constraint);
 					_constraints.Add(constraint);
-					Console.WriteLine($"Grid View: {constraint.Column}:{constraint.Row}");
 					maxRow = Math.Max(maxRow, constraint.Row + constraint.RowSpan - 1);
 					maxColumn = Math.Max(maxColumn, constraint.Column + constraint.ColumnSpan - 1);
 				}
@@ -290,6 +289,12 @@ namespace Comet.Layout
 			return _heights[row];
 		}
 
+		private static bool IsAutoSize(object definition)
+		{
+			var str = definition?.ToString() ?? "";
+			return str.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+		}
+
 		private void ComputeGrid(double width, double height)
 		{
 			var rows = _definedRows.Count;
@@ -305,10 +310,17 @@ namespace Comet.Layout
 			double takenX = 0;
 			var calculatedColumns = new List<int>();
 			var calculatedColumnFactors = new List<double>();
+			var autoColumns = new HashSet<int>();
 			for (var c = 0; c < columns; c++)
 			{
 				var w = _definedColumns[c];
-				if (!w.ToString().EndsWith("*", StringComparison.Ordinal))
+				if (IsAutoSize(w))
+				{
+					// Auto columns: start at 0, will be expanded by child measurement
+					autoColumns.Add(c);
+					_widths[c] = 0;
+				}
+				else if (!w.ToString().EndsWith("*", StringComparison.Ordinal))
 				{
 					if (double.TryParse(w.ToString(), out var value))
 					{
@@ -328,9 +340,28 @@ namespace Comet.Layout
 				}
 			}
 
+			// For Auto columns, measure children to determine width
+			if (autoColumns.Count > 0)
+			{
+				for (var index = 0; index < _constraints.Count && index < grid.Count; index++)
+				{
+					var constraint = _constraints[index];
+					if (autoColumns.Contains(constraint.Column))
+					{
+						var child = grid[index];
+						var childSize = child.Measure(width, height);
+						_widths[constraint.Column] = Math.Max(_widths[constraint.Column], childSize.Width);
+					}
+				}
+				foreach (var c in autoColumns)
+					takenX += _widths[c];
+			}
+
 			var availableWidth = width - takenX - (ColumnSpacing * (calculatedColumns.Count > 0 ? columns - 1 : Math.Max(0, columns - 1)));
+			if (double.IsInfinity(availableWidth) || double.IsNaN(availableWidth))
+				availableWidth = 0;
 			var columnFactor = calculatedColumnFactors.Sum(f => f);
-			var columnWidth = availableWidth / columnFactor;
+			var columnWidth = columnFactor > 0 ? availableWidth / columnFactor : 0;
 			var factorIndex = 0;
 			foreach (var c in calculatedColumns)
 			{
@@ -340,10 +371,17 @@ namespace Comet.Layout
 			double takenY = 0;
 			var calculatedRows = new List<int>();
 			var calculatedRowFactors = new List<double>();
+			var autoRows = new HashSet<int>();
 			for (var r = 0; r < rows; r++)
 			{
 				var h = _definedRows[r];
-				if (!h.ToString().EndsWith("*", StringComparison.Ordinal))
+				if (IsAutoSize(h))
+				{
+					// Auto rows: start at 0, will be expanded by child measurement
+					autoRows.Add(r);
+					_heights[r] = 0;
+				}
+				else if (!h.ToString().EndsWith("*", StringComparison.Ordinal))
 				{
 					if (double.TryParse(h.ToString(), out var value))
 					{
@@ -363,9 +401,28 @@ namespace Comet.Layout
 				}
 			}
 
+			// For Auto rows, measure children to determine height
+			if (autoRows.Count > 0)
+			{
+				for (var index = 0; index < _constraints.Count && index < grid.Count; index++)
+				{
+					var constraint = _constraints[index];
+					if (autoRows.Contains(constraint.Row))
+					{
+						var child = grid[index];
+						var childSize = child.Measure(width, height);
+						_heights[constraint.Row] = Math.Max(_heights[constraint.Row], childSize.Height);
+					}
+				}
+				foreach (var r in autoRows)
+					takenY += _heights[r];
+			}
+
 			var availableHeight = height - takenY - (RowSpacing * (calculatedRows.Count > 0 ? rows - 1 : Math.Max(0, rows - 1)));
+			if (double.IsInfinity(availableHeight) || double.IsNaN(availableHeight))
+				availableHeight = 0;
 			var rowFactor = calculatedRowFactors.Sum(f => f);
-			var rowHeight = availableHeight / rowFactor;
+			var rowHeight = rowFactor > 0 ? availableHeight / rowFactor : 0;
 			factorIndex = 0;
 			foreach (var r in calculatedRows)
 			{

@@ -41,7 +41,9 @@ public static class SampleRuntimeDebugExtensions
 				"Use a root-view factory such as UseCometSampleDebugHost(() => new MainPage()).");
 
 		builder.Services.AddSingleton<ICometSampleDebugRootViewFactory>(new CometSampleDebugRootViewFactory(rootViewFactory));
+#pragma warning disable MCT001 // .UseMauiCommunityToolkit() is chained by the caller after UseCometSampleDebugHost() returns
 		builder.UseMauiApp<CometSampleDebugHostApplication>();
+#pragma warning restore MCT001
 		builder.UseCometHandlers();
 		return builder;
 	}

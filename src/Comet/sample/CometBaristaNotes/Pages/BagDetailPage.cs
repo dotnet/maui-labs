@@ -1,6 +1,12 @@
+using Comet;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -13,8 +19,10 @@ public class BagDetailPageState
 	public bool IsComplete { get; set; }
 	public int ShotCount { get; set; }
 	public bool IsLoaded { get; set; }
+	public bool IsSaving { get; set; }
 	public string Error { get; set; } = "";
 	public RatingAggregate Rating { get; set; } = new();
+	public List<ShotRecord> RelatedShots { get; set; } = new();
 }
 
 public class BagDetailPage : Component<BagDetailPageState>
@@ -46,6 +54,7 @@ public class BagDetailPage : Component<BagDetailPageState>
 		}
 
 		var rating = store.GetBagRating(_bagId);
+		var shots = store.GetShotsForBag(_bagId);
 
 		SetState(s =>
 		{
@@ -56,13 +65,31 @@ public class BagDetailPage : Component<BagDetailPageState>
 			s.IsComplete = bag.IsComplete;
 			s.ShotCount = bag.ShotCount;
 			s.Rating = rating;
+			s.RelatedShots = shots;
 			s.IsLoaded = true;
 		});
 	}
 
 	void Save()
 	{
-		SetState(s => s.Error = "");
+		// Validate roast date
+		if (!DateTime.TryParse(State.RoastDate, out var roastDate))
+		{
+			SetState(s => s.Error = "Please enter a valid date (yyyy-MM-dd)");
+			return;
+		}
+		if (roastDate.Date > DateTime.Now.Date)
+		{
+			SetState(s => s.Error = "Roast date cannot be in the future");
+			return;
+		}
+		if (!string.IsNullOrEmpty(State.Notes) && State.Notes.Length > 500)
+		{
+			SetState(s => s.Error = "Notes cannot exceed 500 characters");
+			return;
+		}
+
+		SetState(s => { s.Error = ""; s.IsSaving = true; });
 
 		var store = InMemoryDataStore.Instance;
 		if (store == null) return;
@@ -73,41 +100,48 @@ public class BagDetailPage : Component<BagDetailPageState>
 			{
 				Id = _bagId,
 				BeanId = State.BeanId,
-				RoastDate = DateTime.TryParse(State.RoastDate, out var d) ? d : DateTime.Now,
+				RoastDate = roastDate,
 				Notes = string.IsNullOrWhiteSpace(State.Notes) ? null : State.Notes,
 				IsComplete = State.IsComplete,
 				IsActive = true
 			});
 		}
-		Navigation?.Pop();
+
+		SetState(s => s.IsSaving = false);
+		Comet.NavigationView.Pop(this);
 	}
 
 	async void DeleteBag()
 	{
-		var page = CometBaristaNotes.Services.PageHelper.GetCurrentPage();
-		if (page == null) return;
-
 		var message = State.ShotCount > 0
 			? $"This bag has {State.ShotCount} shot(s) logged. Deleting it will hide it from all lists. Continue?"
 			: "Are you sure you want to delete this bag?";
 
-		var confirmed = await page.DisplayAlertAsync("Delete Bag", message, "Delete", "Cancel");
+		var confirmed = await PageHelper.DisplayAlertAsync("Delete Bag", message, "Delete", "Cancel");
 		if (!confirmed) return;
 
 		var store = InMemoryDataStore.Instance;
 		if (store == null) return;
 
 		store.ArchiveBag(_bagId);
-		Navigation?.Pop();
+		Comet.NavigationView.Pop(this);
 	}
 
-	void ReactivateBag()
+	void ToggleBagStatus()
 	{
 		var store = InMemoryDataStore.Instance;
 		if (store == null) return;
 
-		store.ReactivateBag(_bagId);
-		SetState(s => s.IsComplete = false);
+		if (State.IsComplete)
+		{
+			store.ReactivateBag(_bagId);
+			SetState(s => s.IsComplete = false);
+		}
+		else
+		{
+			store.MarkComplete(_bagId);
+			SetState(s => s.IsComplete = true);
+		}
 	}
 
 	public override View Render()
@@ -117,63 +151,83 @@ public class BagDetailPage : Component<BagDetailPageState>
 
 		if (_bagId <= 0)
 		{
-			return VStack(
-				Text("Bag not found")
-					.FontFamily(Theme.FontRegular)
-					.Color(Theme.TextSecondary)
-			)
-			.Padding(new Thickness(Theme.SpacingM))
-			.Background(Theme.Background);
+			return FormHelpers.MakeEmptyState(Icons.Coffee, "Bag not found", "No bag ID provided.")
+				.Modifier(CoffeeModifiers.PageContainer);
+		}
+
+		if (!string.IsNullOrEmpty(State.Error) && !State.IsLoaded)
+		{
+			return FormHelpers.MakeEmptyState(Icons.Warning, "Error", State.Error)
+				.Modifier(CoffeeModifiers.PageContainer);
 		}
 
 		var items = new List<View>();
 
+		// Form section
 		items.Add(FormHelpers.MakeSectionHeader("BAG DETAILS"));
 		items.Add(FormHelpers.MakeReadOnlyField("Bean", State.BeanName));
-		items.Add(FormHelpers.MakeReadOnlyField("Roast Date", State.RoastDate));
+		items.Add(FormHelpers.MakeFormEntry("Roast Date", State.RoastDate, "yyyy-MM-dd", v => SetState(s => s.RoastDate = v)));
 		items.Add(FormHelpers.MakeFormEntryWithLimit("Notes", State.Notes, "Bag notes", 500, v => SetState(s => s.Notes = v)));
 
-		// Shot count card
-		items.Add(FormHelpers.MakeCard(
-			VStack(2,
-				Text("Shots Logged")
-					.FontFamily(Theme.FontRegular)
-					.FontSize(14)
-					.Color(Theme.TextSecondary),
-				Text($"{State.ShotCount}")
-					.FontFamily(Theme.FontSemibold)
-					.FontSize(24)
-					.FontWeight(FontWeight.Bold)
-					.Color(Theme.TextPrimary)
-			)
-		));
-
-		// Status toggle card
+		// Status section
+		items.Add(FormHelpers.MakeSectionHeader("STATUS"));
 		items.Add(FormHelpers.MakeToggleRow(
 			State.IsComplete ? "Status: Complete" : "Status: Active",
 			State.IsComplete,
-			v => SetState(s => s.IsComplete = v)
+			v => ToggleBagStatus()
 		));
 
+		// Stats section
+		items.Add(FormHelpers.MakeSectionHeader("STATS"));
+		items.Add(FormHelpers.MakeCard(
+			HStack(CoffeeColors.SpacingM,
+				VStack(2,
+					Text("Shots Logged")
+						.Modifier(CoffeeModifiers.SecondaryText),
+					Text($"{State.ShotCount}")
+						.Modifier(CoffeeModifiers.Headline)
+				)
+			)
+		));
+
+		// Rating section
+		items.Add(FormHelpers.MakeSectionHeader("RATINGS"));
+		if (State.Rating.RatedShots > 0)
+			items.Add(RatingDisplayFactory.Create(State.Rating));
+		else
+			items.Add(Text("No ratings yet")
+				.Modifier(CoffeeModifiers.SecondaryText)
+				.HorizontalTextAlignment(TextAlignment.Center)
+				.Padding(new Thickness(0, CoffeeColors.SpacingM)));
+
+		// Related shots section
+		if (State.RelatedShots.Count > 0)
+		{
+			items.Add(FormHelpers.MakeSectionHeader("RELATED SHOTS"));
+			foreach (var shot in State.RelatedShots)
+			{
+				items.Add(ShotRecordCardFactory.Create(shot, () =>
+					Comet.NavigationView.Navigate(this, new ShotLoggingPage(shot.Id))));
+			}
+		}
+
+		// Error display
 		if (!string.IsNullOrEmpty(State.Error))
-			items.Add(Text(State.Error).Color(Theme.Error).FontSize(14));
+			items.Add(Text(State.Error)
+				.Modifier(CoffeeModifiers.BodyError)
+				.Padding(new Thickness(0, CoffeeColors.SpacingXS)));
 
-		items.Add(FormHelpers.MakePrimaryButton("Save Changes", Save));
-
-		if (State.IsComplete)
-			items.Add(FormHelpers.MakeSecondaryButton("Reactivate Bag", ReactivateBag));
-
+		// Action buttons
+		items.Add(FormHelpers.MakePrimaryButton(State.IsSaving ? "Saving..." : "Save Changes", Save));
 		items.Add(FormHelpers.MakeDangerButton("Delete Bag", DeleteBag));
 
-		items.Add(FormHelpers.MakeSectionHeader("RATINGS"));
-		items.Add(RatingDisplayFactory.Create(State.Rating));
-
-		var stack = VStack(Theme.SpacingS);
+		var stack = VStack(CoffeeColors.SpacingS);
 		foreach (var item in items) stack.Add(item);
 
 		return ScrollView(
-			stack.Padding(new Thickness(Theme.SpacingM))
+			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Background(Theme.Background);
+		.Modifier(CoffeeModifiers.PageContainer)
+		.Title("Bag Details");
 	}
 }

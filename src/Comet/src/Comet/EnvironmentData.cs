@@ -74,6 +74,9 @@ namespace Comet
 		{
 			public const string Image = "TabView.Item.Image";
 			public const string Title = "TabView.Item.Title";
+			public const string BarBackgroundColor = "TabView.BarBackgroundColor";
+			public const string BarTintColor = "TabView.BarTintColor";
+			public const string BarUnselectedColor = "TabView.BarUnselectedColor";
 		}
 
 		public static class Text

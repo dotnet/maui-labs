@@ -1,6 +1,12 @@
+using Comet;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -15,13 +21,13 @@ public class BeanDetailPageState
 	public List<Bag> Bags { get; set; } = new();
 	public RatingAggregate Rating { get; set; } = new();
 	public List<ShotRecord> AllShots { get; set; } = new();
-	public int VisibleShotCount { get; set; } = 10;
+	public int VisibleShotCount { get; set; } = 20;
 }
 
 public class BeanDetailPage : Component<BeanDetailPageState>
 {
 	readonly int _beanId;
-	const int ShotsPageSize = 10;
+	const int ShotsPageSize = 20;
 
 	public BeanDetailPage(int beanId = 0) { _beanId = beanId; }
 
@@ -92,11 +98,8 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 
 	async void DeleteBean()
 	{
-		var page = Services.PageHelper.GetCurrentPage();
-		if (page == null) return;
-
-		var confirmed = await page.DisplayAlertAsync(
-			"Delete Bean",
+		var confirmed = await Services.PageHelper.DisplayAlertAsync(
+			"Delete Bean?",
 			$"Are you sure you want to delete \"{State.Name}\"? This will also archive all associated bags.",
 			"Delete", "Cancel");
 
@@ -118,44 +121,74 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 
 		var items = new List<View>();
 
+		// ── Form section ────────────────────────────────────────────
 		items.Add(FormHelpers.MakeSectionHeader(isEdit ? "EDIT BEAN" : "NEW BEAN"));
-		items.Add(FormHelpers.MakeFormEntry("Name *", State.Name, "Bean name", v => SetState(s => s.Name = v)));
+		items.Add(FormHelpers.MakeFormEntry("Name *", State.Name, "Bean name (required)", v => SetState(s => s.Name = v)));
 		items.Add(FormHelpers.MakeFormEntry("Roaster", State.Roaster, "Roaster name", v => SetState(s => s.Roaster = v)));
-		items.Add(FormHelpers.MakeFormEntry("Origin", State.Origin, "Country or region", v => SetState(s => s.Origin = v)));
-		items.Add(FormHelpers.MakeFormEntry("Notes", State.Notes, "Tasting notes, processing, etc.", v => SetState(s => s.Notes = v)));
+		items.Add(FormHelpers.MakeFormEntry("Origin", State.Origin, "Country or region of origin", v => SetState(s => s.Origin = v)));
+		items.Add(FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100));
 
+		// ── Error display ───────────────────────────────────────────
 		if (!string.IsNullOrEmpty(State.Error))
-			items.Add(Text(State.Error).Color(Theme.Error).FontFamily(Theme.FontRegular).FontSize(14));
+		{
+			items.Add(
+				Border(
+					Text(State.Error)
+						.Modifier(CoffeeModifiers.BodyError)
+						.Padding(new Thickness(12))
+				)
+				.Modifier(CoffeeModifiers.ErrorCard)
+			);
+		}
 
+		// ── Save button ─────────────────────────────────────────────
 		items.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Create Bean", Save));
 
+		// ── Edit-mode sections ──────────────────────────────────────
 		if (isEdit)
 		{
 			items.Add(FormHelpers.MakeDangerButton("Delete Bean", DeleteBean));
-			items.Add(FormHelpers.MakeSectionHeader("RATINGS"));
+
+			// Rating section
+			items.Add(MakeDivider());
+			items.Add(FormHelpers.MakeSectionHeader("BEAN RATINGS"));
 			items.Add(RatingDisplayFactory.Create(State.Rating));
 			items.Add(BuildRatingDistribution());
 
+			// Bags section
+			items.Add(MakeDivider());
 			items.Add(FormHelpers.MakeSectionHeader("BAGS"));
+
 			if (State.Bags.Count == 0)
-				items.Add(Text("No bags added yet").FontFamily(Theme.FontRegular).FontSize(14).Color(Theme.TextSecondary));
+			{
+				items.Add(
+					Text("No bags added yet")
+						.Modifier(CoffeeModifiers.SecondaryText)
+						.HorizontalTextAlignment(TextAlignment.Center)
+						.Padding(new Thickness(0, CoffeeColors.SpacingS))
+				);
+			}
+			else
+			{
+				foreach (var bag in State.Bags)
+					items.Add(BuildBagCard(bag));
+			}
 
 			items.Add(FormHelpers.MakeSecondaryButton("+ Add Bag", () =>
 			{
 				Navigation?.Navigate(new BagFormPage(_beanId));
 			}));
 
-			foreach (var bag in State.Bags)
-			{
-				items.Add(BuildBagCard(bag));
-			}
-
-			// Shot History
+			// Shot history section
+			items.Add(MakeDivider());
 			items.Add(FormHelpers.MakeSectionHeader("SHOT HISTORY"));
+
 			var shots = State.AllShots;
 			if (shots.Count == 0)
 			{
-				items.Add(Text("No shots recorded yet").FontFamily(Theme.FontRegular).FontSize(14).Color(Theme.TextSecondary));
+				items.Add(FormHelpers.MakeEmptyState(
+					Icons.Assignment, "No Shots Yet",
+					"No shots recorded with this bean yet"));
 			}
 			else
 			{
@@ -173,28 +206,49 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 				{
 					items.Add(FormHelpers.MakeSecondaryButton(
 						$"Load More ({shots.Count - State.VisibleShotCount} remaining)",
-						() => { SetState(s => s.VisibleShotCount += ShotsPageSize); }));
+						() => SetState(s => s.VisibleShotCount += ShotsPageSize)));
 				}
 			}
 		}
 
-		var stack = VStack(Theme.SpacingS);
-		foreach (var item in items) stack.Add(item);
+		var stack = VStack(CoffeeColors.SpacingS);
+		foreach (var item in items)
+			stack.Add(item);
 
 		return ScrollView(
-			stack.Padding(new Thickness(Theme.SpacingM))
+			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Background(Theme.Background);
+		.Modifier(CoffeeModifiers.PageContainer);
+	}
+
+	static View MakeDivider()
+	{
+		return new Comet.BoxView(CoffeeColors.Outline.WithAlpha(0.5f))
+			.Modifier(CoffeeModifiers.Divider)
+			.Margin(new Thickness(0, CoffeeColors.SpacingS));
 	}
 
 	View BuildRatingDistribution()
 	{
-		var shots = State.AllShots;
-		var sentiments = new[] { Icons.SentimentVeryDissatisfied, Icons.SentimentDissatisfied, Icons.SentimentNeutral, Icons.SentimentSatisfied, Icons.SentimentVerySatisfied };
-		var sentimentColors = new[] { Theme.Error, Theme.Warning, Theme.TextMuted, Theme.Success, Theme.StarFilled };
+		var sentiments = new[]
+		{
+			Icons.SentimentVeryDissatisfied,
+			Icons.SentimentDissatisfied,
+			Icons.SentimentNeutral,
+			Icons.SentimentSatisfied,
+			Icons.SentimentVerySatisfied
+		};
+		var sentimentColors = new[]
+		{
+			CoffeeColors.Error,
+			CoffeeColors.Warning,
+			CoffeeColors.TextMuted,
+			CoffeeColors.Success,
+			CoffeeColors.StarFilled
+		};
 
 		var counts = new int[5];
-		foreach (var shot in shots)
+		foreach (var shot in State.AllShots)
 		{
 			if (shot.Rating.HasValue)
 			{
@@ -204,7 +258,7 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 		}
 		var maxCount = counts.Max();
 
-		var container = VStack(Theme.SpacingXS);
+		var container = VStack(CoffeeColors.SpacingXS);
 
 		for (var i = 4; i >= 0; i--)
 		{
@@ -213,88 +267,86 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 			container.Add(
 				Grid(columns: new object[] { 28, "*", 30 }, rows: new object[] { "Auto" },
 					Text(sentiments[i])
-						.FontFamily(Icons.FontFamily)
-						.FontSize(18)
-						.Color(sentimentColors[i])
+						.Modifier(CoffeeModifiers.Icon(18, sentimentColors[i]))
 						.HorizontalTextAlignment(TextAlignment.Center)
 						.VerticalTextAlignment(TextAlignment.Center)
 						.Cell(row: 0, column: 0),
 
-					BuildBarOverlay(barFraction, sentimentColors[i])
+					ProgressBar(barFraction)
+						.ProgressColor(sentimentColors[i])
+						.TrackColor(CoffeeColors.SurfaceVariant)
+						.Modifier(CoffeeModifiers.FrameHeight(12))
 						.Cell(row: 0, column: 1),
 
 					Text(counts[i].ToString())
-						.FontFamily(Theme.FontRegular)
-						.FontSize(12)
-						.Color(Theme.TextSecondary)
+						.Modifier(CoffeeModifiers.FormLabel)
 						.HorizontalTextAlignment(TextAlignment.End)
 						.VerticalTextAlignment(TextAlignment.Center)
 						.Cell(row: 0, column: 2)
 				)
-				.ColumnSpacing(Theme.SpacingS)
-				.Frame(height: 24)
+				.ColumnSpacing(CoffeeColors.SpacingS)
+				.Modifier(CoffeeModifiers.FrameHeight(24))
 			);
 		}
 
-		return Border(
-			container
-		)
-		.CornerRadius(Theme.RadiusCard)
-		.Background(Theme.CardBackground)
-		.StrokeColor(Theme.CardStroke)
-		.StrokeThickness(1)
-		.Padding(new Thickness(Theme.SpacingM))
-		.Margin(new Thickness(0, Theme.SpacingXS, 0, 0));
-	}
-
-	View BuildBarOverlay(double fraction, Color fillColor)
-	{
-		return ProgressBar(fraction)
-			.ProgressColor(fillColor)
-			.TrackColor(Theme.SurfaceVariant)
-			.Frame(height: 12);
+		return Border(container)
+			.Modifier(CoffeeModifiers.CardSurface)
+			.Padding(new Thickness(CoffeeColors.SpacingM))
+			.Margin(new Thickness(0, CoffeeColors.SpacingXS, 0, 0));
 	}
 
 	View BuildBagCard(Bag bag)
 	{
-		var statsItems = new List<View>();
-		statsItems.Add(Text($"{bag.ShotCount} shots").FontFamily(Theme.FontRegular).FontSize(12).Color(Theme.TextMuted));
+		// Header row: roast date + status badge
+		var headerRow = HStack(CoffeeColors.SpacingS,
+			Text($"Roasted {bag.RoastDate:MMM d, yyyy}")
+				.Modifier(CoffeeModifiers.BodyStrong),
+			Spacer(),
+			Text(bag.IsComplete ? "Complete" : "Active")
+				.Modifier(CoffeeModifiers.FormLabel)
+				.Modifier(CoffeeModifiers.TextColor(bag.IsComplete ? CoffeeColors.Success : CoffeeColors.Primary))
+				.Padding(new Thickness(6, 2))
+		);
 
-		if (bag.AverageRating.HasValue)
-			statsItems.Add(Text($"{Icons.SentimentVerySatisfied} {bag.AverageRating.Value:F1}").FontFamily(Icons.FontFamily).FontSize(12).Color(Theme.StarFilled));
-		else
-			statsItems.Add(Text("No ratings").FontFamily(Theme.FontRegular).FontSize(12).Color(Theme.TextMuted));
+		var infoItems = new List<View> { headerRow };
 
-		statsItems.Add(Text(bag.IsComplete ? "Complete" : "Active").FontFamily(Theme.FontRegular).FontSize(12).Color(bag.IsComplete ? Theme.Success : Theme.Primary));
-
-		var statsStack = HStack(12);
-		foreach (var s in statsItems) statsStack.Add(s);
-
-		var infoItems = new List<View>();
-		infoItems.Add(Text($"Roasted {bag.RoastDate:MMM d, yyyy}").FontFamily(Theme.FontSemibold).FontSize(14).FontWeight(FontWeight.Bold).Color(Theme.TextPrimary));
+		// Notes
 		if (bag.Notes != null)
-			infoItems.Add(Text(bag.Notes).FontFamily(Theme.FontRegular).FontSize(12).Color(Theme.TextSecondary));
-		infoItems.Add(statsStack);
+		{
+			infoItems.Add(
+				Text(bag.Notes)
+					.Modifier(CoffeeModifiers.FormLabel)
+			);
+		}
+
+		// Stats row: shot count + avg rating
+		var statsRow = HStack(CoffeeColors.SpacingM,
+			Text($"{bag.ShotCount} shots")
+				.Modifier(CoffeeModifiers.Caption),
+			bag.AverageRating.HasValue
+				? Text($"{bag.AverageRating.Value:F1}")
+					.Modifier(CoffeeModifiers.LabelStrong)
+					.Modifier(CoffeeModifiers.TextColor(CoffeeColors.StarFilled))
+				: Text("No ratings")
+					.Modifier(CoffeeModifiers.Caption)
+		);
+		infoItems.Add(statsRow);
 
 		var infoStack = VStack(4);
-		foreach (var item in infoItems) infoStack.Add(item);
+		foreach (var item in infoItems)
+			infoStack.Add(item);
 
 		return Border(
 			Grid(columns: new object[] { "*", "Auto" }, rows: new object[] { "Auto" },
 				infoStack.Cell(row: 0, column: 0),
 				Text(Icons.ChevronRight)
-					.FontFamily(Icons.FontFamily)
-					.FontSize(20)
-					.Color(Theme.TextMuted)
+					.Modifier(CoffeeModifiers.IconMedium(CoffeeColors.TextMuted))
 					.VerticalTextAlignment(TextAlignment.Center)
 					.Cell(row: 0, column: 1)
 			)
 		)
-		.CornerRadius(Theme.RadiusCard)
-		.Background(Theme.CardBackground)
-		.StrokeColor(Theme.CardStroke)
-		.StrokeThickness(1)
-		.Padding(new Thickness(Theme.SpacingM))
+		.Modifier(CoffeeModifiers.CardSurface)
+		.Padding(new Thickness(CoffeeColors.SpacingM))
 		.OnTap(_ => Navigation?.Navigate(new BagDetailPage(bag.Id)));
 	}
 }

@@ -1,6 +1,12 @@
+using Comet;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
 using CometBaristaNotes.Components;
+using CometBaristaNotes.Styles;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -15,7 +21,7 @@ public class EquipmentDetailPageState
 
 public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 {
-	static readonly string[] TypeNames = { "Machine", "Grinder", "Tamper", "PuckScreen", "Other" };
+	static readonly string[] TypeNames = { "Machine", "Grinder", "Tamper", "Puck Screen", "Other" };
 	static readonly EquipmentType[] TypeValues =
 		{ EquipmentType.Machine, EquipmentType.Grinder, EquipmentType.Tamper, EquipmentType.PuckScreen, EquipmentType.Other };
 
@@ -95,17 +101,15 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 	async void Archive()
 	{
 		if (_equipmentId <= 0) return;
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
 
-		var page = Services.PageHelper.GetCurrentPage();
-		if (page == null) return;
-
-		var confirm = await page.DisplayAlertAsync(
+		var confirm = await Services.PageHelper.DisplayAlertAsync(
 			"Archive Equipment?",
 			$"Are you sure you want to archive '{State.Name}'? This action cannot be undone.",
 			"Archive", "Cancel");
 		if (!confirm) return;
+
+		var store = InMemoryDataStore.Instance;
+		if (store == null) return;
 
 		store.ArchiveEquipment(_equipmentId);
 		Navigation?.Pop();
@@ -120,27 +124,40 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 
 		var items = new List<View>
 		{
+			// ── Form section ────────────────────────────────────────
 			FormHelpers.MakeSectionHeader(isEdit ? "EDIT EQUIPMENT" : "NEW EQUIPMENT"),
-			FormHelpers.MakeFormEntry("Name *", State.Name, "Equipment name", v => SetState(s => s.Name = v)),
+			FormHelpers.MakeFormEntry("Name *", State.Name, "Equipment name (required)", v => SetState(s => s.Name = v)),
 			FormHelpers.MakeFormPicker("Type", State.SelectedTypeIndex, TypeNames, v => SetState(s => s.SelectedTypeIndex = v)),
-			FormHelpers.MakeFormEntry("Notes", State.Notes, "Additional details", v => SetState(s => s.Notes = v)),
+			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100),
 		};
 
+		// ── Error display ───────────────────────────────────────────
 		if (!string.IsNullOrEmpty(State.Error))
-			items.Add(Text(State.Error).Color(Theme.Error).FontFamily(Theme.FontRegular).FontSize(14));
+		{
+			items.Add(
+				Border(
+					Text(State.Error)
+						.Modifier(CoffeeModifiers.BodyError)
+						.Padding(new Thickness(12))
+				)
+				.Modifier(CoffeeModifiers.ErrorCard)
+			);
+		}
 
+		// ── Save button ─────────────────────────────────────────────
 		items.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Add Equipment", Save));
 
+		// ── Archive button (edit mode only) ─────────────────────────
 		if (isEdit)
 			items.Add(FormHelpers.MakeDangerButton("Archive Equipment", Archive));
 
-		var stack = VStack(Theme.SpacingS);
+		var stack = VStack(CoffeeColors.SpacingS);
 		foreach (var item in items)
 			stack.Add(item);
 
 		return ScrollView(
-			stack.Padding(new Thickness(Theme.SpacingM))
+			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Background(Theme.Background);
+		.Modifier(CoffeeModifiers.PageContainer);
 	}
 }

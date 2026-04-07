@@ -1,1078 +1,1334 @@
 using Comet;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Maui.Controls;
-using Microsoft.Maui.Controls.Shapes;
-using Microsoft.Maui.Graphics;
+using Comet.Reactive;
+using Comet.Styles;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services;
+using CometBaristaNotes.Services.DTOs;
 using CometBaristaNotes.Components;
-using Syncfusion.Maui.Gauges;
-
-using MauiLabel = Microsoft.Maui.Controls.Label;
-using MauiBorder = Microsoft.Maui.Controls.Border;
-using MauiSlider = Microsoft.Maui.Controls.Slider;
-using MauiButton = Microsoft.Maui.Controls.Button;
-using MauiGrid = Microsoft.Maui.Controls.Grid;
-using MauiBoxView = Microsoft.Maui.Controls.BoxView;
-using SolidColorBrush = Microsoft.Maui.Controls.SolidColorBrush;
-using MauiFontAttributes = Microsoft.Maui.Controls.FontAttributes;
-using MauiPicker = Microsoft.Maui.Controls.Picker;
+using CometBaristaNotes.Styles;
+using Microsoft.Extensions.DependencyInjection;
+// using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using static Comet.CometControls;
+using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
+using System.Data;
 
 namespace CometBaristaNotes.Pages;
 
-/// <summary>
-/// Shot logging page using imperative updates for smooth interaction.
-/// Native MAUI controls are built once and updated directly in event handlers,
-/// avoiding full UI rebuild on each state change.
-/// </summary>
-public class ShotLoggingPageState { }
-
-public class ShotLoggingPage : Component<ShotLoggingPageState>
+// ── Voice chat message model ────────────────────────────────────────
+public class VoiceChatMessage
 {
-// Edit mode: if > 0, we're editing an existing shot
-int _editingShotId = 0;
-readonly IFeedbackService _feedbackService;
-
-// Current values (not Comet State<T> — we update controls directly)
-double _doseIn = 18.0;
-double _doseOut = 36.0;
-double _actualTime = 0;
-int _rating = 2;
-string _tastingNotes = "";
-string _grindSetting = "15";
-string _expectedTime = "28";
-string _expectedOutput = "36";
-int _drinkTypeIndex = 0;
-int _machineIndex = 0;
-int _grinderIndex = 0;
-int _madeByIndex = 0;
-int _madeForIndex = 0;
-int _selectedBagIndex = -1;
-
-bool IsEditMode => _editingShotId > 0;
-
-public ShotLoggingPage()
-{
-	_feedbackService = IPlatformApplication.Current!.Services.GetRequiredService<IFeedbackService>();
+	public string Text { get; set; } = "";
+	public bool IsUser { get; set; }
+	public DateTime Timestamp { get; set; } = DateTime.Now;
 }
 
-public ShotLoggingPage(int shotId)
+// ── State ───────────────────────────────────────────────────────────
+public class ShotLoggingPageState
 {
-	_feedbackService = IPlatformApplication.Current!.Services.GetRequiredService<IFeedbackService>();
-	_editingShotId = shotId;
+	// Core extraction parameters
+	public decimal DoseIn { get; set; } = 18.0m;
+	public string GrindSetting { get; set; } = "5.5";
+	public decimal ExpectedTime { get; set; } = 28;
+	public decimal ExpectedOutput { get; set; } = 36.0m;
+	public decimal? ActualTime { get; set; }
+	public decimal? ActualOutput { get; set; }
+	public decimal? PreinfusionTime { get; set; }
+	public string DrinkType { get; set; } = "Espresso";
+	public int SelectedDrinkIndex { get; set; }
+
+	// Rating (0-4 UI index: terrible, bad, average, good, excellent)
+	public int Rating { get; set; } = 3;
+	public string TastingNotes { get; set; } = "";
+
+	// Bag/Bean selection
+	public int? SelectedBagId { get; set; }
+	public int SelectedBagIndex { get; set; } = -1;
+	public List<Bag> AvailableBags { get; set; } = new();
+	public List<Bean> AvailableBeans { get; set; } = new();
+
+	// Equipment
+	public List<Equipment> AvailableEquipment { get; set; } = new();
+	public int? SelectedMachineId { get; set; }
+	public int SelectedMachineIndex { get; set; } = -1;
+	public int? SelectedGrinderId { get; set; }
+	public int SelectedGrinderIndex { get; set; } = -1;
+	public List<int> SelectedAccessoryIds { get; set; } = new();
+
+	// User profiles
+	public List<UserProfile> AvailableUsers { get; set; } = new();
+	public UserProfile? SelectedMaker { get; set; }
+	public UserProfile? SelectedRecipient { get; set; }
+
+	// Edit mode
+	public DateTime? Timestamp { get; set; }
+	public string? BeanName { get; set; }
+
+	// UI state
+	public bool IsLoading { get; set; }
+	public string? ErrorMessage { get; set; }
+
+	// AI Advice state
+	public bool ShowAdviceSection { get; set; }
+	public bool IsLoadingAdvice { get; set; }
+	public AIAdviceResponseDto? AdviceResponse { get; set; }
+	public bool ShowPromptDetails { get; set; }
+	public string? AdviceError { get; set; }
+
+	// Voice overlay state
+	public bool IsVoiceSheetOpen { get; set; }
+	public bool IsRecording { get; set; }
+	public string VoiceTranscript { get; set; } = "";
+	public string VoiceState { get; set; } = "Tap to speak";
+	public List<VoiceChatMessage> VoiceChatHistory { get; set; } = new();
 }
 
-// References to mutable controls
-MauiLabel? _doseInValueLabel, _doseInUnitLabel;
-MauiLabel? _doseOutValueLabel, _doseOutUnitLabel;
-RangePointer? _doseInRange, _doseOutRange;
-ShapePointer? _doseInPointer, _doseOutPointer;
-MauiLabel? _ratioLabel;
-MauiLabel? _timeValueLabel;
-MauiLabel? _machineNameLabel;
-VerticalStackLayout? _additionalStack;
-Microsoft.Maui.Controls.ActivityIndicator? _savingIndicator;
-View? _saveButton;
-
-// Data
-List<Bag> _bags = new();
-List<Equipment> _machines = new();
-List<Equipment> _grinders = new();
-List<UserProfile> _profiles = new();
-
-static readonly string[] DrinkTypes = { "Espresso", "Americano", "Latte", "Cappuccino", "Flat White", "Cortado" };
-
-double Ratio => _doseIn > 0 ? Math.Round(_doseOut / _doseIn, 1) : 0;
-
-public override View Render()
+// ── Gauge Arc Drawable ─────────────────────────────────────────────
+class GaugeArcDrawable
 {
-var store = InMemoryDataStore.Instance;
-_bags = store?.GetAllBags().Where(b => !b.IsComplete).ToList() ?? new();
-_machines = store?.GetByType(EquipmentType.Machine) ?? new();
-_grinders = store?.GetByType(EquipmentType.Grinder) ?? new();
-_profiles = store?.GetAllProfiles() ?? new();
+	public float Value { get; set; }
+	public float Min { get; set; }
+	public float Max { get; set; }
+	public string[] ScaleLabels { get; set; }
+	public string Unit { get; set; } = "g";
+	public Color TrackColor { get; set; } = Color.FromArgb("#ECDAC4");
+	public Color ValueColor { get; set; } = Color.FromArgb("#86543F");
+	public Color LabelColor { get; set; } = Color.FromArgb("#7C6B5A");
+	public Color ValueTextColor { get; set; } = Color.FromArgb("#352B23");
+	public Color UnitTextColor { get; set; } = Color.FromArgb("#7C7067");
+	public float StrokeWidth { get; set; } = 20f;
+	public float Inset { get; set; } = 14f;
 
-// Load existing shot data in edit mode
-if (IsEditMode)
-	LoadExistingShot(store);
-
-_savingIndicator = new Microsoft.Maui.Controls.ActivityIndicator
-{
-	Color = Theme.Primary,
-	IsRunning = false,
-	IsVisible = false,
-	HeightRequest = 32,
-};
-
-var items = new List<View>();
-
-// Saving indicator — MAUI ActivityIndicator, wrapped
-items.Add(new MauiViewHost(_savingIndicator));
-
-// Syncfusion gauges & imperative MAUI sections — wrapped
-items.Add(new MauiViewHost(BuildDoseGaugesRow()));
-items.Add(new MauiViewHost(BuildRatioDisplay()));
-items.Add(new MauiViewHost(BuildTimeSlider()));
-items.Add(new MauiViewHost(BuildUserSelectionRow()));
-items.Add(new MauiViewHost(BuildRating()));
-
-// Tasting notes — pure Comet
-items.Add(BuildTastingNotes());
-
-// Save button — already Comet
-var saveBtn = FormHelpers.MakePrimaryButton(IsEditMode ? "Update Shot" : "Add Shot", SaveShot)
-	.Margin(new Thickness(0, Theme.SpacingS, 0, 0));
-_saveButton = saveBtn;
-items.Add(saveBtn);
-
-// Additional details — MAUI, wrapped
-items.Add(new MauiViewHost(BuildAdditionalDetails()));
-
-// Delete button — pure Comet
-if (IsEditMode)
-{
-	items.Add(Button("Delete Shot", async () => await DeleteShot())
-		.FontFamily(Theme.FontSemibold).FontSize(16)
-		.Color(Theme.Error).Background(Colors.Transparent)
-		.CornerRadius((int)Theme.RadiusPill)
-		.Frame(height: Theme.ButtonHeight)
-		.Margin(new Thickness(0, Theme.SpacingS, 0, Theme.SpacingXL)));
-}
-else
-{
-	saveBtn.Margin(new Thickness(0, Theme.SpacingS, 0, Theme.SpacingXL));
-}
-
-var stack = VStack(Theme.SpacingM);
-foreach (var item in items) stack.Add(item);
-stack.Padding(new Thickness(Theme.SpacingM));
-
-return ScrollView(stack).Background(Theme.Background);
-}
-
-Microsoft.Maui.Controls.View BuildDoseGaugesRow()
-{
-var grid = new MauiGrid
-{
-ColumnDefinitions =
-{
-new ColumnDefinition(GridLength.Star),
-new ColumnDefinition(GridLength.Auto),
-new ColumnDefinition(GridLength.Star),
-},
-};
-
-grid.Add(BuildGauge("Dose In", _doseIn, "g", 0, 25,
-ref _doseInValueLabel, ref _doseInUnitLabel, ref _doseInRange, ref _doseInPointer,
-delta => { _doseIn = Math.Round(Math.Clamp(_doseIn + delta, 10, 25), 1); UpdateDoseIn(); }), 0, 0);
-
-grid.Add(BuildEquipmentButton(), 1, 0);
-
-grid.Add(BuildGauge("Dose Out", _doseOut, "g", 0, 60,
-ref _doseOutValueLabel, ref _doseOutUnitLabel, ref _doseOutRange, ref _doseOutPointer,
-delta => { _doseOut = Math.Round(Math.Clamp(_doseOut + delta, 20, 60), 1); UpdateDoseOut(); }), 2, 0);
-
-return grid;
-}
-
-Microsoft.Maui.Controls.View BuildGauge(string label, double value, string unit,
-double min, double max,
-ref MauiLabel? valueLabel, ref MauiLabel? unitLabel,
-ref RangePointer? range, ref ShapePointer? pointer,
-Action<double> onStep)
-{
-var gaugeGrid = new MauiGrid { WidthRequest = 160, HeightRequest = 160, HorizontalOptions = LayoutOptions.Center };
-
-var gauge = new SfRadialGauge { WidthRequest = 160, HeightRequest = 160, BackgroundColor = Colors.Transparent };
-var axis = new RadialAxis
-{
-Minimum = min, Maximum = max,
-Interval = (max - min) / 5,
-MinorTicksPerInterval = 1,
-ShowLabels = true, ShowTicks = false,
-RadiusFactor = 0.8,
-LabelFormat = "0",
-AxisLabelStyle = new GaugeLabelStyle { TextColor = Theme.TextSecondary, FontSize = 10 },
-AxisLineStyle = new RadialLineStyle
-{
-Fill = new SolidColorBrush(Theme.SurfaceVariant),
-Thickness = 20,
-CornerStyle = CornerStyle.BothCurve
-}
-};
-
-var r = new RangePointer
-{
-Value = value,
-CornerStyle = CornerStyle.BothCurve,
-PointerWidth = 20,
-Fill = new SolidColorBrush(Theme.Primary)
-};
-range = r;
-axis.Pointers.Add(r);
-
-var p = new ShapePointer
-{
-Value = value,
-IsInteractive = true,
-StepFrequency = 0.1,
-ShapeType = ShapeType.Circle,
-ShapeHeight = 28, ShapeWidth = 28,
-Fill = new SolidColorBrush(Theme.Primary),
-HasShadow = true, Offset = 0,
-};
-p.ValueChanged += (s, e) =>
-{
-var rounded = Math.Round(e.Value, 1);
-onStep(rounded - value);
-value = rounded;
-};
-pointer = p;
-axis.Pointers.Add(p);
-
-gauge.Axes.Add(axis);
-gaugeGrid.Add(gauge);
-
-// Center value overlay
-var vl = new MauiLabel { Text = $"{value:F1}", FontFamily = Theme.FontSemibold, FontSize = 20, FontAttributes = MauiFontAttributes.Bold, TextColor = Theme.TextPrimary, HorizontalTextAlignment = TextAlignment.Center, VerticalTextAlignment = TextAlignment.Center };
-var ul = new MauiLabel { Text = unit, FontFamily = Theme.FontRegular, FontSize = 9, TextColor = Theme.TextSecondary, HorizontalTextAlignment = TextAlignment.Center };
-valueLabel = vl;
-unitLabel = ul;
-var centerStack = new VerticalStackLayout { Spacing = 0, HorizontalOptions = LayoutOptions.Center, VerticalOptions = LayoutOptions.Center, TranslationY = 10 };
-centerStack.Add(vl);
-centerStack.Add(ul);
-gaugeGrid.Add(centerStack);
-
-// Stepper buttons at bottom corners of gauge, with icon between
-var stepMinusBtn = new MauiButton
-{
-	Text = Icons.Remove, FontFamily = Icons.FontFamily, FontSize = 12,
-	TextColor = Theme.TextSecondary, BackgroundColor = Colors.Transparent,
-	WidthRequest = 32, HeightRequest = 32,
-	CornerRadius = 16, Padding = 0, BorderWidth = 0,
-	HorizontalOptions = LayoutOptions.Start, VerticalOptions = LayoutOptions.End,
-	TranslationY = 10,
-};
-stepMinusBtn.Clicked += (s, e) => onStep(-0.1);
-
-var stepPlusBtn = new MauiButton
-{
-	Text = Icons.Add, FontFamily = Icons.FontFamily, FontSize = 12,
-	TextColor = Theme.TextSecondary, BackgroundColor = Colors.Transparent,
-	WidthRequest = 32, HeightRequest = 32,
-	CornerRadius = 16, Padding = 0, BorderWidth = 0,
-	HorizontalOptions = LayoutOptions.End, VerticalOptions = LayoutOptions.End,
-	TranslationY = 10,
-};
-stepPlusBtn.Clicked += (s, e) => onStep(0.1);
-
-// Coffee icon glyph at bottom center
-var coffeeIconGlyph = label == "Dose In" ? "u" : "t";
-var coffeeIcon = new MauiLabel
-{
-	Text = coffeeIconGlyph, FontFamily = Icons.CoffeeFontFamily, FontSize = 24,
-	TextColor = Theme.TextSecondary,
-	HorizontalTextAlignment = TextAlignment.Center, VerticalTextAlignment = TextAlignment.Center,
-	HorizontalOptions = LayoutOptions.Center, VerticalOptions = LayoutOptions.End,
-};
-
-gaugeGrid.Add(stepMinusBtn);
-gaugeGrid.Add(stepPlusBtn);
-gaugeGrid.Add(coffeeIcon);
-
-return gaugeGrid;
-}
-
-void UpdateDoseIn()
-{
-_doseInValueLabel!.Text = $"{_doseIn:F1}";
-_doseInRange!.Value = _doseIn;
-_doseInPointer!.Value = _doseIn;
-_ratioLabel!.Text = $"1:{Ratio:F1}";
-}
-
-void UpdateDoseOut()
-{
-_doseOutValueLabel!.Text = $"{_doseOut:F1}";
-_doseOutRange!.Value = _doseOut;
-_doseOutPointer!.Value = _doseOut;
-_ratioLabel!.Text = $"1:{Ratio:F1}";
-}
-
-Microsoft.Maui.Controls.View BuildEquipmentButton()
-{
-var stack = new VerticalStackLayout { Spacing = Theme.SpacingS, HorizontalOptions = LayoutOptions.Center };
-stack.Add(new MauiBoxView { HeightRequest = 20, BackgroundColor = Colors.Transparent });
-
-var circleGrid = new MauiGrid { WidthRequest = 50, HeightRequest = 50 };
-circleGrid.Add(new MauiBorder
-{
-BackgroundColor = Theme.SurfaceVariant, StrokeThickness = 0,
-StrokeShape = new RoundRectangle { CornerRadius = 25 },
-WidthRequest = 50, HeightRequest = 50,
-});
-circleGrid.Add(new MauiLabel { Text = Icons.Machine, FontFamily = Icons.CoffeeFontFamily, FontSize = 32, TextColor = Theme.TextPrimary, HorizontalTextAlignment = TextAlignment.Center, VerticalTextAlignment = TextAlignment.Center });
-
-_machineNameLabel = new MauiLabel { Text = "Select", FontFamily = Theme.FontRegular, FontSize = 11, TextColor = Theme.TextSecondary, HorizontalTextAlignment = TextAlignment.Center, WidthRequest = 80 };
-
-var tap = new TapGestureRecognizer();
-tap.Tapped += async (s, e) => await ShowEquipmentSelectionPopup();
-circleGrid.GestureRecognizers.Add(tap);
-stack.GestureRecognizers.Add(tap);
-
-stack.Add(circleGrid);
-stack.Add(_machineNameLabel);
-return stack;
-}
-
-async Task ShowEquipmentSelectionPopup()
-{
-try
-{
-var equipment = InMemoryDataStore.Instance?.GetAllEquipment() ?? new List<Models.Equipment>();
-if (equipment.Count == 0)
-{
-	var alertPage = Services.PageHelper.GetCurrentPage();
-	if (alertPage != null)
-		await alertPage.DisplayAlertAsync("No Equipment", "Add equipment in Settings first.", "OK");
-	return;
-}
-
-var items = equipment
-	.OrderBy(e => e.Type)
-	.ThenBy(e => e.Name)
-	.Select(e => new EquipmentSelectionItem
+	public void Draw(ICanvas canvas, RectF dirtyRect)
 	{
-		Id = e.Id,
-		Name = e.Name,
-		EquipmentType = e.Type,
-		IsSelected = (e.Type == EquipmentType.Machine && _machineIndex > 0 && _machineIndex <= _machines.Count && _machines[_machineIndex - 1].Id == e.Id)
-			|| (e.Type == EquipmentType.Grinder && _grinderIndex > 0 && _grinderIndex <= _grinders.Count && _grinders[_grinderIndex - 1].Id == e.Id)
-	})
-	.ToList();
+		var size = Math.Min(dirtyRect.Width, dirtyRect.Height);
+		var cx = dirtyRect.Width / 2f;
+		var cy = dirtyRect.Height / 2f;
+		var radius = size / 2f - StrokeWidth / 2f - Inset;
 
-var popup = new UXDivers.Popups.Maui.Controls.ListActionPopup
-{
-	Title = "Select Equipment",
-	ActionButtonText = "Done",
-	ShowActionButton = true,
-	ItemsSource = items,
-	ItemDataTemplate = new DataTemplate(() =>
-	{
-		var tapGesture = new TapGestureRecognizer();
-		tapGesture.SetBinding(TapGestureRecognizer.CommandParameterProperty, ".");
-		tapGesture.Tapped += (s, e) =>
+		const float startAngle = 225f;
+		const float endAngle = -45f;
+
+		// Track arc (background — full 270°)
+		canvas.StrokeColor = TrackColor;
+		canvas.StrokeSize = StrokeWidth;
+		canvas.StrokeLineCap = LineCap.Round;
+		canvas.DrawArc(cx - radius, cy - radius, radius * 2, radius * 2,
+			startAngle, endAngle, true, false);
+
+		// Value arc (foreground — partial)
+		var fraction = Math.Clamp((Value - Min) / (Max - Min), 0f, 1f);
+		if (fraction > 0.005f)
 		{
-			if (e is TappedEventArgs args && args.Parameter is EquipmentSelectionItem item)
-			{
-				item.IsSelected = !item.IsSelected;
-				ApplyEquipmentSelection(items);
-			}
-		};
+			float valueEndAngle = startAngle - 270f * fraction;
+			canvas.StrokeColor = ValueColor;
+			canvas.StrokeSize = StrokeWidth;
+			canvas.StrokeLineCap = LineCap.Round;
+			canvas.DrawArc(cx - radius, cy - radius, radius * 2, radius * 2,
+				startAngle, valueEndAngle, true, false);
+		}
 
-		var layout = new HorizontalStackLayout { Spacing = 12, Padding = new Thickness(0, 8) };
-		layout.GestureRecognizers.Add(tapGesture);
-
-		var checkIcon = new MauiLabel
+		// Scale labels at polar positions around the arc
+		if (ScaleLabels is { Length: > 1 })
 		{
-			FontSize = 24,
-			VerticalOptions = LayoutOptions.Center,
-		};
-		checkIcon.SetBinding(MauiLabel.TextProperty, new Microsoft.Maui.Controls.Binding("IsSelected",
-			converter: new BoolToStringConverter("Yes", "No")));
-		checkIcon.SetBinding(MauiLabel.TextColorProperty, new Microsoft.Maui.Controls.Binding("IsSelected",
-			converter: new BoolToColorConverter(Theme.Primary, Theme.TextSecondary)));
-
-		var nameLabel = new MauiLabel { FontSize = 16, VerticalOptions = LayoutOptions.Center, TextColor = Colors.White };
-		nameLabel.SetBinding(MauiLabel.TextProperty, "Name");
-
-		var typeLabel = new MauiLabel { FontSize = 12, VerticalOptions = LayoutOptions.Center, TextColor = Colors.Gray };
-		typeLabel.SetBinding(MauiLabel.TextProperty, "TypeName");
-
-		var textStack = new VerticalStackLayout { Spacing = 2 };
-		textStack.Add(nameLabel);
-		textStack.Add(typeLabel);
-
-		layout.Add(checkIcon);
-		layout.Add(textStack);
-		return layout;
-	})
-};
-
-popup.ActionButtonCommand = new Command(() => ApplyEquipmentSelection(items));
-
-// Close any existing popup first (reference pattern from BaristaNotes)
-try { await UXDivers.Popups.Services.IPopupService.Current.PopAsync(); } catch { }
-
-await UXDivers.Popups.Services.IPopupService.Current.PushAsync(popup);
-}
-catch (Exception ex)
-{
-	System.Diagnostics.Debug.WriteLine($"[Equipment] ERROR: {ex}");
-	// Fallback to action sheet
-	var page = Services.PageHelper.GetCurrentPage();
-	if (page != null)
-	{
-		var equipment = InMemoryDataStore.Instance?.GetAllEquipment() ?? new List<Models.Equipment>();
-		var names = equipment.OrderBy(e => e.Type).ThenBy(e => e.Name)
-			.Select(e => $"{e.Type}: {e.Name}").ToArray();
-		var result = await page.DisplayActionSheetAsync("Select Equipment", "Cancel", null, names);
-		if (result != null && result != "Cancel")
-		{
-			var selected = equipment.FirstOrDefault(e => $"{e.Type}: {e.Name}" == result);
-			if (selected?.Type == EquipmentType.Machine)
+			float labelR = radius + StrokeWidth / 2f + 6f;
+			canvas.FontSize = 12;
+			canvas.FontColor = LabelColor;
+			float lw = 28f, lh = 14f;
+			int count = ScaleLabels.Length;
+			for (int i = 0; i < count; i++)
 			{
-				_machineIndex = _machines.FindIndex(m => m.Id == selected.Id) + 1;
-				var name = selected.Name;
-				if (_machineNameLabel != null)
-					_machineNameLabel.Text = name.Length > 10 ? name[..10] + "…" : name;
-			}
-			else if (selected?.Type == EquipmentType.Grinder)
-			{
-				_grinderIndex = _grinders.FindIndex(g => g.Id == selected.Id) + 1;
+				float deg = startAngle - 270f / (count - 1) * i;
+				float rad = deg * MathF.PI / 180f;
+				float lx = cx + labelR * MathF.Cos(rad);
+				float ly = cy - labelR * MathF.Sin(rad);
+				canvas.DrawString(ScaleLabels[i],
+					lx - lw / 2f, ly - lh / 2f, lw, lh,
+					HorizontalAlignment.Center, VerticalAlignment.Center);
 			}
 		}
+
+		// Center value text and unit are rendered via overlaid Text views
+		// for proper bold weight support (canvas.DrawString lacks FontWeight)
 	}
 }
-}
 
-void ApplyEquipmentSelection(List<EquipmentSelectionItem> items)
+// ── Page ────────────────────────────────────────────────────────────
+public class ShotLoggingPage : Component<ShotLoggingPageState>
 {
-var selectedMachine = items.FirstOrDefault(i => i.EquipmentType == EquipmentType.Machine && i.IsSelected);
-if (selectedMachine != null)
-{
-	_machineIndex = _machines.FindIndex(m => m.Id == selectedMachine.Id) + 1;
-	var name = selectedMachine.Name;
-	if (_machineNameLabel != null)
-		_machineNameLabel.Text = name.Length > 10 ? name[..10] + "…" : name;
-}
-else
-{
-	_machineIndex = 0;
-	if (_machineNameLabel != null)
-		_machineNameLabel.Text = "Select";
-}
-
-var selectedGrinder = items.FirstOrDefault(i => i.EquipmentType == EquipmentType.Grinder && i.IsSelected);
-if (selectedGrinder != null)
-	_grinderIndex = _grinders.FindIndex(g => g.Id == selectedGrinder.Id) + 1;
-else
-	_grinderIndex = 0;
-}
-
-Microsoft.Maui.Controls.View BuildRatioDisplay()
-{
-_ratioLabel = new MauiLabel
-{
-	Text = $"1:{Ratio:F1}",
-	FontFamily = Theme.FontSemibold,
-	FontSize = 20,
-	TextColor = Theme.TextSecondary,
-	HorizontalTextAlignment = TextAlignment.Center,
-	HorizontalOptions = LayoutOptions.Center,
-	Margin = new Thickness(0, 8, 0, 0),
-};
-return _ratioLabel;
-}
-
-Microsoft.Maui.Controls.View BuildTimeSlider()
-{
-var stack = new VerticalStackLayout { Spacing = 0 };
-
-_timeValueLabel = new MauiLabel
-{
-	Text = $"Time: {_actualTime:F0}s",
-	FontFamily = Theme.FontRegular,
-	FontSize = 12,
-	TextColor = Theme.TextSecondary,
-	Margin = new Thickness(16, 0, 0, 4),
-};
-stack.Add(_timeValueLabel);
-
-var slider = new MauiSlider
-{
-	Minimum = 0, Maximum = 60, Value = _actualTime,
-	MinimumTrackColor = Theme.Primary, MaximumTrackColor = Theme.SurfaceVariant,
-	Margin = new Thickness(16, 0),
-	VerticalOptions = LayoutOptions.Center,
-};
-slider.ValueChanged += (s, e) =>
-{
-_actualTime = e.NewValue;
-_timeValueLabel.Text = $"Time: {e.NewValue:F0}s";
-};
-
-var sliderBorder = new MauiBorder
-{
-	Content = slider,
-	StrokeThickness = 0,
-	StrokeShape = new RoundRectangle { CornerRadius = Theme.RadiusPill },
-	BackgroundColor = Theme.SurfaceVariant,
-	HeightRequest = Theme.FormFieldHeight,
-};
-
-stack.Add(sliderBorder);
-return stack;
-}
-
-Microsoft.Maui.Controls.View BuildUserSelectionRow()
-{
-var profileNames = new[] { "None" }.Concat(_profiles.Select(p => p.Name)).ToArray();
-
-var grid = new MauiGrid
-{
-	ColumnDefinitions = new ColumnDefinitionCollection
+	static readonly string[] DrinkTypes = { "Espresso", "Americano", "Latte", "Cappuccino", "Flat White", "Cortado" };
+	static readonly string[] RatingLabels = { "Terrible", "Bad", "Average", "Good", "Excellent" };
+	static readonly string[] RatingIcons =
 	{
-		new ColumnDefinition(GridLength.Star),
-		new ColumnDefinition(GridLength.Auto),
-		new ColumnDefinition(GridLength.Star),
-	},
-	RowDefinitions = new RowDefinitionCollection
-	{
-		new RowDefinition(GridLength.Auto),
-	},
-	ColumnSpacing = 16,
-	HorizontalOptions = LayoutOptions.Center,
-};
-
-var madeByAvatarLabel = new MauiLabel();
-var madeByNameLabel = new MauiLabel();
-var madeByCircleBg = new MauiBorder();
-
-var madeByStack = BuildAvatarControl("Made By", _madeByIndex, profileNames,
-ref madeByAvatarLabel, ref madeByNameLabel, ref madeByCircleBg,
-() => ShowProfileSelectionPopup("Made By", idx =>
-{
-	_madeByIndex = idx;
-	UpdateAvatar(_madeByIndex, profileNames, madeByAvatarLabel, madeByNameLabel, madeByCircleBg);
-}));
-grid.Add(madeByStack, 0, 0);
-
-var arrow = new MauiLabel
-{
-	Text = "→",
-	FontFamily = Theme.FontRegular,
-	FontSize = 24,
-	TextColor = Theme.TextMuted,
-	HorizontalTextAlignment = TextAlignment.Center,
-	VerticalTextAlignment = TextAlignment.Center,
-};
-grid.Add(arrow, 1, 0);
-
-var madeForAvatarLabel = new MauiLabel();
-var madeForNameLabel = new MauiLabel();
-var madeForCircleBg = new MauiBorder();
-
-var madeForStack = BuildAvatarControl("Made For", _madeForIndex, profileNames,
-ref madeForAvatarLabel, ref madeForNameLabel, ref madeForCircleBg,
-() => ShowProfileSelectionPopup("Made For", idx =>
-{
-	_madeForIndex = idx;
-	UpdateAvatar(_madeForIndex, profileNames, madeForAvatarLabel, madeForNameLabel, madeForCircleBg);
-}));
-grid.Add(madeForStack, 2, 0);
-
-return grid;
-}
-
-async void ShowProfileSelectionPopup(string title, Action<int> onSelected)
-{
-var items = new List<string> { "None" };
-items.AddRange(_profiles.Select(p => p.Name));
-
-try
-{
-	var popup = new UXDivers.Popups.Maui.Controls.ListActionPopup
-	{
-		Title = title,
-		ShowActionButton = false,
-		ItemsSource = items.Select((name, idx) => new { Name = name, Index = idx }).ToList(),
-		ItemDataTemplate = new Microsoft.Maui.Controls.DataTemplate(() =>
-		{
-			var tapGesture = new TapGestureRecognizer();
-			tapGesture.Tapped += async (s, e) =>
-			{
-				var element = s as Microsoft.Maui.Controls.Element;
-				var bindingCtx = element?.BindingContext;
-				if (bindingCtx != null)
-				{
-					var indexProp = bindingCtx.GetType().GetProperty("Index");
-					if (indexProp != null)
-					{
-						var idx = (int)indexProp.GetValue(bindingCtx)!;
-						onSelected(idx);
-						try { await UXDivers.Popups.Services.IPopupService.Current.PopAsync(); } catch { }
-					}
-				}
-			};
-
-			var layout = new HorizontalStackLayout { Spacing = 12, Padding = new Thickness(0, 8) };
-			layout.GestureRecognizers.Add(tapGesture);
-
-			var circle = new MauiBorder
-			{
-				StrokeShape = new Microsoft.Maui.Controls.Shapes.Ellipse(),
-				HeightRequest = 40,
-				WidthRequest = 40,
-				BackgroundColor = Theme.Primary,
-				StrokeThickness = 0,
-			};
-			var initial = new MauiLabel
-			{
-				FontFamily = Theme.FontSemibold,
-				FontSize = 16,
-				TextColor = Colors.White,
-				HorizontalTextAlignment = TextAlignment.Center,
-				VerticalTextAlignment = TextAlignment.Center,
-			};
-			initial.SetBinding(MauiLabel.TextProperty, new Microsoft.Maui.Controls.Binding("Name",
-				converter: new InitialConverter()));
-			circle.Content = initial;
-			layout.Children.Add(circle);
-
-			var label = new MauiLabel
-			{
-				FontSize = 16,
-				TextColor = Colors.White,
-				VerticalOptions = LayoutOptions.Center,
-			};
-			label.SetBinding(MauiLabel.TextProperty, "Name");
-			layout.Children.Add(label);
-			return layout;
-		}),
+		Icons.SentimentVeryDissatisfied,
+		Icons.SentimentDissatisfied,
+		Icons.SentimentNeutral,
+		Icons.SentimentSatisfied,
+		Icons.SentimentVerySatisfied,
 	};
-	await UXDivers.Popups.Services.IPopupService.Current.PushAsync(popup);
-}
-catch
-{
-	// Fallback to ActionSheet if UXDivers popup fails
-	var fallbackPage = Services.PageHelper.GetCurrentPage();
-	var result = fallbackPage != null
-		? await fallbackPage.DisplayActionSheetAsync(title, "Cancel", null, items.ToArray())
-		: null;
-	if (result != null && result != "Cancel")
+
+	readonly int _shotId;
+	bool _dataLoaded;
+	int _savedShotId;
+
+	// Signal-based reactive state — updates without full page rebuild
+	readonly Signal<double> _doseIn = new(18.0);
+	readonly Signal<double> _yieldOut = new(36.0);
+	readonly Signal<double> _time = new(40.0);
+	readonly Signal<string> _tastingNotes = new("");
+
+	// Cached gauge drawables to avoid recreation on each render (Bug 6)
+	GaugeArcDrawable? _doseGaugeDrawable;
+	GaugeArcDrawable? _outputGaugeDrawable;
+
+	bool IsEditMode => _shotId > 0;
+
+	IAIAdviceService? _aiService;
+	IVoiceCommandService? _voiceService;
+	ISpeechRecognitionService? _speechService;
+	CancellationTokenSource? _adviceCts;
+	CancellationTokenSource? _speechCts;
+
+	public ShotLoggingPage(int shotId = 0)
 	{
-		var idx = items.IndexOf(result);
-		if (idx >= 0) onSelected(idx);
-	}
-}
-}
-
-Microsoft.Maui.Controls.View BuildAvatarControl(string title, int idx, string[] names,
-ref MauiLabel avatarLabel, ref MauiLabel nameLabel, ref MauiBorder circleBg, Action onTap)
-{
-var stack = new VerticalStackLayout { Spacing = Theme.SpacingXS };
-
-// Avatar circle (60x60)
-var circleGrid = new MauiGrid { WidthRequest = 60, HeightRequest = 60 };
-var bg = new MauiBorder
-{
-BackgroundColor = idx == 0 ? Theme.SurfaceVariant : Theme.Primary,
-StrokeThickness = 0, StrokeShape = new RoundRectangle { CornerRadius = 30 }, WidthRequest = 60, HeightRequest = 60,
-};
-circleBg = bg;
-circleGrid.Add(bg);
-
-var initial = idx == 0 ? "?" : (idx - 1 < _profiles.Count ? _profiles[idx - 1].Name[..1].ToUpper() : "?");
-var al = new MauiLabel
-{
-Text = initial, FontFamily = Theme.FontSemibold, FontSize = 24, FontAttributes = MauiFontAttributes.Bold,
-TextColor = idx == 0 ? Theme.TextMuted : Colors.White,
-HorizontalTextAlignment = TextAlignment.Center, VerticalTextAlignment = TextAlignment.Center,
-};
-avatarLabel = al;
-circleGrid.Add(al);
-stack.Add(circleGrid);
-
-// Label BELOW avatar
-var labelText = title == "Made By" ? "Made by" : "For";
-stack.Add(new MauiLabel { Text = labelText, FontFamily = Theme.FontRegular, FontSize = 12, TextColor = Theme.TextSecondary, HorizontalTextAlignment = TextAlignment.Center });
-
-var tap = new TapGestureRecognizer();
-tap.Tapped += (s, e) => onTap();
-stack.GestureRecognizers.Add(tap);
-
-return stack;
-}
-
-void UpdateAvatar(int idx, string[] names, MauiLabel avatarLabel, MauiLabel nameLabel, MauiBorder circleBg)
-{
-var initial = idx == 0 ? "?" : (idx - 1 < _profiles.Count ? _profiles[idx - 1].Name[..1].ToUpper() : "?");
-var fullName = idx == 0 ? "None" : (idx - 1 < _profiles.Count ? _profiles[idx - 1].Name : "None");
-avatarLabel.Text = initial;
-avatarLabel.TextColor = idx == 0 ? Theme.TextMuted : Colors.White;
-nameLabel.Text = fullName;
-circleBg.BackgroundColor = idx == 0 ? Theme.SurfaceVariant : Theme.Primary;
-}
-
-Microsoft.Maui.Controls.View BuildRating()
-{
-var sentiments = new[]
-{
-Icons.SentimentVeryDissatisfied,
-Icons.SentimentDissatisfied,
-Icons.SentimentNeutral,
-Icons.SentimentSatisfied,
-Icons.SentimentVerySatisfied,
-};
-var icons = new MauiLabel[sentiments.Length];
-var row = new HorizontalStackLayout { Spacing = 8, HorizontalOptions = LayoutOptions.Center };
-
-for (int i = 0; i < sentiments.Length; i++)
-{
-var idx = i;
-var lbl = new MauiLabel
-{
-Text = sentiments[i],
-FontFamily = Icons.FontFamily,
-FontSize = 32,
-TextColor = i == _rating ? Theme.Primary : Theme.TextMuted,
-};
-icons[i] = lbl;
-
-var tap = new TapGestureRecognizer();
-tap.Tapped += (s, e) =>
-{
-_rating = idx;
-for (int j = 0; j < sentiments.Length; j++)
-icons[j].TextColor = j == _rating ? Theme.Primary : Theme.TextMuted;
-};
-lbl.GestureRecognizers.Add(tap);
-row.Add(lbl);
-}
-return row;
-}
-
-View BuildTastingNotes() =>
-	VStack(
-		Text("Tasting Notes (optional)")
-			.FontFamily(Theme.FontRegular).FontSize(12).Color(Theme.TextSecondary)
-			.Margin(new Thickness(16, 0, 0, 4)),
-		Border(
-			TextEditor(_tastingNotes)
-				.FontSize(16).FontFamily(Theme.FontRegular)
-				.Color(Theme.TextPrimary).Background(Colors.Transparent)
-				.Frame(height: 80)
-				.Margin(new Thickness(16, 8))
-				.Placeholder("E.g., bright, fruity, slightly sour...")
-				.OnTextChanged(v => _tastingNotes = v)
-		)
-		.CornerRadius(Theme.RadiusEditor)
-		.Background(Theme.SurfaceVariant)
-		.StrokeThickness(0)
-	);
-
-// Bag picker reference for refreshing after inline creation
-MauiPicker? _bagPicker;
-
-Microsoft.Maui.Controls.View BuildBagPickerWithAdd(string[] bagNames)
-{
-var stack = new VerticalStackLayout { Spacing = 4 };
-stack.Add(new MauiLabel { Text = "Bag", FontFamily = Theme.FontRegular, FontSize = 12, TextColor = Theme.TextSecondary, Margin = new Thickness(16, 0, 0, 4) });
-
-var row = new MauiGrid
-{
-	ColumnDefinitions =
-	{
-		new ColumnDefinition(GridLength.Star),
-		new ColumnDefinition(GridLength.Auto),
-	},
-	ColumnSpacing = Theme.SpacingS,
-};
-
-_bagPicker = new MauiPicker
-{
-	TextColor = Theme.TextPrimary,
-	BackgroundColor = Theme.SurfaceVariant,
-	HeightRequest = Theme.FormFieldHeight,
-};
-foreach (var item in bagNames) _bagPicker.Items.Add(item);
-if (_selectedBagIndex >= 0 && _selectedBagIndex < bagNames.Length) _bagPicker.SelectedIndex = _selectedBagIndex;
-_bagPicker.SelectedIndexChanged += (s, e) => _selectedBagIndex = _bagPicker.SelectedIndex;
-
-var pickerBorder = new MauiBorder
-{
-	Content = _bagPicker,
-	StrokeThickness = 0,
-	StrokeShape = new RoundRectangle { CornerRadius = Theme.RadiusPill },
-	BackgroundColor = Theme.SurfaceVariant,
-};
-
-var addBtn = new MauiButton
-{
-	Text = Icons.Add,
-	FontFamily = Icons.FontFamily,
-	FontSize = 22,
-	TextColor = Colors.White,
-	BackgroundColor = Theme.Primary,
-	WidthRequest = Theme.FormFieldHeight,
-	HeightRequest = Theme.FormFieldHeight,
-	CornerRadius = (int)Theme.RadiusPill,
-	Padding = 0,
-};
-addBtn.Clicked += async (s, e) => await AddNewBeanInline();
-
-row.Add(pickerBorder, 0, 0);
-row.Add(addBtn, 1, 0);
-stack.Add(row);
-return stack;
-}
-
-async Task AddNewBeanInline()
-{
-var page = Services.PageHelper.GetCurrentPage();
-if (page == null) return;
-
-var beanName = await page.DisplayPromptAsync(
-	"New Bean",
-	"Enter the bean name to create a new bean and bag:",
-	"Create",
-	"Cancel",
-	"e.g. Ethiopia Sidamo",
-	maxLength: 100,
-	keyboard: Keyboard.Default);
-
-if (string.IsNullOrWhiteSpace(beanName)) return;
-
-var store = InMemoryDataStore.Instance;
-if (store == null) return;
-
-var bean = store.CreateBean(new Bean { Name = beanName.Trim() });
-var bag = store.CreateBag(new Bag { BeanId = bean.Id, RoastDate = DateTime.Now });
-
-// Refresh local bags list and update picker
-_bags = store.GetAllBags().Where(b => !b.IsComplete).ToList();
-var newIndex = _bags.FindIndex(b => b.Id == bag.Id);
-
-if (_bagPicker != null)
-{
-	_bagPicker.Items.Clear();
-	foreach (var b in _bags)
-		_bagPicker.Items.Add(b.BeanName ?? $"Bag #{b.Id}");
-	if (newIndex >= 0)
-	{
-		_bagPicker.SelectedIndex = newIndex;
-		_selectedBagIndex = newIndex;
-	}
-}
-}
-
-Microsoft.Maui.Controls.View BuildAdditionalDetails()
-{
-var wrapper = new VerticalStackLayout { Spacing = Theme.SpacingS };
-
-// Divider line
-var divider = new MauiBoxView
-{
-	HeightRequest = 1,
-	BackgroundColor = Theme.Outline,
-	HorizontalOptions = LayoutOptions.Fill,
-	Margin = new Thickness(0, Theme.SpacingL, 0, 0),
-};
-wrapper.Add(divider);
-
-// Section header
-var headerLabel = new MauiLabel
-{
-	Text = "Additional Details",
-	FontFamily = Theme.FontRegular,
-	FontSize = 14,
-	TextColor = Theme.TextMuted,
-};
-wrapper.Add(headerLabel);
-
-_additionalStack = new VerticalStackLayout { Spacing = Theme.SpacingM, IsVisible = true };
-
-var bagNames = _bags.Select(b => b.BeanName ?? $"Bag #{b.Id}").ToArray();
-
-// Field order: Bag → Grind Setting → Expected Time → Expected Output → Drink Type
-_additionalStack.Add(BuildBagPickerWithAdd(bagNames));
-_additionalStack.Add(FormHelpers.MakeFormEntry("Grind Setting", _grindSetting, "e.g. 15", v => _grindSetting = v));
-_additionalStack.Add(FormHelpers.MakeFormEntry("Expected Time (s)", _expectedTime, "28", v => _expectedTime = v));
-_additionalStack.Add(FormHelpers.MakeFormEntry("Expected Output (g)", _expectedOutput, "36", v => _expectedOutput = v));
-_additionalStack.Add(FormHelpers.MakeFormPicker("Drink Type", _drinkTypeIndex, DrinkTypes, v => _drinkTypeIndex = v));
-
-_additionalStack.Padding = new Thickness(0, 0, 0, Theme.SpacingXL);
-wrapper.Add(_additionalStack);
-return wrapper;
-}
-
-void LoadExistingShot(IDataStore? store)
-{
-	if (store == null) return;
-	var shot = store.GetShot(_editingShotId);
-	if (shot == null) return;
-
-	_doseIn = (double)shot.DoseIn;
-	_doseOut = (double)(shot.ActualOutput ?? 0m);
-	_actualTime = (double)(shot.ActualTime ?? 0m);
-	_rating = shot.Rating ?? -1;
-	_tastingNotes = shot.TastingNotes ?? "";
-	_grindSetting = shot.GrindSetting ?? "15";
-	_expectedTime = shot.ExpectedTime.ToString("G");
-	_expectedOutput = shot.ExpectedOutput.ToString("G");
-
-	var dtIdx = Array.IndexOf(DrinkTypes, shot.DrinkType);
-	_drinkTypeIndex = dtIdx >= 0 ? dtIdx : 0;
-
-	if (shot.MachineId.HasValue)
-	{
-		var mi = _machines.FindIndex(m => m.Id == shot.MachineId.Value);
-		_machineIndex = mi >= 0 ? mi + 1 : 0;
-	}
-	if (shot.GrinderId.HasValue)
-	{
-		var gi = _grinders.FindIndex(g => g.Id == shot.GrinderId.Value);
-		_grinderIndex = gi >= 0 ? gi + 1 : 0;
-	}
-	if (shot.MadeById.HasValue)
-	{
-		var bi = _profiles.FindIndex(p => p.Id == shot.MadeById.Value);
-		_madeByIndex = bi >= 0 ? bi + 1 : 0;
-	}
-	if (shot.MadeForId.HasValue)
-	{
-		var fi = _profiles.FindIndex(p => p.Id == shot.MadeForId.Value);
-		_madeForIndex = fi >= 0 ? fi + 1 : 0;
+		_shotId = shotId;
 	}
 
-	if (shot.BagId > 0)
+	void ResolveServices()
 	{
-		var allBags = store.GetAllBags();
-		var activeBagIdx = _bags.FindIndex(b => b.Id == shot.BagId);
-		if (activeBagIdx < 0)
+		var sp = IPlatformApplication.Current?.Services;
+		if (sp == null) return;
+		try { _aiService ??= sp.GetService<IAIAdviceService>(); } catch { }
+		try { _voiceService ??= sp.GetService<IVoiceCommandService>(); } catch { }
+		try { _speechService ??= sp.GetService<ISpeechRecognitionService>(); } catch { }
+	}
+
+	// ── Data loading ────────────────────────────────────────────────
+
+	void LoadData()
+	{
+		if (_dataLoaded) return;
+		_dataLoaded = true;
+
+		var store = InMemoryDataStore.Instance;
+		if (store == null) return;
+
+		var bags = store.GetAllBags().Where(b => !b.IsComplete).ToList();
+		var beans = store.GetAllBeans();
+		var equipment = store.GetAllEquipment();
+		var users = store.GetAllProfiles();
+
+		var machines = equipment.Where(e => e.Type == EquipmentType.Machine).ToList();
+		var grinders = equipment.Where(e => e.Type == EquipmentType.Grinder).ToList();
+
+		if (IsEditMode)
 		{
-			var bag = allBags.FirstOrDefault(b => b.Id == shot.BagId);
-			if (bag != null)
+			var shot = store.GetShot(_shotId);
+			if (shot == null)
 			{
-				_bags.Add(bag);
-				_selectedBagIndex = _bags.Count - 1;
+				SetState(s => { s.ErrorMessage = "Shot not found"; s.IsLoading = false; });
+				return;
+			}
+
+			_tastingNotes.Value = shot.TastingNotes ?? "";
+			_doseIn.Value = (double)shot.DoseIn;
+			_yieldOut.Value = (double)(shot.ActualOutput ?? shot.ExpectedOutput);
+			_time.Value = (double)(shot.ActualTime ?? 40);
+
+			SetState(s =>
+			{
+				s.AvailableBags = bags;
+				s.AvailableBeans = beans;
+				s.AvailableEquipment = equipment;
+				s.AvailableUsers = users;
+
+				s.Timestamp = shot.Timestamp;
+				s.BeanName = shot.BeanName;
+				s.DoseIn = shot.DoseIn;
+				s.GrindSetting = shot.GrindSetting;
+				s.ExpectedTime = shot.ExpectedTime;
+				s.ExpectedOutput = shot.ExpectedOutput;
+				s.ActualTime = shot.ActualTime;
+				s.ActualOutput = shot.ActualOutput;
+				s.PreinfusionTime = shot.PreinfusionTime;
+				s.Rating = shot.Rating.HasValue ? Math.Max(0, shot.Rating.Value - 1) : 2;
+				s.DrinkType = shot.DrinkType;
+				s.TastingNotes = shot.TastingNotes ?? "";
+				s.SelectedBagId = shot.BagId;
+				s.SelectedBagIndex = bags.FindIndex(b => b.Id == shot.BagId);
+				s.SelectedDrinkIndex = Array.IndexOf(DrinkTypes, shot.DrinkType);
+				if (s.SelectedDrinkIndex < 0) s.SelectedDrinkIndex = 0;
+
+				s.SelectedMaker = shot.MadeById.HasValue ? users.FirstOrDefault(u => u.Id == shot.MadeById.Value) : null;
+				s.SelectedRecipient = shot.MadeForId.HasValue ? users.FirstOrDefault(u => u.Id == shot.MadeForId.Value) : null;
+				s.SelectedMachineId = shot.MachineId;
+				s.SelectedGrinderId = shot.GrinderId;
+				s.SelectedMachineIndex = shot.MachineId.HasValue
+					? machines.FindIndex(m => m.Id == shot.MachineId.Value) : -1;
+				s.SelectedGrinderIndex = shot.GrinderId.HasValue
+					? grinders.FindIndex(g => g.Id == shot.GrinderId.Value) : -1;
+
+				s.IsLoading = false;
+			});
+		}
+		else
+		{
+			SetState(s =>
+			{
+				s.AvailableBags = bags;
+				s.AvailableBeans = beans;
+				s.AvailableEquipment = equipment;
+				s.AvailableUsers = users;
+
+				// Pre-select first user as maker, second as recipient (matches original UX)
+				if (users.Count > 0)
+					s.SelectedMaker = users[0];
+				if (users.Count > 1)
+					s.SelectedRecipient = users[1];
+
+				// Pre-select first machine and grinder (matches original — badge shows count)
+				if (machines.Count > 0)
+				{
+					s.SelectedMachineIndex = 0;
+					s.SelectedMachineId = machines[0].Id;
+				}
+				if (grinders.Count > 0)
+				{
+					s.SelectedGrinderIndex = 0;
+					s.SelectedGrinderId = grinders[0].Id;
+				}
+
+				// Pre-select first bag (matches original UX)
+				if (bags.Count > 0)
+				{
+					s.SelectedBagIndex = 0;
+					s.SelectedBagId = bags[0].Id;
+				}
+
+				s.IsLoading = false;
+			});
+		}
+	}
+
+	// ── Save ────────────────────────────────────────────────────────
+
+	void SaveShot()
+	{
+		var store = InMemoryDataStore.Instance;
+		if (store == null) return;
+
+		if (State.SelectedBagId == null)
+		{
+			SetState(s => s.ErrorMessage = "Please select a bag");
+			return;
+		}
+
+		var record = new ShotRecord
+		{
+			BagId = State.SelectedBagId.Value,
+			MachineId = State.SelectedMachineId,
+			GrinderId = State.SelectedGrinderId,
+			MadeById = State.SelectedMaker?.Id,
+			MadeForId = State.SelectedRecipient?.Id,
+			DoseIn = (decimal)_doseIn.Value,
+			GrindSetting = State.GrindSetting,
+			ExpectedTime = State.ExpectedTime,
+			ExpectedOutput = State.ExpectedOutput,
+			ActualTime = (decimal)_time.Value,
+			ActualOutput = (decimal)_yieldOut.Value,
+			PreinfusionTime = State.PreinfusionTime,
+			DrinkType = State.DrinkType,
+			Rating = State.Rating + 1,
+			TastingNotes = string.IsNullOrWhiteSpace(_tastingNotes.Value) ? null : _tastingNotes.Value,
+		};
+
+		if (IsEditMode)
+		{
+			record.Id = _shotId;
+			store.UpdateShot(record);
+			_savedShotId = _shotId;
+		}
+		else
+		{
+			var created = store.CreateShot(record);
+			_savedShotId = created.Id;
+		}
+
+		SetState(s =>
+		{
+			s.ErrorMessage = null;
+			s.ShowAdviceSection = IsEditMode;
+		});
+
+		if (IsEditMode)
+			Navigation?.Pop();
+		else
+		{
+			_dataLoaded = false;
+			_tastingNotes.Value = "";
+			_doseIn.Value = 18.0;
+			_yieldOut.Value = 36.0;
+			_time.Value = 40.0;
+			SetState(s =>
+			{
+				s.ActualTime = null;
+				s.ActualOutput = null;
+				s.PreinfusionTime = null;
+				s.TastingNotes = "";
+				s.Rating = 3;
+				s.ErrorMessage = null;
+			});
+			LoadData();
+		}
+	}
+
+	// ── AI Advice ───────────────────────────────────────────────────
+
+	async void RequestAdvice()
+	{
+		ResolveServices();
+		if (_aiService == null) return;
+
+		var shotId = IsEditMode ? _shotId : _savedShotId;
+		if (shotId <= 0) return;
+
+		_adviceCts?.Cancel();
+		_adviceCts = new CancellationTokenSource();
+
+		SetState(s =>
+		{
+			s.IsLoadingAdvice = true;
+			s.AdviceResponse = null;
+			s.AdviceError = null;
+			s.ShowAdviceSection = true;
+		});
+
+		try
+		{
+			var response = await _aiService.GetAdviceForShotAsync(shotId, _adviceCts.Token);
+			SetState(s =>
+			{
+				s.IsLoadingAdvice = false;
+				s.AdviceResponse = response;
+				s.AdviceError = response.Success ? null : response.ErrorMessage;
+			});
+		}
+		catch (OperationCanceledException) { }
+		catch (Exception ex)
+		{
+			SetState(s =>
+			{
+				s.IsLoadingAdvice = false;
+				s.AdviceError = ex.Message;
+			});
+		}
+	}
+
+	// ── Voice ───────────────────────────────────────────────────────
+
+	void OpenVoiceSheet()
+	{
+		ResolveServices();
+		_voiceService?.ClearConversationHistory();
+		SetState(s =>
+		{
+			s.IsVoiceSheetOpen = true;
+			s.VoiceState = "Tap to speak";
+			s.VoiceTranscript = "";
+			s.VoiceChatHistory = new List<VoiceChatMessage>();
+		});
+	}
+
+	void CloseVoiceSheet()
+	{
+		_speechCts?.Cancel();
+		SetState(s =>
+		{
+			s.IsVoiceSheetOpen = false;
+			s.IsRecording = false;
+		});
+	}
+
+	async void ToggleRecording()
+	{
+		if (_speechService == null) return;
+
+		if (State.IsRecording)
+		{
+			await _speechService.StopListeningAsync();
+			SetState(s => { s.IsRecording = false; s.VoiceState = "Processing..."; });
+			return;
+		}
+
+		_speechCts?.Cancel();
+		_speechCts = new CancellationTokenSource();
+
+		SetState(s => { s.IsRecording = true; s.VoiceState = "Listening..."; s.VoiceTranscript = ""; });
+
+		try
+		{
+			var result = await _speechService.StartListeningAsync(_speechCts.Token);
+			SetState(s => { s.IsRecording = false; s.VoiceState = "Processing..."; });
+
+			if (result.Success && !string.IsNullOrWhiteSpace(result.Transcript))
+			{
+				SetState(s => s.VoiceChatHistory.Add(new VoiceChatMessage
+				{
+					Text = result.Transcript!,
+					IsUser = true
+				}));
+
+				await ProcessVoiceCommand(result.Transcript!, result.Confidence);
+			}
+			else
+			{
+				SetState(s => s.VoiceState = result.ErrorMessage ?? "Could not understand. Try again.");
+			}
+		}
+		catch (OperationCanceledException) { }
+		catch (Exception ex)
+		{
+			SetState(s =>
+			{
+				s.IsRecording = false;
+				s.VoiceState = $"Error: {ex.Message}";
+			});
+		}
+	}
+
+	async Task ProcessVoiceCommand(string transcript, double confidence)
+	{
+		if (_voiceService == null) return;
+
+		try
+		{
+			var request = new VoiceCommandRequestDto(
+				transcript, confidence,
+				State.SelectedBagId,
+				State.SelectedMachineId,
+				State.SelectedMaker?.Id);
+
+			var toolResult = await _voiceService.ProcessCommandAsync(request);
+
+			SetState(s =>
+			{
+				s.VoiceChatHistory.Add(new VoiceChatMessage
+				{
+					Text = toolResult.Message,
+					IsUser = false
+				});
+				s.VoiceState = "Tap to speak";
+			});
+
+			if (toolResult.Success)
+			{
+				_dataLoaded = false;
+				LoadData();
+			}
+		}
+		catch (Exception ex)
+		{
+			SetState(s =>
+			{
+				s.VoiceChatHistory.Add(new VoiceChatMessage
+				{
+					Text = $"Error: {ex.Message}",
+					IsUser = false
+				});
+				s.VoiceState = "Tap to speak";
+			});
+		}
+	}
+
+	// ── Render ───────────────────────────────────────────────────────
+
+	public override View Render()
+	{
+		ResolveServices();
+		LoadData();
+
+		return ZStack
+		(
+			RenderFormContent(),
+			RenderVoiceFAB(),
+			State.IsVoiceSheetOpen ? RenderVoiceOverlay() : null
+		)
+			.Modifier(CoffeeModifiers.PageContainer)
+			.Title(IsEditMode ? "Edit Shot" : "New Shot");
+	}
+
+	// ── Main form (matches original BaristaNotes layout) ────────────
+
+	View RenderFormContent()
+	{
+		var bagNames = State.AvailableBags.Select(b => b.BeanName ?? $"Bag #{b.Id}").ToArray();
+		var bagPickerIndex = State.SelectedBagIndex >= 0 ? State.SelectedBagIndex : 0;
+
+		var machines = State.AvailableEquipment.Where(e => e.Type == EquipmentType.Machine).ToList();
+		var grinders = State.AvailableEquipment.Where(e => e.Type == EquipmentType.Grinder).ToList();
+		var accessories = State.AvailableEquipment
+			.Where(e => e.Type != EquipmentType.Machine && e.Type != EquipmentType.Grinder).ToList();
+
+		var machineNames = machines.Select(m => m.Name).ToArray();
+		var grinderNames = grinders.Select(g => g.Name).ToArray();
+
+		var machineIdx = State.SelectedMachineIndex >= 0 ? State.SelectedMachineIndex : 0;
+		var grinderIdx = State.SelectedGrinderIndex >= 0 ? State.SelectedGrinderIndex : 0;
+
+		var formChildren = new List<View>();
+
+		// ── Edit mode header ──
+		if (IsEditMode && State.BeanName != null)
+		{
+			formChildren.Add(
+				FormHelpers.MakeCard(
+					VStack(4,
+						Text(State.BeanName ?? "Unknown Bean")
+							.Modifier(CoffeeModifiers.TitleSmall),
+						Text(State.Timestamp?.ToString("MMM d, yyyy h:mm tt") ?? "")
+							.Modifier(CoffeeModifiers.SmallText)
+					)
+				)
+			);
+		}
+
+		// ── Error display ──
+		if (State.ErrorMessage != null)
+		{
+			formChildren.Add(
+				Border(
+					Text(State.ErrorMessage)
+						.Modifier(CoffeeModifiers.BodyError)
+						.Padding(new Thickness(CoffeeColors.SpacingM))
+				)
+				.Modifier(CoffeeModifiers.ErrorCard)
+			);
+		}
+
+		// ═══════════════════════════════════════════════════════════
+		// HERO SECTION — above the fold, matches original layout
+		// ═══════════════════════════════════════════════════════════
+
+		// Dose / Equipment / Output gauges
+		formChildren.Add(RenderDoseGauges());
+
+		// Time slider
+		formChildren.Add(RenderTimeSlider());
+
+		// User avatars (Made by → For)
+		if (State.AvailableUsers.Count > 0)
+			formChildren.Add(RenderUserSelectionRow());
+
+		// Rating sentiment faces
+		formChildren.Add(RenderRatingSelector());
+
+		// Tasting Notes — Signal-bound TextEditor, no SetState needed
+		formChildren.Add(
+			VStack(CoffeeColors.SpacingS,
+				Text("Tasting Notes (optional)")
+					.Modifier(CoffeeModifiers.FormLabel),
+				Border(
+					SignalExtensions.TextEditor(_tastingNotes)
+						.Modifier(CoffeeModifiers.FormEditor(100f, new Thickness(CoffeeColors.SpacingS, 0)))
+						.Placeholder("E.g., bright, fruity, slightly sour...")
+						.PlaceholderColor(CoffeeColors.TextMuted)
+				)
+				.Modifier(CoffeeModifiers.FormEditorContainer)
+			)
+		);
+
+		// Save / Add button — primary, full width
+		formChildren.Add(
+			FormHelpers.MakePrimaryButton(IsEditMode ? "Update Shot" : "Add Shot", SaveShot));
+
+		// ═══════════════════════════════════════════════════════════
+		// ADDITIONAL DETAILS — below the fold
+		// ═══════════════════════════════════════════════════════════
+
+		// Divider
+		formChildren.Add(
+		new Comet.BoxView(CoffeeColors.Outline)
+		.Modifier(CoffeeModifiers.Divider)
+		.Margin(new Thickness(0, CoffeeColors.SpacingL, 0, 0)));
+
+		// Section label
+		formChildren.Add(
+		Text("Additional Details")
+		.Modifier(CoffeeModifiers.MutedText)
+		.Margin(new Thickness(0, CoffeeColors.SpacingS, 0, CoffeeColors.SpacingS)));
+
+		// Bag picker
+		if (State.AvailableBags.Count > 0)
+		{
+			formChildren.Add(
+			FormHelpers.MakeFormPicker("Bag", bagPickerIndex, bagNames,
+			idx => SetState(s =>
+			{
+				s.SelectedBagIndex = idx;
+				s.SelectedBagId = idx >= 0 && idx < s.AvailableBags.Count
+	? s.AvailableBags[idx].Id : null;
+			})));
+		}
+		else
+		{
+			formChildren.Add(
+			FormHelpers.MakeEmptyState(Icons.Coffee, "No Bags",
+			"Add a bean and bag in Settings first",
+			null, null, Icons.FontFamily));
+		}
+
+		// Grind Setting
+		formChildren.Add(
+		FormHelpers.MakeFormEntry("Grind Setting", State.GrindSetting, "5.5",
+		v => SetState(s => s.GrindSetting = v)));
+
+		// Expected Time
+		formChildren.Add(
+		FormHelpers.MakeFormEntry("Expected Time (s)", State.ExpectedTime.ToString("F1"), "28",
+		v => { if (decimal.TryParse(v, out var d)) SetState(s => s.ExpectedTime = d); }));
+
+		// Expected Output
+		formChildren.Add(
+		FormHelpers.MakeFormEntry("Expected Output (g)", State.ExpectedOutput.ToString("F1"), "36.0",
+		v => { if (decimal.TryParse(v, out var d)) SetState(s => s.ExpectedOutput = d); }));
+
+		// Drink Type
+		formChildren.Add(
+		FormHelpers.MakeFormPicker("Drink Type", State.SelectedDrinkIndex, DrinkTypes,
+		idx => SetState(s =>
+		{
+			s.SelectedDrinkIndex = idx;
+			s.DrinkType = idx >= 0 && idx < DrinkTypes.Length ? DrinkTypes[idx] : "Espresso";
+		})));
+
+		// Equipment is selected via the Equipment toggle button in the hero section,
+		// not via form pickers — matches original BaristaNotes design
+
+		// Accessories section removed — not in original design
+
+		// AI Advice (edit mode or after save)
+		if (IsEditMode || _savedShotId > 0)
+			formChildren.Add(RenderAdviceSection());
+
+		// Tab bar + FAB dead space — allows Add Shot button to scroll fully above tab bar
+		formChildren.Add(new Spacer().Modifier(CoffeeModifiers.FrameHeight(160f)));
+
+		var stack = VStack(CoffeeColors.SpacingM);
+		foreach (var child in formChildren)
+			stack.Add(child);
+
+		return ScrollView(
+		stack.Padding(new Thickness(CoffeeColors.SpacingM, 0, CoffeeColors.SpacingM, CoffeeColors.SpacingXL))
+		);
+	}
+
+	// ── Dose / Output Gauges ────────────────────────────────────────
+
+	View RenderDoseGauges()
+	{
+		var equipCount = (State.SelectedMachineId.HasValue ? 1 : 0) +
+		(State.SelectedGrinderId.HasValue ? 1 : 0) +
+		State.SelectedAccessoryIds.Count;
+
+		var doseVal = (decimal)_doseIn.Value;
+		var outputVal = (decimal)_yieldOut.Value;
+		var ratio = doseVal > 0 && outputVal > 0 ? outputVal / doseVal : 0m;
+
+		return new Comet.Grid(
+		columns: new object[] { "*", "Auto", "*" },
+		rows: new object[] { "Auto", "Auto" })
+{
+// Dose In (left) — range 15–20 matches original scale
+RenderSingleGauge(_doseIn, 15.0, 20.0, 0.1,
+Icons.CupIn, Icons.CoffeeFontFamily, ref _doseGaugeDrawable)
+.Cell(row: 0, column: 0),
+
+// Equipment button (center)
+RenderEquipmentButton(equipCount)
+.Cell(row: 0, column: 1),
+
+// Yield Out (right)
+RenderSingleGauge(_yieldOut, 25.0, 50.0, 0.5,
+Icons.CupOut, Icons.CoffeeFontFamily, ref _outputGaugeDrawable)
+.Cell(row: 0, column: 2),
+
+// Ratio (centered below)
+Text($"1:{ratio:F1}")
+.Modifier(CoffeeModifiers.ValueText)
+.Modifier(CoffeeModifiers.TextColor(CoffeeColors.TextSecondary))
+.HorizontalTextAlignment(TextAlignment.Center)
+.Margin(new Thickness(0, CoffeeColors.SpacingXS, 0, 0))
+.Cell(row: 1, column: 0).GridColumnSpan(3)
+};
+	}
+
+	View RenderSingleGauge(Signal<double> signal, double min, double max, double step,
+	string iconGlyph, string iconFont, ref GaugeArcDrawable? cached)
+	{
+		const float gaugeSize = 115f;
+		var value = signal.Value;
+
+		var range = max - min;
+		var interval = range / 5.0;
+		var labels = new string[6];
+		for (int i = 0; i <= 5; i++)
+			labels[i] = (min + interval * i).ToString("F0");
+
+		if (cached == null)
+		{
+			cached = new GaugeArcDrawable
+			{
+				Min = (float)min,
+				Max = (float)max,
+				ScaleLabels = labels,
+				Unit = "g",
+				TrackColor = CoffeeColors.SurfaceVariant,
+				ValueColor = CoffeeColors.Primary,
+				LabelColor = CoffeeColors.TextSecondary,
+				ValueTextColor = CoffeeColors.TextPrimary,
+				UnitTextColor = CoffeeColors.TextSecondary,
+			};
+		}
+		cached.Value = (float)value;
+
+		var drawable = cached;
+		var gv = new Comet.GraphicsView { Draw = drawable.Draw };
+
+		// ZStack: arc drawing + bold text overlay (canvas.DrawString lacks FontWeight)
+		var gaugeView = new ZStack
+{
+	gv.Frame(gaugeSize, gaugeSize),
+	VStack(spacing: 0f,
+		Text(() => $"{signal.Value:F1}")
+			.Modifier(CoffeeModifiers.Headline)
+			.HorizontalTextAlignment(TextAlignment.Center),
+		Text("g")
+			.Modifier(CoffeeModifiers.MicroText)
+			.HorizontalTextAlignment(TextAlignment.Center)
+	).Alignment(Alignment.Center)
+}.Frame(gaugeSize, gaugeSize);
+
+		return VStack(spacing: 0,
+			gaugeView,
+			HStack(CoffeeColors.SpacingL,
+				MakeStepperButton(Icons.Remove,
+					() => signal.Value = Math.Round(Math.Max(min, signal.Value - step), 1)),
+				Text(iconGlyph)
+					.Modifier(CoffeeModifiers.IconFont(24, iconFont, CoffeeColors.TextSecondary)),
+				MakeStepperButton(Icons.Add,
+					() => signal.Value = Math.Round(Math.Min(max, signal.Value + step), 1))
+			)
+		);
+	}
+
+	View MakeStepperButton(string icon, Action action) =>
+	Text(icon)
+	.Modifier(CoffeeModifiers.IconMedium(CoffeeColors.TextSecondary))
+	.Modifier(CoffeeModifiers.FrameSize(32f, 32f))
+	.OnTap(_ => action());
+
+	View RenderEquipmentButton(int selectedCount)
+	{
+		var children = new List<View>
+{
+		Border(
+		Text(Icons.Machine)
+		.Modifier(CoffeeModifiers.IconFont(28, Icons.CoffeeFontFamily, CoffeeColors.TextSecondary))
+		)
+		.Modifier(CoffeeModifiers.SurfaceVariantField)
+		.Modifier(CoffeeModifiers.FrameSize(44f, 44f))
+		};
+
+		if (selectedCount > 0)
+		{
+			children.Add(
+			Border(
+			Text(selectedCount.ToString())
+			.Modifier(CoffeeModifiers.BadgeText)
+			.HorizontalTextAlignment(TextAlignment.Center)
+			.VerticalTextAlignment(TextAlignment.Center)
+			)
+			.Modifier(CoffeeModifiers.CornerRadius(8))
+			.Modifier(CoffeeModifiers.Background(CoffeeColors.Primary))
+			.StrokeThickness(0)
+			.Modifier(CoffeeModifiers.FrameSize(16f, 16f))
+			.Alignment(Alignment.TopTrailing)
+			);
+		}
+
+		var stack = new ZStack();
+		foreach (var c in children)
+			stack.Add(c);
+
+		return stack
+		.Modifier(CoffeeModifiers.FrameSize(50f, 50f))
+		.OnTap(_ => ShowEquipmentPopup());
+	}
+
+	void ShowEquipmentPopup()
+	{
+		var machines = State.AvailableEquipment.Where(e => e.Type == EquipmentType.Machine).ToList();
+		var grinders = State.AvailableEquipment.Where(e => e.Type == EquipmentType.Grinder).ToList();
+
+		var machineNames = machines.Select(m => m.Name).ToArray();
+		var grinderNames = grinders.Select(g => g.Name).ToArray();
+
+		var machineIdx = State.SelectedMachineIndex >= 0 ? State.SelectedMachineIndex : 0;
+		var grinderIdx = State.SelectedGrinderIndex >= 0 ? State.SelectedGrinderIndex : 0;
+
+		var children = new List<View>();
+
+		children.Add(
+		Text("Equipment")
+		.Modifier(CoffeeModifiers.SubHeadline)
+		.HorizontalTextAlignment(TextAlignment.Center));
+
+		if (machineNames.Length > 0)
+		{
+			children.Add(
+			FormHelpers.MakeFormPicker("Machine", machineIdx, machineNames,
+			idx => SetState(s =>
+			{
+				s.SelectedMachineIndex = idx;
+				s.SelectedMachineId = idx >= 0 && idx < machines.Count ? machines[idx].Id : null;
+			})));
+		}
+
+		if (grinderNames.Length > 0)
+		{
+			children.Add(
+			FormHelpers.MakeFormPicker("Grinder", grinderIdx, grinderNames,
+			idx => SetState(s =>
+			{
+				s.SelectedGrinderIndex = idx;
+				s.SelectedGrinderId = idx >= 0 && idx < grinders.Count ? grinders[idx].Id : null;
+			})));
+		}
+
+		children.Add(
+		FormHelpers.MakePrimaryButton("Done", () => ModalView.Dismiss()));
+
+		var stack = VStack(CoffeeColors.SpacingM);
+		foreach (var child in children)
+			stack.Add(child);
+
+		var popup = stack
+		.Padding(new Thickness(CoffeeColors.SpacingL))
+		.Modifier(CoffeeModifiers.Background(CoffeeColors.Surface));
+
+		ModalView.Present(popup);
+	}
+
+	// ── Time Slider ─────────────────────────────────────────────────
+
+	View RenderTimeSlider()
+	{
+		var timeVal = _time.Value;
+		return new Comet.Grid(
+		columns: new object[] { "*" },
+		rows: new object[] { "Auto", "50" })
+{
+// Row 0: Label
+Text(() => $"Time: {_time.Value:F0}s")
+.Modifier(CoffeeModifiers.FormLabel)
+.Margin(new Thickness(CoffeeColors.SpacingM, 0, 0, 0))
+.Cell(row: 0, column: 0),
+
+// Row 1: Rounded capsule background
+Border(new Spacer())
+.Modifier(CoffeeModifiers.SurfaceVariantField)
+.Modifier(CoffeeModifiers.FrameHeight(50f))
+.Cell(row: 1, column: 0),
+
+// Row 1: Slider bound directly to signal — no SetState needed
+SignalExtensions.Slider(_time, 0, 60)
+.Modifier(CoffeeModifiers.FormSlider(
+	CoffeeColors.Primary,
+	Colors.Transparent,
+	CoffeeColors.Primary,
+	margin: new Thickness(CoffeeColors.SpacingM, 0)))
+.Cell(row: 1, column: 0)
+};
+	}
+
+	// ── User Selection ──────────────────────────────────────────────
+
+	const string ArrowForward = "\ue5c8";
+
+	View RenderUserSelectionRow()
+	{
+		var content = HStack(CoffeeColors.SpacingM,
+			RenderUserAvatar(State.SelectedMaker, "Made by",
+				() => CycleUser(u => SetState(s => s.SelectedMaker = u), State.SelectedMaker)),
+
+			Text(ArrowForward)
+				.Modifier(CoffeeModifiers.IconLarge(CoffeeColors.TextSecondary))
+				.Frame(width: 32f),
+
+			RenderUserAvatar(State.SelectedRecipient, "For",
+				() => CycleUser(u => SetState(s => s.SelectedRecipient = u), State.SelectedRecipient))
+		);
+		// Center the group by wrapping in a full-width container
+		return HStack(
+			new Spacer(),
+			content,
+			new Spacer()
+		).FillHorizontal();
+	}
+
+	View RenderUserAvatar(UserProfile? user, string label, Action onTapped)
+	{
+		const float avatarSize = 60f;
+		const float avatarRadius = 30f;
+		View avatar;
+
+		if (user != null && !string.IsNullOrEmpty(user.AvatarPath))
+		{
+			var imagePath = System.IO.Path.Combine(FileSystem.AppDataDirectory, user.AvatarPath);
+			if (System.IO.File.Exists(imagePath))
+			{
+				avatar = Border(
+					Image(imagePath)
+						.Aspect(Aspect.AspectFill)
+						.Modifier(CoffeeModifiers.FrameSize(avatarSize, avatarSize))
+				)
+				.Modifier(CoffeeModifiers.AvatarBorder(avatarSize, avatarRadius, CoffeeColors.SurfaceVariant, Colors.LightGray));
+			}
+			else
+			{
+				avatar = RenderIconAvatar(user != null ? CoffeeColors.TextPrimary : CoffeeColors.TextSecondary,
+					CoffeeColors.SurfaceVariant, avatarSize, avatarRadius);
 			}
 		}
 		else
 		{
-			_selectedBagIndex = activeBagIdx;
+			avatar = RenderIconAvatar(
+				user != null ? CoffeeColors.TextPrimary : CoffeeColors.TextSecondary,
+				CoffeeColors.SurfaceVariant, avatarSize, avatarRadius);
+		}
+
+		return VStack(4,
+		avatar,
+		Text(label)
+		.Modifier(CoffeeModifiers.FormLabel)
+		.HorizontalTextAlignment(TextAlignment.Center)
+		).OnTap(_ => onTapped());
+	}
+
+	View RenderIconAvatar(Color iconColor, Color bgColor, float size, float radius)
+	{
+		return Border(
+		Text(Icons.AccountCircle)
+			.Modifier(CoffeeModifiers.Icon(36, iconColor))
+		)
+		.Modifier(CoffeeModifiers.AvatarBorder(size, radius, bgColor, Colors.LightGray));
+	}
+
+	void CycleUser(Action<UserProfile?> setter, UserProfile? current)
+	{
+		var users = State.AvailableUsers;
+		if (users.Count == 0) return;
+
+		if (current == null)
+			setter(users.First());
+		else
+		{
+			var idx = users.FindIndex(u => u.Id == current.Id);
+			if (idx >= 0 && idx < users.Count - 1)
+				setter(users[idx + 1]);
+			else
+				setter(null);
 		}
 	}
-}
 
-void SaveShot()
-{
-if (_savingIndicator != null)
-{
-	_savingIndicator.IsRunning = true;
-	_savingIndicator.IsVisible = true;
-}
-if (_saveButton != null)
-	_saveButton.IsEnabled(false);
+	// ── Rating ──────────────────────────────────────────────────────
 
-var store = InMemoryDataStore.Instance;
-if (store == null)
-{
-	SetSavingState(false);
-	return;
-}
-
-var bagIdx = _selectedBagIndex;
-if (bagIdx < 0 && _bags.Count > 0) bagIdx = 0;
-if (bagIdx < 0 || bagIdx >= _bags.Count)
-{
-	Services.PageHelper.DispatchOnMainThread(async () =>
+	View RenderRatingSelector()
 	{
-		await _feedbackService.ShowWarning("Please select a coffee bag before saving your shot. Add a bag in Settings if none are available.");
+		var chips = new View[RatingIcons.Length];
+		for (int i = 0; i < RatingIcons.Length; i++)
+		{
+			var idx = i;
+			var isSelected = State.Rating == idx;
+			chips[i] = Text(RatingIcons[idx])
+			.Modifier(CoffeeModifiers.EmojiChip(isSelected ? CoffeeColors.Primary : CoffeeColors.TextMuted))
+			.OnTap(_ => SetState(s => s.Rating = idx));
+		}
+		return HStack(
+		new Spacer(),
+		HStack(spacing: CoffeeColors.SpacingS, chips),
+		new Spacer()
+		);
+	}
+
+	// ── Accessory chips ─────────────────────────────────────────────
+
+	View BuildAccessoryChips(List<Equipment> accessories)
+	{
+		var chips = new List<View>();
+		foreach (var acc in accessories)
+		{
+			var id = acc.Id;
+			var isSelected = State.SelectedAccessoryIds.Contains(id);
+
+			chips.Add(
+			Border(
+			Text(acc.Name)
+			.Modifier(CoffeeModifiers.SmallText)
+			.Modifier(CoffeeModifiers.TextColor(isSelected ? Colors.White : CoffeeColors.TextPrimary))
+			.HorizontalTextAlignment(TextAlignment.Center)
+			.VerticalTextAlignment(TextAlignment.Center)
+			.Padding(new Thickness(CoffeeColors.SpacingS, CoffeeColors.SpacingXS))
+			)
+			.Modifier(CoffeeModifiers.PillChip(isSelected ? CoffeeColors.Primary : CoffeeColors.SurfaceVariant))
+			.OnTap(_ =>
+			{
+				SetState(s =>
+	{
+		if (s.SelectedAccessoryIds.Contains(id))
+			s.SelectedAccessoryIds.Remove(id);
+		else
+			s.SelectedAccessoryIds.Add(id);
 	});
-	SetSavingState(false);
-	return;
-}
+			})
+			);
+		}
 
-var machineIdx = _machineIndex - 1;
-var grinderIdx = _grinderIndex - 1;
-var madeByIdx = _madeByIndex - 1;
-var madeForIdx = _madeForIndex - 1;
-
-var drinkType = _drinkTypeIndex >= 0 && _drinkTypeIndex < DrinkTypes.Length ? DrinkTypes[_drinkTypeIndex] : "Espresso";
-
-var record = new ShotRecord
-{
-BagId = _bags[bagIdx].Id,
-DoseIn = (decimal)_doseIn,
-GrindSetting = _grindSetting,
-ExpectedTime = decimal.TryParse(_expectedTime, out var et) ? et : 28m,
-ExpectedOutput = decimal.TryParse(_expectedOutput, out var eo) ? eo : 36m,
-ActualTime = (decimal)_actualTime,
-ActualOutput = (decimal)_doseOut,
-Rating = _rating >= 0 ? _rating : null,
-TastingNotes = string.IsNullOrWhiteSpace(_tastingNotes) ? null : _tastingNotes,
-DrinkType = drinkType,
-MachineId = machineIdx >= 0 && machineIdx < _machines.Count ? _machines[machineIdx].Id : null,
-GrinderId = grinderIdx >= 0 && grinderIdx < _grinders.Count ? _grinders[grinderIdx].Id : null,
-MadeById = madeByIdx >= 0 && madeByIdx < _profiles.Count ? _profiles[madeByIdx].Id : null,
-MadeForId = madeForIdx >= 0 && madeForIdx < _profiles.Count ? _profiles[madeForIdx].Id : null,
-};
-
-if (IsEditMode)
-{
-	record.Id = _editingShotId;
-	store.UpdateShot(record);
-}
-else
-{
-	store.CreateShot(record);
-}
-
-Services.PageHelper.DispatchOnMainThread(async () =>
-{
-	if (IsEditMode)
-	{
-		await _feedbackService.ShowSuccess($"Your {drinkType} shot ({_doseIn:F1}g dose) has been updated.");
-		Navigation?.Pop();
-	}
-	else
-	{
-		await _feedbackService.ShowSuccess($"Your {drinkType} shot ({_doseIn:F1}g dose) has been recorded.");
-	}
-	SetSavingState(false);
-});
-}
-
-void SetSavingState(bool isSaving)
-{
-	if (_savingIndicator != null)
-	{
-		_savingIndicator.IsRunning = isSaving;
-		_savingIndicator.IsVisible = isSaving;
-	}
-	if (_saveButton != null)
-		_saveButton.IsEnabled(!isSaving);
-}
-
-async Task DeleteShot()
-{
-	var page = Services.PageHelper.GetCurrentPage();
-	if (page == null) return;
-
-	var confirm = await page.DisplayAlertAsync(
-		"Delete Shot",
-		"Are you sure you want to delete this shot? This cannot be undone.",
-		"Delete", "Cancel");
-
-	if (confirm)
-	{
-		InMemoryDataStore.Instance?.DeleteShot(_editingShotId);
-		Navigation?.Pop();
-	}
-}
-
-public class InitialConverter : Microsoft.Maui.Controls.IValueConverter
-{
-	public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
-	{
-		if (value is string s && !string.IsNullOrEmpty(s))
-			return s == "None" ? "?" : s[..1].ToUpper();
-		return "?";
+		var row = HStack(CoffeeColors.SpacingXS);
+		foreach (var c in chips)
+			row.Add(c);
+		return row;
 	}
 
-	public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
-		=> throw new NotImplementedException();
-}
+
+	// ── AI Advice section ───────────────────────────────────────────
+
+	View RenderAdviceSection()
+	{
+		var children = new List<View>();
+
+		children.Add(FormHelpers.MakeSectionHeader("AI Advice"));
+
+		// Get Advice button
+		children.Add(
+			Border(
+				HStack(CoffeeColors.SpacingS,
+					FormHelpers.MakeIcon(Icons.MagicButton, 20, CoffeeColors.Primary),
+					Text("Get AI Advice")
+						.Modifier(CoffeeModifiers.ValueText)
+						.Modifier(CoffeeModifiers.TextColor(CoffeeColors.Primary))
+						.VerticalTextAlignment(TextAlignment.Center)
+				).Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
+			)
+			.Modifier(CoffeeModifiers.OutlinePill(CoffeeColors.Primary))
+			.OnTap(_ => RequestAdvice())
+		);
+
+		// Loading
+		if (State.IsLoadingAdvice)
+		{
+			children.Add(
+				FormHelpers.MakeCard(
+					HStack(CoffeeColors.SpacingM,
+						ActivityIndicator(true)
+							.Modifier(CoffeeModifiers.TextColor(CoffeeColors.Primary))
+							.Frame(width: 24, height: 24),
+						Text("Analyzing your shot...")
+							.Modifier(CoffeeModifiers.SecondaryText)
+							.VerticalTextAlignment(TextAlignment.Center)
+					)
+				)
+			);
+		}
+
+		// Error
+		if (State.AdviceError != null && !State.IsLoadingAdvice)
+		{
+			children.Add(
+				FormHelpers.MakeCard(
+					VStack(CoffeeColors.SpacingS,
+						HStack(CoffeeColors.SpacingS,
+							FormHelpers.MakeIcon(Icons.Error, 20, CoffeeColors.Error),
+							Text(State.AdviceError)
+								.Modifier(CoffeeModifiers.Body)
+								.Modifier(CoffeeModifiers.TextColor(CoffeeColors.Error))
+								.VerticalTextAlignment(TextAlignment.Center)
+						),
+						FormHelpers.MakeSecondaryButton("Retry", RequestAdvice)
+					)
+				)
+			);
+		}
+
+		// Results
+		if (State.AdviceResponse is { Success: true } advice && !State.IsLoadingAdvice)
+		{
+			var adjustmentViews = new List<View>();
+
+			foreach (var adj in advice.Adjustments)
+			{
+				adjustmentViews.Add(
+					Border(
+						VStack(CoffeeColors.SpacingXS,
+							HStack(CoffeeColors.SpacingS,
+								Text(adj.Parameter.ToUpperInvariant())
+									.Modifier(CoffeeModifiers.LabelStrong)
+									.Modifier(CoffeeModifiers.TextColor(CoffeeColors.Primary)),
+								Text($"{adj.Direction} {adj.Amount}")
+									.Modifier(CoffeeModifiers.Body)
+							)
+						).Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
+					)
+					.Modifier(CoffeeModifiers.SurfaceVariantCard)
+				);
+			}
+
+			if (!string.IsNullOrWhiteSpace(advice.Reasoning))
+			{
+				adjustmentViews.Add(
+					Text(advice.Reasoning)
+						.Modifier(CoffeeModifiers.SmallText)
+						.Margin(new Thickness(0, CoffeeColors.SpacingXS, 0, 0)));
+			}
+
+			// Source indicator
+			if (!string.IsNullOrWhiteSpace(advice.Source))
+			{
+				adjustmentViews.Add(
+					Text($"Source: {advice.Source}")
+						.Modifier(CoffeeModifiers.TinyText));
+			}
+
+			// Prompt transparency toggle
+			adjustmentViews.Add(
+				FormHelpers.MakeToggleRow("Show prompt details", State.ShowPromptDetails,
+					v => SetState(s => s.ShowPromptDetails = v)));
+
+			if (State.ShowPromptDetails && !string.IsNullOrWhiteSpace(advice.PromptSent))
+			{
+				adjustmentViews.Add(
+					Border(
+						Text(advice.PromptSent)
+							.Modifier(CoffeeModifiers.TinyText)
+							.Padding(new Thickness(CoffeeColors.SpacingS))
+					)
+					.Modifier(CoffeeModifiers.SurfaceVariantCard)
+				);
+			}
+
+			var adviceStack = VStack(CoffeeColors.SpacingS);
+			foreach (var v in adjustmentViews)
+				adviceStack.Add(v);
+
+			children.Add(FormHelpers.MakeCard(adviceStack));
+		}
+
+		var section = VStack(CoffeeColors.SpacingS);
+		foreach (var c in children)
+			section.Add(c);
+		return section;
+	}
+
+	// ── Voice FAB ───────────────────────────────────────────────────
+
+	View RenderVoiceFAB()
+	{
+		return Border(
+			FormHelpers.MakeIcon(Icons.Mic, 28, Colors.White)
+		)
+		.Modifier(CoffeeModifiers.FloatingActionButton)
+		.Margin(new Thickness(0, 0, CoffeeColors.SpacingM, CoffeeColors.SpacingXL))
+		.Alignment(Alignment.BottomTrailing)
+		.OnTap(_ => OpenVoiceSheet());
+	}
+
+	// ── Voice overlay (bottom sheet) ────────────────────────────────
+
+	View RenderVoiceOverlay()
+	{
+		var chatViews = new List<View>();
+		foreach (var msg in State.VoiceChatHistory)
+		{
+			chatViews.Add(
+				Border(
+					Text(msg.Text)
+						.Modifier(CoffeeModifiers.Body)
+						.Modifier(CoffeeModifiers.TextColor(msg.IsUser ? Colors.White : CoffeeColors.TextPrimary))
+						.Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
+				)
+				.Modifier(CoffeeModifiers.ChatBubble(msg.IsUser ? CoffeeColors.Primary : CoffeeColors.Surface))
+				.Margin(new Thickness(
+					msg.IsUser ? 60 : 0,
+					CoffeeColors.SpacingXS,
+					msg.IsUser ? 0 : 60,
+					CoffeeColors.SpacingXS))
+			);
+		}
+
+		var chatStack = VStack(spacing: 0f);
+		foreach (var v in chatViews)
+			chatStack.Add(v);
+
+		// Mic button appearance
+		var micColor = State.IsRecording ? CoffeeColors.Error : CoffeeColors.Primary;
+		var micSize = State.IsRecording ? 36f : 28f;
+
+		var sheet = VStack(CoffeeColors.SpacingM,
+			// Handle bar
+			Border(new Spacer())
+				.Modifier(CoffeeModifiers.CornerRadius(2))
+				.Modifier(CoffeeModifiers.Background(CoffeeColors.TextMuted))
+				.Modifier(CoffeeModifiers.FrameSize(40, 4))
+				.Margin(new Thickness(0, CoffeeColors.SpacingS, 0, 0)),
+
+			// Close button row
+			HStack(
+				new Spacer(),
+				Border(
+					FormHelpers.MakeIcon(Icons.Close, 20, CoffeeColors.TextPrimary)
+				)
+				.Modifier(CoffeeModifiers.CornerRadius(CoffeeColors.RadiusCircular))
+				.Modifier(CoffeeModifiers.Background(CoffeeColors.SurfaceVariant))
+				.StrokeThickness(0)
+				.Modifier(CoffeeModifiers.FrameSize(32, 32))
+				.OnTap(_ => CloseVoiceSheet())
+			).Padding(new Thickness(CoffeeColors.SpacingM, 0)),
+
+			// Chat history
+			ScrollView(chatStack)
+				.FillHorizontal()
+				.Modifier(CoffeeModifiers.FrameHeight(200)),
+
+			// State text
+			Text(State.VoiceState)
+				.Modifier(CoffeeModifiers.SecondaryText)
+				.HorizontalTextAlignment(TextAlignment.Center),
+
+			// Mic button
+			Border(
+				FormHelpers.MakeIcon(Icons.Mic, micSize, Colors.White)
+			)
+			.Modifier(CoffeeModifiers.CornerRadius(CoffeeColors.RadiusCircular))
+			.Modifier(CoffeeModifiers.Background(micColor))
+			.StrokeThickness(0)
+			.Modifier(CoffeeModifiers.FrameSize(64, 64))
+			.Margin(new Thickness(0, 0, 0, CoffeeColors.SpacingM))
+			.OnTap(_ => ToggleRecording()),
+
+			new Spacer().Modifier(CoffeeModifiers.FrameHeight((float)CoffeeColors.SpacingM))
+		)
+		.Modifier(CoffeeModifiers.Background(CoffeeColors.Surface))
+		.Modifier(CoffeeModifiers.ClipShape(new RoundedRectangle(CoffeeColors.RadiusCard)))
+		.Alignment(Alignment.Bottom);
+
+		// Semi-transparent scrim + sheet
+		return new ZStack
+		{
+			// Scrim
+			new Spacer()
+				.Modifier(CoffeeModifiers.Background(Colors.Black.WithAlpha(0.4f)))
+				.OnTap(_ => CloseVoiceSheet()),
+			sheet
+		};
+	}
 }

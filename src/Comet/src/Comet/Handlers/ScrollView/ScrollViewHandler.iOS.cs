@@ -16,7 +16,7 @@ namespace Comet.Handlers
 
 		protected override CUIScrollView CreatePlatformView() =>
 			new CUIScrollView {
-				ContentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentBehavior.Always,
+				ContentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentBehavior.Automatic,
 				CrossPlatformArrange = Arange,
 			};
 

@@ -25,7 +25,10 @@ namespace Comet
 			get => _selectedIndex;
 			set
 			{
-				if (_selectedIndex != value && value >= 0 && value < _tabs.Count)
+				// Allow setting before tabs are added (deferred apply).
+				// Guard against the larger of _tabs and children count.
+				var count = Math.Max(_tabs.Count, ((IList<View>)this).Count);
+				if (value >= 0 && (count == 0 || value < count) && _selectedIndex != value)
 				{
 					_selectedIndex = value;
 					OnSelectedIndexChanged(value);
