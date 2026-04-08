@@ -156,7 +156,7 @@ public class ListViewHandler : GtkViewHandler<ListView, Gtk.ScrolledWindow>
 				foreach (var item in groupItems)
 				{
 					_items.Add(item);
-					var row = BuildRow(item, idx - 1, false);
+					var row = BuildRow(item, idx, false);
 					_listBox.Append(row);
 					_rowWidgets.Add(row);
 

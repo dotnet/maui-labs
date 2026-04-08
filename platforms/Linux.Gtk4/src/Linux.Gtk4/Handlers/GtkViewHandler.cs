@@ -402,17 +402,14 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 		var semantics = view.Semantics;
 
-		// Use the GTK widget name as a11y label (read by screen readers via AT-SPI)
+		// Combine Description and Hint for tooltip
+		var tooltipParts = new List<string>();
 		if (!string.IsNullOrEmpty(semantics.Description))
-		{
-			// Gtk.Widget tooltip serves as accessible description
-			widget.SetTooltipText(semantics.Description);
-		}
-
+			tooltipParts.Add(semantics.Description);
 		if (!string.IsNullOrEmpty(semantics.Hint))
-		{
-			widget.SetTooltipText(semantics.Hint);
-		}
+			tooltipParts.Add(semantics.Hint);
+		if (tooltipParts.Count > 0)
+			widget.SetTooltipText(string.Join(" — ", tooltipParts));
 	}
 
 	/// <summary>

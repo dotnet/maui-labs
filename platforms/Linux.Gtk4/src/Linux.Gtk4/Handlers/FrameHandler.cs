@@ -33,7 +33,7 @@ public class FrameHandler : GtkViewHandler<IContentView, Gtk.Frame>
 	{
 		base.PlatformArrange(rect);
 		if (VirtualView is ICrossPlatformLayout crossPlatform)
-			crossPlatform.CrossPlatformArrange(rect);
+			crossPlatform.CrossPlatformArrange(new Rect(0, 0, rect.Width, rect.Height));
 	}
 
 	public static void MapContent(FrameHandler handler, IContentView view)

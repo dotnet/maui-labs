@@ -50,8 +50,7 @@ public class LinuxGeolocation : IGeolocation
 
 	public Task<bool> StartListeningForegroundAsync(GeolocationListeningRequest request)
 	{
-		_isListening = true;
-		return Task.FromResult(true);
+		throw new FeatureNotSupportedException("Continuous geolocation listening is not supported on Linux.");
 	}
 
 	public void StopListeningForeground()

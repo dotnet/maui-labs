@@ -45,7 +45,7 @@ public class TabbedPageHandler : GtkViewHandler<ITabbedView, Gtk.Notebook>
 	{
 		if (VirtualView is TabbedPage tabbedPage)
 		{
-			tabbedPage.PagesChanged += OnPagesChanged;
+			tabbedPage.PagesChanged -= OnPagesChanged;
 		}
 
 		platformView.OnSwitchPage -= OnNotebookPageSwitched;

@@ -50,6 +50,7 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 
 	void OnClicked(Gtk.Button sender, EventArgs args)
 	{
+		VirtualView?.Pressed();
 		VirtualView?.Clicked();
 		VirtualView?.Released();
 	}

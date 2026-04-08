@@ -82,14 +82,16 @@ public class LabelHandler : GtkViewHandler<ILabel, Gtk.Label>
 
 	public static void MapTextDecorations(LabelHandler handler, ILabel label)
 	{
-		if (label.TextDecorations.HasFlag(TextDecorations.Underline))
-		{
-			handler.ApplyCss(handler.PlatformView, "text-decoration: underline;");
-		}
+		var css = "";
+		if (label.TextDecorations.HasFlag(TextDecorations.Underline) && label.TextDecorations.HasFlag(TextDecorations.Strikethrough))
+			css = "text-decoration: underline line-through;";
+		else if (label.TextDecorations.HasFlag(TextDecorations.Underline))
+			css = "text-decoration: underline;";
 		else if (label.TextDecorations.HasFlag(TextDecorations.Strikethrough))
-		{
-			handler.ApplyCss(handler.PlatformView, "text-decoration: line-through;");
-		}
+			css = "text-decoration: line-through;";
+
+		if (!string.IsNullOrEmpty(css))
+			handler.ApplyCss(handler.PlatformView, css);
 	}
 
 	public static void MapCharacterSpacing(LabelHandler handler, ILabel label)
