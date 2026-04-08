@@ -156,7 +156,7 @@ Description: $(DebDescription)$(_DebHomepageLine)
     <!-- Write launcher via Exec to avoid MSBuild interpreting shell $ syntax -->
     <Exec Command="cat &gt; &quot;$(_DebStagingDir)/usr/bin/$(DebPackageName)&quot; &lt;&lt; '_LAUNCHER_EOF_'
 #!/bin/sh
-exec $(_DebInstallPrefix)/$(AssemblyName) &quot;%24@&quot;
+exec &quot;$(_DebInstallPrefix)/$(AssemblyName)&quot; &quot;%24@&quot;
 _LAUNCHER_EOF_" />
 
     <Exec Command="chmod +x &quot;$(_DebStagingDir)/usr/bin/$(DebPackageName)&quot;" />

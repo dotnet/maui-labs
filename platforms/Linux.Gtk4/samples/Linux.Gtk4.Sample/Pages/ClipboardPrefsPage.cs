@@ -81,7 +81,7 @@ public class ClipboardPrefsPage : ContentPage
 
 		// --- Secure Storage section ---
 		var secureKey = new Entry { Placeholder = "Key", Text = "api_token" };
-		var secureValue = new Entry { Placeholder = "Secret value", Text = "sk-12345-secret" };
+		var secureValue = new Entry { Placeholder = "Secret value", Text = "my-example-secret-value" };
 		var secureResult = new Label { Text = "(no value)", FontSize = 14, TextColor = Colors.Gray };
 
 		var secureBackendLabel = new Label { Text = "Backend: probing...", FontSize = 12, TextColor = Colors.Gray };

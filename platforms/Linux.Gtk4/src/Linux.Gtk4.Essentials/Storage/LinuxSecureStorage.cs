@@ -377,29 +377,36 @@ public class LinuxSecureStorage : ISecureStorage
 
 	private static byte[] Encrypt(string plainText, byte[] key)
 	{
-		using var aes = Aes.Create();
-		aes.Key = key;
-		aes.GenerateIV();
-		using var encryptor = aes.CreateEncryptor();
 		var plainBytes = Encoding.UTF8.GetBytes(plainText);
-		var cipherBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
-		var result = new byte[aes.IV.Length + cipherBytes.Length];
-		aes.IV.CopyTo(result, 0);
-		cipherBytes.CopyTo(result, aes.IV.Length);
+		var nonce = RandomNumberGenerator.GetBytes(12); // AES-GCM standard nonce size
+		var tag = new byte[16]; // 128-bit authentication tag
+		var cipherBytes = new byte[plainBytes.Length];
+
+		using var aesGcm = new AesGcm(key, tag.Length);
+		aesGcm.Encrypt(nonce, plainBytes, cipherBytes, tag);
+
+		// Format: nonce (12) || tag (16) || ciphertext
+		var result = new byte[nonce.Length + tag.Length + cipherBytes.Length];
+		nonce.CopyTo(result, 0);
+		tag.CopyTo(result, nonce.Length);
+		cipherBytes.CopyTo(result, nonce.Length + tag.Length);
 		return result;
 	}
 
-	private static string Decrypt(byte[] cipherWithIv, byte[] key)
+	private static string Decrypt(byte[] data, byte[] key)
 	{
-		using var aes = Aes.Create();
-		aes.Key = key;
-		var iv = new byte[aes.BlockSize / 8];
-		Array.Copy(cipherWithIv, 0, iv, 0, iv.Length);
-		aes.IV = iv;
-		using var decryptor = aes.CreateDecryptor();
-		var cipherBytes = new byte[cipherWithIv.Length - iv.Length];
-		Array.Copy(cipherWithIv, iv.Length, cipherBytes, 0, cipherBytes.Length);
-		var plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
+		const int nonceSize = 12;
+		const int tagSize = 16;
+		if (data.Length < nonceSize + tagSize)
+			throw new InvalidOperationException("Encrypted data is too short.");
+
+		var nonce = data.AsSpan(0, nonceSize);
+		var tag = data.AsSpan(nonceSize, tagSize);
+		var cipherBytes = data.AsSpan(nonceSize + tagSize);
+		var plainBytes = new byte[cipherBytes.Length];
+
+		using var aesGcm = new AesGcm(key, tagSize);
+		aesGcm.Decrypt(nonce, cipherBytes, tag, plainBytes);
 		return Encoding.UTF8.GetString(plainBytes);
 	}
 }

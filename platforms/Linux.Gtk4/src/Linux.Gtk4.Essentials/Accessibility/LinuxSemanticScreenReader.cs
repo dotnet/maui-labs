@@ -9,8 +9,10 @@ public class LinuxSemanticScreenReader : ISemanticScreenReader
 		// Best-effort: try to use AT-SPI2 via speech-dispatcher
 		try
 		{
-			System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("spd-say", $"\"{text}\"")
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			var psi = new System.Diagnostics.ProcessStartInfo("spd-say")
+				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+			psi.ArgumentList.Add(text);
+			System.Diagnostics.Process.Start(psi);
 		}
 		catch { }
 	}

@@ -322,7 +322,7 @@ Categories=$(FlatpakCategories)
     <!-- Create a single-file .flatpak bundle from the repo -->
     <Message Importance="high" Text="Flatpak: Creating bundle $(FlatpakFileName)..." />
 
-    <Exec Command="flatpak build-bundle &quot;$(_FlatpakRepoDir)&quot; &quot;$(_FlatpakOutputPath)&quot; $(ApplicationId)" />
+    <Exec Command="flatpak build-bundle &quot;$(_FlatpakRepoDir)&quot; &quot;$(_FlatpakOutputPath)&quot; &quot;$(ApplicationId)&quot;" />
 
     <Message Importance="high" Text="Flatpak: Created $(_FlatpakOutputPath)" />
   </Target>

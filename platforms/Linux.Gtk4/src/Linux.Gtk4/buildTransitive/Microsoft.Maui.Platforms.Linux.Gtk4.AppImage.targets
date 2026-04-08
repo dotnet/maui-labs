@@ -380,7 +380,7 @@ _APPRUN_EOF_" />
       Run appimagetool. Use - -appimage-extract-and-run to avoid requiring FUSE on the build host.
       Set ARCH env var to match the target architecture.
     -->
-    <Exec Command="ARCH=$(AppImageArch) &quot;$(AppImageToolPath)&quot; --appimage-extract-and-run --no-appstream &quot;$(_AppDirPath)&quot; &quot;$(_AppImageOutputPath)&quot;" />
+    <Exec Command="ARCH=&quot;$(AppImageArch)&quot; &quot;$(AppImageToolPath)&quot; --appimage-extract-and-run --no-appstream &quot;$(_AppDirPath)&quot; &quot;$(_AppImageOutputPath)&quot;" />
 
     <Message Importance="high" Text="AppImage: Created $(_AppImageOutputPath)" />
   </Target>
