@@ -163,14 +163,6 @@ internal static class LibSecretInterop
 		return ht;
 	}
 
-	public static IntPtr CreateAttributesTable(string key, string value, out IntPtr keyPtr, out IntPtr valuePtr)
-	{
-		var ht = CreateAttributesTable(out var ptrs, (key, value));
-		keyPtr = ptrs[0];
-		valuePtr = ptrs[1];
-		return ht;
-	}
-
 	public static void FreeAttributesTable(IntPtr ht, params IntPtr[] ptrs)
 	{
 		if (ht != IntPtr.Zero)
@@ -178,16 +170,6 @@ internal static class LibSecretInterop
 		foreach (var p in ptrs)
 			if (p != IntPtr.Zero)
 				Marshal.FreeCoTaskMem(p);
-	}
-
-	/// <summary>
-	/// Creates an empty GHashTable (no key-value entries).
-	/// When used with SecretPasswordClearVSync, this clears all items matching the schema.
-	/// Caller must free with <see cref="GHashTableDestroy"/>.
-	/// </summary>
-	public static IntPtr CreateEmptyAttributesTable()
-	{
-		return GHashTableNew(s_strHashPtr, s_strEqualPtr);
 	}
 
 	/// <summary>
