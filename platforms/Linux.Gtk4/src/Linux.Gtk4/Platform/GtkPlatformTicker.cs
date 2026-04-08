@@ -8,7 +8,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 /// </summary>
 public class GtkPlatformTicker : Ticker
 {
-	uint _timerId;
+	volatile uint _timerId;
 
 	public override bool IsRunning => _timerId != 0;
 

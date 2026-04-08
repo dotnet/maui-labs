@@ -48,7 +48,7 @@ public sealed class GtkBlazorWebView : IDisposable
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
 	private string? _hostPage;
-	private static bool _moduleInitialized;
+	private static int _moduleInitialized;
 
 	/// <summary>
 	/// Ensures WebKitGTK native libraries are properly resolved and the sandbox
@@ -57,8 +57,7 @@ public sealed class GtkBlazorWebView : IDisposable
 	/// </summary>
 	public static void InitializeWebKit()
 	{
-		if (_moduleInitialized) return;
-		_moduleInitialized = true;
+		if (Interlocked.Exchange(ref _moduleInitialized, 1) != 0) return;
 
 		WebKitSandboxHelper.ConfigureSandbox();
 
@@ -99,7 +98,9 @@ public sealed class GtkBlazorWebView : IDisposable
 	{
 		if (_webViewManager != null)
 		{
-			_webViewManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
+			var disposeTask = _webViewManager.DisposeAsync().AsTask();
+			if (!disposeTask.Wait(TimeSpan.FromSeconds(5)))
+				System.Diagnostics.Debug.WriteLine("GtkBlazorWebView: DisposeAsync did not complete within 5 seconds.");
 			_webViewManager = null;
 		}
 
@@ -181,10 +182,10 @@ public sealed class GtkBlazorWebView : IDisposable
 			content.Dispose();
 
 			var contentType = headers.TryGetValue("Content-Type", out var ct) ? ct : "application/octet-stream";
-			var bytes = GLib.Bytes.New(ms.GetBuffer().AsSpan(0, (int)ms.Length));
-			var inputStream = Gio.MemoryInputStream.NewFromBytes(bytes);
+			using var bytes = GLib.Bytes.New(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+			using var inputStream = Gio.MemoryInputStream.NewFromBytes(bytes);
 
-			var response = URISchemeResponse.New(inputStream, ms.Length);
+			using var response = URISchemeResponse.New(inputStream, ms.Length);
 			response.SetContentType(contentType);
 			response.SetStatus((uint)statusCode, statusMessage);
 			request.FinishWithResponse(response);
@@ -235,9 +236,9 @@ public sealed class GtkBlazorWebView : IDisposable
 	private static void FinishUriSchemeRequest(URISchemeRequest request, uint statusCode, string statusText, string message)
 	{
 		var body = Encoding.UTF8.GetBytes($"<html><body><h1>{statusCode} {statusText}</h1><p>{message}</p></body></html>");
-		var bytes = GLib.Bytes.New(body);
-		var stream = Gio.MemoryInputStream.NewFromBytes(bytes);
-		var response = URISchemeResponse.New(stream, body.Length);
+		using var bytes = GLib.Bytes.New(body);
+		using var stream = Gio.MemoryInputStream.NewFromBytes(bytes);
+		using var response = URISchemeResponse.New(stream, body.Length);
 		response.SetContentType("text/html; charset=utf-8");
 		response.SetStatus(statusCode, statusText);
 		request.FinishWithResponse(response);

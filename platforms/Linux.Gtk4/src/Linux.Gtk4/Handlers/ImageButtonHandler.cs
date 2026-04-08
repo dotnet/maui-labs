@@ -122,6 +122,8 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 
 			GLib.Functions.IdleAdd(0, () =>
 			{
+				if (cancellationToken.IsCancellationRequested)
+					return false;
 				if (PlatformView?.GetChild() is Gtk.Picture picture)
 					picture.SetPaintable(texture);
 				return false;
@@ -134,6 +136,8 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 		{
 			GLib.Functions.IdleAdd(0, () =>
 			{
+				if (cancellationToken.IsCancellationRequested)
+					return false;
 				if (PlatformView?.GetChild() is Gtk.Picture picture)
 					picture.SetPaintable(null);
 				return false;

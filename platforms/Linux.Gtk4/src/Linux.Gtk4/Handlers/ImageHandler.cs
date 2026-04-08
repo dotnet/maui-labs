@@ -75,6 +75,8 @@ public class ImageHandler : GtkViewHandler<IImage, Gtk.Picture>
 
 			GLib.Functions.IdleAdd(0, () =>
 			{
+				if (cancellationToken.IsCancellationRequested)
+					return false;
 				PlatformView?.SetPaintable(texture);
 				return false;
 			});
@@ -86,6 +88,8 @@ public class ImageHandler : GtkViewHandler<IImage, Gtk.Picture>
 		{
 			GLib.Functions.IdleAdd(0, () =>
 			{
+				if (cancellationToken.IsCancellationRequested)
+					return false;
 				PlatformView?.SetPaintable(null);
 				return false;
 			});

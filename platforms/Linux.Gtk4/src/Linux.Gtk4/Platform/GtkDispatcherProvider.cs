@@ -52,6 +52,7 @@ public class GtkDispatcherTimer : IDispatcherTimer
 {
 	private uint _sourceId;
 	private bool _isRunning;
+	private readonly object _lock = new();
 
 	public TimeSpan Interval { get; set; } = TimeSpan.FromMilliseconds(16);
 	public bool IsRepeating { get; set; } = true;
@@ -61,27 +62,33 @@ public class GtkDispatcherTimer : IDispatcherTimer
 
 	public void Start()
 	{
-		if (_isRunning)
-			return;
-
-		_isRunning = true;
-		_sourceId = GLib.Functions.TimeoutAdd(0, (uint)Interval.TotalMilliseconds, () =>
+		lock (_lock)
 		{
-			Tick?.Invoke(this, EventArgs.Empty);
-			return _isRunning && IsRepeating;
-		});
+			if (_isRunning)
+				return;
+
+			_isRunning = true;
+			_sourceId = GLib.Functions.TimeoutAdd(0, (uint)Interval.TotalMilliseconds, () =>
+			{
+				Tick?.Invoke(this, EventArgs.Empty);
+				return _isRunning && IsRepeating;
+			});
+		}
 	}
 
 	public void Stop()
 	{
-		if (!_isRunning)
-			return;
-
-		_isRunning = false;
-		if (_sourceId > 0)
+		lock (_lock)
 		{
-			GLib.Internal.Source.Remove(_sourceId);
-			_sourceId = 0;
+			if (!_isRunning)
+				return;
+
+			_isRunning = false;
+			if (_sourceId > 0)
+			{
+				GLib.Internal.Source.Remove(_sourceId);
+				_sourceId = 0;
+			}
 		}
 	}
 }
