@@ -35,7 +35,7 @@ public static class GtkThemeManager
 		{
 			settings.GtkApplicationPreferDarkTheme = theme == AppTheme.Dark;
 
-			var baseName = (_systemThemeName ?? "Adwaita").Replace("-dark", "");
+			var baseName = (_systemThemeName ?? "Adwaita").Replace("-dark", "", StringComparison.OrdinalIgnoreCase);
 			var targetTheme = theme == AppTheme.Dark ? $"{baseName}-dark" : baseName;
 			settings.GtkThemeName = targetTheme;
 		}
@@ -59,7 +59,7 @@ public static class GtkThemeManager
 		try
 		{
 			settings.GtkThemeName = _systemThemeName;
-			settings.GtkApplicationPreferDarkTheme = _systemThemeName.Contains("-dark");
+			settings.GtkApplicationPreferDarkTheme = _systemThemeName.Contains("-dark", StringComparison.OrdinalIgnoreCase);
 		}
 		finally
 		{

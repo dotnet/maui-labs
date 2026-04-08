@@ -120,7 +120,11 @@ public class WebViewHandler : GtkViewHandler<IWebView, WebKit.WebView>, IWebView
 		if (handler.PlatformView == null || arg is not string script || string.IsNullOrWhiteSpace(script))
 			return;
 
-		_ = handler.PlatformView.EvaluateJavascriptAsync(script);
+		_ = handler.PlatformView.EvaluateJavascriptAsync(script).ContinueWith(t =>
+		{
+			if (t.IsFaulted)
+				System.Diagnostics.Debug.WriteLine($"WebView Eval failed: {t.Exception?.InnerException?.Message}");
+		}, TaskScheduler.Default);
 	}
 
 	public static void MapEvaluateJavaScriptAsync(WebViewHandler handler, IWebView webView, object? arg)

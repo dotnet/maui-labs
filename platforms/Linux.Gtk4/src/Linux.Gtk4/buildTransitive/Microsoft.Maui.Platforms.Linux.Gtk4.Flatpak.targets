@@ -172,18 +172,18 @@ Categories=$(FlatpakCategories)
     &lt;/recommends&gt;</_FlatpakWebKitRecommends>
 
       <_FlatpakAppStreamComment Condition="'$(FlatpakDescription)' != ''">
-    &lt;summary&gt;$(FlatpakDescription)&lt;/summary&gt;</_FlatpakAppStreamComment>
+    &lt;summary&gt;$([System.Security.SecurityElement]::Escape($(FlatpakDescription)))&lt;/summary&gt;</_FlatpakAppStreamComment>
 
       <_FlatpakAppStreamDescription Condition="'$(FlatpakDescription)' != ''">
-    &lt;description&gt;&lt;p&gt;$(FlatpakDescription)&lt;/p&gt;&lt;/description&gt;</_FlatpakAppStreamDescription>
+    &lt;description&gt;&lt;p&gt;$([System.Security.SecurityElement]::Escape($(FlatpakDescription)))&lt;/p&gt;&lt;/description&gt;</_FlatpakAppStreamDescription>
       <_FlatpakAppStreamDescription Condition="'$(FlatpakDescription)' == ''">
-    &lt;description&gt;&lt;p&gt;$(ApplicationTitle) - a .NET MAUI application for Linux.&lt;/p&gt;&lt;/description&gt;</_FlatpakAppStreamDescription>
+    &lt;description&gt;&lt;p&gt;$([System.Security.SecurityElement]::Escape($(ApplicationTitle))) - a .NET MAUI application for Linux.&lt;/p&gt;&lt;/description&gt;</_FlatpakAppStreamDescription>
 
       <_FlatpakAppStream>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 &lt;component type="desktop-application"&gt;
     &lt;id&gt;$(ApplicationId)&lt;/id&gt;
     &lt;metadata_license&gt;CC0-1.0&lt;/metadata_license&gt;
-    &lt;name&gt;$(ApplicationTitle)&lt;/name&gt;$(_FlatpakAppStreamComment)$(_FlatpakAppStreamDescription)
+    &lt;name&gt;$([System.Security.SecurityElement]::Escape($(ApplicationTitle)))&lt;/name&gt;$(_FlatpakAppStreamComment)$(_FlatpakAppStreamDescription)
     &lt;launchable type="desktop-id"&gt;$(ApplicationId).desktop&lt;/launchable&gt;
     &lt;provides&gt;
       &lt;binary&gt;$(AssemblyName)&lt;/binary&gt;

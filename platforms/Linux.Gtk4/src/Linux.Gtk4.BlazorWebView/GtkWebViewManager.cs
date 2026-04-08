@@ -47,7 +47,17 @@ public class GtkWebViewManager : WebViewManager
 			SingleWriter = false,
 			AllowSynchronousContinuations = false
 		});
-		Task.Run(SendMessagePump);
+		_ = Task.Run(async () =>
+		{
+			try
+			{
+				await SendMessagePump();
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"SendMessagePump failed: {ex.Message}");
+			}
+		});
 	}
 
 	internal bool TryGetResponseContentInternal(

@@ -283,17 +283,17 @@ _APPRUN_EOF_" />
       <_WebKitRecommends Condition="'$(_AppImageNeedsWebKit)' != 'true'"></_WebKitRecommends>
 
       <_AppStreamComment Condition="'$(AppImageComment)' != ''">
-    &lt;summary&gt;$(AppImageComment)&lt;/summary&gt;</_AppStreamComment>
+    &lt;summary&gt;$([System.Security.SecurityElement]::Escape($(AppImageComment)))&lt;/summary&gt;</_AppStreamComment>
       <_AppStreamComment Condition="'$(AppImageComment)' == ''"></_AppStreamComment>
 
-      <_AppStreamDescriptionText Condition="'$(AppImageComment)' != ''">$(AppImageComment)</_AppStreamDescriptionText>
-      <_AppStreamDescriptionText Condition="'$(AppImageComment)' == ''">$(ApplicationTitle)</_AppStreamDescriptionText>
+      <_AppStreamDescriptionText Condition="'$(AppImageComment)' != ''">$([System.Security.SecurityElement]::Escape($(AppImageComment)))</_AppStreamDescriptionText>
+      <_AppStreamDescriptionText Condition="'$(AppImageComment)' == ''">$([System.Security.SecurityElement]::Escape($(ApplicationTitle)))</_AppStreamDescriptionText>
 
       <_AppStreamContent>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 &lt;component type="desktop-application"&gt;
     &lt;id&gt;$(ApplicationId)&lt;/id&gt;
     &lt;metadata_license&gt;CC0-1.0&lt;/metadata_license&gt;
-    &lt;name&gt;$(ApplicationTitle)&lt;/name&gt;$(_AppStreamComment)
+    &lt;name&gt;$([System.Security.SecurityElement]::Escape($(ApplicationTitle)))&lt;/name&gt;$(_AppStreamComment)
     &lt;description&gt;&lt;p&gt;$(_AppStreamDescriptionText)&lt;/p&gt;&lt;/description&gt;
     &lt;launchable type="desktop-id"&gt;$(ApplicationId).desktop&lt;/launchable&gt;
     &lt;provides&gt;
