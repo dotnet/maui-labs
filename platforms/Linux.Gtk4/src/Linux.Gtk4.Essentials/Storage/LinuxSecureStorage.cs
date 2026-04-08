@@ -14,7 +14,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Storage;
 public class LinuxSecureStorage : ISecureStorage
 {
 	private const string MauiApplicationIdMetadataKey = "MauiApplicationId";
-	private const string LibSecretSchemaName = "org.maui.gtk.securestorage";
+	private const string LegacyLibSecretSchemaName = "org.maui.gtk.securestorage";
+	private const string ScopedLibSecretSchemaName = "org.maui.gtk.securestorage.v2";
 	private const string KeyAttributeName = "key";
 	private const string AppIdAttributeName = "application";
 
@@ -22,7 +23,9 @@ public class LinuxSecureStorage : ISecureStorage
 	private readonly string _applicationId = ResolveApplicationId();
 	private bool _useLibSecret;
 	private bool _libSecretProbed;
+	private LegacyMigrationState? _legacyMigrationState;
 	private IntPtr _schemaNamePtr;
+	private IntPtr _legacySchemaNamePtr;
 	private IntPtr _attrNamePtr;
 	private IntPtr _appAttrNamePtr;
 	private LibSecretInterop.SecretSchema _schema;
@@ -86,7 +89,10 @@ public class LinuxSecureStorage : ISecureStorage
 		lock (_lock)
 		{
 			if (TryEnsureLibSecret())
-				return LibSecretClear(key);
+			{
+				IgnoreLegacyFallbackForKey(key);
+				return LibSecretClearScoped(key);
+			}
 
 			var store = LoadStore();
 			var removed = store.Remove(key);
@@ -103,6 +109,7 @@ public class LinuxSecureStorage : ISecureStorage
 			if (TryEnsureLibSecret())
 			{
 				LibSecretClearAll();
+				IgnoreLegacyFallbackForAllKeys();
 			}
 
 			// Always clean up file-based fallback artifacts
@@ -127,16 +134,16 @@ public class LinuxSecureStorage : ISecureStorage
 			if (!LibSecretInterop.IsAvailable())
 				return false;
 
-			// Allocate schema and attribute names that live for the process lifetime.
-			// Every secret is scoped to the current app so different MAUI GTK apps
-			// cannot read or clear each other's entries.
-			_schemaNamePtr = Marshal.StringToCoTaskMemUTF8(LibSecretSchemaName);
+			// Use a versioned schema for new entries so legacy key-only migration
+			// never matches the new per-app records by accident.
+			_schemaNamePtr = Marshal.StringToCoTaskMemUTF8(ScopedLibSecretSchemaName);
+			_legacySchemaNamePtr = Marshal.StringToCoTaskMemUTF8(LegacyLibSecretSchemaName);
 			_attrNamePtr = Marshal.StringToCoTaskMemUTF8(KeyAttributeName);
 			_appAttrNamePtr = Marshal.StringToCoTaskMemUTF8(AppIdAttributeName);
 
 			_legacySchema = new LibSecretInterop.SecretSchema
 			{
-				Name = _schemaNamePtr,
+				Name = _legacySchemaNamePtr,
 				Flags = LibSecretInterop.SECRET_SCHEMA_NONE,
 				Attr0 = new LibSecretInterop.SecretSchemaAttribute
 				{
@@ -206,20 +213,19 @@ public class LinuxSecureStorage : ISecureStorage
 			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
 
+		if (ShouldIgnoreLegacyFallback(key))
+			return null;
+
 		var legacyValue = LibSecretGetLegacy(key);
 		if (legacyValue == null)
 			return null;
 
 		LibSecretSetScoped(key, legacyValue);
-		LibSecretClearLegacy(key);
 		return legacyValue;
 	}
 
 	private void LibSecretSet(string key, string value)
-	{
-		LibSecretSetScoped(key, value);
-		LibSecretClearLegacy(key);
-	}
+		=> LibSecretSetScoped(key, value);
 
 	private void LibSecretSetScoped(string key, string value)
 	{
@@ -243,12 +249,6 @@ public class LinuxSecureStorage : ISecureStorage
 		{
 			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
-	}
-
-	private bool LibSecretClear(string key)
-	{
-		var removed = LibSecretClearScoped(key);
-		return LibSecretClearLegacy(key) || removed;
 	}
 
 	private bool LibSecretClearScoped(string key)
@@ -281,23 +281,6 @@ public class LinuxSecureStorage : ISecureStorage
 		}
 	}
 
-	private bool LibSecretClearLegacy(string key)
-	{
-		var ht = CreateLegacyAttributesTable(key, out var keyPtr, out var valuePtr);
-		try
-		{
-			var removed = LibSecretInterop.SecretPasswordClearVSync(
-				ref _legacySchema, ht, IntPtr.Zero, out var err);
-
-			LibSecretInterop.ConsumeError(err);
-			return removed;
-		}
-		finally
-		{
-			LibSecretInterop.FreeAttributesTable(ht, keyPtr, valuePtr);
-		}
-	}
-
 	private void LibSecretClearAll()
 	{
 		var ht = LibSecretInterop.CreateAttributesTable(
@@ -313,6 +296,21 @@ public class LinuxSecureStorage : ISecureStorage
 		finally
 		{
 			LibSecretInterop.FreeAttributesTable(ht, ptrs);
+		}
+
+		// Legacy entries were written into a single shared schema with no app scope.
+		// Clear that legacy namespace as part of RemoveAll() so pre-upgrade secrets
+		// cannot survive or be resurrected after the user explicitly wipes storage.
+		var legacyHt = LibSecretInterop.CreateEmptyAttributesTable();
+		try
+		{
+			LibSecretInterop.SecretPasswordClearVSync(
+				ref _legacySchema, legacyHt, IntPtr.Zero, out var err);
+			LibSecretInterop.ConsumeError(err);
+		}
+		finally
+		{
+			LibSecretInterop.FreeAttributesTable(legacyHt);
 		}
 	}
 
@@ -337,6 +335,84 @@ public class LinuxSecureStorage : ISecureStorage
 		var result = Marshal.PtrToStringUTF8(resultPtr);
 		LibSecretInterop.SecretPasswordFree(resultPtr);
 		return result;
+	}
+
+	private bool ShouldIgnoreLegacyFallback(string key)
+	{
+		var state = GetLegacyMigrationState();
+		if (state.IgnoreAll)
+			return true;
+
+		return state.IgnoredKeyHashes.Contains(HashKey(key), StringComparer.Ordinal);
+	}
+
+	private void IgnoreLegacyFallbackForKey(string key)
+	{
+		var state = GetLegacyMigrationState();
+		if (state.IgnoreAll)
+			return;
+
+		var keyHash = HashKey(key);
+		if (state.IgnoredKeyHashes.Contains(keyHash, StringComparer.Ordinal))
+			return;
+
+		state.IgnoredKeyHashes.Add(keyHash);
+		SaveLegacyMigrationState(state);
+	}
+
+	private void IgnoreLegacyFallbackForAllKeys()
+	{
+		var state = GetLegacyMigrationState();
+		if (state.IgnoreAll)
+			return;
+
+		state.IgnoreAll = true;
+		state.IgnoredKeyHashes.Clear();
+		SaveLegacyMigrationState(state);
+	}
+
+	private LegacyMigrationState GetLegacyMigrationState()
+	{
+		if (_legacyMigrationState != null)
+			return _legacyMigrationState;
+
+		if (!File.Exists(LegacyMigrationStatePath))
+			return _legacyMigrationState = new LegacyMigrationState();
+
+		try
+		{
+			var json = File.ReadAllText(LegacyMigrationStatePath);
+			_legacyMigrationState = JsonSerializer.Deserialize<LegacyMigrationState>(json) ?? new LegacyMigrationState();
+		}
+		catch
+		{
+			_legacyMigrationState = new LegacyMigrationState();
+		}
+
+		return _legacyMigrationState;
+	}
+
+	private void SaveLegacyMigrationState(LegacyMigrationState state)
+	{
+		_legacyMigrationState = state;
+
+		if (!state.IgnoreAll && state.IgnoredKeyHashes.Count == 0)
+		{
+			if (File.Exists(LegacyMigrationStatePath))
+				File.Delete(LegacyMigrationStatePath);
+			return;
+		}
+
+		var json = JsonSerializer.Serialize(state);
+		File.WriteAllText(LegacyMigrationStatePath, json);
+		try { File.SetUnixFileMode(LegacyMigrationStatePath, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
+		catch { }
+	}
+
+	private static string HashKey(string key)
+	{
+		var keyBytes = Encoding.UTF8.GetBytes(key);
+		return Convert.ToHexString(SHA256.HashData(keyBytes));
 	}
 
 	private static string ResolveApplicationId()
@@ -394,6 +470,13 @@ public class LinuxSecureStorage : ISecureStorage
 
 	private string DataFilePath => Path.Combine(StoragePath, "secure_store.dat");
 	private string KeyFilePath => Path.Combine(StoragePath, "secure_store.key");
+	private string LegacyMigrationStatePath => Path.Combine(StoragePath, "secure_store_legacy_migration.json");
+
+	private sealed class LegacyMigrationState
+	{
+		public bool IgnoreAll { get; set; }
+		public List<string> IgnoredKeyHashes { get; set; } = new();
+	}
 
 	private byte[] GetOrCreateKey()
 	{
