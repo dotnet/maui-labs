@@ -75,14 +75,15 @@ internal static class GtkImageSourceLoader
 		PangoCairo.Functions.ShowLayout(cr, layout);
 		Cairo.Internal.Surface.Flush(surface.Handle);
 
+		layout.Dispose();
+		fontDesc.Dispose();
+
 		// Render to PNG and load as Gdk.Texture (MemoryTextureBuilder has
 		// issues in GirCore 0.7.0, so we use cairo_surface_write_to_png)
 		var tmpPath = Path.Combine(Path.GetTempPath(), $"maui_font_{Guid.NewGuid():N}.png");
 		try
 		{
 			cairo_surface_write_to_png(surface.Handle.DangerousGetHandle(), tmpPath);
-			cr.Dispose();
-			surface.Dispose();
 			return Gdk.Texture.NewFromFilename(tmpPath);
 		}
 		catch
@@ -91,6 +92,8 @@ internal static class GtkImageSourceLoader
 		}
 		finally
 		{
+			cr.Dispose();
+			surface.Dispose();
 			try { File.Delete(tmpPath); } catch { }
 		}
 	}

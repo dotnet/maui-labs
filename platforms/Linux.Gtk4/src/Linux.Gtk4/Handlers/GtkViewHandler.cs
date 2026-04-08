@@ -13,6 +13,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	where TVirtualView : class, IView
 	where TPlatformView : Gtk.Widget
 {
+	private Gtk.CssProvider? _currentCssProvider;
+
 	public static IPropertyMapper<IView, GtkViewHandler<TVirtualView, TPlatformView>> ViewMapper =
 		new PropertyMapper<IView, GtkViewHandler<TVirtualView, TPlatformView>>(ViewHandler.ViewMapper)
 		{
@@ -251,6 +253,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 			var pt = Graphene.Point.Alloc();
 			pt.Init(tx, ty);
 			transform = transform.Translate(pt);
+			pt.Free();
 		}
 
 		// Move to anchor, apply rotation/scale, move back
@@ -260,6 +263,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var anchorPt = Graphene.Point.Alloc();
 		anchorPt.Init(anchorX, anchorY);
 		transform = transform.Translate(anchorPt);
+		anchorPt.Free();
 
 		if (hasRotation)
 			transform = transform.Rotate((float)view.Rotation);
@@ -270,6 +274,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var negPt = Graphene.Point.Alloc();
 		negPt.Init(-anchorX, -anchorY);
 		transform = transform.Translate(negPt);
+		negPt.Free();
 
 		layoutPanel.SetChildTransform(widget, transform);
 	}
@@ -429,9 +434,13 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		if (widget == null)
 			return;
 
-		var provider = Gtk.CssProvider.New();
-		provider.LoadFromString($"* {{ {css} }}");
-		widget.GetStyleContext().AddProvider(provider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+		var ctx = widget.GetStyleContext();
+		if (_currentCssProvider != null)
+			ctx.RemoveProvider(_currentCssProvider);
+
+		_currentCssProvider = Gtk.CssProvider.New();
+		_currentCssProvider.LoadFromString($"* {{ {css} }}");
+		ctx.AddProvider(_currentCssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
 	}
 
 	protected void ApplyCssWithSelector(Gtk.Widget? widget, string selector, string css)
@@ -439,9 +448,13 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		if (widget == null)
 			return;
 
-		var provider = Gtk.CssProvider.New();
-		provider.LoadFromString($"{selector} {{ {css} }}");
-		widget.GetStyleContext().AddProvider(provider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+		var ctx = widget.GetStyleContext();
+		if (_currentCssProvider != null)
+			ctx.RemoveProvider(_currentCssProvider);
+
+		_currentCssProvider = Gtk.CssProvider.New();
+		_currentCssProvider.LoadFromString($"{selector} {{ {css} }}");
+		ctx.AddProvider(_currentCssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
 	}
 
 	protected string BuildFontCss(Microsoft.Maui.Font font)

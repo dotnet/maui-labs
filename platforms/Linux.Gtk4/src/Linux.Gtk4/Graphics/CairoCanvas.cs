@@ -155,6 +155,7 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 
 		_cr.MoveTo(drawX, y);
 		PangoCairo.Functions.ShowLayout(_cr, layout);
+		layout.Dispose();
 	}
 
 	public void DrawString(string value, float x, float y, float width, float height,
@@ -203,6 +204,8 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 		{
 			_cr.Restore();
 		}
+
+		layout.Dispose();
 	}
 
 	public void DrawText(IAttributedText value, float x, float y, float width, float height)
@@ -224,6 +227,7 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 
 		_cr.MoveTo(x, y);
 		PangoCairo.Functions.ShowLayout(_cr, layout);
+		layout.Dispose();
 	}
 
 	public SizeF GetStringSize(string value, IFont font, float fontSize)
@@ -233,6 +237,7 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 
 		var layout = CreatePangoLayout(value, font, fontSize);
 		layout.GetPixelSize(out int textW, out int textH);
+		layout.Dispose();
 		return new SizeF(textW, textH);
 	}
 
@@ -383,10 +388,7 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 	private void DrawShadowFill(Action drawShape)
 	{
 		if (!HasShadow || _shadowColor == null)
-		{
-			drawShape();
 			return;
-		}
 
 		_cr.Save();
 
@@ -567,6 +569,7 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 		}
 
 		layout.SetFontDescription(fontDesc);
+		fontDesc.Dispose();
 		layout.SetText(text, -1);
 		return layout;
 	}
