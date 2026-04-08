@@ -24,14 +24,21 @@ public class LinuxShare : IShare
 		{
 			var tempFile = Path.Combine(Path.GetTempPath(), $"share_{Guid.NewGuid()}.txt");
 			File.WriteAllText(tempFile, request.Text);
-			var textPsi = new ProcessStartInfo("xdg-open")
+			try
 			{
-				UseShellExecute = false,
-				RedirectStandardOutput = true,
-				RedirectStandardError = true
-			};
-			textPsi.ArgumentList.Add(tempFile);
-			using var textProcess = Process.Start(textPsi);
+				var textPsi = new ProcessStartInfo("xdg-open")
+				{
+					UseShellExecute = false,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true
+				};
+				textPsi.ArgumentList.Add(tempFile);
+				using var textProcess = Process.Start(textPsi);
+			}
+			finally
+			{
+				try { File.Delete(tempFile); } catch { }
+			}
 		}
 		return Task.CompletedTask;
 	}

@@ -64,12 +64,16 @@ internal class LinuxScreenshotResult : IScreenshotResult
 
 	public Task<Stream> OpenReadAsync(ScreenshotFormat format = ScreenshotFormat.Png, int quality = 100)
 	{
-		return Task.FromResult<Stream>(File.OpenRead(_filePath));
+		var bytes = File.ReadAllBytes(_filePath);
+		try { File.Delete(_filePath); } catch { }
+		return Task.FromResult<Stream>(new MemoryStream(bytes));
 	}
 
 	public async Task CopyToAsync(Stream destination, ScreenshotFormat format = ScreenshotFormat.Png, int quality = 100)
 	{
 		using var source = File.OpenRead(_filePath);
 		await source.CopyToAsync(destination);
+		source.Close();
+		try { File.Delete(_filePath); } catch { }
 	}
 }

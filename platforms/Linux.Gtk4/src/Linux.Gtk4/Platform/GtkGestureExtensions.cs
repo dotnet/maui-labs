@@ -9,38 +9,61 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 /// </summary>
 public static class GtkGestureExtensions
 {
+// Track attached controllers per widget to enable cleanup
+private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, List<Gtk.EventController>> _attachedControllers = new();
+
 /// <summary>
 /// Attaches MAUI gesture recognizers to a GTK widget.
+/// Removes any previously attached gesture controllers first to prevent accumulation.
 /// </summary>
 public static void AttachGestures(Gtk.Widget widget, IView view)
 {
 if (view is not Microsoft.Maui.Controls.View mauiView)
 return;
 
+RemoveAttachedGestures(widget);
+
+var controllers = new List<Gtk.EventController>();
+
 foreach (var recognizer in mauiView.GestureRecognizers)
 {
 switch (recognizer)
 {
 case Microsoft.Maui.Controls.TapGestureRecognizer tapRecognizer:
-AttachTapGesture(widget, tapRecognizer);
+controllers.AddRange(AttachTapGesture(widget, tapRecognizer));
 break;
 case Microsoft.Maui.Controls.PanGestureRecognizer panRecognizer:
-AttachPanGesture(widget, panRecognizer);
+controllers.AddRange(AttachPanGesture(widget, panRecognizer));
 break;
 case Microsoft.Maui.Controls.PointerGestureRecognizer pointerRecognizer:
-AttachPointerGesture(widget, pointerRecognizer);
+controllers.AddRange(AttachPointerGesture(widget, pointerRecognizer));
 break;
 case Microsoft.Maui.Controls.SwipeGestureRecognizer swipeRecognizer:
-AttachSwipeGesture(widget, swipeRecognizer);
+controllers.AddRange(AttachSwipeGesture(widget, swipeRecognizer));
 break;
 case Microsoft.Maui.Controls.PinchGestureRecognizer pinchRecognizer:
-AttachPinchGesture(widget, pinchRecognizer);
+controllers.AddRange(AttachPinchGesture(widget, pinchRecognizer));
 break;
-}
 }
 }
 
-private static void AttachTapGesture(Gtk.Widget widget, Microsoft.Maui.Controls.TapGestureRecognizer recognizer)
+if (controllers.Count > 0)
+_attachedControllers[widget.Handle] = controllers;
+}
+
+/// <summary>
+/// Removes all gesture controllers previously attached by <see cref="AttachGestures"/>.
+/// </summary>
+public static void RemoveAttachedGestures(Gtk.Widget widget)
+{
+if (_attachedControllers.TryRemove(widget.Handle, out var controllers))
+{
+foreach (var c in controllers)
+widget.RemoveController(c);
+}
+}
+
+private static Gtk.EventController[] AttachTapGesture(Gtk.Widget widget, Microsoft.Maui.Controls.TapGestureRecognizer recognizer)
 {
 var gesture = Gtk.GestureClick.New();
 gesture.OnReleased += (_, args) =>
@@ -48,9 +71,10 @@ gesture.OnReleased += (_, args) =>
 recognizer.Command?.Execute(recognizer.CommandParameter);
 };
 widget.AddController(gesture);
+return [gesture];
 }
 
-private static void AttachPanGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PanGestureRecognizer recognizer)
+private static Gtk.EventController[] AttachPanGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PanGestureRecognizer recognizer)
 {
 var gesture = Gtk.GestureDrag.New();
 int gestureId = 0;
@@ -69,6 +93,7 @@ gesture.OnDragEnd += (_, args) =>
 InvokePanUpdated(recognizer, GestureStatus.Completed, gestureId, 0, 0);
 };
 widget.AddController(gesture);
+return [gesture];
 }
 
 /// <summary>
@@ -102,7 +127,7 @@ catch { /* ignore reflection failures */ }
 }
 }
 
-private static void AttachPointerGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PointerGestureRecognizer recognizer)
+private static Gtk.EventController[] AttachPointerGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PointerGestureRecognizer recognizer)
 {
 var motion = Gtk.EventControllerMotion.New();
 
@@ -132,9 +157,10 @@ recognizer.PointerReleasedCommand?.Execute(recognizer.PointerReleasedCommandPara
 
 widget.AddController(motion);
 widget.AddController(click);
+return [motion, click];
 }
 
-private static void AttachSwipeGesture(Gtk.Widget widget, Microsoft.Maui.Controls.SwipeGestureRecognizer recognizer)
+private static Gtk.EventController[] AttachSwipeGesture(Gtk.Widget widget, Microsoft.Maui.Controls.SwipeGestureRecognizer recognizer)
 {
 var gesture = Gtk.GestureSwipe.New();
 gesture.OnSwipe += (_, args) =>
@@ -155,9 +181,10 @@ if (recognizer.Direction.HasFlag(direction))
 recognizer.SendSwiped(mauiView, direction);
 };
 widget.AddController(gesture);
+return [gesture];
 }
 
-private static void AttachPinchGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PinchGestureRecognizer recognizer)
+private static Gtk.EventController[] AttachPinchGesture(Gtk.Widget widget, Microsoft.Maui.Controls.PinchGestureRecognizer recognizer)
 {
 var gesture = Gtk.GestureZoom.New();
 var controller = (Microsoft.Maui.Controls.IPinchGestureController)recognizer;
@@ -184,5 +211,6 @@ controller.SendPinchCanceled(sender);
 };
 
 widget.AddController(gesture);
+return [gesture];
 }
 }

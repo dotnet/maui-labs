@@ -25,6 +25,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 	};
 
 	private readonly Dictionary<Page, Gtk.Window> _modalDialogs = new();
+	private bool _destroying;
 
 	public WindowHandler() : base(Mapper, CommandMapper)
 	{
@@ -81,8 +82,9 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 	private bool OnCloseRequest(Gtk.Window sender, EventArgs args)
 	{
-		if (VirtualView != null)
+		if (VirtualView != null && !_destroying)
 		{
+			_destroying = true;
 			GtkMauiApplication.Current.UnregisterWindow(VirtualView);
 			VirtualView.Destroying();
 		}
@@ -286,7 +288,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 					BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				subscribe?.Invoke(alertManager, null);
 			}
-			catch { }
+			catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"AlertManager setup failed: {ex.Message}"); }
 		}
 	}
 

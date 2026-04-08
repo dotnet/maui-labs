@@ -25,6 +25,7 @@ public class ListViewHandler : GtkViewHandler<ListView, Gtk.ScrolledWindow>
 	readonly List<Gtk.Widget> _rowWidgets = [];
 	int _selectedIndex = -1;
 	bool _updatingSelection;
+	INotifyCollectionChanged? _observableSource;
 
 	public static new IPropertyMapper<ListView, ListViewHandler> Mapper =
 		new PropertyMapper<ListView, ListViewHandler>(ViewMapper)
@@ -88,7 +89,40 @@ public class ListViewHandler : GtkViewHandler<ListView, Gtk.ScrolledWindow>
 	{
 		base.ConnectHandler(platformView);
 		if (VirtualView != null)
+		{
+			SubscribeCollectionChanged(VirtualView.ItemsSource);
 			RebuildRows();
+		}
+	}
+
+	protected override void DisconnectHandler(Gtk.ScrolledWindow platformView)
+	{
+		UnsubscribeCollectionChanged();
+		base.DisconnectHandler(platformView);
+	}
+
+	void SubscribeCollectionChanged(IEnumerable? source)
+	{
+		UnsubscribeCollectionChanged();
+		if (source is INotifyCollectionChanged ncc)
+		{
+			ncc.CollectionChanged += OnCollectionChanged;
+			_observableSource = ncc;
+		}
+	}
+
+	void UnsubscribeCollectionChanged()
+	{
+		if (_observableSource != null)
+		{
+			_observableSource.CollectionChanged -= OnCollectionChanged;
+			_observableSource = null;
+		}
+	}
+
+	void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+	{
+		RebuildRows();
 	}
 
 	public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
@@ -482,6 +516,7 @@ public class ListViewHandler : GtkViewHandler<ListView, Gtk.ScrolledWindow>
 
 	public static void MapItemsSource(ListViewHandler handler, ListView view)
 	{
+		handler.SubscribeCollectionChanged(view.ItemsSource);
 		handler.RebuildRows();
 	}
 

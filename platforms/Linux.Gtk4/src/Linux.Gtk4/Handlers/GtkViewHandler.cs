@@ -73,6 +73,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	protected override void DisconnectHandler(TPlatformView platformView)
 	{
+		_zIndexMap.TryRemove(platformView.Handle, out _);
 		CleanupContextFlyout(platformView);
 		CleanupVisualStateTracking(platformView);
 		base.DisconnectHandler(platformView);
@@ -539,8 +540,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		handler.PlatformView.SetDirection(dir);
 	}
 
-	// Track ZIndex per widget
-	static readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> _zIndexMap = new();
+	// Track ZIndex per widget using native handle for uniqueness
+	static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, int> _zIndexMap = new();
 
 	static void MapZIndex(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
 	{
@@ -550,7 +551,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var parent = widget.GetParent();
 		if (parent == null) return;
 
-		int key = widget.GetHashCode();
+		nint key = widget.Handle;
 		_zIndexMap[key] = view.ZIndex;
 
 		// Reorder siblings: GTK4 draws last child on top.
@@ -560,7 +561,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 		while (sibling != null)
 		{
-			if (sibling != widget && _zIndexMap.TryGetValue(sibling.GetHashCode(), out int sibZ) && sibZ > view.ZIndex)
+			if (sibling != widget && _zIndexMap.TryGetValue(sibling.Handle, out int sibZ) && sibZ > view.ZIndex)
 			{
 				insertBefore = sibling;
 				break;
