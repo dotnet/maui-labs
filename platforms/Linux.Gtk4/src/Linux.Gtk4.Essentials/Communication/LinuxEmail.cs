@@ -11,8 +11,14 @@ public class LinuxEmail : IEmail
 	{
 		if (message is null)
 		{
-			Process.Start(new ProcessStartInfo("xdg-open", "mailto:")
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			var psi = new ProcessStartInfo("xdg-open")
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			psi.ArgumentList.Add("mailto:");
+			using var process = Process.Start(psi);
 			return Task.CompletedTask;
 		}
 
@@ -24,8 +30,14 @@ public class LinuxEmail : IEmail
 
 		var mailto = $"mailto:{to}?subject={subject}&body={body}{cc}{bcc}";
 
-		Process.Start(new ProcessStartInfo("xdg-open", mailto)
-			{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+		var composePsi = new ProcessStartInfo("xdg-open")
+		{
+			UseShellExecute = false,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true
+		};
+		composePsi.ArgumentList.Add(mailto);
+		using var composeProcess = Process.Start(composePsi);
 
 		return Task.CompletedTask;
 	}

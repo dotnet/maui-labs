@@ -30,8 +30,14 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		cancellationToken.ThrowIfCancellationRequested();
 
 		// Open browser
-		Process.Start(new ProcessStartInfo("xdg-open", authUriBuilder.Uri.AbsoluteUri)
-			{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+		var psi = new ProcessStartInfo("xdg-open")
+		{
+			UseShellExecute = false,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true
+		};
+		psi.ArgumentList.Add(authUriBuilder.Uri.AbsoluteUri);
+		using var process = Process.Start(psi);
 
 		while (true)
 		{

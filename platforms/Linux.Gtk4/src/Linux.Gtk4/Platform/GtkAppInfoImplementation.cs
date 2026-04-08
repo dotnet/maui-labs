@@ -31,7 +31,9 @@ class GtkAppInfoImplementation : IAppInfo
 	{
 		try
 		{
-			Process.Start(new ProcessStartInfo("xdg-open", "settings://") { UseShellExecute = false });
+			var psi = new ProcessStartInfo("xdg-open") { UseShellExecute = false };
+			psi.ArgumentList.Add("settings://");
+			using var process = Process.Start(psi);
 		}
 		catch
 		{

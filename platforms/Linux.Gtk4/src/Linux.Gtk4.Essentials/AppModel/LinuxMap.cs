@@ -36,13 +36,14 @@ public class LinuxMap : IMap
 
 	private static Task LaunchUrl(string url)
 	{
-		var psi = new ProcessStartInfo("xdg-open", url)
+		var psi = new ProcessStartInfo("xdg-open")
 		{
 			UseShellExecute = false,
 			RedirectStandardOutput = true,
 			RedirectStandardError = true
 		};
-		Process.Start(psi);
+		psi.ArgumentList.Add(url);
+		using var process = Process.Start(psi);
 		return Task.CompletedTask;
 	}
 }

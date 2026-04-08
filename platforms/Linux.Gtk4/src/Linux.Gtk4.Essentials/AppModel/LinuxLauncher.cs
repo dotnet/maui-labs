@@ -35,14 +35,16 @@ public class LinuxLauncher : ILauncher
 	{
 		try
 		{
-			var psi = new ProcessStartInfo("xdg-open", argument)
+			var psi = new ProcessStartInfo("xdg-open")
 			{
 				UseShellExecute = false,
 				RedirectStandardOutput = true,
 				RedirectStandardError = true
 			};
-			Process.Start(psi);
-			return Task.FromResult(true);
+			psi.ArgumentList.Add(argument);
+
+			using var process = Process.Start(psi);
+			return Task.FromResult(process is not null);
 		}
 		catch
 		{

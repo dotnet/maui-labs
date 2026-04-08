@@ -10,14 +10,16 @@ public class LinuxBrowser : IBrowser
 		ArgumentNullException.ThrowIfNull(uri);
 		try
 		{
-			var psi = new ProcessStartInfo("xdg-open", uri.AbsoluteUri)
+			var psi = new ProcessStartInfo("xdg-open")
 			{
 				UseShellExecute = false,
 				RedirectStandardOutput = true,
 				RedirectStandardError = true
 			};
-			Process.Start(psi);
-			return await Task.FromResult(true);
+			psi.ArgumentList.Add(uri.AbsoluteUri);
+
+			using var process = Process.Start(psi);
+			return await Task.FromResult(process is not null);
 		}
 		catch
 		{

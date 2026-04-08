@@ -11,15 +11,27 @@ public class LinuxShare : IShare
 		// Best-effort: use xdg-open with a temporary file containing the text
 		if (!string.IsNullOrEmpty(request.Uri))
 		{
-			Process.Start(new ProcessStartInfo("xdg-open", request.Uri)
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			var psi = new ProcessStartInfo("xdg-open")
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			psi.ArgumentList.Add(request.Uri);
+			using var process = Process.Start(psi);
 		}
 		else if (!string.IsNullOrEmpty(request.Text))
 		{
 			var tempFile = Path.Combine(Path.GetTempPath(), $"share_{Guid.NewGuid()}.txt");
 			File.WriteAllText(tempFile, request.Text);
-			Process.Start(new ProcessStartInfo("xdg-open", tempFile)
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			var textPsi = new ProcessStartInfo("xdg-open")
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			textPsi.ArgumentList.Add(tempFile);
+			using var textProcess = Process.Start(textPsi);
 		}
 		return Task.CompletedTask;
 	}
@@ -29,8 +41,14 @@ public class LinuxShare : IShare
 		ArgumentNullException.ThrowIfNull(request);
 		if (request.File is not null)
 		{
-			Process.Start(new ProcessStartInfo("xdg-open", request.File.FullPath)
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			var psi = new ProcessStartInfo("xdg-open")
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			psi.ArgumentList.Add(request.File.FullPath);
+			using var process = Process.Start(psi);
 		}
 		return Task.CompletedTask;
 	}
@@ -40,8 +58,14 @@ public class LinuxShare : IShare
 		ArgumentNullException.ThrowIfNull(request);
 		foreach (var file in request.Files ?? Enumerable.Empty<ShareFile>())
 		{
-			Process.Start(new ProcessStartInfo("xdg-open", file.FullPath)
-				{ UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+			var psi = new ProcessStartInfo("xdg-open")
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			psi.ArgumentList.Add(file.FullPath);
+			using var process = Process.Start(psi);
 		}
 		return Task.CompletedTask;
 	}
