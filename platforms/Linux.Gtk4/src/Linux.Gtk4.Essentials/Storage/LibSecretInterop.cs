@@ -142,16 +142,32 @@ internal static class LibSecretInterop
 	}
 
 	/// <summary>
-	/// Creates a GHashTable&lt;string,string&gt; with a single key→value entry.
+	/// Creates a GHashTable&lt;string,string&gt; with one or more key→value entries.
 	/// Caller must free with <see cref="GHashTableDestroy"/>.
 	/// The returned pinned strings must be freed after the hash table is destroyed.
 	/// </summary>
-	public static IntPtr CreateAttributesTable(string key, string value, out IntPtr keyPtr, out IntPtr valuePtr)
+	public static IntPtr CreateAttributesTable(out IntPtr[] allocatedPtrs, params (string Key, string Value)[] attributes)
 	{
 		var ht = GHashTableNew(s_strHashPtr, s_strEqualPtr);
-		keyPtr = Marshal.StringToCoTaskMemUTF8(key);
-		valuePtr = Marshal.StringToCoTaskMemUTF8(value);
-		GHashTableInsert(ht, keyPtr, valuePtr);
+		allocatedPtrs = new IntPtr[attributes.Length * 2];
+
+		for (var i = 0; i < attributes.Length; i++)
+		{
+			var keyPtr = Marshal.StringToCoTaskMemUTF8(attributes[i].Key);
+			var valuePtr = Marshal.StringToCoTaskMemUTF8(attributes[i].Value);
+			allocatedPtrs[i * 2] = keyPtr;
+			allocatedPtrs[i * 2 + 1] = valuePtr;
+			GHashTableInsert(ht, keyPtr, valuePtr);
+		}
+
+		return ht;
+	}
+
+	public static IntPtr CreateAttributesTable(string key, string value, out IntPtr keyPtr, out IntPtr valuePtr)
+	{
+		var ht = CreateAttributesTable(out var ptrs, (key, value));
+		keyPtr = ptrs[0];
+		valuePtr = ptrs[1];
 		return ht;
 	}
 

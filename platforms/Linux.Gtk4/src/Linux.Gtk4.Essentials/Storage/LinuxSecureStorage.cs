@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,11 +13,18 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Storage;
 /// </summary>
 public class LinuxSecureStorage : ISecureStorage
 {
+	private const string MauiApplicationIdMetadataKey = "MauiApplicationId";
+	private const string LibSecretSchemaName = "org.maui.gtk.securestorage";
+	private const string KeyAttributeName = "key";
+	private const string AppIdAttributeName = "application";
+
 	private readonly object _lock = new();
+	private readonly string _applicationId = ResolveApplicationId();
 	private bool _useLibSecret;
 	private bool _libSecretProbed;
 	private IntPtr _schemaNamePtr;
 	private IntPtr _attrNamePtr;
+	private IntPtr _appAttrNamePtr;
 	private LibSecretInterop.SecretSchema _schema;
 
 	/// <summary>
@@ -118,15 +126,23 @@ public class LinuxSecureStorage : ISecureStorage
 			if (!LibSecretInterop.IsAvailable())
 				return false;
 
-			// Allocate schema name and attribute name strings that live for the process lifetime
-			_schemaNamePtr = Marshal.StringToCoTaskMemUTF8("org.maui.gtk.securestorage");
-			_attrNamePtr = Marshal.StringToCoTaskMemUTF8("key");
+			// Allocate schema and attribute names that live for the process lifetime.
+			// Every secret is scoped to the current app so different MAUI GTK apps
+			// cannot read or clear each other's entries.
+			_schemaNamePtr = Marshal.StringToCoTaskMemUTF8(LibSecretSchemaName);
+			_attrNamePtr = Marshal.StringToCoTaskMemUTF8(KeyAttributeName);
+			_appAttrNamePtr = Marshal.StringToCoTaskMemUTF8(AppIdAttributeName);
 
 			_schema = new LibSecretInterop.SecretSchema
 			{
 				Name = _schemaNamePtr,
 				Flags = LibSecretInterop.SECRET_SCHEMA_NONE,
 				Attr0 = new LibSecretInterop.SecretSchemaAttribute
+				{
+					Name = _appAttrNamePtr,
+					Type = LibSecretInterop.SECRET_SCHEMA_ATTRIBUTE_STRING,
+				},
+				Attr1 = new LibSecretInterop.SecretSchemaAttribute
 				{
 					Name = _attrNamePtr,
 					Type = LibSecretInterop.SECRET_SCHEMA_ATTRIBUTE_STRING,
@@ -135,7 +151,7 @@ public class LinuxSecureStorage : ISecureStorage
 			};
 
 			// Probe with a lookup to verify the Secret Service daemon is reachable
-			var ht = LibSecretInterop.CreateAttributesTable("key", "__probe__", out var kPtr, out var vPtr);
+			var ht = CreateScopedAttributesTable("__probe__", out var ptrs);
 			try
 			{
 				var result = LibSecretInterop.SecretPasswordLookupVSync(
@@ -150,7 +166,7 @@ public class LinuxSecureStorage : ISecureStorage
 			}
 			finally
 			{
-				LibSecretInterop.FreeAttributesTable(ht, kPtr, vPtr);
+				LibSecretInterop.FreeAttributesTable(ht, ptrs);
 			}
 
 			_useLibSecret = true;
@@ -165,7 +181,7 @@ public class LinuxSecureStorage : ISecureStorage
 
 	private string? LibSecretGet(string key)
 	{
-		var ht = LibSecretInterop.CreateAttributesTable("key", key, out var kPtr, out var vPtr);
+		var ht = CreateScopedAttributesTable(key, out var ptrs);
 		try
 		{
 			var resultPtr = LibSecretInterop.SecretPasswordLookupVSync(
@@ -184,20 +200,20 @@ public class LinuxSecureStorage : ISecureStorage
 		}
 		finally
 		{
-			LibSecretInterop.FreeAttributesTable(ht, kPtr, vPtr);
+			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
 	}
 
 	private void LibSecretSet(string key, string value)
 	{
-		var ht = LibSecretInterop.CreateAttributesTable("key", key, out var kPtr, out var vPtr);
+		var ht = CreateScopedAttributesTable(key, out var ptrs);
 		try
 		{
 			LibSecretInterop.SecretPasswordStoreVSync(
 				ref _schema,
 				ht,          // attributes
 				IntPtr.Zero, // default collection
-				key,         // label
+				$"{_applicationId}:{key}", // label
 				value,       // password
 				IntPtr.Zero, // cancellable
 				out var err);
@@ -208,13 +224,13 @@ public class LinuxSecureStorage : ISecureStorage
 		}
 		finally
 		{
-			LibSecretInterop.FreeAttributesTable(ht, kPtr, vPtr);
+			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
 	}
 
 	private bool LibSecretClear(string key)
 	{
-		var ht = LibSecretInterop.CreateAttributesTable("key", key, out var kPtr, out var vPtr);
+		var ht = CreateScopedAttributesTable(key, out var ptrs);
 		try
 		{
 			var removed = LibSecretInterop.SecretPasswordClearVSync(
@@ -225,13 +241,15 @@ public class LinuxSecureStorage : ISecureStorage
 		}
 		finally
 		{
-			LibSecretInterop.FreeAttributesTable(ht, kPtr, vPtr);
+			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
 	}
 
 	private void LibSecretClearAll()
 	{
-		var ht = LibSecretInterop.CreateEmptyAttributesTable();
+		var ht = LibSecretInterop.CreateAttributesTable(
+			out var ptrs,
+			(AppIdAttributeName, _applicationId));
 		try
 		{
 			LibSecretInterop.SecretPasswordClearVSync(
@@ -241,8 +259,50 @@ public class LinuxSecureStorage : ISecureStorage
 		}
 		finally
 		{
-			LibSecretInterop.FreeAttributesTable(ht);
+			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
+	}
+
+	private IntPtr CreateScopedAttributesTable(string key, out IntPtr[] ptrs) =>
+		LibSecretInterop.CreateAttributesTable(
+			out ptrs,
+			(AppIdAttributeName, _applicationId),
+			(KeyAttributeName, key));
+
+	private static string ResolveApplicationId()
+	{
+		if (TryGetApplicationId(Assembly.GetEntryAssembly(), out var applicationId))
+			return applicationId;
+
+		var entryAssemblyName = Assembly.GetEntryAssembly()?.GetName().Name;
+		if (!string.IsNullOrWhiteSpace(entryAssemblyName))
+			return entryAssemblyName;
+
+		if (!string.IsNullOrWhiteSpace(AppDomain.CurrentDomain.FriendlyName))
+			return AppDomain.CurrentDomain.FriendlyName;
+
+		return "unknown";
+	}
+
+	private static bool TryGetApplicationId(Assembly? assembly, out string applicationId)
+	{
+		if (assembly != null)
+		{
+			foreach (var metadata in assembly.GetCustomAttributes<AssemblyMetadataAttribute>())
+			{
+				if (!string.Equals(metadata.Key, MauiApplicationIdMetadataKey, StringComparison.Ordinal))
+					continue;
+
+				if (string.IsNullOrWhiteSpace(metadata.Value))
+					continue;
+
+				applicationId = metadata.Value.Trim();
+				return true;
+			}
+		}
+
+		applicationId = string.Empty;
+		return false;
 	}
 
 	// ── Encrypted-file fallback (original implementation) ───────────────
