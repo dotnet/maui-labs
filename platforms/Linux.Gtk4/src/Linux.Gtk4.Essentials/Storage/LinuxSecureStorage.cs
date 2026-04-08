@@ -26,6 +26,7 @@ public class LinuxSecureStorage : ISecureStorage
 	private IntPtr _attrNamePtr;
 	private IntPtr _appAttrNamePtr;
 	private LibSecretInterop.SecretSchema _schema;
+	private LibSecretInterop.SecretSchema _legacySchema;
 
 	/// <summary>
 	/// Returns the active storage backend: "libsecret" (GNOME Keyring / Secret Service)
@@ -133,6 +134,18 @@ public class LinuxSecureStorage : ISecureStorage
 			_attrNamePtr = Marshal.StringToCoTaskMemUTF8(KeyAttributeName);
 			_appAttrNamePtr = Marshal.StringToCoTaskMemUTF8(AppIdAttributeName);
 
+			_legacySchema = new LibSecretInterop.SecretSchema
+			{
+				Name = _schemaNamePtr,
+				Flags = LibSecretInterop.SECRET_SCHEMA_NONE,
+				Attr0 = new LibSecretInterop.SecretSchemaAttribute
+				{
+					Name = _attrNamePtr,
+					Type = LibSecretInterop.SECRET_SCHEMA_ATTRIBUTE_STRING,
+				},
+				// Sentinel — all remaining attrs are zeroed (IntPtr.Zero, 0) by default
+			};
+
 			_schema = new LibSecretInterop.SecretSchema
 			{
 				Name = _schemaNamePtr,
@@ -184,27 +197,31 @@ public class LinuxSecureStorage : ISecureStorage
 		var ht = CreateScopedAttributesTable(key, out var ptrs);
 		try
 		{
-			var resultPtr = LibSecretInterop.SecretPasswordLookupVSync(
-				ref _schema, ht, IntPtr.Zero, out var err);
-
-			var errMsg = LibSecretInterop.ConsumeError(err);
-			if (errMsg != null)
-				return null;
-
-			if (resultPtr == IntPtr.Zero)
-				return null;
-
-			var result = Marshal.PtrToStringUTF8(resultPtr);
-			LibSecretInterop.SecretPasswordFree(resultPtr);
-			return result;
+			var result = LibSecretLookup(ref _schema, ht);
+			if (result != null)
+				return result;
 		}
 		finally
 		{
 			LibSecretInterop.FreeAttributesTable(ht, ptrs);
 		}
+
+		var legacyValue = LibSecretGetLegacy(key);
+		if (legacyValue == null)
+			return null;
+
+		LibSecretSetScoped(key, legacyValue);
+		LibSecretClearLegacy(key);
+		return legacyValue;
 	}
 
 	private void LibSecretSet(string key, string value)
+	{
+		LibSecretSetScoped(key, value);
+		LibSecretClearLegacy(key);
+	}
+
+	private void LibSecretSetScoped(string key, string value)
 	{
 		var ht = CreateScopedAttributesTable(key, out var ptrs);
 		try
@@ -230,6 +247,12 @@ public class LinuxSecureStorage : ISecureStorage
 
 	private bool LibSecretClear(string key)
 	{
+		var removed = LibSecretClearScoped(key);
+		return LibSecretClearLegacy(key) || removed;
+	}
+
+	private bool LibSecretClearScoped(string key)
+	{
 		var ht = CreateScopedAttributesTable(key, out var ptrs);
 		try
 		{
@@ -242,6 +265,36 @@ public class LinuxSecureStorage : ISecureStorage
 		finally
 		{
 			LibSecretInterop.FreeAttributesTable(ht, ptrs);
+		}
+	}
+
+	private string? LibSecretGetLegacy(string key)
+	{
+		var ht = CreateLegacyAttributesTable(key, out var keyPtr, out var valuePtr);
+		try
+		{
+			return LibSecretLookup(ref _legacySchema, ht);
+		}
+		finally
+		{
+			LibSecretInterop.FreeAttributesTable(ht, keyPtr, valuePtr);
+		}
+	}
+
+	private bool LibSecretClearLegacy(string key)
+	{
+		var ht = CreateLegacyAttributesTable(key, out var keyPtr, out var valuePtr);
+		try
+		{
+			var removed = LibSecretInterop.SecretPasswordClearVSync(
+				ref _legacySchema, ht, IntPtr.Zero, out var err);
+
+			LibSecretInterop.ConsumeError(err);
+			return removed;
+		}
+		finally
+		{
+			LibSecretInterop.FreeAttributesTable(ht, keyPtr, valuePtr);
 		}
 	}
 
@@ -268,6 +321,23 @@ public class LinuxSecureStorage : ISecureStorage
 			out ptrs,
 			(AppIdAttributeName, _applicationId),
 			(KeyAttributeName, key));
+
+	private static IntPtr CreateLegacyAttributesTable(string key, out IntPtr keyPtr, out IntPtr valuePtr) =>
+		LibSecretInterop.CreateAttributesTable(KeyAttributeName, key, out keyPtr, out valuePtr);
+
+	private static string? LibSecretLookup(ref LibSecretInterop.SecretSchema schema, IntPtr attributes)
+	{
+		var resultPtr = LibSecretInterop.SecretPasswordLookupVSync(
+			ref schema, attributes, IntPtr.Zero, out var err);
+
+		var errMsg = LibSecretInterop.ConsumeError(err);
+		if (errMsg != null || resultPtr == IntPtr.Zero)
+			return null;
+
+		var result = Marshal.PtrToStringUTF8(resultPtr);
+		LibSecretInterop.SecretPasswordFree(resultPtr);
+		return result;
+	}
 
 	private static string ResolveApplicationId()
 	{
