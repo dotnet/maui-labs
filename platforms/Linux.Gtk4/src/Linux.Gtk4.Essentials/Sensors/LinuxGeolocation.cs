@@ -27,6 +27,12 @@ public class LinuxGeolocation : IGeolocation
 			using var process = System.Diagnostics.Process.Start(psi);
 			if (process is null) return null;
 
+			cancelToken.Register(() =>
+			{
+				try { if (!process.HasExited) process.Kill(); }
+				catch { }
+			});
+
 			var output = await process.StandardOutput.ReadToEndAsync(cancelToken);
 			await process.WaitForExitAsync(cancelToken);
 

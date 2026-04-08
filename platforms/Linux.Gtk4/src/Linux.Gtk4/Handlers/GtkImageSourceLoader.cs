@@ -6,7 +6,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 internal static class GtkImageSourceLoader
 {
-	static readonly HttpClient HttpClient = new();
+	static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
 
 	[System.Runtime.InteropServices.DllImport("libcairo.so.2")]
 	static extern int cairo_surface_write_to_png(nint surface,

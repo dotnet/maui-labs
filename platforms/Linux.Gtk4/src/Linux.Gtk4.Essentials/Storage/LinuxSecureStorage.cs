@@ -47,37 +47,41 @@ public class LinuxSecureStorage : ISecureStorage
 
 	public Task<string?> GetAsync(string key)
 	{
-		lock (_lock)
+		return Task.Run(() =>
 		{
-			if (TryEnsureLibSecret())
+			lock (_lock)
 			{
-				var result = LibSecretGet(key);
-				if (result != null)
-					return Task.FromResult<string?>(result);
-				// null could mean "not found" — that's fine, return null
-				return Task.FromResult<string?>(null);
-			}
+				if (TryEnsureLibSecret())
+				{
+					var result = LibSecretGet(key);
+					if (result != null)
+						return result;
+					return (string?)null;
+				}
 
-			var store = LoadStore();
-			return Task.FromResult(store.TryGetValue(key, out var value) ? value : null);
-		}
+				var store = LoadStore();
+				return store.TryGetValue(key, out var value) ? value : null;
+			}
+		});
 	}
 
 	public Task SetAsync(string key, string value)
 	{
-		lock (_lock)
+		return Task.Run(() =>
 		{
-			if (TryEnsureLibSecret())
+			lock (_lock)
 			{
-				LibSecretSet(key, value);
-				return Task.CompletedTask;
-			}
+				if (TryEnsureLibSecret())
+				{
+					LibSecretSet(key, value);
+					return;
+				}
 
-			var store = LoadStore();
-			store[key] = value;
-			SaveStore(store);
-			return Task.CompletedTask;
-		}
+				var store = LoadStore();
+				store[key] = value;
+				SaveStore(store);
+			}
+		});
 	}
 
 	public bool Remove(string key)

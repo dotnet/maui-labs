@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
     <PackageReference Include="GirCore.WebKit-6.0" Version="0.7.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
   </ItemGroup>
 

@@ -39,9 +39,12 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		psi.ArgumentList.Add(authUriBuilder.Uri.AbsoluteUri);
 		using var process = Process.Start(psi);
 
+		using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
+
 		while (true)
 		{
-			using var client = await listener.AcceptTcpClientAsync(cancellationToken);
+			using var client = await listener.AcceptTcpClientAsync(timeoutCts.Token);
 
 			var responseUrl = await TryHandleCallbackAsync(client, redirectUri, cancellationToken);
 			if (responseUrl is null)

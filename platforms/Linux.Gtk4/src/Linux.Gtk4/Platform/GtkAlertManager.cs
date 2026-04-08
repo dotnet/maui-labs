@@ -41,7 +41,7 @@ if (proxy == null) return;
 
 services.AddSingleton(iamsType, proxy);
 }
-catch { }
+catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkAlertManager registration failed: {ex.Message}"); }
 }
 
 static Gtk.Window? GetGtkWindow(object? page)
