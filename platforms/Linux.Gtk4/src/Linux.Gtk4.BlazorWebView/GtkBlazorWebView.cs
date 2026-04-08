@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.FileProviders;
@@ -152,8 +153,17 @@ public sealed class GtkBlazorWebView : IDisposable
 
 	private void HandleUriScheme(URISchemeRequest request)
 	{
-		if (request.GetScheme() != Scheme || _webViewManager == null)
+		if (request.GetScheme() != Scheme)
+		{
+			FinishUriSchemeRequest(request, 400, "Bad Request", "Unsupported URI scheme.");
 			return;
+		}
+
+		if (_webViewManager == null)
+		{
+			FinishUriSchemeRequest(request, 503, "Service Unavailable", "Blazor WebView is not ready yet.");
+			return;
+		}
 
 		string uri = request.GetUri();
 		bool allowFallbackOnHostPage = !System.IO.Path.HasExtension(uri);
@@ -178,7 +188,10 @@ public sealed class GtkBlazorWebView : IDisposable
 			response.SetContentType(contentType);
 			response.SetStatus((uint)statusCode, statusMessage);
 			request.FinishWithResponse(response);
+			return;
 		}
+
+		FinishUriSchemeRequest(request, 404, "Not Found", $"No Blazor content was found for '{uri}'.");
 	}
 
 	private void StartWebViewCoreIfPossible()
@@ -217,5 +230,16 @@ public sealed class GtkBlazorWebView : IDisposable
 			return new PhysicalFileProvider(bundleRootDir);
 
 		return new NullFileProvider();
+	}
+
+	private static void FinishUriSchemeRequest(URISchemeRequest request, uint statusCode, string statusText, string message)
+	{
+		var body = Encoding.UTF8.GetBytes($"<html><body><h1>{statusCode} {statusText}</h1><p>{message}</p></body></html>");
+		var bytes = GLib.Bytes.New(body);
+		var stream = Gio.MemoryInputStream.NewFromBytes(bytes);
+		var response = URISchemeResponse.New(stream, body.Length);
+		response.SetContentType("text/html; charset=utf-8");
+		response.SetStatus(statusCode, statusText);
+		request.FinishWithResponse(response);
 	}
 }

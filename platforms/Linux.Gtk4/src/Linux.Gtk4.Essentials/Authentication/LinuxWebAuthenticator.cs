@@ -20,7 +20,8 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		ValidateCallbackUrl(callbackUrl);
 		using var listener = CreateLoopbackListener(callbackUrl, out var redirectUri);
 
-		// Honor the caller-provided callback path/host while using the listener's bound port.
+		// Honor the caller-provided callback path while normalizing the host/port
+		// to the actual bound loopback endpoint so browser resolution matches the listener.
 		var authUriBuilder = new UriBuilder(authUrl);
 		var query = System.Web.HttpUtility.ParseQueryString(authUriBuilder.Query);
 		query["redirect_uri"] = redirectUri.ToString();
@@ -65,6 +66,7 @@ public class LinuxWebAuthenticator : IWebAuthenticator
 		var redirectUriBuilder = new UriBuilder(callbackUrl)
 		{
 			Scheme = Uri.UriSchemeHttp,
+			Host = endpoint.Address.ToString(),
 			Port = endpoint.Port,
 			Path = string.IsNullOrEmpty(callbackUrl.AbsolutePath) ? "/" : callbackUrl.AbsolutePath,
 			Fragment = string.Empty
