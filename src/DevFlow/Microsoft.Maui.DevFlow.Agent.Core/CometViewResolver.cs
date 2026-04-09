@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Microsoft.Maui;
 
@@ -98,7 +99,16 @@ internal static class CometViewResolver
 		}
 		catch (AmbiguousMatchException)
 		{
-			// Walk inheritance chain with DeclaredOnly to resolve ambiguity
+			// Generic handlers like ViewHandler<T1,T2> use 'new' to hide base PlatformView.
+			// GetProperty throws AmbiguousMatchException. Use GetProperties to find all,
+			// then prefer the most-derived (non-object return type) version.
+			var candidates = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+				.Where(p => p.Name == name)
+				.OrderByDescending(p => p.PropertyType != typeof(object) ? 1 : 0)
+				.ToArray();
+			if (candidates.Length > 0) return candidates[0];
+
+			// Fallback: walk inheritance chain with DeclaredOnly
 			var current = type;
 			while (current != null)
 			{

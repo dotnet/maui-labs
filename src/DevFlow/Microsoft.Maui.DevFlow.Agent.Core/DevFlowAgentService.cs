@@ -1319,8 +1319,10 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                         return "ok";
 
                     return $"No tap handler on {el.GetType().FullName} (gestures:{v.GestureRecognizers.Count}, type:{v.GetType().Name})";
-                // Comet views implement IGestureView with Gesture objects that have Invoke().
-                // Check via reflection to avoid a hard Comet dependency.
+                // Comet TabView tab switching — must come before generic IView handlers
+                case IView cometTabChild when TrySwitchCometTabImpl(cometTabChild):
+                    return "ok";
+                // Comet views implement IGestureView with Gesture objects
                 case IView gestureView when TryInvokeCometGestureTap(gestureView):
                     return "ok";
                 // Comet views implement MAUI interfaces (IButton, ISwitch, etc.)
@@ -1338,6 +1340,15 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                     iRb.IsChecked = true;
                     return "ok";
                 case IView iView when iView.Handler?.PlatformView != null:
+                    // Comet tab switch for views that weren't caught by the guard above
+                    if ((el.GetType().FullName ?? "").StartsWith("Comet."))
+                    {
+                        var diag = TrySwitchCometTabDiag(iView);
+                        if (diag.Item1) return "ok";
+                        if (TryInvokeCometGestureTap(iView)) return "ok";
+                        if (TryBubbleCometGestureTap(iView)) return "ok";
+                        return $"Comet IView: {el.GetType().FullName} [tab:{diag.Item2}]";
+                    }
                     // Last resort: try native tap via handler's platform view
                     if (TryNativeTapOnHandler(iView))
                         return "ok";
@@ -1351,7 +1362,25 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                         return "ok";
                     return $"Unhandled IView (no handler): {el.GetType().FullName}";
                 default:
-                    return $"Unhandled type: {el.GetType().FullName}";
+                    // Comet views may not match 'case IView' due to framework version
+                    // mismatch (DevFlow targets net10.0/MAUI 10, host app may use MAUI 11).
+                    // Handle Comet-specific interactions by type name via reflection.
+                    var elTypeName = el.GetType().FullName ?? "";
+                    if (elTypeName.StartsWith("Comet."))
+                    {
+                        // Tab switching: walk parent chain to find Comet.TabView
+                        var tabResult = TrySwitchCometTabDiag(el);
+                        if (tabResult.Item1)
+                            return "ok";
+                        // Gesture tap: check IGestureView for tap gestures
+                        if (TryInvokeCometGestureTapByReflection(el))
+                            return "ok";
+                        // Bubble up parent chain for gesture on parent container
+                        if (TryBubbleCometGestureTapByReflection(el))
+                            return "ok";
+                        return $"Comet unhandled: {elTypeName} [tab:{tabResult.Item2}]";
+                    }
+                    return $"DEVFLOW_V2_UNHANDLED: {el.GetType().FullName}";
             }
         });
 
@@ -1493,6 +1522,181 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] TryNativeTapOnHandler failed: {ex.GetBaseException().Message}");
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if the view is a child of a Comet TabView and switches to it.
+    /// Walks up the parent chain via reflection to find a TabView parent,
+    /// then sets SelectedIndex to the child's position.
+    /// </summary>
+    /// <summary>
+    /// Accepts 'object' because Comet views may not match the DevFlow assembly's IView
+    /// when framework versions differ (e.g. DevFlow compiled against MAUI 10, app uses MAUI 11).
+    /// All access is via reflection.
+    /// </summary>
+    private static bool TrySwitchCometTabImpl(IView view) => TrySwitchCometTabDiag(view).Item1;
+
+    private static (bool, string) TrySwitchCometTabDiag(object view)
+    {
+        try
+        {
+            // Walk up the parent chain to find a Comet TabView
+            object current = view;
+            object tabView = null;
+            var walkLog = new System.Text.StringBuilder();
+
+            for (int i = 0; i < 10; i++)
+            {
+                var parentProp = current.GetType().GetProperty("Parent",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (parentProp == null) { walkLog.Append($"noProp@{i};"); break; }
+
+                var parent = parentProp.GetValue(current);
+                if (parent == null) { walkLog.Append($"null@{i};"); break; }
+
+                walkLog.Append($"{i}:{parent.GetType().Name};");
+                if (parent.GetType().FullName == "Comet.TabView")
+                {
+                    tabView = parent;
+                    break;
+                }
+
+                current = parent;
+            }
+
+            if (tabView == null) return (false, $"noTabView({walkLog})");
+
+            // Find the child's index using the public Count property and indexer
+            var tabType = tabView.GetType();
+            var countProp = tabType.GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
+            var indexerProp = tabType.GetProperty("Item", BindingFlags.Public | BindingFlags.Instance);
+            if (countProp == null || indexerProp == null) return (false, "noCountOrItem");
+
+            int count = (int)countProp.GetValue(tabView);
+            int childIndex = -1;
+            for (int idx = 0; idx < count; idx++)
+            {
+                var child = indexerProp.GetValue(tabView, new object[] { idx });
+                if (ReferenceEquals(child, view))
+                {
+                    childIndex = idx;
+                    break;
+                }
+            }
+
+            if (childIndex < 0) return (false, $"noRefMatch(count={count})");
+
+            // Set SelectedIndex on the Comet TabView
+            var selectedIndexProp = tabType.GetProperty("SelectedIndex",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (selectedIndexProp == null) return (false, "noSelectedIndex");
+            selectedIndexProp.SetValue(tabView, childIndex);
+
+            // Update the native platform view via reflection
+            // (can't use 'as IView' cast — same framework version issue)
+            var handlerProp = tabType.GetProperty("Handler",
+                BindingFlags.Public | BindingFlags.Instance);
+            var handler = handlerProp?.GetValue(tabView);
+            if (handler != null)
+            {
+                // Use GetPropertySafe to avoid AmbiguousMatchException from generic
+                // ViewHandler<T1,T2>.PlatformView hiding the base class version
+                var platformViewProp = CometViewResolver.GetPropertySafe(handler.GetType(), "PlatformView");
+                var platformView = platformViewProp?.GetValue(handler);
+                if (platformView != null)
+                {
+                    // iOS: CUITabView.ApplySelectedIndex(int)
+                    var applyMethod = platformView.GetType().GetMethod("ApplySelectedIndex",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (applyMethod != null)
+                    {
+                        applyMethod.Invoke(platformView, new object[] { childIndex });
+                    }
+                    else
+                    {
+                        var selIdxProp = CometViewResolver.GetPropertySafe(platformView.GetType(), "SelectedIndex");
+                        if (selIdxProp != null && selIdxProp.CanWrite)
+                            selIdxProp.SetValue(platformView, (nint)childIndex);
+                    }
+                }
+            }
+
+            return (true, "ok");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"ex:{ex.GetBaseException().Message}");
+        }
+    }
+
+    /// <summary>
+    /// Invokes a Comet tap gesture via reflection.
+    /// Works when Comet views implement IGestureView with Gesture objects.
+    /// All access via reflection — no IView cast needed.
+    /// </summary>
+    private static bool TryInvokeCometGestureTapByReflection(object view)
+    {
+        try
+        {
+            var viewType = view.GetType();
+            // Comet views implementing IGestureView have a Gestures property
+            var gesturesProp = viewType.GetProperty("Gestures",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (gesturesProp == null) return false;
+
+            var gestures = gesturesProp.GetValue(view) as System.Collections.IEnumerable;
+            if (gestures == null) return false;
+
+            foreach (var gesture in gestures)
+            {
+                if (gesture == null) continue;
+                var gestureType = gesture.GetType();
+                // Look for TapGesture or a type with "Tap" in the name
+                if (gestureType.Name.Contains("Tap") || gestureType.FullName?.Contains("TapGesture") == true)
+                {
+                    var invokeMethod = gestureType.GetMethod("Invoke",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (invokeMethod != null)
+                    {
+                        invokeMethod.Invoke(gesture, null);
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MauiDevFlow] TryInvokeCometGestureTapByReflection failed: {ex.GetBaseException().Message}");
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Walks up the Comet parent chain looking for a gesture tap (all via reflection).
+    /// </summary>
+    private static bool TryBubbleCometGestureTapByReflection(object view)
+    {
+        try
+        {
+            object current = view;
+            for (int i = 0; i < 10; i++)
+            {
+                var parentProp = current.GetType().GetProperty("Parent",
+                    BindingFlags.Public | BindingFlags.Instance);
+                var parent = parentProp?.GetValue(current);
+                if (parent == null) break;
+
+                if (TryInvokeCometGestureTapByReflection(parent))
+                    return true;
+
+                current = parent;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MauiDevFlow] TryBubbleCometGestureTapByReflection failed: {ex.GetBaseException().Message}");
         }
         return false;
     }
