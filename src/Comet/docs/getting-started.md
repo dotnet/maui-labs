@@ -62,7 +62,7 @@ the correct project structure, NuGet references, and platform configuration.
 ### Install the template
 
 ```
-dotnet new install Clancey.Comet.Templates.Multiplatform
+dotnet new install Microsoft.Maui.Comet.Templates.Multiplatform
 ```
 
 ### Create the project
@@ -207,7 +207,7 @@ If the template is not available, you can add Comet to a standard MAUI project:
 ```
 dotnet new maui -n MyFirstCometApp
 cd MyFirstCometApp
-dotnet add package Clancey.Comet
+dotnet add package Microsoft.Maui.Comet
 ```
 
 Then delete the XAML files the MAUI template generates:

@@ -441,7 +441,7 @@ be automatically included only for the correct target.
 
 ## NuGet Packaging
 
-The main package is `Clancey.Comet`. CI uses `dotnet pack` with a computed
+The main package is `Microsoft.Maui.Comet`. CI uses `dotnet pack` with a computed
 version:
 
 ```bash

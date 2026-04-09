@@ -144,4 +144,4 @@ stages:
         command: 'push'
         packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
         nuGetFeedType: 'external'
-        publishFeedCredentials: 'ClanceyNugetFeed'
+        publishFeedCredentials: 'MauiLabsNugetFeed'

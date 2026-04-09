@@ -1,22 +1,22 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
-    <id>Clancey.Comet.Skia</id>
+    <id>Microsoft.Maui.Comet.Skia</id>
     <version>0.0.1-alpha</version>
-    <title>Comet</title>
-    <authors>James Clancey</authors>
-    <owners>Clancey</owners>
+    <title>Comet.Skia</title>
+    <authors>Microsoft</authors>
+    <owners>Microsoft</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Skia Controls for Comet</description>
     <summary>This allows you to use Skia drawn controls for Comet!.</summary>
-    <copyright>James Clancey</copyright>
-    <projectUrl>https://github.com/clancey/Comet</projectUrl>
-    <repository type="git" url="https://github.com/clancey/Comet"/>
+    <copyright>Microsoft</copyright>
+    <projectUrl>https://github.com/nicwise/maui-labs</projectUrl>
+    <repository type="git" url="https://github.com/nicwise/maui-labs"/>
     <license type="expression">MIT</license>
     <language>C#</language>
     <dependencies>
       <group>
-        <dependency id="Clancey.Comet" version="$cometVersion$"/>
+        <dependency id="Microsoft.Maui.Comet" version="$cometVersion$"/>
         <dependency id="SkiaSharp" version="1.68.1.1"/>
         <dependency id="SkiaSharp.Views" version="1.68.1.1"/>
         <dependency id="Topten.RichTextKit" version="0.1.118"/>

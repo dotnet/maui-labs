@@ -140,8 +140,8 @@ stages:
           # Write your commands here
           
           nuget source Add -Name "GHNuget" \
-               -Source "https://nuget.pkg.github.com/Clancey/index.json" \
-               -UserName Clancey -Password $(gp)
+               -Source "https://nuget.pkg.github.com/nicwise/index.json" \
+               -UserName nicwise -Password $(gp)
           
           nuget push $(Build.ArtifactStagingDirectory)/**/*.nupkg -Source "GHNuget"
 
@@ -158,6 +158,6 @@ stages:
     #     command: 'push'
     #     packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
     #     nuGetFeedType: 'external'
-    #     publishFeedCredentials: 'ClanceyGitHubPackages'
+    #     publishFeedCredentials: 'MauiLabsGitHubPackages'
 
     

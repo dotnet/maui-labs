@@ -326,7 +326,7 @@ dotnet test tests/Comet.Tests/Comet.Tests.csproj --no-build -c Release
 
 ### NuGet Package
 
-The main package is `Clancey.Comet`. Packing uses `dotnet pack`:
+The main package is `Microsoft.Maui.Comet`. Packing uses `dotnet pack`:
 
 ```bash
 dotnet pack src/Comet/Comet.csproj -c Release -p:PackageVersion=$VERSION -o ./artifacts

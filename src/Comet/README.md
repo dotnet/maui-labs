@@ -1,6 +1,6 @@
 # Comet ☄️
 
-[![dev-build](https://github.com/dotnet/Comet/actions/workflows/dev.yml/badge.svg)](https://github.com/dotnet/Comet/actions/workflows/dev.yml)  [![Clancey.Comet on fuget.org](https://www.fuget.org/packages/Clancey.Comet/badge.svg)](https://www.fuget.org/packages/Clancey.Comet)
+[![dev-build](https://github.com/dotnet/Comet/actions/workflows/dev.yml/badge.svg)](https://github.com/dotnet/Comet/actions/workflows/dev.yml)  [![Microsoft.Maui.Comet on fuget.org](https://www.fuget.org/packages/Microsoft.Maui.Comet/badge.svg)](https://www.fuget.org/packages/Microsoft.Maui.Comet)
 
 Comet is an MVU framework for [.NET MAUI](https://learn.microsoft.com/dotnet/maui/what-is-maui). Write your entire UI in C# with a reactive state system that tracks what you read and updates only what changed. No XAML, no view models, no binding markup.
 
@@ -210,7 +210,7 @@ Comet requires .NET 10 with the MAUI workload.
 
 ```bash
 dotnet workload install maui
-dotnet add package Clancey.Comet
+dotnet add package Microsoft.Maui.Comet
 ```
 
 Register Comet handlers in `MauiProgram.cs`:

@@ -34,7 +34,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="MAUI_VERSION" />
-		<PackageReference Include="Clancey.Comet" Version="COMET_VERSION" />
+		<PackageReference Include="Microsoft.Maui.Comet" Version="COMET_VERSION" />
 	</ItemGroup>
 
 </Project>

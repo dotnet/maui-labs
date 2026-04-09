@@ -1,17 +1,17 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
-    <id>Clancey.Comet</id>
+    <id>Microsoft.Maui.Comet</id>
     <version>0.0.1-alpha</version>
     <title>Comet</title>
-    <authors>James Clancey</authors>
-    <owners>Clancey</owners>
+    <authors>Microsoft</authors>
+    <owners>Microsoft</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Comet MVU .NET MAUI framework - Build cross-platform UIs with Model-View-Update pattern</description>
     <summary>Comet is an MVU UI Framework for .NET MAUI. Build UI declaratively from C# with automatic data binding.</summary>
-    <copyright>James Clancey</copyright>
-    <projectUrl>https://github.com/jfversluis/Comet</projectUrl>
-    <repository type="git" url="https://github.com/jfversluis/Comet"/>
+    <copyright>Microsoft</copyright>
+    <projectUrl>https://github.com/nicwise/maui-labs</projectUrl>
+    <repository type="git" url="https://github.com/nicwise/maui-labs"/>
     <license type="expression">MIT</license>
     <language>C#</language>
     <dependencies>
@@ -26,7 +26,7 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="Directory.Build.targets" target="build/Clancey.Comet.targets"/>
+    <file src="Directory.Build.targets" target="build/Microsoft.Maui.Comet.targets"/>
     <file src="src/Comet/bin/Release/net9.0-ios/Comet.dll" target="lib/net9.0-ios18.0/Comet.dll"/>
     <file src="src/Comet/bin/Release/net9.0-ios/Comet.pdb" target="lib/net9.0-ios18.0/Comet.pdb"/>
     <file src="src/Comet/bin/Release/net9.0-android/Comet.dll" target="lib/net9.0-android35.0/Comet.dll"/>
