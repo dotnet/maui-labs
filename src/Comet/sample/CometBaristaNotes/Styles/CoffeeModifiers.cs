@@ -1,8 +1,3 @@
-using System;
-using Comet.Styles;
-using CometBaristaNotes.Components;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
 using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
 using CometBorder = Comet.Border;
 using CometButton = Comet.Button;
@@ -13,7 +8,8 @@ namespace CometBaristaNotes.Styles;
 
 /// <summary>
 /// Reusable ViewModifier subclasses for the coffee theme.
-/// Uses hex constants from CoffeeColors; will migrate to framework tokens later.
+/// Colors resolve dynamically from CoffeeColors (which delegates to ThemeManager)
+/// so modifiers respond to light/dark theme changes.
 /// </summary>
 
 public class TypographyModifier : ViewModifier
@@ -21,9 +17,9 @@ public class TypographyModifier : ViewModifier
 	readonly string _fontFamily;
 	readonly double _fontSize;
 	readonly FontWeight? _fontWeight;
-	readonly Color _color;
+	readonly Func<Color> _color;
 
-	public TypographyModifier(string fontFamily, double fontSize, Color color, FontWeight? fontWeight = null)
+	public TypographyModifier(string fontFamily, double fontSize, Func<Color> color, FontWeight? fontWeight = null)
 	{
 		_fontFamily = fontFamily;
 		_fontSize = fontSize;
@@ -35,7 +31,7 @@ public class TypographyModifier : ViewModifier
 	{
 		view.FontFamily(_fontFamily)
 			.FontSize(_fontSize)
-			.Color(_color);
+			.Color(_color());
 
 		if (_fontWeight.HasValue)
 			view.FontWeight(_fontWeight.Value);
@@ -589,31 +585,31 @@ public static class CoffeeModifiers
 	public static readonly ViewModifier ShotCard = new ShotCardModifier();
 	public static readonly ViewModifier SurfaceVariantField = new SurfaceVariantFieldModifier();
 	public static readonly ViewModifier TransparentField = new TransparentFieldModifier();
-	public static readonly ViewModifier Headline = new TypographyModifier(CoffeeColors.FontSemibold, 24, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier SubHeadline = new TypographyModifier(CoffeeColors.FontSemibold, 20, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier TitleSmall = new TypographyModifier(CoffeeColors.FontSemibold, 18, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier Body = new TypographyModifier(CoffeeColors.FontRegular, 14, CoffeeColors.TextPrimary);
-	public static readonly ViewModifier BodyStrong = new TypographyModifier(CoffeeColors.FontSemibold, 14, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier SecondaryText = new TypographyModifier(CoffeeColors.FontRegular, 14, CoffeeColors.TextSecondary);
-	public static readonly ViewModifier MutedText = new TypographyModifier(CoffeeColors.FontRegular, 14, CoffeeColors.TextMuted);
-	public static readonly ViewModifier Caption = new TypographyModifier(CoffeeColors.FontRegular, 12, CoffeeColors.TextMuted);
-	public static readonly ViewModifier SmallText = new TypographyModifier(CoffeeColors.FontRegular, 13, CoffeeColors.TextSecondary);
-	public static readonly ViewModifier TinyText = new TypographyModifier(CoffeeColors.FontRegular, 11, CoffeeColors.TextMuted);
-	public static readonly ViewModifier MicroText = new TypographyModifier(CoffeeColors.FontRegular, 9, CoffeeColors.TextSecondary);
-	public static readonly ViewModifier LabelStrong = new TypographyModifier(CoffeeColors.FontSemibold, 12, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier ValueText = new TypographyModifier(CoffeeColors.FontSemibold, 16, CoffeeColors.TextPrimary);
-	public static readonly ViewModifier CardTitle = new TypographyModifier(CoffeeColors.FontSemibold, 16, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier CardSubtitle = new TypographyModifier(CoffeeColors.FontRegular, 14, CoffeeColors.TextSecondary);
-	public static readonly ViewModifier FormLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, CoffeeColors.TextSecondary);
-	public static readonly ViewModifier FormValue = new TypographyModifier(CoffeeColors.FontRegular, 16, CoffeeColors.TextPrimary);
-	public static readonly ViewModifier BadgeText = new TypographyModifier(CoffeeColors.FontSemibold, 10, Colors.White, FontWeight.Bold);
-	public static readonly ViewModifier BodyError = new TypographyModifier(CoffeeColors.FontRegular, 14, CoffeeColors.Error);
-	public static readonly ViewModifier RatingAverage = new TypographyModifier(CoffeeColors.FontSemibold, 36, CoffeeColors.Primary, FontWeight.Bold);
-	public static readonly ViewModifier RatingLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, CoffeeColors.TextMuted);
-	public static readonly ViewModifier RatingStatLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, CoffeeColors.TextMuted);
-	public static readonly ViewModifier RatingStatValue = new TypographyModifier(CoffeeColors.FontSemibold, 12, CoffeeColors.TextPrimary, FontWeight.Bold);
-	public static readonly ViewModifier RatingLevelLabel = new TypographyModifier(CoffeeColors.FontSemibold, 12, CoffeeColors.TextSecondary, FontWeight.Bold);
-	public static readonly ViewModifier RatingCountLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, CoffeeColors.TextMuted);
+	public static readonly ViewModifier Headline = new TypographyModifier(CoffeeColors.FontSemibold, 24, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier SubHeadline = new TypographyModifier(CoffeeColors.FontSemibold, 20, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier TitleSmall = new TypographyModifier(CoffeeColors.FontSemibold, 18, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier Body = new TypographyModifier(CoffeeColors.FontRegular, 14, () => CoffeeColors.TextPrimary);
+	public static readonly ViewModifier BodyStrong = new TypographyModifier(CoffeeColors.FontSemibold, 14, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier SecondaryText = new TypographyModifier(CoffeeColors.FontRegular, 14, () => CoffeeColors.TextSecondary);
+	public static readonly ViewModifier MutedText = new TypographyModifier(CoffeeColors.FontRegular, 14, () => CoffeeColors.TextMuted);
+	public static readonly ViewModifier Caption = new TypographyModifier(CoffeeColors.FontRegular, 12, () => CoffeeColors.TextMuted);
+	public static readonly ViewModifier SmallText = new TypographyModifier(CoffeeColors.FontRegular, 13, () => CoffeeColors.TextSecondary);
+	public static readonly ViewModifier TinyText = new TypographyModifier(CoffeeColors.FontRegular, 11, () => CoffeeColors.TextMuted);
+	public static readonly ViewModifier MicroText = new TypographyModifier(CoffeeColors.FontRegular, 9, () => CoffeeColors.TextSecondary);
+	public static readonly ViewModifier LabelStrong = new TypographyModifier(CoffeeColors.FontSemibold, 12, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier ValueText = new TypographyModifier(CoffeeColors.FontSemibold, 16, () => CoffeeColors.TextPrimary);
+	public static readonly ViewModifier CardTitle = new TypographyModifier(CoffeeColors.FontSemibold, 16, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier CardSubtitle = new TypographyModifier(CoffeeColors.FontRegular, 14, () => CoffeeColors.TextSecondary);
+	public static readonly ViewModifier FormLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, () => CoffeeColors.TextSecondary);
+	public static readonly ViewModifier FormValue = new TypographyModifier(CoffeeColors.FontRegular, 16, () => CoffeeColors.TextPrimary);
+	public static readonly ViewModifier BadgeText = new TypographyModifier(CoffeeColors.FontSemibold, 10, () => Colors.White, FontWeight.Bold);
+	public static readonly ViewModifier BodyError = new TypographyModifier(CoffeeColors.FontRegular, 14, () => CoffeeColors.Error);
+	public static readonly ViewModifier RatingAverage = new TypographyModifier(CoffeeColors.FontSemibold, 36, () => CoffeeColors.Primary, FontWeight.Bold);
+	public static readonly ViewModifier RatingLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, () => CoffeeColors.TextMuted);
+	public static readonly ViewModifier RatingStatLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, () => CoffeeColors.TextMuted);
+	public static readonly ViewModifier RatingStatValue = new TypographyModifier(CoffeeColors.FontSemibold, 12, () => CoffeeColors.TextPrimary, FontWeight.Bold);
+	public static readonly ViewModifier RatingLevelLabel = new TypographyModifier(CoffeeColors.FontSemibold, 12, () => CoffeeColors.TextSecondary, FontWeight.Bold);
+	public static readonly ViewModifier RatingCountLabel = new TypographyModifier(CoffeeColors.FontRegular, 12, () => CoffeeColors.TextMuted);
 	public static readonly CardModifier Card = new();
 	public static readonly ListCardModifier ListCard = new();
 	public static readonly FormFieldModifier FormField = new();

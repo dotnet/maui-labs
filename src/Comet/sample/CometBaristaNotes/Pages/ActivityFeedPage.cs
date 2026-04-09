@@ -1,14 +1,4 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Styles;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Maui;
 using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -168,13 +158,10 @@ public class ActivityFeedPage : Component<ActivityFeedState>
 			State.IsFilterSheetOpen ? RenderFilterOverlay() : null
 		)
 			.Modifier(CoffeeModifiers.PageContainer)
+			.ToolbarItems(
+				new Comet.ToolbarItem { IconGlyph = "line.3.horizontal.decrease", OnClicked = OpenFilterSheet })
 			.Title("Shot History");
 	}
-
-	/// <summary>
-	/// Called from BaristaApp toolbar item to open the Comet filter overlay.
-	/// </summary>
-	public void TriggerFilter() => OpenFilterSheet();
 
 	View RenderFilterOverlay()
 	{
@@ -313,45 +300,32 @@ public class ActivityFeedPage : Component<ActivityFeedState>
 				"Start logging your espresso shots to see them here");
 		}
 
-		// Shot list — cards with tight spacing, edge-to-edge with horizontal margins
-		var items = new List<View>();
+		// Shot list via CollectionView with virtualization
+		var list = new CollectionView<ShotRecord>(() => State.ShotRecords)
+		{
+			ViewFor = shot => new ShotRecordCard(shot, () =>
+				Comet.NavigationView.Navigate(this, new ShotLoggingPage(shot.Id)))
+				.Margin(new Thickness(0, 3)),
+			ItemsLayout = Comet.ItemsLayout.Vertical(0),
+			RemainingItemsThreshold = 5,
+			RemainingItemsThresholdReached = () => { if (State.HasMore) LoadMore(); },
+		};
 
-		// Active filter count (only when filters are applied)
+		var content = VStack(spacing: 0f);
+
+		// Active filter count header
 		if (State.HasActiveFilters)
 		{
 			var resultText = $"Showing {State.ShotRecords.Count} of {State.TotalShotCount} shots";
-			items.Add(Text(resultText)
+			content.Add(Text(resultText)
 				.Modifier(CoffeeModifiers.SecondaryText)
 				.HorizontalTextAlignment(TextAlignment.Center)
 				.Padding(new Thickness(0, CoffeeColors.SpacingXS)));
 		}
 
-		// Shot cards — 4pt vertical margins to match original CollectionView Margin(16, 4)
-		foreach (var shot in State.ShotRecords)
-		{
-			items.Add(ShotRecordCardFactory.Create(shot, () =>
-				Comet.NavigationView.Navigate(this, new ShotLoggingPage(shot.Id)))
-				.Margin(new Thickness(0, 3)));
-		}
+		content.Add(list.FillHorizontal().FillVertical());
 
-		// Load more button
-		if (State.HasMore)
-		{
-			items.Add(
-				Button("Load More", LoadMore)
-					.Modifier(CoffeeModifiers.SecondaryButton)
-					.Margin(new Thickness(0, CoffeeColors.SpacingS))
-			);
-		}
-
-		// Bottom spacer for scroll clearance past tab bar
-		items.Add(new Spacer().Modifier(CoffeeModifiers.FrameHeight(80)));
-
-		var stack = VStack(spacing: 0f);
-		foreach (var item in items) stack.Add(item);
-
-		return ScrollView(
-			stack.Padding(new Thickness(CoffeeColors.SpacingM, 0))
-		);
+		return content
+			.Padding(new Thickness(CoffeeColors.SpacingM, 0));
 	}
 }

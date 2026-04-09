@@ -1,13 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Pages;
 
 public class BeanDetailPageState
@@ -27,16 +17,21 @@ public class BeanDetailPageState
 public class BeanDetailPage : Component<BeanDetailPageState>
 {
 	readonly int _beanId;
+	readonly IDataStore _store;
 	const int ShotsPageSize = 20;
 
-	public BeanDetailPage(int beanId = 0) { _beanId = beanId; }
+	public BeanDetailPage(int beanId = 0)
+	{
+		_beanId = beanId;
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
 
 	void LoadBean()
 	{
 		if (_beanId <= 0) { SetState(s => s.IsLoaded = true); return; }
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		var bean = store.GetBean(_beanId);
 		if (bean == null)
@@ -67,8 +62,7 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 		}
 		SetState(s => s.Error = "");
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		if (_beanId > 0)
 		{
@@ -105,10 +99,7 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 
 		if (!confirmed) return;
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
-
-		store.ArchiveBean(_beanId);
+		_store.ArchiveBean(_beanId);
 		Navigation?.Pop();
 	}
 
@@ -119,19 +110,17 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 
 		var isEdit = _beanId > 0;
 
-		var items = new List<View>();
+		var stack = VStack(CoffeeColors.SpacingS,
+			FormHelpers.MakeSectionHeader(isEdit ? "EDIT BEAN" : "NEW BEAN"),
+			FormHelpers.MakeFormEntry("Name *", State.Name, "Bean name (required)", v => SetState(s => s.Name = v)),
+			FormHelpers.MakeFormEntry("Roaster", State.Roaster, "Roaster name", v => SetState(s => s.Roaster = v)),
+			FormHelpers.MakeFormEntry("Origin", State.Origin, "Country or region of origin", v => SetState(s => s.Origin = v)),
+			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100)
+		);
 
-		// ── Form section ────────────────────────────────────────────
-		items.Add(FormHelpers.MakeSectionHeader(isEdit ? "EDIT BEAN" : "NEW BEAN"));
-		items.Add(FormHelpers.MakeFormEntry("Name *", State.Name, "Bean name (required)", v => SetState(s => s.Name = v)));
-		items.Add(FormHelpers.MakeFormEntry("Roaster", State.Roaster, "Roaster name", v => SetState(s => s.Roaster = v)));
-		items.Add(FormHelpers.MakeFormEntry("Origin", State.Origin, "Country or region of origin", v => SetState(s => s.Origin = v)));
-		items.Add(FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100));
-
-		// ── Error display ───────────────────────────────────────────
 		if (!string.IsNullOrEmpty(State.Error))
 		{
-			items.Add(
+			stack.Add(
 				Border(
 					Text(State.Error)
 						.Modifier(CoffeeModifiers.BodyError)
@@ -141,27 +130,25 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 			);
 		}
 
-		// ── Save button ─────────────────────────────────────────────
-		items.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Create Bean", Save));
+		stack.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Create Bean", Save));
 
-		// ── Edit-mode sections ──────────────────────────────────────
 		if (isEdit)
 		{
-			items.Add(FormHelpers.MakeDangerButton("Delete Bean", DeleteBean));
+			stack.Add(FormHelpers.MakeDangerButton("Delete Bean", DeleteBean));
 
 			// Rating section
-			items.Add(MakeDivider());
-			items.Add(FormHelpers.MakeSectionHeader("BEAN RATINGS"));
-			items.Add(RatingDisplayFactory.Create(State.Rating));
-			items.Add(BuildRatingDistribution());
+			stack.Add(MakeDivider());
+			stack.Add(FormHelpers.MakeSectionHeader("BEAN RATINGS"));
+			stack.Add(new RatingDisplay(State.Rating));
+			stack.Add(BuildRatingDistribution());
 
 			// Bags section
-			items.Add(MakeDivider());
-			items.Add(FormHelpers.MakeSectionHeader("BAGS"));
+			stack.Add(MakeDivider());
+			stack.Add(FormHelpers.MakeSectionHeader("BAGS"));
 
 			if (State.Bags.Count == 0)
 			{
-				items.Add(
+				stack.Add(
 					Text("No bags added yet")
 						.Modifier(CoffeeModifiers.SecondaryText)
 						.HorizontalTextAlignment(TextAlignment.Center)
@@ -171,22 +158,22 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 			else
 			{
 				foreach (var bag in State.Bags)
-					items.Add(BuildBagCard(bag));
+					stack.Add(BuildBagCard(bag));
 			}
 
-			items.Add(FormHelpers.MakeSecondaryButton("+ Add Bag", () =>
+			stack.Add(FormHelpers.MakeSecondaryButton("+ Add Bag", () =>
 			{
 				Navigation?.Navigate(new BagFormPage(_beanId));
 			}));
 
 			// Shot history section
-			items.Add(MakeDivider());
-			items.Add(FormHelpers.MakeSectionHeader("SHOT HISTORY"));
+			stack.Add(MakeDivider());
+			stack.Add(FormHelpers.MakeSectionHeader("SHOT HISTORY"));
 
 			var shots = State.AllShots;
 			if (shots.Count == 0)
 			{
-				items.Add(FormHelpers.MakeEmptyState(
+				stack.Add(FormHelpers.MakeEmptyState(
 					Icons.Assignment, "No Shots Yet",
 					"No shots recorded with this bean yet"));
 			}
@@ -196,7 +183,7 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 				foreach (var shot in visible)
 				{
 					var shotId = shot.Id;
-					items.Add(ShotRecordCardFactory.Create(shot, () =>
+					stack.Add(new ShotRecordCard(shot, () =>
 					{
 						Navigation?.Navigate(new ShotLoggingPage(shotId));
 					}));
@@ -204,21 +191,18 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 
 				if (State.VisibleShotCount < shots.Count)
 				{
-					items.Add(FormHelpers.MakeSecondaryButton(
+					stack.Add(FormHelpers.MakeSecondaryButton(
 						$"Load More ({shots.Count - State.VisibleShotCount} remaining)",
 						() => SetState(s => s.VisibleShotCount += ShotsPageSize)));
 				}
 			}
 		}
 
-		var stack = VStack(CoffeeColors.SpacingS);
-		foreach (var item in items)
-			stack.Add(item);
-
 		return ScrollView(
 			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Modifier(CoffeeModifiers.PageContainer);
+		.Modifier(CoffeeModifiers.PageContainer)
+		.Title(isEdit ? "Edit Bean" : "New Bean");
 	}
 
 	static View MakeDivider()
@@ -308,19 +292,17 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 				.Padding(new Thickness(6, 2))
 		);
 
-		var infoItems = new List<View> { headerRow };
+		var infoStack = VStack(4, headerRow);
 
-		// Notes
 		if (bag.Notes != null)
 		{
-			infoItems.Add(
+			infoStack.Add(
 				Text(bag.Notes)
 					.Modifier(CoffeeModifiers.FormLabel)
 			);
 		}
 
-		// Stats row: shot count + avg rating
-		var statsRow = HStack(CoffeeColors.SpacingM,
+		infoStack.Add(HStack(CoffeeColors.SpacingM,
 			Text($"{bag.ShotCount} shots")
 				.Modifier(CoffeeModifiers.Caption),
 			bag.AverageRating.HasValue
@@ -329,12 +311,7 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 					.Modifier(CoffeeModifiers.TextColor(CoffeeColors.StarFilled))
 				: Text("No ratings")
 					.Modifier(CoffeeModifiers.Caption)
-		);
-		infoItems.Add(statsRow);
-
-		var infoStack = VStack(4);
-		foreach (var item in infoItems)
-			infoStack.Add(item);
+		));
 
 		return Border(
 			Grid(columns: new object[] { "*", "Auto" }, rows: new object[] { "Auto" },

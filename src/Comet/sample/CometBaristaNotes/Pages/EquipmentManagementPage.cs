@@ -1,13 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Pages;
 
 public class EquipmentManagementPageState
@@ -18,52 +8,51 @@ public class EquipmentManagementPageState
 
 public class EquipmentManagementPage : Component<EquipmentManagementPageState>
 {
+	readonly IDataStore _store;
+
+	public EquipmentManagementPage()
+	{
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
+
 	void LoadEquipment()
 	{
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
 		SetState(s =>
 		{
-			s.Equipment = store.GetAllEquipment();
+			s.Equipment = _store.GetAllEquipment();
 			s.IsLoaded = true;
 		});
 	}
+
+	void NavigateToAddEquipment() => Comet.NavigationView.Navigate(this, new EquipmentDetailPage(0));
 
 	public override View Render()
 	{
 		if (!State.IsLoaded)
 			LoadEquipment();
 
-		var items = State.Equipment;
+		var addToolbar = new Comet.ToolbarItem { IconGlyph = "plus", OnClicked = NavigateToAddEquipment };
 
-		if (items.Count == 0)
+		var list = new CollectionView<Equipment>(() => State.Equipment)
 		{
-			return VStack(CoffeeColors.SpacingM,
+			ViewFor = eq => MakeEquipmentCard(eq),
+			ItemsLayout = Comet.ItemsLayout.Vertical(CoffeeColors.SpacingS),
+			EmptyView = VStack(CoffeeColors.SpacingM,
 				FormHelpers.MakeEmptyState(
 					Icons.Machine,
 					"No Equipment Yet",
 					"Add your coffee machines, grinders, and accessories",
 					iconFontFamily: Icons.CoffeeFontFamily),
-				FormHelpers.MakePrimaryButton("+ Add Equipment", () =>
-					Comet.NavigationView.Navigate(this, new EquipmentDetailPage(0)))
-			)
-			.Padding(new Thickness(CoffeeColors.SpacingL))
-			.FillHorizontal()
-			.Modifier(CoffeeModifiers.PageContainer);
-		}
+				FormHelpers.MakePrimaryButton("+ Add Equipment", NavigateToAddEquipment)
+			).Padding(new Thickness(CoffeeColors.SpacingL)),
+		};
 
-		var stack = VStack(CoffeeColors.SpacingS,
-			FormHelpers.MakePrimaryButton("+ Add Equipment", () =>
-				Comet.NavigationView.Navigate(this, new EquipmentDetailPage(0)))
-		);
-
-		foreach (var eq in items)
-		{
-			stack.Add(MakeEquipmentCard(eq));
-		}
-
-		return ScrollView(stack.Padding(new Thickness(CoffeeColors.SpacingM)))
-			.Modifier(CoffeeModifiers.PageContainer);
+		return list
+			.Padding(new Thickness(CoffeeColors.SpacingM))
+			.Modifier(CoffeeModifiers.PageContainer)
+			.ToolbarItems(addToolbar)
+			.Title("Equipment");
 	}
 
 	View MakeEquipmentCard(Equipment eq)

@@ -1,6 +1,3 @@
-using Comet.Styles;
-using CometBaristaNotes.Styles;
-
 namespace CometBaristaNotes.Services;
 
 public class ThemeService : IThemeService

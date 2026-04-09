@@ -1,11 +1,9 @@
-using Microsoft.Maui.Graphics;
-
 namespace CometBaristaNotes.Components;
 
 /// <summary>
-/// Static color/sizing constants for the coffee palette.
-/// Bridge class — pages reference these during the migration to Comet tokens.
-/// Will be replaced by CoffeeTokens + ThemeManager resolution in Phase 4.
+/// Dynamic color/sizing constants for the coffee palette.
+/// Color properties resolve from ThemeManager.Current() so they respond to
+/// light/dark theme changes. Non-color constants (spacing, radii, sizes) are fixed.
 /// </summary>
 public static class CoffeeColors
 {
@@ -13,25 +11,37 @@ public static class CoffeeColors
 	public const string FontRegular = "Manrope";
 	public const string FontSemibold = "ManropeSemibold";
 
-	// Card themed colors (original BaristaNotes uses ThemeKey(ThemeKeys.CardBorder))
-	public static readonly Color CardBackground = Color.FromArgb("#FCEFE1");
-	public static readonly Color CardStroke = Color.FromArgb("#D7C5B2");
+	// ── Theme-aware colors ──────────────────────────────────────────
+	// Material 3 colors resolve from theme.Colors; app-specific colors
+	// resolve from CoffeeTokens (backed by CoffeeThemeData).
 
-	// Colors
-	public static readonly Color Primary = Color.FromArgb("#86543F");
-	public static readonly Color Background = Color.FromArgb("#D2BCA5");
-	public static readonly Color Surface = Color.FromArgb("#FCEFE1");
-	public static readonly Color SurfaceVariant = Color.FromArgb("#ECDAC4");
-	public static readonly Color SurfaceElevated = Color.FromArgb("#FFF7EC");
-	public static readonly Color TextPrimary = Color.FromArgb("#352B23");
-	public static readonly Color TextSecondary = Color.FromArgb("#7C7067");
-	public static readonly Color TextMuted = Color.FromArgb("#A38F7D");
-	public static readonly Color Outline = Color.FromArgb("#D7C5B2");
-	public static readonly Color Success = Color.FromArgb("#4CAF50");
-	public static readonly Color Warning = Color.FromArgb("#FFA726");
-	public static readonly Color Error = Color.FromArgb("#EF5350");
+	static Theme T => ThemeManager.Current();
+
+	// Card themed colors
+	public static Color CardBackground => T?.Colors?.Surface ?? Color.FromArgb("#FCEFE1");
+	public static Color CardStroke => T?.Colors?.Outline ?? Color.FromArgb("#D7C5B2");
+
+	// Material 3 colors
+	public static Color Primary => T?.Colors?.Primary ?? Color.FromArgb("#86543F");
+	public static Color Background => T?.Colors?.Background ?? Color.FromArgb("#D2BCA5");
+	public static Color Surface => T?.Colors?.Surface ?? Color.FromArgb("#FCEFE1");
+	public static Color SurfaceVariant => T?.Colors?.SurfaceVariant ?? Color.FromArgb("#ECDAC4");
+	public static Color Outline => T?.Colors?.Outline ?? Color.FromArgb("#D7C5B2");
+
+	// App-specific colors (via CoffeeTokens → CoffeeThemeData)
+	public static Color SurfaceElevated => CoffeeTokens.SurfaceElevated.Resolve(T);
+	public static Color TextPrimary => CoffeeTokens.TextPrimary.Resolve(T);
+	public static Color TextSecondary => CoffeeTokens.TextSecondary.Resolve(T);
+	public static Color TextMuted => CoffeeTokens.TextMuted.Resolve(T);
+	public static Color Success => CoffeeTokens.Success.Resolve(T);
+	public static Color Warning => CoffeeTokens.Warning.Resolve(T);
+	public static Color Error => CoffeeTokens.Error.Resolve(T);
+
+	// Non-themed colors
 	public static readonly Color StarFilled = Color.FromArgb("#FFB800");
-	public static readonly Color StarEmpty = Color.FromArgb("#D7C5B2");
+	public static Color StarEmpty => T?.Colors?.Outline ?? Color.FromArgb("#D7C5B2");
+
+	// ── Fixed constants ─────────────────────────────────────────────
 
 	// Spacing
 	public const int SpacingXS = 4;

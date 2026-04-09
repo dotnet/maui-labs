@@ -1,10 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Components;
 
 /// <summary>

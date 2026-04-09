@@ -38,6 +38,9 @@
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
 		<PackageReference Include="CommunityToolkit.Maui" Version="13.0.0" />
+		<!-- DevFlow: local patched build with Comet visual tree support.
+		     NuGet DevFlow removed via local Directory.Build.targets. -->
+		<ProjectReference Include="..\..\..\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -1,17 +1,6 @@
-using Comet;
 using Comet.Reactive;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
 using CometBaristaNotes.Services.DTOs;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Extensions.DependencyInjection;
-// using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
 using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
-using System.Data;
 
 namespace CometBaristaNotes.Pages;
 
@@ -91,11 +80,11 @@ class GaugeArcDrawable
 	public float Max { get; set; }
 	public string[] ScaleLabels { get; set; }
 	public string Unit { get; set; } = "g";
-	public Color TrackColor { get; set; } = Color.FromArgb("#ECDAC4");
-	public Color ValueColor { get; set; } = Color.FromArgb("#86543F");
-	public Color LabelColor { get; set; } = Color.FromArgb("#7C6B5A");
-	public Color ValueTextColor { get; set; } = Color.FromArgb("#352B23");
-	public Color UnitTextColor { get; set; } = Color.FromArgb("#7C7067");
+	public Color TrackColor { get; set; } = CoffeeColors.SurfaceVariant;
+	public Color ValueColor { get; set; } = CoffeeColors.Primary;
+	public Color LabelColor { get; set; } = CoffeeColors.TextSecondary;
+	public Color ValueTextColor { get; set; } = CoffeeColors.TextPrimary;
+	public Color UnitTextColor { get; set; } = CoffeeColors.TextSecondary;
 	public float StrokeWidth { get; set; } = 20f;
 	public float Inset { get; set; } = 14f;
 
@@ -168,6 +157,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 	};
 
 	readonly int _shotId;
+	readonly IDataStore _store;
 	bool _dataLoaded;
 	int _savedShotId;
 
@@ -192,6 +182,8 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 	public ShotLoggingPage(int shotId = 0)
 	{
 		_shotId = shotId;
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
 	}
 
 	void ResolveServices()
@@ -210,8 +202,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		if (_dataLoaded) return;
 		_dataLoaded = true;
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		var bags = store.GetAllBags().Where(b => !b.IsComplete).ToList();
 		var beans = store.GetAllBeans();
@@ -314,8 +305,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 
 	void SaveShot()
 	{
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		if (State.SelectedBagId == null)
 		{
@@ -554,6 +544,9 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 			State.IsVoiceSheetOpen ? RenderVoiceOverlay() : null
 		)
 			.Modifier(CoffeeModifiers.PageContainer)
+			.ToolbarItems(
+				new Comet.ToolbarItem { IconGlyph = "mic.fill", OnClicked = () => { /* toggle voice */ } },
+				new Comet.ToolbarItem { IconGlyph = "camera.fill", OnClicked = () => { /* open camera */ } })
 			.Title(IsEditMode ? "Edit Shot" : "New Shot");
 	}
 

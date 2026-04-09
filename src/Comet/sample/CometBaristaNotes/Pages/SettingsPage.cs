@@ -1,10 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-
 namespace CometBaristaNotes.Pages;
 
 public class SettingsPageState
@@ -19,7 +12,9 @@ public class SettingsPage : Component<SettingsPageState>
 	public SettingsPage()
 	{
 		_themeService = IPlatformApplication.Current!.Services.GetRequiredService<IThemeService>();
-		_themeService.LoadSavedTheme();
+		// Note: LoadSavedTheme() is called during CoffeeTheme.Initialize() in BaristaApp ctor.
+		// Calling it here during page construction would trigger ThemeManager.SetTheme() which
+		// marks all views dirty and deadlocks the initial render pipeline.
 	}
 
 	public override View Render()

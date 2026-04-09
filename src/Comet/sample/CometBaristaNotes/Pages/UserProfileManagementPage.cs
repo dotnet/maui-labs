@@ -1,13 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Pages;
 
 public class UserProfileManagementPageState
@@ -18,51 +8,50 @@ public class UserProfileManagementPageState
 
 public class UserProfileManagementPage : Component<UserProfileManagementPageState>
 {
+	readonly IDataStore _store;
+
+	public UserProfileManagementPage()
+	{
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
+
 	void LoadProfiles()
 	{
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
 		SetState(s =>
 		{
-			s.Profiles = store.GetAllProfiles();
+			s.Profiles = _store.GetAllProfiles();
 			s.IsLoaded = true;
 		});
 	}
+
+	void NavigateToAddProfile() => Comet.NavigationView.Navigate(this, new ProfileFormPage(0));
 
 	public override View Render()
 	{
 		if (!State.IsLoaded)
 			LoadProfiles();
 
-		var profiles = State.Profiles;
+		var addToolbar = new Comet.ToolbarItem { IconGlyph = "plus", OnClicked = NavigateToAddProfile };
 
-		if (profiles.Count == 0)
+		var list = new CollectionView<UserProfile>(() => State.Profiles)
 		{
-			return VStack(CoffeeColors.SpacingM,
+			ViewFor = profile => MakeProfileCard(profile),
+			ItemsLayout = Comet.ItemsLayout.Vertical(CoffeeColors.SpacingS),
+			EmptyView = VStack(CoffeeColors.SpacingM,
 				FormHelpers.MakeEmptyState(
 					Icons.Person,
 					"No Profiles Yet",
 					"Create profiles for different users or coffee preferences"),
-				FormHelpers.MakePrimaryButton("+ Add Profile", () =>
-					Comet.NavigationView.Navigate(this, new ProfileFormPage(0)))
-			)
-			.Padding(new Thickness(CoffeeColors.SpacingL))
-			.FillHorizontal()
-			.Modifier(CoffeeModifiers.PageContainer);
-		}
+				FormHelpers.MakePrimaryButton("+ Add Profile", NavigateToAddProfile)
+			).Padding(new Thickness(CoffeeColors.SpacingL)),
+		};
 
-		var stack = VStack(CoffeeColors.SpacingS,
-			FormHelpers.MakePrimaryButton("+ Add Profile", () =>
-				Comet.NavigationView.Navigate(this, new ProfileFormPage(0)))
-		);
-
-		foreach (var profile in profiles)
-		{
-			stack.Add(MakeProfileCard(profile));
-		}
-
-		return ScrollView(stack.Padding(new Thickness(CoffeeColors.SpacingM)))
-			.Modifier(CoffeeModifiers.PageContainer);
+		return list
+			.Padding(new Thickness(CoffeeColors.SpacingM))
+			.Modifier(CoffeeModifiers.PageContainer)
+			.ToolbarItems(addToolbar)
+			.Title("Profiles");
 	}
 
 	View MakeProfileCard(UserProfile profile)

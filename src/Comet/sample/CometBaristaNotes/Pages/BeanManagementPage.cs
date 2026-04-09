@@ -1,13 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Pages;
 
 public class BeanManagementPageState
@@ -18,51 +8,50 @@ public class BeanManagementPageState
 
 public class BeanManagementPage : Component<BeanManagementPageState>
 {
+	readonly IDataStore _store;
+
+	public BeanManagementPage()
+	{
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
+
 	void LoadBeans()
 	{
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
 		SetState(s =>
 		{
-			s.Beans = store.GetAllBeans();
+			s.Beans = _store.GetAllBeans();
 			s.IsLoaded = true;
 		});
 	}
+
+	void NavigateToAddBean() => Comet.NavigationView.Navigate(this, new BeanDetailPage(0));
 
 	public override View Render()
 	{
 		if (!State.IsLoaded)
 			LoadBeans();
 
-		var beans = State.Beans;
+		var addToolbar = new Comet.ToolbarItem { IconGlyph = "plus", OnClicked = NavigateToAddBean };
 
-		if (beans.Count == 0)
+		var list = new CollectionView<Bean>(() => State.Beans)
 		{
-			return VStack(CoffeeColors.SpacingM,
+			ViewFor = bean => MakeBeanCard(bean),
+			ItemsLayout = Comet.ItemsLayout.Vertical(CoffeeColors.SpacingS),
+			EmptyView = VStack(CoffeeColors.SpacingM,
 				FormHelpers.MakeEmptyState(
 					Icons.Coffee,
 					"No Beans Yet",
 					"Add your first bean to start tracking your coffee collection"),
-				FormHelpers.MakePrimaryButton("+ Add Bean", () =>
-					Comet.NavigationView.Navigate(this, new BeanDetailPage(0)))
-			)
-			.Padding(new Thickness(CoffeeColors.SpacingL))
-			.FillHorizontal()
-			.Modifier(CoffeeModifiers.PageContainer);
-		}
+				FormHelpers.MakePrimaryButton("+ Add Bean", NavigateToAddBean)
+			).Padding(new Thickness(CoffeeColors.SpacingL)),
+		};
 
-		var stack = VStack(CoffeeColors.SpacingS,
-			FormHelpers.MakePrimaryButton("+ Add Bean", () =>
-				Comet.NavigationView.Navigate(this, new BeanDetailPage(0)))
-		);
-
-		foreach (var bean in beans)
-		{
-			stack.Add(MakeBeanCard(bean));
-		}
-
-		return ScrollView(stack.Padding(new Thickness(CoffeeColors.SpacingM)))
-			.Modifier(CoffeeModifiers.PageContainer);
+		return list
+			.Padding(new Thickness(CoffeeColors.SpacingM))
+			.Modifier(CoffeeModifiers.PageContainer)
+			.ToolbarItems(addToolbar)
+			.Title("Beans");
 	}
 
 	View MakeBeanCard(Bean bean)

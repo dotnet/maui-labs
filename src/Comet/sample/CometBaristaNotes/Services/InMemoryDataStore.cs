@@ -1,7 +1,5 @@
 namespace CometBaristaNotes.Services;
 
-using CometBaristaNotes.Models;
-
 public class InMemoryDataStore : IDataStore
 {
     public static IDataStore Instance { get; set; } = null!;

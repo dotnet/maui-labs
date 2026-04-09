@@ -1,4 +1,3 @@
-using CometBaristaNotes.Models;
 using System.ComponentModel;
 
 namespace CometBaristaNotes.Components;

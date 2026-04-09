@@ -1,13 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Pages;
 
 public class BagDetailPageState
@@ -28,8 +18,14 @@ public class BagDetailPageState
 public class BagDetailPage : Component<BagDetailPageState>
 {
 	readonly int _bagId;
+	readonly IDataStore _store;
 
-	public BagDetailPage(int bagId = 0) { _bagId = bagId; }
+	public BagDetailPage(int bagId = 0)
+	{
+		_bagId = bagId;
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
 
 	void LoadBag()
 	{
@@ -39,8 +35,7 @@ public class BagDetailPage : Component<BagDetailPageState>
 			return;
 		}
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		var bag = store.GetBag(_bagId);
 		if (bag == null)
@@ -91,8 +86,7 @@ public class BagDetailPage : Component<BagDetailPageState>
 
 		SetState(s => { s.Error = ""; s.IsSaving = true; });
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		if (_bagId > 0)
 		{
@@ -120,17 +114,13 @@ public class BagDetailPage : Component<BagDetailPageState>
 		var confirmed = await PageHelper.DisplayAlertAsync("Delete Bag", message, "Delete", "Cancel");
 		if (!confirmed) return;
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
-
-		store.ArchiveBag(_bagId);
+		_store.ArchiveBag(_bagId);
 		Comet.NavigationView.Pop(this);
 	}
 
 	void ToggleBagStatus()
 	{
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		if (State.IsComplete)
 		{
@@ -161,68 +151,62 @@ public class BagDetailPage : Component<BagDetailPageState>
 				.Modifier(CoffeeModifiers.PageContainer);
 		}
 
-		var items = new List<View>();
+		var stack = VStack(CoffeeColors.SpacingS,
+			// Form section
+			FormHelpers.MakeSectionHeader("BAG DETAILS"),
+			FormHelpers.MakeReadOnlyField("Bean", State.BeanName),
+			FormHelpers.MakeFormEntry("Roast Date", State.RoastDate, "yyyy-MM-dd", v => SetState(s => s.RoastDate = v)),
+			FormHelpers.MakeFormEntryWithLimit("Notes", State.Notes, "Bag notes", 500, v => SetState(s => s.Notes = v)),
 
-		// Form section
-		items.Add(FormHelpers.MakeSectionHeader("BAG DETAILS"));
-		items.Add(FormHelpers.MakeReadOnlyField("Bean", State.BeanName));
-		items.Add(FormHelpers.MakeFormEntry("Roast Date", State.RoastDate, "yyyy-MM-dd", v => SetState(s => s.RoastDate = v)));
-		items.Add(FormHelpers.MakeFormEntryWithLimit("Notes", State.Notes, "Bag notes", 500, v => SetState(s => s.Notes = v)));
+			// Status section
+			FormHelpers.MakeSectionHeader("STATUS"),
+			FormHelpers.MakeToggleRow(
+				State.IsComplete ? "Status: Complete" : "Status: Active",
+				State.IsComplete,
+				v => ToggleBagStatus()
+			),
 
-		// Status section
-		items.Add(FormHelpers.MakeSectionHeader("STATUS"));
-		items.Add(FormHelpers.MakeToggleRow(
-			State.IsComplete ? "Status: Complete" : "Status: Active",
-			State.IsComplete,
-			v => ToggleBagStatus()
-		));
-
-		// Stats section
-		items.Add(FormHelpers.MakeSectionHeader("STATS"));
-		items.Add(FormHelpers.MakeCard(
-			HStack(CoffeeColors.SpacingM,
-				VStack(2,
-					Text("Shots Logged")
-						.Modifier(CoffeeModifiers.SecondaryText),
-					Text($"{State.ShotCount}")
-						.Modifier(CoffeeModifiers.Headline)
+			// Stats section
+			FormHelpers.MakeSectionHeader("STATS"),
+			FormHelpers.MakeCard(
+				HStack(CoffeeColors.SpacingM,
+					VStack(2,
+						Text("Shots Logged")
+							.Modifier(CoffeeModifiers.SecondaryText),
+						Text($"{State.ShotCount}")
+							.Modifier(CoffeeModifiers.Headline)
+					)
 				)
-			)
-		));
+			),
 
-		// Rating section
-		items.Add(FormHelpers.MakeSectionHeader("RATINGS"));
-		if (State.Rating.RatedShots > 0)
-			items.Add(RatingDisplayFactory.Create(State.Rating));
-		else
-			items.Add(Text("No ratings yet")
-				.Modifier(CoffeeModifiers.SecondaryText)
-				.HorizontalTextAlignment(TextAlignment.Center)
-				.Padding(new Thickness(0, CoffeeColors.SpacingM)));
+			// Rating section
+			FormHelpers.MakeSectionHeader("RATINGS"),
+			State.Rating.RatedShots > 0
+				? new RatingDisplay(State.Rating)
+				: Text("No ratings yet")
+					.Modifier(CoffeeModifiers.SecondaryText)
+					.HorizontalTextAlignment(TextAlignment.Center)
+					.Padding(new Thickness(0, CoffeeColors.SpacingM))
+		);
 
-		// Related shots section
+		// Related shots (dynamic count — use Add)
 		if (State.RelatedShots.Count > 0)
 		{
-			items.Add(FormHelpers.MakeSectionHeader("RELATED SHOTS"));
+			stack.Add(FormHelpers.MakeSectionHeader("RELATED SHOTS"));
 			foreach (var shot in State.RelatedShots)
 			{
-				items.Add(ShotRecordCardFactory.Create(shot, () =>
+				stack.Add(new ShotRecordCard(shot, () =>
 					Comet.NavigationView.Navigate(this, new ShotLoggingPage(shot.Id))));
 			}
 		}
 
-		// Error display
 		if (!string.IsNullOrEmpty(State.Error))
-			items.Add(Text(State.Error)
+			stack.Add(Text(State.Error)
 				.Modifier(CoffeeModifiers.BodyError)
 				.Padding(new Thickness(0, CoffeeColors.SpacingXS)));
 
-		// Action buttons
-		items.Add(FormHelpers.MakePrimaryButton(State.IsSaving ? "Saving..." : "Save Changes", Save));
-		items.Add(FormHelpers.MakeDangerButton("Delete Bag", DeleteBag));
-
-		var stack = VStack(CoffeeColors.SpacingS);
-		foreach (var item in items) stack.Add(item);
+		stack.Add(FormHelpers.MakePrimaryButton(State.IsSaving ? "Saving..." : "Save Changes", Save));
+		stack.Add(FormHelpers.MakeDangerButton("Delete Bag", DeleteBag));
 
 		return ScrollView(
 			stack.Padding(new Thickness(CoffeeColors.SpacingM))

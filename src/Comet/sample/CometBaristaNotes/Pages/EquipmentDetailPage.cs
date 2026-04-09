@@ -1,13 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Pages;
 
 public class EquipmentDetailPageState
@@ -26,15 +16,20 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 		{ EquipmentType.Machine, EquipmentType.Grinder, EquipmentType.Tamper, EquipmentType.PuckScreen, EquipmentType.Other };
 
 	readonly int _equipmentId;
+	readonly IDataStore _store;
 
-	public EquipmentDetailPage(int equipmentId = 0) { _equipmentId = equipmentId; }
+	public EquipmentDetailPage(int equipmentId = 0)
+	{
+		_equipmentId = equipmentId;
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
 
 	void LoadEquipment()
 	{
 		if (_equipmentId <= 0) { SetState(s => s.IsLoaded = true); return; }
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		var eq = store.GetEquipment(_equipmentId);
 		if (eq == null)
@@ -68,8 +63,7 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 		}
 		SetState(s => s.Error = "");
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		var typeIdx = State.SelectedTypeIndex;
 		var eqType = (typeIdx >= 0 && typeIdx < TypeValues.Length) ? TypeValues[typeIdx] : EquipmentType.Machine;
@@ -108,8 +102,7 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 			"Archive", "Cancel");
 		if (!confirm) return;
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		store.ArchiveEquipment(_equipmentId);
 		Navigation?.Pop();
@@ -122,19 +115,16 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 
 		var isEdit = _equipmentId > 0;
 
-		var items = new List<View>
-		{
-			// ── Form section ────────────────────────────────────────
+		var stack = VStack(CoffeeColors.SpacingS,
 			FormHelpers.MakeSectionHeader(isEdit ? "EDIT EQUIPMENT" : "NEW EQUIPMENT"),
 			FormHelpers.MakeFormEntry("Name *", State.Name, "Equipment name (required)", v => SetState(s => s.Name = v)),
 			FormHelpers.MakeFormPicker("Type", State.SelectedTypeIndex, TypeNames, v => SetState(s => s.SelectedTypeIndex = v)),
-			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100),
-		};
+			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100)
+		);
 
-		// ── Error display ───────────────────────────────────────────
 		if (!string.IsNullOrEmpty(State.Error))
 		{
-			items.Add(
+			stack.Add(
 				Border(
 					Text(State.Error)
 						.Modifier(CoffeeModifiers.BodyError)
@@ -144,20 +134,15 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 			);
 		}
 
-		// ── Save button ─────────────────────────────────────────────
-		items.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Add Equipment", Save));
+		stack.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Add Equipment", Save));
 
-		// ── Archive button (edit mode only) ─────────────────────────
 		if (isEdit)
-			items.Add(FormHelpers.MakeDangerButton("Archive Equipment", Archive));
-
-		var stack = VStack(CoffeeColors.SpacingS);
-		foreach (var item in items)
-			stack.Add(item);
+			stack.Add(FormHelpers.MakeDangerButton("Archive Equipment", Archive));
 
 		return ScrollView(
 			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Modifier(CoffeeModifiers.PageContainer);
+		.Modifier(CoffeeModifiers.PageContainer)
+		.Title(isEdit ? "Edit Equipment" : "New Equipment");
 	}
 }

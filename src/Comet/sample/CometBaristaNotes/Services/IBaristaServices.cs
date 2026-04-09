@@ -1,7 +1,5 @@
 namespace CometBaristaNotes.Services;
 
-using CometBaristaNotes.Models;
-
 public interface IDataStore : IShotService, IBeanService, IBagService, IEquipmentService, IUserProfileService, IRatingService
 {
 	IDataChangeNotifier? DataChangeNotifier { get; set; }

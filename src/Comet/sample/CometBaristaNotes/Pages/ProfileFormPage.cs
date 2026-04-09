@@ -1,13 +1,4 @@
-using Comet;
-using Comet.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Storage;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Components;
-using CometBaristaNotes.Styles;
-using static Comet.CometControls;
 
 namespace CometBaristaNotes.Pages;
 
@@ -24,8 +15,14 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 	const double AvatarSize = 120;
 
 	readonly int _profileId;
+	readonly IDataStore _store;
 
-	public ProfileFormPage(int profileId = 0) { _profileId = profileId; }
+	public ProfileFormPage(int profileId = 0)
+	{
+		_profileId = profileId;
+		_store = IPlatformApplication.Current?.Services.GetService<IDataStore>()
+			?? InMemoryDataStore.Instance;
+	}
 
 	void LoadProfile()
 	{
@@ -35,8 +32,7 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 			return;
 		}
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		var profile = store.GetProfile(_profileId);
 		SetState(s =>
@@ -59,8 +55,7 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 		}
 		SetState(s => s.Error = "");
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
+		var store = _store;
 
 		if (_profileId > 0)
 		{
@@ -94,10 +89,7 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 			"Cancel");
 		if (!confirmed) return;
 
-		var store = InMemoryDataStore.Instance;
-		if (store == null) return;
-
-		store.DeleteProfile(_profileId);
+		_store.DeleteProfile(_profileId);
 		Navigation?.Pop();
 	}
 
@@ -132,43 +124,30 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 
 		var isEdit = _profileId > 0;
 
-		var items = new List<View>();
+		var avatarSection = isEdit
+			? VStack(CoffeeColors.SpacingS,
+				new ProfileImagePicker(State.AvatarPath, AvatarSize, _ => PickPhoto())
+			  )
+			  .Alignment(Alignment.Center)
+			  .Padding(new Thickness(0, CoffeeColors.SpacingS))
+			: VStack(CoffeeColors.SpacingS,
+				new CircularAvatar(null, AvatarSize),
+				Text("Save the profile first to add a photo")
+					.Modifier(CoffeeModifiers.SecondaryText)
+					.HorizontalTextAlignment(TextAlignment.Center)
+			  )
+			  .Alignment(Alignment.Center)
+			  .Padding(new Thickness(0, CoffeeColors.SpacingS));
 
-		// ── Header ──────────────────────────────────────────────────
-		items.Add(FormHelpers.MakeSectionHeader(isEdit ? "EDIT PROFILE" : "NEW PROFILE"));
+		var stack = VStack(CoffeeColors.SpacingS,
+			FormHelpers.MakeSectionHeader(isEdit ? "EDIT PROFILE" : "NEW PROFILE"),
+			avatarSection,
+			FormHelpers.MakeFormEntry("Name *", State.Name, "Profile name", v => SetState(s => s.Name = v))
+		);
 
-		// ── Avatar section ──────────────────────────────────────────
-		if (isEdit)
-		{
-			items.Add(
-				VStack(CoffeeColors.SpacingS,
-					new ProfileImagePicker(State.AvatarPath, AvatarSize, _ => PickPhoto())
-				)
-				.Alignment(Alignment.Center)
-				.Padding(new Thickness(0, CoffeeColors.SpacingS))
-			);
-		}
-		else
-		{
-			items.Add(
-				VStack(CoffeeColors.SpacingS,
-					new CircularAvatar(null, AvatarSize),
-					Text("Save the profile first to add a photo")
-						.Modifier(CoffeeModifiers.SecondaryText)
-						.HorizontalTextAlignment(TextAlignment.Center)
-				)
-				.Alignment(Alignment.Center)
-				.Padding(new Thickness(0, CoffeeColors.SpacingS))
-			);
-		}
-
-		// ── Name field ──────────────────────────────────────────────
-		items.Add(FormHelpers.MakeFormEntry("Name *", State.Name, "Profile name", v => SetState(s => s.Name = v)));
-
-		// ── Error display ───────────────────────────────────────────
 		if (!string.IsNullOrEmpty(State.Error))
 		{
-			items.Add(
+			stack.Add(
 				Border(
 					Text(State.Error)
 						.Modifier(CoffeeModifiers.BodyError)
@@ -178,20 +157,15 @@ public class ProfileFormPage : Component<ProfileFormPageState>
 			);
 		}
 
-		// ── Save button ─────────────────────────────────────────────
-		items.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Create Profile", Save));
+		stack.Add(FormHelpers.MakePrimaryButton(isEdit ? "Save Changes" : "Create Profile", Save));
 
-		// ── Delete button (edit mode only) ──────────────────────────
 		if (isEdit)
-			items.Add(FormHelpers.MakeDangerButton("Delete Profile", Delete));
-
-		var stack = VStack(CoffeeColors.SpacingS);
-		foreach (var item in items)
-			stack.Add(item);
+			stack.Add(FormHelpers.MakeDangerButton("Delete Profile", Delete));
 
 		return ScrollView(
 			stack.Padding(new Thickness(CoffeeColors.SpacingM))
 		)
-		.Modifier(CoffeeModifiers.PageContainer);
+		.Modifier(CoffeeModifiers.PageContainer)
+		.Title(isEdit ? "Edit Profile" : "New Profile");
 	}
 }

@@ -1,6 +1,5 @@
 namespace CometBaristaNotes.Services;
 
-using CometBaristaNotes.Models;
 using Microsoft.EntityFrameworkCore;
 
 public class BaristaNotesContext : DbContext

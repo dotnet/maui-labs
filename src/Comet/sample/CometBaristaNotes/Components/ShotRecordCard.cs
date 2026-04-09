@@ -1,64 +1,54 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Models;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-using static Comet.CometControls;
-
 namespace CometBaristaNotes.Components;
 
 /// <summary>
-/// Factory for creating shot record cards matching the original BaristaNotes layout.
+/// Displays a shot record card matching the original BaristaNotes layout.
 /// Card shows: DrinkType + smiley badge, BeanName, Recipe, Timestamp • By • For.
-/// Equipment is hidden (matches original which has it commented out).
 /// </summary>
-public static class ShotRecordCardFactory
+public class ShotRecordCard : View
 {
-	public static View Create(ShotRecord shot, Action? onTap = null)
-	{
-		var beanName = shot.BeanName ?? shot.BagDisplayName ?? "Unknown Bean";
+	readonly ShotRecord _shot;
+	readonly Action? _onTap;
 
-		// Tuned for visual density parity with original: spacing 6, padding 10.
-		// Original MauiReactor uses spacing:8/padding:12 but CollectionView renders more compactly
-		// than ScrollView+VStack, so we compensate with tighter values.
+	public ShotRecordCard(ShotRecord shot, Action? onTap = null)
+	{
+		_shot = shot;
+		_onTap = onTap;
+	}
+
+	[Body]
+	View body()
+	{
+		var beanName = _shot.BeanName ?? _shot.BagDisplayName ?? "Unknown Bean";
+
 		var card = VStack(spacing: 6f,
-			// Header: coffee icon + drink type + rating smiley badge
 			HStack(spacing: 4f,
 				FormHelpers.MakeIcon(Icons.Coffee, 18, CoffeeColors.Primary),
-				Text(shot.DrinkType)
+				Text(_shot.DrinkType)
 					.Modifier(CoffeeModifiers.TitleSmall),
 				new Spacer(),
-				MakeRatingBadge(shot)
+				MakeRatingBadge()
 			),
-
-			// Bean name
 			Text(beanName)
 				.Modifier(CoffeeModifiers.FormValue),
-
-			// Recipe line
-			Text(FormatRecipeLine(shot))
+			Text(FormatRecipeLine())
 				.Modifier(CoffeeModifiers.SecondaryText),
-
-			// Footer: single line "Timestamp • By: Name • For: Name"
-			Text(FormatFooterLine(shot))
+			Text(FormatFooterLine())
 				.Modifier(CoffeeModifiers.Caption)
 		)
 		.Modifier(CoffeeModifiers.ShotCard);
 
-		if (onTap != null)
-			card = card.OnTap(_ => onTap());
+		if (_onTap != null)
+			card = card.OnTap(_ => _onTap());
 
 		return card;
 	}
 
-	static View MakeRatingBadge(ShotRecord shot)
+	View MakeRatingBadge()
 	{
-		if (!shot.Rating.HasValue)
+		if (!_shot.Rating.HasValue)
 			return Text("").Frame(width: 0, height: 0).Opacity(0);
 
-		var rating = shot.Rating.Value;
-		var glyph = rating switch
+		var glyph = _shot.Rating.Value switch
 		{
 			0 => Icons.SentimentVeryDissatisfied,
 			1 => Icons.SentimentDissatisfied,
@@ -71,31 +61,31 @@ public static class ShotRecordCardFactory
 		return FormHelpers.MakeIcon(glyph, 24, CoffeeColors.Primary);
 	}
 
-	static string FormatRecipeLine(ShotRecord shot)
+	string FormatRecipeLine()
 	{
-		var doseIn = $"{shot.DoseIn:F1}g in";
-		var doseOut = shot.ActualOutput.HasValue ? $"{shot.ActualOutput:F1}g out" : "\u2014";
-		var time = shot.ActualTime.HasValue ? $"({shot.ActualTime:F1}s)" : "";
+		var doseIn = $"{_shot.DoseIn:F1}g in";
+		var doseOut = _shot.ActualOutput.HasValue ? $"{_shot.ActualOutput:F1}g out" : "\u2014";
+		var time = _shot.ActualTime.HasValue ? $"({_shot.ActualTime:F1}s)" : "";
 		return $"{doseIn} \u2192 {doseOut} {time}".Trim();
 	}
 
-	static string FormatFooterLine(ShotRecord shot)
+	string FormatFooterLine()
 	{
-		var parts = new List<string> { FormatTimestamp(shot) };
-		if (shot.MadeByName != null)
-			parts.Add($"By: {shot.MadeByName}");
-		if (shot.MadeForName != null)
-			parts.Add($"For: {shot.MadeForName}");
+		var parts = new List<string> { FormatTimestamp() };
+		if (_shot.MadeByName != null)
+			parts.Add($"By: {_shot.MadeByName}");
+		if (_shot.MadeForName != null)
+			parts.Add($"For: {_shot.MadeForName}");
 		return string.Join(" \u2022 ", parts);
 	}
 
-	static string FormatTimestamp(ShotRecord shot)
+	string FormatTimestamp()
 	{
-		var diff = DateTime.Now - shot.Timestamp;
+		var diff = DateTime.Now - _shot.Timestamp;
 		if (diff.TotalMinutes < 1) return "Just now";
 		if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-		if (diff.TotalHours < 24) return shot.Timestamp.ToString("h:mm tt");
-		if (diff.TotalDays < 7) return shot.Timestamp.ToString("ddd h:mm tt");
-		return shot.Timestamp.ToString("MMM d, h:mm tt");
+		if (diff.TotalHours < 24) return _shot.Timestamp.ToString("h:mm tt");
+		if (diff.TotalDays < 7) return _shot.Timestamp.ToString("ddd h:mm tt");
+		return _shot.Timestamp.ToString("MMM d, h:mm tt");
 	}
 }

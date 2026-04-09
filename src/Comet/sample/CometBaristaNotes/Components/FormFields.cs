@@ -1,6 +1,3 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Styles;
 using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
 
 namespace CometBaristaNotes.Components;

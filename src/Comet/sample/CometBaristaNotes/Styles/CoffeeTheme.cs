@@ -1,9 +1,5 @@
 using System.Runtime.CompilerServices;
-using Comet.Styles;
-using CometBaristaNotes.Services;
-using Microsoft.Maui;
 using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Graphics;
 
 namespace CometBaristaNotes.Styles;
 

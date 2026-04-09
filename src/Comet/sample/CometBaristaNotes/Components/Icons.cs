@@ -1,4 +1,3 @@
-using Microsoft.Maui.Graphics;
 using FontIcon = Comet.FontImageSource;
 
 namespace CometBaristaNotes.Components;

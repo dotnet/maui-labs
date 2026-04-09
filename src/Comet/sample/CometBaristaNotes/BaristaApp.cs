@@ -1,10 +1,4 @@
-using Comet;
-using Comet.Styles;
-using CometBaristaNotes.Components;
 using CometBaristaNotes.Pages;
-using CometBaristaNotes.Services;
-using CometBaristaNotes.Styles;
-using Microsoft.Maui.Graphics;
 using TabView = Comet.TabView;
 
 namespace CometBaristaNotes;
@@ -26,17 +20,8 @@ public class BaristaApp : CometApp
 	public static Comet.View CreateRootView()
 	{
 		var tabs = TabView();
-
-		// New Shot tab — native toolbar items (camera first = rightmost on iOS, mic second = leftmost)
-		var shotNav = MakeTab(new ShotLoggingPage(), "New Shot", "cup.and.saucer.fill");
-		shotNav.ToolbarItems.Add(new Comet.ToolbarItem { IconGlyph = "camera.fill", OnClicked = () => { /* open camera */ } });
-		shotNav.ToolbarItems.Add(new Comet.ToolbarItem { IconGlyph = "mic.fill", OnClicked = () => { /* toggle voice */ } });
-		tabs.Add(shotNav);
-
-		var activityPage = new ActivityFeedPage();
-		var activityNav = MakeTab(activityPage, "Activity", "list.bullet.rectangle.portrait.fill");
-		activityNav.ToolbarItems.Add(new Comet.ToolbarItem { IconGlyph = "line.3.horizontal.decrease", OnClicked = () => activityPage.TriggerFilter() });
-		tabs.Add(activityNav);
+		tabs.Add(MakeTab(new ShotLoggingPage(), "New Shot", "cup.and.saucer.fill"));
+		tabs.Add(MakeTab(new ActivityFeedPage(), "Activity", "list.bullet.rectangle.portrait.fill"));
 		tabs.Add(MakeTab(new SettingsPage(), "Settings", "gearshape.fill"));
 		tabs.TabBarBackgroundColor(CoffeeColors.Background);
 		tabs.TabBarTintColor(CoffeeColors.Primary);

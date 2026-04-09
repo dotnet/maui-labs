@@ -4,6 +4,7 @@ using CommunityToolkit.Maui;
 using CommunityToolkit.Maui.Media;
 using Fonts;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Maui.DevFlow.Agent;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platform;
 
@@ -15,13 +16,8 @@ public static class MauiProgram
 	{
 		var builder = MauiApp.CreateBuilder();
 
-#if DEBUG
-		builder.UseCometSampleDebugHost(BaristaApp.CreateRootView)
-			.UseMauiCommunityToolkit();
-#else
 		builder.UseCometApp<BaristaApp>()
 			.UseMauiCommunityToolkit();
-#endif
 
 		// Load embedded appsettings.json into IConfiguration
 		var assembly = typeof(MauiProgram).Assembly;
@@ -42,7 +38,7 @@ public static class MauiProgram
 		});
 
 #if DEBUG
-		builder.EnableSampleRuntimeDebugging();
+		builder.AddMauiDevFlowAgent();
 #endif
 
 		builder.ConfigureFonts(fonts =>
@@ -57,6 +53,7 @@ public static class MauiProgram
 
 		// Register singleton data store with SQLite persistence
 		var store = new SqliteDataStore();
+		builder.Services.AddSingleton<IDataStore>(store);
 		builder.Services.AddSingleton<IShotService>(store);
 		builder.Services.AddSingleton<IBeanService>(store);
 		builder.Services.AddSingleton<IBagService>(store);
@@ -64,7 +61,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<IUserProfileService>(store);
 		builder.Services.AddSingleton<IRatingService>(store);
 
-		// Alias so pages using InMemoryDataStore.Instance keep working
+		// Legacy alias for InMemoryDataStore.Instance fallback
 		InMemoryDataStore.Instance = store;
 
 		// Feedback, theme, and data change notification services

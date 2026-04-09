@@ -1,5 +1,3 @@
-using System;
-
 namespace CometBaristaNotes;
 
 public static class ServiceHelper
