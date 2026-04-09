@@ -60,7 +60,9 @@ namespace Comet.iOS
 			// before calling ToPlatform, to avoid circular CometViewHandler→CometView loop.
 			var viewToRender = _view;
 			if (viewToRender is View cometView && cometView.Body != null)
+			{
 				viewToRender = cometView.GetView();
+			}
 			var newPlatformView = viewToRender?.ToPlatform(MauiContext);
 			currentHandler = _view?.Handler;
 			if (currentPlatformView == newPlatformView)

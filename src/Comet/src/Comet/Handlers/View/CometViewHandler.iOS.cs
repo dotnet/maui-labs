@@ -22,7 +22,10 @@ namespace Comet.Handlers
 		}
 		CometViewController viewController;
 		UIViewController IPlatformViewHandler.ViewController => viewController ??= new CometViewController { ContainerView = this.PlatformView, MauiContext = MauiContext };
-		protected override CometView CreatePlatformView() => new CometView(MauiContext);
+		protected override CometView CreatePlatformView()
+		{
+			return new CometView(MauiContext);
+		}
 		public override void SetVirtualView(IView view)
 		{
 			base.SetVirtualView(view);

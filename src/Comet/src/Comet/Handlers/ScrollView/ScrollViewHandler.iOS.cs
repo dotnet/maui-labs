@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Foundation;
 using UIKit;
 using Microsoft.Maui.Handlers;
@@ -60,13 +60,19 @@ namespace Comet.Handlers
 		{
 			base.SetVirtualView(view);
 
+			// ScrollView content must ignore safe area — the ScrollView itself
+			// handles safe area via ContentInsetAdjustmentBehavior. Without this,
+			// MAUI's LayoutView (MauiView) will double-apply safe area insets to
+			// the content's CrossPlatformArrange, pushing it below the nav bar.
+			if (VirtualView?.Content is View contentView)
+				contentView.SetEnvironment(EnvironmentKeys.Layout.IgnoreSafeArea, true, false);
+
 			var oldContent = _content;
 			_content = VirtualView?.Content?.ToPlatform(MauiContext);
 			if(oldContent != _content)
 				oldContent?.RemoveFromSuperview();
 			if (_content != null)
 			{
-				//_content.SizeToFit();
 				PlatformView.Add(_content);
 			}
 
@@ -81,6 +87,6 @@ namespace Comet.Handlers
 				PlatformView.ShowsHorizontalScrollIndicator = false;
 			}
 		}
-		
+
 	}
 }

@@ -9,7 +9,10 @@ namespace Comet.Handlers
 	public partial class TabViewHandler : ViewHandler<TabView, CUITabView>
 	{
 		//public override bool IgnoreSafeArea => VirtualView?.GetIgnoreSafeArea(true) ?? true;
-		protected override CUITabView CreatePlatformView() =>  new CUITabView { Context = MauiContext };
+		protected override CUITabView CreatePlatformView()
+		{
+			return new CUITabView { Context = MauiContext };
+		}
 
 
 		public override void SetVirtualView(IView view)

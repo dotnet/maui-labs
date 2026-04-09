@@ -61,11 +61,28 @@ namespace Comet.Handlers
 			{
 				var platformView = _mauiItemsView.ToPlatform(MauiContext);
 				PlatformView.SetContent(platformView, _mauiItemsView);
+
+				// MAUI's ItemsViewController forces ContentInsetAdjustmentBehavior = Never,
+				// which prevents the collection view from adjusting for the navigation bar.
+				// Override to Automatic so content starts below the nav bar and scrolls
+				// behind it with the standard iOS translucent glass effect.
+				SetAutomaticContentInsets(platformView);
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine($"[CollectionViewHandler] EmbedMauiItemsView failed: {ex.Message}");
 			}
+		}
+
+		static void SetAutomaticContentInsets(UIView view)
+		{
+			if (view is UIKit.UIScrollView scrollView)
+			{
+				scrollView.ContentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentBehavior.Automatic;
+				return;
+			}
+			foreach (var subview in view.Subviews)
+				SetAutomaticContentInsets(subview);
 		}
 
 		protected override void DisconnectHandler(CollectionViewContainer platformView)

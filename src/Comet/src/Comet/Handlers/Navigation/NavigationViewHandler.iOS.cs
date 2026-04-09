@@ -42,9 +42,9 @@ namespace Comet.Handlers
 				toView.Navigation = nav;
 				var newVc = new Comet.iOS.CometViewController { MauiContext = MauiContext, CurrentView = toView };
 
-				// Apply toolbar items from the pushed view
-				ApplyToolbarItems(newVc, toView, nav);
-
+				// Store the NavigationView reference so CometViewController can
+				// apply toolbar items in ViewWillAppear (after Render has been called).
+				newVc.NavigationViewRef = nav;
 				navigationController.PushViewController(newVc, true);
 			});
 			nav.SetPerformPop(() => navigationController.PopViewController(true));
@@ -58,9 +58,8 @@ namespace Comet.Handlers
 				if (!string.IsNullOrEmpty(title))
 					vc.Title = title;
 			});
-			// Enable large titles (iOS convention matching original BaristaNotes)
-			navigationController.NavigationBar.PrefersLargeTitles = true;
-			vc.NavigationItem.LargeTitleDisplayMode = UINavigationItemLargeTitleDisplayMode.Always;
+			// Use inline (compact) title to match the original BaristaNotes design.
+			navigationController.NavigationBar.PrefersLargeTitles = false;
 
 			navigationController.PushViewController(vc, true);
 
@@ -74,91 +73,12 @@ namespace Comet.Handlers
 					(s, e) => action());
 			}
 
-			// Apply toolbar items from the NavigationView to the root view controller
-			ApplyToolbarItems(vc, null, nav);
+			// Toolbar items are resolved in CometViewController.ViewWillAppear
+			// (after the Component's Render has been called and BuiltView is available).
+			// Set NavigationViewRef so it can fall back to NavigationView-level items.
+			vc.NavigationViewRef = nav;
 
 			return navigationController.View;
-		}
-
-		/// <summary>
-		/// Applies toolbar items to a view controller's navigation item.
-		/// Checks the pushed view's own toolbar items first, then falls back
-		/// to the NavigationView's toolbar items.
-		/// </summary>
-		static void ApplyToolbarItems(CometViewController vc, View pushedView, NavigationView nav)
-		{
-			// Determine which toolbar items to use: view's own items take priority
-			List<ToolbarItem> items = null;
-			if (pushedView != null)
-			{
-				var viewItems = pushedView.GetToolbarItems();
-				if (viewItems.Count > 0)
-					items = viewItems;
-			}
-			// Fall back to NavigationView's toolbar items
-			if (items == null || items.Count == 0)
-				items = nav.ToolbarItems;
-
-			if (items == null || items.Count == 0)
-				return;
-
-			var rightItems = new List<UIBarButtonItem>();
-			foreach (var item in items)
-			{
-				if (item.Order == ToolbarItemOrder.Secondary) continue;
-				var toolbarAction = item.OnClicked;
-				UIBarButtonItem barItem;
-
-				// Render font icon as UIImage if font family is specified
-				if (!string.IsNullOrEmpty(item.IconGlyph) && !string.IsNullOrEmpty(item.IconFontFamily))
-				{
-					var image = CreateFontIconImage(item.IconGlyph, item.IconFontFamily, 24);
-					if (image != null)
-					{
-						barItem = new UIBarButtonItem(
-							image.ImageWithRenderingMode(UIImageRenderingMode.AlwaysTemplate),
-							UIBarButtonItemStyle.Plain,
-							(s, e) => toolbarAction?.Invoke());
-					}
-					else
-					{
-						barItem = new UIBarButtonItem(
-							item.IconGlyph ?? item.Text ?? "",
-							UIBarButtonItemStyle.Plain,
-							(s, e) => toolbarAction?.Invoke());
-					}
-				}
-				// Use SF Symbol name if glyph looks like an SF Symbol identifier
-				else if (!string.IsNullOrEmpty(item.IconGlyph) && item.IconGlyph.Contains('.'))
-				{
-					var sfImage = UIImage.GetSystemImage(item.IconGlyph);
-					if (sfImage != null)
-					{
-						barItem = new UIBarButtonItem(
-							sfImage,
-							UIBarButtonItemStyle.Plain,
-							(s, e) => toolbarAction?.Invoke());
-					}
-					else
-					{
-						barItem = new UIBarButtonItem(
-							item.Text ?? item.IconGlyph,
-							UIBarButtonItemStyle.Plain,
-							(s, e) => toolbarAction?.Invoke());
-					}
-				}
-				else
-				{
-					barItem = new UIBarButtonItem(
-						item.IconGlyph ?? item.Text ?? "",
-						UIBarButtonItemStyle.Plain,
-						(s, e) => toolbarAction?.Invoke());
-				}
-				barItem.Enabled = item.IsEnabled;
-				rightItems.Add(barItem);
-			}
-			if (rightItems.Count > 0)
-				vc.NavigationItem.RightBarButtonItems = rightItems.ToArray();
 		}
 
 		protected override void ConnectHandler(UIView platformView)
@@ -180,15 +100,17 @@ namespace Comet.Handlers
 		{
 			if (viewController is CUINavigationController navController)
 			{
-				// Let CometViewController.ApplyStyle() handle the nav bar appearance.
-				// We only set TintColor here for toolbar item icons.
-				var textPrimaryColor = UIColor.FromRGBA(53, 43, 35, 255); // CoffeeColors.TextPrimary
-				navController.NavigationBar.TintColor = textPrimaryColor;
+				// Let CometViewController.ApplyStyle() handle the full nav bar appearance.
+				// Resolve tint color dynamically from the view's environment so it
+				// updates on theme change (no hardcoded light-mode colors).
+				var textColor = VirtualView?.GetNavigationTextColor()?.ToPlatform();
+				if (textColor != null)
+					navController.NavigationBar.TintColor = textColor;
 				navController.NavigationBar.Translucent = true;
 			}
 		}
 
-		static UIImage CreateFontIconImage(string glyph, string fontFamily, nfloat size)
+		internal static UIImage CreateFontIconImage(string glyph, string fontFamily, nfloat size)
 		{
 			var font = UIFont.FromName(fontFamily, size);
 			if (font == null)

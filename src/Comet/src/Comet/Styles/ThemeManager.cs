@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Maui.Graphics;
 
 namespace Comet.Styles
@@ -51,6 +53,22 @@ namespace Comet.Styles
 
 			// Sync with MAUI's theme system so native chrome respects the theme
 			SyncMauiAppTheme(theme);
+
+			// Mark all views with a render body dirty so they re-render with new theme
+			// colors. This includes Component<T> (IComponentWithState) and CometApp
+			// subclasses that use Body = func. CoffeeColors properties resolve from
+			// ThemeManager.Current() so a full re-render picks up new values.
+			ThreadHelper.RunOnMainThread(() =>
+			{
+				List<View> views;
+				lock (View.ActiveViewsLock)
+					views = View.ActiveViews.OfType<View>().ToList();
+				foreach (var v in views)
+				{
+					if (v is IComponentWithState || v.Body != null)
+						Reactive.ReactiveScheduler.MarkViewDirty(v);
+				}
+			});
 		}
 
 		/// <summary>

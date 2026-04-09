@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Threading.Tasks;
 using CoreGraphics;
+using Foundation;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using UIKit;
@@ -14,10 +15,16 @@ namespace Comet.iOS
 		private View _startingCurrentView;
 		public IMauiContext MauiContext { get; set; }
 
+		/// <summary>
+		/// Reference to the parent NavigationView. Used to resolve fallback toolbar
+		/// items when the pushed view doesn't declare its own.
+		/// </summary>
+		internal NavigationView NavigationViewRef { get; set; }
+
 		public CometViewController()
 		{
-			// Ensure edge-to-edge layout regardless of initialization path
-			// (LoadView vs ContainerView setter).
+			// Ensure edge-to-edge layout so content extends behind the
+			// translucent navigation bar and tab bar.
 			EdgesForExtendedLayout = UIRectEdge.All;
 			ExtendedLayoutIncludesOpaqueBars = true;
 		}
@@ -34,6 +41,10 @@ namespace Comet.iOS
 
 				Title = value?.GetTitle() ?? "";
 
+				// Re-apply nav bar style when the view updates (e.g. on theme change
+				// re-render) so chrome colors stay in sync.
+				if (IsViewLoaded && NavigationController != null)
+					ApplyStyle();
 			}
 		}
 
@@ -92,7 +103,7 @@ namespace Comet.iOS
 			base.ViewDidAppear(animated);
 			CurrentView?.ViewDidAppear();
 
-			// Always set the UIWindow background to match the content so safe area
+			// Set the UIWindow background to match the content so safe area
 			// edges (status bar, home indicator) show the correct color instead of
 			// black/white letterboxing.
 			if (View?.Window != null)
@@ -115,8 +126,6 @@ namespace Comet.iOS
 
 			// Propagate background color to the container view so it extends
 			// into safe area insets (prevents white/black letterboxing).
-			// Walk the view tree because the background is often on the rendered
-			// body (e.g. ZStack from Render()), not on the Component itself.
 			if (view != null && _containerView != null)
 			{
 				var bg = GetEffectiveBackground(view);
@@ -127,6 +136,85 @@ namespace Comet.iOS
 			}
 
 			ApplyStyle();
+			ApplyToolbarItemsFromView();
+		}
+
+		/// <summary>
+		/// Applies toolbar items from the current view to the navigation item.
+		/// Called in ViewWillAppear after LoadView has built the Component's view tree,
+		/// so .ToolbarItems() set inside Render() are discoverable via BuiltView.
+		/// </summary>
+		void ApplyToolbarItemsFromView()
+		{
+			var view = CurrentView;
+			if (view == null) return;
+
+			// Check the view (Component) and its built view for toolbar items
+			var items = view.GetToolbarItems();
+
+			// Fall back to the NavigationView's toolbar items
+			if (items.Count == 0 && NavigationViewRef != null)
+				items = NavigationViewRef.ToolbarItems;
+
+			if (items == null || items.Count == 0) return;
+
+			var rightItems = new System.Collections.Generic.List<UIBarButtonItem>();
+			foreach (var item in items)
+			{
+				if (item.Order == ToolbarItemOrder.Secondary) continue;
+				var toolbarAction = item.OnClicked;
+				UIBarButtonItem barItem;
+
+				// Render font icon as UIImage if font family is specified
+				if (!string.IsNullOrEmpty(item.IconGlyph) && !string.IsNullOrEmpty(item.IconFontFamily))
+				{
+					var image = Handlers.NavigationViewHandler.CreateFontIconImage(item.IconGlyph, item.IconFontFamily, 24);
+					if (image != null)
+					{
+						barItem = new UIBarButtonItem(
+							image.ImageWithRenderingMode(UIImageRenderingMode.AlwaysTemplate),
+							UIBarButtonItemStyle.Plain,
+							(s, e) => toolbarAction?.Invoke());
+					}
+					else
+					{
+						barItem = new UIBarButtonItem(
+							item.IconGlyph ?? item.Text ?? "",
+							UIBarButtonItemStyle.Plain,
+							(s, e) => toolbarAction?.Invoke());
+					}
+				}
+				// Try SF Symbol (works for "plus", "trash", "star.fill", etc.)
+				else if (!string.IsNullOrEmpty(item.IconGlyph))
+				{
+					var sfImage = UIImage.GetSystemImage(item.IconGlyph);
+					if (sfImage != null)
+					{
+						barItem = new UIBarButtonItem(
+							sfImage,
+							UIBarButtonItemStyle.Plain,
+							(s, e) => toolbarAction?.Invoke());
+					}
+					else
+					{
+						barItem = new UIBarButtonItem(
+							item.Text ?? item.IconGlyph,
+							UIBarButtonItemStyle.Plain,
+							(s, e) => toolbarAction?.Invoke());
+					}
+				}
+				else
+				{
+					barItem = new UIBarButtonItem(
+						item.IconGlyph ?? item.Text ?? "",
+						UIBarButtonItemStyle.Plain,
+						(s, e) => toolbarAction?.Invoke());
+				}
+				barItem.Enabled = item.IsEnabled;
+				rightItems.Add(barItem);
+			}
+			if (rightItems.Count > 0)
+				NavigationItem.RightBarButtonItems = rightItems.ToArray();
 		}
 
 		public override void ViewDidDisappear(bool animated)
@@ -145,34 +233,47 @@ namespace Comet.iOS
 			if (NavigationController == null)
 				return;
 
+			var navBar = NavigationController.NavigationBar;
 			var barColor = CurrentView?.GetNavigationBackgroundColor()?.ToPlatform();
 			var textColor = CurrentView?.GetNavigationTextColor()?.ToPlatform();
 
-			// Also try background from the content view tree (NavigationView or body)
-			if (barColor == null)
-			{
-				var bg = GetEffectiveBackground(CurrentView);
-				if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
-					barColor = solid.Color.ToPlatform();
-			}
-
-			// Translucent nav bar so content scrolls behind it
+			// Use the standard iOS translucent blur for the nav bar.
+			// ConfigureWithDefaultBackground gives the native glass/blur effect
+			// that lets scrolled content show through the bar.
 			var appearance = new UINavigationBarAppearance();
 			appearance.ConfigureWithDefaultBackground();
 			appearance.ShadowColor = UIColor.Clear;
+
+			if (barColor != null)
+				appearance.BackgroundColor = barColor;
 
 			if (textColor != null)
 			{
 				appearance.LargeTitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
 				appearance.TitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
-				NavigationController.NavigationBar.TintColor = textColor;
+				navBar.TintColor = textColor;
 			}
 
-			NavigationController.NavigationBar.StandardAppearance = appearance;
-			NavigationController.NavigationBar.ScrollEdgeAppearance = appearance;
-			NavigationController.NavigationBar.CompactAppearance = appearance;
-			NavigationController.NavigationBar.Translucent = true;
+			// StandardAppearance: the bar look when content is scrolled behind it.
+			navBar.StandardAppearance = appearance;
+
+			// ScrollEdgeAppearance: the bar look when content is at the top edge
+			// (not scrolled). Use transparent so the bar blends with the page
+			// background when the user hasn't scrolled yet.
+			var edgeAppearance = new UINavigationBarAppearance();
+			edgeAppearance.ConfigureWithTransparentBackground();
+			edgeAppearance.ShadowColor = UIColor.Clear;
+			if (textColor != null)
+			{
+				edgeAppearance.LargeTitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
+				edgeAppearance.TitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
+			}
+			navBar.ScrollEdgeAppearance = edgeAppearance;
+
+			navBar.CompactAppearance = appearance;
+			navBar.Translucent = true;
 		}
+
 		protected override void Dispose(bool disposing)
 		{
 			if (disposing)
