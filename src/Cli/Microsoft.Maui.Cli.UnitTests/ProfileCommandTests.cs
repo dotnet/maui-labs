@@ -2,8 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
+using Microsoft.Maui.Cli.Models;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -28,6 +31,7 @@ public class ProfileCommandTests
 		Assert.Contains(command.Options, o => o.Name == "--framework");
 		Assert.Contains(command.Options, o => o.Name == "--device");
 		Assert.Contains(command.Options, o => o.Name == "--output");
+		Assert.Contains(command.Options, o => o.Name == "--format");
 		Assert.Contains(command.Options, o => o.Name == "--configuration");
 		Assert.Contains(command.Options, o => o.Name == "--platform");
 		Assert.Contains(command.Options, o => o.Name == "--duration");
@@ -49,12 +53,65 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
-	public void ProfileCommand_DefaultPlatformIsAndroid()
+	public void ProfileCommand_DefaultFormatIsNetTrace()
+	{
+		var command = ProfileCommand.Create();
+		var formatOption = (Option<string>)command.Options.First(o => o.Name == "--format");
+		var parseResult = command.Parse("profile");
+		Assert.Equal("nettrace", parseResult.GetValue(formatOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_FormatOptionIsNotExplicitWhenOmitted()
+	{
+		var command = ProfileCommand.Create();
+		var formatOption = (Option<string>)command.Options.First(o => o.Name == "--format");
+		var parseResult = command.Parse("profile");
+
+		Assert.False(ProfileCommand.WasOptionExplicitlySpecified(parseResult, formatOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_FormatOptionIsExplicitWhenProvided()
+	{
+		var command = ProfileCommand.Create();
+		var formatOption = (Option<string>)command.Options.First(o => o.Name == "--format");
+		var parseResult = command.Parse("profile --format speedscope");
+
+		Assert.True(ProfileCommand.WasOptionExplicitlySpecified(parseResult, formatOption));
+	}
+
+	[Fact]
+	public void ResolveTraceOutputFormat_DefaultsToNetTraceWhenOmittedNonInteractive()
+	{
+		var result = ProfileCommand.ResolveTraceOutputFormat(
+			requestedFormat: null,
+			explicitlySpecified: false,
+			nonInteractive: true,
+			spectre: null);
+
+		Assert.Equal(TraceOutputFormat.NetTrace, result);
+	}
+
+	[Fact]
+	public void ResolveTraceOutputFormat_UsesExplicitSpeedscopeValue()
+	{
+		var result = ProfileCommand.ResolveTraceOutputFormat(
+			requestedFormat: "speedscope",
+			explicitlySpecified: true,
+			nonInteractive: false,
+			spectre: null);
+
+		Assert.Equal(TraceOutputFormat.Speedscope, result);
+	}
+
+	[Fact]
+	public void ProfileCommand_DefaultPlatformIsAll()
 	{
 		var command = ProfileCommand.Create();
 		var platformOption = (Option<string>)command.Options.First(o => o.Name == "--platform");
 		var parseResult = command.Parse("profile");
-		Assert.Equal("android", parseResult.GetValue(platformOption));
+		Assert.Equal("all", parseResult.GetValue(platformOption));
 	}
 
 	[Fact]
@@ -124,6 +181,25 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ResolveTargetFramework_SelectsAcrossPlatformsWhenPlatformIsAll()
+	{
+		var project = FakeProject(["net11.0-ios", "net11.0-android"]);
+		var result = ProfileCommand.ResolveTargetFramework(project, null, "all", nonInteractive: true, spectre: null);
+		Assert.Equal("net11.0-android", result);
+	}
+
+	[Theory]
+	[InlineData("net10.0-android", "android")]
+	[InlineData("net10.0-ios", "ios")]
+	[InlineData("net10.0-maccatalyst", "maccatalyst")]
+	[InlineData("net10.0-windows10.0.19041.0", "windows")]
+	[InlineData("net10.0", null)]
+	public void InferPlatformFromTargetFramework_ReturnsExpected(string tfm, string? expected)
+	{
+		Assert.Equal(expected, ProfileCommand.InferPlatformFromTargetFramework(tfm));
+	}
+
+	[Fact]
 	public void ResolveTargetFramework_ThrowsWhenNoCandidatesMatchPlatform()
 	{
 		var project = FakeProject(["net10.0-ios", "net10.0-maccatalyst"]);
@@ -149,21 +225,21 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveOutputPath_UsesExplicitPath()
 	{
-		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace.nettrace");
+		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace.nettrace", TraceOutputFormat.NetTrace);
 		Assert.Equal(Path.GetFullPath("/tmp/my-trace.nettrace"), path);
 	}
 
 	[Fact]
 	public void ResolveOutputPath_AddsNettraceExtensionWhenMissing()
 	{
-		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace");
+		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace", TraceOutputFormat.NetTrace);
 		Assert.EndsWith(".nettrace", path, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]
 	public void ResolveOutputPath_DefaultNameIncludesProjectName()
 	{
-		var path = ProfileCommand.ResolveOutputPath("MyApp", null);
+		var path = ProfileCommand.ResolveOutputPath("MyApp", null, TraceOutputFormat.NetTrace);
 		var fileName = Path.GetFileName(path);
 		Assert.StartsWith("MyApp_", fileName, StringComparison.OrdinalIgnoreCase);
 		Assert.EndsWith(".nettrace", fileName, StringComparison.OrdinalIgnoreCase);
@@ -172,10 +248,24 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveOutputPath_FallsBackWhenProjectNameIsEmpty()
 	{
-		var path = ProfileCommand.ResolveOutputPath(string.Empty, null);
+		var path = ProfileCommand.ResolveOutputPath(string.Empty, null, TraceOutputFormat.NetTrace);
 		var fileName = Path.GetFileName(path);
 		Assert.StartsWith("maui-startup-profile_", fileName, StringComparison.OrdinalIgnoreCase);
 		Assert.EndsWith(".nettrace", fileName, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public void ResolveOutputPath_SpeedscopeStripsRequestedSpeedscopeSuffix()
+	{
+		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace.speedscope.json", TraceOutputFormat.Speedscope);
+		Assert.Equal(Path.GetFullPath("/tmp/my-trace.nettrace"), path);
+	}
+
+	[Fact]
+	public void GetPrimaryOutputPath_SpeedscopeUsesSidecarJsonFile()
+	{
+		var path = ProfileCommand.GetPrimaryOutputPath("/tmp/my-trace.nettrace", TraceOutputFormat.Speedscope);
+		Assert.Equal("/tmp/my-trace.nettrace.speedscope.json", path);
 	}
 
 	// ── Tool version parsing ──────────────────────────────────────────────────
@@ -230,6 +320,49 @@ public class ProfileCommandTests
 		Assert.All(frameworks, f => Assert.DoesNotContain("$(", f, StringComparison.Ordinal));
 	}
 
+	[Fact]
+	public void GetAndroidApplicationId_ReadsApplicationIdFromProjectFile()
+	{
+		var csprojContent = """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0-android</TargetFramework>
+			    <ApplicationId>com.example.myapp</ApplicationId>
+			  </PropertyGroup>
+			</Project>
+			""";
+
+		using var tempProject = TempProjectFile(csprojContent);
+		var applicationId = MauiProjectResolver.GetAndroidApplicationId(tempProject.Path, "net10.0-android", "Debug");
+
+		Assert.Equal("com.example.myapp", applicationId);
+	}
+
+	[Fact]
+	public void GetAndroidApplicationId_PrefersBuiltManifestPackage()
+	{
+		var csprojContent = """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0-android</TargetFramework>
+			    <ApplicationId>com.example.fromproject</ApplicationId>
+			  </PropertyGroup>
+			</Project>
+			""";
+
+		using var tempProject = TempProjectFile(csprojContent);
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var manifestDirectory = Path.Combine(projectDirectory, "obj", "Debug", "net10.0-android");
+		Directory.CreateDirectory(manifestDirectory);
+		File.WriteAllText(
+			Path.Combine(manifestDirectory, "AndroidManifest.xml"),
+			"""<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.frommanifest" />""");
+
+		var applicationId = MauiProjectResolver.GetAndroidApplicationId(tempProject.Path, "net10.0-android", "Debug");
+
+		Assert.Equal("com.example.frommanifest", applicationId);
+	}
+
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
 	static ResolvedMauiProject FakeProject(IReadOnlyList<string> targetFrameworks) =>
@@ -241,9 +374,23 @@ public class ProfileCommandTests
 			TargetFrameworks = targetFrameworks
 		};
 
+	static Device CreateDevice(string platform, bool isEmulator) =>
+		new()
+		{
+			Id = isEmulator ? $"{platform}-emu" : $"{platform}-device",
+			Name = isEmulator ? $"{platform} emulator" : $"{platform} device",
+			Platforms = [platform],
+			IsEmulator = isEmulator,
+			IsRunning = true,
+			Type = isEmulator ? DeviceType.Emulator : DeviceType.Physical,
+			State = DeviceState.Booted
+		};
+
 	static TempFile TempProjectFile(string content)
 	{
-		var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csproj");
+		var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(directory);
+		var path = Path.Combine(directory, "TestProject.csproj");
 		File.WriteAllText(path, content);
 		return new TempFile(path);
 	}
@@ -258,6 +405,7 @@ public class ProfileCommandTests
 		// applies its own defaults (dotnet-common + dotnet-sampled-thread-time).
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
+			outputFormat: TraceOutputFormat.NetTrace,
 			dsrouterPid: 12345,
 			traceProfile: null,
 			duration: null,
@@ -271,6 +419,7 @@ public class ProfileCommandTests
 		// Should use --process-id, not --dsrouter
 		Assert.Contains("--process-id", args);
 		Assert.DoesNotContain("--dsrouter", args);
+		Assert.Equal("NetTrace", args[Array.IndexOf(args, "--format") + 1]);
 	}
 
 	[Fact]
@@ -282,6 +431,7 @@ public class ProfileCommandTests
 		// actually receives the event (--stopping-event-provider-name alone is not enough).
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
+			outputFormat: TraceOutputFormat.NetTrace,
 			dsrouterPid: 12345,
 			traceProfile: null,
 			duration: null,
@@ -311,6 +461,7 @@ public class ProfileCommandTests
 		// with the default profiles.
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
+			outputFormat: TraceOutputFormat.NetTrace,
 			dsrouterPid: 12345,
 			traceProfile: "gc-verbose",
 			duration: null,
@@ -334,6 +485,7 @@ public class ProfileCommandTests
 		// event provider via --providers.
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
+			outputFormat: TraceOutputFormat.NetTrace,
 			dsrouterPid: 12345,
 			traceProfile: "gc-verbose",
 			duration: null,
@@ -351,12 +503,152 @@ public class ProfileCommandTests
 		Assert.Contains("Microsoft.Maui.StartupProfiling", args[providersIdx + 1]);
 	}
 
+	[Fact]
+	public void BuildTraceArguments_Speedscope_UsesSpeedscopeFormat()
+	{
+		var args = ProfileCommand.BuildTraceArguments(
+			outputPath: "/out.nettrace",
+			outputFormat: TraceOutputFormat.Speedscope,
+			dsrouterPid: 12345,
+			traceProfile: null,
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null).ToArray();
+
+		var formatIdx = Array.IndexOf(args, "--format");
+		Assert.True(formatIdx >= 0);
+		Assert.Equal("Speedscope", args[formatIdx + 1]);
+	}
+
+
+	[Fact]
+	public void BuildDsrouterArguments_UsesSelectedDiagnosticPort()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+		var args = ProfileCommand.BuildDsrouterArguments(transport, 9012);
+
+		Assert.Equal("server-server", args[0]);
+
+		var tcpServerIdx = Array.IndexOf(args, "-tcps");
+		Assert.True(tcpServerIdx >= 0);
+		Assert.Equal("127.0.0.1:9012", args[tcpServerIdx + 1]);
+		Assert.Contains("--forward-port", args);
+		Assert.Contains("Android", args);
+	}
+
+	[Fact]
+	public void ResolveProfileTransport_AndroidEmulator_UsesEmulatorLoopbackAlias()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: true));
+
+		Assert.Equal("10.0.2.2", transport.DiagnosticAddress);
+		Assert.Equal("connect", transport.DiagnosticListenMode);
+		Assert.Equal("server-server", transport.DsrouterKind);
+		Assert.Equal("-tcps", transport.DsrouterRuntimeEndpointOption);
+		Assert.Equal("Android", transport.DsrouterForwardPort);
+		Assert.False(transport.RequiresManualExitControlPortRouting);
+	}
+
+	[Fact]
+	public void ResolveProfileTransport_AndroidDevice_UsesLoopbackAndManualExitRouting()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		Assert.Equal("127.0.0.1", transport.DiagnosticAddress);
+		Assert.Equal("connect", transport.DiagnosticListenMode);
+		Assert.True(transport.RequiresManualExitControlPortRouting);
+	}
+
+	[Fact]
+	public void ResolveProfileTransport_Ios_UsesListenModeAndTcpClient()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.iOS,
+			CreateDevice(Platforms.iOS, isEmulator: true));
+
+		Assert.Equal("127.0.0.1", transport.DiagnosticAddress);
+		Assert.Equal("listen", transport.DiagnosticListenMode);
+		Assert.Equal("server-client", transport.DsrouterKind);
+		Assert.Equal("-tcpc", transport.DsrouterRuntimeEndpointOption);
+		Assert.Equal("iOS", transport.DsrouterForwardPort);
+		Assert.False(transport.RequiresManualExitControlPortRouting);
+	}
+
+	[Fact]
+	public void FindAvailableTcpPort_SkipsBusyPort()
+	{
+		using var listener = new TcpListener(IPAddress.Loopback, 0);
+		listener.Start();
+
+		var busyPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+		var selectedPort = ProfileCommand.FindAvailableTcpPort(busyPort, busyPort + 20);
+
+		Assert.NotEqual(busyPort, selectedPort);
+		Assert.InRange(selectedPort, busyPort + 1, busyPort + 20);
+	}
+
+	[Fact]
+	public void ResolveStoppingEventConfiguration_LeavesStoppingEventUnsetWithoutExplicitOptions()
+	{
+		var result = ProfileCommand.ResolveStoppingEventConfiguration(
+			hasStartupProfilingHelper: true,
+			duration: null,
+			providerName: null,
+			eventName: null,
+			payloadFilter: null);
+
+		Assert.False(result.AutoSelected);
+		Assert.Null(result.ProviderName);
+		Assert.Null(result.EventName);
+		Assert.Null(result.PayloadFilter);
+	}
+
+	[Fact]
+	public void ResolveStoppingEventConfiguration_DoesNotOverrideExplicitOrTimedSettings()
+	{
+		var durationResult = ProfileCommand.ResolveStoppingEventConfiguration(
+			hasStartupProfilingHelper: true,
+			duration: TimeSpan.FromSeconds(5),
+			providerName: null,
+			eventName: null,
+			payloadFilter: null);
+
+		Assert.False(durationResult.AutoSelected);
+		Assert.Null(durationResult.ProviderName);
+
+		var customResult = ProfileCommand.ResolveStoppingEventConfiguration(
+			hasStartupProfilingHelper: true,
+			duration: null,
+			providerName: "Custom.Provider",
+			eventName: "Done",
+			payloadFilter: "kind:start");
+
+		Assert.False(customResult.AutoSelected);
+		Assert.Equal("Custom.Provider", customResult.ProviderName);
+		Assert.Equal("Done", customResult.EventName);
+		Assert.Equal("kind:start", customResult.PayloadFilter);
+	}
+
 	sealed class TempFile(string path) : IDisposable
 	{
 		public string Path { get; } = path;
 		public void Dispose()
 		{
-			try { File.Delete(Path); }
+			try
+			{
+				var directory = System.IO.Path.GetDirectoryName(Path);
+				if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+					Directory.Delete(directory, recursive: true);
+				else
+					File.Delete(Path);
+			}
 			catch { /* best-effort cleanup */ }
 		}
 	}
