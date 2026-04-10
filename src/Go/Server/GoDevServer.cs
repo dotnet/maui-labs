@@ -11,7 +11,7 @@ using Microsoft.Maui.Go;
 namespace Microsoft.Maui.Go.Server;
 
 /// <summary>
-/// MAUI Go dev server entry point.
+/// Comet Go dev server entry point.
 /// Watches project files, compiles deltas, pushes to connected companion apps.
 /// </summary>
 public static class GoDevServer
@@ -37,7 +37,7 @@ public static class GoDevServer
 		var projectName = Path.GetFileNameWithoutExtension(csproj);
 		Console.WriteLine();
 		Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
-		Console.WriteLine("║           MAUI Go Dev Server                            ║");
+		Console.WriteLine("║           Comet Go Dev Server                            ║");
 		Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
 		Console.WriteLine();
 		Console.WriteLine($"  Project:  {projectName}");
@@ -122,7 +122,7 @@ public static class GoDevServer
 				// Serve basic info page for browser requests
 				context.Response.StatusCode = 200;
 				context.Response.ContentType = "text/plain";
-				var msg = Encoding.UTF8.GetBytes($"MAUI Go Dev Server — {projectName}\nConnect with the MAUI Go companion app.");
+				var msg = Encoding.UTF8.GetBytes($"Comet Go Dev Server — {projectName}\nConnect with the Comet Go companion app.");
 				await context.Response.OutputStream.WriteAsync(msg, ct);
 				context.Response.Close();
 				continue;

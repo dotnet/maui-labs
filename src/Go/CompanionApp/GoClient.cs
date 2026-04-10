@@ -15,7 +15,7 @@ using Microsoft.Maui.Go;
 namespace Microsoft.Maui.Go.CompanionApp;
 
 /// <summary>
-/// Connects to the MAUI Go dev server, receives hot reload deltas,
+/// Connects to the Comet Go dev server, receives hot reload deltas,
 /// and applies them via MetadataUpdater.ApplyUpdate().
 /// Auto-reconnects on disconnection with exponential backoff.
 /// </summary>

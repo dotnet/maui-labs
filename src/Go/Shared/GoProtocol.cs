@@ -9,7 +9,7 @@ using System.Text.Json;
 namespace Microsoft.Maui.Go;
 
 /// <summary>
-/// Binary wire format for MAUI Go messages.
+/// Binary wire format for Comet Go messages.
 ///
 /// Frame layout:
 ///   [4 bytes: total payload length (big-endian)]

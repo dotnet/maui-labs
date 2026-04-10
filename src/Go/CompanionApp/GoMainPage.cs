@@ -17,7 +17,7 @@ using static Comet.CometControls;
 namespace Microsoft.Maui.Go.CompanionApp;
 
 /// <summary>
-/// State for the MAUI Go companion app.
+/// State for the Comet Go companion app.
 /// </summary>
 public class GoAppState
 {
@@ -34,7 +34,7 @@ public class GoAppState
 }
 
 /// <summary>
-/// The main MAUI Go companion app UI — connect screen + dynamic view host.
+/// The main Comet Go companion app UI — connect screen + dynamic view host.
 /// </summary>
 public class GoMainPage : Component<GoAppState>
 {

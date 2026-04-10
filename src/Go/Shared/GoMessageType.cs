@@ -4,7 +4,7 @@
 namespace Microsoft.Maui.Go;
 
 /// <summary>
-/// Wire protocol messages between MAUI Go dev server and companion app.
+/// Wire protocol messages between Comet Go dev server and companion app.
 /// All messages are length-prefixed binary frames sent over WebSocket.
 /// </summary>
 public enum GoMessageType : byte

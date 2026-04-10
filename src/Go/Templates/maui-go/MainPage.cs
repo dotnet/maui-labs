@@ -1,4 +1,4 @@
-// My first MAUI Go app!
+// My first Comet Go app!
 // Edit this file and save — the companion app updates instantly.
 
 using Comet;
@@ -14,7 +14,7 @@ public class MainPage : View
 	[Body]
 	View body() => new VStack(spacing: 20)
 	{
-		new Text("Welcome to MAUI Go!")
+		new Text("Welcome to Comet Go!")
 			.FontSize(28)
 			.FontWeight(FontWeight.Bold)
 			.Color(Colors.Purple)

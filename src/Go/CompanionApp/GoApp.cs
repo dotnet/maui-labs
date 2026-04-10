@@ -9,7 +9,7 @@ using Microsoft.Maui.Hosting;
 namespace Microsoft.Maui.Go.CompanionApp;
 
 /// <summary>
-/// MAUI Go companion app entry point.
+/// Comet Go companion app entry point.
 /// Sets up Comet with the GoMainPage as root view.
 /// </summary>
 public class GoApp : CometApp

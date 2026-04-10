@@ -11,7 +11,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
-    <ApplicationTitle>MAUI Go</ApplicationTitle>
+    <ApplicationTitle>Comet Go</ApplicationTitle>
     <ApplicationId>com.microsoft.maui.go</ApplicationId>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
@@ -27,10 +27,15 @@
          On Android/iOS, set via the native entry point. -->
   </PropertyGroup>
 
-  <!-- Use CoreCLR on Android (required for MetadataUpdater hot reload) -->
+  <!-- CoreCLR on Android is required for MetadataUpdater hot reload.
+       Currently experimental: https://learn.microsoft.com/dotnet/maui/whats-new/dotnet-10#experimental-coreclr
+       Disabled for now due to assembly loading issues (FileNotFoundException for Microsoft.Maui).
+       Re-enable when CoreCLR assembly loading is fixed in a future preview. -->
+  <!--
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <UseMonoRuntime>false</UseMonoRuntime>
   </PropertyGroup>
+  -->
 
   <ItemGroup>
     <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#000000" />
