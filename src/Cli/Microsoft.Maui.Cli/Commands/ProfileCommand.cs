@@ -5,6 +5,7 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
@@ -44,6 +45,8 @@ public static class ProfileCommand
 	internal const string DotnetPgoFallbackBranch = "release/10.0";
 	internal const string DotnetPgoBranchEnvironmentVariable = "MAUI_DOTNET_PGO_BRANCH";
 	internal const string DotnetPgoProjectPath = "src/coreclr/tools/dotnet-pgo/dotnet-pgo.csproj";
+	internal const int DotnetPgoStatusTailLineCount = 5;
+	internal const int DotnetPgoStatusMaxLineLength = 120;
 
 	// MSBuild SDK path env vars set by a parent `dotnet run` process that would otherwise
 	// pin the child build to the wrong SDK version (e.g. the CLI's own SDK instead of the
@@ -740,10 +743,12 @@ public static class ProfileCommand
 				formatter,
 				useJson,
 				$"Cloning dotnet/runtime ({branch})...",
-				() => ProcessRunner.RunAsync(
+				reportLine => ProcessRunner.RunAsync(
 					gitPath,
 					["clone", "--depth", "1", "--single-branch", "--branch", branch, DotnetPgoRuntimeRepoUrl, cloneDirectory],
 					timeout: s_buildLaunchTimeout,
+					onOutputData: reportLine,
+					onErrorData: reportLine,
 					cancellationToken: cancellationToken));
 			if (!cloneResult.Success)
 				throw ProfileCommandProcessHelpers.CreateProcessFailureException("git clone", cloneResult);
@@ -759,11 +764,13 @@ public static class ProfileCommand
 				formatter,
 				useJson,
 				$"Publishing dotnet-pgo for {GetCurrentRuntimeIdentifier()}...",
-				() => ProcessRunner.RunAsync(
+				reportLine => ProcessRunner.RunAsync(
 					dotnetPath,
 					publishArgs,
 					cloneDirectory,
 					timeout: s_buildLaunchTimeout,
+					onOutputData: reportLine,
+					onErrorData: reportLine,
 					cancellationToken: cancellationToken));
 			if (!publishResult.Success)
 				throw ProfileCommandProcessHelpers.CreateProcessFailureException("dotnet publish", publishResult);
@@ -821,15 +828,91 @@ public static class ProfileCommand
 		IOutputFormatter formatter,
 		bool useJson,
 		string message,
-		Func<Task<T>> operation)
+		Func<Action<string>?, Task<T>> operation)
 	{
 		if (formatter is SpectreOutputFormatter spectre && !useJson)
-			return await spectre.StatusAsync(message, operation);
+		{
+			var recentLines = new Queue<string>();
+			var syncLock = new object();
+			var lastRefreshUtc = DateTime.MinValue;
+
+			return await spectre.StatusAsync(FormatStatusMessage(message, recentLines), async statusContext =>
+			{
+				void ReportLine(string line)
+				{
+					string? updatedStatus = null;
+
+					lock (syncLock)
+					{
+						if (!AppendStatusTailLine(recentLines, line))
+							return;
+
+						var now = DateTime.UtcNow;
+						if (now - lastRefreshUtc < TimeSpan.FromMilliseconds(75))
+							return;
+
+						lastRefreshUtc = now;
+						updatedStatus = FormatStatusMessage(message, recentLines);
+					}
+
+					if (updatedStatus is not null)
+						statusContext.Status(updatedStatus);
+				}
+
+				var result = await operation(ReportLine);
+
+				lock (syncLock)
+					statusContext.Status(FormatStatusMessage(message, recentLines));
+
+				return result;
+			});
+		}
 
 		if (!useJson)
 			formatter.WriteInfo(message);
 
-		return await operation();
+		return await operation(null);
+	}
+
+	internal static bool AppendStatusTailLine(Queue<string> recentLines, string? line, int maxLines = DotnetPgoStatusTailLineCount)
+	{
+		ArgumentNullException.ThrowIfNull(recentLines);
+
+		if (string.IsNullOrWhiteSpace(line))
+			return false;
+
+		var normalizedLine = string.Join(" ", line.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+		if (normalizedLine.Length > DotnetPgoStatusMaxLineLength)
+			normalizedLine = normalizedLine[..(DotnetPgoStatusMaxLineLength - 3)] + "...";
+
+		recentLines.Enqueue(normalizedLine);
+		while (recentLines.Count > maxLines)
+			recentLines.Dequeue();
+
+		return true;
+	}
+
+	internal static string FormatStatusMessage(string message, IEnumerable<string> recentLines)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+		var lines = recentLines
+			.Where(static line => !string.IsNullOrWhiteSpace(line))
+			.ToArray();
+
+		if (lines.Length == 0)
+			return Markup.Escape(message);
+
+		var builder = new StringBuilder(Markup.Escape(message));
+		foreach (var line in lines)
+		{
+			builder.AppendLine();
+			builder.Append("[grey]");
+			builder.Append(Markup.Escape($"  {line}"));
+			builder.Append("[/]");
+		}
+
+		return builder.ToString();
 	}
 
 	static IReadOnlyList<string> ResolveMibcReferenceAssemblies(

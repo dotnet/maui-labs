@@ -369,6 +369,30 @@ public class ProfileCommandTests
 		Assert.Matches("^(osx|linux|win)-(x64|arm64)$", rid);
 	}
 
+	[Fact]
+	public void AppendStatusTailLine_KeepsOnlyTheMostRecentLines()
+	{
+		var lines = new Queue<string>();
+
+		for (var i = 1; i <= 7; i++)
+			ProfileCommand.AppendStatusTailLine(lines, $"line {i}");
+
+		Assert.Equal(["line 3", "line 4", "line 5", "line 6", "line 7"], lines.ToArray());
+	}
+
+	[Fact]
+	public void FormatStatusMessage_IncludesEscapedRecentOutput()
+	{
+		var message = ProfileCommand.FormatStatusMessage(
+			"Publishing dotnet-pgo...",
+			["Restored [package]", "Build succeeded"]);
+
+		Assert.Contains("Publishing dotnet-pgo...", message);
+		Assert.Contains("Restored", message);
+		Assert.Contains("[grey]", message);
+		Assert.Contains("Build succeeded", message);
+	}
+
 	// ── Tool version parsing ──────────────────────────────────────────────────
 
 	// ── Project resolver ──────────────────────────────────────────────────────

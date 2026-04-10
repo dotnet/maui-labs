@@ -147,6 +147,8 @@ public static class ProcessRunner
 		TimeSpan? timeout = null,
 		string? continuousInput = null,
 		IEnumerable<string>? environmentVariablesToRemove = null,
+		Action<string>? onOutputData = null,
+		Action<string>? onErrorData = null,
 		CancellationToken cancellationToken = default)
 	{
 		var stopwatch = Stopwatch.StartNew();
@@ -189,7 +191,10 @@ public static class ProcessRunner
 		process.OutputDataReceived += (_, e) =>
 		{
 			if (e.Data != null)
+			{
 				stdoutBuilder.AppendLine(e.Data);
+				onOutputData?.Invoke(e.Data);
+			}
 			else
 				outputTcs.TrySetResult(true);
 		};
@@ -197,7 +202,10 @@ public static class ProcessRunner
 		process.ErrorDataReceived += (_, e) =>
 		{
 			if (e.Data != null)
+			{
 				stderrBuilder.AppendLine(e.Data);
+				onErrorData?.Invoke(e.Data);
+			}
 			else
 				errorTcs.TrySetResult(true);
 		};
