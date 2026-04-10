@@ -10,7 +10,6 @@ using Comet.Reactive;
 using Comet.Styles;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
-using Microsoft.Maui.HotReload;
 using static Comet.CometControls;
 
 namespace Microsoft.Maui.Go.CompanionApp;
@@ -39,13 +38,10 @@ public class GoMainPage : Component<GoAppState>
 
 	public GoMainPage()
 	{
-		// Auto-connect if MAUI_GO_SERVER env var is set (for automated testing)
+		// Auto-connect if MAUI_GO_SERVER env var is set
 		var autoUrl = Environment.GetEnvironmentVariable("MAUI_GO_SERVER");
 		if (!string.IsNullOrEmpty(autoUrl))
-		{
-			Console.WriteLine($"[GoMainPage] Will auto-connect to {autoUrl}");
 			State.ServerUrl = autoUrl;
-		}
 	}
 
 	public override View Render()
@@ -183,14 +179,11 @@ public class GoMainPage : Component<GoAppState>
 			Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() =>
 			{
 				// Re-instantiate the user's view to pick up the updated method body.
-				// Don't call MauiHotReloadHelper.TriggerReload() because that would
-				// destroy GoMainPage and its WebSocket client.
 				if (_userViewType is not null)
 				{
 					try
 					{
 						var newView = (Comet.View)Activator.CreateInstance(_userViewType)!;
-						Console.WriteLine($"[GoMainPage] Re-created user view after delta #{seq}: {newView.GetType().Name}");
 						SetState(s =>
 						{
 							s.UserView = newView;
@@ -199,7 +192,6 @@ public class GoMainPage : Component<GoAppState>
 					}
 					catch (Exception ex)
 					{
-						Console.WriteLine($"[GoMainPage] Failed to re-create view after delta: {ex.Message}");
 						SetState(s =>
 						{
 							s.DeltasApplied = seq;
@@ -248,7 +240,6 @@ public class GoMainPage : Component<GoAppState>
 	/// </summary>
 	void LoadUserView(Assembly assembly)
 	{
-		Console.WriteLine($"[GoMainPage] LoadUserView called with assembly: {assembly.FullName}");
 		var cometViewType = typeof(Comet.View);
 
 		// Find MainPage or first public View subclass
@@ -259,18 +250,15 @@ public class GoMainPage : Component<GoAppState>
 
 		if (viewType is null)
 		{
-			Console.WriteLine("[GoMainPage] No Comet View found in assembly");
 			SetState(s => s.ErrorMessage = "No Comet View found in assembly. Create a class named 'MainPage' inheriting from Comet.View.");
 			return;
 		}
 
-		Console.WriteLine($"[GoMainPage] Found view type: {viewType.FullName}");
 		_userViewType = viewType;
 
 		try
 		{
 			var view = (Comet.View)Activator.CreateInstance(viewType)!;
-			Console.WriteLine($"[GoMainPage] View instantiated: {view.GetType().Name}");
 			SetState(s =>
 			{
 				s.UserView = view;
