@@ -14,7 +14,7 @@ public class MainPage : View
 	[Body]
 	View body() => new VStack(spacing: 20)
 	{
-		new Text("Welcome to MAUI Go! 🚀")
+		new Text("Welcome to MAUI Go!")
 			.FontSize(28)
 			.FontWeight(FontWeight.Bold)
 			.Color(Colors.Purple)

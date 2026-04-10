@@ -55,7 +55,7 @@ public static class GoDevServer
 			Console.WriteLine(" FAILED");
 			Console.WriteLine();
 			foreach (var err in initResult.Errors)
-				Console.WriteLine($"  ✗ {err}");
+				Console.WriteLine($"  * {err}");
 			return 1;
 		}
 
@@ -134,7 +134,7 @@ public static class GoDevServer
 			lock (_clientsLock)
 				_clients.Add(ws);
 
-			Console.WriteLine($"  📱 Device connected! ({_clients.Count} total)");
+			Console.WriteLine($"  Device connected! ({_clients.Count} total)");
 
 			// Send welcome + initial assembly on a background task
 			_ = HandleClientAsync(ws, projectName, ct);
@@ -155,7 +155,7 @@ public static class GoDevServer
 				if (type == GoMessageType.Hello)
 				{
 					var hello = GoProtocol.DecodeJson<HelloMessage>(payload.Span);
-					Console.WriteLine($"  📱 {hello.DeviceName} ({hello.Platform}) — MetadataUpdate: {hello.SupportsMetadataUpdate}");
+					Console.WriteLine($"  {hello.DeviceName} ({hello.Platform}) — MetadataUpdate: {hello.SupportsMetadataUpdate}");
 				}
 			}
 
@@ -174,7 +174,7 @@ public static class GoDevServer
 				_compiler.CurrentPe!,
 				_compiler.CurrentPdb!);
 			await ws.SendAsync(initFrame, WebSocketMessageType.Binary, true, ct);
-			Console.WriteLine($"  📦 Sent initial assembly ({_compiler.CurrentPe!.Length} bytes)");
+			Console.WriteLine($"  Sent initial assembly ({_compiler.CurrentPe!.Length} bytes)");
 
 			// Keep reading (for pong responses, future commands)
 			while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -190,7 +190,7 @@ public static class GoDevServer
 		{
 			lock (_clientsLock)
 				_clients.Remove(ws);
-			Console.WriteLine($"  📱 Device disconnected ({_clients.Count} remaining)");
+			Console.WriteLine($"  Device disconnected ({_clients.Count} remaining)");
 		}
 	}
 
@@ -253,7 +253,7 @@ public static class GoDevServer
 			.Select(f => Path.GetRelativePath(_projectDir!, f))
 			.ToArray();
 
-		Console.Write($"  🔄 Change detected: {string.Join(", ", relativePaths)}... ");
+		Console.Write($"  Change detected: {string.Join(", ", relativePaths)}... ");
 
 		var result = _compiler!.CompileDelta();
 
@@ -274,7 +274,7 @@ public static class GoDevServer
 			await BroadcastAsync(errorMsg);
 
 			foreach (var err in result.Errors)
-				Console.WriteLine($"    ✗ {err}");
+				Console.WriteLine($"    * {err}");
 			return;
 		}
 

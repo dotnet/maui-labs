@@ -123,7 +123,7 @@ public sealed class GoClient : IDisposable
 				await _ws.SendAsync(hello, WebSocketMessageType.Binary, true, _cts.Token);
 
 				Console.WriteLine($"[GoClient] Reconnected successfully");
-				StatusChanged?.Invoke("Reconnected ✅");
+				StatusChanged?.Invoke("Reconnected");
 				Connected?.Invoke();
 
 				_ = ReceiveLoopAsync();
@@ -188,13 +188,13 @@ public sealed class GoClient : IDisposable
 						var errors = GoProtocol.DecodeJson<CompilationErrorMessage>(payload.Span);
 						var errorText = string.Join("\n", errors.Errors.Select(e => $"{e.FilePath}({e.Line}): {e.Message}"));
 						ErrorReceived?.Invoke(errorText);
-						StatusChanged?.Invoke($"⚠️ {errors.Errors.Count} compilation error(s)");
+						StatusChanged?.Invoke($"{errors.Errors.Count} compilation error(s)");
 						break;
 
 					case GoMessageType.RestartRequired:
 						var restart = GoProtocol.DecodeJson<RestartRequiredMessage>(payload.Span);
 						RestartRequired?.Invoke(restart.Reason);
-						StatusChanged?.Invoke("🔄 Restart required");
+						StatusChanged?.Invoke("Restart required");
 						break;
 
 					case GoMessageType.Ping:
@@ -232,7 +232,7 @@ public sealed class GoClient : IDisposable
 
 			Console.WriteLine($"[GoClient] Loaded assembly: {assemblyName} ({pe.Length}b PE, {pdb.Length}b PDB)");
 
-			StatusChanged?.Invoke($"✅ Loaded: {assemblyName}");
+			StatusChanged?.Invoke($"Loaded: {assemblyName}");
 			AssemblyLoaded?.Invoke(_userAssembly);
 		}
 		catch (Exception ex)
@@ -260,14 +260,14 @@ public sealed class GoClient : IDisposable
 				delta.ILDelta,
 				delta.PdbDelta.Length > 0 ? delta.PdbDelta : ReadOnlySpan<byte>.Empty);
 
-			Console.WriteLine($"[GoClient] ✅ Delta #{delta.Sequence} applied ({delta.MetadataDelta.Length}b meta, {delta.ILDelta.Length}b IL)");
+			Console.WriteLine($"[GoClient] Delta #{delta.Sequence} applied ({delta.MetadataDelta.Length}b meta, {delta.ILDelta.Length}b IL)");
 
-			StatusChanged?.Invoke($"🔥 Delta #{delta.Sequence} applied");
+			StatusChanged?.Invoke($"Delta #{delta.Sequence} applied");
 			DeltaApplied?.Invoke(delta.Sequence);
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"[GoClient] ❌ Delta #{delta.Sequence} failed: {ex.Message}");
+			Console.WriteLine($"[GoClient] Delta #{delta.Sequence} failed: {ex.Message}");
 			ErrorReceived?.Invoke($"Delta apply failed: {ex.Message}");
 		}
 	}

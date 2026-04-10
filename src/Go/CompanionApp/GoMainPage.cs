@@ -76,7 +76,7 @@ public class GoMainPage : Component<GoAppState>
 			new Spacer(),
 
 			// Logo / Title
-			Text("☄️ Comet Go")
+			Text("Comet Go")
 				.FontSize(36)
 				.FontWeight(FontWeight.Bold)
 				.Color(Colors.White)
@@ -138,13 +138,13 @@ public class GoMainPage : Component<GoAppState>
 			// Status bar overlay
 			new HStack(spacing: 8)
 			{
-				Text($"☄️ Comet Go — {State.DeltasApplied} updates")
+				Text($"Comet Go — {State.DeltasApplied} updates")
 					.FontSize(11)
 					.Color(Colors.White),
 
 				new Spacer(),
 
-				Button("✕", OnDisconnectTapped)
+				Button("X", OnDisconnectTapped)
 					.Color(Colors.White)
 					.Background(Colors.Transparent)
 					.FontSize(11)
@@ -158,7 +158,7 @@ public class GoMainPage : Component<GoAppState>
 		if (State.ErrorMessage is not null)
 		{
 			children.Add(
-				Text("⚠️ " + State.ErrorMessage)
+				Text(State.ErrorMessage)
 					.FontSize(12)
 					.Color(Colors.White)
 					.FontFamily("Courier New")
