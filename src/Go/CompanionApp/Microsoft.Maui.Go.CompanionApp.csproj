@@ -27,6 +27,11 @@
          On Android/iOS, set via the native entry point. -->
   </PropertyGroup>
 
+  <!-- Use CoreCLR on Android (required for MetadataUpdater hot reload) -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <UseMonoRuntime>false</UseMonoRuntime>
+  </PropertyGroup>
+
   <ItemGroup>
     <MauiIcon Include="Resources\AppIcon\appicon.svg" Color="#6200EE" />
     <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#6200EE" BaseSize="432,145" />
