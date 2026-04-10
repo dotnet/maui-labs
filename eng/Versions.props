@@ -13,7 +13,7 @@
   </PropertyGroup>
   <!-- Dependencies flowing via darc/maestro (match Version.Details.xml) -->
   <PropertyGroup Label="Dotnet MAUI">
-    <MicrosoftMauiControlsVersion>10.0.41</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsVersion>11.0.0-preview.3.26207.5</MicrosoftMauiControlsVersion>
     <!-- Minimum MAUI version required by DevFlow shipping packages.
          Kept low so consumers can use any compatible MAUI 10.0.x release. -->
     <DevFlowMauiMinVersion>10.0.20</DevFlowMauiMinVersion>
@@ -22,12 +22,12 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
-    <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
-    <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
-    <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
-    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsHttpVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsHostingVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingDebugVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsLoggingDebugVersion>
+    <SystemTextJsonVersion>11.0.0-preview.3.26203.107</SystemTextJsonVersion>
   </PropertyGroup>
   <!-- Pinned dependencies (third party, not flowing via maestro) -->
   <PropertyGroup Label="Third Party">

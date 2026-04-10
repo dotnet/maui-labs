@@ -11,10 +11,10 @@ public class MainPage : View
     [Body]
     View body() => new VStack(spacing: 20)
     {
-        new Text("Welcome to test-go-app!")
+        new Text("Okay, this is the test-go-app!")
             .FontSize(28)
             .FontWeight(FontWeight.Bold)
-            .Color(Colors.Purple)
+            .Color(Colors.Orange)
             .HorizontalTextAlignment(TextAlignment.Center),
 
         new Text(() => $"Count: {count.Value}")
@@ -23,7 +23,7 @@ public class MainPage : View
 
         new Button("Tap me!", () => count.Value++)
             .Color(Colors.White)
-            .Background(new SolidPaint(Colors.Purple))
+            .Background(new SolidPaint(Colors.Orange))
             .CornerRadius(12)
             .Frame(height: 50),
 
