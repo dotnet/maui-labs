@@ -43,6 +43,13 @@ public static partial class AndroidCommands
 
 					if (sdkCheck.Details?.TryGetPropertyValue("path", out var path) == true)
 						formatter.WriteProgress($"Path: {path}");
+
+					if (sdkCheck.Details?.TryGetPropertyValue("requiresElevation", out var elevation) == true
+						&& elevation?.GetValue<bool>() == true)
+					{
+						formatter.WriteWarning("Administrator access is required at this SDK location. " +
+							"Run as administrator or set ANDROID_HOME or ANDROID_SDK_ROOT to a user-writable path.");
+					}
 				}
 			}
 		});

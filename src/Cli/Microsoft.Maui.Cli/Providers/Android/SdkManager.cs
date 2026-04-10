@@ -289,8 +289,12 @@ public class SdkManager : IDisposable
 	}
 
 	/// <summary>
-	/// Checks whether the current SDK path is in a location that typically requires
-	/// administrator privileges to write to (e.g., Program Files).
+	/// Checks whether the current SDK path requires administrator privileges to write to.
+	/// When the path already exists, the check uses actual filesystem writability so that the
+	/// result matches what callers (e.g., IDE extensions) observe when they probe the directory
+	/// themselves.  When the path does not yet exist (e.g., before the SDK is installed), the
+	/// check falls back to a Program Files prefix heuristic to predict whether creating the
+	/// directory will require elevation.
 	/// </summary>
 	public bool SdkPathRequiresElevation()
 	{
@@ -301,10 +305,44 @@ public class SdkManager : IDisposable
 		if (string.IsNullOrEmpty(sdkPath))
 			return false;
 
+		// If the directory exists, probe it directly rather than guessing from the path.
+		// This makes the CLI's decision consistent with callers that check actual write access.
+		if (Directory.Exists(sdkPath))
+			return !CanWriteToDirectory(sdkPath);
+
+		// Directory does not exist yet — fall back to Program Files prefix heuristic so we can
+		// predict whether creating it will require elevation.
 		var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 		var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
 		return sdkPath.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase)
 			|| sdkPath.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>
+	/// Attempts to create and immediately delete a probe file inside <paramref name="path"/> to
+	/// determine whether the current process has write access to that directory.
+	/// Returns <see langword="true"/> if the write succeeds, <see langword="false"/> if an
+	/// <see cref="UnauthorizedAccessException"/> is thrown.
+	/// </summary>
+	internal static bool CanWriteToDirectory(string path)
+	{
+		var probe = Path.Combine(path, Path.GetRandomFileName());
+		try
+		{
+			File.WriteAllText(probe, string.Empty);
+			File.Delete(probe);
+			return true;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return false;
+		}
+		catch (IOException)
+		{
+			// Treat transient I/O problems (e.g., network paths) as writable so we do not
+			// report a false "elevation required" when the real issue is unrelated to permissions.
+			return true;
+		}
 	}
 }

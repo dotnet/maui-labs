@@ -64,12 +64,20 @@ public class AndroidProvider : IAndroidProvider
 		// Check Android SDK
 		if (!IsSdkInstalled)
 		{
+			var notFoundDetails = new JsonObject
+			{
+				["requiresElevation"] = SdkPathRequiresElevation
+			};
+			if (!string.IsNullOrEmpty(SdkPath))
+				notFoundDetails["path"] = SdkPath!;
+
 			checks.Add(new HealthCheck
 			{
 				Category = "android",
 				Name = "Android SDK",
 				Status = CheckStatus.Error,
 				Message = "Android SDK not found",
+				Details = notFoundDetails,
 				Fix = new FixInfo
 				{
 					IssueId = ErrorCodes.AndroidSdkNotFound,
@@ -86,7 +94,11 @@ public class AndroidProvider : IAndroidProvider
 			Category = "android",
 			Name = "Android SDK",
 			Status = CheckStatus.Ok,
-			Details = new JsonObject { ["path"] = SdkPath! }
+			Details = new JsonObject
+			{
+				["path"] = SdkPath!,
+				["requiresElevation"] = SdkPathRequiresElevation
+			}
 		});
 
 		// Check SDK Manager
