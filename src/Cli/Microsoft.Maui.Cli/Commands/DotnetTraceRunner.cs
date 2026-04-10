@@ -174,10 +174,74 @@ internal static class DotnetTraceRunner
 		var details = traceProcess.GetCombinedOutput();
 		throw new MauiToolException(
 			ErrorCodes.InternalError,
-			"dotnet-trace exited before the app launch started.",
+			"dotnet-trace exited before the profiling session could be established.",
 			nativeError: details);
 	}
 
+	internal static async Task<MonitoredProcess> StartWithRetryAsync(
+		string workingDirectory,
+		string outputPath,
+		TraceOutputFormat outputFormat,
+		ProfileTransportConfiguration transport,
+		Device device,
+		string? traceProfile,
+		TimeSpan? duration,
+		string? stoppingEventProvider,
+		string? stoppingEventName,
+		string? stoppingEventPayloadFilter,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		CancellationToken cancellationToken)
+	{
+		var startedAt = Stopwatch.GetTimestamp();
+		MauiToolException? lastFailure = null;
+
+		while (Stopwatch.GetElapsedTime(startedAt) < ProfileCommand.s_traceStartupRetryTimeout)
+		{
+			var traceProcess = StartCollector(
+				workingDirectory,
+				outputPath,
+				outputFormat,
+				transport,
+				device,
+				traceProfile,
+				duration,
+				stoppingEventProvider,
+				stoppingEventName,
+				stoppingEventPayloadFilter,
+				formatter,
+				useJson,
+				verbose,
+				cancellationToken);
+
+			try
+			{
+				ProfileCommandProcessHelpers.WriteVerbose(
+					formatter,
+					useJson,
+					verbose,
+					$"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect after launching the suspended app.");
+				await EnsureStartedAsync(traceProcess, cancellationToken);
+				return traceProcess;
+			}
+			catch (MauiToolException ex) when (IsRetryableStartupFailure(ex.NativeError))
+			{
+				lastFailure = ex;
+				traceProcess.Dispose();
+				ProfileCommandProcessHelpers.WriteVerbose(
+					formatter,
+					useJson,
+					verbose,
+					$"dotnet-trace could not connect yet; retrying in {ProfileCommand.s_traceStartupRetryDelay.TotalSeconds:0.#}s while the app runtime finishes opening its diagnostics channel.");
+				await Task.Delay(ProfileCommand.s_traceStartupRetryDelay, cancellationToken);
+			}
+		}
+
+		throw lastFailure ?? new MauiToolException(
+			ErrorCodes.InternalError,
+			$"dotnet-trace could not connect to the app within {ProfileCommand.s_traceStartupRetryTimeout.TotalSeconds:0}s.");
+	}
 	internal static bool IsRetryableStartupFailure(string? details)
 	{
 		if (string.IsNullOrWhiteSpace(details))
