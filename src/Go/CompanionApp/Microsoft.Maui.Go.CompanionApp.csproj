@@ -22,14 +22,9 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 
-    <!-- Critical: MetadataUpdater requires this env var at process start.
-         On Android/iOS, we set it via the native entry point.
-         On Mac Catalyst, we rely on the launchd environment or env plist. -->
-
-    <!-- Enable interpreter on Apple platforms for EnC (Edit and Continue) support.
-         MetadataUpdater.IsSupported requires the Mono interpreter, not AOT. -->
-    <UseInterpreter Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">true</UseInterpreter>
-    <MtouchInterpreter Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">all</MtouchInterpreter>
+    <!-- Critical: MetadataUpdater requires DOTNET_MODIFIABLE_ASSEMBLIES=Debug at process start.
+         On Mac Catalyst, set via Info.plist LSEnvironment.
+         On Android/iOS, set via the native entry point. -->
   </PropertyGroup>
 
   <ItemGroup>
