@@ -35,6 +35,7 @@ public static class StartupProfilingMarker
 {
     internal const string ProfilingEnvironmentVariable = "MAUI_STARTUP_PROFILING";
     internal const string AutoExitEnvironmentVariable = "MAUI_STARTUP_PROFILING_AUTO_EXIT";
+    internal const string DiagnosticsEnvironmentVariable = "MAUI_STARTUP_PROFILING_DIAGNOSTICS";
     internal const string ExitControlHostEnvironmentVariable = "MAUI_STARTUP_PROFILING_EXIT_HOST";
     internal const string ExitControlPortEnvironmentVariable = "MAUI_STARTUP_PROFILING_EXIT_PORT";
     internal const string DiagnosticPortsEnvironmentVariable = "DOTNET_DiagnosticPorts";
@@ -135,6 +136,12 @@ internal static class StartupProfilingDiagnostics
 
     internal static void Log(string message)
     {
+        if (!StartupProfilingMarker.IsProfilingSession
+            && !StartupProfilingMarker.IsEnabledEnvironmentVariable(StartupProfilingMarker.DiagnosticsEnvironmentVariable))
+        {
+            return;
+        }
+
         var formatted = $"{Prefix} {DateTime.UtcNow:O} {message}";
         TryLogToAndroidLogcat(formatted);
         Debug.WriteLine(formatted);

@@ -60,6 +60,7 @@ protected override void OnAppearing()
 |---|---|---|
 | `MAUI_STARTUP_PROFILING` | `1` / `true` | Indicates that the app is running in a profiling session. |
 | `MAUI_STARTUP_PROFILING_AUTO_EXIT` | `1` / `true` | Exits the process immediately after `Complete()` is called. Mainly useful for custom or CI-driven flows. |
+| `MAUI_STARTUP_PROFILING_DIAGNOSTICS` | `1` / `true` | Forces verbose helper diagnostics even outside a CLI-started profiling session. |
 | `MAUI_STARTUP_PROFILING_EXIT_HOST` | host name / IP | Optional explicit host for the CLI exit-control channel. |
 | `MAUI_STARTUP_PROFILING_EXIT_PORT` | TCP port | Optional explicit port for the CLI exit-control channel. |
 

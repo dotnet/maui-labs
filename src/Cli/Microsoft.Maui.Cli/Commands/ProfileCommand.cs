@@ -105,13 +105,12 @@ public static class ProfileCommand
 		};
 		var stoppingEventProviderOption = new Option<string?>("--stopping-event-provider-name")
 		{
-			Description = "Stop tracing when the first matching event provider emits an event. " +
-				"Optional override; when the app references Microsoft.Maui.StartupProfiling and no duration is specified, maui profile uses Microsoft.Maui.StartupProfiling automatically."
+			Description = "Optional event provider name for an event-based stop condition. " +
+				"When omitted, maui profile waits for --duration or a manual Enter/Ctrl+C stop."
 		};
 		var stoppingEventNameOption = new Option<string?>("--stopping-event-event-name")
 		{
-			Description = "Optional event name to combine with --stopping-event-provider-name. " +
-				"Optional override; StartupComplete is auto-selected with Microsoft.Maui.StartupProfiling."
+			Description = "Optional event name to combine with --stopping-event-provider-name."
 		};
 		var stoppingEventPayloadFilterOption = new Option<string?>("--stopping-event-payload-filter")
 		{

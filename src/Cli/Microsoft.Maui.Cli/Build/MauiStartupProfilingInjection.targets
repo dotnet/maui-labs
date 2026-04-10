@@ -42,11 +42,6 @@
                                              Condition="'$(MauiStartupProfilingExitHost)' != ''" />
       <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING_EXIT_PORT=$(MauiStartupProfilingExitPort)"
                                              Condition="'$(MauiStartupProfilingExitPort)' != ''" />
-      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EnableEventPipe=1" />
-      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EventPipeOutputPath=/data/user/0/$(ApplicationId)/files/maui-startup-profile.nettrace"
-                                             Condition="'$(ApplicationId)' != ''" />
-      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EventPipeCircularMB=256" />
-      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EventPipeConfig=Microsoft-Windows-DotNETRuntime:0x000000100003801D:4,Microsoft-DotNETCore-SampleProfiler:0x0000F00000000000:4" />
     </ItemGroup>
 
     <WriteLinesToFile File="$(_MauiStartupProfilingEnvironmentFile)"
