@@ -13,6 +13,7 @@ namespace Microsoft.Maui.Cli.UnitTests;
 /// Tests for <see cref="SdkManager.SdkPathRequiresElevation"/> and the
 /// <c>requiresElevation</c> field surfaced in <see cref="AndroidProvider.CheckHealthAsync"/>.
 /// </summary>
+[Collection("AndroidEnvironment")]
 public class SdkManagerElevationTests : IDisposable
 {
 	readonly string _tempDir;
@@ -54,6 +55,13 @@ public class SdkManagerElevationTests : IDisposable
 		SdkManager.CanWriteToDirectory(_tempDir);
 
 		Assert.Empty(Directory.GetFiles(_tempDir));
+	}
+
+	[Fact]
+	public void CanWriteToDirectory_ReturnsFalse_ForNonExistentDirectory()
+	{
+		var nonExistent = Path.Combine(_tempDir, "does-not-exist");
+		Assert.False(SdkManager.CanWriteToDirectory(nonExistent));
 	}
 
 	// -----------------------------------------------------------------------

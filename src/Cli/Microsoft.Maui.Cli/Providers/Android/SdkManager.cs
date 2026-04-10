@@ -338,6 +338,12 @@ public class SdkManager : IDisposable
 		{
 			return false;
 		}
+		catch (DirectoryNotFoundException)
+		{
+			// Directory was deleted between our Exists check and the probe — treat as
+			// non-writable so the caller doesn't assume it can install here.
+			return false;
+		}
 		catch (IOException)
 		{
 			// Treat transient I/O problems (e.g., network paths) as writable so we do not
