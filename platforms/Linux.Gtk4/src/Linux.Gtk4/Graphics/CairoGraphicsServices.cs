@@ -18,29 +18,35 @@ internal class CairoStringSizeService : IStringSizeService
 		// Create a temporary Cairo surface + context for Pango measurement
 		var surface = new Cairo.ImageSurface(Cairo.Format.Argb32, 1, 1);
 		var cr = new Cairo.Context(surface);
+		Pango.Layout? layout = null;
+		Pango.FontDescription? fontDesc = null;
 
-		var layout = PangoCairo.Functions.CreateLayout(cr);
-		var fontDesc = Pango.FontDescription.New();
-		fontDesc.SetFamily(font?.Name ?? "Sans");
-		fontDesc.SetAbsoluteSize(fontSize * Pango.Constants.SCALE);
-		fontDesc.SetWeight((font?.Weight ?? 400) >= 600 ? Pango.Weight.Bold : Pango.Weight.Normal);
-		fontDesc.SetStyle(font?.StyleType switch
+		try
 		{
-			FontStyleType.Italic => Pango.Style.Italic,
-			FontStyleType.Oblique => Pango.Style.Oblique,
-			_ => Pango.Style.Normal,
-		});
-		layout.SetFontDescription(fontDesc);
-		layout.SetText(value, -1);
+			layout = PangoCairo.Functions.CreateLayout(cr);
+			fontDesc = Pango.FontDescription.New();
+			fontDesc.SetFamily(font?.Name ?? "Sans");
+			fontDesc.SetAbsoluteSize(fontSize * Pango.Constants.SCALE);
+			fontDesc.SetWeight((font?.Weight ?? 400) >= 600 ? Pango.Weight.Bold : Pango.Weight.Normal);
+			fontDesc.SetStyle(font?.StyleType switch
+			{
+				FontStyleType.Italic => Pango.Style.Italic,
+				FontStyleType.Oblique => Pango.Style.Oblique,
+				_ => Pango.Style.Normal,
+			});
+			layout.SetFontDescription(fontDesc);
+			layout.SetText(value, -1);
 
-		layout.GetPixelSize(out int textW, out int textH);
-
-		fontDesc.Dispose();
-		layout.Dispose();
-		cr.Dispose();
-		surface.Dispose();
-
-		return new SizeF(textW, textH);
+			layout.GetPixelSize(out int textW, out int textH);
+			return new SizeF(textW, textH);
+		}
+		finally
+		{
+			fontDesc?.Dispose();
+			layout?.Dispose();
+			cr.Dispose();
+			surface.Dispose();
+		}
 	}
 
 	public SizeF GetStringSize(string value, IFont font, float fontSize,

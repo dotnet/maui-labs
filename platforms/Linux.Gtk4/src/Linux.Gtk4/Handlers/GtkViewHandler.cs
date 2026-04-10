@@ -64,6 +64,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	bool _isPointerOver;
 	Rect _lastArrangeRect;
 
+	Gtk.CssProvider? _transitionCssProvider;
+
 	protected override void ConnectHandler(TPlatformView platformView)
 	{
 		base.ConnectHandler(platformView);
@@ -76,6 +78,12 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		_zIndexMap.TryRemove(platformView.Handle, out _);
 		CleanupContextFlyout(platformView);
 		CleanupVisualStateTracking(platformView);
+		RemoveTransitionCss(platformView);
+		if (_currentCssProvider != null)
+		{
+			platformView.GetStyleContext().RemoveProvider(_currentCssProvider);
+			_currentCssProvider = null;
+		}
 		base.DisconnectHandler(platformView);
 	}
 
@@ -186,9 +194,18 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	/// </summary>
 	void ApplyTransitionCss(Gtk.Widget widget)
 	{
-		var provider = Gtk.CssProvider.New();
-		provider.LoadFromString("* { transition: background-color 200ms ease, opacity 200ms ease, box-shadow 200ms ease, border-radius 200ms ease, color 200ms ease; }");
-		widget.GetStyleContext().AddProvider(provider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION - 1);
+		_transitionCssProvider = Gtk.CssProvider.New();
+		_transitionCssProvider.LoadFromString("* { transition: background-color 200ms ease, opacity 200ms ease, box-shadow 200ms ease, border-radius 200ms ease, color 200ms ease; }");
+		widget.GetStyleContext().AddProvider(_transitionCssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION - 1);
+	}
+
+	void RemoveTransitionCss(Gtk.Widget widget)
+	{
+		if (_transitionCssProvider != null)
+		{
+			widget.GetStyleContext().RemoveProvider(_transitionCssProvider);
+			_transitionCssProvider = null;
+		}
 	}
 
 	public override void PlatformArrange(Rect rect)

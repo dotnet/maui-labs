@@ -98,10 +98,14 @@ public sealed class GtkBlazorWebView : IDisposable
 	{
 		if (_webViewManager != null)
 		{
-			var disposeTask = _webViewManager.DisposeAsync().AsTask();
-			if (!disposeTask.Wait(TimeSpan.FromSeconds(5)))
-				System.Diagnostics.Debug.WriteLine("GtkBlazorWebView: DisposeAsync did not complete within 5 seconds.");
+			// Offload blocking wait to thread pool to avoid deadlocking the GTK main thread
+			var manager = _webViewManager;
 			_webViewManager = null;
+			Task.Run(async () =>
+			{
+				try { await manager.DisposeAsync(); }
+				catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkBlazorWebView: DisposeAsync failed: {ex.Message}"); }
+			}).Wait(TimeSpan.FromSeconds(5));
 		}
 
 		WebKitWebView.Dispose();
@@ -112,7 +116,7 @@ public sealed class GtkBlazorWebView : IDisposable
 		var webView = new WebView();
 
 		// Make web view transparent for Blazor styling
-		webView.SetBackgroundColor(new Gdk.RGBA { Red = 255, Blue = 0, Green = 0, Alpha = 0 });
+		webView.SetBackgroundColor(new Gdk.RGBA { Red = 0, Blue = 0, Green = 0, Alpha = 0 });
 
 		// Configure settings
 		var settings = webView.GetSettings();

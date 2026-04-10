@@ -330,6 +330,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			cv.ScrollToRequested -= OnScrollToRequested;
 
 		UnhookCollectionChanged();
+		UnhookSelectionChanged();
 
 		base.DisconnectHandler(platformView);
 	}

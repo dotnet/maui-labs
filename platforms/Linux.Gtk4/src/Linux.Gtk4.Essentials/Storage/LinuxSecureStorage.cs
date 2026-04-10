@@ -11,7 +11,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Storage;
 /// Secure storage that uses libsecret (freedesktop.org Secret Service / GNOME Keyring)
 /// when available, falling back to AES-256 encrypted file storage otherwise.
 /// </summary>
-public class LinuxSecureStorage : ISecureStorage
+public class LinuxSecureStorage : ISecureStorage, IDisposable
 {
 	private const string MauiApplicationIdMetadataKey = "MauiApplicationId";
 	private const string LibSecretSchemaName = "org.maui.gtk.securestorage.v2";
@@ -412,5 +412,12 @@ public class LinuxSecureStorage : ISecureStorage
 		using var aesGcm = new AesGcm(key, tagSize);
 		aesGcm.Decrypt(nonce, cipherBytes, tag, plainBytes);
 		return Encoding.UTF8.GetString(plainBytes);
+	}
+
+	public void Dispose()
+	{
+		if (_schemaNamePtr != IntPtr.Zero) { Marshal.FreeCoTaskMem(_schemaNamePtr); _schemaNamePtr = IntPtr.Zero; }
+		if (_attrNamePtr != IntPtr.Zero) { Marshal.FreeCoTaskMem(_attrNamePtr); _attrNamePtr = IntPtr.Zero; }
+		if (_appAttrNamePtr != IntPtr.Zero) { Marshal.FreeCoTaskMem(_appAttrNamePtr); _appAttrNamePtr = IntPtr.Zero; }
 	}
 }

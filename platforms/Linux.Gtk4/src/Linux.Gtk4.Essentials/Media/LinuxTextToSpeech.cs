@@ -21,8 +21,15 @@ public class LinuxTextToSpeech : ITextToSpeech
 					culture.TwoLetterISOLanguageName, culture.Name, culture.DisplayName, culture.Name });
 				return Task.FromResult<IEnumerable<Locale>>(new[] { locale });
 			}
+			else
+			{
+				System.Diagnostics.Debug.WriteLine("LinuxTextToSpeech: Could not find Locale constructor via reflection. Locale list will be empty.");
+			}
 		}
-		catch { }
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"LinuxTextToSpeech: Failed to create Locale via reflection: {ex.Message}");
+		}
 		return Task.FromResult<IEnumerable<Locale>>(Array.Empty<Locale>());
 	}
 

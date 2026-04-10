@@ -50,6 +50,11 @@ class GtkAppInfoImplementation : IAppInfo
 
 		// Set the static field used by AppInfo's static accessors
 		var field = typeof(AppInfo).GetField("currentImplementation", BindingFlags.Static | BindingFlags.NonPublic);
-		field?.SetValue(null, instance);
+		if (field == null)
+		{
+			System.Diagnostics.Debug.WriteLine("GtkAppInfoImplementation: Could not find 'currentImplementation' field on AppInfo. Theme detection may not work.");
+			return;
+		}
+		field.SetValue(null, instance);
 	}
 }

@@ -155,8 +155,12 @@ internal class CairoPlatformImage : global::Microsoft.Maui.Graphics.IImage
 		}
 	}
 
+	private bool _disposed;
+
 	public void Dispose()
 	{
+		if (_disposed) return;
+		_disposed = true;
 		Surface?.Dispose();
 	}
 

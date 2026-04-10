@@ -8,7 +8,6 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 /// </summary>
 public static class GtkMenuBarManager
 {
-	private static readonly List<string> _registeredActions = new();
 	private const string ActionPrefix = "menu";
 
 	/// <summary>

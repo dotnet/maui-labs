@@ -305,10 +305,15 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 		if (surface == null)
 			return;
 
+		int imgW = cairo_image_surface_get_width(surface.Handle.DangerousGetHandle());
+		int imgH = cairo_image_surface_get_height(surface.Handle.DangerousGetHandle());
+		if (imgW <= 0 || imgH <= 0)
+			return;
+
 		_cr.Save();
 
-		double scaleX = width / cairo_image_surface_get_width(surface.Handle.DangerousGetHandle());
-		double scaleY = height / cairo_image_surface_get_height(surface.Handle.DangerousGetHandle());
+		double scaleX = width / imgW;
+		double scaleY = height / imgH;
 		_cr.Translate(x, y);
 		_cr.Scale(scaleX, scaleY);
 
