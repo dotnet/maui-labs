@@ -63,13 +63,13 @@ namespace Comet
 			var style = button.GetEnvironment<IControlStyle<Button, ButtonConfiguration>>(
 				StyleToken<Button>.Key);
 
-			if (style == null)
+			if (style is null)
 			{
 				var theme = ThemeManager.Current(button);
 				style = theme.GetNewControlStyle<Button>() as IControlStyle<Button, ButtonConfiguration>;
 			}
 
-			if (style == null)
+			if (style is null)
 				return ViewModifier.Empty;
 
 			return style.Resolve(config);
@@ -83,13 +83,13 @@ namespace Comet
 			var style = toggle.GetEnvironment<IControlStyle<Toggle, ToggleConfiguration>>(
 				StyleToken<Toggle>.Key);
 
-			if (style == null)
+			if (style is null)
 			{
 				var theme = ThemeManager.Current(toggle);
 				style = theme.GetNewControlStyle<Toggle>() as IControlStyle<Toggle, ToggleConfiguration>;
 			}
 
-			if (style == null)
+			if (style is null)
 				return ViewModifier.Empty;
 
 			return style.Resolve(config);
@@ -103,13 +103,13 @@ namespace Comet
 			var style = textField.GetEnvironment<IControlStyle<TextField, TextFieldConfiguration>>(
 				StyleToken<TextField>.Key);
 
-			if (style == null)
+			if (style is null)
 			{
 				var theme = ThemeManager.Current(textField);
 				style = theme.GetNewControlStyle<TextField>() as IControlStyle<TextField, TextFieldConfiguration>;
 			}
 
-			if (style == null)
+			if (style is null)
 				return ViewModifier.Empty;
 
 			return style.Resolve(config);
@@ -123,13 +123,13 @@ namespace Comet
 			var style = slider.GetEnvironment<IControlStyle<Slider, SliderConfiguration>>(
 				StyleToken<Slider>.Key);
 
-			if (style == null)
+			if (style is null)
 			{
 				var theme = ThemeManager.Current(slider);
 				style = theme.GetNewControlStyle<Slider>() as IControlStyle<Slider, SliderConfiguration>;
 			}
 
-			if (style == null)
+			if (style is null)
 				return ViewModifier.Empty;
 
 			return style.Resolve(config);

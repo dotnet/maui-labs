@@ -62,7 +62,7 @@ namespace Comet
 		/// </summary>
 		public void ForceValidation()
 		{
-			if (TypedAssociatedObject != null)
+			if (TypedAssociatedObject is not null)
 				IsValid = Validate(TypedAssociatedObject);
 		}
 	}

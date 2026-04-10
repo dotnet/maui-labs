@@ -22,7 +22,7 @@ namespace Comet.Styles
 		/// </summary>
 		public static Theme Current(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return Current();
 
 			var theme = view.GetEnvironment<Theme>(ActiveThemeKey);
@@ -35,7 +35,7 @@ namespace Comet.Styles
 		public static Theme Current()
 		{
 			var theme = View.GetGlobalEnvironment<Theme>(ActiveThemeKey);
-			if (theme != null)
+			if (theme is not null)
 				return theme;
 
 			// Fall back to the legacy Theme.Current if no new-style theme is set
@@ -65,7 +65,7 @@ namespace Comet.Styles
 					views = View.ActiveViews.OfType<View>().ToList();
 				foreach (var v in views)
 				{
-					if (v is IComponentWithState || v.Body != null)
+					if (v is IComponentWithState || v.Body is not null)
 						Reactive.ReactiveScheduler.MarkViewDirty(v);
 				}
 			});
@@ -77,13 +77,13 @@ namespace Comet.Styles
 		/// </summary>
 		static void SyncMauiAppTheme(Theme theme)
 		{
-			if (theme == null)
+			if (theme is null)
 				return;
 
 			try
 			{
 				var app = Microsoft.Maui.Controls.Application.Current;
-				if (app == null)
+				if (app is null)
 					return;
 
 				switch (theme.CurrentTheme)

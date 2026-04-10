@@ -35,7 +35,7 @@ namespace Comet.iOS
 		public override void Draw(CGRect rect)
 		{
 			var context = UIGraphics.GetCurrentContext();
-			if (Shape != null)
+			if (Shape is not null)
 			{
 				var drawingStyle = Shape.GetDrawingStyle(View, DrawingStyle.StrokeFill);
 
@@ -56,7 +56,7 @@ namespace Comet.iOS
 
 				var path = Shape.PathForBounds(shapeBounds).AsCGPath();
 
-				if (fill != null)
+				if (fill is not null)
 				{
 					if (fill is Color color)
 					{
@@ -79,7 +79,7 @@ namespace Comet.iOS
 							var stopColor = gradient.Stops[i].Color;
 							offsets[i] = gradient.Stops[i].Offset;
 
-							if (stopColor == null) stopColor = Colors.White;
+							if (stopColor is null) stopColor = Colors.White;
 
 							gradientColors[g++] = stopColor.Red;
 							gradientColors[g++] = stopColor.Green;

@@ -62,7 +62,7 @@ namespace Comet
 
 		public virtual void Add(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return;
 			view.Parent = this;
 			view.Navigation = Parent?.Navigation;
@@ -73,7 +73,7 @@ namespace Comet
 		protected override void OnParentChange(View parent)
 		{
 			base.OnParentChange(parent);
-			if (Content != null)
+			if (Content is not null)
 			{
 				Content.Parent = this;
 			}
@@ -100,7 +100,7 @@ namespace Comet
 
 		public override Size GetDesiredSize(Size availableSize)
 		{
-			if (Content != null)
+			if (Content is not null)
 			{
 				var margin = Content.GetMargin();
 				availableSize.Width -= margin.HorizontalThickness;

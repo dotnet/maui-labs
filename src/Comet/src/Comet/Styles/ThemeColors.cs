@@ -172,10 +172,10 @@ namespace Comet.Styles
 
 		static void SetColor(ContextualObject target, string key, Color value)
 		{
-			if (value == null)
+			if (value is null)
 				return;
 
-			if (target != null)
+			if (target is not null)
 				target.SetEnvironment(key, value, true);
 			else
 				View.SetGlobalEnvironment(key, value);

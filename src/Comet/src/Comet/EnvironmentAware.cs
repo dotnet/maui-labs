@@ -31,13 +31,13 @@ namespace Comet
 
 		internal void UpdateBuiltViewContext(View builtView)
 		{
-			MergeEnvironmentData(_context, builtView.Context(_context != null));
-			MergeEnvironmentData(_localContext, builtView.LocalContext(_localContext != null));
+			MergeEnvironmentData(_context, builtView.Context(_context is not null));
+			MergeEnvironmentData(_localContext, builtView.LocalContext(_localContext is not null));
 		}
 
 		void MergeEnvironmentData(EnvironmentData parent, EnvironmentData child)
 		{
-			if (parent == null)
+			if (parent is null)
 				return;
 			foreach (var pair in parent.dictionary)
 				child.dictionary[pair.Key] = pair.Value;
@@ -55,7 +55,7 @@ namespace Comet
 		public static string GetTypedKey(ContextualObject obj, string key)
 			=> GetTypedKey(obj.GetType(), key);
 		public static string GetTypedKey(Type type, string key)
-			=> type == null ? key : $"{type.Name}.{key}";
+			=> type is null ? key : $"{type.Name}.{key}";
 		public static string GetTypedStyleId(ContextualObject theObject, string key)
 		{
 			var styleId = theObject.StyleId;
@@ -109,7 +109,7 @@ namespace Comet
 
 				//If no more parents, check the environment
 				//For global environment check Styled -> Typed -> then root key
-				if (view == null)
+				if (view is null)
 				{
 					result = View.Environment.GetValueInternal(styledKey);
 
@@ -147,7 +147,7 @@ namespace Comet
 		internal bool SetValue(string key, object value, bool cascades)
 		{
 			//Monitor changes if we care!
-			if (monitoredChanges != null && Thread.CurrentThread == currentMonitoredThread)
+			if (monitoredChanges is not null && Thread.CurrentThread == currentMonitoredThread)
 			{
 				//TODO: Check into this for shapes!!!!!
 				var oldValue = this.GetEnvironment(this as View, key, cascades);
@@ -159,9 +159,9 @@ namespace Comet
 			//If we are setting the value to null, 
 			//there is no reason to create the dictionary if it doesnt exist
 			if (cascades)
-				return Context(value != null)?.SetValue(key, value,true) ?? false;
+				return Context(value is not null)?.SetValue(key, value,true) ?? false;
 			else
-				return LocalContext(value != null)?.SetValue(key, value,false) ?? false;
+				return LocalContext(value is not null)?.SetValue(key, value,false) ?? false;
 		}
 
 		static Dictionary<(ContextualObject view, string property, bool cascades), (object oldValue, object newValue)> monitoredChanges = null;
@@ -193,18 +193,18 @@ namespace Comet
 		//protected ICollection<string> GetAllKeys()
 		//{
 		//    //This is the global Environment
-		//    if (View?.Parent == null)
+		//    if (View?.Parent is null)
 		//        return dictionary.Keys;
 
 		//    //TODO: we need a fancy way of collapsing this. This may be too slow
 		//    var keys = new HashSet<string>();
 		//    var localKeys = dictionary?.Keys;
-		//    if (localKeys != null)
+		//    if (localKeys is not null)
 		//        foreach (var k in localKeys)
 		//            keys.Add(k);
 
 		//    var parentKeys = View?.Parent?.Context?.GetAllKeys() ?? View.Environment.GetAllKeys();
-		//    if (parentKeys != null)
+		//    if (parentKeys is not null)
 		//        foreach (var k in parentKeys)
 		//            keys.Add(k);
 		//    return keys;
@@ -302,22 +302,22 @@ namespace Comet
 				return true;
 			}
 			value = default;
-			return raw != null;
+			return raw is not null;
 		}
 
 
 		public static Dictionary<string, object> DebugGetEnvironment(this View view)
 		{
 			var parentDictionary = view.Parent?.DebugGetEnvironment();
-			if (parentDictionary == null)
+			if (parentDictionary is null)
 			{
 				parentDictionary = new Dictionary<string, object>(ContextualObject.Environment.dictionary);
 			}
-			if (view._context != null)
+			if (view._context is not null)
 				foreach (var pair in view._context.dictionary)
 					parentDictionary[pair.Key] = pair.Value;
 
-			if (view._localContext != null)
+			if (view._localContext is not null)
 				foreach (var pair in view._localContext.dictionary)
 					parentDictionary[pair.Key] = pair.Value;
 			return parentDictionary;

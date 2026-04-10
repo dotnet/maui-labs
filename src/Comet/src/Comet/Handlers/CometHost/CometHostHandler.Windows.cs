@@ -45,7 +45,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 	void UpdateCometView()
 	{
-		if (VirtualView?.CometView == null || MauiContext == null)
+		if (VirtualView?.CometView is null || MauiContext is null)
 			return;
 
 		try
@@ -54,7 +54,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			
 			// Get the render view (body content) to avoid CometViewHandler handler circularity
 			var renderView = cometView.GetView();
-			IView viewToRender = (renderView != null && renderView != cometView) ? renderView : cometView;
+			IView viewToRender = (renderView is not null && renderView != cometView) ? renderView : cometView;
 			
 			var platformView = viewToRender.ToPlatform(MauiContext);
 			if (platformView is FrameworkElement fe)
@@ -73,17 +73,17 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 		public void SetContent(FrameworkElement element, IView virtualView)
 		{
-			if (_contentElement != null)
+			if (_contentElement is not null)
 				Children.Remove(_contentElement);
 			_contentElement = element;
 			_virtualView = virtualView;
-			if (_contentElement != null)
+			if (_contentElement is not null)
 				Children.Add(_contentElement);
 		}
 
 		public void ClearContent()
 		{
-			if (_contentElement != null)
+			if (_contentElement is not null)
 				Children.Remove(_contentElement);
 			_contentElement = null;
 			_virtualView = null;
@@ -91,7 +91,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 		protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize)
 		{
-			if (_contentElement != null)
+			if (_contentElement is not null)
 			{
 				_virtualView?.Arrange(new Microsoft.Maui.Graphics.Rect(0, 0, finalSize.Width, finalSize.Height));
 				_contentElement.Arrange(new Windows.Foundation.Rect(0, 0, finalSize.Width, finalSize.Height));
@@ -101,7 +101,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 		protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
 		{
-			if (_contentElement != null)
+			if (_contentElement is not null)
 			{
 				_virtualView?.Measure(availableSize.Width, availableSize.Height);
 				_contentElement.Measure(availableSize);

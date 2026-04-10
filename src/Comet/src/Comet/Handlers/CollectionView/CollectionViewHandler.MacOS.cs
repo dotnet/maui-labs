@@ -46,13 +46,13 @@ namespace Comet.Handlers
 		public static void MapReloadData(CollectionViewHandler handler, IListView virtualView, object? value)
 #nullable restore
 		{
-			if (handler._mauiItemsView != null)
+			if (handler._mauiItemsView is not null)
 				RefreshItemsSource(handler._mauiItemsView, virtualView);
 		}
 
 		void EmbedMauiItemsView()
 		{
-			if (_mauiItemsView == null || MauiContext == null)
+			if (_mauiItemsView is null || MauiContext is null)
 				return;
 
 			try
@@ -98,7 +98,7 @@ namespace Comet.Handlers
 				_contentView?.RemoveFromSuperview();
 				_contentView = platformView;
 				_virtualView = virtualView;
-				if (_contentView != null)
+				if (_contentView is not null)
 				{
 					_contentView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 					AddSubview(_contentView);
@@ -116,7 +116,7 @@ namespace Comet.Handlers
 			public override void Layout()
 			{
 				base.Layout();
-				if (_contentView == null || Bounds.Width <= 0 || Bounds.Height <= 0)
+				if (_contentView is null || Bounds.Width <= 0 || Bounds.Height <= 0)
 					return;
 
 				_virtualView?.Measure(Bounds.Width, Bounds.Height);

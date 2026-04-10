@@ -15,7 +15,7 @@ namespace Comet
 		};
 		public Image(IImageSource imageSource = null)
 		{
-			ImageSource = imageSource != null ? new PropertySubscription<IImageSource>(imageSource) : null;
+			ImageSource = imageSource is not null ? new PropertySubscription<IImageSource>(imageSource) : null;
 		}
 
 		public Image(string source)

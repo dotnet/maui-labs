@@ -33,11 +33,11 @@ namespace Comet
 		{
 			get
 			{
-				if (_hostedView == null && _factory != null)
+				if (_hostedView is null && _factory is not null)
 				{
 					lock (_lock)
 					{
-						if (_hostedView == null && _factory != null)
+						if (_hostedView is null && _factory is not null)
 						{
 							var factory = _factory;
 							_factory = null; // Clear first to prevent retry on exception
@@ -65,7 +65,7 @@ namespace Comet
 				frameConstraints?.Height ?? availableSize.Height);
 
 			// If the hosted view has a handler, try to measure it
-			if (HostedView?.Handler != null)
+			if (HostedView?.Handler is not null)
 			{
 				try
 				{
@@ -92,7 +92,7 @@ namespace Comet
 			ms.Width += margins.HorizontalThickness;
 			ms.Height += margins.VerticalThickness;
 			MeasuredSize = ms;
-			MeasurementValid = ViewHandler != null;
+			MeasurementValid = ViewHandler is not null;
 			return MeasuredSize;
 		}
 

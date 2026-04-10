@@ -88,7 +88,7 @@ namespace Comet.Layout
 					_definedColumns.Add(DefaultColumnWidth);
 			}
 
-			if (_gridX == null || !_lastSize.Equals(available))
+			if (_gridX is null || !_lastSize.Equals(available))
 			{
 				ComputeGrid(available.Width, available.Height);
 				_lastSize = available;
@@ -161,7 +161,7 @@ namespace Comet.Layout
 			if (layout.Count == 0)
 				return measured;
 
-			if (_gridX == null || !_lastSize.Equals(size))
+			if (_gridX is null || !_lastSize.Equals(size))
 			{
 				ComputeGrid(size.Width, size.Height);
 				_lastSize = size;
@@ -219,7 +219,7 @@ namespace Comet.Layout
 
 		public int AddRow(object row)
 		{
-			if (row == null)
+			if (row is null)
 				return -1;
 
 			_definedRows.Add(row);
@@ -230,7 +230,7 @@ namespace Comet.Layout
 
 		public void AddRows(params object[] rows)
 		{
-			if (rows == null)
+			if (rows is null)
 				return;
 
 			foreach (var row in rows)
@@ -250,7 +250,7 @@ namespace Comet.Layout
 
 		public int AddColumn(object column)
 		{
-			if (column == null)
+			if (column is null)
 				return -1;
 
 			_definedColumns.Add(column);
@@ -261,7 +261,7 @@ namespace Comet.Layout
 
 		public void AddColumns(params object[] columns)
 		{
-			if (columns == null)
+			if (columns is null)
 				return;
 
 			foreach (var column in columns)
@@ -449,7 +449,7 @@ namespace Comet.Layout
 
 		private double GetFactor(object value)
 		{
-			if (value != null)
+			if (value is not null)
 			{
 				var str = value.ToString();
 				if (str.EndsWith("*", StringComparison.Ordinal))
@@ -469,7 +469,7 @@ namespace Comet.Layout
 		{
 			double width = 0;
 
-			if (_widths != null)
+			if (_widths is not null)
 			{
 				foreach (var value in _widths)
 				{
@@ -499,7 +499,7 @@ namespace Comet.Layout
 		{
 			double height = 0;
 
-			if (_heights != null)
+			if (_heights is not null)
 			{
 				foreach (var value in _heights)
 				{

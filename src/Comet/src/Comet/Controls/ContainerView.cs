@@ -33,7 +33,7 @@ namespace Comet
 			else if (obj is Func<View> func)
 			{
 				var view = func();
-				if (view != null)
+				if (view is not null)
 					Add(view);
 			}
 			else
@@ -51,7 +51,7 @@ namespace Comet
 		}
 		public void Add(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return;
 			view.Parent = this;
 			view.Navigation = Parent as NavigationView ?? Parent?.Navigation;
@@ -100,7 +100,7 @@ namespace Comet
 
 		public bool Remove(View item)
 		{
-			if (item == null) return false;
+			if (item is null) return false;
 
 			var index = Views.IndexOf(item);
 			if (index >= 0)
@@ -139,7 +139,7 @@ namespace Comet
 
 		public void Insert(int index, View item)
 		{
-			if (item == null)
+			if (item is null)
 				return;
 
 			Views.Insert(index, item);

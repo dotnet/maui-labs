@@ -117,7 +117,7 @@
 
 //				while (_commandStack.Count > 0)
 //				{
-//					if (_path == null)
+//					if (_path is null)
 //					{
 //						_path = new PathF();
 //					}
@@ -126,7 +126,7 @@
 //					HandleCommand(vCommand);
 //				}
 
-//				if (_path != null && !_path.Closed)
+//				if (_path is not null && !_path.Closed)
 //				{
 //					if (_closeWhenDone)
 //					{
@@ -402,14 +402,14 @@
 //			var point2 = NewPoint(NextValue, NextValue, isRelative, false);
 
 //			// ReSharper disable ConvertIfStatementToNullCoalescingExpression
-//			if (_relativePoint != null)
+//			if (_relativePoint is not null)
 //			{
-//				if (_lastCurveControlPoint == null)
+//				if (_lastCurveControlPoint is null)
 //				{
 //					// ReSharper restore ConvertIfStatementToNullCoalescingExpression
 //					point1 = GraphicsOperations.GetOppositePoint((Point)_relativePoint, point2);
 //				}
-//				else if (_relativePoint != null)
+//				else if (_relativePoint is not null)
 //				{
 //					point1 = GraphicsOperations.GetOppositePoint((Point)_relativePoint, (Point)_lastCurveControlPoint);
 //				}
@@ -429,7 +429,7 @@
 //		{
 //			Point point;
 
-//			if (isRelative && _relativePoint != null)
+//			if (isRelative && _relativePoint is not null)
 //			{
 
 //				point = new Point(((Point)_relativePoint).X + x, ((Point)_relativePoint).Y + y);
@@ -454,11 +454,11 @@
 //		{
 //			var point = new Point();
 
-//			if (isRelative && _relativePoint != null)
+//			if (isRelative && _relativePoint is not null)
 //			{
 //				point = new Point(((Point)_relativePoint).X, ((Point)_relativePoint).Y + y);
 //			}
-//			else if (_relativePoint != null)
+//			else if (_relativePoint is not null)
 //			{
 //				point = new Point(((Point)_relativePoint).X, y);
 //			}
@@ -473,11 +473,11 @@
 //		{
 //			var point = new Point();
 
-//			if (isRelative && _relativePoint != null)
+//			if (isRelative && _relativePoint is not null)
 //			{
 //				point = new Point(((Point)_relativePoint).X + x, ((Point)_relativePoint).Y);
 //			}
-//			else if (_relativePoint != null)
+//			else if (_relativePoint is not null)
 //			{
 //				point = new Point(x, ((Point)_relativePoint).Y);
 //			}

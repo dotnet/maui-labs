@@ -95,7 +95,7 @@ namespace Comet
 					.SelectMany(s => s.Windows)
 					.FirstOrDefault(w => w.IsKeyWindow);
 				var vc = window?.RootViewController;
-				while (vc?.PresentedViewController != null)
+				while (vc?.PresentedViewController is not null)
 					vc = vc.PresentedViewController;
 				return vc;
 			}

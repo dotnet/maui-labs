@@ -47,7 +47,7 @@ namespace Comet.Platform.Windows
 
 		private void UpdateView()
 		{
-			if (_nativeView != null)
+			if (_nativeView is not null)
 			{
 				Children.Remove(_nativeView);
 				_nativeView = null;
@@ -55,7 +55,7 @@ namespace Comet.Platform.Windows
 
 			_nativeView = _view?.ToPlatform(Context);
 
-			if (_nativeView != null)
+			if (_nativeView is not null)
 			{
 				if (_nativeView is FrameworkElement frameworkElement)
 				{
@@ -77,7 +77,7 @@ namespace Comet.Platform.Windows
 
 		protected override UwpSize ArrangeOverride(UwpSize finalSize)
 		{
-			if (finalSize.Width > 0 && finalSize.Height > 0 && _view != null)
+			if (finalSize.Width > 0 && finalSize.Height > 0 && _view is not null)
 				_view.Frame = new RectF(0, 0, (float)finalSize.Width, (float)finalSize.Height);
 
 			return finalSize;

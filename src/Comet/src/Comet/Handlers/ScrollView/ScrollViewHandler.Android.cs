@@ -19,7 +19,7 @@ namespace Comet.Handlers
 		
 		protected override void DisconnectHandler(AScrollView view)
 		{
-			if (_content != null)
+			if (_content is not null)
 			{
 				view.RemoveView(_content);
 				_content = null;
@@ -39,7 +39,7 @@ namespace Comet.Handlers
 				measuredSize.Height = rect.Height;
 			measuredSize.Width = Math.Max(measuredSize.Width, rect.Width);
 			measuredSize.Height = Math.Max(measuredSize.Height, rect.Height);
-			if (VirtualView?.Content != null)
+			if (VirtualView?.Content is not null)
 				VirtualView.Content.Frame = new Rect(Point.Zero, measuredSize);
 			//PlatformView.v = measuredSize.ToCGSize();
 			//_content.Frame = new CGRect(CGPoint.Empty, measuredSize);

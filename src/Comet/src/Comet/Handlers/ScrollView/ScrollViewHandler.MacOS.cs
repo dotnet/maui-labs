@@ -35,7 +35,7 @@ namespace Comet.Handlers
 				sub.RemoveFromSuperview();
 
 			var content = VirtualView?.Content?.ToMacOSPlatform(MauiContext);
-			if (content != null)
+			if (content is not null)
 				_documentView.AddSubview(content);
 
 			if (VirtualView.Orientation == Orientation.Horizontal)

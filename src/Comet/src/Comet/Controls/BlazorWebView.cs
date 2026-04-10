@@ -75,7 +75,7 @@ namespace Comet
 		{
 			if (string.IsNullOrWhiteSpace(selector))
 				throw new ArgumentException("Selector cannot be empty", nameof(selector));
-			if (componentType == null)
+			if (componentType is null)
 				throw new ArgumentNullException(nameof(componentType));
 
 			_rootComponents.Add(new RootComponent

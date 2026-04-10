@@ -37,7 +37,7 @@ namespace Comet.Android.Controls
 			get => containerView?.CurrentView ?? startingCurrentView;
 			set
 			{
-				if (containerView != null)
+				if (containerView is not null)
 					containerView.CurrentView = value;
 				else
 					startingCurrentView = value;
@@ -50,7 +50,7 @@ namespace Comet.Android.Controls
 			ViewGroup container,
 			Bundle savedInstanceState)
 		{
-			if (CurrentView == null && savedInstanceState != null)
+			if (CurrentView is null && savedInstanceState is not null)
 			{
 				var oldViewId = savedInstanceState.GetString(currentViewID);
 				var oldView = Comet.Internal.Extensions.FindViewById(null, oldViewId);
@@ -66,7 +66,7 @@ namespace Comet.Android.Controls
 		const string currentViewID = nameof(currentViewID);
 		public override void OnSaveInstanceState(Bundle outState)
 		{
-			if (CurrentView != null)
+			if (CurrentView is not null)
 			{
 				string viewId = (CurrentView as View)?.Id;
 				outState.PutString(currentViewID, viewId);
@@ -77,7 +77,7 @@ namespace Comet.Android.Controls
 
 		public override void OnDestroy()
 		{
-			if (containerView != null && containerView.CurrentView != null)
+			if (containerView is not null && containerView.CurrentView is not null)
 			{
 				//containerView.CurrentView.ViewHandler = null;
 				//containerView.CurrentView.Dispose();

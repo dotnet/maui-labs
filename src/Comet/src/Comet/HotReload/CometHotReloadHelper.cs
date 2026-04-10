@@ -21,7 +21,7 @@ public static class CometHotReloadHelper
 
 	public static void RegisterReplacedView(string originalTypeName, Type replacementType)
 	{
-		if (string.IsNullOrWhiteSpace(originalTypeName) || replacementType == null)
+		if (string.IsNullOrWhiteSpace(originalTypeName) || replacementType is null)
 			return;
 
 		lock (Sync)
@@ -40,7 +40,7 @@ public static class CometHotReloadHelper
 	{
 		var currentType = currentView?.GetType();
 		var compareType = compareView?.GetType();
-		if (currentType == null || compareType == null)
+		if (currentType is null || compareType is null)
 			return false;
 
 		lock (Sync)
@@ -63,7 +63,7 @@ public static class CometHotReloadHelper
 
 	internal static View CreateReplacement(View currentView)
 	{
-		if (currentView == null || !MauiHotReloadHelper.IsEnabled)
+		if (currentView is null || !MauiHotReloadHelper.IsEnabled)
 			return null;
 
 		Type replacementType;
@@ -86,7 +86,7 @@ public static class CometHotReloadHelper
 	static View CreateReplacementInstance(Type replacementType, object[] args)
 	{
 		var constructors = replacementType?.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-		if (constructors == null)
+		if (constructors is null)
 			return null;
 
 		foreach (var constructor in constructors.OrderBy(c => c.GetParameters().Length))
@@ -99,10 +99,10 @@ public static class CometHotReloadHelper
 			for (var i = 0; i < parameters.Length; i++)
 			{
 				var argument = args[i];
-				if (argument == null)
+				if (argument is null)
 				{
 					if (parameters[i].ParameterType.IsValueType &&
-						Nullable.GetUnderlyingType(parameters[i].ParameterType) == null)
+						Nullable.GetUnderlyingType(parameters[i].ParameterType) is null)
 					{
 						isMatch = false;
 						break;

@@ -35,7 +35,7 @@ namespace Comet.Handlers
 				if (hostedHandler is IDisposable disposableHandler)
 					disposableHandler.Dispose();
 			}
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 			{
 				platformView.Children.Remove(_hostedPlatformView);
 				if (_hostedPlatformView is IDisposable disposable)
@@ -47,10 +47,10 @@ namespace Comet.Handlers
 
 		void UpdateHostedView()
 		{
-			if (VirtualView?.HostedView == null || MauiContext == null)
+			if (VirtualView?.HostedView is null || MauiContext is null)
 				return;
 
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 				PlatformView.Children.Remove(_hostedPlatformView);
 
 			try
@@ -61,7 +61,7 @@ namespace Comet.Handlers
 			{
 				// Handler not found — try CometApp's MauiContext (has third-party handlers)
 				var fallbackCtx = CometApp.MauiContext;
-				if (fallbackCtx != null && fallbackCtx != MauiContext)
+				if (fallbackCtx is not null && fallbackCtx != MauiContext)
 				{
 					try
 					{
@@ -80,7 +80,7 @@ namespace Comet.Handlers
 				}
 			}
 
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 			{
 				_hostedPlatformView.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch;
 				_hostedPlatformView.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch;

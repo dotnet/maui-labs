@@ -16,7 +16,7 @@ namespace Comet
 			set
 			{
 				Clear();
-				if (value != null)
+				if (value is not null)
 					Add(value);
 			}
 		}

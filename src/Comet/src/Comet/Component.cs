@@ -103,7 +103,7 @@ namespace Comet
 		/// </summary>
 		protected void SetState(Action<TState> mutator)
 		{
-			if (mutator == null)
+			if (mutator is null)
 				throw new ArgumentNullException(nameof(mutator));
 
 			// Ensure state is initialized
@@ -121,7 +121,7 @@ namespace Comet
 		/// </summary>
 		internal void MergeStateFrom(Component<TState> oldComponent)
 		{
-			if (oldComponent?._state != null)
+			if (oldComponent?._state is not null)
 			{
 				_state = oldComponent._state;
 			}
@@ -133,7 +133,7 @@ namespace Comet
 
 		public override void TransferStateFrom(IComponentWithState source)
 		{
-			if (source is Component<TState> typed && typed._state != null)
+			if (source is Component<TState> typed && typed._state is not null)
 			{
 				_state = typed._state;
 			}
@@ -182,7 +182,7 @@ namespace Comet
 		/// </summary>
 		internal void UpdatePropsFromDiff(TProps newProps)
 		{
-			if (newProps == null)
+			if (newProps is null)
 				newProps = new TProps();
 
 			// Just update the props reference — don't trigger Reload here
@@ -210,7 +210,7 @@ namespace Comet
 		public override void TransferStateFrom(IComponentWithState source)
 		{
 			base.TransferStateFrom(source);
-			if (source is Component<TState, TProps> typed && typed._props != null)
+			if (source is Component<TState, TProps> typed && typed._props is not null)
 			{
 				_props = typed._props;
 			}

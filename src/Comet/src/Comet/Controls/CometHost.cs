@@ -53,7 +53,7 @@ public class CometHost : Microsoft.Maui.Controls.View, IContentView, IVisualTree
 	IReadOnlyList<IVisualTreeElement> IVisualTreeElement.GetVisualChildren()
 	{
 		var presentedChild = GetPresentedContent() as IVisualTreeElement;
-		if (presentedChild != null)
+		if (presentedChild is not null)
 			return new[] { presentedChild };
 
 		var rootChild = CometView as IVisualTreeElement;

@@ -35,7 +35,7 @@ namespace Comet.MacOS
 		public override void DrawRect(CGRect dirtyRect)
 		{
 			var context = NSGraphicsContext.CurrentContext?.CGContext;
-			if (context == null || Shape == null)
+			if (context is null || Shape is null)
 				return;
 
 			var drawingStyle = Shape.GetDrawingStyle(View, DrawingStyle.StrokeFill);
@@ -57,7 +57,7 @@ namespace Comet.MacOS
 
 			var path = Shape.PathForBounds(shapeBounds).AsCGPath();
 
-			if (fill != null)
+			if (fill is not null)
 			{
 				if (fill is Color color)
 				{
@@ -80,7 +80,7 @@ namespace Comet.MacOS
 						var stopColor = gradient.Stops[i].Color;
 						offsets[i] = gradient.Stops[i].Offset;
 
-						if (stopColor == null) stopColor = Colors.White;
+						if (stopColor is null) stopColor = Colors.White;
 
 						gradientColors[g++] = stopColor.Red;
 						gradientColors[g++] = stopColor.Green;

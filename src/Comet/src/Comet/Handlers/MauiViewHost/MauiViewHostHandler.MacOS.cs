@@ -37,13 +37,13 @@ namespace Comet.Handlers
 
 		void UpdateHostedView()
 		{
-			if (VirtualView?.HostedView == null || MauiContext == null)
+			if (VirtualView?.HostedView is null || MauiContext is null)
 				return;
 
 			try
 			{
 				var hostedPlatformView = VirtualView.HostedView.ToMacOSPlatform(MauiContext);
-				if (hostedPlatformView != null)
+				if (hostedPlatformView is not null)
 					PlatformView.SetHostedView(hostedPlatformView, VirtualView.HostedView);
 			}
 			catch (Exception ex)
@@ -64,7 +64,7 @@ namespace Comet.Handlers
 				_hostedPlatformView?.RemoveFromSuperview();
 				_hostedPlatformView = platformView;
 				_hostedVirtualView = virtualView;
-				if (_hostedPlatformView != null)
+				if (_hostedPlatformView is not null)
 				{
 					AddSubview(_hostedPlatformView);
 					NeedsLayout = true;
@@ -81,7 +81,7 @@ namespace Comet.Handlers
 			public override void Layout()
 			{
 				base.Layout();
-				if (_hostedPlatformView == null || Bounds.Width <= 0 || Bounds.Height <= 0)
+				if (_hostedPlatformView is null || Bounds.Width <= 0 || Bounds.Height <= 0)
 					return;
 
 				var bounds = new Microsoft.Maui.Graphics.Rect(0, 0, Bounds.Width, Bounds.Height);
@@ -94,7 +94,7 @@ namespace Comet.Handlers
 			{
 				get
 				{
-					if (_hostedPlatformView != null)
+					if (_hostedPlatformView is not null)
 						return _hostedPlatformView.IntrinsicContentSize;
 					return base.IntrinsicContentSize;
 				}

@@ -170,15 +170,15 @@ namespace Comet.Styles
 
 		public virtual void Apply(ContextualObject view = null)
 		{
-			if (view == null)
+			if (view is null)
 				SetDefaultControlSizingForLayouts();
-			if (view == null)
+			if (view is null)
 				View.SetGlobalEnvironment(nameof(IView.FlowDirection), FlowDirection);
 			else
 				view.SetEnvironment(nameof(IView.FlowDirection), FlowDirection);
 
 
-			if (view == null)
+			if (view is null)
 				View.SetGlobalEnvironment(nameof(ITextAlignment.HorizontalTextAlignment), HorizontalAlignment);
 			else
 				view.SetEnvironment(nameof(ITextAlignment.HorizontalTextAlignment), HorizontalAlignment);
@@ -260,7 +260,7 @@ namespace Comet.Styles
 
 		protected void SetEnvironment(ContextualObject view, Type type, string key, StyleAwareValue value)
 		{
-			if (value == null)
+			if (value is null)
 			{
 				SetEnvironmentValue(view, type, key, null);
 				return;
@@ -268,7 +268,7 @@ namespace Comet.Styles
 
 			foreach (var pair in value.ToEnvironmentValues())
 			{
-				var newKey = pair.key == null ? key : $"{key}.{pair.key}";
+				var newKey = pair.key is null ? key : $"{key}.{pair.key}";
 				SetEnvironmentValue(view, type, newKey, pair.value);
 			}
 		}
@@ -276,27 +276,27 @@ namespace Comet.Styles
 
 		protected void SetEnvironment(ContextualObject view, string styleId, string key, StyleAwareValue value)
 		{
-			if (value == null)
+			if (value is null)
 			{
 				SetEnvironmentValue(view, styleId, key, null);
 				return;
 			}
 			foreach (var pair in value.ToEnvironmentValues())
 			{
-				var newKey = pair.key == null ? key : $"{pair.key}.{key}";
+				var newKey = pair.key is null ? key : $"{pair.key}.{key}";
 				SetEnvironmentValue(view, styleId, newKey, pair.value);
 			}
 		}
 		protected void SetEnvironment(ContextualObject view, string styleId, string key, StyleAwareValue value, Func<object, object> getProperty)
 		{
-			if (value == null)
+			if (value is null)
 			{
 				SetEnvironmentValue(view, styleId, key, null);
 				return;
 			}
 			foreach (var pair in value.ToEnvironmentValues())
 			{
-				var newKey = pair.key == null ? key : $"{pair.key}.{key}";
+				var newKey = pair.key is null ? key : $"{pair.key}.{key}";
 				SetEnvironmentValue(view, styleId, newKey, getProperty(pair.value));
 			}
 		}
@@ -304,7 +304,7 @@ namespace Comet.Styles
 
 		void SetEnvironmentValue(ContextualObject view, Type type, string key, object value)
 		{
-			if (view != null)
+			if (view is not null)
 				view.SetEnvironment(type, key, value);
 			else
 				View.SetGlobalEnvironment(type, key, value);
@@ -312,7 +312,7 @@ namespace Comet.Styles
 
 		void SetEnvironmentValue(ContextualObject view, string styleId, string key, object value)
 		{
-			if (view != null)
+			if (view is not null)
 				view.SetEnvironment(styleId, key, value);
 			else
 				View.SetGlobalEnvironment(styleId, key, value);

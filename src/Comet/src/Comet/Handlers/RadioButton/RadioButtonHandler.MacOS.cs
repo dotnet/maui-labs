@@ -19,7 +19,7 @@ namespace Comet.Handlers
 		public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
 		{
 			var platformView = PlatformView;
-			if (platformView == null)
+			if (platformView is null)
 				return Size.Zero;
 
 			var intrinsic = platformView.IntrinsicContentSize;
@@ -53,14 +53,14 @@ namespace Comet.Handlers
 
 		public static partial void MapIsChecked(RadioButtonHandler handler, RadioButton virtualView)
 		{
-			if (handler.PlatformView == null)
+			if (handler.PlatformView is null)
 				return;
 			handler.PlatformView.IsChecked = virtualView.Selected?.CurrentValue ?? false;
 		}
 
 		public static partial void MapLabel(RadioButtonHandler handler, RadioButton virtualView)
 		{
-			if (handler.PlatformView == null)
+			if (handler.PlatformView is null)
 				return;
 			handler.PlatformView.SetLabel(virtualView.Label?.CurrentValue ?? "");
 			virtualView.InvalidateMeasurement();
@@ -68,11 +68,11 @@ namespace Comet.Handlers
 
 		public static partial void MapTextColor(RadioButtonHandler handler, RadioButton virtualView)
 		{
-			if (handler.PlatformView == null)
+			if (handler.PlatformView is null)
 				return;
 
 			var color = ((ITextStyle)virtualView).TextColor;
-			if (color != null)
+			if (color is not null)
 			{
 				var nsColor = NSColor.FromRgba(
 					(nfloat)color.Red,

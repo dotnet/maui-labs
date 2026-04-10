@@ -77,11 +77,11 @@ namespace Comet
 
 		void ApplyTemplate()
 		{
-			if (_controlTemplate != null && _innerContent != null)
+			if (_controlTemplate is not null && _innerContent is not null)
 			{
 				base.Add(_controlTemplate.CreateContent(_innerContent));
 			}
-			else if (_innerContent != null)
+			else if (_innerContent is not null)
 			{
 				base.Add(_innerContent);
 			}

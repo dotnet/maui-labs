@@ -42,14 +42,14 @@ namespace Comet.Handlers
 
 		public static partial void MapIsChecked(RadioButtonHandler handler, RadioButton virtualView)
 		{
-			if (handler.PlatformView == null)
+			if (handler.PlatformView is null)
 				return;
 			handler.PlatformView.IsChecked = virtualView.Selected?.CurrentValue ?? false;
 		}
 
 		public static partial void MapLabel(RadioButtonHandler handler, RadioButton virtualView)
 		{
-			if (handler.PlatformView == null)
+			if (handler.PlatformView is null)
 				return;
 			handler.PlatformView.Content = virtualView.Label?.CurrentValue ?? "";
 		}

@@ -58,7 +58,7 @@ namespace Comet
 				// LerpingAnimation can't interpolate from null, so default
 				// to the numeric zero for the matching type.
 				var startValue = values.oldValue;
-				if (startValue == null)
+				if (startValue is null)
 				{
 					startValue = values.newValue switch
 					{
@@ -85,7 +85,7 @@ namespace Comet
 				};
 				if (autoReverses)
 					animation = animation.CreateAutoReversing();
-				if (animations == null)
+				if (animations is null)
 					return animation;
 				animations.Add(animation);
 			}
@@ -220,7 +220,7 @@ namespace Comet
 					Lerp = lerp,
 				};
 
-				if (animations == null)
+				if (animations is null)
 				{
 					view.AddAnimation(spring);
 					return view;
@@ -228,7 +228,7 @@ namespace Comet
 				animations.Add(spring);
 			}
 
-			if (animations != null && animations.Count > 0)
+			if (animations is not null && animations.Count > 0)
 			{
 				var group = new ContextualAnimation(animations)
 				{

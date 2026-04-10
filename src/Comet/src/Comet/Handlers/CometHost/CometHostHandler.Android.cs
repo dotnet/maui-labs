@@ -46,7 +46,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 	void UpdateCometView()
 	{
-		if (VirtualView?.CometView == null || MauiContext == null)
+		if (VirtualView?.CometView is null || MauiContext is null)
 			return;
 
 		try
@@ -66,10 +66,10 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			
 			// Get the render view (body content) to avoid CometViewHandler handler circularity
 			var renderView = cometView.GetView();
-			IView viewToRender = (renderView != null && renderView != cometView) ? renderView : cometView;
+			IView viewToRender = (renderView is not null && renderView != cometView) ? renderView : cometView;
 			
 			var platformView = viewToRender.ToPlatform(MauiContext);
-			if (platformView != null)
+			if (platformView is not null)
 				PlatformView.SetContent(platformView, viewToRender);
 		}
 		catch (Exception ex)
@@ -95,11 +95,11 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 		public void SetContent(global::Android.Views.View platformView, IView virtualView)
 		{
-			if (_contentView != null)
+			if (_contentView is not null)
 				RemoveView(_contentView);
 			_contentView = platformView;
 			_virtualView = virtualView;
-			if (_contentView != null)
+			if (_contentView is not null)
 			{
 				AddView(_contentView, new FrameLayout.LayoutParams(
 					ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
@@ -108,7 +108,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 		public void ClearContent()
 		{
-			if (_contentView != null)
+			if (_contentView is not null)
 				RemoveView(_contentView);
 			_contentView = null;
 			_virtualView = null;
@@ -123,10 +123,10 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 		/// </summary>
 		public void Reload()
 		{
-			if (_cometView == null || MauiContext == null) return;
+			if (_cometView is null || MauiContext is null) return;
 
 			var renderView = _cometView.GetView();
-			IView viewToRender = (renderView != null && renderView != _cometView) ? renderView : _cometView;
+			IView viewToRender = (renderView is not null && renderView != _cometView) ? renderView : _cometView;
 
 			// After ResetView's DiffUpdate, handlers have been transferred from
 			// old to new views. The virtual tree is correct but the platform
@@ -169,7 +169,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			{
 				// No handler yet — need full platform view creation
 				var platformView = viewToRender.ToPlatform(MauiContext);
-				if (platformView != null)
+				if (platformView is not null)
 					SetContent(platformView, viewToRender);
 			}
 		}
@@ -192,14 +192,14 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			layoutHandler.Clear();
 			foreach (var child in virtualChildren)
 			{
-				if (child != null)
+				if (child is not null)
 					layoutHandler.Add(child);
 			}
 
 			// Recurse into children
 			foreach (var child in virtualChildren)
 			{
-				if (child != null)
+				if (child is not null)
 					SyncViewTreePlatformChildren(child);
 			}
 		}
@@ -212,7 +212,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			{
 				foreach (var child in ((IContainerView)container).GetChildren())
 				{
-					if (child != null)
+					if (child is not null)
 						InvalidateViewTreeMeasurements(child);
 				}
 			}
@@ -221,11 +221,11 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 		protected override void OnLayout(bool changed, int left, int top, int right, int bottom)
 		{
 			base.OnLayout(changed, left, top, right, bottom);
-			if (_contentView == null) return;
+			if (_contentView is null) return;
 
 			var width = right - left;
 			var height = bottom - top;
-			if (width > 0 && height > 0 && _virtualView != null)
+			if (width > 0 && height > 0 && _virtualView is not null)
 			{
 				var density = Context?.Resources?.DisplayMetrics?.Density ?? 1;
 				var widthDp = width / density;

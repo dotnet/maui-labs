@@ -34,7 +34,7 @@ namespace Comet
 	public class UriImageSource : ImageSource, IUriImageSource, IStreamImageSource
 	{
 		static HttpClient client = new HttpClient();
-		public override bool IsEmpty => Uri == null;
+		public override bool IsEmpty => Uri is null;
 
 		public Uri Uri { get; set; }
 

@@ -15,19 +15,19 @@ namespace Comet
 		{
 			var shadow = view.GetShadow() ?? new Shadow();
 
-			if (paint != null)
+			if (paint is not null)
 				shadow = shadow.WithPaint(paint);
 
-			if (radius != null)
+			if (radius is not null)
 				shadow = shadow.WithRadius((float)radius);
 
-			if (x != null || y != null)
+			if (x is not null || y is not null)
 			{
 				var newX = x ?? shadow.Offset.X;
 				var newY = y ?? shadow.Offset.Y;
 				shadow = shadow.WithOffset(new Point(newX, newY));
 			}
-			if (type != null)
+			if (type is not null)
 				view.SetEnvironment(type, EnvironmentKeys.View.Shadow, shadow, true);
 			else
 				view.SetEnvironment(EnvironmentKeys.View.Shadow, shadow, false);
@@ -41,7 +41,7 @@ namespace Comet
 		}
 		public static T ClipShape<T>(this T view, Shape shape, Type type = null) where T : View
 		{
-			if (type != null)
+			if (type is not null)
 				view.SetEnvironment(type, EnvironmentKeys.View.ClipShape, shape, true);
 			else
 				view.SetEnvironment(EnvironmentKeys.View.ClipShape, shape, false);
@@ -63,9 +63,9 @@ namespace Comet
 
 		public static T Stroke<T>(this T shape, Color color, float lineWidth, bool cascades = true, Type type = null) where T : Shape
 		{
-			if (type != null && !cascades)
+			if (type is not null && !cascades)
 				Logger.Fatal($"Setting a type, and cascades = false does nothing!");
-			if (type != null)
+			if (type is not null)
 			{
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.LineWidth, lineWidth, true);
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.StrokeColor, new SolidPaint(color), true);
@@ -79,9 +79,9 @@ namespace Comet
 		}
 		public static T Stroke<T>(this T shape, Paint paint, float lineWidth, bool cascades = true, Type type = null) where T : Shape
 		{
-			if (type != null && !cascades)
+			if (type is not null && !cascades)
 				Logger.Fatal($"Setting a type, and cascades = false does nothing!");
-			if (type != null)
+			if (type is not null)
 			{
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.LineWidth, lineWidth, true);
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.StrokeColor, paint, true);
@@ -96,9 +96,9 @@ namespace Comet
 
 		public static T Fill<T>(this T shape, Color color, bool cascades = true, Type type = null) where T : Shape
 		{
-			if (type != null && !cascades)
+			if (type is not null && !cascades)
 				Logger.Fatal($"Setting a type, and cascades = false does nothing!");
-			if (type != null)
+			if (type is not null)
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.Fill, color, true);
 			else
 				shape.SetEnvironment(EnvironmentKeys.Shape.Fill, color, cascades);
@@ -108,9 +108,9 @@ namespace Comet
 
 		public static T Fill<T>(this T shape, Gradient gradient, bool cascades = true, Type type = null) where T : Shape
 		{
-			if (type != null && !cascades)
+			if (type is not null && !cascades)
 				Logger.Fatal($"Setting a type, and cascades = false does nothing!");
-			if (type != null)
+			if (type is not null)
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.Fill, gradient, true);
 			else
 				shape.SetEnvironment(EnvironmentKeys.Shape.Fill, gradient, cascades);
@@ -119,9 +119,9 @@ namespace Comet
 
 		public static T Style<T>(this T shape, DrawingStyle drawingStyle, bool cascades = true, Type type = null) where T : Shape
 		{
-			if (type != null && !cascades)
+			if (type is not null && !cascades)
 				Logger.Fatal($"Setting a type, and cascades = false does nothing!");
-			if (type != null)
+			if (type is not null)
 				shape.SetEnvironment(type, EnvironmentKeys.Shape.DrawingStyle, drawingStyle, true);
 			else
 				shape.SetEnvironment(EnvironmentKeys.Shape.DrawingStyle, drawingStyle, cascades);
@@ -158,7 +158,7 @@ namespace Comet
 
 		public static T Border<T>(this T view, Shape shape, Type type = null) where T : View
 		{
-			view.SetEnvironment(type, EnvironmentKeys.View.Border, shape, type != null);
+			view.SetEnvironment(type, EnvironmentKeys.View.Border, shape, type is not null);
 			return view;
 		}
 

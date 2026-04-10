@@ -86,7 +86,7 @@ namespace Comet
 					OnDequeue = (pair) =>
 					{
 						var view = pair.Value;
-						if (view?.ViewHandler?.PlatformView == null)
+						if (view?.ViewHandler?.PlatformView is null)
 							view.Dispose();
 						else
 							CurrentViews[pair.Key] = view;
@@ -143,13 +143,13 @@ namespace Comet
 		protected override View GetViewFor(int section, int index)
 		{
 			var item = (T)GetItemAt(section, index);
-			if (item == null)
+			if (item is null)
 				return null;
 			var key = (section, index, item);
 			if (!CurrentViews.TryGetValue(key, out var view) || (view?.IsDisposed ?? true))
 			{
 				view = ViewFor?.Invoke(item);
-				if (view == null)
+				if (view is null)
 					return null;
 				CurrentViews[key] = view;
 				view.Parent = this;

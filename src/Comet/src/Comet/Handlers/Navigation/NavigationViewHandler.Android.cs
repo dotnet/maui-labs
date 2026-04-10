@@ -13,7 +13,7 @@ namespace Comet.Handlers
 		public override void SetVirtualView(IView view)
 		{
 			base.SetVirtualView(view);
-			if (VirtualView != null)
+			if (VirtualView is not null)
 			{
 				PlatformView.SetRoot(VirtualView.Content);
 				VirtualView?.SetPerformNavigate(PlatformView.NavigateTo);
@@ -24,7 +24,7 @@ namespace Comet.Handlers
 		{
 			base.DisconnectHandler(nativeView);
 
-			if (VirtualView != null)
+			if (VirtualView is not null)
 			{
 				VirtualView.SetPerformNavigate(action: null);
 				VirtualView.SetPerformPop(action: null);

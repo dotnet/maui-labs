@@ -23,7 +23,7 @@ namespace Comet.Handlers
 			for (var s = 0; s < sections; s++)
 			{
 				var section = virtualView?.HeaderFor(s);
-				if (section != null)
+				if (section is not null)
 					nativeView.Items?.Add(new ListViewHandlerItem((ListViewHandler)viewHandler, section));
 
 				var rows = virtualView.Rows(s);
@@ -33,7 +33,7 @@ namespace Comet.Handlers
 					nativeView.Items?.Add(new ListViewHandlerItem((ListViewHandler)viewHandler, v));
 				}
 				var footer = virtualView?.FooterFor(s);
-				if (footer != null)
+				if (footer is not null)
 					nativeView.Items?.Add(new ListViewHandlerItem((ListViewHandler)viewHandler, footer));
 			}
 		}

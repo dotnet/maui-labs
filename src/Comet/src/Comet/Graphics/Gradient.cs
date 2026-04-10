@@ -13,7 +13,7 @@ namespace Comet.Graphics
 		/// <param name="colors"></param>
 		public Gradient(Color[] colors)
 		{
-			if (colors == null) throw new ArgumentNullException(nameof(colors));
+			if (colors is null) throw new ArgumentNullException(nameof(colors));
 
 			Stops = new Stop[colors.Length];
 			for (var i = 0; i < colors.Length; i++)
@@ -29,7 +29,7 @@ namespace Comet.Graphics
 		/// <param name="stops"></param>
 		public Gradient(Stop[] stops)
 		{
-			if (stops == null) throw new ArgumentNullException(nameof(stops));
+			if (stops is null) throw new ArgumentNullException(nameof(stops));
 
 			Stops = stops;
 		}
@@ -38,7 +38,7 @@ namespace Comet.Graphics
 
 		public Stop[] GetSortedStops()
 		{
-			if (_sortedStops == null)
+			if (_sortedStops is null)
 			{
 				_sortedStops = new Stop[Stops.Length];
 				Array.Copy(Stops, _sortedStops, Stops.Length);

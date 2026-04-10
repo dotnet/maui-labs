@@ -55,7 +55,7 @@ namespace Comet.MacOS
 
 		public void SetTextColor(NSColor color)
 		{
-			if (color == null || string.IsNullOrEmpty(Title))
+			if (color is null || string.IsNullOrEmpty(Title))
 				return;
 
 			var attributes = new NSDictionary(

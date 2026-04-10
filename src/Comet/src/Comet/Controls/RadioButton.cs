@@ -16,7 +16,7 @@ namespace Comet
 			bool selected = false,
 			Action onClick = null)
 		{
-			Label = label != null ? new PropertySubscription<string>(label) : null;
+			Label = label is not null ? new PropertySubscription<string>(label) : null;
 			Selected = new PropertySubscription<bool>(selected);
 			OnClick = onClick;
 			// State is initialized through constructor bindings, not handler
@@ -29,8 +29,8 @@ namespace Comet
 			Func<bool> selected = null,
 			Action onClick = null)
 		{
-			Label = label != null ? PropertySubscription<string>.FromFunc(label) : null;
-			Selected = selected != null ? PropertySubscription<bool>.FromFunc(selected) : null;
+			Label = label is not null ? PropertySubscription<string>.FromFunc(label) : null;
+			Selected = selected is not null ? PropertySubscription<bool>.FromFunc(selected) : null;
 			OnClick = onClick;
 			_hasInitializedIsChecked = true;
 		}
@@ -72,7 +72,7 @@ namespace Comet
 		Size IContentView.CrossPlatformArrange(Rect bounds)
 		{
 			var content = ((IContentView)this).PresentedContent;
-			if (content != null)
+			if (content is not null)
 				content.Arrange(bounds);
 			return bounds.Size;
 		}
@@ -134,7 +134,7 @@ namespace Comet
 			var previous = Selected?.CurrentValue ?? false;
 			var shouldNotify = notify && _hasInitializedIsChecked && previous != value;
 
-			if (Selected != null)
+			if (Selected is not null)
 			{
 				Selected.Set(value);
 			}
@@ -177,7 +177,7 @@ namespace Comet
 
 			foreach (var sibling in radioGroup.OfType<RadioButton>().Where(x => x != this))
 			{
-				if (groupName != null && sibling.ResolveGroupName() != groupName)
+				if (groupName is not null && sibling.ResolveGroupName() != groupName)
 				{
 					continue;
 				}

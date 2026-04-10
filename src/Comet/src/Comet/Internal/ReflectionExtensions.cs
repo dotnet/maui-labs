@@ -20,7 +20,7 @@ namespace Comet.Reflection
 
 			// Fast path using compiled delegates
 			var setter = SetterCache<T>.Get(key);
-			if (setter != null)
+			if (setter is not null)
 			{
 				setter(obj, value);
 				return true;
@@ -31,7 +31,7 @@ namespace Comet.Reflection
 			{
 				var s = CreateSetter<T>(type, name);
 				SetterCache<T>.Set(key, s);
-				if (s != null)
+				if (s is not null)
 				{
 					s(obj, value);
 					return true;
@@ -52,7 +52,7 @@ namespace Comet.Reflection
 		static Action<object, T> CreateSetter<T>(Type type, string name)
 		{
 			var property = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-			if (property != null && property.CanWrite)
+			if (property is not null && property.CanWrite)
 			{
 				if (property.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
 					return null;
@@ -84,7 +84,7 @@ namespace Comet.Reflection
 			}
 			
 			var field = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-			if (field != null)
+			if (field is not null)
 			{
 				var target = Expression.Parameter(typeof(object), "target");
 				var value = Expression.Parameter(typeof(T), "value");
@@ -123,7 +123,7 @@ namespace Comet.Reflection
 
 			if (_setterCache.TryGetValue(cacheKey, out var setter))
 			{
-				if (setter != null)
+				if (setter is not null)
 				{
 					setter(obj, value);
 					return true;
@@ -133,7 +133,7 @@ namespace Comet.Reflection
 			{
 				var s = CreateSetter(type, name);
 				_setterCache[cacheKey] = s;
-				if (s != null)
+				if (s is not null)
 				{
 					s(obj, value);
 					return true;
@@ -144,7 +144,7 @@ namespace Comet.Reflection
 			{
 				// First call for this (Type, name) — resolve and cache
 				var info = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-				if (info != null && info.CanWrite)
+				if (info is not null && info.CanWrite)
 				{
 					if (info.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
 						member = null; // PropertySubscription-typed — always skip
@@ -159,7 +159,7 @@ namespace Comet.Reflection
 				_setMemberCache[cacheKey] = member;
 			}
 
-			if (member == null)
+			if (member is null)
 				return false;
 
 			if (member is PropertyInfo pi)
@@ -180,7 +180,7 @@ namespace Comet.Reflection
 			try
 			{
 				var property = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-				if (property != null && property.CanWrite)
+				if (property is not null && property.CanWrite)
 				{
 					if (property.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
 						return null;
@@ -194,7 +194,7 @@ namespace Comet.Reflection
 					var castConvertedValue = Expression.Convert(convertedValue, property.PropertyType);
 
 					var method = property.GetSetMethod(true);
-					if (method != null)
+					if (method is not null)
 					{
 						var body = Expression.Call(castTarget, method, castConvertedValue);
 						return Expression.Lambda<Action<object, object>>(body, target, value).Compile();
@@ -202,7 +202,7 @@ namespace Comet.Reflection
 				}
 				
 				var field = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-				if (field != null)
+				if (field is not null)
 				{
 					var target = Expression.Parameter(typeof(object), "target");
 					var value = Expression.Parameter(typeof(object), "value");
@@ -227,7 +227,7 @@ namespace Comet.Reflection
 
 		public static object Convert(this object obj, Type type)
 		{
-			if (obj == null)
+			if (obj is null)
 				return null;
 			var newType = obj.GetType();
 			if (type.IsAssignableFrom(newType))
@@ -248,38 +248,38 @@ namespace Comet.Reflection
 
 		public static bool SetDeepPropertyValue(this object obj, string name, object value)
 		{
-			if (obj == null)
+			if (obj is null)
 				return false;
 			var lastObect = obj;
 			FieldInfo field = null;
 			PropertyInfo info = null;
 			foreach (var part in name.Split('.'))
 			{
-				if (obj == null)
+				if (obj is null)
 					return false;
 				info = null;
 				field = null;
 				var type = obj?.GetType();
 				lastObect = obj;
 				info = type?.GetDeepProperty(part);
-				if (info != null)
+				if (info is not null)
 				{
 					obj = info.GetValue(obj, null);
 				}
 				else
 				{
 					field = type?.GetDeepField(part);
-					if (field == null)
+					if (field is null)
 						return false;
 					obj = field.GetValue(obj);
 				}
 			}
-			if (field != null)
+			if (field is not null)
 			{
 				field.SetValue(lastObect, value);
 				return true;
 			}
-			else if (info != null)
+			else if (info is not null)
 			{
 				info.SetValue(lastObect, value);
 				return true;
@@ -290,7 +290,7 @@ namespace Comet.Reflection
 		public static FieldInfo GetDeepField(this Type type, string name)
 		{
 			var fieldInfo = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-			if (fieldInfo == null && type.BaseType != null)
+			if (fieldInfo is null && type.BaseType is not null)
 				fieldInfo = GetDeepField(type.BaseType, name);
 			return fieldInfo;
 		}
@@ -298,14 +298,14 @@ namespace Comet.Reflection
 		public static PropertyInfo GetDeepProperty(this Type type, string name)
 		{
 			var prop = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-			if (prop == null && type.BaseType != null)
+			if (prop is null && type.BaseType is not null)
 				prop = GetDeepProperty(type.BaseType, name);
 			return prop;
 		}
 		public static List<PropertyInfo> GetDeepProperties(this Type type, BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
 		{
 			var properties = type.GetProperties(flags).ToList();
-			if (type.BaseType != null)
+			if (type.BaseType is not null)
 				properties.AddRange(GetDeepProperties(type.BaseType, flags));
 			return properties;
 		}
@@ -313,14 +313,14 @@ namespace Comet.Reflection
 		public static MethodInfo GetDeepMethodInfo(this Type type, string name)
 		{
 			var methodInfo = type.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-			if (methodInfo == null && type.BaseType != null)
+			if (methodInfo is null && type.BaseType is not null)
 				methodInfo = GetDeepMethodInfo(type.BaseType, name);
 			return methodInfo;
 		}
 		public static MethodInfo GetDeepMethodInfo(this Type type, Type withAttribute)
 		{
 			var methodInfo = type.GetMethods(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance).Where(m => m.GetCustomAttributes(withAttribute, false).Length > 0).FirstOrDefault();
-			if (methodInfo == null && type.BaseType != null)
+			if (methodInfo is null && type.BaseType is not null)
 				methodInfo = GetDeepMethodInfo(type.BaseType, withAttribute);
 			return methodInfo;
 		}
@@ -329,18 +329,18 @@ namespace Comet.Reflection
 		{
 			foreach (var part in name.Split('.'))
 			{
-				if (obj == null)
+				if (obj is null)
 					return null;
 				var type = obj.GetType();
 				var info = type.GetProperty(part, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-				if (info != null)
+				if (info is not null)
 				{
 					obj = info.GetValue(obj, null);
 				}
 				else
 				{
 					var field = type.GetField(part, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-					if (field == null)
+					if (field is null)
 						return null;
 					obj = field.GetValue(obj);
 				}
@@ -351,7 +351,7 @@ namespace Comet.Reflection
 		public static T GetPropValue<T>(this object obj, string name)
 		{
 			var retval = GetPropertyValue(obj, name);
-			if (retval == null)
+			if (retval is null)
 				return default;
 			return (T)retval;
 		}

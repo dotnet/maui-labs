@@ -55,19 +55,19 @@ namespace Comet.Handlers
 
 		public static void MapTitle(CometWindowHandler handler, IWindow window)
 		{
-			if (handler.PlatformView != null)
+			if (handler.PlatformView is not null)
 				handler.PlatformView.Title = window.Title ?? string.Empty;
 		}
 
 		public static void MapContent(CometWindowHandler handler, IWindow window)
 		{
-			if (handler.MauiContext == null || window.Content == null)
+			if (handler.MauiContext is null || window.Content is null)
 				return;
 
 			var content = window.Content;
 			var contentView = content.ToMacOSPlatform(handler.MauiContext);
 
-			if (handler._contentContainer != null)
+			if (handler._contentContainer is not null)
 			{
 				foreach (var subview in handler._contentContainer.Subviews)
 					subview.RemoveFromSuperview();
@@ -122,7 +122,7 @@ namespace Comet.Handlers
 
 				try
 				{
-					if (HostedContent != null && HostedContent.TryGetTarget(out var content))
+					if (HostedContent is not null && HostedContent.TryGetTarget(out var content))
 					{
 						content.Measure((double)size.Width, (double)size.Height);
 						content.Arrange(new Microsoft.Maui.Graphics.Rect(0, 0, (double)size.Width, (double)size.Height));

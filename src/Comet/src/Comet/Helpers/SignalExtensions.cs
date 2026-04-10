@@ -18,9 +18,9 @@ namespace Comet
 		/// </summary>
 		public static TextField TextField(Signal<string> text, string placeholder = null, Action completed = null)
 		{
-			var field = completed != null
+			var field = completed is not null
 				? new TextField(text, placeholder ?? "", completed)
-				: placeholder != null
+				: placeholder is not null
 					? new TextField(text, placeholder)
 					: new TextField(text);
 

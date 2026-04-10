@@ -19,12 +19,12 @@ namespace Comet.Android.Controls
 		public void SetVirtualView(ScrollView view, IMauiContext context)
 		{
 			var newContent = view.Content?.ToPlatform(context);
-			if(scrollView == null || currentOrientation != view.Orientation)
+			if(scrollView is null || currentOrientation != view.Orientation)
 			{
-				if (currentView != null)
+				if (currentView is not null)
 					scrollView?.RemoveView(currentView);
 				currentView = null;
-				if (scrollView != null)
+				if (scrollView is not null)
 					this.RemoveView(scrollView);
 
 				currentOrientation = view.Orientation;
@@ -32,7 +32,7 @@ namespace Comet.Android.Controls
 			}
 
 			if (newContent != currentView) {
-				if(currentView != null)
+				if(currentView is not null)
 					scrollView?.RemoveView(currentView);
 				currentView = newContent;
 				scrollView.AddView(currentView);
@@ -48,7 +48,7 @@ namespace Comet.Android.Controls
 		protected override void OnLayout(bool changed, int left, int top, int right, int bottom)
 		{
 			scrollView?.Layout(0, 0, this.Width, this.Height);
-			if (CrossPlatformArrange == null || Context == null)
+			if (CrossPlatformArrange is null || Context is null)
 			{
 				return;
 			}

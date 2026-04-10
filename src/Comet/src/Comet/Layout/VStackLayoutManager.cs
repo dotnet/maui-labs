@@ -106,7 +106,7 @@ public class VStackLayoutManager : Microsoft.Maui.Layouts.ILayoutManager
 
 				var constraints = view.GetFrameConstraints();
 				var sizing = view.GetHorizontalLayoutAlignment(layout);
-				if (sizing == LayoutAlignment.Fill && constraints?.Width == null && !double.IsInfinity(widthConstraint))
+				if (sizing == LayoutAlignment.Fill && constraints?.Width is null && !double.IsInfinity(widthConstraint))
 					width = widthConstraint;
 
 				width = Math.Max(finalWidth, width);

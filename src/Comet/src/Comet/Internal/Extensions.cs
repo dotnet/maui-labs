@@ -11,7 +11,7 @@ namespace Comet.Internal
 	{
 		public static T GetValueOfType<T>(this object obj)
 		{
-			if (obj == null)
+			if (obj is null)
 				return default;
 
 			if (obj is T t)
@@ -28,7 +28,7 @@ namespace Comet.Internal
 
 		public static View FindViewById(this View view, string id)
 		{
-			if(view == null)
+			if(view is null)
 				return MauiHotReloadHelper.ActiveViews.OfType<View>().Select(x=> x.FindViewById(id)).FirstOrDefault();
 			if (view.Id == id)
 				return view;
@@ -40,7 +40,7 @@ namespace Comet.Internal
 		public static Func<View> GetBody(this View view)
 		{
 			var bodyMethod = view.GetType().GetDeepMethodInfo(typeof(BodyAttribute));
-			if (bodyMethod != null)
+			if (bodyMethod is not null)
 				return (Func<View>)Delegate.CreateDelegate(typeof(Func<View>), view, bodyMethod.Name);
 			return null;
 		}
@@ -54,14 +54,14 @@ namespace Comet.Internal
 
 		public static T SetParent<T>(this T view, View parent) where T : View
 		{
-			if (view != null)
+			if (view is not null)
 				view.Parent = parent;
 			return view;
 		}
 
 		public static T FindParentOfType<T>(this View view)
 		{
-			if (view == null)
+			if (view is null)
 				return default;
 			if (view.BuiltView is T bt)
 			{
@@ -73,10 +73,10 @@ namespace Comet.Internal
 		}
 		public static NavigationView FindNavigation (this View view)
 		{
-			if (view == null)
+			if (view is null)
 				return default;
 			var v = view.GetView();
-			if(v.Navigation != null)
+			if(v.Navigation is not null)
 				return v.Navigation;
 
 			if (v is ContentView cv)

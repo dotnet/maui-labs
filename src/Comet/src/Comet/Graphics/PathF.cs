@@ -26,12 +26,12 @@
 //			{
 //				var newPoint = point;
 
-//				if (transform != null)
+//				if (transform is not null)
 //					newPoint = transform.Transform(point);
 
 //				_points.Add(newPoint);
 //			}
-//			if (prototype._arcAngles != null)
+//			if (prototype._arcAngles is not null)
 //			{
 //				_arcAngles = new List<float>();
 //				_arcClockwise = new List<bool>();
@@ -71,7 +71,7 @@
 //		{
 //			get
 //			{
-//				if (_points != null && _points.Count > 0)
+//				if (_points is not null && _points.Count > 0)
 //					return _points[0];
 
 //				return null;
@@ -100,13 +100,13 @@
 //		{
 //			get
 //			{
-//				if (_cachedBounds != null)
+//				if (_cachedBounds is not null)
 //					return (Rectangle)_cachedBounds;
 
 //				_cachedBounds = CalculateBounds();
 
 //				/* var graphicsService = Device.GraphicsService;
-//                if (graphicsService != null)
+//                if (graphicsService is not null)
 //                    _cachedBounds = graphicsService.GetPathBounds(this);
 //                else
 //                {
@@ -198,7 +198,7 @@
 //		{
 //			get
 //			{
-//				if (_points != null && _points.Count > 0)
+//				if (_points is not null && _points.Count > 0)
 //					return _points[_points.Count - 1];
 
 //				return null;
@@ -227,7 +227,7 @@
 
 //		public float GetArcAngle(int index)
 //		{
-//			if (_arcAngles != null && _arcAngles.Count > index)
+//			if (_arcAngles is not null && _arcAngles.Count > index)
 //				return _arcAngles[index];
 
 //			return 0;
@@ -235,7 +235,7 @@
 
 //		public bool IsArcClockwise(int index)
 //		{
-//			if (_arcClockwise != null && _arcClockwise.Count > index)
+//			if (_arcClockwise is not null && _arcClockwise.Count > index)
 //				return _arcClockwise[index];
 
 //			return false;
@@ -292,7 +292,7 @@
 
 //		public PathF AddArc(Point topLeft, Point bottomRight, float startAngle, float endAngle, bool clockwise)
 //		{
-//			if (_arcAngles == null)
+//			if (_arcAngles is null)
 //			{
 //				_arcAngles = new List<float>();
 //				_arcClockwise = new List<bool>();

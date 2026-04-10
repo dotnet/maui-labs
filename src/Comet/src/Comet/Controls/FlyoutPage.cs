@@ -31,10 +31,10 @@ namespace Comet
 			get => _flyout;
 			set
 			{
-				if (_flyout != null)
+				if (_flyout is not null)
 					_flyout.Parent = null;
 				_flyout = value;
-				if (_flyout != null)
+				if (_flyout is not null)
 				{
 					_flyout.Parent = this;
 					_flyout.Navigation = Parent?.Navigation;
@@ -52,10 +52,10 @@ namespace Comet
 			get => _detail;
 			set
 			{
-				if (_detail != null)
+				if (_detail is not null)
 					_detail.Parent = null;
 				_detail = value;
-				if (_detail != null)
+				if (_detail is not null)
 				{
 					_detail.Parent = this;
 					_detail.Navigation = Parent?.Navigation;
@@ -109,9 +109,9 @@ namespace Comet
 		public IReadOnlyList<View> GetChildren()
 		{
 			var children = new List<View>();
-			if (_flyout != null)
+			if (_flyout is not null)
 				children.Add(_flyout);
-			if (_detail != null)
+			if (_detail is not null)
 				children.Add(_detail);
 			return children.AsReadOnly();
 		}
@@ -127,9 +127,9 @@ namespace Comet
 		protected override void OnParentChange(View parent)
 		{
 			base.OnParentChange(parent);
-			if (_flyout != null)
+			if (_flyout is not null)
 				_flyout.Parent = this;
-			if (_detail != null)
+			if (_detail is not null)
 				_detail.Parent = this;
 		}
 

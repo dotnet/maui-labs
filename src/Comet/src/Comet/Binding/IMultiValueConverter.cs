@@ -27,10 +27,10 @@ namespace Comet
 
 		public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
 		{
-			if (_convertBack == null)
+			if (_convertBack is null)
 				throw new NotSupportedException("ConvertBack is not supported for this converter");
 
-			if (value == null)
+			if (value is null)
 				return _convertBack(default);
 			if (value is TTarget targetValue)
 				return _convertBack(targetValue);

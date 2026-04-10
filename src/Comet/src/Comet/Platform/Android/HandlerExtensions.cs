@@ -17,7 +17,7 @@ public static partial class HandlerExtensions
 		{
 			var nativeView = handler.PlatformView as AView;
 			var view = handler.VirtualView as View;
-			if (nativeView == null)
+			if (nativeView is null)
 				return;
 			nativeView.LongClick += (s, e) =>
 			{
@@ -44,7 +44,7 @@ public static partial class HandlerExtensions
 		{
 			var nativeView = handler.PlatformView as AView;
 			var view = handler.VirtualView as View;
-			if (nativeView == null)
+			if (nativeView is null)
 				return;
 			nativeView.SetOnDragListener(new CometDragListener(dropGesture, view));
 			gesture.PlatformGesture = nativeView;
@@ -55,7 +55,7 @@ public static partial class HandlerExtensions
 		{
 			var nativeView = handler.PlatformView as AView;
 			var view = handler.VirtualView as View;
-			if (nativeView == null)
+			if (nativeView is null)
 				return;
 			nativeView.Hover += (s, e) =>
 			{
@@ -91,7 +91,7 @@ public static partial class HandlerExtensions
 
 		if (gesture is DragGesture)
 		{
-			if (nativeView != null)
+			if (nativeView is not null)
 				nativeView.LongClickable = false;
 			return;
 		}
@@ -115,10 +115,10 @@ public static partial class HandlerExtensions
 	public static CometTouchGestureListener GetGestureListener(this IViewHandler handler, bool createIfNull)
 	{
 		var v = handler.VirtualView as View;
-		if (v == null)
+		if (v is null)
 			return null;
 		var gl = v.GetEnvironment<ObjectWrapper<CometTouchGestureListener>>(nameof(CometTouchGestureListener), false)?.Object;
-		if (gl == null && createIfNull)
+		if (gl is null && createIfNull)
 			v.SetEnvironment(nameof(CometTouchGestureListener), new ObjectWrapper<CometTouchGestureListener> { Object = gl = new CometTouchGestureListener(handler.PlatformView as AView, v) }, false);
 		return gl;
 	}

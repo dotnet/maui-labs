@@ -17,10 +17,10 @@ namespace Comet
 		{
 			get
 			{
-				if (_registeredService == null)
+				if (_registeredService is null)
 				{
 					_registeredService = ServiceContainer.Resolve<ILogger>(true);
-					if (_registeredService == null)
+					if (_registeredService is null)
 					{
 						_registeredService = new ConsoleLogger();
 						_registeredService.Log(LogLevel.Warning, "No logging service was registered.  Falling back to console logging.");
@@ -64,7 +64,7 @@ namespace Comet
 
 		public static void Log(LogLevel LogLevel, params object[] parameters)
 		{
-			if (parameters == null || parameters.Length == 0)
+			if (parameters is null || parameters.Length == 0)
 				return;
 
 			if (parameters.Length == 1)
@@ -76,14 +76,14 @@ namespace Comet
 				}
 
 				var value = parameters[0];
-				if (value != null)
+				if (value is not null)
 				{
 					RegisteredService.Log(LogLevel, value.ToString());
 					return;
 				}
 			}
 
-			var format = parameters[0] != null ? parameters[0].ToString() : "";
+			var format = parameters[0] is not null ? parameters[0].ToString() : "";
 			var message = format;
 
 			try

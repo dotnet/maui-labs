@@ -16,7 +16,7 @@ namespace Comet
 
 		public static bool GoToState(View view, string stateName)
 		{
-			if (view == null || string.IsNullOrEmpty(stateName))
+			if (view is null || string.IsNullOrEmpty(stateName))
 				return false;
 
 			if (!_visualStateGroups.TryGetValue(view, out var groups))
@@ -25,7 +25,7 @@ namespace Comet
 			foreach (var group in groups)
 			{
 				var state = group.States.FirstOrDefault(s => s.Name == stateName);
-				if (state != null)
+				if (state is not null)
 				{
 					foreach (var setter in state.Setters)
 					{
@@ -40,7 +40,7 @@ namespace Comet
 
 		public static void SetVisualStateGroups(View view, List<VisualStateGroup> groups)
 		{
-			if (view == null)
+			if (view is null)
 				return;
 
 			_visualStateGroups.AddOrUpdate(view, groups);
@@ -48,7 +48,7 @@ namespace Comet
 
 		public static List<VisualStateGroup> GetVisualStateGroups(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return null;
 
 			_visualStateGroups.TryGetValue(view, out var groups);
@@ -57,7 +57,7 @@ namespace Comet
 
 		public static void ClearVisualStateGroups(View view)
 		{
-			if (view != null)
+			if (view is not null)
 				_visualStateGroups.Remove(view);
 		}
 	}

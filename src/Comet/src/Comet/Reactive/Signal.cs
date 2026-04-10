@@ -32,7 +32,7 @@ public sealed class Signal<T> : IReactiveSource, INotifyPropertyRead, IDisposabl
 	{
 		get
 		{
-			if (ReactiveScope.Current != null)
+			if (ReactiveScope.Current is not null)
 				ReactiveScope.Current.TrackRead(this);
 			else
 				PropertyRead?.Invoke(this, ValueChangedArgs);

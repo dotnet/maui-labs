@@ -26,7 +26,7 @@ namespace Comet
 		public CometShell(params ShellItem[] items)
 		{
 			_current = this;
-			if (items == null)
+			if (items is null)
 				return;
 
 			foreach (var item in items)
@@ -40,7 +40,7 @@ namespace Comet
 		/// </summary>
 		public static void SetSearchHandler(SearchHandler handler)
 		{
-			if (Current != null)
+			if (Current is not null)
 				Current.SearchHandler = handler;
 		}
 
@@ -65,7 +65,7 @@ namespace Comet
 			if (string.IsNullOrWhiteSpace(route))
 				throw new ArgumentException("Route cannot be null or empty.", nameof(route));
 
-			if (type == null)
+			if (type is null)
 				throw new ArgumentNullException(nameof(type));
 
 			if (!typeof(View).IsAssignableFrom(type))
@@ -116,7 +116,7 @@ namespace Comet
 
 		static string ResolveRoute(Type type)
 		{
-			if (type == null)
+			if (type is null)
 				throw new ArgumentNullException(nameof(type));
 
 			if (_typedRoutes.TryGetValue(type, out var route))
@@ -127,7 +127,7 @@ namespace Comet
 
 		public CometShell AddItem(ShellItem item)
 		{
-			if (item == null)
+			if (item is null)
 				return this;
 
 			Items.Add(item);
@@ -236,7 +236,7 @@ namespace Comet
 		static View CreateView(Type pageType, Dictionary<string, string> queryParams, object parameters)
 		{
 			var page = Activator.CreateInstance(pageType) as View;
-			if (page == null)
+			if (page is null)
 				throw new InvalidOperationException($"Failed to create instance of {pageType.Name}");
 
 			NavigationParameterHelper.Apply(page, parameters, queryParams);
@@ -246,7 +246,7 @@ namespace Comet
 		private async Task NavigateTo(View page)
 		{
 			// Use existing navigation infrastructure
-			if (Navigation != null)
+			if (Navigation is not null)
 			{
 				Navigation.Navigate(page);
 			}
@@ -261,7 +261,7 @@ namespace Comet
 
 		private async Task NavigateBack()
 		{
-			if (Navigation != null)
+			if (Navigation is not null)
 			{
 				Navigation.Pop();
 			}
@@ -294,7 +294,7 @@ namespace Comet
 		{
 			Title = title;
 			Route = route;
-			if (sections == null)
+			if (sections is null)
 				return;
 
 			foreach (var section in sections)
@@ -322,7 +322,7 @@ namespace Comet
 
 		public ShellItem AddSection(ShellSection section)
 		{
-			if (section != null)
+			if (section is not null)
 				Items.Add(section);
 			return this;
 		}
@@ -350,7 +350,7 @@ namespace Comet
 		{
 			Title = title;
 			Route = route;
-			if (content == null)
+			if (content is null)
 				return;
 
 			foreach (var item in content)
@@ -378,7 +378,7 @@ namespace Comet
 
 		public ShellSection AddContent(ShellContent content)
 		{
-			if (content != null)
+			if (content is not null)
 				Items.Add(content);
 			return this;
 		}
@@ -487,7 +487,7 @@ namespace Comet
 	{
 		static CometShell GetCurrentShell()
 		{
-			if (CometShell.Current != null)
+			if (CometShell.Current is not null)
 				return CometShell.Current;
 
 			throw new InvalidOperationException("No Shell instance is currently active. Ensure a CometShell is set as Current.");

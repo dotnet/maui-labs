@@ -10,7 +10,7 @@ namespace Comet.Internal
 		{
 			if (index >= 0 && index < (list?.Count ?? 0))
 				return list[index];
-			if (getItem != null)
+			if (getItem is not null)
 				return getItem(index);
 			return default;
 

@@ -34,7 +34,7 @@ namespace Comet.iOS
 			get => _containerView?.CurrentView as View ?? _startingCurrentView;
 			set
 			{
-				if (_containerView != null)
+				if (_containerView is not null)
 					_containerView.CurrentView = value;
 				else
 					_startingCurrentView = value;
@@ -43,7 +43,7 @@ namespace Comet.iOS
 
 				// Re-apply nav bar style when the view updates (e.g. on theme change
 				// re-render) so chrome colors stay in sync.
-				if (IsViewLoaded && NavigationController != null)
+				if (IsViewLoaded && NavigationController is not null)
 					ApplyStyle();
 			}
 		}
@@ -79,19 +79,19 @@ namespace Comet.iOS
 		/// </summary>
 		static Paint GetEffectiveBackground(View view)
 		{
-			if (view == null) return null;
+			if (view is null) return null;
 
 			var bg = view.GetBackground();
-			if (bg != null) return bg;
+			if (bg is not null) return bg;
 
 			// Walk into the rendered body view tree
-			if (view.Body != null)
+			if (view.Body is not null)
 			{
 				var bodyView = view.GetView() as View;
-				if (bodyView != null)
+				if (bodyView is not null)
 				{
 					bg = bodyView.GetBackground();
-					if (bg != null) return bg;
+					if (bg is not null) return bg;
 				}
 			}
 
@@ -106,14 +106,14 @@ namespace Comet.iOS
 			// Set the UIWindow background to match the content so safe area
 			// edges (status bar, home indicator) show the correct color instead of
 			// black/white letterboxing.
-			if (View?.Window != null)
+			if (View?.Window is not null)
 			{
 				UIKit.UIColor bgColor = null;
 				var bg = GetEffectiveBackground(CurrentView);
-				if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
+				if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color is not null)
 					bgColor = solid.Color.ToPlatform();
 				bgColor ??= _containerView?.BackgroundColor;
-				if (bgColor != null)
+				if (bgColor is not null)
 					View.Window.BackgroundColor = bgColor;
 			}
 		}
@@ -126,10 +126,10 @@ namespace Comet.iOS
 
 			// Propagate background color to the container view so it extends
 			// into safe area insets (prevents white/black letterboxing).
-			if (view != null && _containerView != null)
+			if (view is not null && _containerView is not null)
 			{
 				var bg = GetEffectiveBackground(view);
-				if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
+				if (bg is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color is not null)
 				{
 					_containerView.BackgroundColor = solid.Color.ToPlatform();
 				}
@@ -147,16 +147,16 @@ namespace Comet.iOS
 		void ApplyToolbarItemsFromView()
 		{
 			var view = CurrentView;
-			if (view == null) return;
+			if (view is null) return;
 
 			// Check the view (Component) and its built view for toolbar items
 			var items = view.GetToolbarItems();
 
 			// Fall back to the NavigationView's toolbar items
-			if (items.Count == 0 && NavigationViewRef != null)
+			if (items.Count == 0 && NavigationViewRef is not null)
 				items = NavigationViewRef.ToolbarItems;
 
-			if (items == null || items.Count == 0) return;
+			if (items is null || items.Count == 0) return;
 
 			var rightItems = new System.Collections.Generic.List<UIBarButtonItem>();
 			foreach (var item in items)
@@ -169,7 +169,7 @@ namespace Comet.iOS
 				if (!string.IsNullOrEmpty(item.IconGlyph) && !string.IsNullOrEmpty(item.IconFontFamily))
 				{
 					var image = Handlers.NavigationViewHandler.CreateFontIconImage(item.IconGlyph, item.IconFontFamily, 24);
-					if (image != null)
+					if (image is not null)
 					{
 						barItem = new UIBarButtonItem(
 							image.ImageWithRenderingMode(UIImageRenderingMode.AlwaysTemplate),
@@ -188,7 +188,7 @@ namespace Comet.iOS
 				else if (!string.IsNullOrEmpty(item.IconGlyph))
 				{
 					var sfImage = UIImage.GetSystemImage(item.IconGlyph);
-					if (sfImage != null)
+					if (sfImage is not null)
 					{
 						barItem = new UIBarButtonItem(
 							sfImage,
@@ -230,7 +230,7 @@ namespace Comet.iOS
 
 		public void ApplyStyle()
 		{
-			if (NavigationController == null)
+			if (NavigationController is null)
 				return;
 
 			var navBar = NavigationController.NavigationBar;
@@ -244,10 +244,10 @@ namespace Comet.iOS
 			appearance.ConfigureWithDefaultBackground();
 			appearance.ShadowColor = UIColor.Clear;
 
-			if (barColor != null)
+			if (barColor is not null)
 				appearance.BackgroundColor = barColor;
 
-			if (textColor != null)
+			if (textColor is not null)
 			{
 				appearance.LargeTitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
 				appearance.TitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
@@ -263,7 +263,7 @@ namespace Comet.iOS
 			var edgeAppearance = new UINavigationBarAppearance();
 			edgeAppearance.ConfigureWithTransparentBackground();
 			edgeAppearance.ShadowColor = UIColor.Clear;
-			if (textColor != null)
+			if (textColor is not null)
 			{
 				edgeAppearance.LargeTitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };
 				edgeAppearance.TitleTextAttributes = new UIStringAttributes { ForegroundColor = textColor };

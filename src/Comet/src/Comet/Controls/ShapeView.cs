@@ -38,7 +38,7 @@ namespace Comet
 
 			// Apply dash pattern if set on the shape
 			var dashPattern = shape.GetEnvironment<float[]>(this, "StrokeDashPattern");
-			if (dashPattern != null && dashPattern.Length > 0)
+			if (dashPattern is not null && dashPattern.Length > 0)
 				canvas.StrokeDashPattern = dashPattern;
 
 			canvas.DrawShape(shape, dirtyRect, drawingStyle, strokeWidth, strokeColor, fill);

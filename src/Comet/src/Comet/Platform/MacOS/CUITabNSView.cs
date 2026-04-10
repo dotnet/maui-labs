@@ -38,7 +38,7 @@ namespace Comet.MacOS
 			_tabView = tabView;
 			_tabs.Clear();
 
-			if (tabView == null)
+			if (tabView is null)
 				return;
 
 			foreach (var tab in tabView)
@@ -65,7 +65,7 @@ namespace Comet.MacOS
 
 		void SelectTab(int index)
 		{
-			if (index < 0 || index >= _tabs.Count || Context == null)
+			if (index < 0 || index >= _tabs.Count || Context is null)
 				return;
 
 			_tabBar.SelectedSegment = index;
@@ -95,7 +95,7 @@ namespace Comet.MacOS
 			var contentTop = padding + tabBarHeight + padding;
 			_contentArea.Frame = new CGRect(0, contentTop, bounds.Width, bounds.Height - contentTop);
 
-			if (_currentPageView != null)
+			if (_currentPageView is not null)
 			{
 				_currentPageView.Frame = _contentArea.Bounds;
 				var tabIndex = (int)_tabBar.SelectedSegment;

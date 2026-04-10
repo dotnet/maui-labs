@@ -8,7 +8,7 @@ namespace Comet
 		IReadOnlyList<IVisualTreeElement> IVisualTreeElement.GetVisualChildren()
 		{
 			var children = GetChildren();
-			if (children == null || children.Count == 0)
+			if (children is null || children.Count == 0)
 				return Array.Empty<IVisualTreeElement>();
 
 			var visualChildren = new List<IVisualTreeElement>(children.Count);

@@ -29,11 +29,11 @@ namespace Comet
 		public static TabView TabView(View first, params View[] rest)
 		{
 			var tv = new TabView();
-			if (first != null)
+			if (first is not null)
 				tv.Add(first);
 			foreach (var child in rest)
 			{
-				if (child != null)
+				if (child is not null)
 					tv.Add(child);
 			}
 			return tv;
@@ -47,7 +47,7 @@ namespace Comet
 		public static ContentView ContentView(View content)
 		{
 			var cv = new ContentView();
-			if (content != null)
+			if (content is not null)
 				cv.Add(content);
 			return cv;
 		}

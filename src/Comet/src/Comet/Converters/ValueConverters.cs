@@ -26,7 +26,7 @@ namespace Comet.Converters
 		/// </summary>
 		public static bool IsEmpty<T>(IEnumerable<T> items)
 		{
-			if (items == null) return true;
+			if (items is null) return true;
 			foreach (var _ in items)
 				return false;
 			return true;

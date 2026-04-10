@@ -24,7 +24,7 @@ internal sealed class SubscriberList
 	{
 		lock (_lock)
 		{
-			if (_items == null)
+			if (_items is null)
 				return;
 
 			for (var i = 0; i < _count; i++)
@@ -46,7 +46,7 @@ internal sealed class SubscriberList
 
 		lock (_lock)
 		{
-			if (_items == null || _count == 0)
+			if (_items is null || _count == 0)
 				return;
 
 			snapshot = ArrayPool<IReactiveSubscriber>.Shared.Rent(_count);
@@ -69,7 +69,7 @@ internal sealed class SubscriberList
 		}
 		finally
 		{
-			if (snapshot != null)
+			if (snapshot is not null)
 				ArrayPool<IReactiveSubscriber>.Shared.Return(snapshot, clearArray: true);
 		}
 	}

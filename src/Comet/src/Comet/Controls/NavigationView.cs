@@ -29,12 +29,12 @@ namespace Comet
 			view.Navigation = this;
 			view.UpdateNavigation();
 
-			if (PerformNavigate == null && Navigation != null)
+			if (PerformNavigate is null && Navigation is not null)
 				Navigation.Navigate(view);
 			else
 			{
 				_views.Add(view);
-				if (PerformNavigate != null)
+				if (PerformNavigate is not null)
 					PerformNavigate(view);
 				else
 					((IStackNavigationView)this).RequestNavigation(new NavigationRequest(_views, true));
@@ -79,13 +79,13 @@ namespace Comet
 
 		protected override void OnHandlerChange()
 		{
-			if (_views.Count == 0 && Content != null)
+			if (_views.Count == 0 && Content is not null)
 				_views.Add(Content);
 
 			// When the handler is transferred from another NavigationView (during diff),
 			// the platform navigation controller may have a stale stack.
 			// Reset the root content to match the current Content.
-			if (PerformContentReset != null && Content != null)
+			if (PerformContentReset is not null && Content is not null)
 				PerformContentReset(Content);
 			else
 				((IStackNavigationView)this).RequestNavigation(new NavigationRequest(_views, false));
@@ -95,11 +95,11 @@ namespace Comet
 
 		public void Pop()
 		{
-			if (PerformPop == null && Navigation != null)
+			if (PerformPop is null && Navigation is not null)
 				Navigation.Pop();
 			else
 			{
-				if (PerformPop != null)
+				if (PerformPop is not null)
 					PerformPop();
 				else
 				{
@@ -115,7 +115,7 @@ namespace Comet
 		public override void Add(View view)
 		{
 			base.Add(view);
-			if (view != null)
+			if (view is not null)
 			{
 				view.Navigation = this;
 				view.Parent = this;
@@ -128,7 +128,7 @@ namespace Comet
 			{
 				ModalView.Present(modal.Content);
 			}
-			else if (fromView.Navigation != null)
+			else if (fromView.Navigation is not null)
 			{
 				fromView.Navigation.Navigate(view);
 			}
@@ -163,7 +163,7 @@ namespace Comet
 				_views.Clear();
 				_views.Add(root);
 			}
-			if (PerformContentReset != null && Content != null)
+			if (PerformContentReset is not null && Content is not null)
 				PerformContentReset(Content);
 		}
 
@@ -176,7 +176,7 @@ namespace Comet
 
 		static View FindParentNavigationView(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return null;
 
 			if (view.Parent is NavigationView || view.Parent is ModalView)

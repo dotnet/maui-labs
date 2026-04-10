@@ -35,17 +35,17 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 
 	void UpdateCometView()
 	{
-		if (VirtualView?.CometView == null || MauiContext == null)
+		if (VirtualView?.CometView is null || MauiContext is null)
 			return;
 
 		try
 		{
 			var cometView = VirtualView.CometView;
 			var renderView = cometView.GetView();
-			IView viewToRender = (renderView != null && renderView != cometView) ? renderView : cometView;
+			IView viewToRender = (renderView is not null && renderView != cometView) ? renderView : cometView;
 
 			var platformView = viewToRender.ToMacOSPlatform(MauiContext);
-			if (platformView != null)
+			if (platformView is not null)
 				PlatformView.SetContent(platformView, viewToRender);
 		}
 		catch (Exception ex)
@@ -69,7 +69,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			_contentView?.RemoveFromSuperview();
 			_contentView = platformView;
 			_virtualView = virtualView;
-			if (_contentView != null)
+			if (_contentView is not null)
 			{
 				_contentView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 				AddSubview(_contentView);
@@ -87,7 +87,7 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 		public override void Layout()
 		{
 			base.Layout();
-			if (_contentView == null || Bounds.Width <= 0 || Bounds.Height <= 0)
+			if (_contentView is null || Bounds.Width <= 0 || Bounds.Height <= 0)
 				return;
 
 			_virtualView?.Measure(Bounds.Width, Bounds.Height);

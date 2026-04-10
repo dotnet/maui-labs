@@ -33,7 +33,7 @@ namespace Comet
 
 		public FlyoutNavigationView(Func<IReadOnlyList<T>> items, Func<int> currentIndex = null, Func<double> flyoutWidth = null)
 		{
-			CurrentIndex = currentIndex != null ? PropertySubscription<int>.FromFunc(currentIndex) : null;
+			CurrentIndex = currentIndex is not null ? PropertySubscription<int>.FromFunc(currentIndex) : null;
 			Items = PropertySubscription<IReadOnlyList<T>>.FromFunc(items);
 			Setup();
 		}

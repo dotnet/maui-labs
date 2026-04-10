@@ -38,12 +38,12 @@ namespace Comet
 
 		internal object GetOrCreateNativeView(IMauiContext mauiContext)
 		{
-			if (nativeView != null)
+			if (nativeView is not null)
 				return nativeView;
 
 			lock (syncLock)
 			{
-				if (nativeView == null)
+				if (nativeView is null)
 					nativeView = factory(mauiContext) ?? throw new InvalidOperationException("NativeHost factory returned null.");
 			}
 
@@ -78,7 +78,7 @@ namespace Comet
 
 		internal bool TryMeasureOverride(Size availableSize, out Size size)
 		{
-			if (measureOverride != null)
+			if (measureOverride is not null)
 			{
 				size = measureOverride(availableSize);
 				return true;
@@ -90,7 +90,7 @@ namespace Comet
 
 		public NativeHost OnConnect(Action<object, IMauiContext> action)
 		{
-			if (action == null)
+			if (action is null)
 				throw new ArgumentNullException(nameof(action));
 
 			connectActions.Add(action);
@@ -99,7 +99,7 @@ namespace Comet
 
 		public NativeHost OnUpdate(Action<object, IMauiContext> action)
 		{
-			if (action == null)
+			if (action is null)
 				throw new ArgumentNullException(nameof(action));
 
 			updateActions.Add(action);
@@ -109,7 +109,7 @@ namespace Comet
 
 		public NativeHost OnDisconnect(Action<object> action)
 		{
-			if (action == null)
+			if (action is null)
 				throw new ArgumentNullException(nameof(action));
 
 			disconnectActions.Add(action);
@@ -118,7 +118,7 @@ namespace Comet
 
 		public NativeHost Sync<T>(T value, Action<object, T> apply)
 		{
-			if (apply == null)
+			if (apply is null)
 				throw new ArgumentNullException(nameof(apply));
 
 			return OnUpdate((native, _) => apply(native, value));
@@ -196,7 +196,7 @@ namespace Comet
 			measured.Width += margins.HorizontalThickness;
 			measured.Height += margins.VerticalThickness;
 			MeasuredSize = measured;
-			MeasurementValid = ViewHandler != null;
+			MeasurementValid = ViewHandler is not null;
 			return MeasuredSize;
 		}
 	}

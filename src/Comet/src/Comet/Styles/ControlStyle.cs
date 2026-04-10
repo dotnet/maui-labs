@@ -50,7 +50,7 @@ namespace Comet.Styles
 			var controlType = typeof(T);
 			foreach (var kvp in _properties)
 			{
-				if (target != null)
+				if (target is not null)
 					target.SetEnvironment(controlType, kvp.Key, kvp.Value);
 				else
 					View.SetGlobalEnvironment(controlType, kvp.Key, kvp.Value);

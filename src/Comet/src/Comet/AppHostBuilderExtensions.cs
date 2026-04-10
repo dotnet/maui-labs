@@ -147,24 +147,24 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var shadow = cometView.GetEnvironment<Comet.Graphics.Shadow>(EnvironmentKeys.View.Shadow);
-				if (shadow == null)
+				if (shadow is null)
 					return;
 #if __IOS__ || MACCATALYST
 				var platformView = handler.PlatformView as UIKit.UIView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 				var layer = platformView.Layer;
 				layer.ShadowOpacity = shadow.Opacity;
 				layer.ShadowRadius = shadow.Radius;
 				layer.ShadowOffset = new CoreGraphics.CGSize(shadow.Offset.X, shadow.Offset.Y);
-				if (shadow.Paint is SolidPaint sp && sp.Color != null)
+				if (shadow.Paint is SolidPaint sp && sp.Color is not null)
 					layer.ShadowColor = sp.Color.ToPlatform().CGColor;
 				else
 					layer.ShadowColor = UIKit.UIColor.Black.CGColor;
 				layer.MasksToBounds = false;
 #elif ANDROID
 				var platformView = handler.PlatformView as global::Android.Views.View;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 				var density = platformView.Context?.Resources?.DisplayMetrics?.Density ?? 1;
 				platformView.Elevation = shadow.Radius * density;
@@ -178,7 +178,7 @@ namespace Comet
 					return;
 				var borderStroke = (IBorderStroke)border;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				var layer = platformView.Layer;
@@ -186,12 +186,12 @@ namespace Comet
 				{
 					layer.CornerRadius = rr.CornerRadius;
 				}
-				else if (borderStroke.Shape != null)
+				else if (borderStroke.Shape is not null)
 				{
 					layer.CornerRadius = 0;
 				}
 				layer.MasksToBounds = true;
-				if (borderStroke.Stroke is SolidPaint sp && sp.Color != null)
+				if (borderStroke.Stroke is SolidPaint sp && sp.Color is not null)
 				{
 					layer.BorderColor = sp.Color.ToPlatform().CGColor;
 					layer.BorderWidth = (float)borderStroke.StrokeThickness;
@@ -201,21 +201,21 @@ namespace Comet
 					layer.BorderWidth = 0;
 				}
 				var bg = border.GetBackground();
-				if (bg is SolidPaint bgPaint && bgPaint.Color != null)
+				if (bg is SolidPaint bgPaint && bgPaint.Color is not null)
 				{
 					layer.BackgroundColor = bgPaint.Color.ToPlatform().CGColor;
 				}
 #elif ANDROID
 				var context = platformView.Context;
-				if (context != null)
+				if (context is not null)
 				{
 					var drawable = new global::Android.Graphics.Drawables.GradientDrawable();
 					if (borderStroke.Shape is RoundedRectangle rr)
 						drawable.SetCornerRadius((float)(rr.CornerRadius * context.Resources.DisplayMetrics.Density));
-					if (borderStroke.Stroke is SolidPaint sp && sp.Color != null)
+					if (borderStroke.Stroke is SolidPaint sp && sp.Color is not null)
 						drawable.SetStroke((int)(borderStroke.StrokeThickness * context.Resources.DisplayMetrics.Density), sp.Color.ToPlatform());
 					var bg = border.GetBackground();
-					if (bg is SolidPaint bgPaint && bgPaint.Color != null)
+					if (bg is SolidPaint bgPaint && bgPaint.Color is not null)
 						drawable.SetColor(bgPaint.Color.ToPlatform());
 					platformView.Background = drawable;
 				}
@@ -228,10 +228,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var color = cometView.GetEnvironment<Color>(EnvironmentKeys.Entry.PlaceholderColor);
-				if (color == null)
+				if (color is null)
 					return;
 				var entry = handler.PlatformView;
-				if (entry == null)
+				if (entry is null)
 					return;
 #if __IOS__ || MACCATALYST
 				entry.AttributedPlaceholder = new Foundation.NSAttributedString(
@@ -250,10 +250,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var keyboard = cometView.GetEnvironment<Microsoft.Maui.Keyboard>(EnvironmentKeys.Entry.Keyboard);
-				if (keyboard == null)
+				if (keyboard is null)
 					return;
 				var entry = handler.PlatformView;
-				if (entry == null)
+				if (entry is null)
 					return;
 #if __IOS__ || MACCATALYST
 				entry.ApplyKeyboard(keyboard);
@@ -270,10 +270,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var returnType = cometView.GetEnvironment<ReturnType?>(EnvironmentKeys.Entry.ReturnType);
-				if (returnType == null)
+				if (returnType is null)
 					return;
 				var entry = handler.PlatformView;
-				if (entry == null)
+				if (entry is null)
 					return;
 #if __IOS__ || MACCATALYST
 				entry.ReturnKeyType = returnType.Value switch
@@ -294,23 +294,23 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				var onColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Switch.OnColor);
-				if (onColor != null)
+				if (onColor is not null)
 					platformView.OnTintColor = onColor.ToPlatform();
 				var thumbColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Switch.ThumbColor);
-				if (thumbColor != null)
+				if (thumbColor is not null)
 					platformView.ThumbTintColor = thumbColor.ToPlatform();
 #elif ANDROID
 				var onColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Switch.OnColor);
-				if (onColor != null)
+				if (onColor is not null)
 					platformView.TrackTintList = new global::Android.Content.Res.ColorStateList(
 						new[] { new[] { global::Android.Resource.Attribute.StateChecked } },
 						new[] { (int)onColor.ToPlatform() });
 				var thumbColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Switch.ThumbColor);
-				if (thumbColor != null)
+				if (thumbColor is not null)
 					platformView.ThumbTintList = new global::Android.Content.Res.ColorStateList(
 						new[] { Array.Empty<int>() },
 						new[] { (int)thumbColor.ToPlatform() });
@@ -323,25 +323,25 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				var minTrackColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Slider.ProgressColor);
-				if (minTrackColor != null)
+				if (minTrackColor is not null)
 					platformView.MinimumTrackTintColor = minTrackColor.ToPlatform();
 				var maxTrackColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Slider.TrackColor);
-				if (maxTrackColor != null)
+				if (maxTrackColor is not null)
 					platformView.MaximumTrackTintColor = maxTrackColor.ToPlatform();
 				var thumbColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Slider.ThumbColor);
-				if (thumbColor != null)
+				if (thumbColor is not null)
 					platformView.ThumbTintColor = thumbColor.ToPlatform();
 #elif ANDROID
 				var minTrackColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Slider.ProgressColor);
-				if (minTrackColor != null && platformView.ProgressTintList != null)
+				if (minTrackColor is not null && platformView.ProgressTintList is not null)
 					platformView.ProgressTintList = global::Android.Content.Res.ColorStateList.ValueOf(
 						new global::Android.Graphics.Color((int)minTrackColor.ToPlatform()));
 				var thumbColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Slider.ThumbColor);
-				if (thumbColor != null)
+				if (thumbColor is not null)
 					platformView.ThumbTintList = global::Android.Content.Res.ColorStateList.ValueOf(
 						new global::Android.Graphics.Color((int)thumbColor.ToPlatform()));
 #endif
@@ -353,10 +353,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<double>>(EnvironmentKeys.Slider.ValueChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var slider = handler.PlatformView;
-				if (slider == null)
+				if (slider is null)
 					return;
 #if __IOS__ || MACCATALYST
 				if (_sliderValueChangedHandlers.TryGetValue(slider, out var oldHandler))
@@ -406,10 +406,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<bool>>(EnvironmentKeys.Switch.Toggled);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				if (_switchValueChangedHandlers.TryGetValue(platformView, out var oldSwitchHandler))
@@ -445,10 +445,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<bool>>(EnvironmentKeys.CheckBox.IsCheckedChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				if (_checkBoxCheckedHandlers.TryGetValue(platformView, out var oldCheckHandler))
@@ -484,10 +484,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<double>>(EnvironmentKeys.Stepper.ValueChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				platformView.ValueChanged += (s, e) =>
@@ -507,10 +507,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<int>>(EnvironmentKeys.Picker.SelectedIndexChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var picker = handler.PlatformView;
-				if (picker == null)
+				if (picker is null)
 					return;
 #if __IOS__ || MACCATALYST
 				// Remove previous subscription to prevent duplicates on re-map
@@ -555,10 +555,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var aspect = cometView.GetEnvironment<Microsoft.Maui.Aspect?>(EnvironmentKeys.Image.Aspect);
-				if (aspect == null)
+				if (aspect is null)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				platformView.ContentMode = aspect.Value switch
@@ -585,10 +585,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var color = cometView.GetEnvironment<Color>(EnvironmentKeys.Entry.PlaceholderColor);
-				if (color == null)
+				if (color is null)
 					return;
 				var editor = handler.PlatformView;
-				if (editor == null)
+				if (editor is null)
 					return;
 #if __IOS__ || MACCATALYST
 				// iOS UITextView doesn't have a built-in placeholder; MAUI handles it
@@ -605,10 +605,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var keyboard = cometView.GetEnvironment<Microsoft.Maui.Keyboard>(EnvironmentKeys.Entry.Keyboard);
-				if (keyboard == null)
+				if (keyboard is null)
 					return;
 				var editor = handler.PlatformView;
-				if (editor == null)
+				if (editor is null)
 					return;
 #if __IOS__ || MACCATALYST
 				editor.ApplyKeyboard(keyboard);
@@ -624,22 +624,22 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				var progressColor = cometView.GetEnvironment<Color>(EnvironmentKeys.ProgressBar.ProgressColor);
-				if (progressColor != null)
+				if (progressColor is not null)
 					platformView.ProgressTintColor = progressColor.ToPlatform();
 				var trackColor = cometView.GetEnvironment<Color>(EnvironmentKeys.ProgressBar.TrackColor);
-				if (trackColor != null)
+				if (trackColor is not null)
 					platformView.TrackTintColor = trackColor.ToPlatform();
 #elif ANDROID
 				var progressColor = cometView.GetEnvironment<Color>(EnvironmentKeys.ProgressBar.ProgressColor);
-				if (progressColor != null)
+				if (progressColor is not null)
 					platformView.ProgressTintList = global::Android.Content.Res.ColorStateList.ValueOf(
 						new global::Android.Graphics.Color((int)progressColor.ToPlatform()));
 				var trackColor = cometView.GetEnvironment<Color>(EnvironmentKeys.ProgressBar.TrackColor);
-				if (trackColor != null)
+				if (trackColor is not null)
 					platformView.ProgressBackgroundTintList = global::Android.Content.Res.ColorStateList.ValueOf(
 						new global::Android.Graphics.Color((int)trackColor.ToPlatform()));
 #endif
@@ -666,10 +666,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var color = cometView.GetEnvironment<Color>(EnvironmentKeys.DatePicker.TextColor);
-				if (color == null)
+				if (color is null)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				// UIDatePicker uses tintColor for text color on iOS 15+
@@ -685,38 +685,38 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var platformView = handler.PlatformView;
-				if (platformView == null)
+				if (platformView is null)
 					return;
 #if __IOS__ || MACCATALYST
 				var cornerRadius = cometView.GetEnvironment<int?>(EnvironmentKeys.Button.CornerRadius);
-				if (cornerRadius != null)
+				if (cornerRadius is not null)
 					platformView.Layer.CornerRadius = cornerRadius.Value;
 				var borderWidth = cometView.GetEnvironment<double?>(EnvironmentKeys.Button.BorderWidth);
-				if (borderWidth != null)
+				if (borderWidth is not null)
 					platformView.Layer.BorderWidth = (float)borderWidth.Value;
 				var borderColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Button.BorderColor);
-				if (borderColor != null)
+				if (borderColor is not null)
 					platformView.Layer.BorderColor = borderColor.ToPlatform().CGColor;
-				if (cornerRadius != null || borderWidth != null)
+				if (cornerRadius is not null || borderWidth is not null)
 					platformView.ClipsToBounds = true;
 #elif ANDROID
 				var cornerRadius = cometView.GetEnvironment<int?>(EnvironmentKeys.Button.CornerRadius);
 				var borderWidth = cometView.GetEnvironment<double?>(EnvironmentKeys.Button.BorderWidth);
 				var borderColor = cometView.GetEnvironment<Color>(EnvironmentKeys.Button.BorderColor);
-				if (cornerRadius != null || borderWidth != null || borderColor != null)
+				if (cornerRadius is not null || borderWidth is not null || borderColor is not null)
 				{
 					var context = platformView.Context;
-					if (context != null)
+					if (context is not null)
 					{
 						var drawable = new global::Android.Graphics.Drawables.GradientDrawable();
-						if (cornerRadius != null)
+						if (cornerRadius is not null)
 							drawable.SetCornerRadius((float)(cornerRadius.Value * context.Resources.DisplayMetrics.Density));
-						if (borderWidth != null && borderColor != null)
+						if (borderWidth is not null && borderColor is not null)
 							drawable.SetStroke((int)(borderWidth.Value * context.Resources.DisplayMetrics.Density), borderColor.ToPlatform());
-						else if (borderWidth != null)
+						else if (borderWidth is not null)
 							drawable.SetStroke((int)(borderWidth.Value * context.Resources.DisplayMetrics.Density), global::Android.Graphics.Color.Transparent);
 						var bg = cometView.GetBackground();
-						if (bg is SolidPaint bgPaint && bgPaint.Color != null)
+						if (bg is SolidPaint bgPaint && bgPaint.Color is not null)
 							drawable.SetColor(bgPaint.Color.ToPlatform());
 						platformView.Background = drawable;
 					}
@@ -730,10 +730,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<string>>(EnvironmentKeys.Entry.TextChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var entry = handler.PlatformView;
-				if (entry == null)
+				if (entry is null)
 					return;
 #if __IOS__ || MACCATALYST
 				// Remove previous subscription to prevent duplicates on re-map
@@ -771,10 +771,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<string>>(EnvironmentKeys.Entry.TextChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var editor = handler.PlatformView;
-				if (editor == null)
+				if (editor is null)
 					return;
 #if __IOS__ || MACCATALYST
 				// Remove previous subscription to prevent duplicates on re-map
@@ -809,10 +809,10 @@ namespace Comet
 				if (view is not View cometView)
 					return;
 				var callback = cometView.GetEnvironment<Action<string>>(EnvironmentKeys.Entry.TextChanged);
-				if (callback == null)
+				if (callback is null)
 					return;
 				var searchBar = handler.PlatformView;
-				if (searchBar == null)
+				if (searchBar is null)
 					return;
 #if __IOS__ || MACCATALYST
 				if (_searchBarTextChangedHandlers.TryGetValue(searchBar, out var oldHandler))
@@ -1095,7 +1095,7 @@ namespace Comet
 
 		static void ApplyInspectionMetadata(IViewHandler handler, View view)
 		{
-			if (handler?.PlatformView == null || view == null)
+			if (handler?.PlatformView is null || view is null)
 				return;
 
 			var automationId = view.AutomationId;
@@ -1197,7 +1197,7 @@ namespace Comet
 					Label = ((IText)button).Text,
 				});
 
-				if (resolved == null || resolved == ViewModifier.Empty)
+				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
 				ApplyModifierAsTypeScopedDefaults(button, typeof(Button), resolved);
@@ -1216,7 +1216,7 @@ namespace Comet
 					IsEnabled = toggle.GetEnvironment<bool?>(nameof(IView.IsEnabled)) ?? true,
 				});
 
-				if (resolved == null || resolved == ViewModifier.Empty)
+				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
 				ApplyModifierAsTypeScopedDefaults(toggle, typeof(Toggle), resolved);
@@ -1235,7 +1235,7 @@ namespace Comet
 					Placeholder = ((IPlaceholder)textField).Placeholder,
 				});
 
-				if (resolved == null || resolved == ViewModifier.Empty)
+				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
 				ApplyModifierAsTypeScopedDefaults(textField, typeof(TextField), resolved);
@@ -1256,7 +1256,7 @@ namespace Comet
 					IsEnabled = slider.GetEnvironment<bool?>(nameof(IView.IsEnabled)) ?? true,
 				});
 
-				if (resolved == null || resolved == ViewModifier.Empty)
+				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
 				ApplyModifierAsTypeScopedDefaults(slider, typeof(Slider), resolved);
@@ -1285,7 +1285,7 @@ namespace Comet
 			// the modifier, detect new keys, move new values to global type-scoped,
 			// and revert changes on the view's context.
 			var contextBefore = new Dictionary<string, object>();
-			if (realView._context != null)
+			if (realView._context is not null)
 			{
 				foreach (var kvp in realView._context.dictionary)
 					contextBefore[kvp.Key] = kvp.Value;
@@ -1309,7 +1309,7 @@ namespace Comet
 				{
 					var key = entry.Key.property;
 					var newValue = entry.Value.newValue;
-					if (newValue != null)
+					if (newValue is not null)
 					{
 						View.SetGlobalEnvironment(controlType, key, newValue);
 					}

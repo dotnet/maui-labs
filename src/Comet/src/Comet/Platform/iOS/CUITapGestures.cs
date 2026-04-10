@@ -184,7 +184,7 @@ namespace Comet.iOS
 
 			// Try to load string data from the first drag item before invoking callbacks
 			var items = session.Items;
-			if (items != null && items.Length > 0)
+			if (items is not null && items.Length > 0)
 			{
 				items[0].ItemProvider.LoadObject(new ObjCRuntime.Class(typeof(NSString)), (data, error) =>
 				{

@@ -20,7 +20,7 @@ namespace Comet.Android.Controls
 			var view = ListView?.ViewFor(0, position);
 			var cell = view?.ToPlatform(MauiContext);
 
-			if (holder is CometRecyclerViewHolder rvh && cell != null)
+			if (holder is CometRecyclerViewHolder rvh && cell is not null)
 			{
 				Logger.Debug($"OnBindViewHolder");
 
@@ -71,7 +71,7 @@ namespace Comet.Android.Controls
 			for (int i = 0; i < parent.ChildCount; i++)
 			{
 				var child = parent.GetChildAt(i);
-				if (child != null)
+				if (child is not null)
 				{
 					child.Clickable = false;
 					child.Focusable = false;

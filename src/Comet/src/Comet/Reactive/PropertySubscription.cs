@@ -64,10 +64,10 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	public T CurrentValue => _currentValue;
 
 	/// <summary>Whether this is a static (non-reactive) subscription.</summary>
-	public bool IsStatic => _compute == null;
+	public bool IsStatic => _compute is null;
 
 	/// <summary>Whether this wraps a <see cref="Signal{T}"/> for bidirectional binding.</summary>
-	public bool IsBidirectional => WriteBack != null;
+	public bool IsBidirectional => WriteBack is not null;
 
 	/// <summary>
 	/// Sets the current value directly and writes back to the source Signal if bidirectional.
@@ -78,7 +78,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	public void Set(T value)
 	{
 		_currentValue = value;
-		if (WriteBack != null)
+		if (WriteBack is not null)
 		{
 			ReactiveScheduler.SuppressNotifications = true;
 			try
@@ -103,7 +103,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 		if (!_comparer.Equals(old, _currentValue))
 		{
 			PropertyChangedCallback?.Invoke(_currentValue);
-			if (_viewRef?.TryGetTarget(out var view) == true && _propertyName != null)
+			if (_viewRef?.TryGetTarget(out var view) == true && _propertyName is not null)
 				view.ViewPropertyChanged(_propertyName, _currentValue);
 		}
 	}
@@ -133,7 +133,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	/// </summary>
 	public PropertySubscription(Signal<T> signal, EqualityComparer<T>? comparer = null)
 	{
-		if (signal == null) throw new ArgumentNullException(nameof(signal));
+		if (signal is null) throw new ArgumentNullException(nameof(signal));
 		_compute = () => signal.Value;
 		WriteBack = v => signal.Value = v;
 		_comparer = comparer ?? EqualityComparer<T>.Default;
@@ -157,7 +157,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	/// </summary>
 	void Evaluate()
 	{
-		if (_disposed || _compute == null)
+		if (_disposed || _compute is null)
 			return;
 
 		var oldDeps = _dependencies;
@@ -180,7 +180,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 		newDeps = scope.EndTracking();
 
 		// Diff subscriptions: unsubscribe from removed deps
-		if (oldDeps != null)
+		if (oldDeps is not null)
 		{
 			foreach (var dep in oldDeps)
 			{
@@ -192,7 +192,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 		// Subscribe to newly discovered deps
 		foreach (var dep in newDeps)
 		{
-			if (oldDeps == null || !oldDeps.Contains(dep))
+			if (oldDeps is null || !oldDeps.Contains(dep))
 				dep.Subscribe(this);
 		}
 
@@ -218,7 +218,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 		{
 			PropertyChangedCallback?.Invoke(_currentValue);
 
-			if (_viewRef?.TryGetTarget(out var view) == true && _propertyName != null)
+			if (_viewRef?.TryGetTarget(out var view) == true && _propertyName is not null)
 				view.ViewPropertyChanged(_propertyName, _currentValue);
 		}
 	}
@@ -239,7 +239,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 		{
 			PropertyChangedCallback?.Invoke(_currentValue);
 
-			if (_viewRef?.TryGetTarget(out var view) == true && _propertyName != null)
+			if (_viewRef?.TryGetTarget(out var view) == true && _propertyName is not null)
 				view.ViewPropertyChanged(_propertyName, _currentValue);
 		}
 	}
@@ -253,7 +253,7 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	public void Dispose()
 	{
 		_disposed = true;
-		if (_dependencies != null)
+		if (_dependencies is not null)
 		{
 			foreach (var dep in _dependencies)
 				dep.Unsubscribe(this);
@@ -274,13 +274,13 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	public static implicit operator PropertySubscription<T>(T value) => new(value);
 
 	/// <summary>Implicit conversion from a Func (API-compatible replacement for Binding&lt;T&gt; implicit).</summary>
-	public static implicit operator PropertySubscription<T>(Func<T> compute) => compute == null ? null! : new(compute);
+	public static implicit operator PropertySubscription<T>(Func<T> compute) => compute is null ? null! : new(compute);
 
 	/// <summary>Implicit conversion from Reactive&lt;T&gt; for backward compatibility during migration.
 	/// Subscribes to Reactive.ValueChanged to bridge notifications to PropertySubscription.</summary>
 	public static implicit operator PropertySubscription<T>(Reactive<T> reactive)
 	{
-		if (reactive == null) return null!;
+		if (reactive is null) return null!;
 		var sub = new PropertySubscription<T>(reactive.Value);
 		reactive.ValueChanged += v => sub.SetAndNotify(v);
 		sub.WriteBack = v => reactive.Value = v;
@@ -289,5 +289,5 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 
 	/// <summary>Implicit conversion to <typeparamref name="T"/> for convenient value access.</summary>
 	public static implicit operator T(PropertySubscription<T>? sub) =>
-		sub == null ? default! : sub._currentValue;
+		sub is null ? default! : sub._currentValue;
 }

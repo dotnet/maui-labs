@@ -89,7 +89,7 @@ namespace Comet
 
 		public static T Cast<T>(this object val)
 		{
-			if (val == null)
+			if (val is null)
 				return default;
 			try
 			{
@@ -123,7 +123,7 @@ namespace Comet
 
 		public static View Diff(this View newView, View oldView, bool checkRenderers)
 		{
-			if (oldView == null)
+			if (oldView is null)
 				return newView;
 			var v = newView.DiffUpdate(oldView,checkRenderers);
 			//void callUpdateOnView(View view)
@@ -167,7 +167,7 @@ namespace Comet
 			if (ReferenceEquals(newView, oldView))
 			{
 				var replacement = CometHotReloadHelper.CreateReplacement(oldView);
-				if (replacement != null && replacement != oldView)
+				if (replacement is not null && replacement != oldView)
 				{
 					oldView.SetHotReloadReplacement(replacement);
 					return replacement;
@@ -196,12 +196,12 @@ namespace Comet
 			var baseType = componentType.BaseType;
 
 			// Walk up the hierarchy to find Component<TState, TProps> or Component<TState>
-			while (baseType != null && !baseType.Name.StartsWith("Component"))
+			while (baseType is not null && !baseType.Name.StartsWith("Component"))
 			{
 				baseType = baseType.BaseType;
 			}
 
-			if (baseType == null)
+			if (baseType is null)
 			{
 				return null;
 			}
@@ -213,10 +213,10 @@ namespace Comet
 				var updateMethod = componentType.GetMethod("UpdatePropsFromDiff", 
 					BindingFlags.NonPublic | BindingFlags.Instance);
 				
-				if (updateMethod != null)
+				if (updateMethod is not null)
 				{
 					var propsProperty = baseType.GetProperty("Props");
-					if (propsProperty != null)
+					if (propsProperty is not null)
 					{
 						var newProps = propsProperty.GetValue(newView);
 						updateMethod.Invoke(oldView, new[] { newProps });
@@ -236,7 +236,7 @@ namespace Comet
 
 		static void DetachMergedChild(IContainerView oldContainer, IContainerView newContainer, View mergedChild)
 		{
-			if (mergedChild == null)
+			if (mergedChild is null)
 				return;
 			if (ReferenceEquals(oldContainer, newContainer))
 				return;
@@ -248,7 +248,7 @@ namespace Comet
 
 		static void DetachRetainedOldChild(IContainerView oldContainer, IContainerView newContainer, View oldChild)
 		{
-			if (oldChild == null)
+			if (oldChild is null)
 				return;
 			if (ReferenceEquals(oldContainer, newContainer))
 				return;
@@ -268,7 +268,7 @@ namespace Comet
 			// Component-specific merge logic
 			// When both views are Components of the same type, reuse the old instance (updated with new props)
 			var mergedComponent = TryMergeComponents(newView, oldView, out var reusedOldComponentInstance);
-			if (mergedComponent != null)
+			if (mergedComponent is not null)
 			{
 				// Same-type diffs reuse the old instance; hot reload replacements keep the
 				// new instance after state transfer so updated code executes.
@@ -279,7 +279,7 @@ namespace Comet
 			
 			// Always diff the built views (the result of Body/Render)
 			// This is especially important for Components — their Render() output needs diffing
-			if (newView.BuiltView != null && oldView.BuiltView != null)
+			if (newView.BuiltView is not null && oldView.BuiltView is not null)
 			{
 				newView.BuiltView.Diff(oldView.BuiltView,checkRenderers);
 			}
@@ -306,7 +306,7 @@ namespace Comet
 					for (var i = 0; i < oldChildren.Count; i++)
 					{
 						var oldChild = oldChildren[i];
-						if (oldChild == null)
+						if (oldChild is null)
 							continue;
 						
 						var key = oldChild.GetKey();
@@ -321,7 +321,7 @@ namespace Comet
 					for (var i = 0; i < newChildren.Count; i++)
 					{
 						var newChild = newChildren.GetViewAtIndex(i);
-						if (newChild == null)
+						if (newChild is null)
 							continue;
 						
 						var key = newChild.GetKey();
@@ -343,7 +343,7 @@ namespace Comet
 							unkeyedIndex++;
 						}
 						
-						if (matchedOld != null && newChild.AreSameType(matchedOld, checkRenderers))
+						if (matchedOld is not null && newChild.AreSameType(matchedOld, checkRenderers))
 						{
 							// Key-aware reconciliation preserves the OLD instance for identity stability.
 							// For Components, DiffUpdate already returns the old instance (via TryMergeComponents).
@@ -459,7 +459,7 @@ namespace Comet
 			// Run synchronously so handler transfer completes before ResetView
 			// disposes the old view (async dispatch caused a race condition where
 			// old handlers were already null by the time transfer ran).
-			if (mergedComponent == null || !reusedOldComponentInstance)
+			if (mergedComponent is null || !reusedOldComponentInstance)
 			{
 				newView.UpdateFromOldView(oldView);
 			}
@@ -493,13 +493,13 @@ namespace Comet
 				return viewView?.GetType() == compareViewView?.GetType();
 			}
 			var areSame = AreSameType(view, compareView);
-			if (areSame && checkRenderers && compareView?.ViewHandler != null)
+			if (areSame && checkRenderers && compareView?.ViewHandler is not null)
 			{
 				var mauiContext = compareView.ViewHandler.MauiContext ??
 					view?.ViewHandler?.MauiContext ??
 					CometContext.Current;
 				var renderType = mauiContext?.Handlers?.GetHandlerType(view.GetType());
-				if (renderType != null)
+				if (renderType is not null)
 					areSame = renderType == compareView.ViewHandler.GetType();
 			}
 			return areSame;

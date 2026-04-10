@@ -38,7 +38,7 @@ namespace Comet.Handlers
 				if (hostedHandler is IDisposable disposableHandler)
 					disposableHandler.Dispose();
 			}
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 			{
 				platformView.RemoveView(_hostedPlatformView);
 				if (_hostedPlatformView is IDisposable disposable)
@@ -50,10 +50,10 @@ namespace Comet.Handlers
 
 		void UpdateHostedView()
 		{
-			if (VirtualView?.HostedView == null || MauiContext == null)
+			if (VirtualView?.HostedView is null || MauiContext is null)
 				return;
 
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 				PlatformView.RemoveView(_hostedPlatformView);
 
 			try
@@ -64,7 +64,7 @@ namespace Comet.Handlers
 			{
 				// Handler not found — try CometApp's MauiContext (has third-party handlers)
 				var fallbackCtx = CometApp.MauiContext;
-				if (fallbackCtx != null && fallbackCtx != MauiContext)
+				if (fallbackCtx is not null && fallbackCtx != MauiContext)
 				{
 					try
 					{
@@ -83,7 +83,7 @@ namespace Comet.Handlers
 				}
 			}
 
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 			{
 				PlatformView.AddView(_hostedPlatformView,
 					new AFrameLayout.LayoutParams(

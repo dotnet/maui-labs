@@ -77,7 +77,7 @@ namespace Comet.iOS
 			if (_unevenRows)
 				return (nfloat)CalculateRowHeight(tableView, indexPath.Section, indexPath.Row);
 
-			if (_rowHeight == null)
+			if (_rowHeight is null)
 				_rowHeight = CalculateRowHeight(tableView, indexPath.Section, indexPath.Row);
 
 			return (nfloat)_rowHeight;
@@ -87,15 +87,15 @@ namespace Comet.iOS
 		{
 			// todo: we really need a "GetOrCreate" method.
 			var view = _listView?.ViewFor(section, row);
-			if (view != null)
+			if (view is not null)
 			{
 				var constraints = view.GetFrameConstraints();
 
-				if (constraints?.Height != null)
+				if (constraints?.Height is not null)
 					return (float)constraints?.Height;
 
 				// todo: this is really inefficient.
-				if (view.ToPlatform(Context) != null)
+				if (view.ToPlatform(Context) is not null)
 				{
 					var size = tableView.Bounds.Size;
 					var measure = view.Measure(size.Width,size.Height);

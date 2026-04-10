@@ -34,7 +34,7 @@ namespace Comet.Windows
 			// Reuse handlers if view type is compatible
 			if (view is View v && _view is View pv &&
 				v.GetContentTypeHashCode() == pv.GetContentTypeHashCode()
-				&& currentHandler != null)
+				&& currentHandler is not null)
 			{
 				_view = view;
 				v.ViewHandler = currentHandler;
@@ -56,7 +56,7 @@ namespace Comet.Windows
 
 			// Resolve views with a Body (e.g. Component<T>) to their concrete view tree
 			var viewToRender = _view;
-			if (viewToRender is View cometView && cometView.Body != null)
+			if (viewToRender is View cometView && cometView.Body is not null)
 				viewToRender = cometView.GetView();
 			var newPlatformView = viewToRender?.ToPlatform(MauiContext);
 			currentHandler = _view?.Handler;
@@ -64,10 +64,10 @@ namespace Comet.Windows
 			if (currentPlatformView == newPlatformView)
 				return;
 
-			if (currentPlatformView != null)
+			if (currentPlatformView is not null)
 				Children.Remove(currentPlatformView);
 
-			if (newPlatformView != this && newPlatformView != null)
+			if (newPlatformView != this && newPlatformView is not null)
 			{
 				currentPlatformView = newPlatformView;
 				Children.Add(currentPlatformView);
@@ -76,7 +76,7 @@ namespace Comet.Windows
 
 		protected override Microsoft.UI.Xaml.Size MeasureOverride(Microsoft.UI.Xaml.Size availableSize)
 		{
-			if (_view == null)
+			if (_view is null)
 				return availableSize;
 
 			var width = availableSize.Width > 0 ? availableSize.Width : 1000;
@@ -88,12 +88,12 @@ namespace Comet.Windows
 
 		protected override Microsoft.UI.Xaml.Size ArrangeOverride(Microsoft.UI.Xaml.Size finalSize)
 		{
-			if (_view == null)
+			if (_view is null)
 				return finalSize;
 
 			_view.Arrange(new Rect(0, 0, finalSize.Width, finalSize.Height));
 
-			if (currentPlatformView != null)
+			if (currentPlatformView is not null)
 			{
 				currentPlatformView.Arrange(new Microsoft.UI.Xaml.Rect(0, 0, finalSize.Width, finalSize.Height));
 			}

@@ -47,7 +47,7 @@ namespace Comet
 		/// </summary>
 		public IEnumerable<object> GetResults()
 		{
-			if (string.IsNullOrEmpty(Query) || ItemsSource == null)
+			if (string.IsNullOrEmpty(Query) || ItemsSource is null)
 				return Array.Empty<object>();
 			return ItemsSource(Query);
 		}

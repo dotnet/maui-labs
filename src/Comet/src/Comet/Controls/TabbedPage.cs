@@ -53,7 +53,7 @@ namespace Comet
 		/// </summary>
 		public void Add(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return;
 
 			view.Parent = this;
@@ -75,7 +75,7 @@ namespace Comet
 			base.OnParentChange(parent);
 			foreach (var child in _children)
 			{
-				if (child != null)
+				if (child is not null)
 					child.Parent = this;
 			}
 		}

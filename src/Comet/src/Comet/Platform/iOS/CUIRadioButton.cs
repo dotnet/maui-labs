@@ -54,7 +54,7 @@ namespace Comet.iOS
 
 		public override void SetTitleColor(UIColor color, UIControlState forState)
 		{
-			if (forState == UIControlState.Normal && color != null)
+			if (forState == UIControlState.Normal && color is not null)
 			{
 				_foregroundColor = color;
 				ApplyConfiguration();
@@ -68,7 +68,7 @@ namespace Comet.iOS
 			config.ImagePadding = CONTENT_SPACING;
 			config.BaseForegroundColor = _foregroundColor;
 			config.ContentInsets = new NSDirectionalEdgeInsets(4, 0, 4, 0);
-			if (_title != null)
+			if (_title is not null)
 				config.Title = _title;
 			Configuration = config;
 		}

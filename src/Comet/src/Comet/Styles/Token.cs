@@ -55,7 +55,7 @@ namespace Comet.Styles
 		/// </summary>
 		public T Resolve(Theme theme)
 		{
-			if (theme != null && Resolver != null)
+			if (theme is not null && Resolver is not null)
 				return Resolver(theme);
 			return DefaultValue;
 		}
@@ -66,7 +66,7 @@ namespace Comet.Styles
 		/// </summary>
 		public T Resolve(View view)
 		{
-			if (view == null)
+			if (view is null)
 				return Resolve(ThemeManager.Current());
 			return Resolve(ThemeManager.Current(view));
 		}

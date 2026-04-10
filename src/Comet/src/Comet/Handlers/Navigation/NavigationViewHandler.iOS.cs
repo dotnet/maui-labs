@@ -24,7 +24,7 @@ namespace Comet.Handlers
 			if (!string.IsNullOrEmpty(navTitle))
 				vc.Title = navTitle;
 
-			if (nav.Navigation != null)
+			if (nav.Navigation is not null)
 			{
 				viewController = vc;
 				return viewController.View;
@@ -64,7 +64,7 @@ namespace Comet.Handlers
 			navigationController.PushViewController(vc, true);
 
 			// Add leading bar button (hamburger icon) if configured
-			if (nav.LeadingBarAction != null)
+			if (nav.LeadingBarAction is not null)
 			{
 				var action = nav.LeadingBarAction;
 				vc.NavigationItem.LeftBarButtonItem = new UIBarButtonItem(
@@ -88,7 +88,7 @@ namespace Comet.Handlers
 
 			// When the handler is transferred to a new NavigationView (during diff),
 			// the title must be refreshed from the current VirtualView.
-			if (rootViewController != null)
+			if (rootViewController is not null)
 			{
 				var title = VirtualView?.GetTitle();
 				if (!string.IsNullOrEmpty(title))
@@ -104,7 +104,7 @@ namespace Comet.Handlers
 				// Resolve tint color dynamically from the view's environment so it
 				// updates on theme change (no hardcoded light-mode colors).
 				var textColor = VirtualView?.GetNavigationTextColor()?.ToPlatform();
-				if (textColor != null)
+				if (textColor is not null)
 					navController.NavigationBar.TintColor = textColor;
 				navController.NavigationBar.Translucent = true;
 			}
@@ -113,7 +113,7 @@ namespace Comet.Handlers
 		internal static UIImage CreateFontIconImage(string glyph, string fontFamily, nfloat size)
 		{
 			var font = UIFont.FromName(fontFamily, size);
-			if (font == null)
+			if (font is null)
 				return null;
 
 			var text = new Foundation.NSString(glyph);

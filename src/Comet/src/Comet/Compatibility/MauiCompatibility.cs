@@ -101,7 +101,7 @@ namespace Comet
 
 		public ImageSource ImageSource { get; set; }
 
-		public bool IsEmpty => ImageSource == null;
+		public bool IsEmpty => ImageSource is null;
 	}
 
 	/// <summary>

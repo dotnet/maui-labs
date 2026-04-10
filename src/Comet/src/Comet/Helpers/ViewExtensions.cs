@@ -12,7 +12,7 @@ namespace Comet
 	{
 		public static View GetViewWithTag(this View view, string tag)
 		{
-			if (view == null) return null;
+			if (view is null) return null;
 
 			if (view.Tag == tag)
 				return view;
@@ -22,7 +22,7 @@ namespace Comet
 				foreach (var subView in layout)
 				{
 					var match = subView.GetViewWithTag(tag);
-					if (match != null)
+					if (match is not null)
 						return match;
 				}
 			}
@@ -343,7 +343,7 @@ namespace Comet
 				return typedValue;
 
 			var parent = view.Parent;
-			while (parent != null)
+			while (parent is not null)
 			{
 				if (parent.Resources?.TryGetResource(key, out value) == true && value is TValue typedValue2)
 					return typedValue2;
@@ -361,7 +361,7 @@ namespace Comet
 		// Behaviors
 		public static T AddBehavior<T>(this T view, Behavior behavior) where T : View
 		{
-			if (behavior == null)
+			if (behavior is null)
 				throw new ArgumentNullException(nameof(behavior));
 
 			var behaviors = view.Behaviors as List<Behavior>;
@@ -372,7 +372,7 @@ namespace Comet
 
 		public static T RemoveBehavior<T>(this T view, Behavior behavior) where T : View
 		{
-			if (behavior == null)
+			if (behavior is null)
 				throw new ArgumentNullException(nameof(behavior));
 
 			var behaviors = view.Behaviors as List<Behavior>;
@@ -384,7 +384,7 @@ namespace Comet
 		// Triggers
 		public static T AddTrigger<T>(this T view, DataTrigger trigger) where T : View
 		{
-			if (trigger == null)
+			if (trigger is null)
 				throw new ArgumentNullException(nameof(trigger));
 
 			var triggers = view.Triggers as List<DataTrigger>;
@@ -395,7 +395,7 @@ namespace Comet
 
 		public static T RemoveTrigger<T>(this T view, DataTrigger trigger) where T : View
 		{
-			if (trigger == null)
+			if (trigger is null)
 				throw new ArgumentNullException(nameof(trigger));
 
 			var triggers = view.Triggers as List<DataTrigger>;

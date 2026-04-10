@@ -10,7 +10,7 @@ namespace Comet
 		public static async Task<bool> DisplayAlert(this View view, string title, string message, string accept, string cancel)
 		{
 			var page = GetPage(view);
-			if (page != null)
+			if (page is not null)
 				return await page.DisplayAlert(title, message, accept, cancel);
 			return false;
 		}
@@ -18,14 +18,14 @@ namespace Comet
 		public static async Task DisplayAlert(this View view, string title, string message, string cancel)
 		{
 			var page = GetPage(view);
-			if (page != null)
+			if (page is not null)
 				await page.DisplayAlert(title, message, cancel);
 		}
 
 		public static async Task<string> DisplayActionSheet(this View view, string title, string cancel, string destruction, params string[] buttons)
 		{
 			var page = GetPage(view);
-			if (page != null)
+			if (page is not null)
 				return await page.DisplayActionSheet(title, cancel, destruction, buttons);
 			return null;
 		}
@@ -33,7 +33,7 @@ namespace Comet
 		public static async Task<string> DisplayPromptAsync(this View view, string title, string message = null, string accept = "OK", string cancel = "Cancel", string placeholder = null, int maxLength = -1, Microsoft.Maui.Keyboard keyboard = null, string initialValue = "")
 		{
 			var page = GetPage(view);
-			if (page != null)
+			if (page is not null)
 				return await page.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxLength, keyboard, initialValue);
 			return null;
 		}
@@ -42,7 +42,7 @@ namespace Comet
 		{
 			// Try to get the MAUI context and find the current page
 			var context = view.GetMauiContext();
-			if (context?.Services != null)
+			if (context?.Services is not null)
 			{
 				// Try to get the platform window
 				try

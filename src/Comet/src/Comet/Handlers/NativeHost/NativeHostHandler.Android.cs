@@ -49,11 +49,11 @@ namespace Comet.Handlers
 
 		void UpdateHostedView()
 		{
-			if (VirtualView == null || MauiContext == null || PlatformView == null)
+			if (VirtualView is null || MauiContext is null || PlatformView is null)
 				return;
 
 			var currentToken = VirtualView.SourceToken;
-			if (hostedNativeView == null || !Equals(sourceToken, currentToken))
+			if (hostedNativeView is null || !Equals(sourceToken, currentToken))
 			{
 				TearDownHostedView(PlatformView);
 
@@ -79,7 +79,7 @@ namespace Comet.Handlers
 
 		void TearDownHostedView(NativeHostContainerView platformView)
 		{
-			if (hostedNativeView == null)
+			if (hostedNativeView is null)
 				return;
 
 			var releasedView = hostedNativeView;
@@ -96,10 +96,10 @@ namespace Comet.Handlers
 
 		Size MeasureHostedView(Size availableSize)
 		{
-			if (VirtualView != null && VirtualView.TryMeasureOverride(availableSize, out var measured))
+			if (VirtualView is not null && VirtualView.TryMeasureOverride(availableSize, out var measured))
 				return measured;
 
-			if (hostedNativeView == null)
+			if (hostedNativeView is null)
 				return availableSize;
 
 			var density = Context?.Resources?.DisplayMetrics?.Density ?? 1f;
@@ -150,7 +150,7 @@ namespace Comet.Handlers
 
 			public void ClearHostedView()
 			{
-				if (hostedView != null)
+				if (hostedView is not null)
 					RemoveView(hostedView);
 				hostedView = null;
 			}

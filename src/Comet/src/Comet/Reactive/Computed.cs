@@ -68,7 +68,7 @@ public sealed class Computed<T> : IReactiveSource, IReactiveSubscriber, IDisposa
 
 		newDeps = scope.EndTracking();
 
-		if (oldDeps != null)
+		if (oldDeps is not null)
 		{
 			foreach (var dep in oldDeps)
 			{
@@ -79,7 +79,7 @@ public sealed class Computed<T> : IReactiveSource, IReactiveSubscriber, IDisposa
 
 		foreach (var dep in newDeps)
 		{
-			if (oldDeps == null || !oldDeps.Contains(dep))
+			if (oldDeps is null || !oldDeps.Contains(dep))
 				dep.Subscribe(this);
 		}
 
@@ -117,7 +117,7 @@ public sealed class Computed<T> : IReactiveSource, IReactiveSubscriber, IDisposa
 	public void Dispose()
 	{
 		_disposed = true;
-		if (_dependencies != null)
+		if (_dependencies is not null)
 		{
 			foreach (var dep in _dependencies)
 				dep.Unsubscribe(this);

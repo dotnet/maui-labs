@@ -71,7 +71,7 @@ namespace Comet.Handlers
 			_content = VirtualView?.Content?.ToPlatform(MauiContext);
 			if(oldContent != _content)
 				oldContent?.RemoveFromSuperview();
-			if (_content != null)
+			if (_content is not null)
 			{
 				PlatformView.Add(_content);
 			}

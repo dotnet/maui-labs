@@ -19,7 +19,7 @@ namespace Comet.Handlers
 			_contentContainer = new NSView { WantsLayer = true };
 
 			var nav = VirtualView;
-			if (nav?.Content != null)
+			if (nav?.Content is not null)
 			{
 				var platformView = nav.Content.ToMacOSPlatform(MauiContext);
 				_contentContainer.AddSubview(platformView);
@@ -51,7 +51,7 @@ namespace Comet.Handlers
 
 		void ShowView(IView view)
 		{
-			if (view == null || MauiContext == null)
+			if (view is null || MauiContext is null)
 				return;
 
 			_currentPageView?.RemoveFromSuperview();
@@ -65,7 +65,7 @@ namespace Comet.Handlers
 
 		void LayoutContent(CGRect bounds)
 		{
-			if (_currentPageView == null || bounds.Width <= 0 || bounds.Height <= 0)
+			if (_currentPageView is null || bounds.Width <= 0 || bounds.Height <= 0)
 				return;
 
 			_currentPageView.Frame = bounds;

@@ -38,7 +38,7 @@ namespace Comet
 
 		public static implicit operator T(OnPlatform<T> value)
 		{
-			if (value == null)
+			if (value is null)
 				return default;
 			return value.GetValue();
 		}
@@ -93,7 +93,7 @@ namespace Comet
 
 		public static implicit operator T(OnIdiom<T> value)
 		{
-			if (value == null)
+			if (value is null)
 				return default;
 			return value.GetValue();
 		}

@@ -9,26 +9,26 @@ namespace Comet
 	{
 		public static void Apply(View view, object parameters, Dictionary<string, string> queryParameters = null)
 		{
-			if (view == null)
+			if (view is null)
 				return;
 
-			if (parameters != null)
+			if (parameters is not null)
 				TryApplyProps(view, parameters);
 
 			if (view is IQueryAttributable queryAttributable)
 			{
 				var values = queryParameters;
-				if ((values == null || values.Count == 0) && parameters != null)
+				if ((values is null || values.Count == 0) && parameters is not null)
 					values = ToDictionary(parameters);
 
-				if (values != null && values.Count > 0)
+				if (values is not null && values.Count > 0)
 					queryAttributable.ApplyQueryAttributes(values);
 			}
 		}
 
 		public static string BuildRoute(string route, object parameters)
 		{
-			if (string.IsNullOrWhiteSpace(route) || parameters == null)
+			if (string.IsNullOrWhiteSpace(route) || parameters is null)
 				return route;
 
 			var queryString = ToQueryString(parameters);
@@ -43,7 +43,7 @@ namespace Comet
 		{
 			var values = new Dictionary<string, string>(StringComparer.Ordinal);
 
-			if (parameters == null)
+			if (parameters is null)
 				return values;
 
 			if (parameters is IEnumerable<KeyValuePair<string, string>> stringPairs)
@@ -89,11 +89,11 @@ namespace Comet
 
 		static void Add(IDictionary<string, string> values, string key, object value)
 		{
-			if (string.IsNullOrWhiteSpace(key) || value == null)
+			if (string.IsNullOrWhiteSpace(key) || value is null)
 				return;
 
 			var stringValue = ConvertToString(value);
-			if (stringValue == null)
+			if (stringValue is null)
 				return;
 
 			values[key] = stringValue;
@@ -101,7 +101,7 @@ namespace Comet
 
 		static string ConvertToString(object value)
 		{
-			if (value == null)
+			if (value is null)
 				return null;
 
 			return value switch
@@ -117,7 +117,7 @@ namespace Comet
 		static bool TryApplyProps(View view, object parameters)
 		{
 			var propsProperty = view.GetType().GetProperty("Props", BindingFlags.Instance | BindingFlags.Public);
-			if (propsProperty == null || !propsProperty.CanWrite)
+			if (propsProperty is null || !propsProperty.CanWrite)
 				return false;
 
 			if (!propsProperty.PropertyType.IsInstanceOfType(parameters))

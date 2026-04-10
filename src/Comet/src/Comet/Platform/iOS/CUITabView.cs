@@ -30,7 +30,7 @@ namespace Comet.iOS
 		}
 		public void Setup(IList<View> views)
 		{
-			if (views == null)
+			if (views is null)
 			{
 				tabViewController.ViewControllers = null;
 				return;
@@ -41,7 +41,7 @@ namespace Comet.iOS
 				// (e.g. NavigationView → CUINavigationController with toolbar items),
 				// reuse it so toolbar items and navigation stack are preserved.
 				UIViewController vc;
-				if (x.Handler is IPlatformViewHandler pvh && pvh.ViewController != null)
+				if (x.Handler is IPlatformViewHandler pvh && pvh.ViewController is not null)
 				{
 					vc = pvh.ViewController;
 				}
@@ -49,7 +49,7 @@ namespace Comet.iOS
 				{
 					// Ensure the view is realized so its handler is created
 					x.ToPlatform(Context);
-					if (x.Handler is IPlatformViewHandler pvh2 && pvh2.ViewController != null)
+					if (x.Handler is IPlatformViewHandler pvh2 && pvh2.ViewController is not null)
 					{
 						vc = pvh2.ViewController;
 					}
@@ -98,7 +98,7 @@ namespace Comet.iOS
 		/// </summary>
 		public void ApplySelectedIndex(int index)
 		{
-			if (tabViewController.ViewControllers != null && index >= 0 && index < tabViewController.ViewControllers.Length)
+			if (tabViewController.ViewControllers is not null && index >= 0 && index < tabViewController.ViewControllers.Length)
 				tabViewController.SelectedIndex = (nint)index;
 		}
 
@@ -108,13 +108,13 @@ namespace Comet.iOS
 		/// </summary>
 		public void ApplyTabBarAppearance(View tabView)
 		{
-			if (tabView == null) return;
+			if (tabView is null) return;
 
 			var bgColor = tabView.GetEnvironment<Color>(EnvironmentKeys.TabView.BarBackgroundColor);
 			var tintColor = tabView.GetEnvironment<Color>(EnvironmentKeys.TabView.BarTintColor);
 			var unselectedColor = tabView.GetEnvironment<Color>(EnvironmentKeys.TabView.BarUnselectedColor);
 
-			if (bgColor == null && tintColor == null && unselectedColor == null)
+			if (bgColor is null && tintColor is null && unselectedColor is null)
 				return;
 
 			// Translucent appearance with blur so content scrolls behind the bar
@@ -123,17 +123,17 @@ namespace Comet.iOS
 			appearance.BackgroundEffect = UIBlurEffect.FromStyle(UIBlurEffectStyle.SystemUltraThinMaterial);
 			appearance.ShadowColor = UIColor.Clear;
 
-			if (bgColor != null)
+			if (bgColor is not null)
 				appearance.BackgroundColor = bgColor.WithAlpha(0.85f).ToPlatform();
 
 			tabViewController.TabBar.StandardAppearance = appearance;
 			tabViewController.TabBar.ScrollEdgeAppearance = appearance;
 			tabViewController.TabBar.Translucent = true;
 
-			if (tintColor != null)
+			if (tintColor is not null)
 				tabViewController.TabBar.TintColor = tintColor.ToPlatform();
 
-			if (unselectedColor != null)
+			if (unselectedColor is not null)
 				tabViewController.TabBar.UnselectedItemTintColor = unselectedColor.ToPlatform();
 		}
 
@@ -141,7 +141,7 @@ namespace Comet.iOS
 		{
 			base.MovedToSuperview();
 			var vc = this.GetViewController();
-			if (vc != null)
+			if (vc is not null)
 			{
 				vc.AddChildViewController(tabViewController);
 				tabViewController.DidMoveToParentViewController(vc);
@@ -162,7 +162,7 @@ namespace Comet.iOS
 			// CometViewController.LoadView() sets vc.Title from the content view,
 			// and iOS propagates that to UINavigationController.TabBarItem.Title.
 			// This ensures our TabText() values always win.
-			if (_explicitTabTitles != null && tabViewController.ViewControllers != null)
+			if (_explicitTabTitles is not null && tabViewController.ViewControllers is not null)
 			{
 				for (int i = 0; i < _explicitTabTitles.Count && i < tabViewController.ViewControllers.Length; i++)
 				{

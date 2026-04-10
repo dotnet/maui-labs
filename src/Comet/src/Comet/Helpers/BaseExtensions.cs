@@ -7,7 +7,7 @@ namespace Comet
 	{
 		public static string FirstCharToUpper(this string input)
 		{
-			if (input != null)
+			if (input is not null)
 				return string.IsNullOrWhiteSpace(input)
 					? input[0].ToString().ToUpper() + input.Substring(1)
 					: input;

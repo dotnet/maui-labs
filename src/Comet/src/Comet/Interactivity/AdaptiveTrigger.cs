@@ -39,7 +39,7 @@ namespace Comet
 		/// </summary>
 		public void Apply(double currentWidth, double currentHeight)
 		{
-			if (AssociatedObject == null)
+			if (AssociatedObject is null)
 				return;
 
 			if (Evaluate(currentWidth, currentHeight))

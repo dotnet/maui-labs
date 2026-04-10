@@ -37,7 +37,7 @@ base.DisconnectHandler(platformView);
 
 void UpdateHostedView()
 {
-if (VirtualView?.HostedView == null || MauiContext == null)
+if (VirtualView?.HostedView is null || MauiContext is null)
 return;
 
 try
@@ -54,7 +54,7 @@ catch (Exception)
 // Handler not found in this MauiContext - try CometApp's context
 // which has all registered handlers including third-party (Syncfusion, etc.)
 var fallbackCtx = CometApp.MauiContext;
-if (fallbackCtx != null && fallbackCtx != MauiContext)
+if (fallbackCtx is not null && fallbackCtx != MauiContext)
 {
 try
 {
@@ -67,7 +67,7 @@ Console.WriteLine($"[MauiViewHostHandler] All ToPlatform failed for {VirtualView
 }
 }
 
-if (hostedPlatformView != null)
+if (hostedPlatformView is not null)
 PlatformView.SetHostedView(hostedPlatformView, VirtualView.HostedView);
 }
 catch (Exception ex)
@@ -86,7 +86,7 @@ public void SetHostedView(UIView platformView, IView virtualView)
 _hostedPlatformView?.RemoveFromSuperview();
 _hostedPlatformView = platformView;
 _hostedVirtualView = virtualView;
-if (_hostedPlatformView != null)
+if (_hostedPlatformView is not null)
 {
 AddSubview(_hostedPlatformView);
 SetNeedsLayout();
@@ -103,7 +103,7 @@ _hostedVirtualView = null;
 public override void LayoutSubviews()
 {
 base.LayoutSubviews();
-if (_hostedPlatformView == null || Bounds.Width <= 0 || Bounds.Height <= 0)
+if (_hostedPlatformView is null || Bounds.Width <= 0 || Bounds.Height <= 0)
 return;
 
 // Use MAUI's cross-platform layout to arrange children
@@ -117,12 +117,12 @@ _hostedPlatformView.Frame = Bounds;
 
 public override CGSize SizeThatFits(CGSize size)
 {
-if (_hostedVirtualView != null)
+if (_hostedVirtualView is not null)
 {
 var measured = _hostedVirtualView.Measure(size.Width, size.Height);
 return new CGSize(measured.Width, measured.Height);
 }
-if (_hostedPlatformView != null)
+if (_hostedPlatformView is not null)
 return _hostedPlatformView.SizeThatFits(size);
 return base.SizeThatFits(size);
 }
@@ -131,7 +131,7 @@ public override CGSize IntrinsicContentSize
 {
 get
 {
-if (_hostedPlatformView != null)
+if (_hostedPlatformView is not null)
 return _hostedPlatformView.IntrinsicContentSize;
 return base.IntrinsicContentSize;
 }

@@ -30,7 +30,7 @@ namespace Comet.Handlers
 
 		void UpdateListView(IListView listView)
 		{
-			if (_dataSource == null || _delegate == null || _tableView == null)
+			if (_dataSource is null || _delegate is null || _tableView is null)
 				return;
 
 			_dataSource.ListView = listView;
@@ -67,7 +67,7 @@ namespace Comet.Handlers
 
 		protected override void DisconnectHandler(NSScrollView platformView)
 		{
-			if (_tableView != null)
+			if (_tableView is not null)
 			{
 				_tableView.DataSource = null;
 				_tableView.Delegate = null;
@@ -103,14 +103,14 @@ namespace Comet.Handlers
 		static List<FlatRow> BuildFlatRows(IListView listView)
 		{
 			var rows = new List<FlatRow>();
-			if (listView == null)
+			if (listView is null)
 				return rows;
 
 			var sectionCount = listView.Sections();
 			for (int s = 0; s < sectionCount; s++)
 			{
 				var header = listView.HeaderFor(s);
-				if (header != null)
+				if (header is not null)
 				{
 					rows.Add(new FlatRow { Kind = RowKind.Header, Section = s, Index = -1 });
 				}
@@ -173,7 +173,7 @@ namespace Comet.Handlers
 			[Export("tableView:viewForTableColumn:row:")]
 			public NSView GetViewForTableColumn(NSTableView tableView, NSTableColumn tableColumn, nint row)
 			{
-				if (_listView == null || row < 0 || row >= _dataSource.FlatRows.Count)
+				if (_listView is null || row < 0 || row >= _dataSource.FlatRows.Count)
 					return new NSView();
 
 				var flatRow = _dataSource.FlatRows[(int)row];
@@ -181,11 +181,11 @@ namespace Comet.Handlers
 				if (flatRow.Kind == RowKind.Header)
 				{
 					var headerView = _listView.HeaderFor(flatRow.Section);
-					if (headerView == null)
+					if (headerView is null)
 						return new NSView();
 
 					var container = tableView.MakeView(HeaderIdentifier, this) as CometNSTableCellView;
-					if (container == null)
+					if (container is null)
 					{
 						container = new CometNSTableCellView(_mauiContext)
 						{
@@ -197,13 +197,13 @@ namespace Comet.Handlers
 				}
 
 				var view = _listView.ViewFor(flatRow.Section, flatRow.Index);
-				if (view == null)
+				if (view is null)
 					return new NSView();
 
 				// Use content type hash for view recycling (same pattern as iOS)
 				var identifier = $"{CellIdentifier}_{view.GetContentTypeHashCode()}";
 				var cellView = tableView.MakeView(identifier, this) as CometNSTableCellView;
-				if (cellView == null)
+				if (cellView is null)
 				{
 					cellView = new CometNSTableCellView(_mauiContext)
 					{
@@ -216,7 +216,7 @@ namespace Comet.Handlers
 
 			public override nfloat GetRowHeight(NSTableView tableView, nint row)
 			{
-				if (_listView == null || row < 0 || row >= _dataSource.FlatRows.Count)
+				if (_listView is null || row < 0 || row >= _dataSource.FlatRows.Count)
 					return DefaultRowHeight;
 
 				var flatRow = _dataSource.FlatRows[(int)row];
@@ -231,18 +231,18 @@ namespace Comet.Handlers
 					view = _listView.ViewFor(flatRow.Section, flatRow.Index);
 				}
 
-				if (view == null)
+				if (view is null)
 					return DefaultRowHeight;
 
 				// Fast path: explicit frame constraints
 				var constraints = view.GetFrameConstraints();
-				if (constraints?.Height != null)
+				if (constraints?.Height is not null)
 					return (nfloat)constraints.Height;
 
 				// Slow path: realize the view and measure
 				try
 				{
-					if (view.ToMacOSPlatform(_mauiContext) != null)
+					if (view.ToMacOSPlatform(_mauiContext) is not null)
 					{
 						var measure = view.Measure(tableView.Bounds.Width, double.PositiveInfinity);
 						if (measure.Height > 0)
@@ -259,11 +259,11 @@ namespace Comet.Handlers
 
 			public override void SelectionDidChange(NSNotification notification)
 			{
-				if (_listView == null)
+				if (_listView is null)
 					return;
 
 				var tableView = notification.Object as NSTableView;
-				if (tableView == null)
+				if (tableView is null)
 					return;
 
 				var selectedRow = tableView.SelectedRow;

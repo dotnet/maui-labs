@@ -28,7 +28,7 @@ namespace Comet
 		}
 		public override Size GetDesiredSize(Size availableSize)
 		{
-			if (View != null)
+			if (View is not null)
 			{
 				return View.Measure(availableSize.Width, availableSize.Height);
 			}

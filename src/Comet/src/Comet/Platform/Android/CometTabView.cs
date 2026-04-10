@@ -54,7 +54,7 @@ public void CreateTabs(IList<View> views)
 _views = views?.ToList();
 _bottomNavigationView.Menu.Clear();
 
-if (views == null) return;
+if (views is null) return;
 
 for (int i = 0; i < views.Count; i++)
 {
@@ -67,16 +67,16 @@ _bottomNavigationView.Menu.Add(0, i, i, title);
 protected override void OnAttachedToWindow()
 {
 base.OnAttachedToWindow();
-if (_views != null && _views.Count > 0 && _selectedIndex < 0)
+if (_views is not null && _views.Count > 0 && _selectedIndex < 0)
 ShowTab(0);
 }
 
 void ShowTab(int index)
 {
-if (_views == null || index < 0 || index >= _views.Count)
+if (_views is null || index < 0 || index >= _views.Count)
 return;
 
-if (_currentPlatformView != null)
+if (_currentPlatformView is not null)
 {
 _contentContainer.RemoveView(_currentPlatformView);
 _currentPlatformView = null;
@@ -86,12 +86,12 @@ _currentVirtualView = null;
 _selectedIndex = index;
 var view = _views[index];
 var renderView = view.GetView();
-IView viewToRender = (renderView != null && renderView != view) ? renderView : view;
+IView viewToRender = (renderView is not null && renderView != view) ? renderView : view;
 
 var platformView = viewToRender.ToPlatform(MauiContext);
-if (platformView != null)
+if (platformView is not null)
 {
-if (platformView.Parent != null)
+if (platformView.Parent is not null)
 (platformView.Parent as ViewGroup)?.RemoveView(platformView);
 _currentPlatformView = platformView;
 _currentVirtualView = viewToRender;
@@ -103,7 +103,7 @@ Post(() =>
 // Use measured dimensions as fallback when layout hasn't completed yet
 var containerWidth = _contentContainer.Width > 0 ? _contentContainer.Width : _contentContainer.MeasuredWidth;
 var containerHeight = _contentContainer.Height > 0 ? _contentContainer.Height : _contentContainer.MeasuredHeight;
-if (_currentPlatformView != null && containerWidth > 0 && containerHeight > 0)
+if (_currentPlatformView is not null && containerWidth > 0 && containerHeight > 0)
 {
 MeasureAndArrangeContent();
 _currentPlatformView.Layout(0, 0, containerWidth, containerHeight);
@@ -115,7 +115,7 @@ InvalidateViewTree(_currentPlatformView);
 
 void MeasureAndArrangeContent()
 {
-if (_currentVirtualView == null) return;
+if (_currentVirtualView is null) return;
 var density = Context?.Resources?.DisplayMetrics?.Density ?? 1;
 var containerWidth = _contentContainer.Width > 0 ? _contentContainer.Width : _contentContainer.MeasuredWidth;
 var containerHeight = _contentContainer.Height > 0 ? _contentContainer.Height : _contentContainer.MeasuredHeight;
@@ -159,7 +159,7 @@ AView.MeasureSpec.MakeMeasureSpec(contentHeight, MeasureSpecMode.Exactly));
 
 // Explicitly measure the current content view so dynamically added
 // children get proper dimensions (FrameLayout won't re-measure them).
-if (_currentPlatformView != null)
+if (_currentPlatformView is not null)
 {
 _currentPlatformView.Measure(
 AView.MeasureSpec.MakeMeasureSpec(widthSize, MeasureSpecMode.Exactly),
@@ -180,7 +180,7 @@ _contentContainer.Layout(0, 0, width, contentHeight);
 _bottomNavigationView.Layout(0, contentHeight, width, height);
 
 // Explicitly layout the current content view within the container bounds
-if (_currentPlatformView != null)
+if (_currentPlatformView is not null)
 {
 _currentPlatformView.Layout(0, 0, width, contentHeight);
 }

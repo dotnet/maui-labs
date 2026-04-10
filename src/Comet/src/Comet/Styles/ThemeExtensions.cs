@@ -19,7 +19,7 @@ namespace Comet.Styles
 		public static T ThemeBackground<T>(this T view, string themeColorKey) where T : View
 		{
 			var color = Theme.Current.GetColor(themeColorKey);
-			if (color != null)
+			if (color is not null)
 				view.SetEnvironment(nameof(IView.Background), (Paint)new SolidPaint(color), false);
 			return view;
 		}
@@ -37,7 +37,7 @@ namespace Comet.Styles
 		public static T ThemeForeground<T>(this T view, string themeColorKey) where T : View
 		{
 			var color = Theme.Current.GetColor(themeColorKey);
-			if (color != null)
+			if (color is not null)
 				view.SetEnvironment(EnvironmentKeys.Colors.Color, color, false);
 			return view;
 		}

@@ -24,7 +24,7 @@ namespace Comet.Styles
 			{
 				var old = _current;
 				_current = value;
-				if (old != value && value != null)
+				if (old != value && value is not null)
 				{
 					value.Apply();
 					ThemeChanged?.Invoke(value);
@@ -152,7 +152,7 @@ namespace Comet.Styles
 			}
 
 			// Notify any IThemeable views
-			if (target == null)
+			if (target is null)
 			{
 				NotifyThemeableViews();
 			}
@@ -181,10 +181,10 @@ namespace Comet.Styles
 		/// </summary>
 		public Color GetColor(string themeColorKey)
 		{
-			if (ColorScheme != null)
+			if (ColorScheme is not null)
 			{
 				var color = ResolveFromColorScheme(themeColorKey);
-				if (color != null)
+				if (color is not null)
 					return color;
 			}
 

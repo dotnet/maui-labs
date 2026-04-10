@@ -10,7 +10,7 @@ namespace Comet
 			var stack = new VStack();
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -21,7 +21,7 @@ namespace Comet
 			var stack = new VStack(spacing: spacing);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -32,7 +32,7 @@ namespace Comet
 			var stack = new VStack(alignment);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -43,7 +43,7 @@ namespace Comet
 			var stack = new VStack(alignment, spacing);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -54,7 +54,7 @@ namespace Comet
 			var stack = new HStack();
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -65,7 +65,7 @@ namespace Comet
 			var stack = new HStack(spacing: spacing);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -76,7 +76,7 @@ namespace Comet
 			var stack = new HStack(alignment);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -87,7 +87,7 @@ namespace Comet
 			var stack = new HStack(alignment, spacing);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -98,7 +98,7 @@ namespace Comet
 			var stack = new ZStack();
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					stack.Add(child);
 			}
 			return stack;
@@ -109,7 +109,7 @@ namespace Comet
 			var grid = new Grid();
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					grid.Add(child);
 			}
 			return grid;
@@ -120,7 +120,7 @@ namespace Comet
 			var grid = new Grid(columns: columns, rows: rows);
 			foreach (var child in children)
 			{
-				if (child != null)
+				if (child is not null)
 					grid.Add(child);
 			}
 			return grid;
@@ -129,7 +129,7 @@ namespace Comet
 		public static ScrollView ScrollView(View content)
 		{
 			var scroll = new ScrollView();
-			if (content != null)
+			if (content is not null)
 				scroll.Add(content);
 			return scroll;
 		}
@@ -137,7 +137,7 @@ namespace Comet
 		public static ScrollView ScrollView(Orientation orientation, View content)
 		{
 			var scroll = new ScrollView(orientation);
-			if (content != null)
+			if (content is not null)
 				scroll.Add(content);
 			return scroll;
 		}
@@ -145,7 +145,7 @@ namespace Comet
 		public static NavigationView NavigationView(View content)
 		{
 			var nav = new NavigationView();
-			if (content != null)
+			if (content is not null)
 				nav.Add(content);
 			return nav;
 		}
@@ -153,7 +153,7 @@ namespace Comet
 		public static Border Border(View content)
 		{
 			var border = new Border();
-			if (content != null)
+			if (content is not null)
 				border.Add(content);
 			return border;
 		}

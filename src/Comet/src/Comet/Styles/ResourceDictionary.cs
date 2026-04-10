@@ -20,7 +20,7 @@ namespace Comet
 					return true;
 			}
 
-			if (MergedWith != null)
+			if (MergedWith is not null)
 				return MergedWith.TryGetResource(key, out value);
 
 			value = null;

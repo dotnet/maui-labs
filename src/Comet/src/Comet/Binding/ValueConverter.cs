@@ -22,7 +22,7 @@ namespace Comet
 
 		public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
 		{
-			if (value == null)
+			if (value is null)
 				return _convert(default);
 			if (value is TSource sourceValue)
 				return _convert(sourceValue);
@@ -32,10 +32,10 @@ namespace Comet
 
 		public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
 		{
-			if (_convertBack == null)
+			if (_convertBack is null)
 				throw new NotSupportedException("ConvertBack is not supported for this converter");
 
-			if (value == null)
+			if (value is null)
 				return _convertBack(default);
 			if (value is TTarget targetValue)
 				return _convertBack(targetValue);

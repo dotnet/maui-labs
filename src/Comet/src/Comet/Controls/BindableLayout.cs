@@ -40,7 +40,7 @@ UnsubscribeFromObservable();
 _itemsSource = source;
 _observableSource = source as ObservableCollection<T>;
 
-if (_observableSource != null)
+if (_observableSource is not null)
 _observableSource.CollectionChanged += OnCollectionChanged;
 
 RebuildItems();
@@ -48,7 +48,7 @@ RebuildItems();
 
 private void UnsubscribeFromObservable()
 {
-if (_observableSource != null)
+if (_observableSource is not null)
 _observableSource.CollectionChanged -= OnCollectionChanged;
 }
 
@@ -60,13 +60,13 @@ RebuildItems();
 private void RebuildItems()
 {
 Clear();
-if (_itemsSource == null || _itemTemplate == null)
+if (_itemsSource is null || _itemTemplate is null)
 return;
 
 foreach (var item in _itemsSource)
 {
 var view = _itemTemplate(item);
-if (view != null)
+if (view is not null)
 Add(view);
 }
 }
@@ -110,7 +110,7 @@ UnsubscribeFromObservable();
 _itemsSource = source;
 _observableSource = source as INotifyCollectionChanged;
 
-if (_observableSource != null)
+if (_observableSource is not null)
 _observableSource.CollectionChanged += OnCollectionChanged;
 
 RebuildItems();
@@ -118,7 +118,7 @@ RebuildItems();
 
 private void UnsubscribeFromObservable()
 {
-if (_observableSource != null)
+if (_observableSource is not null)
 _observableSource.CollectionChanged -= OnCollectionChanged;
 }
 
@@ -130,13 +130,13 @@ RebuildItems();
 private void RebuildItems()
 {
 Clear();
-if (_itemsSource == null || _itemTemplate == null)
+if (_itemsSource is null || _itemTemplate is null)
 return;
 
 foreach (var item in _itemsSource)
 {
 var view = _itemTemplate(item);
-if (view != null)
+if (view is not null)
 Add(view);
 }
 }

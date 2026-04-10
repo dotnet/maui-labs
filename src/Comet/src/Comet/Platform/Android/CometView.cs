@@ -42,7 +42,7 @@ namespace Comet.Android
 			}
 			// Resolve views with a Body (e.g. Component<T>) to their concrete view tree
 			var viewToRender = _view;
-			if (viewToRender is View cometView && cometView.Body != null)
+			if (viewToRender is View cometView && cometView.Body is not null)
 				viewToRender = cometView.GetView();
 			var newPlatformView = viewToRender?.ToPlatform(MauiContext);
 
@@ -52,15 +52,15 @@ namespace Comet.Android
 				currentHandler = _view?.Handler;
 			if (currentPlatformView == newPlatformView)
 				return;
-			if (currentPlatformView != null)
+			if (currentPlatformView is not null)
 				RemoveView(currentPlatformView);
-			if (_view == null)
+			if (_view is null)
 				return;
 
 			currentPlatformView = currentHandler.PlatformView as AView ?? new AView(MauiContext.Context);
 			if (currentPlatformView.Parent == this)
 				return;
-			if (currentPlatformView.Parent != null)
+			if (currentPlatformView.Parent is not null)
 				(currentPlatformView.Parent as AViewGroup).RemoveView(currentPlatformView);
 			AddView(currentPlatformView, new LayoutParams(LayoutParams.MatchParent, LayoutParams.MatchParent));
 
@@ -81,7 +81,7 @@ namespace Comet.Android
 			double nativeWidth = widthSize;
 			double nativeHeight = heightSize;
 
-			if (CurrentView != null)
+			if (CurrentView is not null)
 			{
 				var deviceIndependentWidth = widthMeasureSpec.ToDouble(Context);
 				var deviceIndependentHeight = heightMeasureSpec.ToDouble(Context);
@@ -115,7 +115,7 @@ namespace Comet.Android
 
 		protected override void OnLayout(bool changed, int left, int top, int right, int bottom)
 		{
-			if (currentPlatformView == null || inLayout) return;
+			if (currentPlatformView is null || inLayout) return;
 
 			var displayScale = Context.Resources.DisplayMetrics.Density;
 			var width = (right - left) / displayScale;

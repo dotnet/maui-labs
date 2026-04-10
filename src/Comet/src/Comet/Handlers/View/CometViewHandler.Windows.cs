@@ -34,11 +34,11 @@ namespace Comet.Handlers
 
 		public static void MapBackgroundColor(CometViewHandler handler, View view)
 		{
-			if (handler?.PlatformView == null)
+			if (handler?.PlatformView is null)
 				return;
 
 			var background = view.Background;
-			if (background is SolidPaint solid && solid.Color != null)
+			if (background is SolidPaint solid && solid.Color is not null)
 			{
 				handler.PlatformView.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
 					Microsoft.UI.Xaml.Media.ColorHelper.FromArgb(
@@ -47,7 +47,7 @@ namespace Comet.Handlers
 						(byte)(solid.Color.Green * 255),
 						(byte)(solid.Color.Blue * 255)));
 			}
-			else if (background == null)
+			else if (background is null)
 			{
 				handler.PlatformView.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
 					Microsoft.UI.Colors.White);

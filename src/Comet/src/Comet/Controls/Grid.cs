@@ -24,10 +24,10 @@ namespace Comet
 			layout.ColumnSpacing = columnSpacing ?? spacing ?? 0;
 			layout.RowSpacing = rowSpacing ?? spacing ?? 0;
 
-			if (columns != null)
+			if (columns is not null)
 				layout.AddColumns(columns);
 
-			if (rows != null)
+			if (rows is not null)
 				layout.AddRows(rows);
 		}
 

@@ -11,7 +11,7 @@ namespace Comet.iOS
 		public static UIStringAttributes DefaultTitleTextAttributes { get; private set; }
 		public CUINavigationController()
 		{
-			if (DefaultBarTintColor == null)
+			if (DefaultBarTintColor is null)
 			{
 				DefaultBarTintColor = NavigationBar.BarTintColor;
 				DefaultTintColor = NavigationBar.TintColor;

@@ -48,13 +48,13 @@ namespace Comet.Handlers
 		public static void MapReloadData(CollectionViewHandler handler, IListView virtualView, object? value)
 #nullable restore
 		{
-			if (handler._mauiItemsView != null)
+			if (handler._mauiItemsView is not null)
 				RefreshItemsSource(handler._mauiItemsView, virtualView);
 		}
 
 		void EmbedMauiItemsView()
 		{
-			if (_mauiItemsView == null || MauiContext == null)
+			if (_mauiItemsView is null || MauiContext is null)
 				return;
 
 			try
@@ -100,10 +100,10 @@ namespace Comet.Handlers
 
 		public override Microsoft.Maui.Graphics.Size GetDesiredSize(double widthConstraint, double heightConstraint)
 		{
-			if (_mauiItemsView != null)
+			if (_mauiItemsView is not null)
 			{
 				var platformView = _mauiItemsView.Handler?.PlatformView as UIView;
-				if (platformView != null)
+				if (platformView is not null)
 				{
 					var fitting = platformView.SizeThatFits(new CoreGraphics.CGSize(
 						double.IsInfinity(widthConstraint) ? double.MaxValue : widthConstraint,
@@ -131,7 +131,7 @@ namespace Comet.Handlers
 				_contentView?.RemoveFromSuperview();
 				_contentView = platformView;
 				_virtualView = virtualView;
-				if (_contentView != null)
+				if (_contentView is not null)
 				{
 					_contentView.AutoresizingMask = UIViewAutoresizing.FlexibleWidth | UIViewAutoresizing.FlexibleHeight;
 					AddSubview(_contentView);
@@ -149,7 +149,7 @@ namespace Comet.Handlers
 			public override void LayoutSubviews()
 			{
 				base.LayoutSubviews();
-				if (_contentView == null || Bounds.Width <= 0 || Bounds.Height <= 0)
+				if (_contentView is null || Bounds.Width <= 0 || Bounds.Height <= 0)
 					return;
 
 				_virtualView?.Measure(Bounds.Width, Bounds.Height);

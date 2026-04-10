@@ -29,17 +29,17 @@
 //			{
 //				base.Frame = value;
 
-//				if (_shadowLayer != null || _maskLayer != null)
+//				if (_shadowLayer is not null || _maskLayer is not null)
 //				{
 //					if (!_size.Equals(value.Size))
 //					{
-//						if (_clipShape != null)
+//						if (_clipShape is not null)
 //						{
 //							var path = _clipShape.PathForBounds(new RectangleF(0, 0, (float)value.Width, (float)value.Height));
-//							if (_shadowLayer != null)
+//							if (_shadowLayer is not null)
 //								_shadowLayer.Path = path.ToCGPath();
 
-//							if (_maskLayer != null)
+//							if (_maskLayer is not null)
 //								_maskLayer.Path = path.ToCGPath();
 //						}
 //						else
@@ -49,10 +49,10 @@
 //							var transform = CGAffineTransform.MakeScale(fx, fy);
 //							var path = _shadowLayer?.Path ?? _maskLayer?.Path;
 //							var transformedPath = path?.CopyByTransformingPath(transform);
-//							if (_shadowLayer != null)
+//							if (_shadowLayer is not null)
 //								_shadowLayer.Path = transformedPath;
 
-//							if (_maskLayer != null)
+//							if (_maskLayer is not null)
 //								_maskLayer.Path = transformedPath;
 //						}
 //					}
@@ -67,7 +67,7 @@
 //			get => _mainView;
 //			set
 //			{
-//				if (_mainView != null)
+//				if (_mainView is not null)
 //				{
 //					ShadowLayer = null;
 //					MaskLayer = null;
@@ -77,14 +77,14 @@
 
 //				_mainView = value;
 
-//				if (_mainView != null)
+//				if (_mainView is not null)
 //				{
 //					base.Frame = _mainView.Bounds;
 //					_size = _mainView.Bounds.Size;
 //					_mainView.AutoresizingMask = UIViewAutoresizing.FlexibleWidth | UIViewAutoresizing.FlexibleHeight;
 //					_mainView.Frame = Bounds;
 
-//					if (_overlayView != null)
+//					if (_overlayView is not null)
 //						InsertSubviewBelow(_mainView, _overlayView);
 //					else
 //						AddSubview(_mainView);
@@ -111,7 +111,7 @@
 
 //				_overlayView = value;
 
-//				if (_overlayView != null)
+//				if (_overlayView is not null)
 //				{
 //					base.Frame = _mainView?.Bounds ?? Bounds;
 //					_overlayView.AutoresizingMask = UIViewAutoresizing.FlexibleWidth | UIViewAutoresizing.FlexibleHeight;
@@ -128,7 +128,7 @@
 //			{
 //				_shadowLayer?.RemoveFromSuperLayer();
 //				_shadowLayer = value;
-//				if (_shadowLayer != null && _mainView != null)
+//				if (_shadowLayer is not null && _mainView is not null)
 //					Layer.InsertSublayerBelow(_shadowLayer, _mainView.Layer);
 //			}
 //		}
@@ -137,7 +137,7 @@
 
 //		public override CGSize SizeThatFits(CGSize size)
 //		{
-//			if (_mainView != null)
+//			if (_mainView is not null)
 //			{
 //				_intrinsicContentSize = _mainView.SizeThatFits(size);
 //				return _intrinsicContentSize;
@@ -148,7 +148,7 @@
 
 //		public override void SizeToFit()
 //		{
-//			if (_mainView != null)
+//			if (_mainView is not null)
 //			{
 //				_mainView.SizeToFit();
 //				_intrinsicContentSize = _mainView.Bounds.Size;
@@ -165,11 +165,11 @@
 //			get => _maskLayer;
 //			set
 //			{
-//				if (_maskLayer != null)
+//				if (_maskLayer is not null)
 //					_mainView.Layer.Mask = null;
 
 //				_maskLayer = value;
-//				if (_mainView != null)
+//				if (_mainView is not null)
 //					_mainView.Layer.Mask = value;
 //			}
 //		}

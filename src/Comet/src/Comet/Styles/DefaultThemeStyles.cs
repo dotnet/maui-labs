@@ -29,16 +29,16 @@ namespace Comet.Styles
 
 		static void RegisterButtonStyle(Theme theme)
 		{
-			if (theme.GetControlStyle<Button>() != null)
+			if (theme.GetControlStyle<Button>() is not null)
 				return;
 
 			var primary = theme.GetColor(EnvironmentKeys.ThemeColor.Primary);
 			var onPrimary = theme.GetColor(EnvironmentKeys.ThemeColor.OnPrimary);
 
 			var style = new ControlStyle<Button>();
-			if (primary != null)
+			if (primary is not null)
 				style.Set(EnvironmentKeys.Colors.Background, new SolidPaint(primary));
-			if (onPrimary != null)
+			if (onPrimary is not null)
 				style.Set(EnvironmentKeys.Colors.Color, onPrimary);
 
 			theme.SetControlStyle(style);
@@ -46,13 +46,13 @@ namespace Comet.Styles
 
 		static void RegisterTextStyle(Theme theme)
 		{
-			if (theme.GetControlStyle<Text>() != null)
+			if (theme.GetControlStyle<Text>() is not null)
 				return;
 
 			var onSurface = theme.GetColor(EnvironmentKeys.ThemeColor.OnSurface);
 
 			var style = new ControlStyle<Text>();
-			if (onSurface != null)
+			if (onSurface is not null)
 				style.Set(EnvironmentKeys.Colors.Color, onSurface);
 
 			theme.SetControlStyle(style);
@@ -60,7 +60,7 @@ namespace Comet.Styles
 
 		static void RegisterTextFieldStyle(Theme theme)
 		{
-			if (theme.GetControlStyle<TextField>() != null)
+			if (theme.GetControlStyle<TextField>() is not null)
 				return;
 
 			var surfaceVariant = theme.GetColor(EnvironmentKeys.ThemeColor.SurfaceVariant);
@@ -68,11 +68,11 @@ namespace Comet.Styles
 			var outline = theme.GetColor(EnvironmentKeys.ThemeColor.Outline);
 
 			var style = new ControlStyle<TextField>();
-			if (surfaceVariant != null)
+			if (surfaceVariant is not null)
 				style.Set(EnvironmentKeys.Colors.Background, new SolidPaint(surfaceVariant));
-			if (onSurface != null)
+			if (onSurface is not null)
 				style.Set(EnvironmentKeys.Colors.Color, onSurface);
-			if (outline != null)
+			if (outline is not null)
 				style.Set(EnvironmentKeys.Button.BorderColor, outline);
 
 			theme.SetControlStyle(style);
@@ -80,13 +80,13 @@ namespace Comet.Styles
 
 		static void RegisterToggleStyle(Theme theme)
 		{
-			if (theme.GetControlStyle<Toggle>() != null)
+			if (theme.GetControlStyle<Toggle>() is not null)
 				return;
 
 			var primary = theme.GetColor(EnvironmentKeys.ThemeColor.Primary);
 
 			var style = new ControlStyle<Toggle>();
-			if (primary != null)
+			if (primary is not null)
 				style.Set(EnvironmentKeys.Switch.OnColor, primary);
 
 			theme.SetControlStyle(style);
@@ -94,13 +94,13 @@ namespace Comet.Styles
 
 		static void RegisterSliderStyle(Theme theme)
 		{
-			if (theme.GetControlStyle<Slider>() != null)
+			if (theme.GetControlStyle<Slider>() is not null)
 				return;
 
 			var primary = theme.GetColor(EnvironmentKeys.ThemeColor.Primary);
 
 			var style = new ControlStyle<Slider>();
-			if (primary != null)
+			if (primary is not null)
 				style.Set(EnvironmentKeys.Slider.ProgressColor, primary);
 
 			theme.SetControlStyle(style);

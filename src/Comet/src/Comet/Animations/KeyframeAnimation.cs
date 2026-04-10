@@ -65,10 +65,10 @@ namespace Comet
 				return;
 			}
 
-			if (_currentAnimation == null)
+			if (_currentAnimation is null)
 			{
 				_currentAnimation = CreateSegmentAnimation(_currentSegmentIndex);
-				if (_currentAnimation == null)
+				if (_currentAnimation is null)
 				{
 					_currentSegmentIndex++;
 					return;

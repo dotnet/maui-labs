@@ -51,21 +51,21 @@ namespace Comet
 		/// </summary>
 		public static void ApplyAutomationProperties(View cometView, Microsoft.Maui.Controls.View mauiView)
 		{
-			if (cometView == null || mauiView == null) return;
+			if (cometView is null || mauiView is null) return;
 
 			var automationName = cometView.GetAutomationName();
-			if (automationName != null)
+			if (automationName is not null)
 				Microsoft.Maui.Controls.AutomationProperties.SetName(mauiView, automationName);
 
 			var helpText = cometView.GetAutomationHelpText();
-			if (helpText != null)
+			if (helpText is not null)
 				Microsoft.Maui.Controls.AutomationProperties.SetHelpText(mauiView, helpText);
 
 			var isInTree = cometView.GetIsInAccessibleTree();
 			if (isInTree.HasValue)
 				Microsoft.Maui.Controls.AutomationProperties.SetIsInAccessibleTree(mauiView, isInTree.Value);
 
-			if (cometView.AccessibilityId != null)
+			if (cometView.AccessibilityId is not null)
 				mauiView.AutomationId = cometView.AccessibilityId;
 		}
 	}

@@ -25,7 +25,7 @@ namespace Comet.iOS
 
 		public void SetFromContext(IMauiContext context)
 		{
-			if (cometView != null)
+			if (cometView is not null)
 				return;
 
 			ContentView.Tag = _instanceCount++;

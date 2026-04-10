@@ -76,7 +76,7 @@ public static partial class HandlerExtensions
 			{
 				var data = dragGesture.DragStarting?.Invoke(view);
 				dragGesture.DragStartingCommand?.Execute(dragGesture.DragStartingCommandParameter);
-				if (data != null)
+				if (data is not null)
 					e.Data.SetText(data.ToString());
 			};
 			nativeView.DropCompleted += (s, e) =>

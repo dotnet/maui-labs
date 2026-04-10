@@ -8,7 +8,7 @@ namespace Comet
 
 		internal void Attach(View view)
 		{
-			if (AssociatedObject != null)
+			if (AssociatedObject is not null)
 				throw new InvalidOperationException("Behavior is already attached to a view");
 
 			AssociatedObject = view;
@@ -17,7 +17,7 @@ namespace Comet
 
 		internal void Detach()
 		{
-			if (AssociatedObject == null)
+			if (AssociatedObject is null)
 				return;
 
 			OnDetachingFrom(AssociatedObject);

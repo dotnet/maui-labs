@@ -35,7 +35,7 @@ namespace Comet.Handlers
 		static bool IsCarouselView(IListView listView)
 		{
 			var type = listView.GetType();
-			while (type != null)
+			while (type is not null)
 			{
 				if (type == typeof(Comet.CarouselView))
 					return true;
@@ -69,7 +69,7 @@ namespace Comet.Handlers
 
 			// Sync position from the Comet CarouselView to the MAUI CarouselView
 			var positionProp = listView.GetType().GetProperty("Position");
-			if (positionProp != null)
+			if (positionProp is not null)
 			{
 				var posValue = positionProp.GetValue(listView);
 				if (posValue is Reactive.PropertySubscription<int> posSub)
@@ -89,7 +89,7 @@ namespace Comet.Handlers
 					if (!listViewRef.TryGetTarget(out var currentListView))
 						return;
 					var cometView = currentListView.ViewFor(proxy.Section, proxy.Row);
-					container.Content = cometView != null ? new CometHost(cometView) : null;
+					container.Content = cometView is not null ? new CometHost(cometView) : null;
 				};
 				return container;
 			});
@@ -118,7 +118,7 @@ namespace Comet.Handlers
 					if (_currentListViewRef?.TryGetTarget(out var lv) != true)
 						return;
 					var cometView = lv.ViewFor(proxy.Section, proxy.Row);
-					container.Content = cometView != null ? new CometHost(cometView) : null;
+					container.Content = cometView is not null ? new CometHost(cometView) : null;
 				};
 				return container;
 			});
@@ -129,13 +129,13 @@ namespace Comet.Handlers
 					return;
 
 				var current = e.CurrentSelection;
-				if (current == null || current.Count == 0)
+				if (current is null || current.Count == 0)
 					return;
 
 				// Find the most recently added item for accurate multi-select reporting
 				var previous = e.PreviousSelection;
 				object target = current[current.Count - 1];
-				if (previous != null)
+				if (previous is not null)
 				{
 					foreach (var item in current)
 					{
@@ -184,7 +184,7 @@ namespace Comet.Handlers
 		static void MapCometItemsLayout(Microsoft.Maui.Controls.CollectionView cv, IListView listView)
 		{
 			var cometLayout = GetPropertyValue<Comet.ItemsLayout>(listView, nameof(Comet.CollectionView.ItemsLayout));
-			if (cometLayout == null)
+			if (cometLayout is null)
 				return;
 
 			if (cometLayout is Comet.GridItemsLayout gridLayout)
@@ -227,16 +227,16 @@ namespace Comet.Handlers
 		static void MapCometEmptyView(Microsoft.Maui.Controls.CollectionView cv, IListView listView)
 		{
 			var emptyView = GetPropertyValue<Comet.View>(listView, nameof(Comet.CollectionView.EmptyView));
-			cv.EmptyView = emptyView != null ? new CometHost(emptyView) : null;
+			cv.EmptyView = emptyView is not null ? new CometHost(emptyView) : null;
 		}
 
 		static void MapCometHeaderFooter(Microsoft.Maui.Controls.CollectionView cv, IListView listView)
 		{
 			var header = listView.HeaderView();
-			cv.Header = header != null ? new CometHost(header) : null;
+			cv.Header = header is not null ? new CometHost(header) : null;
 
 			var footer = listView.FooterView();
-			cv.Footer = footer != null ? new CometHost(footer) : null;
+			cv.Footer = footer is not null ? new CometHost(footer) : null;
 		}
 
 		/// <summary>
@@ -245,7 +245,7 @@ namespace Comet.Handlers
 		static T GetPropertyValue<T>(IListView listView, string propertyName)
 		{
 			var prop = listView.GetType().GetProperty(propertyName);
-			if (prop != null)
+			if (prop is not null)
 			{
 				var value = prop.GetValue(listView);
 				if (value is T typed)
@@ -276,7 +276,7 @@ namespace Comet.Handlers
 		static void MapCometScrollTo(Microsoft.Maui.Controls.CollectionView cv, IListView listView)
 		{
 			var scrollToProp = listView.GetType().GetProperty("ScrollToRequested");
-			if (scrollToProp != null)
+			if (scrollToProp is not null)
 			{
 				scrollToProp.SetValue(listView, (Action<int, bool>)((index, animate) =>
 				{

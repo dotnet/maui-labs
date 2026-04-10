@@ -10,7 +10,6 @@ using Comet;
 using Comet.Reactive;
 using Comet.Styles;
 using Microsoft.Maui;
-using Microsoft.Maui.Devices;
 using Microsoft.Maui.Graphics;
 using static Comet.CometControls;
 
@@ -21,11 +20,10 @@ namespace Microsoft.Maui.Go.CompanionApp;
 /// </summary>
 public class GoAppState
 {
-	// On Android emulator, 10.0.2.2 reaches the host machine.
-	// With adb reverse, localhost also works.
-	public string ServerUrl { get; set; } = DeviceInfo.Platform == DevicePlatform.Android
-		? $"ws://10.0.2.2:{GoProtocol.DefaultPort}{GoProtocol.DefaultPath}"
-		: $"ws://localhost:{GoProtocol.DefaultPort}{GoProtocol.DefaultPath}";
+	// Use localhost as default -- works with adb reverse on physical devices
+	// and directly on iOS/Mac simulators. For Android emulators without
+	// adb reverse, change to 10.0.2.2 in the UI.
+	public string ServerUrl { get; set; } = $"ws://localhost:{GoProtocol.DefaultPort}{GoProtocol.DefaultPath}";
 	public string Status { get; set; } = "Enter server URL or scan QR code";
 	public string? ErrorMessage { get; set; }
 	public bool IsConnected { get; set; }

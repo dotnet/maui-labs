@@ -80,7 +80,7 @@ namespace Comet.Layout
 
 					var constraints = view.GetFrameConstraints();
 					var verticalSizing = view.GetVerticalLayoutAlignment(layout);
-					if (verticalSizing == LayoutAlignment.Fill && constraints?.Height == null && !double.IsInfinity(heightConstraint))
+					if (verticalSizing == LayoutAlignment.Fill && constraints?.Height is null && !double.IsInfinity(heightConstraint))
 						height = heightConstraint;
 					height = Math.Max(finalHeight, height);
 					width += finalWidth;

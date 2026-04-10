@@ -69,7 +69,7 @@ namespace Comet
 		public static T GridRow<T>(this T view, int row) where T : View
 		{
 			var existing = view.GetLayoutConstraints() as GridConstraints;
-			if (existing != null)
+			if (existing is not null)
 				existing.Row = row;
 			else
 				view.LayoutConstraints(new GridConstraints(row, 0));
@@ -79,7 +79,7 @@ namespace Comet
 		public static T GridColumn<T>(this T view, int column) where T : View
 		{
 			var existing = view.GetLayoutConstraints() as GridConstraints;
-			if (existing != null)
+			if (existing is not null)
 				existing.Column = column;
 			else
 				view.LayoutConstraints(new GridConstraints(0, column));
@@ -89,7 +89,7 @@ namespace Comet
 		public static T GridRowSpan<T>(this T view, int rowSpan) where T : View
 		{
 			var existing = view.GetLayoutConstraints() as GridConstraints;
-			if (existing != null)
+			if (existing is not null)
 				existing.RowSpan = rowSpan;
 			else
 				view.LayoutConstraints(new GridConstraints(0, 0, rowSpan, 1));
@@ -99,7 +99,7 @@ namespace Comet
 		public static T GridColumnSpan<T>(this T view, int colSpan) where T : View
 		{
 			var existing = view.GetLayoutConstraints() as GridConstraints;
-			if (existing != null)
+			if (existing is not null)
 				existing.ColumnSpan = colSpan;
 			else
 				view.LayoutConstraints(new GridConstraints(0, 0, 1, colSpan));
@@ -126,7 +126,7 @@ namespace Comet
 			this View view,
 			Rect frame, LayoutAlignment defaultHorizontalAlignment = LayoutAlignment.Fill, LayoutAlignment defaultVerticalAlignment = LayoutAlignment.Fill)
 		{
-			if (view == null)
+			if (view is null)
 				return;
 			var margin = view.GetMargin();
 			if (!margin.IsEmpty)
@@ -154,7 +154,7 @@ namespace Comet
 			var verticalSizing = view.GetVerticalLayoutAlignment(view.Parent as ContainerView, defaultVerticalAlignment);
 
 
-			if (frameConstraints?.Width != null)
+			if (frameConstraints?.Width is not null)
 			{
 				width = (float)frameConstraints.Width;
 			}
@@ -164,7 +164,7 @@ namespace Comet
 					width = frame.Width;
 			}
 
-			if (frameConstraints?.Height != null)
+			if (frameConstraints?.Height is not null)
 			{
 				height = (float)frameConstraints.Height;
 			}
@@ -230,9 +230,9 @@ namespace Comet
 		public static LayoutAlignment GetHorizontalLayoutAlignment(this View view, ContainerView container, LayoutAlignment defaultSizing = LayoutAlignment.Start)
 		{
 			var sizing = view.GetEnvironment<LayoutAlignment?>(view, EnvironmentKeys.Layout.HorizontalLayoutAlignment,false);
-			if (sizing != null) return (LayoutAlignment)sizing;
+			if (sizing is not null) return (LayoutAlignment)sizing;
 
-			if (container != null)
+			if (container is not null)
 				sizing = view.GetEnvironment<LayoutAlignment?>(view, $"{container.GetType().Name}.{EnvironmentKeys.Layout.HorizontalLayoutAlignment}");
 			return sizing ?? defaultSizing;
 		}
@@ -240,9 +240,9 @@ namespace Comet
 		public static LayoutAlignment GetVerticalLayoutAlignment(this View view, ContainerView container, LayoutAlignment defaultSizing = LayoutAlignment.Start)
 		{
 			var sizing = view.GetEnvironment<LayoutAlignment?>(view, EnvironmentKeys.Layout.VerticalLayoutAlignment, false);
-			if (sizing != null) return (LayoutAlignment)sizing;
+			if (sizing is not null) return (LayoutAlignment)sizing;
 
-			if (container != null)
+			if (container is not null)
 				sizing = view.GetEnvironment<LayoutAlignment?>(view, $"{container.GetType().Name}.{EnvironmentKeys.Layout.VerticalLayoutAlignment}");
 			return sizing ?? defaultSizing;
 		}

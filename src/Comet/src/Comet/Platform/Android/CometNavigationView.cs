@@ -39,7 +39,7 @@ ShowView(view);
 
 void ShowView(View view)
 {
-if (currentPlatformView != null)
+if (currentPlatformView is not null)
 {
 RemoveView(currentPlatformView);
 currentPlatformView = null;
@@ -49,12 +49,12 @@ currentVirtualView = null;
 currentView = view;
 
 var renderView = view.GetView();
-IView viewToRender = (renderView != null && renderView != view) ? renderView : view;
+IView viewToRender = (renderView is not null && renderView != view) ? renderView : view;
 
 var platformView = viewToRender.ToPlatform(MauiContext);
-if (platformView != null)
+if (platformView is not null)
 {
-if (platformView.Parent != null)
+if (platformView.Parent is not null)
 (platformView.Parent as ViewGroup)?.RemoveView(platformView);
 currentPlatformView = platformView;
 currentVirtualView = viewToRender;
@@ -70,7 +70,7 @@ RequestLayout();
 // Post a deferred layout to ensure the view tree is fully measured
 Post(() =>
 {
-if (currentPlatformView != null && Width > 0 && Height > 0)
+if (currentPlatformView is not null && Width > 0 && Height > 0)
 {
 MeasureAndArrange();
 currentPlatformView.Layout(0, 0, Width, Height);
@@ -93,7 +93,7 @@ InvalidateViewTree(vg.GetChildAt(i));
 
 void MeasureAndArrange()
 {
-if (currentVirtualView == null || Width <= 0 || Height <= 0)
+if (currentVirtualView is null || Width <= 0 || Height <= 0)
 return;
 var density = Context?.Resources?.DisplayMetrics?.Density ?? 1;
 var widthDp = Width / density;
@@ -104,7 +104,7 @@ currentVirtualView.Arrange(new Microsoft.Maui.Graphics.Rect(0, 0, widthDp, heigh
 
 public void NavigateTo(View view)
 {
-if (currentView != null)
+if (currentView is not null)
 viewStack.Push(currentView);
 ShowView(view);
 UpdateBackCallbackState();
@@ -120,7 +120,7 @@ protected override void OnAttachedToWindow()
 {
 base.OnAttachedToWindow();
 isAttached = true;
-if (contentView != null)
+if (contentView is not null)
 {
 SetRoot(contentView);
 contentView = null;
@@ -148,7 +148,7 @@ UpdateBackCallbackState();
 
 void UpdateBackCallbackState()
 {
-if (backCallback != null)
+if (backCallback is not null)
 backCallback.Enabled = CanGoBack;
 }
 

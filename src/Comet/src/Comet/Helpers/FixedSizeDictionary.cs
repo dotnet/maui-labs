@@ -32,7 +32,7 @@ namespace System.Collections.Generic
 			{
 				lock (_lock)
 				{
-					if (key == null)
+					if (key is null)
 						return default(T1);
 					if (dictionary.TryGetValue(key, out var value))
 					{

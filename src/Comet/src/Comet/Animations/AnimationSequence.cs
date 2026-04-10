@@ -53,7 +53,7 @@ namespace Comet
 		{
 			CurrentTime += secondsSinceLastUpdate;
 			currentAnimation ??= GetNextAnimation();
-			if (currentAnimation == null)
+			if (currentAnimation is null)
 			{
 				HasFinished = true;
 				return;

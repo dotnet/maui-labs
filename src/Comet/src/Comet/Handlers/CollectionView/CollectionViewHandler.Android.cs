@@ -50,16 +50,16 @@ cvHandler.EmbedMauiItemsView();
 public static void MapReloadData(CollectionViewHandler handler, IListView virtualView, object? value)
 #nullable restore
 {
-if (handler._mauiItemsView != null)
+if (handler._mauiItemsView is not null)
 RefreshItemsSource(handler._mauiItemsView, virtualView);
 }
 
 void EmbedMauiItemsView()
 {
-if (_mauiItemsView == null || MauiContext == null)
+if (_mauiItemsView is null || MauiContext is null)
 return;
 
-if (_hostedPlatformView != null)
+if (_hostedPlatformView is not null)
 PlatformView.RemoveView(_hostedPlatformView);
 
 try
@@ -72,7 +72,7 @@ Console.WriteLine($"[CollectionViewHandler] EmbedMauiItemsView failed: {ex.Messa
 return;
 }
 
-if (_hostedPlatformView != null)
+if (_hostedPlatformView is not null)
 {
 PlatformView.AddView(_hostedPlatformView,
 new AFrameLayout.LayoutParams(
@@ -84,7 +84,7 @@ PlatformView.RequestLayout();
 
 protected override void DisconnectHandler(AFrameLayout platformView)
 {
-if (_hostedPlatformView != null)
+if (_hostedPlatformView is not null)
 {
 platformView.RemoveView(_hostedPlatformView);
 _hostedPlatformView = null;
@@ -105,7 +105,7 @@ var w = double.IsInfinity(widthConstraint) ? 400 : widthConstraint;
 var h = double.IsInfinity(heightConstraint) ? 800 : heightConstraint;
 
 // Measure the platform FrameLayout so its children (MauiRecyclerView) get sized
-if (PlatformView != null && Context != null)
+if (PlatformView is not null && Context is not null)
 {
 var density = Context.Resources.DisplayMetrics.Density;
 PlatformView.Measure(
@@ -121,7 +121,7 @@ public override void PlatformArrange(Microsoft.Maui.Graphics.Rect frame)
 base.PlatformArrange(frame);
 
 // Ensure the FrameLayout and its MauiRecyclerView child get proper layout
-if (PlatformView != null && Context != null)
+if (PlatformView is not null && Context is not null)
 {
 var density = Context.Resources.DisplayMetrics.Density;
 var widthPx = (int)(frame.Width * density);

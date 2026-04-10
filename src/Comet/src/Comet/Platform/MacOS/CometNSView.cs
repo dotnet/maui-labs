@@ -33,7 +33,7 @@ namespace Comet.MacOS
 			// Reuse handlers when content type matches
 			if (view is View v && _view is View pv &&
 				v.GetContentTypeHashCode() == pv.GetContentTypeHashCode()
-				&& currentHandler != null)
+				&& currentHandler is not null)
 			{
 				_view = view;
 				v.ViewHandler = currentHandler;
@@ -56,7 +56,7 @@ namespace Comet.MacOS
 			// Resolve views with a Body to their concrete tree to avoid
 			// circular CometViewHandler→CometNSView loops
 			var viewToRender = _view;
-			if (viewToRender is View cometView && cometView.Body != null)
+			if (viewToRender is View cometView && cometView.Body is not null)
 				viewToRender = cometView.GetView();
 
 			var newPlatformView = viewToRender?.ToMacOSPlatform(MauiContext);
@@ -65,7 +65,7 @@ namespace Comet.MacOS
 				return;
 
 			currentPlatformView?.RemoveFromSuperview();
-			if (newPlatformView != this && newPlatformView != null)
+			if (newPlatformView != this && newPlatformView is not null)
 			{
 				AddSubview(newPlatformView);
 				currentPlatformView = newPlatformView;
@@ -75,7 +75,7 @@ namespace Comet.MacOS
 		public override void Layout()
 		{
 			base.Layout();
-			if (currentPlatformView == null)
+			if (currentPlatformView is null)
 				return;
 			_view?.Measure(Bounds.Width, Bounds.Height);
 			currentPlatformView.Frame = Bounds;
@@ -84,10 +84,10 @@ namespace Comet.MacOS
 		public void UpdateBackground(IView view)
 		{
 			WantsLayer = true;
-			if (Layer == null)
+			if (Layer is null)
 				return;
 
-			if (view.Background is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color != null)
+			if (view.Background is Microsoft.Maui.Graphics.SolidPaint solid && solid.Color is not null)
 			{
 				var color = solid.Color;
 				Layer.BackgroundColor = CoreGraphics.CGColor.CreateSrgb(

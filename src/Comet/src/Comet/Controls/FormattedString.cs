@@ -40,9 +40,9 @@ namespace Comet
 		{
 			var span = new Microsoft.Maui.Controls.Span { Text = Text };
 
-			if (TextColor != null)
+			if (TextColor is not null)
 				span.TextColor = TextColor;
-			if (FontFamily != null)
+			if (FontFamily is not null)
 				span.FontFamily = FontFamily;
 			if (FontSize > 0)
 				span.FontSize = FontSize;
@@ -50,7 +50,7 @@ namespace Comet
 				span.FontAttributes = (Microsoft.Maui.Controls.FontAttributes)(int)FontAttributes;
 			if (TextDecorations != TextDecorations.None)
 				span.TextDecorations = (Microsoft.Maui.TextDecorations)(int)TextDecorations;
-			if (BackgroundColor != null)
+			if (BackgroundColor is not null)
 				span.BackgroundColor = BackgroundColor;
 			if (CharacterSpacing != 0)
 				span.CharacterSpacing = CharacterSpacing;

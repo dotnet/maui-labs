@@ -36,14 +36,14 @@ namespace Comet.Handlers
 		public static void MapTitle(CometViewHandler handler, View view)
 		{
 			var vc = handler?.viewController;
-			if (vc == null)
+			if (vc is null)
 				return;
 			vc.Title = view.GetTitle() ?? "";
 		}
 		public static void MapBackgroundColor(CometViewHandler handler, View view)
 		{
 			var vc = handler?.viewController;
-			if (vc == null)
+			if (vc is null)
 				return;
 			vc.View.UpdateBackground(view);
 		}

@@ -43,7 +43,7 @@ namespace Comet
 			else
 				contentMeasureSize.Width = double.PositiveInfinity;
 			
-			if (Content != null)
+			if (Content is not null)
 			{
 				// Always remeasure content with current constraints — they change
 				// on rotation and the old cached size would be stale.
@@ -64,7 +64,7 @@ namespace Comet
 			this.Frame = frame;
 
 			Content.SetFrameFromPlatformView(frame,LayoutAlignment.Start,	LayoutAlignment.Start);
-			if (Content?.BuiltView != null)
+			if (Content?.BuiltView is not null)
 				Content.BuiltView.LayoutSubviews(frame);
 		}
 

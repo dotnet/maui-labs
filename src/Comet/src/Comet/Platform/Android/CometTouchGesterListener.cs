@@ -74,21 +74,21 @@ namespace Comet.Android.Controls
 			// Scale gesture callbacks
 			public bool OnScale(ScaleGestureDetector detector)
 			{
-				if (currentListener != null)
+				if (currentListener is not null)
 					currentListener.OnPinch(detector.ScaleFactor, GestureStatus.Running);
 				return true;
 			}
 
 			public bool OnScaleBegin(ScaleGestureDetector detector)
 			{
-				if (currentListener != null)
+				if (currentListener is not null)
 					currentListener.OnPinch(detector.ScaleFactor, GestureStatus.Started);
 				return true;
 			}
 
 			public void OnScaleEnd(ScaleGestureDetector detector)
 			{
-				if (currentListener != null)
+				if (currentListener is not null)
 					currentListener.OnPinch(detector.ScaleFactor, GestureStatus.Completed);
 			}
 

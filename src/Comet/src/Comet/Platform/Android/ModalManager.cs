@@ -21,7 +21,7 @@ namespace Comet.Android.Controls
 		public static void ShowModal(View view)
 		{
 			var transaction = FragmentManager(view).BeginTransaction();
-			if (currrentDialog != null)
+			if (currrentDialog is not null)
 				transaction.Remove(currrentDialog);
 			transaction.AddToBackStack(null);
 
@@ -33,7 +33,7 @@ namespace Comet.Android.Controls
 		public static void DismisModal() => PerformDismiss(true);
 		static void PerformDismiss(bool removeCurrent = true)
 		{
-			if (currrentDialog == null)
+			if (currrentDialog is null)
 				return;
 			var transaction = FragmentManager(currrentDialog.HView).BeginTransaction();
 
@@ -46,7 +46,7 @@ namespace Comet.Android.Controls
 			currentDialogs.Remove(currrentDialog.HView);
 			currrentDialog = null;
 			var currentView = currentDialogs.LastOrDefault();
-			if (currentView == null)
+			if (currentView is null)
 			{
 				transaction.CommitAllowingStateLoss();
 				return;
@@ -74,11 +74,11 @@ namespace Comet.Android.Controls
 			public override void OnDestroy()
 			{
 				PerformDismiss(false);
-				if (HView != null)
+				if (HView is not null)
 				{
 					HView.ViewHandler = null;
 				}
-				if (currentBuiltView != null)
+				if (currentBuiltView is not null)
 				{
 					currentBuiltView?.Dispose();
 					currentBuiltView = null;

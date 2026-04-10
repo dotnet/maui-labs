@@ -10,13 +10,13 @@ namespace Comet.Graphics
 	{
 		public static Paint ConvertToPaint(this Object obj)
 		{
-			if (obj == null)
+			if (obj is null)
 				return null;
 			var p = obj?.GetValueOfType<Paint>();
-			if (p != null)
+			if (p is not null)
 				return p;
 			var c = obj?.GetValueOfType<Color>();
-			if (c != null)
+			if (c is not null)
 				return new SolidPaint { Color = c };
 			var s = obj?.GetValueOfType<string>();
 			if (!string.IsNullOrWhiteSpace(s))
@@ -47,7 +47,7 @@ namespace Comet
 			Color strokeColor = null,
 			object fill = null)
 		{
-			if (shape == null)
+			if (shape is null)
 				return;
 			Paint strokePaint = null;
 			Paint fillPaint = null;
@@ -88,7 +88,7 @@ namespace Comet
 
 			var path = shape.PathForBounds(shapeBounds);
 
-			if (fill != null && fillPaint != null)
+			if (fill is not null && fillPaint is not null)
 			{
 				if (fill is Color color)
 				{
@@ -137,7 +137,7 @@ namespace Comet
 						canvas.FillPath(path);
 					}
 
-					//if (shader != null)
+					//if (shader is not null)
 					//{
 					//	fillPaint.Shader = shader;
 					//	canvas.DrawPath(path, fillPaint);
@@ -148,7 +148,7 @@ namespace Comet
 				}
 			}
 
-			if (strokePaint != null)
+			if (strokePaint is not null)
 			{
 				canvas.StrokeSize = strokeWidth;
 				canvas.StrokeColor = strokeColor;

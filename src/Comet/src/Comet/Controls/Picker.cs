@@ -12,7 +12,7 @@ namespace Comet
 		public Picker(int selectedIndex, params string[] items)
 		{
 			SelectedIndex = selectedIndex;
-			if (items != null)
+			if (items is not null)
 				Items = new List<string>(items);
 		}
 
@@ -39,7 +39,7 @@ namespace Comet
 
 		// IPicker implementation
 		IList<string> IPicker.Items => Items?.CurrentValue ?? new List<string>();
-		int IPicker.SelectedIndex { get => SelectedIndex?.CurrentValue ?? -1; set { if (SelectedIndex != null) SelectedIndex.Set(value); } }
+		int IPicker.SelectedIndex { get => SelectedIndex?.CurrentValue ?? -1; set { if (SelectedIndex is not null) SelectedIndex.Set(value); } }
 		string IPicker.Title => Title?.CurrentValue;
 		Color IPicker.TitleColor => this.GetEnvironment<Color>(nameof(IPicker.TitleColor));
 
@@ -57,7 +57,7 @@ namespace Comet
 		string IItemDelegate<string>.GetItem(int index)
 		{
 			var items = Items?.CurrentValue;
-			if (items == null || index < 0 || index >= items.Count)
+			if (items is null || index < 0 || index >= items.Count)
 				return null;
 			return items[index];
 		}

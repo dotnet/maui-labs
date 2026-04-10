@@ -48,16 +48,16 @@ namespace Comet.Handlers
 		public static void MapReloadData(CollectionViewHandler handler, IListView virtualView, object? value)
 #nullable restore
 		{
-			if (handler._mauiItemsView != null)
+			if (handler._mauiItemsView is not null)
 				RefreshItemsSource(handler._mauiItemsView, virtualView);
 		}
 
 		void EmbedMauiItemsView()
 		{
-			if (_mauiItemsView == null || MauiContext == null)
+			if (_mauiItemsView is null || MauiContext is null)
 				return;
 
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 				PlatformView.Children.Remove(_hostedPlatformView);
 
 			try
@@ -70,7 +70,7 @@ namespace Comet.Handlers
 				return;
 			}
 
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 			{
 				_hostedPlatformView.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch;
 				_hostedPlatformView.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch;
@@ -80,7 +80,7 @@ namespace Comet.Handlers
 
 		protected override void DisconnectHandler(WGrid platformView)
 		{
-			if (_hostedPlatformView != null)
+			if (_hostedPlatformView is not null)
 			{
 				platformView.Children.Remove(_hostedPlatformView);
 				_hostedPlatformView = null;

@@ -60,7 +60,7 @@ namespace Comet
 					OnDequeue = (pair) =>
 					{
 						var view = pair.Value;
-						if (view?.ViewHandler ?.PlatformView == null)
+						if (view?.ViewHandler ?.PlatformView is null)
 							view.Dispose();
 						else
 							CurrentViews[pair.Key] = view;
@@ -119,13 +119,13 @@ namespace Comet
 		protected override View GetViewFor(int section, int index)
 		{
 			var item = (T)GetItemAt(section, index);
-			if (item == null)
+			if (item is null)
 				return null;
 			var key = (section, index,item);
 			if (!CurrentViews.TryGetValue(key, out var view) || (view?.IsDisposed ?? true))
 			{
 				view = ViewFor?.Invoke(item);
-				if (view == null)
+				if (view is null)
 					return null;
 				CurrentViews[key] = view;
 				view.Parent = this;
@@ -176,7 +176,7 @@ namespace Comet
 
 		public virtual void Add(View view)
 		{
-			if (views == null)
+			if (views is null)
 				views = new List<View>();
 			views.Add(view);
 		}
@@ -262,13 +262,13 @@ namespace Comet
 		List<View> views;
 		public virtual void Add(IEnumerable<View> views)
 		{
-			if (this.views == null)
+			if (this.views is null)
 				this.views = new List<View>();
 			this.views.AddRange(views);
 		}
 		public virtual void Add(View view)
 		{
-			if (views == null)
+			if (views is null)
 				views = new List<View>();
 			views.Add(view);
 		}
@@ -312,7 +312,7 @@ namespace Comet
 		{
 			var item = (T)GetItemAt(index);
 			var view = ViewFor?.Invoke(item);
-			if (view != null)
+			if (view is not null)
 				trackedViews.Add(view);
 			return view;
 		}
@@ -348,7 +348,7 @@ namespace Comet
 		List<Section<T>> sections;
 		public virtual void Add(Section<T> section)
 		{
-			if (sections == null)
+			if (sections is null)
 				sections = new List<Section<T>>();
 			sections.Add(section);
 		}
@@ -367,13 +367,13 @@ namespace Comet
 		protected override View GetViewFor(int section, int index)
 		{
 			var item = (T)GetItemAt(section, index);
-			if (item == null)
+			if (item is null)
 				return null;
 			var key = (section, index,item);
 			if (!CurrentViews.TryGetValue(key, out var view) || (view?.IsDisposed ?? true))
 			{
 				view = sections.SafeGetAtIndex(section, GetCachedSection)?.GetViewFor(index)?.SetParent(this);
-				if (view == null)
+				if (view is null)
 					return null;
 				CurrentViews[key] = view;
 			}
@@ -385,7 +385,7 @@ namespace Comet
 			if (!sectionCache.TryGetValue(index, out var section))
 			{
 				section = SectionFor?.Invoke(index);
-				if (section != null)
+				if (section is not null)
 				{
 					section.Parent = this;
 					sectionCache[index] = section;
@@ -430,14 +430,14 @@ namespace Comet
 		IList<Section> sections;
 		public virtual void Add(Section section)
 		{
-			if (sections == null)
+			if (sections is null)
 				sections = new List<Section>();
 			sections.Add(section);
 		}
 
 		public virtual void Add(IEnumerable<Section> items)
 		{
-			if (this.sections == null)
+			if (this.sections is null)
 				this.sections = new List<Section>();
 			((List<Section>)this.sections).AddRange(items);
 		}

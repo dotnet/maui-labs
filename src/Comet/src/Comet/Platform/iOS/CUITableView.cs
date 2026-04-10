@@ -32,7 +32,7 @@ namespace Comet.iOS
 					var v = value.ViewFor(0, 0);
 					var constraints = v?.GetFrameConstraints();
 
-					if (constraints?.Height != null)
+					if (constraints?.Height is not null)
 						RowHeight = (float)constraints.Height;
 					else
 						RowHeight = -1;
@@ -53,7 +53,7 @@ namespace Comet.iOS
 			var uneven = _delegate.UnevenRows;
 			if (listView?.Sections() > 0)
 			{
-				hasHeader = listView.HeaderFor(0) != null;
+				hasHeader = listView.HeaderFor(0) is not null;
 			}
 			if (_delegate.HasHeaders != hasHeader)
 			{
