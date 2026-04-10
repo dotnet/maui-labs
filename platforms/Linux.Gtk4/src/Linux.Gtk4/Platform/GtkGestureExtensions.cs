@@ -48,7 +48,7 @@ break;
 }
 
 if (controllers.Count > 0)
-_attachedControllers[widget.Handle] = controllers;
+_attachedControllers[widget.Handle.DangerousGetHandle()] = controllers;
 }
 
 /// <summary>
@@ -56,7 +56,7 @@ _attachedControllers[widget.Handle] = controllers;
 /// </summary>
 public static void RemoveAttachedGestures(Gtk.Widget widget)
 {
-if (_attachedControllers.TryRemove(widget.Handle, out var controllers))
+if (_attachedControllers.TryRemove(widget.Handle.DangerousGetHandle(), out var controllers))
 {
 foreach (var c in controllers)
 widget.RemoveController(c);

@@ -75,7 +75,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	protected override void DisconnectHandler(TPlatformView platformView)
 	{
-		_zIndexMap.TryRemove(platformView.Handle, out _);
+		_zIndexMap.TryRemove(platformView.Handle.DangerousGetHandle(), out _);
 		CleanupContextFlyout(platformView);
 		CleanupVisualStateTracking(platformView);
 		RemoveTransitionCss(platformView);
@@ -568,7 +568,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var parent = widget.GetParent();
 		if (parent == null) return;
 
-		nint key = widget.Handle;
+		nint key = widget.Handle.DangerousGetHandle();
 		_zIndexMap[key] = view.ZIndex;
 
 		// Reorder siblings: GTK4 draws last child on top.
@@ -578,7 +578,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 		while (sibling != null)
 		{
-			if (sibling != widget && _zIndexMap.TryGetValue(sibling.Handle, out int sibZ) && sibZ > view.ZIndex)
+			if (sibling != widget && _zIndexMap.TryGetValue(sibling.Handle.DangerousGetHandle(), out int sibZ) && sibZ > view.ZIndex)
 			{
 				insertBefore = sibling;
 				break;
