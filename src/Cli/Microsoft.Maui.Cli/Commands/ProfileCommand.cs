@@ -38,6 +38,7 @@ public static class ProfileCommand
 	internal const string SpeedscopeExtension = ".speedscope.json";
 	internal const string MibcExtension = ".mibc";
 	internal const string DotnetPgoDisplayPath = "~/.maui/dotnet-pgo";
+	internal const string MibcDotnetRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x6000080018:5";
 
 	// MSBuild SDK path env vars set by a parent `dotnet run` process that would otherwise
 	// pin the child build to the wrong SDK version (e.g. the CLI's own SDK instead of the

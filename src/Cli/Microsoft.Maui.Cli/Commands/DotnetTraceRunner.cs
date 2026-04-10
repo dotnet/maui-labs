@@ -10,10 +10,6 @@ namespace Microsoft.Maui.Cli.Commands;
 
 internal static class DotnetTraceRunner
 {
-	// Match the provider mask/verbosity used by the known-good Android IBC flow in
-	// dotnet-optimization so dotnet-pgo can see the richer JIT/R2R/profile payload.
-	const string StartupPgoRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x1F000080018:5";
-
 	internal static MonitoredProcess StartCollector(
 		string workingDirectory,
 		string outputPath,
@@ -97,12 +93,14 @@ internal static class DotnetTraceRunner
 			"--resume-runtime"
 		};
 
+		var requiresExtraRuntimeProviders = outputFormat == TraceOutputFormat.Mibc;
+
 		if (!string.IsNullOrWhiteSpace(traceProfile))
 		{
 			args.Add("--profile");
 			args.Add(traceProfile);
 		}
-		else if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
+		else if (!string.IsNullOrWhiteSpace(stoppingEventProvider) || requiresExtraRuntimeProviders)
 		{
 			args.Add("--profile");
 			args.Add("dotnet-common,dotnet-sampled-thread-time");
@@ -114,10 +112,22 @@ internal static class DotnetTraceRunner
 			args.Add(FormatDuration(durationValue));
 		}
 
+		var providers = new List<string>();
+		if (requiresExtraRuntimeProviders)
+		{
+			// dotnet-pgo create-mibc needs runtime MethodDetails/JIT data in the raw trace.
+			providers.Add(ProfileCommand.MibcDotnetRuntimeProvider);
+		}
+
 		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
 		{
+			providers.Add($"{stoppingEventProvider}:ffffffffffffffff:5");
+		}
+
+		if (providers.Count > 0)
+		{
 			args.Add("--providers");
-			args.Add(BuildProviderList(stoppingEventProvider));
+			args.Add(BuildProviderList(requiresExtraRuntimeProviders, stoppingEventProvider));
 		}
 
 		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
@@ -141,16 +151,17 @@ internal static class DotnetTraceRunner
 		return args;
 	}
 
-	static string BuildProviderList(string stoppingEventProvider)
+	static string BuildProviderList(bool includeRuntimeProvider, string? stoppingEventProvider)
 	{
-		// dotnet-pgo create-mibc needs runtime JIT/R2R events in the trace.
-		// Keep the startup-complete provider too so dotnet-trace can still stop automatically.
-		return string.Join(
-			",",
-			[
-				StartupPgoRuntimeProvider,
-				$"{stoppingEventProvider}:ffffffffffffffff:5"
-			]);
+		var providers = new List<string>();
+
+		if (includeRuntimeProvider)
+			providers.Add(ProfileCommand.MibcDotnetRuntimeProvider);
+
+		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
+			providers.Add($"{stoppingEventProvider}:ffffffffffffffff:5");
+
+		return string.Join(",", providers);
 	}
 
 	internal static async Task EnsureStartedAsync(MonitoredProcess traceProcess, CancellationToken cancellationToken)

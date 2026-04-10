@@ -596,6 +596,36 @@ public class ProfileCommandTests
 		var formatIdx = Array.IndexOf(args, "--format");
 		Assert.True(formatIdx >= 0);
 		Assert.Equal("NetTrace", args[formatIdx + 1]);
+
+		var profileIdx = Array.IndexOf(args, "--profile");
+		Assert.True(profileIdx >= 0);
+		Assert.Equal("dotnet-common,dotnet-sampled-thread-time", args[profileIdx + 1]);
+
+		var providersIdx = Array.IndexOf(args, "--providers");
+		Assert.True(providersIdx >= 0);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x6000080018:5", args[providersIdx + 1]);
+	}
+
+	[Fact]
+	public void BuildTraceArguments_MibcWithUserProfile_KeepsProfileAndAddsRuntimeProvider()
+	{
+		var args = ProfileCommand.BuildTraceArguments(
+			outputPath: "/out.nettrace",
+			outputFormat: TraceOutputFormat.Mibc,
+			dsrouterPid: 12345,
+			traceProfile: "gc-verbose",
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null).ToArray();
+
+		var profileIdx = Array.IndexOf(args, "--profile");
+		Assert.True(profileIdx >= 0);
+		Assert.Equal("gc-verbose", args[profileIdx + 1]);
+
+		var providersIdx = Array.IndexOf(args, "--providers");
+		Assert.True(providersIdx >= 0);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x6000080018:5", args[providersIdx + 1]);
 	}
 
 
