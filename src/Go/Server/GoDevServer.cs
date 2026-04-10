@@ -280,12 +280,21 @@ public static class GoDevServer
 
 		if (result.MetadataDelta is null)
 		{
-			Console.WriteLine("RESTART REQUIRED");
-			var restartMsg = GoProtocol.EncodeJson(GoMessageType.RestartRequired, new RestartRequiredMessage
+			if (result.Errors.Count > 0)
 			{
-				Reason = "Edit requires app restart (unsupported by MetadataUpdater)"
-			});
-			await BroadcastAsync(restartMsg);
+				// Unsupported edit — tell the device what happened
+				Console.WriteLine("RESTART REQUIRED");
+				Console.WriteLine($"    {result.Errors[0]}");
+				var restartMsg = GoProtocol.EncodeJson(GoMessageType.RestartRequired, new RestartRequiredMessage
+				{
+					Reason = result.Errors[0]
+				});
+				await BroadcastAsync(restartMsg);
+			}
+			else
+			{
+				Console.WriteLine("no changes");
+			}
 			return;
 		}
 

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -127,7 +128,7 @@ public class GoMainPage : Component<GoAppState>
 
 	View RenderUserView()
 	{
-		return new VStack(spacing: 0)
+		var children = new List<View>
 		{
 			// Status bar overlay
 			new HStack(spacing: 8)
@@ -146,10 +147,33 @@ public class GoMainPage : Component<GoAppState>
 			}
 			.Padding(new Thickness(16, 4))
 			.Background(new SolidPaint(new Color(98, 0, 238))),
-
-			// User's view fills the rest
-			State.UserView!,
 		};
+
+		// Show error/warning banner if present
+		if (State.ErrorMessage is not null)
+		{
+			children.Add(
+				new VStack(spacing: 4)
+				{
+					Text("⚠️ " + State.ErrorMessage)
+						.FontSize(12)
+						.Color(Colors.White)
+						.FontFamily("Courier New"),
+
+					Button("Dismiss", () => SetState(s => s.ErrorMessage = null))
+						.Color(Colors.White)
+						.Background(Colors.Transparent)
+						.FontSize(11),
+				}
+				.Padding(new Thickness(12, 8))
+				.Background(new SolidPaint(new Color(180, 40, 40)))
+			);
+		}
+
+		// User's view fills the rest
+		children.Add(State.UserView!);
+
+		return new VStack(spacing: 0) { children.ToArray() };
 	}
 
 	async void OnConnectTapped()
@@ -188,6 +212,7 @@ public class GoMainPage : Component<GoAppState>
 						{
 							s.UserView = newView;
 							s.DeltasApplied = seq;
+							s.ErrorMessage = null; // Clear any previous error
 						});
 					}
 					catch (Exception ex)
