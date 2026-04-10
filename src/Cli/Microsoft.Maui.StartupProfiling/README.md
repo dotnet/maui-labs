@@ -23,7 +23,7 @@ The current experience is:
 - by default, tracing is **manual stop**: wait for the app to reach the screen you care about, then press **Enter** or **Ctrl+C**
 - `--format nettrace`, `--format speedscope`, and `--format mibc` are supported; the derived formats keep the raw `.nettrace` companion
 
-For `--format mibc`, the CLI uses the `dotnet-pgo` binary at `~/.maui/dotnet-pgo`. If it is missing, the CLI can build it from `dotnet/runtime` source automatically on first use.
+For `--format mibc`, the CLI uses the `dotnet-pgo` binary at `~/.maui/dotnet-pgo`. If it is missing, the CLI can build it from `dotnet/runtime` source automatically on first use, defaulting to the latest stable release branch.
 
 If you want automatic stop behavior, provide an explicit condition such as:
 

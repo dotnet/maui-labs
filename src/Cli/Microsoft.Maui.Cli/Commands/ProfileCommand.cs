@@ -41,7 +41,7 @@ public static class ProfileCommand
 	internal const string DotnetPgoDisplayPath = "~/.maui/dotnet-pgo";
 	internal const string MibcDotnetRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x6000080018:5";
 	internal const string DotnetPgoRuntimeRepoUrl = "https://github.com/dotnet/runtime.git";
-	internal const string DotnetPgoDefaultBranch = "release/10.0";
+	internal const string DotnetPgoFallbackBranch = "release/10.0";
 	internal const string DotnetPgoBranchEnvironmentVariable = "MAUI_DOTNET_PGO_BRANCH";
 	internal const string DotnetPgoProjectPath = "src/coreclr/tools/dotnet-pgo/dotnet-pgo.csproj";
 
@@ -603,6 +603,77 @@ public static class ProfileCommand
 		"-o", outputDirectory
 	];
 
+	internal static string? ParseLatestStableDotnetRuntimeReleaseBranch(string? lsRemoteOutput)
+	{
+		if (string.IsNullOrWhiteSpace(lsRemoteOutput))
+			return null;
+
+		return lsRemoteOutput
+			.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+			.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).LastOrDefault())
+			.Where(token => !string.IsNullOrWhiteSpace(token))
+			.Select(token =>
+			{
+				var value = token!;
+				const string prefix = "refs/heads/";
+				if (value.StartsWith(prefix, StringComparison.Ordinal))
+					value = value[prefix.Length..];
+
+				if (!value.StartsWith("release/", StringComparison.Ordinal))
+					return null;
+
+				var versionText = value["release/".Length..];
+				return Version.TryParse(versionText, out var version)
+					? new { Branch = value, Version = version }
+					: null;
+			})
+			.Where(candidate => candidate is not null)
+			.OrderByDescending(candidate => candidate!.Version)
+			.Select(candidate => candidate!.Branch)
+			.FirstOrDefault();
+	}
+
+	static async Task<string> ResolveDotnetPgoSourceBranchAsync(
+		string gitPath,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		CancellationToken cancellationToken)
+	{
+		var overrideBranch = Environment.GetEnvironmentVariable(DotnetPgoBranchEnvironmentVariable);
+		if (!string.IsNullOrWhiteSpace(overrideBranch))
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				formatter,
+				useJson,
+				verbose,
+				$"Using dotnet-pgo source branch override from {DotnetPgoBranchEnvironmentVariable}: {overrideBranch}");
+			return overrideBranch.Trim();
+		}
+
+		var lsRemoteResult = await ProcessRunner.RunAsync(
+			gitPath,
+			["ls-remote", "--heads", DotnetPgoRuntimeRepoUrl, "refs/heads/release/*"],
+			timeout: TimeSpan.FromSeconds(30),
+			cancellationToken: cancellationToken);
+
+		if (lsRemoteResult.Success &&
+			ParseLatestStableDotnetRuntimeReleaseBranch(lsRemoteResult.StandardOutput) is { } latestStableBranch)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				formatter,
+				useJson,
+				verbose,
+				$"Selected latest stable dotnet/runtime release branch for dotnet-pgo: {latestStableBranch}");
+			return latestStableBranch;
+		}
+
+		if (!useJson)
+			formatter.WriteWarning($"Could not detect the latest stable dotnet/runtime release branch automatically. Falling back to {DotnetPgoFallbackBranch}.");
+
+		return DotnetPgoFallbackBranch;
+	}
+
 	internal static string GetCurrentRuntimeIdentifier()
 	{
 		var os = OperatingSystem.IsMacOS() ? "osx"
@@ -651,12 +722,13 @@ public static class ProfileCommand
 		}
 
 		var dotnetPath = ProcessRunner.GetCommandPath("dotnet") ?? "dotnet";
-		var branch = Environment.GetEnvironmentVariable(DotnetPgoBranchEnvironmentVariable) ?? DotnetPgoDefaultBranch;
 		var cloneDirectory = Path.Combine(Path.GetTempPath(), $"dotnet-runtime-{Guid.NewGuid():N}");
 		var publishDirectory = Path.Combine(cloneDirectory, "artifacts", "dotnet-pgo");
 
 		try
 		{
+			var branch = await ResolveDotnetPgoSourceBranchAsync(gitPath, formatter, useJson, verbose, cancellationToken);
+
 			ProfileCommandProcessHelpers.WriteVerbose(
 				formatter,
 				useJson,

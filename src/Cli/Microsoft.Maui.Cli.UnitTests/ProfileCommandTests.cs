@@ -334,6 +334,34 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ParseLatestStableDotnetRuntimeReleaseBranch_PicksHighestRelease()
+	{
+		var lsRemoteOutput = """
+			abc123	refs/heads/release/9.0
+			def456	refs/heads/release/10.0
+			ghi789	refs/heads/release/8.0
+			jkl012	refs/heads/main
+			""";
+
+		var branch = ProfileCommand.ParseLatestStableDotnetRuntimeReleaseBranch(lsRemoteOutput);
+
+		Assert.Equal("release/10.0", branch);
+	}
+
+	[Fact]
+	public void ParseLatestStableDotnetRuntimeReleaseBranch_ReturnsNullWithoutStableRelease()
+	{
+		var lsRemoteOutput = """
+			abc123	refs/heads/main
+			def456	refs/heads/feature/test
+			""";
+
+		var branch = ProfileCommand.ParseLatestStableDotnetRuntimeReleaseBranch(lsRemoteOutput);
+
+		Assert.Null(branch);
+	}
+
+	[Fact]
 	public void GetCurrentRuntimeIdentifier_ReturnsSupportedRidFormat()
 	{
 		var rid = ProfileCommand.GetCurrentRuntimeIdentifier();
