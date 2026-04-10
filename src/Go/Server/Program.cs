@@ -6,20 +6,20 @@ using Microsoft.Maui.Go.Server;
 // Entry point
 if (args.Length == 0)
 {
-	Console.Error.WriteLine("Usage: Microsoft.Maui.Go.Server <project-dir> [--port 9000] [--qr]");
+	Console.Error.WriteLine("Usage: Microsoft.Maui.Go.Server <project-dir> [--port 9000] [--no-qr]");
 	return 1;
 }
 
 var projectDir = args[0];
 var port = 9000;
-var showQr = false;
+var showQr = true;
 
 for (var i = 1; i < args.Length; i++)
 {
 	if (args[i] == "--port" && i + 1 < args.Length)
 		port = int.Parse(args[++i]);
-	else if (args[i] == "--qr")
-		showQr = true;
+	else if (args[i] == "--no-qr")
+		showQr = false;
 }
 
 using var cts = new CancellationTokenSource();
