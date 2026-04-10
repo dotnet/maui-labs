@@ -1,3 +1,4 @@
+using System;
 using Android.App;
 using Android.Runtime;
 using Microsoft.Maui;
@@ -11,7 +12,7 @@ public class MainApplication : MauiApplication
 	public MainApplication(IntPtr handle, JniHandleOwnership ownership) : base(handle, ownership)
 	{
 		// CRITICAL: Must be set before the runtime initializes MetadataUpdater.
-		System.Environment.SetEnvironmentVariable("DOTNET_MODIFIABLE_ASSEMBLIES", "Debug");
+		Environment.SetEnvironmentVariable("DOTNET_MODIFIABLE_ASSEMBLIES", "Debug");
 	}
 
 	protected override MauiApp CreateMauiApp() => GoApp.CreateMauiApp();

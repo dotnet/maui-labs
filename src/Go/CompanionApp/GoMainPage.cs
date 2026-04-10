@@ -10,6 +10,7 @@ using Comet;
 using Comet.Reactive;
 using Comet.Styles;
 using Microsoft.Maui;
+using Microsoft.Maui.Devices;
 using Microsoft.Maui.Graphics;
 using static Comet.CometControls;
 
@@ -20,7 +21,11 @@ namespace Microsoft.Maui.Go.CompanionApp;
 /// </summary>
 public class GoAppState
 {
-	public string ServerUrl { get; set; } = $"ws://192.168.1.100:{GoProtocol.DefaultPort}{GoProtocol.DefaultPath}";
+	// On Android emulator, 10.0.2.2 reaches the host machine.
+	// With adb reverse, localhost also works.
+	public string ServerUrl { get; set; } = DeviceInfo.Platform == DevicePlatform.Android
+		? $"ws://10.0.2.2:{GoProtocol.DefaultPort}{GoProtocol.DefaultPath}"
+		: $"ws://localhost:{GoProtocol.DefaultPort}{GoProtocol.DefaultPath}";
 	public string Status { get; set; } = "Enter server URL or scan QR code";
 	public string? ErrorMessage { get; set; }
 	public bool IsConnected { get; set; }
@@ -149,24 +154,16 @@ public class GoMainPage : Component<GoAppState>
 			.Background(new SolidPaint(new Color(98, 0, 238))),
 		};
 
-		// Show error/warning banner if present
+		// Show error/warning banner if present (simple text, no nested VStack)
 		if (State.ErrorMessage is not null)
 		{
 			children.Add(
-				new VStack(spacing: 4)
-				{
-					Text("⚠️ " + State.ErrorMessage)
-						.FontSize(12)
-						.Color(Colors.White)
-						.FontFamily("Courier New"),
-
-					Button("Dismiss", () => SetState(s => s.ErrorMessage = null))
-						.Color(Colors.White)
-						.Background(Colors.Transparent)
-						.FontSize(11),
-				}
-				.Padding(new Thickness(12, 8))
-				.Background(new SolidPaint(new Color(180, 40, 40)))
+				Text("⚠️ " + State.ErrorMessage)
+					.FontSize(12)
+					.Color(Colors.White)
+					.FontFamily("Courier New")
+					.Background(new SolidPaint(new Color(180, 40, 40)))
+					.Padding(new Thickness(12, 8))
 			);
 		}
 
