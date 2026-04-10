@@ -705,7 +705,7 @@ public class ProfileCommandTests
 
 		var providersIdx = Array.IndexOf(args, "--providers");
 		Assert.True(providersIdx >= 0);
-		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x6000080018:5", args[providersIdx + 1]);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x1F000080018:5", args[providersIdx + 1]);
 	}
 
 	[Fact]
@@ -727,7 +727,22 @@ public class ProfileCommandTests
 
 		var providersIdx = Array.IndexOf(args, "--providers");
 		Assert.True(providersIdx >= 0);
-		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x6000080018:5", args[providersIdx + 1]);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x1F000080018:5", args[providersIdx + 1]);
+	}
+
+	[Fact]
+	public void MauiStartupProfilingInjectionTargets_IncludeDynamicPgoEnvironmentVariables()
+	{
+		var targetsPath = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiStartupProfilingInjection.targets"));
+
+		var contents = File.ReadAllText(targetsPath);
+
+		Assert.Contains("MauiStartupProfilingEnableMibcPgo", contents);
+		Assert.Contains("DOTNET_TieredPGO=1", contents);
+		Assert.Contains("DOTNET_ReadyToRun=0", contents);
+		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
 	}
 
 

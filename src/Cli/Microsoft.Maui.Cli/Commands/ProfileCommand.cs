@@ -40,7 +40,7 @@ public static class ProfileCommand
 	internal const string SpeedscopeExtension = ".speedscope.json";
 	internal const string MibcExtension = ".mibc";
 	internal const string DotnetPgoDisplayPath = "~/.maui/dotnet-pgo";
-	internal const string MibcDotnetRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x6000080018:5";
+	internal const string MibcDotnetRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x1F000080018:5";
 	internal const string DotnetPgoRuntimeRepoUrl = "https://github.com/dotnet/runtime.git";
 	internal const string DotnetPgoFallbackBranch = "release/10.0";
 	internal const string DotnetPgoBranchEnvironmentVariable = "MAUI_DOTNET_PGO_BRANCH";

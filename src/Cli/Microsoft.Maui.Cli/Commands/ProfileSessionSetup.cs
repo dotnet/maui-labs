@@ -53,7 +53,7 @@ internal static class ProfileSessionSetup
 				context.DiagnosticAddress,
 				context.ReservedPorts!.ExitControlPort,
 				injectBootstrap: !hasStartupProfilingHelper,
-				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection,
+				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
 				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
 
 		WriteDiagnosticPortInfo(context);

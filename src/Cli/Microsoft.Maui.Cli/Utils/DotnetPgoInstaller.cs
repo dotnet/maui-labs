@@ -302,7 +302,7 @@ internal static class DotnetPgoInstaller
 			var syncLock = new object();
 			var lastRefreshUtc = DateTime.MinValue;
 
-			return await spectre.StatusAsync(FormatStatusMessage(message, recentLines), async statusContext =>
+			return await spectre.StatusAsync(message, async updateStatus =>
 			{
 				void ReportLine(string line)
 				{
@@ -322,13 +322,13 @@ internal static class DotnetPgoInstaller
 					}
 
 					if (updatedStatus is not null)
-						statusContext.Status(updatedStatus);
+						updateStatus(updatedStatus);
 				}
 
 				var result = await operation(ReportLine);
 
 				lock (syncLock)
-					statusContext.Status(FormatStatusMessage(message, recentLines));
+					updateStatus(FormatStatusMessage(message, recentLines));
 
 				return result;
 			});
