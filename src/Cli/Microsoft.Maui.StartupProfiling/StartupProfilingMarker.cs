@@ -84,7 +84,6 @@ public static class StartupProfilingMarker
         StartupProfilingEventSource.Log.Diagnostic(diagnosticMessage);
         StartupProfilingEventSource.Log.StartupComplete();
         StartupProfilingDiagnostics.Log("StartupComplete event emitted.");
-        StartupProfilingExitChannel.NotifyStartupComplete();
 
         if (autoExitEnabled)
         {
@@ -183,9 +182,6 @@ internal static class StartupProfilingExitChannel
     const int ExitControlPortOffset = 1;
     const int MaxConnectAttempts = 20;
     static int s_started;
-    static int s_startupCompleteNotified;
-    static readonly Lock s_sync = new();
-    static StreamWriter? s_writer;
 
     internal static void TryStart()
     {
@@ -226,14 +222,6 @@ internal static class StartupProfilingExitChannel
         return TryDeriveFromDiagnosticPorts(diagnosticPorts, out host, out port);
     }
 
-    internal static void NotifyStartupComplete()
-    {
-        if (Interlocked.Exchange(ref s_startupCompleteNotified, 1) != 0)
-            return;
-
-        _ = Task.Run(() => SendMessageWhenConnectedAsync("startup-complete"));
-    }
-
     static bool TryDeriveFromDiagnosticPorts(string diagnosticPorts, out string host, out int port)
     {
         host = "127.0.0.1";
@@ -270,10 +258,6 @@ internal static class StartupProfilingExitChannel
                 using var stream = client.GetStream();
                 using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
                 using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
-                lock (s_sync)
-                {
-                    s_writer = writer;
-                }
 
                 await writer.WriteLineAsync($"ready pid={Environment.ProcessId}");
                 StartupProfilingDiagnostics.Log("Exit control channel connected; waiting for the host exit command.");
@@ -305,45 +289,7 @@ internal static class StartupProfilingExitChannel
 
                 await Task.Delay(TimeSpan.FromMilliseconds(500));
             }
-            finally
-            {
-                lock (s_sync)
-                {
-                    s_writer = null;
-                }
-            }
         }
     }
 
-    static async Task SendMessageWhenConnectedAsync(string message)
-    {
-        for (var attempt = 0; attempt < MaxConnectAttempts; attempt++)
-        {
-            StreamWriter? writer;
-            lock (s_sync)
-            {
-                writer = s_writer;
-            }
-
-            if (writer is not null)
-            {
-                try
-                {
-                    await writer.WriteLineAsync(message);
-                    await writer.FlushAsync();
-                    StartupProfilingDiagnostics.Log($"Exit control channel message sent: '{message}'.");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    StartupProfilingDiagnostics.Log($"Failed to send exit control message '{message}': {ex.Message}");
-                    return;
-                }
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(250));
-        }
-
-        StartupProfilingDiagnostics.Log($"Exit control channel was not connected in time to send '{message}'.");
-    }
 }

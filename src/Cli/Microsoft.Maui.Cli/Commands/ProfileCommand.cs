@@ -4,14 +4,12 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
-using System.Diagnostics.Tracing;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
@@ -175,10 +173,7 @@ public static class ProfileCommand
 					parseResult.GetValue(stoppingEventPayloadFilterOption));
 
 				var duration = parseResult.GetValue(durationOption);
-				var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(project.ProjectPath, StartupProfilingPackageId);
-				var supportsAutomaticStartupProfiling = hasStartupProfilingHelper || HasInjectedStartupProfilingArtifacts();
 				var stoppingEvent = ResolveStoppingEventConfiguration(
-					supportsAutomaticStartupProfiling,
 					duration,
 					parseResult.GetValue(stoppingEventProviderOption),
 					parseResult.GetValue(stoppingEventNameOption),
@@ -578,7 +573,6 @@ public static class ProfileCommand
 	}
 
 	internal static StoppingEventConfiguration ResolveStoppingEventConfiguration(
-		bool hasStartupProfilingHelper,
 		TimeSpan? duration,
 		string? providerName,
 		string? eventName,
@@ -660,7 +654,6 @@ public static class ProfileCommand
 		// the diagnostics port forwarding; we only keep manual routing for the extra exit channel.
 		MonitoredProcess? dsrouterProcess = null;
 		MonitoredProcess? traceProcess = null;
-		ManagedTraceCollector? managedTraceCollector = null;
 		ReservedProfilePorts? reservedPorts = null;
 		ExitControlServer? exitControlServer = null;
 		ProfilingBuildInjection? buildInjection = null;
@@ -729,31 +722,26 @@ public static class ProfileCommand
 			var dsrouterStart = await StartDsrouterAsync(transport, diagnosticPort, formatter, useJson, verbose, cancellationToken);
 			dsrouterProcess = dsrouterStart.DnxProcess;
 			var dsrouterPid = dsrouterStart.DsrouterPid;
-			var useManagedTraceCollector = ShouldUseManagedTraceCollector(traceProfile, stoppingEventProvider, stoppingEventName, stoppingEventPayloadFilter);
 			WriteVerbose(formatter, useJson, verbose, $"dotnet-dsrouter reported PID {dsrouterPid}.");
 			await EnsureDsrouterStartedAsync(dsrouterProcess, diagnosticPort, cancellationToken);
+			traceProcess = StartTraceCollector(
+				project.ProjectDirectory,
+				outputPath,
+				outputFormat,
+				dsrouterPid,
+				device.Id,
+				traceProfile,
+				effectiveDuration,
+				stoppingEventProvider,
+				stoppingEventName,
+				stoppingEventPayloadFilter,
+				formatter,
+				useJson,
+				verbose,
+				cancellationToken);
 
-			if (!useManagedTraceCollector)
-			{
-				traceProcess = StartTraceCollector(
-					project.ProjectDirectory,
-					outputPath,
-					outputFormat,
-					dsrouterPid,
-					device.Id,
-					traceProfile,
-					effectiveDuration,
-					stoppingEventProvider,
-					stoppingEventName,
-					stoppingEventPayloadFilter,
-					formatter,
-					useJson,
-					verbose,
-					cancellationToken);
-
-				WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect.");
-				await EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
-			}
+			WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect.");
+			await EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
 
 			var launchArgs = BuildLaunchArguments(
 				project.ProjectPath,
@@ -776,11 +764,7 @@ public static class ProfileCommand
 
 			if (!launchResult.Success)
 			{
-				if (managedTraceCollector is not null)
-				{
-					await managedTraceCollector.StopAsync(cancellationToken);
-				}
-				else if (traceProcess is not null)
+				if (traceProcess is not null)
 				{
 					await RequestTraceStopAsync(traceProcess.Process, formatter, useJson, verbose);
 					await traceProcess.WaitForExitAsync();
@@ -789,15 +773,9 @@ public static class ProfileCommand
 				throw CreateProcessFailureException("dotnet build -t:Run", launchResult);
 			}
 
-			if (useManagedTraceCollector)
-			{
-				managedTraceCollector = StartManagedTraceCollector(dsrouterPid, outputPath, traceProfile, formatter, useJson, verbose);
-				WriteVerbose(formatter, useJson, verbose, "Started the managed EventPipe trace collector.");
-			}
-
 			if (!useJson)
 			{
-				if (traceProcess?.Process.HasExited == true || managedTraceCollector?.HasCompleted == true)
+				if (traceProcess.Process.HasExited)
 				{
 					formatter.WriteWarning(
 						"Trace collection completed during app launch before a manual stop request. " +
@@ -814,23 +792,10 @@ public static class ProfileCommand
 				}
 			}
 
-			if (managedTraceCollector is not null)
-			{
-				await WaitForManagedTraceCompletionAsync(
-					managedTraceCollector,
-					effectiveDuration,
-					exitControlServer,
-					allowManualStop: !useJson,
-					formatter,
-					useJson,
-					verbose,
-					cancellationToken);
-			}
-			else if (traceProcess is not null)
+			if (traceProcess is not null)
 			{
 				await WaitForTraceCompletionAsync(
 					traceProcess,
-					exitControlServer,
 					allowManualStop: !useJson,
 					formatter,
 					useJson,
@@ -859,9 +824,6 @@ public static class ProfileCommand
 				await StopBackgroundProcessAsync(traceProcess.Process, "dotnet-trace", formatter, useJson, verbose);
 				traceProcess.Dispose();
 			}
-
-			if (managedTraceCollector is not null)
-				await managedTraceCollector.DisposeAsync();
 
 			if (dsrouterProcess is not null)
 			{
@@ -1076,75 +1038,6 @@ public static class ProfileCommand
 		var success = Version.TryParse(value, out var parsedVersion);
 		version = parsedVersion ?? new Version(0, 0);
 		return success;
-	}
-
-	static bool ShouldUseManagedTraceCollector(
-		string? traceProfile,
-		string? stoppingEventProvider,
-		string? stoppingEventName,
-		string? stoppingEventPayloadFilter) =>
-		false;
-
-	static bool SupportsManagedTraceProfile(string? traceProfile)
-	{
-		if (string.IsNullOrWhiteSpace(traceProfile))
-			return true;
-
-		foreach (var profile in traceProfile.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-		{
-			if (!profile.Equals("dotnet-common", StringComparison.OrdinalIgnoreCase) &&
-				!profile.Equals("dotnet-sampled-thread-time", StringComparison.OrdinalIgnoreCase))
-			{
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	static ManagedTraceCollector StartManagedTraceCollector(
-		int dsrouterPid,
-		string outputPath,
-		string? traceProfile,
-		IOutputFormatter formatter,
-		bool useJson,
-		bool verbose)
-	{
-		WriteVerbose(formatter, useJson, verbose, $"Managed trace target PID: {dsrouterPid}");
-		return ManagedTraceCollector.Start(
-			dsrouterPid,
-			outputPath,
-			BuildManagedTraceProviders(traceProfile));
-	}
-
-	static IReadOnlyList<EventPipeProvider> BuildManagedTraceProviders(string? traceProfile)
-	{
-		var providers = new Dictionary<string, EventPipeProvider>(StringComparer.OrdinalIgnoreCase);
-		var profileNames = string.IsNullOrWhiteSpace(traceProfile)
-			? ["dotnet-common", "dotnet-sampled-thread-time"]
-			: traceProfile.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-		foreach (var profileName in profileNames)
-		{
-			if (profileName.Equals("dotnet-common", StringComparison.OrdinalIgnoreCase))
-			{
-				providers["Microsoft-Windows-DotNETRuntime"] = new EventPipeProvider(
-					"Microsoft-Windows-DotNETRuntime",
-					EventLevel.Informational,
-					unchecked((long)0x000000100003801D));
-				continue;
-			}
-
-			if (profileName.Equals("dotnet-sampled-thread-time", StringComparison.OrdinalIgnoreCase))
-			{
-				providers["Microsoft-DotNETCore-SampleProfiler"] = new EventPipeProvider(
-					"Microsoft-DotNETCore-SampleProfiler",
-					EventLevel.Informational,
-					unchecked((long)0x0000F00000000000));
-			}
-		}
-
-		return providers.Values.ToList();
 	}
 
 	internal static IEnumerable<string> BuildTraceArguments(
@@ -1520,13 +1413,6 @@ public static class ProfileCommand
 		return File.Exists(candidate) ? candidate : null;
 	}
 
-	static bool HasInjectedStartupProfilingArtifacts()
-	{
-		return TryResolveBuildAssetPath(StartupProfilingInjectionTargetsFileName) is not null
-			&& TryResolveBuildAssetPath(StartupProfilingInjectionSourceFileName) is not null
-			&& TryResolveBuildAssetPath(StartupProfilingAssemblyFileName) is not null;
-	}
-
 	static ProfilingBuildInjection? TryCreateBuildInjection(string exitControlHost, int exitControlPort, bool injectBootstrap)
 	{
 		var targetsPath = TryResolveBuildAssetPath(StartupProfilingInjectionTargetsFileName);
@@ -1587,119 +1473,8 @@ public static class ProfileCommand
 		}
 	}
 
-	static async Task WaitForManagedTraceCompletionAsync(
-		ManagedTraceCollector traceCollector,
-		TimeSpan? duration,
-		ExitControlServer? exitControlServer,
-		bool allowManualStop,
-		IOutputFormatter formatter,
-		bool useJson,
-		bool verbose,
-		CancellationToken cancellationToken)
-	{
-		WriteVerbose(
-			formatter,
-			useJson,
-			verbose,
-			allowManualStop
-				? "Waiting for the managed EventPipe trace collector to complete or for a manual stop request."
-				: "Waiting for the managed EventPipe trace collector to complete in non-interactive mode.");
-
-		var completionTask = traceCollector.WaitForCompletionAsync();
-		Task? durationTask = duration is null ? null : Task.Delay(duration.Value, cancellationToken);
-
-		async Task StopManagedTraceAsync(string message, string verboseMessage)
-		{
-			if (!useJson)
-				formatter.WriteInfo(message);
-			WriteVerbose(formatter, useJson, verbose, verboseMessage);
-			await traceCollector.StopAsync(cancellationToken);
-		}
-
-		if (!allowManualStop)
-		{
-			if (durationTask is null)
-			{
-				await completionTask;
-			}
-			else
-			{
-				var completedTask = await Task.WhenAny(completionTask, durationTask);
-				if (completedTask == durationTask && !traceCollector.HasCompleted)
-				{
-					await StopManagedTraceAsync(
-						"Configured trace duration elapsed; stopping trace and finalizing output...",
-						"Automatic stop requested because the configured trace duration elapsed.");
-				}
-
-				await completionTask;
-			}
-		}
-		else
-		{
-			var manualStopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-			ConsoleCancelEventHandler? cancelHandler = null;
-			cancelHandler = (_, e) =>
-			{
-				e.Cancel = true;
-				manualStopSignal.TrySetResult(true);
-			};
-
-			Console.CancelKeyPress += cancelHandler;
-			var readLineTask = Task.Run(() =>
-			{
-				try
-				{
-					Console.ReadLine();
-				}
-				finally
-				{
-					manualStopSignal.TrySetResult(true);
-				}
-			}, CancellationToken.None);
-
-			try
-			{
-				while (!traceCollector.HasCompleted)
-				{
-					var waitTasks = new List<Task> { completionTask, manualStopSignal.Task };
-					if (durationTask is not null)
-						waitTasks.Add(durationTask);
-
-					var completedTask = await Task.WhenAny(waitTasks);
-					if (completedTask == completionTask)
-						break;
-
-					if (durationTask is not null && completedTask == durationTask)
-					{
-						await StopManagedTraceAsync(
-							"Configured trace duration elapsed; stopping trace and finalizing output...",
-							"Automatic stop requested because the configured trace duration elapsed.");
-						break;
-					}
-
-					if (completedTask == manualStopSignal.Task)
-					{
-						await StopManagedTraceAsync(
-							"Stopping trace and finalizing output...",
-							"Manual stop requested from the console.");
-						break;
-					}
-				}
-			}
-			finally
-			{
-				Console.CancelKeyPress -= cancelHandler;
-				_ = readLineTask;
-			}
-		}
-
-		await completionTask;
-	}
-
 	static async Task WaitForTraceCompletionAsync(
 		MonitoredProcess traceProcess,
-		ExitControlServer? exitControlServer,
 		bool allowManualStop,
 		IOutputFormatter formatter,
 		bool useJson,
@@ -2386,92 +2161,6 @@ internal sealed class ReservedProfilePorts(
 	}
 }
 
-internal sealed class ManagedTraceCollector : IAsyncDisposable
-{
-	readonly EventPipeSession _session;
-	readonly FileStream _outputStream;
-	readonly Task _copyTask;
-	bool _stopRequested;
-	bool _disposed;
-
-	ManagedTraceCollector(EventPipeSession session, FileStream outputStream, Task copyTask)
-	{
-		_session = session;
-		_outputStream = outputStream;
-		_copyTask = copyTask;
-	}
-
-	public bool HasCompleted => _copyTask.IsCompleted;
-
-	public static ManagedTraceCollector Start(int processId, string outputPath, IReadOnlyList<EventPipeProvider> providers)
-	{
-		var client = new DiagnosticsClient(processId);
-		var session = client.StartEventPipeSession(providers, requestRundown: false);
-		var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-		var copyTask = Task.Run(async () =>
-		{
-			try
-			{
-				await session.EventStream.CopyToAsync(outputStream);
-				await outputStream.FlushAsync();
-			}
-			finally
-			{
-				await outputStream.DisposeAsync();
-			}
-		});
-		client.ResumeRuntime();
-
-		return new ManagedTraceCollector(session, outputStream, copyTask);
-	}
-
-	public Task WaitForCompletionAsync() => _copyTask;
-
-	public async Task StopAsync(CancellationToken cancellationToken)
-	{
-		if (!_stopRequested)
-		{
-			_stopRequested = true;
-			await _session.StopAsync(cancellationToken);
-		}
-
-		await _copyTask;
-	}
-
-	public async ValueTask DisposeAsync()
-	{
-		if (_disposed)
-			return;
-
-		_disposed = true;
-
-		try
-		{
-			if (!_stopRequested)
-			{
-				_stopRequested = true;
-				_session.Stop();
-			}
-		}
-		catch
-		{
-			// Best-effort cleanup only.
-		}
-
-		try
-		{
-			await _copyTask;
-		}
-		catch
-		{
-			// Best-effort cleanup only.
-		}
-
-		_outputStream.Dispose();
-		_session.Dispose();
-	}
-}
-
 internal sealed class DiagnosticPortRoutingConflictException(int port, string direction, string details)
 	: Exception($"Diagnostic port {port} was unavailable during adb {direction} routing.")
 {
@@ -2484,7 +2173,6 @@ internal sealed class ExitControlServer : IDisposable
 {
 	readonly TcpListener _listener;
 	readonly Task<TcpClient?> _acceptTask;
-	readonly TaskCompletionSource<bool> _startupCompleteTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 	readonly TaskCompletionSource<bool> _clientClosedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 	readonly IOutputFormatter _formatter;
 	readonly bool _useJson;
@@ -2505,26 +2193,6 @@ internal sealed class ExitControlServer : IDisposable
 
 	public static ExitControlServer Attach(ReservedTcpPort reservation, IOutputFormatter formatter, bool useJson, bool verbose) =>
 		new(reservation.DetachListener(), formatter, useJson, verbose);
-
-	public async Task<bool> WaitForStartupCompleteAsync(TimeSpan timeout, CancellationToken cancellationToken)
-	{
-		var client = await WaitForClientAsync(timeout, cancellationToken);
-		if (client is null)
-			return false;
-
-		if (_startupCompleteTcs.Task.IsCompletedSuccessfully)
-			return true;
-
-		try
-		{
-			var completed = await Task.WhenAny(_startupCompleteTcs.Task, _clientClosedTcs.Task, Task.Delay(timeout, cancellationToken));
-			return completed == _startupCompleteTcs.Task && _startupCompleteTcs.Task.IsCompletedSuccessfully;
-		}
-		catch (OperationCanceledException)
-		{
-			return false;
-		}
-	}
 
 	public async Task<bool> TryRequestExitAsync(TimeSpan connectTimeout, TimeSpan commandTimeout, CancellationToken cancellationToken)
 	{
@@ -2606,10 +2274,7 @@ internal sealed class ExitControlServer : IDisposable
 				if (message is null)
 					break;
 
-				var trimmed = message.Trim();
-				LogVerbose($"Exit control channel message received: '{trimmed}'.");
-				if (string.Equals(trimmed, "startup-complete", StringComparison.OrdinalIgnoreCase))
-					_startupCompleteTcs.TrySetResult(true);
+				LogVerbose($"Exit control channel message received: '{message.Trim()}'.");
 			}
 		}
 		catch (IOException ex)

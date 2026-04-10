@@ -598,7 +598,6 @@ public class ProfileCommandTests
 	public void ResolveStoppingEventConfiguration_LeavesStoppingEventUnsetWithoutExplicitOptions()
 	{
 		var result = ProfileCommand.ResolveStoppingEventConfiguration(
-			hasStartupProfilingHelper: true,
 			duration: null,
 			providerName: null,
 			eventName: null,
@@ -614,7 +613,6 @@ public class ProfileCommandTests
 	public void ResolveStoppingEventConfiguration_DoesNotOverrideExplicitOrTimedSettings()
 	{
 		var durationResult = ProfileCommand.ResolveStoppingEventConfiguration(
-			hasStartupProfilingHelper: true,
 			duration: TimeSpan.FromSeconds(5),
 			providerName: null,
 			eventName: null,
@@ -624,7 +622,6 @@ public class ProfileCommandTests
 		Assert.Null(durationResult.ProviderName);
 
 		var customResult = ProfileCommand.ResolveStoppingEventConfiguration(
-			hasStartupProfilingHelper: true,
 			duration: null,
 			providerName: "Custom.Provider",
 			eventName: "Done",
