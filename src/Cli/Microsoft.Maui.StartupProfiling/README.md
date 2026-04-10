@@ -21,6 +21,9 @@ The current experience is:
 - the CLI can prompt for the target framework, device, and trace format
 - the app is built and launched in **Release**
 - by default, tracing is **manual stop**: wait for the app to reach the screen you care about, then press **Enter** or **Ctrl+C**
+- `--format nettrace`, `--format speedscope`, and `--format mibc` are supported; the derived formats keep the raw `.nettrace` companion
+
+For `--format mibc`, the CLI expects the `dotnet-pgo` binary at `~/.maui/dotnet-pgo`.
 
 If you want automatic stop behavior, provide an explicit condition such as:
 

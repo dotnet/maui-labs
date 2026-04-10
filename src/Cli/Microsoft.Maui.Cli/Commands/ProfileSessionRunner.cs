@@ -34,6 +34,20 @@ internal static class ProfileSessionRunner
 			await CleanupAsync(context);
 		}
 
+		if (context.OutputFormat == TraceOutputFormat.Mibc)
+		{
+			await ProfileCommand.ConvertNetTraceToMibcAsync(
+				context.Project,
+				context.Framework,
+				context.Configuration,
+				context.OutputPath,
+				context.PrimaryOutputPath,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
+		}
+
 		EnsurePrimaryOutputExists(context.PrimaryOutputPath);
 		ProfileTraceOutputValidation.ValidateTraceOutput(context.PrimaryOutputPath, context.OutputPath, context.OutputFormat, context.Transport.Platform);
 
@@ -53,7 +67,7 @@ internal static class ProfileSessionRunner
 			Configuration = context.Configuration,
 			Format = ProfileOutputResolver.FormatOutputFormat(context.OutputFormat),
 			OutputPath = context.PrimaryOutputPath,
-			RawTracePath = context.OutputFormat == TraceOutputFormat.Speedscope ? context.OutputPath : null,
+			RawTracePath = context.OutputFormat is TraceOutputFormat.Speedscope or TraceOutputFormat.Mibc ? context.OutputPath : null,
 			DsrouterKind = context.DsrouterKind,
 			DiagnosticAddress = context.DiagnosticAddress,
 			DiagnosticPort = context.DiagnosticPort,
