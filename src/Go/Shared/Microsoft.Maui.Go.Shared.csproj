@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.Go</RootNamespace>
+    <Description>Shared wire protocol for MAUI Go dev server and companion app</Description>
+  </PropertyGroup>
+</Project>

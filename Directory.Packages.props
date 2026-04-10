@@ -63,4 +63,11 @@
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="$(MicrosoftSourceLinkGitHubVersion)" />
   </ItemGroup>
 
+  <!-- MAUI Go -->
+  <ItemGroup Label="MAUI Go">
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
+    <PackageVersion Include="QRCoder" Version="$(QRCoderVersion)" />
+    <PackageVersion Include="Clancey.Comet" Version="$(ClanceyCometVersion)" />
+  </ItemGroup>
+
 </Project>

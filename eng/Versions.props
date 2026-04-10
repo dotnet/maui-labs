@@ -61,4 +61,9 @@
   <PropertyGroup Label="SourceLink">
     <MicrosoftSourceLinkGitHubVersion>10.0.201</MicrosoftSourceLinkGitHubVersion>
   </PropertyGroup>
+  <PropertyGroup Label="MAUI Go">
+    <MicrosoftCodeAnalysisCSharpVersion>4.12.0</MicrosoftCodeAnalysisCSharpVersion>
+    <QRCoderVersion>1.6.0</QRCoderVersion>
+    <ClanceyCometVersion>1.0.0-preview.5</ClanceyCometVersion>
+  </PropertyGroup>
 </Project>
