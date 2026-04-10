@@ -261,7 +261,7 @@ public static class ProfileCommand
 				formatter as SpectreOutputFormatter);
 
 			if (outputFormat == TraceOutputFormat.Mibc)
-				_ = await EnsureDotnetPgoAvailableAsync(formatter, useJson, verbose, cancellationToken);
+				_ = await DotnetPgoInstaller.EnsureAvailableAsync(formatter, useJson, verbose, cancellationToken);
 
 			var configuration = ResolveProfileConfiguration(
 				parseResult.GetValue(configurationOption),
@@ -453,6 +453,11 @@ public static class ProfileCommand
 
 	internal static bool IsRetryableTraceStartupFailure(string? details)
 		=> DotnetTraceRunner.IsRetryableStartupFailure(details);
+
+	internal static CancellationToken ResolvePostProcessingCancellationToken(bool stopRequestedByUser, CancellationToken cancellationToken) =>
+		stopRequestedByUser && cancellationToken.IsCancellationRequested
+			? CancellationToken.None
+			: cancellationToken;
 
 	internal static async Task ConvertNetTraceToMibcAsync(
 		ResolvedMauiProject project,

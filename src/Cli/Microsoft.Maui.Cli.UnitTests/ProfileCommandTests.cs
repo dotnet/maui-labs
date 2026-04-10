@@ -316,14 +316,14 @@ public class ProfileCommandTests
 	[Fact]
 	public void GetDotnetPgoInstallPath_UsesMauiHomeLocation()
 	{
-		var path = ProfileCommand.GetDotnetPgoInstallPath("/Users/tester");
+		var path = DotnetPgoInstaller.GetInstallPath("/Users/tester");
 		Assert.Equal("/Users/tester/.maui/dotnet-pgo", path);
 	}
 
 	[Fact]
 	public void BuildDotnetPgoPublishArguments_UsesSingleFileSelfContainedPublish()
 	{
-		var args = ProfileCommand.BuildDotnetPgoPublishArguments("osx-arm64", "/tmp/dotnet-pgo-build");
+		var args = DotnetPgoInstaller.BuildPublishArguments("osx-arm64", "/tmp/dotnet-pgo-build");
 
 		Assert.Contains("publish", args);
 		Assert.Contains("src/coreclr/tools/dotnet-pgo/dotnet-pgo.csproj", args);
@@ -344,7 +344,7 @@ public class ProfileCommandTests
 			jkl012	refs/heads/main
 			""";
 
-		var branch = ProfileCommand.ParseLatestStableDotnetRuntimeReleaseBranch(lsRemoteOutput);
+		var branch = DotnetPgoInstaller.ParseLatestStableReleaseBranch(lsRemoteOutput);
 
 		Assert.Equal("release/10.0", branch);
 	}
@@ -357,7 +357,7 @@ public class ProfileCommandTests
 			def456	refs/heads/feature/test
 			""";
 
-		var branch = ProfileCommand.ParseLatestStableDotnetRuntimeReleaseBranch(lsRemoteOutput);
+		var branch = DotnetPgoInstaller.ParseLatestStableReleaseBranch(lsRemoteOutput);
 
 		Assert.Null(branch);
 	}
@@ -365,7 +365,7 @@ public class ProfileCommandTests
 	[Fact]
 	public void GetCurrentRuntimeIdentifier_ReturnsSupportedRidFormat()
 	{
-		var rid = ProfileCommand.GetCurrentRuntimeIdentifier();
+		var rid = DotnetPgoInstaller.GetCurrentRuntimeIdentifier();
 		Assert.Matches("^(osx|linux|win)-(x64|arm64)$", rid);
 	}
 
@@ -375,7 +375,7 @@ public class ProfileCommandTests
 		var lines = new Queue<string>();
 
 		for (var i = 1; i <= 7; i++)
-			ProfileCommand.AppendStatusTailLine(lines, $"line {i}");
+			DotnetPgoInstaller.AppendStatusTailLine(lines, $"line {i}");
 
 		Assert.Equal(["line 3", "line 4", "line 5", "line 6", "line 7"], lines.ToArray());
 	}
@@ -383,7 +383,7 @@ public class ProfileCommandTests
 	[Fact]
 	public void FormatStatusMessage_IncludesEscapedRecentOutput()
 	{
-		var message = ProfileCommand.FormatStatusMessage(
+		var message = DotnetPgoInstaller.FormatStatusMessage(
 			"Publishing dotnet-pgo...",
 			["Restored [package]", "Build succeeded"]);
 
@@ -391,6 +391,28 @@ public class ProfileCommandTests
 		Assert.Contains("Restored", message);
 		Assert.Contains("[grey]", message);
 		Assert.Contains("Build succeeded", message);
+	}
+
+	[Fact]
+	public void ResolvePostProcessingCancellationToken_PreservesCancellationForNormalCompletion()
+	{
+		using var cts = new CancellationTokenSource();
+		cts.Cancel();
+
+		var token = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser: false, cts.Token);
+
+		Assert.True(token.IsCancellationRequested);
+	}
+
+	[Fact]
+	public void ResolvePostProcessingCancellationToken_IgnoresCtrlCCancellationAfterManualStop()
+	{
+		using var cts = new CancellationTokenSource();
+		cts.Cancel();
+
+		var token = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser: true, cts.Token);
+
+		Assert.False(token.IsCancellationRequested);
 	}
 
 	// ── Tool version parsing ──────────────────────────────────────────────────

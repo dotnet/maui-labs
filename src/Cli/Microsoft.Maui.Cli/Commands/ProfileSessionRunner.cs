@@ -10,13 +10,14 @@ internal static class ProfileSessionRunner
 	internal static async Task<MauiProfileResult> RunAsync(ProfileSessionRequest request, CancellationToken cancellationToken)
 	{
 		var context = await ProfileSessionSetup.PrepareAsync(request, cancellationToken);
+		var stopRequestedByUser = false;
 		try
 		{
 			await ProfileSessionLaunch.StartAsync(context, cancellationToken);
 
 			if (context.TraceProcess is not null)
 			{
-				await ProfileTraceLifecycle.WaitForCompletionAsync(
+				stopRequestedByUser = await ProfileTraceLifecycle.WaitForCompletionAsync(
 					context.TraceProcess,
 					allowManualStop: !context.UseJson,
 					context.Formatter,
@@ -25,27 +26,29 @@ internal static class ProfileSessionRunner
 					cancellationToken);
 			}
 
+			var postProcessingCancellationToken = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser, cancellationToken);
+
 			if (!context.UseRuntimeOwnedTraceCollection
 				&& context.ExitControlServer is not null)
-				await TryRequestAppExitAsync(context, cancellationToken);
+				await TryRequestAppExitAsync(context, postProcessingCancellationToken);
+
+			if (context.OutputFormat == TraceOutputFormat.Mibc)
+			{
+				await ProfileCommand.ConvertNetTraceToMibcAsync(
+					context.Project,
+					context.Framework,
+					context.Configuration,
+					context.OutputPath,
+					context.PrimaryOutputPath,
+					context.Formatter,
+					context.UseJson,
+					context.Verbose,
+					postProcessingCancellationToken);
+			}
 		}
 		finally
 		{
 			await CleanupAsync(context);
-		}
-
-		if (context.OutputFormat == TraceOutputFormat.Mibc)
-		{
-			await ProfileCommand.ConvertNetTraceToMibcAsync(
-				context.Project,
-				context.Framework,
-				context.Configuration,
-				context.OutputPath,
-				context.PrimaryOutputPath,
-				context.Formatter,
-				context.UseJson,
-				context.Verbose,
-				cancellationToken);
 		}
 
 		EnsurePrimaryOutputExists(context.PrimaryOutputPath);
