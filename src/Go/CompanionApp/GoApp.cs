@@ -24,7 +24,7 @@ public class GoApp : CometApp
 		// CRITICAL: Set this as early as possible.
 		// MetadataUpdater.IsSupported checks this env var, and it must
 		// be set BEFORE the runtime initializes the update pipeline.
-		Environment.SetEnvironmentVariable("DOTNET_MODIFIABLE_ASSEMBLIES", "debug");
+		Environment.SetEnvironmentVariable("DOTNET_MODIFIABLE_ASSEMBLIES", "Debug");
 
 		var builder = MauiApp.CreateBuilder();
 		builder.UseCometApp<GoApp>();

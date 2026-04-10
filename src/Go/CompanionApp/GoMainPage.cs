@@ -34,9 +34,33 @@ public class GoAppState
 public class GoMainPage : Component<GoAppState>
 {
 	GoClient? _client;
+	bool _autoConnectAttempted;
+	Type? _userViewType; // Track the user's view type for re-instantiation after deltas
+
+	public GoMainPage()
+	{
+		// Auto-connect if MAUI_GO_SERVER env var is set (for automated testing)
+		var autoUrl = Environment.GetEnvironmentVariable("MAUI_GO_SERVER");
+		if (!string.IsNullOrEmpty(autoUrl))
+		{
+			Console.WriteLine($"[GoMainPage] Will auto-connect to {autoUrl}");
+			State.ServerUrl = autoUrl;
+		}
+	}
 
 	public override View Render()
 	{
+		// Auto-connect on first render if env var was set
+		if (!_autoConnectAttempted && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MAUI_GO_SERVER")))
+		{
+			_autoConnectAttempted = true;
+			_ = Task.Run(async () =>
+			{
+				await Task.Delay(500);
+				Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(OnConnectTapped);
+			});
+		}
+
 		if (State.IsConnected && State.UserView is not null)
 			return RenderUserView();
 
@@ -158,9 +182,35 @@ public class GoMainPage : Component<GoAppState>
 		_client.DeltaApplied += seq =>
 			Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() =>
 			{
-				SetState(s => s.DeltasApplied = seq);
-				// Trigger Comet's hot reload pipeline so the view tree rebuilds
-				MauiHotReloadHelper.TriggerReload();
+				// Re-instantiate the user's view to pick up the updated method body.
+				// Don't call MauiHotReloadHelper.TriggerReload() because that would
+				// destroy GoMainPage and its WebSocket client.
+				if (_userViewType is not null)
+				{
+					try
+					{
+						var newView = (Comet.View)Activator.CreateInstance(_userViewType)!;
+						Console.WriteLine($"[GoMainPage] Re-created user view after delta #{seq}: {newView.GetType().Name}");
+						SetState(s =>
+						{
+							s.UserView = newView;
+							s.DeltasApplied = seq;
+						});
+					}
+					catch (Exception ex)
+					{
+						Console.WriteLine($"[GoMainPage] Failed to re-create view after delta: {ex.Message}");
+						SetState(s =>
+						{
+							s.DeltasApplied = seq;
+							s.ErrorMessage = $"View update failed: {ex.Message}";
+						});
+					}
+				}
+				else
+				{
+					SetState(s => s.DeltasApplied = seq);
+				}
 			});
 
 		_client.Disconnected += () =>
@@ -198,6 +248,7 @@ public class GoMainPage : Component<GoAppState>
 	/// </summary>
 	void LoadUserView(Assembly assembly)
 	{
+		Console.WriteLine($"[GoMainPage] LoadUserView called with assembly: {assembly.FullName}");
 		var cometViewType = typeof(Comet.View);
 
 		// Find MainPage or first public View subclass
@@ -208,13 +259,18 @@ public class GoMainPage : Component<GoAppState>
 
 		if (viewType is null)
 		{
+			Console.WriteLine("[GoMainPage] No Comet View found in assembly");
 			SetState(s => s.ErrorMessage = "No Comet View found in assembly. Create a class named 'MainPage' inheriting from Comet.View.");
 			return;
 		}
 
+		Console.WriteLine($"[GoMainPage] Found view type: {viewType.FullName}");
+		_userViewType = viewType;
+
 		try
 		{
 			var view = (Comet.View)Activator.CreateInstance(viewType)!;
+			Console.WriteLine($"[GoMainPage] View instantiated: {view.GetType().Name}");
 			SetState(s =>
 			{
 				s.UserView = view;

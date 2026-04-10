@@ -1,8 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -27,6 +30,8 @@ public sealed class DeltaCompiler
 	CSharpCompilation? _currentCompilation;
 	EmitBaseline? _baseline;
 	int _generation;
+	PEReader? _peReader;
+	MetadataReaderProvider? _pdbReaderProvider;
 
 	public string AssemblyName { get; }
 	public byte[]? CurrentPe { get; private set; }
@@ -81,14 +86,51 @@ public sealed class DeltaCompiler
 		CurrentPe = peStream.ToArray();
 		CurrentPdb = pdbStream.ToArray();
 
-		// Create baseline for future deltas
+		// Create baseline for future deltas.
+		// We must provide proper debug info and local signature providers
+		// so Roslyn can correctly track local variable slots and synthesized
+		// members (closures, lambdas) across delta generations.
 		var moduleMetadata = ModuleMetadata.CreateFromImage(CurrentPe);
+
+		// Build lookup tables from the PE and PDB for the baseline providers
+		var peReader = new PEReader(new MemoryStream(CurrentPe));
+		var metadataReader = peReader.GetMetadataReader();
+		var pdbReaderProvider = MetadataReaderProvider.FromPortablePdbStream(new MemoryStream(CurrentPdb));
+		var pdbReader = pdbReaderProvider.GetMetadataReader();
+
+		// Build local signature map: MethodDef handle → StandaloneSignature handle
+		var localSigMap = new Dictionary<MethodDefinitionHandle, StandaloneSignatureHandle>();
+		foreach (var methodHandle in metadataReader.MethodDefinitions)
+		{
+			var methodDef = metadataReader.GetMethodDefinition(methodHandle);
+			var body = methodDef.RelativeVirtualAddress > 0
+				? peReader.GetMethodBody(methodDef.RelativeVirtualAddress)
+				: null;
+			if (body?.LocalSignature.IsNil == false)
+				localSigMap[methodHandle] = body.LocalSignature;
+		}
+
 		_baseline = EmitBaseline.CreateInitialBaseline(
 			_currentCompilation,
 			moduleMetadata,
-			handle => default,
-			handle => default,
+			handle =>
+			{
+				// Read EditAndContinueMethodDebugInformation from PDB
+				try
+				{
+					return EditAndContinueMethodDebugInfoReader.Read(pdbReader, handle);
+				}
+				catch
+				{
+					return default;
+				}
+			},
+			handle => localSigMap.TryGetValue(handle, out var sig) ? sig : default,
 			hasPortableDebugInformation: true);
+
+		// Keep readers alive for the lifetime of the baseline
+		_peReader = peReader;
+		_pdbReaderProvider = pdbReaderProvider;
 
 		_generation = 0;
 
@@ -548,8 +590,38 @@ public sealed class DeltaCompiler
 }
 
 /// <summary>
-/// Result of a compilation or delta generation.
+/// Reads EditAndContinueMethodDebugInformation from a Portable PDB.
+/// EnC-specific debug info is stored in custom debug info entries:
+///   - EncLocalSlotMap  (GUID: EE813940-...) — maps local variable slots across edits
+///   - EncLambdaAndClosureMap (GUID: A643004F-...) — tracks lambda ordinals and closure scopes
 /// </summary>
+static class EditAndContinueMethodDebugInfoReader
+{
+	// Portable PDB custom debug info GUIDs for EnC
+	static readonly Guid EncLocalSlotMapGuid = new("C6B3C19F-4B94-45F3-9D7A-F9EB21C54D13");
+	static readonly Guid EncLambdaAndClosureMapGuid = new("A643004F-0170-4B5E-B5AA-1C5763BD9B08");
+
+	public static EditAndContinueMethodDebugInformation Read(
+		MetadataReader pdbReader, MethodDefinitionHandle handle)
+	{
+		var localSlotMap = ImmutableArray<byte>.Empty;
+		var lambdaMap = ImmutableArray<byte>.Empty;
+
+		foreach (var cdiHandle in pdbReader.GetCustomDebugInformation(handle))
+		{
+			var cdi = pdbReader.GetCustomDebugInformation(cdiHandle);
+			var guid = pdbReader.GetGuid(cdi.Kind);
+			var blob = pdbReader.GetBlobContent(cdi.Value);
+
+			if (guid == EncLocalSlotMapGuid)
+				localSlotMap = blob;
+			else if (guid == EncLambdaAndClosureMapGuid)
+				lambdaMap = blob;
+		}
+
+		return EditAndContinueMethodDebugInformation.Create(localSlotMap, lambdaMap);
+	}
+}
 public sealed class CompilationResult
 {
 	public bool Success { get; init; }
