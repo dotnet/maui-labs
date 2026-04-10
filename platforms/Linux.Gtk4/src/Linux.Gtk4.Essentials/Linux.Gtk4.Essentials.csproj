@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
-    <PackageReference Include="Tmds.DBus.Protocol" Version="0.20.0" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
   </ItemGroup>
 
   <ItemGroup>
