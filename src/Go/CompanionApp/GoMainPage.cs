@@ -76,7 +76,7 @@ public class GoMainPage : Component<GoAppState>
 			new Spacer(),
 
 			// Logo / Title
-			Text("MAUI Go")
+			Text("☄️ Comet Go")
 				.FontSize(36)
 				.FontWeight(FontWeight.Bold)
 				.Color(Colors.White)
@@ -99,7 +99,7 @@ public class GoMainPage : Component<GoAppState>
 			// Connect button
 			Button("Connect", OnConnectTapped)
 				.Color(Colors.White)
-				.Background(new SolidPaint(new Color(98, 0, 238)))
+				.Background(new SolidPaint(new Color(139, 90, 43)))
 				.CornerRadius(12)
 				.Frame(height: 50)
 				.AutomationId("ConnectButton"),
@@ -124,11 +124,11 @@ public class GoMainPage : Component<GoAppState>
 			// Footer
 			Text("Powered by .NET MAUI + Comet")
 				.FontSize(11)
-				.Color(new Color(180, 180, 180))
+				.Color(new Color(180, 170, 155))
 				.HorizontalTextAlignment(TextAlignment.Center),
 		}
 		.Padding(new Thickness(32))
-		.Background(new SolidPaint(new Color(25, 0, 70)));
+		.Background(new SolidPaint(new Color(40, 26, 13)));
 	}
 
 	View RenderUserView()
@@ -138,7 +138,7 @@ public class GoMainPage : Component<GoAppState>
 			// Status bar overlay
 			new HStack(spacing: 8)
 			{
-				Text($"🔥 MAUI Go — {State.DeltasApplied} updates")
+				Text($"☄️ Comet Go — {State.DeltasApplied} updates")
 					.FontSize(11)
 					.Color(Colors.White),
 
@@ -151,7 +151,7 @@ public class GoMainPage : Component<GoAppState>
 					.AutomationId("DisconnectButton"),
 			}
 			.Padding(new Thickness(16, 4))
-			.Background(new SolidPaint(new Color(98, 0, 238))),
+			.Background(new SolidPaint(new Color(139, 90, 43))),
 		};
 
 		// Show error/warning banner if present (simple text, no nested VStack)
