@@ -313,6 +313,33 @@ public class ProfileCommandTests
 		Assert.Equal("/tmp/my-trace.mibc", path);
 	}
 
+	[Fact]
+	public void GetDotnetPgoInstallPath_UsesMauiHomeLocation()
+	{
+		var path = ProfileCommand.GetDotnetPgoInstallPath("/Users/tester");
+		Assert.Equal("/Users/tester/.maui/dotnet-pgo", path);
+	}
+
+	[Fact]
+	public void BuildDotnetPgoPublishArguments_UsesSingleFileSelfContainedPublish()
+	{
+		var args = ProfileCommand.BuildDotnetPgoPublishArguments("osx-arm64", "/tmp/dotnet-pgo-build");
+
+		Assert.Contains("publish", args);
+		Assert.Contains("src/coreclr/tools/dotnet-pgo/dotnet-pgo.csproj", args);
+		Assert.Contains("--self-contained", args);
+		Assert.Contains("-p:PublishSingleFile=true", args);
+		Assert.Contains("-p:PublishTrimmed=false", args);
+		Assert.Contains("/tmp/dotnet-pgo-build", args);
+	}
+
+	[Fact]
+	public void GetCurrentRuntimeIdentifier_ReturnsSupportedRidFormat()
+	{
+		var rid = ProfileCommand.GetCurrentRuntimeIdentifier();
+		Assert.Matches("^(osx|linux|win)-(x64|arm64)$", rid);
+	}
+
 	// ── Tool version parsing ──────────────────────────────────────────────────
 
 	// ── Project resolver ──────────────────────────────────────────────────────
