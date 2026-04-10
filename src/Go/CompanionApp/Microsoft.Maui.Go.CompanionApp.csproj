@@ -12,7 +12,7 @@
     <Nullable>enable</Nullable>
 
     <ApplicationTitle>Comet Go</ApplicationTitle>
-    <ApplicationId>com.microsoft.maui.go</ApplicationId>
+    <ApplicationId>com.simplyprofound.cometgo</ApplicationId>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
 
@@ -33,7 +33,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#000000" />
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#000000" ForegroundTintColor="#FFCB05" />
     <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#D2BCA5" BaseSize="432,145" />
     <MauiFont Include="Resources\Fonts\*" />
   </ItemGroup>

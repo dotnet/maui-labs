@@ -254,20 +254,23 @@ public sealed class GoClient : IDisposable
 
 		try
 		{
+			Console.WriteLine($"[GoClient] Applying delta #{delta.Sequence} ({delta.MetadataDelta.Length}b meta, {delta.ILDelta.Length}b IL, {delta.PdbDelta.Length}b PDB)...");
+
 			MetadataUpdater.ApplyUpdate(
 				_userAssembly,
 				delta.MetadataDelta,
 				delta.ILDelta,
 				delta.PdbDelta.Length > 0 ? delta.PdbDelta : ReadOnlySpan<byte>.Empty);
 
-			Console.WriteLine($"[GoClient] Delta #{delta.Sequence} applied ({delta.MetadataDelta.Length}b meta, {delta.ILDelta.Length}b IL)");
+			Console.WriteLine($"[GoClient] Delta #{delta.Sequence} applied successfully");
 
 			StatusChanged?.Invoke($"Delta #{delta.Sequence} applied");
 			DeltaApplied?.Invoke(delta.Sequence);
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"[GoClient] Delta #{delta.Sequence} failed: {ex.Message}");
+			Console.WriteLine($"[GoClient] Delta #{delta.Sequence} failed: {ex.GetType().Name}: {ex.Message}");
+			Console.WriteLine($"[GoClient] Stack: {ex.StackTrace}");
 			ErrorReceived?.Invoke($"Delta apply failed: {ex.Message}");
 		}
 	}

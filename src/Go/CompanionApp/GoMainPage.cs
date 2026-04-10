@@ -88,10 +88,12 @@ public class GoMainPage : Component<GoAppState>
 			new Spacer().Frame(height: 20),
 
 			// Server URL input
-			new TextField(new Signal<string>(State.ServerUrl), "ws://host:9000/maui-go")
+			new TextField(new Signal<string>(State.ServerUrl), "ws://host:9000/comet-go")
 				.OnTextChanged(url => SetState(s => s.ServerUrl = url))
 				.Color(Colors.White)
-				.FontSize(14)
+				.FontSize(18)
+				.Background(new SolidPaint(new Color(60, 40, 20)))
+				.Padding(new Thickness(12, 10))
 				.AutomationId("ServerUrlField"),
 
 			// Connect button
