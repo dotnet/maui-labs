@@ -236,9 +236,15 @@ internal class CairoCanvas : global::Microsoft.Maui.Graphics.ICanvas
 			return SizeF.Zero;
 
 		var layout = CreatePangoLayout(value, font, fontSize);
-		layout.GetPixelSize(out int textW, out int textH);
-		layout.Dispose();
-		return new SizeF(textW, textH);
+		try
+		{
+			layout.GetPixelSize(out int textW, out int textH);
+			return new SizeF(textW, textH);
+		}
+		finally
+		{
+			layout.Dispose();
+		}
 	}
 
 	public SizeF GetStringSize(string value, IFont font, float fontSize, HorizontalAlignment horizontalAlignment, VerticalAlignment verticalAlignment)

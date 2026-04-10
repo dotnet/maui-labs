@@ -116,6 +116,12 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			label.SetMarginEnd(12);
 			label.SetMarginTop(8);
 			label.SetMarginBottom(8);
+
+			// Add a one-time CSS provider for group header styling via CSS class
+			var cssProvider = Gtk.CssProvider.New();
+			cssProvider.LoadFromString("label.group-header { font-weight: bold; font-size: 13px; }");
+			label.GetStyleContext().AddProvider(cssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+
 			listItem.SetChild(label);
 		};
 		factory.OnBind += (_, args) =>
@@ -127,13 +133,11 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 			label.SetText(item.GetString());
 
-			// Style group headers differently
+			// Toggle group header style via CSS class (avoids accumulating providers)
 			if (_groupHeaderIndices.Contains(idx))
-			{
-				var cssProvider = Gtk.CssProvider.New();
-				cssProvider.LoadFromString("label { font-weight: bold; font-size: 13px; }");
-				label.GetStyleContext().AddProvider(cssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
-			}
+				label.AddCssClass("group-header");
+			else
+				label.RemoveCssClass("group-header");
 		};
 		return factory;
 	}

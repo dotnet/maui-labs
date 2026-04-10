@@ -18,6 +18,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 {
 	Gtk.Paned? _paned;
+	Gtk.CssProvider? _displayCssProvider;
 	Gtk.ListBox? _flyoutListBox;
 	Gtk.Box? _flyoutBox;
 	Gtk.Notebook? _notebook;
@@ -117,10 +118,10 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 			var display = Gdk.Display.GetDefault();
 			if (display != null)
 			{
-				var provider = Gtk.CssProvider.New();
-				provider.LoadFromString(
+				_displayCssProvider = Gtk.CssProvider.New();
+				_displayCssProvider.LoadFromString(
 					"paned.maui-shell-paned > * { background: none; background-image: none; }");
-				Gtk.StyleContext.AddProviderForDisplay(display, provider,
+				Gtk.StyleContext.AddProviderForDisplay(display, _displayCssProvider,
 					Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
 			}
 		}
@@ -138,6 +139,13 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 			_flyoutListBox.OnRowSelected -= OnFlyoutRowSelected;
 		if (_notebook != null)
 			_notebook.OnSwitchPage -= OnNotebookPageSwitched;
+		if (_displayCssProvider != null)
+		{
+			var display = Gdk.Display.GetDefault();
+			if (display != null)
+				Gtk.StyleContext.RemoveProviderForDisplay(display, _displayCssProvider);
+			_displayCssProvider = null;
+		}
 		base.DisconnectHandler(platformView);
 	}
 
