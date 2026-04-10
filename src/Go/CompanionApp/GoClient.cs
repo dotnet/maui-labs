@@ -17,13 +17,23 @@ namespace Microsoft.Maui.Go.CompanionApp;
 /// <summary>
 /// Connects to the MAUI Go dev server, receives hot reload deltas,
 /// and applies them via MetadataUpdater.ApplyUpdate().
+/// Auto-reconnects on disconnection with exponential backoff.
 /// </summary>
 public sealed class GoClient : IDisposable
 {
-	readonly ClientWebSocket _ws = new();
+	ClientWebSocket? _ws;
 	readonly CancellationTokenSource _cts = new();
 	Assembly? _userAssembly;
 	string _serverUrl = "";
+	bool _autoReconnect = true;
+
+	static readonly TimeSpan[] BackoffDelays = [
+		TimeSpan.FromSeconds(1),
+		TimeSpan.FromSeconds(2),
+		TimeSpan.FromSeconds(4),
+		TimeSpan.FromSeconds(8),
+		TimeSpan.FromSeconds(15),
+	];
 
 	public event Action<string>? StatusChanged;
 	public event Action<string>? ErrorReceived;
@@ -33,22 +43,30 @@ public sealed class GoClient : IDisposable
 	public event Action? Disconnected;
 	public event Action<string>? RestartRequired;
 
-	public bool IsConnected => _ws.State == WebSocketState.Open;
+	public bool IsConnected => _ws?.State == WebSocketState.Open;
 
 	/// <summary>
 	/// Connect to the dev server and start receiving updates.
+	/// Will auto-reconnect if the connection drops.
 	/// </summary>
 	public async Task ConnectAsync(string serverUrl)
 	{
 		_serverUrl = serverUrl;
-		StatusChanged?.Invoke("Connecting...");
+		_autoReconnect = true;
+		await ConnectOnceAsync();
+	}
 
-		Console.WriteLine($"[GoClient] MetadataUpdater.IsSupported = {MetadataUpdater.IsSupported}");
-		Console.WriteLine($"[GoClient] Connecting to {serverUrl}...");
+	async Task ConnectOnceAsync()
+	{
+		StatusChanged?.Invoke("Connecting...");
+		Console.WriteLine($"[GoClient] Connecting to {_serverUrl}...");
 
 		try
 		{
-			await _ws.ConnectAsync(new Uri(serverUrl), _cts.Token);
+			_ws?.Dispose();
+			_ws = new ClientWebSocket();
+
+			await _ws.ConnectAsync(new Uri(_serverUrl), _cts.Token);
 
 			// Send Hello
 			var hello = GoProtocol.EncodeJson(GoMessageType.Hello, new HelloMessage
@@ -66,12 +84,60 @@ public sealed class GoClient : IDisposable
 
 			_ = ReceiveLoopAsync();
 		}
-		catch (Exception ex)
+		catch (Exception ex) when (!_cts.IsCancellationRequested)
 		{
 			Console.WriteLine($"[GoClient] Connection failed: {ex.Message}");
-			StatusChanged?.Invoke($"Connection failed: {ex.Message}");
-			ErrorReceived?.Invoke(ex.Message);
+			StatusChanged?.Invoke($"Connection failed — will retry...");
+			_ = ReconnectLoopAsync();
 		}
+	}
+
+	async Task ReconnectLoopAsync()
+	{
+		if (!_autoReconnect || _cts.IsCancellationRequested) return;
+
+		for (int attempt = 0; attempt < BackoffDelays.Length && !_cts.IsCancellationRequested; attempt++)
+		{
+			var delay = BackoffDelays[attempt];
+			StatusChanged?.Invoke($"Reconnecting in {delay.TotalSeconds:0}s...");
+			Console.WriteLine($"[GoClient] Reconnect attempt {attempt + 1} in {delay.TotalSeconds}s...");
+
+			try { await Task.Delay(delay, _cts.Token); }
+			catch (OperationCanceledException) { return; }
+
+			try
+			{
+				_ws?.Dispose();
+				_ws = new ClientWebSocket();
+				await _ws.ConnectAsync(new Uri(_serverUrl), _cts.Token);
+
+				// Re-send Hello
+				var hello = GoProtocol.EncodeJson(GoMessageType.Hello, new HelloMessage
+				{
+					DeviceId = Guid.NewGuid().ToString("N")[..8],
+					DeviceName = Microsoft.Maui.Devices.DeviceInfo.Name,
+					Platform = Microsoft.Maui.Devices.DeviceInfo.Platform.ToString(),
+					RuntimeVersion = Environment.Version.ToString(),
+					SupportsMetadataUpdate = MetadataUpdater.IsSupported,
+				});
+				await _ws.SendAsync(hello, WebSocketMessageType.Binary, true, _cts.Token);
+
+				Console.WriteLine($"[GoClient] Reconnected successfully");
+				StatusChanged?.Invoke("Reconnected ✅");
+				Connected?.Invoke();
+
+				_ = ReceiveLoopAsync();
+				return; // Success — exit reconnect loop
+			}
+			catch (Exception ex) when (!_cts.IsCancellationRequested)
+			{
+				Console.WriteLine($"[GoClient] Reconnect attempt {attempt + 1} failed: {ex.Message}");
+			}
+		}
+
+		// All attempts exhausted
+		StatusChanged?.Invoke("Disconnected — tap to reconnect");
+		Disconnected?.Invoke();
 	}
 
 	async Task ReceiveLoopAsync()
@@ -80,7 +146,7 @@ public sealed class GoClient : IDisposable
 
 		try
 		{
-			while (_ws.State == WebSocketState.Open && !_cts.IsCancellationRequested)
+			while (_ws?.State == WebSocketState.Open && !_cts.IsCancellationRequested)
 			{
 				var segment = new ArraySegment<byte>(buffer);
 				var result = await _ws.ReceiveAsync(segment, _cts.Token);
@@ -139,9 +205,16 @@ public sealed class GoClient : IDisposable
 			}
 		}
 		catch (WebSocketException ex) { Console.WriteLine($"[GoClient] WS error: {ex.Message}"); }
-		catch (OperationCanceledException) { /* Normal shutdown */ }
+		catch (OperationCanceledException) { return; }
 		catch (Exception ex) { Console.WriteLine($"[GoClient] Receive error: {ex.Message}"); }
-		finally
+
+		// Connection lost — attempt reconnect
+		if (_autoReconnect && !_cts.IsCancellationRequested)
+		{
+			StatusChanged?.Invoke("Connection lost — reconnecting...");
+			_ = ReconnectLoopAsync();
+		}
+		else
 		{
 			StatusChanged?.Invoke("Disconnected");
 			Disconnected?.Invoke();
@@ -199,10 +272,20 @@ public sealed class GoClient : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Manually trigger a reconnection attempt.
+	/// </summary>
+	public Task ReconnectAsync()
+	{
+		_autoReconnect = true;
+		return ConnectOnceAsync();
+	}
+
 	public void Dispose()
 	{
+		_autoReconnect = false;
 		_cts.Cancel();
-		_ws.Dispose();
+		_ws?.Dispose();
 		_cts.Dispose();
 	}
 }
