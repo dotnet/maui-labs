@@ -735,11 +735,15 @@ public static class ProfileCommand
 				verbose,
 				$"Cloning {DotnetPgoRuntimeRepoUrl} ({branch}) into {cloneDirectory}.");
 
-			var cloneResult = await ProcessRunner.RunAsync(
-				gitPath,
-				["clone", "--depth", "1", "--single-branch", "--branch", branch, DotnetPgoRuntimeRepoUrl, cloneDirectory],
-				timeout: s_buildLaunchTimeout,
-				cancellationToken: cancellationToken);
+			var cloneResult = await RunWithOptionalStatusAsync(
+				formatter,
+				useJson,
+				$"Cloning dotnet/runtime ({branch})...",
+				() => ProcessRunner.RunAsync(
+					gitPath,
+					["clone", "--depth", "1", "--single-branch", "--branch", branch, DotnetPgoRuntimeRepoUrl, cloneDirectory],
+					timeout: s_buildLaunchTimeout,
+					cancellationToken: cancellationToken));
 			if (!cloneResult.Success)
 				throw ProfileCommandProcessHelpers.CreateProcessFailureException("git clone", cloneResult);
 
@@ -750,12 +754,16 @@ public static class ProfileCommand
 				verbose,
 				$"Publishing dotnet-pgo via {ProfileCommandProcessHelpers.FormatCommandLine(dotnetPath, publishArgs)}");
 
-			var publishResult = await ProcessRunner.RunAsync(
-				dotnetPath,
-				publishArgs,
-				cloneDirectory,
-				timeout: s_buildLaunchTimeout,
-				cancellationToken: cancellationToken);
+			var publishResult = await RunWithOptionalStatusAsync(
+				formatter,
+				useJson,
+				$"Publishing dotnet-pgo for {GetCurrentRuntimeIdentifier()}...",
+				() => ProcessRunner.RunAsync(
+					dotnetPath,
+					publishArgs,
+					cloneDirectory,
+					timeout: s_buildLaunchTimeout,
+					cancellationToken: cancellationToken));
 			if (!publishResult.Success)
 				throw ProfileCommandProcessHelpers.CreateProcessFailureException("dotnet publish", publishResult);
 
@@ -806,6 +814,21 @@ public static class ProfileCommand
 				// Best-effort cleanup for the temporary runtime clone.
 			}
 		}
+	}
+
+	static async Task<T> RunWithOptionalStatusAsync<T>(
+		IOutputFormatter formatter,
+		bool useJson,
+		string message,
+		Func<Task<T>> operation)
+	{
+		if (formatter is SpectreOutputFormatter spectre && !useJson)
+			return await spectre.StatusAsync(message, operation);
+
+		if (!useJson)
+			formatter.WriteInfo(message);
+
+		return await operation();
 	}
 
 	static IReadOnlyList<string> ResolveMibcReferenceAssemblies(
