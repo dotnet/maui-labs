@@ -11,7 +11,7 @@ public class MainPage : View
     [Body]
     View body() => new VStack(spacing: 20)
     {
-        new Text("Okay, this is the test-go-app!")
+        new Text("Yo, this is the test-go-app!")
             .FontSize(28)
             .FontWeight(FontWeight.Bold)
             .Color(Colors.Orange)

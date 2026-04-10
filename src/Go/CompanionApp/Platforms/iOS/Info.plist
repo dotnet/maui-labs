@@ -7,5 +7,7 @@
 		<key>DOTNET_MODIFIABLE_ASSEMBLIES</key>
 		<string>Debug</string>
 	</dict>
+	<key>XSAppIconAssets</key>
+	<string>Assets.xcassets/appicon.appiconset</string>
 </dict>
 </plist>
