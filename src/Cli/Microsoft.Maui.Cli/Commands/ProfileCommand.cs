@@ -106,7 +106,7 @@ public static class ProfileCommand
 		var stoppingEventProviderOption = new Option<string?>("--stopping-event-provider-name")
 		{
 			Description = "Optional event provider name for an event-based stop condition. " +
-				"When omitted, maui profile waits for --duration or a manual Enter/Ctrl+C stop."
+				"When omitted, maui profile waits for --duration or a manual Enter stop."
 		};
 		var stoppingEventNameOption = new Option<string?>("--stopping-event-event-name")
 		{
@@ -184,7 +184,7 @@ public static class ProfileCommand
 				{
 					throw MauiToolException.UserActionRequired(
 						ErrorCodes.InvalidArgument,
-						"Non-interactive profile runs require an explicit stop condition because the default behavior waits for a manual Enter/Ctrl+C stop.",
+						"Non-interactive profile runs require an explicit stop condition because the default behavior waits for a manual Enter stop.",
 						[
 							"Add --duration 00:00:15 for a fixed-length startup trace.",
 							"Or pass --stopping-event-provider-name/--stopping-event-event-name to stop on a custom EventSource marker."
@@ -242,8 +242,7 @@ public static class ProfileCommand
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -690,7 +689,7 @@ public static class ProfileCommand
 			// later is fast (seconds) and won't race with dotnet-trace's connection timeout.
 			if (!noBuild)
 			{
-				if (!useJson)
+				if (!useJson && formatter is not SpectreOutputFormatter)
 					formatter.WriteInfo("Building the app...");
 
 				var buildArgs = BuildCompileArguments(project.ProjectPath, framework, configuration, buildInjection);
@@ -752,7 +751,7 @@ public static class ProfileCommand
 				buildInjection);
 			WriteVerbose(formatter, useJson, verbose, $"Launch command: {FormatCommandLine("dotnet", launchArgs)}");
 
-			if (!useJson)
+			if (!useJson && formatter is not SpectreOutputFormatter)
 				formatter.WriteInfo("Deploying and launching the app with startup diagnostics enabled...");
 
 			var launchResult = formatter is SpectreOutputFormatter spectre && !useJson
@@ -783,10 +782,10 @@ public static class ProfileCommand
 				else
 				{
 					var traceStatusMessage = !string.IsNullOrWhiteSpace(stoppingEventProvider)
-						? "Waiting for the configured stopping event. Press Enter or Ctrl+C to stop early."
+						? "Waiting for the configured stopping event. Press Enter to stop early."
 						: effectiveDuration is { } explicitDuration
-							? $"Startup trace is running. It will stop automatically after {FormatDuration(explicitDuration)} unless you press Enter or Ctrl+C sooner."
-							: "Startup trace is running. Press Enter or Ctrl+C to stop and finalize the trace output.";
+							? $"Startup trace is running. It will stop automatically after {FormatDuration(explicitDuration)} unless you press Enter sooner."
+							: "Startup trace is running. Press Enter to stop and finalize the trace output.";
 					formatter.WriteInfo(traceStatusMessage);
 				}
 			}
@@ -2367,8 +2366,8 @@ internal sealed class MonitoredProcess : IDisposable
 			line =>
 			{
 				onStderrLine?.Invoke(line);
-				if (!useJson)
-					formatter.WriteWarning($"[{prefix}] {line}");
+				if (verbose && !useJson)
+					formatter.WriteProgress($"[{prefix}:stderr] {line}");
 			},
 			cancellationToken);
 

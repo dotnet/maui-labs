@@ -52,8 +52,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -201,8 +200,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -292,8 +290,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -408,8 +405,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 		command.Add(stopCommand);
@@ -485,8 +481,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 		command.Add(deleteCommand);

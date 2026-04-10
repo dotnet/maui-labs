@@ -59,17 +59,30 @@ public class Program
 		{
 			var formatter = GetFormatter(parseResult);
 			var isCi = parseResult.GetValue(GlobalOptions.CiOption);
+			var exitCode = HandleCommandException(formatter, exception);
 
-			formatter.WriteError(exception);
-
-			// In CI mode, fail fast
 			if (isCi)
 			{
-				Environment.Exit(1);
+				Environment.Exit(exitCode);
 			}
 
-			return 1;
+			return exitCode;
 		}
+	}
+
+	internal static int HandleCommandException(IOutputFormatter formatter, Exception exception)
+	{
+		ArgumentNullException.ThrowIfNull(formatter);
+		ArgumentNullException.ThrowIfNull(exception);
+
+		if (exception is OperationCanceledException)
+		{
+			formatter.WriteInfo("Cancelled.");
+			return 130;
+		}
+
+		formatter.WriteError(exception);
+		return 1;
 	}
 
 	internal static RootCommand BuildRootCommand()
