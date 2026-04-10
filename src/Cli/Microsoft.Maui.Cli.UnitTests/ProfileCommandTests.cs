@@ -328,6 +328,7 @@ public class ProfileCommandTests
 		Assert.Contains("publish", args);
 		Assert.Contains("src/coreclr/tools/dotnet-pgo/dotnet-pgo.csproj", args);
 		Assert.Contains("--self-contained", args);
+		Assert.Contains("-p:UseAppHost=true", args);
 		Assert.Contains("-p:PublishSingleFile=true", args);
 		Assert.Contains("-p:PublishTrimmed=false", args);
 		Assert.Contains("/tmp/dotnet-pgo-build", args);
