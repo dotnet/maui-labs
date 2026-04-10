@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.DevFlow.Driver;
@@ -9,13 +8,6 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class TreeTool
 {
-	private static readonly JsonSerializerOptions JsonOptions = new()
-	{
-		PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-		WriteIndented = false
-	};
-
 	[McpServerTool(Name = "maui_tree"), Description("Inspect the visual tree of the running MAUI app. Returns structured JSON element hierarchy with IDs, types, bounds, visibility, and properties. Use element IDs from this tree for tap, fill, scroll, and other interaction commands.")]
 	public static async Task<string> Tree(
 		McpAgentSession session,
@@ -47,7 +39,7 @@ public sealed class TreeTool
 				return $"No elements of type '{filter}' found in the visual tree.";
 		}
 
-		return JsonSerializer.Serialize(result, JsonOptions);
+		return CliJson.SerializeUntyped(result, indented: false);
 	}
 
 	private static ElementInfo? FindElement(IEnumerable<ElementInfo> elements, string id)

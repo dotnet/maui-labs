@@ -68,6 +68,59 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
 
+      - name: NativeAOT publish smoke test (macOS)
+        if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64) rid="osx-arm64" ;;
+            x86_64) rid="osx-x64" ;;
+            *)
+              echo "Unsupported macOS architecture: $arch"
+              exit 1
+              ;;
+          esac
+
+          dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
+            -c Release \
+            -r "$rid" \
+            -p:PublishAot=true \
+            -p:PublishTrimmed=true \
+            -p:InvariantGlobalization=true \
+            -p:TreatWarningsAsErrors=true \
+            --self-contained true
+
+          publish_dir="artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/$rid/publish"
+          cli_path="$publish_dir/maui"
+          commands_json="$(mktemp)"
+          agents_json="$(mktemp)"
+
+          "$cli_path" devflow version
+          "$cli_path" devflow commands --json > "$commands_json"
+          "$cli_path" devflow broker stop >/dev/null 2>&1 || true
+          "$cli_path" devflow list --json > "$agents_json"
+          "$cli_path" devflow broker stop >/dev/null 2>&1 || true
+
+          python - "$commands_json" "$agents_json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as fp:
+              commands = json.load(fp)
+          with open(sys.argv[2], "r", encoding="utf-8") as fp:
+              agents = json.load(fp)
+
+          assert isinstance(commands, list), "Expected commands output to be a JSON array"
+          assert commands, "Expected at least one command description"
+          assert all("command" in item and "description" in item for item in commands), "Command entries must include command and description"
+          assert isinstance(agents, list), "Expected list --json output to be a JSON array"
+          PY
+
+          rm -f "$commands_json" "$agents_json"
+
       - name: Upload test results
         if: inputs.run-tests && always()
         uses: actions/upload-artifact@v7

@@ -32,7 +32,8 @@ public class AndroidProvider : IAndroidProvider
 	public string? SdkPath => _sdkPath ??= PlatformDetector.Paths.GetAndroidSdkPath();
 	public string? JdkPath => _jdkPath ??= _jdkManager.DetectedJdkPath ?? PlatformDetector.Paths.GetJdkPath();
 
-	public bool IsSdkInstalled => !string.IsNullOrEmpty(SdkPath) && Directory.Exists(SdkPath);
+	public bool IsSdkInstalled => !string.IsNullOrEmpty(SdkPath) && Directory.Exists(SdkPath)
+		&& Directory.Exists(Path.Combine(SdkPath, "cmdline-tools"));
 	public bool IsJdkInstalled => !string.IsNullOrEmpty(JdkPath) && Directory.Exists(JdkPath);
 	public bool SdkPathRequiresElevation => _sdkManager.SdkPathRequiresElevation();
 

@@ -22,7 +22,8 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 | `Microsoft.Maui.Cli` | CLI global tool (`maui`) |
 
 ```bash
-dotnet tool install -g Microsoft.Maui.Cli
+# Microsoft.Maui.Cli is currently released as a pre-release, so make sure to use the --prerelease flag
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
 maui doctor
 ```
 

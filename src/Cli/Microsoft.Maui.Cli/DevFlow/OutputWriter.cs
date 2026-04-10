@@ -1,5 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
@@ -10,20 +10,6 @@ namespace Microsoft.Maui.Cli.DevFlow;
 /// </summary>
 class DevFlowOutputWriter : IDevFlowOutputWriter
 {
-    private static readonly JsonSerializerOptions s_jsonOptions = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
-    private static readonly JsonSerializerOptions s_compactJsonOptions = new()
-    {
-        WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     /// <summary>
     /// Resolves whether JSON output mode is active.
     /// Priority: --no-json flag > --json flag > MAUIDEVFLOW_OUTPUT env var > TTY auto-detection.
@@ -51,7 +37,7 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
     {
         if (json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(data, s_jsonOptions));
+            Console.WriteLine(CliJson.SerializeUntyped(data, indented: true));
         }
         else if (humanFormatter != null)
         {
@@ -59,7 +45,7 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
         }
         else
         {
-            Console.WriteLine(JsonSerializer.Serialize(data, s_jsonOptions));
+            Console.WriteLine(CliJson.SerializeUntyped(data, indented: true));
         }
     }
 
@@ -83,7 +69,7 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
         }
         else
         {
-            Console.WriteLine(JsonSerializer.Serialize(element, s_jsonOptions));
+            Console.WriteLine(CliJson.PrettyPrint(element));
         }
     }
 
@@ -94,8 +80,12 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
     {
         if (json)
         {
-            var result = new ActionResult { Success = success, Action = action, ElementId = elementId };
-            Console.WriteLine(JsonSerializer.Serialize(result, s_compactJsonOptions));
+            Console.WriteLine(CliJson.SerializeUntyped(new JsonObject
+            {
+                ["success"] = success,
+                ["action"] = action,
+                ["elementId"] = elementId
+            }, indented: false));
         }
         else
         {
@@ -112,14 +102,21 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
     {
         if (json)
         {
-            var error = new ErrorResult
+            var error = new JsonObject
             {
-                Error = message,
-                Type = errorType,
-                Retryable = retryable,
-                Suggestions = suggestions
+                ["error"] = message,
+                ["type"] = errorType,
+                ["retryable"] = retryable
             };
-            Console.Error.WriteLine(JsonSerializer.Serialize(error, s_compactJsonOptions));
+            if (suggestions is { Length: > 0 })
+            {
+                var suggestionArray = new JsonArray();
+                foreach (var suggestion in suggestions)
+                    suggestionArray.Add((JsonNode?)JsonValue.Create(suggestion));
+                error["suggestions"] = suggestionArray;
+            }
+
+            Console.Error.WriteLine(CliJson.SerializeUntyped(error, indented: false));
         }
         else
         {
@@ -132,7 +129,7 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
     /// </summary>
     public void WriteJsonLine<T>(T data)
     {
-        Console.WriteLine(JsonSerializer.Serialize(data, s_compactJsonOptions));
+        Console.WriteLine(CliJson.SerializeUntyped(data, indented: false));
     }
 
     /// <summary>
@@ -140,35 +137,6 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
     /// </summary>
     public string FormatJson<T>(T data)
     {
-        return JsonSerializer.Serialize(data, s_jsonOptions);
-    }
-
-    // DTOs for structured output
-
-    private class ActionResult
-    {
-        [JsonPropertyName("success")]
-        public bool Success { get; set; }
-
-        [JsonPropertyName("action")]
-        public string? Action { get; set; }
-
-        [JsonPropertyName("elementId")]
-        public string? ElementId { get; set; }
-    }
-
-    private class ErrorResult
-    {
-        [JsonPropertyName("error")]
-        public string? Error { get; set; }
-
-        [JsonPropertyName("type")]
-        public string? Type { get; set; }
-
-        [JsonPropertyName("retryable")]
-        public bool Retryable { get; set; }
-
-        [JsonPropertyName("suggestions")]
-        public string[]? Suggestions { get; set; }
+        return CliJson.SerializeUntyped(data, indented: true);
     }
 }

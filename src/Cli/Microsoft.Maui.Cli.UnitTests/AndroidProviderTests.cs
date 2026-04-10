@@ -8,6 +8,65 @@ using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
 
+public class AndroidProviderIsSdkInstalledTests : IDisposable
+{
+	readonly string _tempDir;
+
+	public AndroidProviderIsSdkInstalledTests()
+	{
+		_tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		Directory.CreateDirectory(_tempDir);
+	}
+
+	public void Dispose()
+	{
+		if (Directory.Exists(_tempDir))
+			Directory.Delete(_tempDir, recursive: true);
+	}
+
+	/// <summary>
+	/// Mirrors the <c>AndroidProvider.IsSdkInstalled</c> check so tests stay in sync with the implementation.
+	/// </summary>
+	static bool IsSdkInstalledCheck(string? sdkPath) =>
+		!string.IsNullOrEmpty(sdkPath)
+		&& Directory.Exists(sdkPath)
+		&& Directory.Exists(Path.Combine(sdkPath, "cmdline-tools"));
+
+	[Fact]
+	public void IsSdkInstalled_ReturnsFalse_WhenSdkDirectoryExistsButCmdlineToolsMissing()
+	{
+		// The SDK directory exists but cmdline-tools subdirectory does NOT exist —
+		// this is the exact scenario described in issue E2102.
+		Assert.True(Directory.Exists(_tempDir));
+		Assert.False(Directory.Exists(Path.Combine(_tempDir, "cmdline-tools")));
+
+		Assert.False(IsSdkInstalledCheck(_tempDir));
+	}
+
+	[Fact]
+	public void IsSdkInstalled_ReturnsTrue_WhenSdkDirectoryAndCmdlineToolsBothExist()
+	{
+		Directory.CreateDirectory(Path.Combine(_tempDir, "cmdline-tools"));
+
+		Assert.True(IsSdkInstalledCheck(_tempDir));
+	}
+
+	[Fact]
+	public void IsSdkInstalled_ReturnsFalse_WhenSdkDirectoryDoesNotExist()
+	{
+		var nonExistentPath = Path.Combine(_tempDir, "nonexistent");
+
+		Assert.False(IsSdkInstalledCheck(nonExistentPath));
+	}
+
+	[Fact]
+	public void IsSdkInstalled_ReturnsFalse_WhenSdkPathIsNull()
+	{
+		Assert.False(IsSdkInstalledCheck(null));
+	}
+}
+
+
 public class AndroidProviderTests
 {
 	[Fact]

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.DevFlow.Driver;
@@ -9,13 +8,6 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class NetworkTool
 {
-	private static readonly JsonSerializerOptions JsonOptions = new()
-	{
-		PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-		WriteIndented = false
-	};
-
 	[McpServerTool(Name = "maui_network"), Description("List captured HTTP network requests from the running app. Returns structured data with method, URL, status code, duration, and sizes.")]
 	public static async Task<string> NetworkList(
 		McpAgentSession session,
@@ -43,7 +35,7 @@ public sealed class NetworkTool
 			};
 		}
 
-		return JsonSerializer.Serialize(requests, JsonOptions);
+		return CliJson.SerializeUntyped(requests, indented: false);
 	}
 
 	[McpServerTool(Name = "maui_network_detail"), Description("Get full details of a captured HTTP request including headers and body.")]
@@ -57,7 +49,7 @@ public sealed class NetworkTool
 		if (detail == null)
 			return $"Network request '{requestId}' not found.";
 
-		return JsonSerializer.Serialize(detail, JsonOptions);
+		return CliJson.SerializeUntyped(detail, indented: false);
 	}
 
 	[McpServerTool(Name = "maui_network_clear"), Description("Clear all captured network requests from the buffer.")]

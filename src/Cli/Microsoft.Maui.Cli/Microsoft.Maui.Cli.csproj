@@ -13,6 +13,9 @@
     <IsShipping>true</IsShipping>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>
@@ -46,6 +49,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Cli.UnitTests" />
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
   </ItemGroup>
 
 </Project>

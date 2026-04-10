@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.Models;
@@ -10,6 +11,8 @@ namespace Microsoft.Maui.Cli.Output;
 /// <summary>
 /// JSON output formatter for machine-readable output.
 /// </summary>
+[UnconditionalSuppressMessage("AOT", "IL2026:RequiresUnreferencedCode", Justification = "General-purpose CLI output formatter; full AOT migration tracked separately.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode", Justification = "General-purpose CLI output formatter; full AOT migration tracked separately.")]
 public class JsonOutputFormatter : IOutputFormatter
 {
 	static readonly JsonSerializerOptions s_options = new()
@@ -17,7 +20,13 @@ public class JsonOutputFormatter : IOutputFormatter
 		WriteIndented = true,
 		PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
 		DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-		Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) }
+		Converters =
+		{
+			new JsonStringEnumConverter<DeviceType>(JsonNamingPolicy.SnakeCaseLower),
+			new JsonStringEnumConverter<DeviceState>(JsonNamingPolicy.SnakeCaseLower),
+			new JsonStringEnumConverter<HealthStatus>(JsonNamingPolicy.SnakeCaseLower),
+			new JsonStringEnumConverter<CheckStatus>(JsonNamingPolicy.SnakeCaseLower),
+		}
 	};
 
 	readonly TextWriter _output;
