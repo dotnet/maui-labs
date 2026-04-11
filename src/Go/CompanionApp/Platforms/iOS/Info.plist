@@ -9,5 +9,7 @@
 	</dict>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Comet Go needs camera access to scan the QR code displayed by the dev server.</string>
 </dict>
 </plist>

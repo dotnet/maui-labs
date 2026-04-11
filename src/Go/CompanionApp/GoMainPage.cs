@@ -69,65 +69,101 @@ public class GoMainPage : Component<GoAppState>
 
 	View RenderConnectScreen()
 	{
-		return new VStack(spacing: 20)
+		return new VStack(spacing: 0)
 		{
 			new Spacer(),
 
-			// Logo / Title
-			Text("Comet Go")
-				.FontSize(36)
-				.FontWeight(FontWeight.Bold)
-				.Color(Colors.White)
-				.HorizontalTextAlignment(TextAlignment.Center),
+			// Logo / Title area
+			new VStack(spacing: 8)
+			{
+				Text("Comet Go")
+					.FontSize(36)
+					.FontWeight(FontWeight.Bold)
+					.Color(Colors.White)
+					.HorizontalTextAlignment(TextAlignment.Center),
 
-			Text("Connect to your dev server")
-				.FontSize(16)
-				.Color(new Color(255, 255, 255, 180))
-				.HorizontalTextAlignment(TextAlignment.Center),
+				Text("Connect to your dev server")
+					.FontSize(15)
+					.Color(new Color(210, 188, 165))
+					.HorizontalTextAlignment(TextAlignment.Center),
+			}.Padding(new Thickness(0, 0, 0, 40)),
 
-			new Spacer().Frame(height: 20),
+			// Connection form card
+			new VStack(spacing: 16)
+			{
+				// Server URL label
+				Text("Server URL")
+					.FontSize(13)
+					.FontWeight(FontWeight.Semibold)
+					.Color(new Color(210, 188, 165)),
 
-			// Server URL input
-			new TextField(new Signal<string>(State.ServerUrl), "ws://host:9000/comet-go")
-				.OnTextChanged(url => SetState(s => s.ServerUrl = url))
-				.Color(Colors.White)
-				.FontSize(18)
-				.Background(new SolidPaint(new Color(60, 40, 20)))
-				.Padding(new Thickness(12, 10))
-				.AutomationId("ServerUrlField"),
+				// URL input field — dark card style
+				new TextField(new Signal<string>(State.ServerUrl), "ws://host:9000/comet-go")
+					.OnTextChanged(url => SetState(s => s.ServerUrl = url))
+					.Color(Colors.White)
+					.FontSize(16)
+					.Background(new SolidPaint(new Color(30, 20, 10)))
+					.Padding(new Thickness(14, 12))
+					.AutomationId("ServerUrlField"),
 
-			// Connect button
-			Button("Connect", OnConnectTapped)
-				.Color(Colors.White)
-				.Background(new SolidPaint(new Color(139, 90, 43)))
-				.CornerRadius(12)
-				.Frame(height: 50)
-				.AutomationId("ConnectButton"),
+				// Connect button — full width, warm accent
+				Button("Connect", OnConnectTapped)
+					.Color(Colors.White)
+					.Background(new SolidPaint(new Color(212, 160, 74)))
+					.CornerRadius(10)
+					.Frame(height: 48)
+					.AutomationId("ConnectButton"),
 
-			// Status
-			Text(State.Status)
-				.FontSize(14)
-				.Color(State.ErrorMessage is not null ? Colors.OrangeRed : new Color(200, 200, 200))
-				.HorizontalTextAlignment(TextAlignment.Center)
-				.AutomationId("StatusLabel"),
+				// Divider with "or"
+				new HStack(spacing: 12)
+				{
+					new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(80, 60, 40))),
+					Text("or")
+						.FontSize(13)
+						.Color(new Color(160, 140, 120)),
+					new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(80, 60, 40))),
+				},
 
-			// Error details
-			State.ErrorMessage is not null
-				? Text(State.ErrorMessage)
-					.FontSize(12)
-					.Color(Colors.OrangeRed)
-					.FontFamily("Courier New")
-				: (View)new Spacer().Frame(height: 1),
+				// Scan QR Code button — outlined style
+				Button("Scan QR Code", OnScanQrTapped)
+					.Color(new Color(212, 160, 74))
+					.Background(new SolidPaint(new Color(50, 35, 20)))
+					.CornerRadius(10)
+					.Frame(height: 48)
+					.AutomationId("ScanQrButton"),
+			}
+			.Padding(new Thickness(24, 20))
+			.Background(new SolidPaint(new Color(50, 35, 20)))
+			.RoundedBorder(12, new Color(80, 60, 40)),
+
+			// Status area
+			new VStack(spacing: 8)
+			{
+				Text(State.Status)
+					.FontSize(13)
+					.Color(State.ErrorMessage is not null ? Colors.OrangeRed : new Color(180, 170, 160))
+					.HorizontalTextAlignment(TextAlignment.Center)
+					.AutomationId("StatusLabel"),
+
+				State.ErrorMessage is not null
+					? Text(State.ErrorMessage)
+						.FontSize(11)
+						.Color(Colors.OrangeRed)
+						.FontFamily("Courier New")
+						.HorizontalTextAlignment(TextAlignment.Center)
+					: (View)new Spacer().Frame(height: 1),
+			}.Padding(new Thickness(0, 20, 0, 0)),
 
 			new Spacer(),
 
 			// Footer
 			Text("Powered by .NET MAUI + Comet")
 				.FontSize(11)
-				.Color(new Color(180, 170, 155))
-				.HorizontalTextAlignment(TextAlignment.Center),
+				.Color(new Color(140, 130, 115))
+				.HorizontalTextAlignment(TextAlignment.Center)
+				.Padding(new Thickness(0, 0, 0, 16)),
 		}
-		.Padding(new Thickness(32))
+		.Padding(new Thickness(28))
 		.Background(new SolidPaint(new Color(40, 26, 13)));
 	}
 
@@ -171,6 +207,29 @@ public class GoMainPage : Component<GoAppState>
 		children.Add(State.UserView!);
 
 		return new VStack(spacing: 0) { children.ToArray() };
+	}
+
+	async void OnScanQrTapped()
+	{
+		var tcs = new System.Threading.Tasks.TaskCompletionSource<string?>();
+		var scannerPage = new QrScannerPage(tcs);
+
+		var currentPage = Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault()?.Page;
+		if (currentPage is not null)
+		{
+			await currentPage.Navigation.PushModalAsync(scannerPage);
+			var result = await tcs.Task;
+
+			if (!string.IsNullOrEmpty(result))
+			{
+				// The QR code contains the WebSocket URL directly
+				SetState(s =>
+				{
+					s.ServerUrl = result;
+					s.Status = "QR code scanned - tap Connect";
+				});
+			}
+		}
 	}
 
 	async void OnConnectTapped()

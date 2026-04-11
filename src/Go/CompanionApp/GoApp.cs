@@ -5,6 +5,7 @@ using System;
 using Comet;
 using Comet.Styles;
 using Microsoft.Maui.Hosting;
+using ZXing.Net.Maui.Controls;
 
 namespace Microsoft.Maui.Go.CompanionApp;
 
@@ -28,6 +29,7 @@ public class GoApp : CometApp
 
 		var builder = MauiApp.CreateBuilder();
 		builder.UseCometApp<GoApp>();
+		builder.UseBarcodeReader();
 
 		builder.ConfigureFonts(fonts =>
 		{
