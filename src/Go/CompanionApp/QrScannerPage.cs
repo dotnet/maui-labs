@@ -116,21 +116,21 @@ public class QrScannerPage : ContentPage
 				new ColumnDefinition(GridLength.Star),
 				new ColumnDefinition(48),
 			},
-			Padding = new Thickness(16, 56, 16, 0),
+			Padding = new Thickness(16, 60, 16, 0),
 			VerticalOptions = LayoutOptions.Start,
 		};
 		topBar.Add(closeButton, 0);
 		topBar.Add(titleLabel, 1);
 
-		// Instruction below viewfinder
+		// Instruction BELOW viewfinder
 		var instructionLabel = new Label
 		{
-			Text = "Point your camera at the QR code shown by the dev server",
+			Text = "Point your camera at the QR code\nshown by the dev server",
 			TextColor = Color.FromArgb("#D2BCA5"),
-			FontSize = 13,
+			FontSize = 14,
 			HorizontalTextAlignment = TextAlignment.Center,
 			VerticalOptions = LayoutOptions.Center,
-			Margin = new Thickness(32, 160, 32, 0),
+			Margin = new Thickness(32, 180, 32, 0),
 		};
 
 		var layout = new Grid();
@@ -144,31 +144,44 @@ public class QrScannerPage : ContentPage
 		Content = layout;
 	}
 
+	/// <summary>
+	/// Dismiss this page. Uses native iOS dismiss since CometApp presents modally
+	/// via UIViewController, not MAUI Navigation.
+	/// </summary>
+	void DismissScanner()
+	{
+#if IOS || MACCATALYST
+		var vc = this.Handler as Microsoft.Maui.Handlers.PageHandler;
+		vc?.ViewController?.DismissViewController(true, null);
+#endif
+	}
+
 	Border CreateCloseButton()
 	{
 		var border = new Border
 		{
 			Background = new SolidColorBrush(Color.FromArgb("#66281A0D")),
 			StrokeThickness = 0,
-			WidthRequest = 40,
-			HeightRequest = 40,
+			WidthRequest = 44,
+			HeightRequest = 44,
 			HorizontalOptions = LayoutOptions.Start,
-			StrokeShape = new RoundRectangle { CornerRadius = 20 },
+			StrokeShape = new RoundRectangle { CornerRadius = 22 },
 			Content = new Label
 			{
 				Text = "X",
 				TextColor = Color.FromArgb("#D2BCA5"),
-				FontSize = 18,
+				FontSize = 20,
+				FontAttributes = FontAttributes.Bold,
 				HorizontalTextAlignment = TextAlignment.Center,
 				VerticalTextAlignment = TextAlignment.Center,
 			}
 		};
 
 		var tap = new TapGestureRecognizer();
-		tap.Tapped += async (_, _) =>
+		tap.Tapped += (_, _) =>
 		{
 			_tcs.TrySetResult(null);
-			await Navigation.PopModalAsync();
+			DismissScanner();
 		};
 		border.GestureRecognizers.Add(tap);
 		return border;
@@ -201,7 +214,7 @@ public class QrScannerPage : ContentPage
 			if (status != PermissionStatus.Granted)
 			{
 				_tcs.TrySetResult(null);
-				await Navigation.PopModalAsync();
+				DismissScanner();
 				return;
 			}
 		}
@@ -239,13 +252,13 @@ public class QrScannerPage : ContentPage
 				await Task.Delay(500);
 
 				_tcs.TrySetResult(result.Value);
-				await Navigation.PopModalAsync();
+				DismissScanner();
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine($"[QrScanner] Error dismissing: {ex}");
 				_tcs.TrySetResult(result.Value);
-				try { await Navigation.PopModalAsync(false); } catch { }
+				try { DismissScanner(); } catch { }
 			}
 		});
 	}

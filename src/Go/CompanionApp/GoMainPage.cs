@@ -69,34 +69,39 @@ public class GoMainPage : Component<GoAppState>
 
 	View RenderConnectScreen()
 	{
+		// Match splash screen background color
+		var bgColor = new Color(210, 188, 165); // #D2BCA5
+		var accentColor = new Color(212, 160, 74); // warm gold
+		var textColor = new Color(60, 40, 20); // dark brown
+
 		return new VStack(spacing: 0)
 		{
 			new Spacer(),
 
-			// Comet logo (same as splash screen)
-			new Image("comet_logo.svg")
-				.Frame(width: 280, height: 94)
+			// Comet logo (same as splash screen — SVG rendered as PNG by Resizetizer)
+			new Image("comet_logo")
+				.Frame(width: 260, height: 87)
 				.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
 
 			new Spacer().Frame(height: 16),
 
 			// Welcome text
 			Text("Welcome to Comet Go")
-				.FontSize(22)
-				.Color(new Color(160, 180, 204))
+				.FontSize(20)
+				.Color(new Color(80, 55, 30))
 				.HorizontalTextAlignment(TextAlignment.Center),
 
 			new Spacer().Frame(height: 48),
 
-			// PRIMARY: Scan QR Code button (large, accent colored, with border)
+			// PRIMARY: Scan QR Code button
 			Button("Scan QR Code", OnScanQrTapped)
 				.Color(Colors.White)
 				.FontWeight(FontWeight.Bold)
 				.FontSize(18)
-				.Background(new SolidPaint(new Color(212, 160, 74)))
+				.Background(new SolidPaint(accentColor))
 				.CornerRadius(14)
 				.Frame(height: 56)
-				.RoundedBorder(14, new Color(230, 185, 100))
+				.RoundedBorder(14, accentColor)
 				.AutomationId("ScanQrButton"),
 
 			new Spacer().Frame(height: 28),
@@ -104,36 +109,36 @@ public class GoMainPage : Component<GoAppState>
 			// "or enter manually" divider with horizontal lines
 			new HStack(spacing: 0)
 			{
-				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(70, 60, 50))),
+				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(170, 150, 130))),
 				Text("  or enter manually  ")
 					.FontSize(13)
-					.Color(new Color(130, 120, 110)),
-				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(70, 60, 50))),
+					.Color(new Color(120, 100, 80)),
+				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(170, 150, 130))),
 			},
 
 			new Spacer().Frame(height: 28),
 
-			// Server URL input — outlined, same height as buttons
+			// Server URL input — outlined with accent color, same height as buttons
 			new TextField(new Signal<string>(State.ServerUrl), "ws://192.168.x.x:9000/maui-go")
 				.OnTextChanged(url => SetState(s => s.ServerUrl = url))
-				.Color(Colors.White)
+				.Color(textColor)
 				.FontSize(16)
-				.Background(new SolidPaint(new Color(25, 20, 15)))
+				.Background(new SolidPaint(new Color(230, 215, 195)))
 				.Padding(new Thickness(16, 14))
 				.Frame(height: 56)
-				.RoundedBorder(14, new Color(70, 60, 50))
+				.RoundedBorder(14, accentColor)
 				.AutomationId("ServerUrlField"),
 
 			new Spacer().Frame(height: 16),
 
-			// SECONDARY: Connect button (outlined, muted)
+			// SECONDARY: Connect button (outlined with accent color)
 			Button("Connect", OnConnectTapped)
-				.Color(new Color(212, 160, 74))
+				.Color(accentColor)
 				.FontSize(16)
-				.Background(new SolidPaint(new Color(35, 28, 18)))
+				.Background(new SolidPaint(new Color(230, 215, 195)))
 				.CornerRadius(14)
 				.Frame(height: 56)
-				.RoundedBorder(14, new Color(70, 60, 50))
+				.RoundedBorder(14, accentColor)
 				.AutomationId("ConnectButton"),
 
 			new Spacer().Frame(height: 20),
@@ -148,7 +153,7 @@ public class GoMainPage : Component<GoAppState>
 				: (State.Status != "Enter server URL or scan QR code"
 					? Text(State.Status)
 						.FontSize(13)
-						.Color(new Color(160, 150, 140))
+						.Color(new Color(100, 80, 60))
 						.HorizontalTextAlignment(TextAlignment.Center)
 						.AutomationId("StatusLabel")
 					: (View)new Spacer().Frame(height: 1)),
@@ -156,7 +161,7 @@ public class GoMainPage : Component<GoAppState>
 			new Spacer(),
 		}
 		.Padding(new Thickness(28))
-		.Background(new SolidPaint(new Color(25, 18, 10)));
+		.Background(new SolidPaint(bgColor));
 	}
 
 	View RenderUserView()
