@@ -10,7 +10,7 @@ using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.Commands;
 
-public static partial class ProfileCommand
+internal static class ProfileCommandTransport
 {
 	internal static string[] BuildCompileArguments(
 		string projectPath,
@@ -112,7 +112,7 @@ public static partial class ProfileCommand
 		return [.. args];
 	}
 
-	static async Task TryForceStopRunningAndroidAppAsync(
+	internal static async Task TryForceStopRunningAndroidAppAsync(
 		ResolvedMauiProject project,
 		string framework,
 		string configuration,
@@ -125,7 +125,7 @@ public static partial class ProfileCommand
 		var applicationId = MauiProjectResolver.GetAndroidApplicationId(project.ProjectPath, framework, configuration);
 		if (string.IsNullOrWhiteSpace(applicationId))
 		{
-			WriteVerbose(formatter, useJson, verbose, $"Could not resolve the Android application ID for '{project.ProjectName}'. Skipping pre-launch force-stop.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Could not resolve the Android application ID for '{project.ProjectName}'. Skipping pre-launch force-stop.");
 			return;
 		}
 
@@ -133,20 +133,20 @@ public static partial class ProfileCommand
 		if (adbPath is null)
 			return;
 
-		WriteVerbose(formatter, useJson, verbose, $"Force-stopping any existing '{applicationId}' process on {device.Id} before starting trace collection.");
+		ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Force-stopping any existing '{applicationId}' process on {device.Id} before starting trace collection.");
 		var stopResult = await ProcessRunner.RunAsync(
 			adbPath,
 			["-s", device.Id, "shell", "am", "force-stop", applicationId],
-			timeout: s_adbPortForwardTimeout,
+			timeout: ProfileCommand.s_adbPortForwardTimeout,
 			cancellationToken: cancellationToken);
 
 		if (!stopResult.Success)
 		{
-			WriteVerbose(
+			ProfileCommandTooling.WriteVerbose(
 				formatter,
 				useJson,
 				verbose,
-				$"adb force-stop for '{applicationId}' returned exit code {stopResult.ExitCode}: {GetProcessFailureDetails(stopResult)}");
+				$"adb force-stop for '{applicationId}' returned exit code {stopResult.ExitCode}: {ProfileCommandTooling.GetProcessFailureDetails(stopResult)}");
 		}
 	}
 
@@ -156,7 +156,7 @@ public static partial class ProfileCommand
 		return reservation.Port;
 	}
 
-	static async Task<ReservedProfilePorts> ReserveProfilePortsAndConfigureRoutingAsync(
+	internal static async Task<ReservedProfilePorts> ReserveProfilePortsAndConfigureRoutingAsync(
 		Device device,
 		ProfileTransportConfiguration transport,
 		int startingPort,
@@ -191,14 +191,14 @@ public static partial class ProfileCommand
 					continue;
 				}
 
-				WriteVerbose(
+				ProfileCommandTooling.WriteVerbose(
 					formatter,
 					useJson,
 					verbose,
 					$"Reserved diagnostic port {port} and exit control port {exitControlPort}.");
 				if (transport.RequiresManualExitControlPortRouting)
 				{
-					WriteVerbose(
+					ProfileCommandTooling.WriteVerbose(
 						formatter,
 						useJson,
 						verbose,
@@ -212,7 +212,7 @@ public static partial class ProfileCommand
 				diagnosticReservation?.Dispose();
 				exitControlReservation?.Dispose();
 				await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port, exitControlPort);
-				WriteVerbose(formatter, useJson, verbose, $"Port {ex.Port} was unavailable for adb routing ({ex.Direction}): {ex.Details}");
+				ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Port {ex.Port} was unavailable for adb routing ({ex.Direction}): {ex.Details}");
 			}
 			catch
 			{
@@ -249,7 +249,7 @@ public static partial class ProfileCommand
 			$"Could not find a free diagnostic TCP port starting at {startingPort}.");
 	}
 
-	static async Task EnsureAdbPortRoutingAsync(
+	internal static async Task EnsureAdbPortRoutingAsync(
 		Device device,
 		IOutputFormatter formatter,
 		bool useJson,
@@ -272,18 +272,18 @@ public static partial class ProfileCommand
 		foreach (var port in ports.Distinct().Where(port => port > 0))
 		{
 			var portSpec = $"tcp:{port}";
-			WriteVerbose(formatter, useJson, verbose, $"Ensuring adb reverse for {device.Id} on {portSpec}.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Ensuring adb reverse for {device.Id} on {portSpec}.");
 
 			await ResetAdbPortMappingAsync(adbPath, device.Id, "reverse", portSpec, cancellationToken);
 			var reverseResult = await ProcessRunner.RunAsync(
 				adbPath,
 				["-s", device.Id, "reverse", portSpec, portSpec],
-				timeout: s_adbPortForwardTimeout,
+				timeout: ProfileCommand.s_adbPortForwardTimeout,
 				cancellationToken: cancellationToken);
 
 			if (!reverseResult.Success)
 			{
-				var details = GetProcessFailureDetails(reverseResult);
+				var details = ProfileCommandTooling.GetProcessFailureDetails(reverseResult);
 				if (IsPortBindingConflict(details))
 					throw new DiagnosticPortRoutingConflictException(port, "reverse", details);
 
@@ -299,7 +299,7 @@ public static partial class ProfileCommand
 		}
 	}
 
-	static async Task RemoveAdbPortRoutingAsync(
+	internal static async Task RemoveAdbPortRoutingAsync(
 		Device device,
 		IOutputFormatter formatter,
 		bool useJson,
@@ -318,7 +318,7 @@ public static partial class ProfileCommand
 			foreach (var port in ports.Distinct().Where(port => port > 0))
 			{
 				var portSpec = $"tcp:{port}";
-				WriteVerbose(formatter, useJson, verbose, $"Removing adb reverse/forward mappings for {device.Id} on {portSpec}.");
+				ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Removing adb reverse/forward mappings for {device.Id} on {portSpec}.");
 				await ResetAdbPortMappingAsync(adbPath, device.Id, "reverse", portSpec, CancellationToken.None);
 				await ResetAdbPortMappingAsync(adbPath, device.Id, "forward", portSpec, CancellationToken.None);
 			}
@@ -341,7 +341,7 @@ public static partial class ProfileCommand
 		_ = await ProcessRunner.RunAsync(
 			adbPath,
 			removeArgs,
-			timeout: s_adbPortForwardTimeout,
+			timeout: ProfileCommand.s_adbPortForwardTimeout,
 			cancellationToken: cancellationToken);
 	}
 
@@ -360,11 +360,11 @@ public static partial class ProfileCommand
 		return File.Exists(candidate) ? candidate : null;
 	}
 
-	static ProfilingBuildInjection? TryCreateBuildInjection(string exitControlHost, int exitControlPort, bool injectBootstrap)
+	internal static ProfilingBuildInjection? TryCreateBuildInjection(string exitControlHost, int exitControlPort, bool injectBootstrap)
 	{
-		var targetsPath = TryResolveBuildAssetPath(StartupProfilingInjectionTargetsFileName);
-		var assemblyPath = TryResolveBuildAssetPath(StartupProfilingAssemblyFileName);
-		var sourcePath = TryResolveBuildAssetPath(StartupProfilingInjectionSourceFileName);
+		var targetsPath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingInjectionTargetsFileName);
+		var assemblyPath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingAssemblyFileName);
+		var sourcePath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingInjectionSourceFileName);
 
 		if (targetsPath is null || assemblyPath is null || sourcePath is null)
 			return null;
@@ -389,7 +389,7 @@ public static partial class ProfileCommand
 		|| details.Contains("cannot bind listener", StringComparison.OrdinalIgnoreCase)
 		|| details.Contains("cannot bind socket", StringComparison.OrdinalIgnoreCase);
 
-	static int GetExitControlPort(int diagnosticPort)
+	internal static int GetExitControlPort(int diagnosticPort)
 	{
 		if (diagnosticPort >= IPEndPoint.MaxPort)
 		{
@@ -398,7 +398,7 @@ public static partial class ProfileCommand
 				$"Cannot reserve an exit control port after diagnostic port {diagnosticPort}.");
 		}
 
-		return checked(diagnosticPort + ExitControlPortOffset);
+		return checked(diagnosticPort + ProfileCommand.ExitControlPortOffset);
 	}
 
 	static ReservedTcpPort? TryReserveTcpPort(int port)

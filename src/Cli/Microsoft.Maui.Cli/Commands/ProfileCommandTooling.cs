@@ -10,9 +10,9 @@ using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.Commands;
 
-public static partial class ProfileCommand
+internal static class ProfileCommandTooling
 {
-	static void ValidateDnxAvailable()
+	internal static void ValidateDnxAvailable()
 	{
 		var hasDnx = ProcessRunner.GetCommandPath("dnx") is not null;
 		var hasDotnetTrace = CanResolveDiagnosticsTool(
@@ -36,7 +36,7 @@ public static partial class ProfileCommand
 			]);
 	}
 
-	static void ConfigureDotnetToolStartInfo(ProcessStartInfo startInfo, string packageId, IReadOnlyList<string> toolArgs, out string commandLine)
+	internal static void ConfigureDotnetToolStartInfo(ProcessStartInfo startInfo, string packageId, IReadOnlyList<string> toolArgs, out string commandLine)
 	{
 		var installedToolPath = FindInstalledDotnetToolCommand(packageId);
 		if (installedToolPath is not null)
@@ -96,7 +96,7 @@ public static partial class ProfileCommand
 	/// Starts dotnet-dsrouter via <c>dnx</c> and waits for it to print its PID to stdout.
 	/// dotnet-dsrouter always prints a line containing <c>pid=&lt;N&gt;</c> shortly after startup.
 	/// </summary>
-	static async Task<(MonitoredProcess DnxProcess, int DsrouterPid)> StartDsrouterAsync(
+	internal static async Task<(MonitoredProcess DnxProcess, int DsrouterPid)> StartDsrouterAsync(
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		IOutputFormatter formatter,
@@ -113,7 +113,7 @@ public static partial class ProfileCommand
 			CreateNoWindow = true
 		};
 
-		var dsrouterArgs = BuildDsrouterArguments(transport, diagnosticPort);
+		var dsrouterArgs = ProfileCommandTransport.BuildDsrouterArguments(transport, diagnosticPort);
 		ConfigureDotnetToolStartInfo(startInfo, "dotnet-dsrouter", dsrouterArgs, out var commandLine);
 		WriteVerbose(formatter, useJson, verbose, $"dsrouter command: {commandLine}");
 
@@ -141,7 +141,7 @@ public static partial class ProfileCommand
 			});
 
 		using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-		timeoutCts.CancelAfter(s_dsrouterStartupTimeout);
+		timeoutCts.CancelAfter(ProfileCommand.s_dsrouterStartupTimeout);
 
 		int dsrouterPid;
 		try
@@ -154,14 +154,14 @@ public static partial class ProfileCommand
 				process.Kill(entireProcessTree: true);
 			throw new MauiToolException(
 				ErrorCodes.InternalError,
-				$"dotnet-dsrouter did not report its PID within {s_dsrouterStartupTimeout.TotalSeconds}s.",
+				$"dotnet-dsrouter did not report its PID within {ProfileCommand.s_dsrouterStartupTimeout.TotalSeconds}s.",
 				nativeError: monitoredProcess.GetCombinedOutput());
 		}
 
 		return (monitoredProcess, dsrouterPid);
 	}
 
-	static MonitoredProcess StartTraceCollector(
+	internal static MonitoredProcess StartTraceCollector(
 		string workingDirectory,
 		string outputPath,
 		TraceOutputFormat outputFormat,
@@ -319,7 +319,13 @@ public static partial class ProfileCommand
 		return args;
 	}
 
-	static async Task EnsureTraceCollectorStartedAsync(MonitoredProcess traceProcess, CancellationToken cancellationToken)
+	internal static string FormatDuration(TimeSpan duration)
+	{
+		var positiveDuration = duration < TimeSpan.Zero ? duration.Negate() : duration;
+		return $"{(int)positiveDuration.TotalDays:00}:{positiveDuration.Hours:00}:{positiveDuration.Minutes:00}:{positiveDuration.Seconds:00}";
+	}
+
+	internal static async Task EnsureTraceCollectorStartedAsync(MonitoredProcess traceProcess, CancellationToken cancellationToken)
 	{
 		await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
 		if (!traceProcess.Process.HasExited)
@@ -333,7 +339,7 @@ public static partial class ProfileCommand
 			nativeError: details);
 	}
 
-	static async Task<MonitoredProcess> StartTraceCollectorWithRetryAsync(
+	internal static async Task<MonitoredProcess> StartTraceCollectorWithRetryAsync(
 		string workingDirectory,
 		string outputPath,
 		TraceOutputFormat outputFormat,
@@ -352,7 +358,7 @@ public static partial class ProfileCommand
 		var startedAt = Stopwatch.GetTimestamp();
 		MauiToolException? lastFailure = null;
 
-		while (Stopwatch.GetElapsedTime(startedAt) < s_traceStartupRetryTimeout)
+		while (Stopwatch.GetElapsedTime(startedAt) < ProfileCommand.s_traceStartupRetryTimeout)
 		{
 			var traceProcess = StartTraceCollector(
 				workingDirectory,
@@ -384,14 +390,14 @@ public static partial class ProfileCommand
 					formatter,
 					useJson,
 					verbose,
-					$"dotnet-trace could not connect yet; retrying in {s_traceStartupRetryDelay.TotalSeconds:0.#}s while the iOS runtime finishes opening its diagnostics channel.");
-				await Task.Delay(s_traceStartupRetryDelay, cancellationToken);
+					$"dotnet-trace could not connect yet; retrying in {ProfileCommand.s_traceStartupRetryDelay.TotalSeconds:0.#}s while the iOS runtime finishes opening its diagnostics channel.");
+				await Task.Delay(ProfileCommand.s_traceStartupRetryDelay, cancellationToken);
 			}
 		}
 
 		throw lastFailure ?? new MauiToolException(
 			ErrorCodes.InternalError,
-			$"dotnet-trace could not connect to the iOS app within {s_traceStartupRetryTimeout.TotalSeconds:0}s.");
+			$"dotnet-trace could not connect to the iOS app within {ProfileCommand.s_traceStartupRetryTimeout.TotalSeconds:0}s.");
 	}
 
 	internal static bool IsRetryableTraceStartupFailure(string? details)
@@ -406,7 +412,7 @@ public static partial class ProfileCommand
 			details.Contains("Can't assign requested address", StringComparison.OrdinalIgnoreCase);
 	}
 
-	static async Task EnsureDsrouterStartedAsync(MonitoredProcess dsrouterProcess, int diagnosticPort, CancellationToken cancellationToken)
+	internal static async Task EnsureDsrouterStartedAsync(MonitoredProcess dsrouterProcess, int diagnosticPort, CancellationToken cancellationToken)
 	{
 		await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
 		if (!dsrouterProcess.Process.HasExited)
@@ -428,18 +434,18 @@ public static partial class ProfileCommand
 			: MauiToolException.UserActionRequired(ErrorCodes.InternalError, message, suggestions, nativeError: details);
 	}
 
-	static string GetProcessFailureDetails(ProcessResult result) =>
+	internal static string GetProcessFailureDetails(ProcessResult result) =>
 		string.IsNullOrWhiteSpace(result.StandardError)
 			? result.StandardOutput.Trim()
 			: result.StandardError.Trim();
 
-	static void WriteVerbose(IOutputFormatter formatter, bool useJson, bool verbose, string message)
+	internal static void WriteVerbose(IOutputFormatter formatter, bool useJson, bool verbose, string message)
 	{
 		if (verbose && !useJson)
 			formatter.WriteProgress($"[debug] {message}");
 	}
 
-	static string FormatCommandLine(string fileName, IEnumerable<string> arguments) =>
+	internal static string FormatCommandLine(string fileName, IEnumerable<string> arguments) =>
 		string.Join(" ", [QuoteForDisplay(fileName), .. arguments.Select(QuoteForDisplay)]);
 
 	static string QuoteForDisplay(string value) =>
@@ -447,7 +453,7 @@ public static partial class ProfileCommand
 			? $"\"{value.Replace("\"", "\\\"")}\""
 			: value;
 
-	static Exception CreateProcessFailureException(string commandName, ProcessResult result)
+	internal static Exception CreateProcessFailureException(string commandName, ProcessResult result)
 	{
 		var details = string.IsNullOrWhiteSpace(result.StandardError)
 			? result.StandardOutput.Trim()

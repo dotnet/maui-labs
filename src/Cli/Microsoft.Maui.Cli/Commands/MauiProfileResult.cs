@@ -3,42 +3,6 @@
 
 namespace Microsoft.Maui.Cli.Commands;
 
-internal sealed record ResolvedMauiProject
-{
-	public required string ProjectPath { get; init; }
-	public required string ProjectDirectory { get; init; }
-	public required string ProjectName { get; init; }
-	public required IReadOnlyList<string> TargetFrameworks { get; init; }
-}
-
-internal sealed record StoppingEventConfiguration(
-	string? ProviderName,
-	string? EventName,
-	string? PayloadFilter,
-	bool AutoSelected);
-
-internal enum TraceOutputFormat
-{
-	NetTrace,
-	Speedscope
-}
-
-internal sealed record ProfilingBuildInjection(
-	string TargetsPath,
-	string AssemblyPath,
-	string ExitControlHost,
-	int ExitControlPort,
-	bool InjectBootstrap);
-
-internal sealed record ProfileTransportConfiguration(
-	string Platform,
-	string DiagnosticAddress,
-	string DiagnosticListenMode,
-	string DsrouterKind,
-	string DsrouterRuntimeEndpointOption,
-	string? DsrouterForwardPort,
-	bool RequiresManualExitControlPortRouting);
-
 internal sealed record MauiProfileResult
 {
 	public required string ProjectPath { get; init; }

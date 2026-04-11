@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Net;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
@@ -14,32 +15,32 @@ namespace Microsoft.Maui.Cli.Commands;
 /// <summary>
 /// Implementation of 'maui profile' command.
 /// </summary>
-public static partial class ProfileCommand
+public static class ProfileCommand
 {
-	static readonly TimeSpan s_buildLaunchTimeout = TimeSpan.FromMinutes(15);
-	static readonly TimeSpan s_dsrouterStartupTimeout = TimeSpan.FromSeconds(30);
-	static readonly TimeSpan s_traceStartupRetryTimeout = TimeSpan.FromSeconds(15);
-	static readonly TimeSpan s_traceStartupRetryDelay = TimeSpan.FromMilliseconds(500);
-	static readonly TimeSpan s_adbPortForwardTimeout = TimeSpan.FromSeconds(15);
-	static readonly TimeSpan s_exitControlConnectTimeout = TimeSpan.FromSeconds(5);
-	static readonly TimeSpan s_exitControlCommandTimeout = TimeSpan.FromSeconds(10);
-	static readonly TimeSpan s_traceStopInterruptDelay = TimeSpan.FromSeconds(5);
-	static readonly TimeSpan s_traceStopTimeout = TimeSpan.FromSeconds(15);
-	const int DefaultDiagnosticPort = 9000;
-	const int ExitControlPortOffset = 1;
-	const string StartupProfilingPackageId = "Microsoft.Maui.StartupProfiling";
-	const string StartupProfilingProviderName = "Microsoft.Maui.StartupProfiling";
-	const string StartupProfilingEventName = "StartupComplete";
-	const string StartupProfilingAssemblyFileName = "Microsoft.Maui.StartupProfiling.dll";
-	const string StartupProfilingInjectionTargetsFileName = "MauiStartupProfilingInjection.targets";
-	const string StartupProfilingInjectionSourceFileName = "MauiStartupProfiling.AutoInitialize.cs";
-	const string SpeedscopeExtension = ".speedscope.json";
+	internal static readonly TimeSpan s_buildLaunchTimeout = TimeSpan.FromMinutes(15);
+	internal static readonly TimeSpan s_dsrouterStartupTimeout = TimeSpan.FromSeconds(30);
+	internal static readonly TimeSpan s_traceStartupRetryTimeout = TimeSpan.FromSeconds(15);
+	internal static readonly TimeSpan s_traceStartupRetryDelay = TimeSpan.FromMilliseconds(500);
+	internal static readonly TimeSpan s_adbPortForwardTimeout = TimeSpan.FromSeconds(15);
+	internal static readonly TimeSpan s_exitControlConnectTimeout = TimeSpan.FromSeconds(5);
+	internal static readonly TimeSpan s_exitControlCommandTimeout = TimeSpan.FromSeconds(10);
+	internal static readonly TimeSpan s_traceStopInterruptDelay = TimeSpan.FromSeconds(5);
+	internal static readonly TimeSpan s_traceStopTimeout = TimeSpan.FromSeconds(15);
+	internal const int DefaultDiagnosticPort = 9000;
+	internal const int ExitControlPortOffset = 1;
+	internal const string StartupProfilingPackageId = "Microsoft.Maui.StartupProfiling";
+	internal const string StartupProfilingProviderName = "Microsoft.Maui.StartupProfiling";
+	internal const string StartupProfilingEventName = "StartupComplete";
+	internal const string StartupProfilingAssemblyFileName = "Microsoft.Maui.StartupProfiling.dll";
+	internal const string StartupProfilingInjectionTargetsFileName = "MauiStartupProfilingInjection.targets";
+	internal const string StartupProfilingInjectionSourceFileName = "MauiStartupProfiling.AutoInitialize.cs";
+	internal const string SpeedscopeExtension = ".speedscope.json";
 
 	// MSBuild SDK path env vars set by a parent `dotnet run` process that would otherwise
 	// pin the child build to the wrong SDK version (e.g. the CLI's own SDK instead of the
 	// user's project SDK). Removing them lets the child process discover the correct SDK
 	// from the project directory's global.json or the latest installed SDK.
-	static readonly string[] s_msbuildSdkEnvVars =
+	internal static readonly string[] s_msbuildSdkEnvVars =
 	[
 		"MSBuildSDKsPath",
 		"MSBUILD_EXE_PATH",
@@ -249,4 +250,172 @@ public static partial class ProfileCommand
 
 		return command;
 	}
+
+	internal static string ResolveTargetFramework(
+		ResolvedMauiProject project,
+		string? requestedFramework,
+		string platform,
+		bool nonInteractive,
+		SpectreOutputFormatter? spectre)
+		=> ProfileCommandResolution.ResolveTargetFramework(project, requestedFramework, platform, nonInteractive, spectre);
+
+	internal static bool WasOptionExplicitlySpecified<T>(ParseResult parseResult, Option<T> option)
+		=> ProfileCommandResolution.WasOptionExplicitlySpecified(parseResult, option);
+
+	internal static string ResolveProfileConfiguration(string? requestedConfiguration, bool explicitlySpecified, string platform)
+		=> ProfileCommandResolution.ResolveProfileConfiguration(requestedConfiguration, explicitlySpecified, platform);
+
+	static Task<Device> ResolveProfileDeviceAsync(
+		string platform,
+		string? requestedDevice,
+		IDeviceManager deviceManager,
+		bool nonInteractive,
+		SpectreOutputFormatter? spectre,
+		CancellationToken cancellationToken)
+		=> ProfileCommandResolution.ResolveProfileDeviceAsync(
+			platform,
+			requestedDevice,
+			deviceManager,
+			nonInteractive,
+			spectre,
+			cancellationToken);
+
+	static void ValidateDnxAvailable()
+		=> ProfileCommandTooling.ValidateDnxAvailable();
+
+	internal static TraceOutputFormat ResolveTraceOutputFormat(
+		string? requestedFormat,
+		bool explicitlySpecified,
+		bool nonInteractive,
+		SpectreOutputFormatter? spectre)
+		=> ProfileCommandResolution.ResolveTraceOutputFormat(requestedFormat, explicitlySpecified, nonInteractive, spectre);
+
+	internal static TraceOutputFormat ResolveTraceOutputFormat(string? requestedFormat)
+		=> ProfileCommandResolution.ResolveTraceOutputFormat(requestedFormat);
+
+	internal static string ResolveOutputPath(string projectName, string? requestedOutput, TraceOutputFormat outputFormat)
+		=> ProfileCommandResolution.ResolveOutputPath(projectName, requestedOutput, outputFormat);
+
+	internal static string GetPrimaryOutputPath(string collectorOutputPath, TraceOutputFormat outputFormat)
+		=> ProfileCommandResolution.GetPrimaryOutputPath(collectorOutputPath, outputFormat);
+
+	static void ValidateStoppingEventOptions(string? providerName, string? eventName, string? payloadFilter)
+		=> ProfileCommandResolution.ValidateStoppingEventOptions(providerName, eventName, payloadFilter);
+
+	internal static StoppingEventConfiguration ResolveStoppingEventConfiguration(
+		TimeSpan? duration,
+		string? providerName,
+		string? eventName,
+		string? payloadFilter)
+		=> ProfileCommandResolution.ResolveStoppingEventConfiguration(duration, providerName, eventName, payloadFilter);
+
+	static Task<MauiProfileResult> RunProfileAsync(
+		ResolvedMauiProject project,
+		string framework,
+		Device device,
+		string outputPath,
+		TraceOutputFormat outputFormat,
+		string configuration,
+		string? traceProfile,
+		bool noBuild,
+		int diagnosticPort,
+		TimeSpan? duration,
+		string? stoppingEventProvider,
+		string? stoppingEventName,
+		string? stoppingEventPayloadFilter,
+		bool autoSelectedStoppingEvent,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		CancellationToken cancellationToken)
+		=> ProfileCommandExecution.RunProfileAsync(
+			project,
+			framework,
+			device,
+			outputPath,
+			outputFormat,
+			configuration,
+			traceProfile,
+			noBuild,
+			diagnosticPort,
+			duration,
+			stoppingEventProvider,
+			stoppingEventName,
+			stoppingEventPayloadFilter,
+			autoSelectedStoppingEvent,
+			formatter,
+			useJson,
+			verbose,
+			cancellationToken);
+
+	internal static string[] BuildCompileArguments(
+		string projectPath,
+		string framework,
+		string configuration,
+		ProfileTransportConfiguration transport,
+		int diagnosticPort,
+		ProfilingBuildInjection? buildInjection)
+		=> ProfileCommandTransport.BuildCompileArguments(projectPath, framework, configuration, transport, diagnosticPort, buildInjection);
+
+	internal static string[] BuildLaunchArguments(
+		string projectPath,
+		string framework,
+		string configuration,
+		Device device,
+		ProfileTransportConfiguration transport,
+		int diagnosticPort,
+		ProfilingBuildInjection? buildInjection)
+		=> ProfileCommandTransport.BuildLaunchArguments(projectPath, framework, configuration, device, transport, diagnosticPort, buildInjection);
+
+	internal static string[] BuildDsrouterArguments(ProfileTransportConfiguration transport, int diagnosticPort)
+		=> ProfileCommandTransport.BuildDsrouterArguments(transport, diagnosticPort);
+
+	internal static IEnumerable<string> BuildTraceArguments(
+		string outputPath,
+		TraceOutputFormat outputFormat,
+		int dsrouterPid,
+		string? traceProfile,
+		TimeSpan? duration,
+		string? stoppingEventProvider,
+		string? stoppingEventName,
+		string? stoppingEventPayloadFilter)
+		=> ProfileCommandTooling.BuildTraceArguments(
+			outputPath,
+			outputFormat,
+			dsrouterPid,
+			traceProfile,
+			duration,
+			stoppingEventProvider,
+			stoppingEventName,
+			stoppingEventPayloadFilter);
+
+	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
+		=> ProfileCommandTooling.CanResolveDiagnosticsTool(installedToolPath, cachedToolDll);
+
+	internal static bool CanUseDiagnosticsTooling(bool hasDnx, bool hasDotnetTrace, bool hasDotnetDsrouter)
+		=> ProfileCommandTooling.CanUseDiagnosticsTooling(hasDnx, hasDotnetTrace, hasDotnetDsrouter);
+
+	internal static bool IsRetryableTraceStartupFailure(string? details)
+		=> ProfileCommandTooling.IsRetryableTraceStartupFailure(details);
+
+	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)
+		=> ProfileCommandTransport.FindAvailableTcpPort(startingPort, maxPort);
+
+	internal static void ValidateTraceOutput(string primaryOutputPath, string collectorOutputPath, TraceOutputFormat outputFormat, string platform)
+		=> ProfileCommandExecution.ValidateTraceOutput(primaryOutputPath, collectorOutputPath, outputFormat, platform);
+
+	internal static bool IsTargetFrameworkCompatible(string tfm, string platform)
+		=> ProfileCommandResolution.IsTargetFrameworkCompatible(tfm, platform);
+
+	internal static string ResolveProfilePlatform(string requestedPlatform, string framework)
+		=> ProfileCommandResolution.ResolveProfilePlatform(requestedPlatform, framework);
+
+	internal static ProfileTransportConfiguration ResolveProfileTransport(string platform, Device device)
+		=> ProfileCommandTransport.ResolveProfileTransport(platform, device);
+
+	internal static string? InferPlatformFromTargetFramework(string tfm)
+		=> ProfileCommandResolution.InferPlatformFromTargetFramework(tfm);
+
+	internal static Version GetFrameworkSortKey(string tfm)
+		=> ProfileCommandResolution.GetFrameworkSortKey(tfm);
 }

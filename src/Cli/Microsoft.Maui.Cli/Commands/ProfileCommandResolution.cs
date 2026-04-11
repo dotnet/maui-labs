@@ -12,7 +12,7 @@ using Spectre.Console;
 
 namespace Microsoft.Maui.Cli.Commands;
 
-public static partial class ProfileCommand
+internal static class ProfileCommandResolution
 {
 	internal static string ResolveTargetFramework(
 		ResolvedMauiProject project,
@@ -84,7 +84,7 @@ public static partial class ProfileCommand
 			: requestedConfiguration.Trim();
 	}
 
-	static Task<Device> ResolveProfileDeviceAsync(
+	internal static Task<Device> ResolveProfileDeviceAsync(
 		string platform,
 		string? requestedDevice,
 		IDeviceManager deviceManager,
@@ -249,9 +249,9 @@ public static partial class ProfileCommand
 
 		var fullPath = Path.GetFullPath(requestedOutput);
 		if (outputFormat == TraceOutputFormat.Speedscope &&
-			fullPath.EndsWith(SpeedscopeExtension, StringComparison.OrdinalIgnoreCase))
+			fullPath.EndsWith(ProfileCommand.SpeedscopeExtension, StringComparison.OrdinalIgnoreCase))
 		{
-			fullPath = fullPath[..^SpeedscopeExtension.Length];
+			fullPath = fullPath[..^ProfileCommand.SpeedscopeExtension.Length];
 		}
 
 		if (string.IsNullOrWhiteSpace(Path.GetExtension(fullPath)))
@@ -261,7 +261,7 @@ public static partial class ProfileCommand
 
 	internal static string GetPrimaryOutputPath(string collectorOutputPath, TraceOutputFormat outputFormat) => outputFormat switch
 	{
-		TraceOutputFormat.Speedscope => collectorOutputPath + SpeedscopeExtension,
+		TraceOutputFormat.Speedscope => collectorOutputPath + ProfileCommand.SpeedscopeExtension,
 		_ => collectorOutputPath
 	};
 
@@ -279,7 +279,7 @@ public static partial class ProfileCommand
 		_ => $"[bold]{Markup.Escape(FormatOutputFormat(outputFormat))}[/]"
 	};
 
-	static void ValidateStoppingEventOptions(string? providerName, string? eventName, string? payloadFilter)
+	internal static void ValidateStoppingEventOptions(string? providerName, string? eventName, string? payloadFilter)
 	{
 		var hasProviderName = !string.IsNullOrWhiteSpace(providerName);
 		var hasEventName = !string.IsNullOrWhiteSpace(eventName);

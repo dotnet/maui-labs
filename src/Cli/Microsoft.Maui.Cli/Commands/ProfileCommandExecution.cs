@@ -9,9 +9,9 @@ using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.Commands;
 
-public static partial class ProfileCommand
+internal static class ProfileCommandExecution
 {
-	static async Task<MauiProfileResult> RunProfileAsync(
+	internal static async Task<MauiProfileResult> RunProfileAsync(
 		ResolvedMauiProject project,
 		string framework,
 		Device device,
@@ -31,7 +31,7 @@ public static partial class ProfileCommand
 		bool verbose,
 		CancellationToken cancellationToken)
 	{
-		var primaryOutputPath = GetPrimaryOutputPath(outputPath, outputFormat);
+		var primaryOutputPath = ProfileCommandResolution.GetPrimaryOutputPath(outputPath, outputFormat);
 		var outputDirectory = Path.GetDirectoryName(outputPath);
 		if (string.IsNullOrWhiteSpace(outputDirectory))
 		{
@@ -42,10 +42,10 @@ public static partial class ProfileCommand
 
 		Directory.CreateDirectory(outputDirectory);
 
-		var profilePlatform = InferPlatformFromTargetFramework(framework) ?? device.Platform;
-		var transport = ResolveProfileTransport(profilePlatform, device);
+		var profilePlatform = ProfileCommandResolution.InferPlatformFromTargetFramework(framework) ?? device.Platform;
+		var transport = ProfileCommandTransport.ResolveProfileTransport(profilePlatform, device);
 		var dsrouterKind = transport.DsrouterKind;
-		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(project.ProjectPath, StartupProfilingPackageId);
+		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(project.ProjectPath, ProfileCommand.StartupProfilingPackageId);
 		var requestedDiagnosticPort = diagnosticPort;
 		var diagnosticAddress = transport.DiagnosticAddress;
 		var startedAtUtc = DateTimeOffset.UtcNow;
@@ -57,25 +57,25 @@ public static partial class ProfileCommand
 			formatter.WriteInfo($"Framework: {framework}");
 			formatter.WriteInfo($"Configuration: {configuration}");
 			formatter.WriteInfo($"Device: {device.Name} ({device.Id})");
-			formatter.WriteInfo($"Format: {FormatOutputFormat(outputFormat)}");
+			formatter.WriteInfo($"Format: {ProfileCommandResolution.FormatOutputFormat(outputFormat)}");
 			formatter.WriteInfo($"Output: {primaryOutputPath}");
 			if (!string.Equals(primaryOutputPath, outputPath, StringComparison.OrdinalIgnoreCase))
 				formatter.WriteInfo($"Raw trace companion: {outputPath}");
 			if (autoSelectedStoppingEvent)
 			{
 				formatter.WriteInfo(
-					$"Stopping event: {StartupProfilingProviderName}/{StartupProfilingEventName} " +
+					$"Stopping event: {ProfileCommand.StartupProfilingProviderName}/{ProfileCommand.StartupProfilingEventName} " +
 					"(auto-detected from the app's startup profiling helper).");
 			}
 		}
 
-		WriteVerbose(
+		ProfileCommandTooling.WriteVerbose(
 			formatter,
 			useJson,
 			verbose,
 			$"Profile settings: configuration={configuration}, noBuild={noBuild}, dsrouterKind={dsrouterKind}, " +
 			$"diagnosticAddress={diagnosticAddress}, diagnosticListenMode={transport.DiagnosticListenMode}, diagnosticPort={diagnosticPort}, " +
-			$"traceProfile={traceProfile ?? "(default)"}, outputFormat={FormatOutputFormat(outputFormat)}, duration={duration?.ToString() ?? "(manual stop)"}, " +
+			$"traceProfile={traceProfile ?? "(default)"}, outputFormat={ProfileCommandResolution.FormatOutputFormat(outputFormat)}, duration={duration?.ToString() ?? "(manual stop)"}, " +
 			$"stoppingEventProvider={stoppingEventProvider ?? "(none)"}, stoppingEventName={stoppingEventName ?? "(none)"}, " +
 			$"stoppingEventPayloadFilter={stoppingEventPayloadFilter ?? "(none)"}");
 
@@ -86,7 +86,7 @@ public static partial class ProfileCommand
 		ProfilingBuildInjection? buildInjection = null;
 		try
 		{
-			reservedPorts = await ReserveProfilePortsAndConfigureRoutingAsync(
+			reservedPorts = await ProfileCommandTransport.ReserveProfilePortsAndConfigureRoutingAsync(
 				device,
 				transport,
 				diagnosticPort,
@@ -98,7 +98,7 @@ public static partial class ProfileCommand
 			diagnosticPort = reservedPorts.DiagnosticPort;
 			buildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
 				? null
-				: TryCreateBuildInjection(
+				: ProfileCommandTransport.TryCreateBuildInjection(
 					diagnosticAddress,
 					reservedPorts.ExitControlPort,
 					injectBootstrap: !hasStartupProfilingHelper);
@@ -121,37 +121,37 @@ public static partial class ProfileCommand
 				if (!useJson && formatter is not SpectreOutputFormatter)
 					formatter.WriteInfo("Building the app...");
 
-				var buildArgs = BuildCompileArguments(project.ProjectPath, framework, configuration, transport, diagnosticPort, buildInjection);
-				WriteVerbose(formatter, useJson, verbose, $"Build command: {FormatCommandLine("dotnet", buildArgs)}");
+				var buildArgs = ProfileCommandTransport.BuildCompileArguments(project.ProjectPath, framework, configuration, transport, diagnosticPort, buildInjection);
+				ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Build command: {ProfileCommandTooling.FormatCommandLine("dotnet", buildArgs)}");
 				var buildResult = formatter is SpectreOutputFormatter spectreForBuild && !useJson
 					? await spectreForBuild.StatusAsync(
 						"Building the app...",
-						() => ProcessRunner.RunAsync("dotnet", buildArgs, project.ProjectDirectory, timeout: s_buildLaunchTimeout, environmentVariablesToRemove: s_msbuildSdkEnvVars, cancellationToken: cancellationToken))
-					: await ProcessRunner.RunAsync("dotnet", buildArgs, project.ProjectDirectory, timeout: s_buildLaunchTimeout, environmentVariablesToRemove: s_msbuildSdkEnvVars, cancellationToken: cancellationToken);
+						() => ProcessRunner.RunAsync("dotnet", buildArgs, project.ProjectDirectory, timeout: ProfileCommand.s_buildLaunchTimeout, environmentVariablesToRemove: ProfileCommand.s_msbuildSdkEnvVars, cancellationToken: cancellationToken))
+					: await ProcessRunner.RunAsync("dotnet", buildArgs, project.ProjectDirectory, timeout: ProfileCommand.s_buildLaunchTimeout, environmentVariablesToRemove: ProfileCommand.s_msbuildSdkEnvVars, cancellationToken: cancellationToken);
 
 				if (!buildResult.Success)
-					throw CreateProcessFailureException("dotnet build", buildResult);
+					throw ProfileCommandTooling.CreateProcessFailureException("dotnet build", buildResult);
 			}
 			else
 			{
-				WriteVerbose(formatter, useJson, verbose, "Skipping build because --no-build was specified.");
+				ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "Skipping build because --no-build was specified.");
 			}
 
-			await TryForceStopRunningAndroidAppAsync(project, framework, configuration, device, formatter, useJson, verbose, cancellationToken);
+			await ProfileCommandTransport.TryForceStopRunningAndroidAppAsync(project, framework, configuration, device, formatter, useJson, verbose, cancellationToken);
 
 			exitControlServer = ExitControlServer.Attach(reservedPorts.ExitControlReservation, formatter, useJson, verbose);
 			reservedPorts.DiagnosticReservation.Dispose();
 
-			WriteVerbose(formatter, useJson, verbose, $"Starting dotnet-dsrouter in '{dsrouterKind}' mode on port {diagnosticPort}.");
-			var dsrouterStart = await StartDsrouterAsync(transport, diagnosticPort, formatter, useJson, verbose, cancellationToken);
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Starting dotnet-dsrouter in '{dsrouterKind}' mode on port {diagnosticPort}.");
+			var dsrouterStart = await ProfileCommandTooling.StartDsrouterAsync(transport, diagnosticPort, formatter, useJson, verbose, cancellationToken);
 			dsrouterProcess = dsrouterStart.DnxProcess;
 			var dsrouterPid = dsrouterStart.DsrouterPid;
-			WriteVerbose(formatter, useJson, verbose, $"dotnet-dsrouter reported PID {dsrouterPid}.");
-			await EnsureDsrouterStartedAsync(dsrouterProcess, diagnosticPort, cancellationToken);
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"dotnet-dsrouter reported PID {dsrouterPid}.");
+			await ProfileCommandTooling.EnsureDsrouterStartedAsync(dsrouterProcess, diagnosticPort, cancellationToken);
 			var startTraceAfterLaunch = string.Equals(transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase);
 			if (!startTraceAfterLaunch)
 			{
-				traceProcess = StartTraceCollector(
+				traceProcess = ProfileCommandTooling.StartTraceCollector(
 					project.ProjectDirectory,
 					outputPath,
 					outputFormat,
@@ -167,11 +167,11 @@ public static partial class ProfileCommand
 					verbose,
 					cancellationToken);
 
-				WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect.");
-				await EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
+				ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect.");
+				await ProfileCommandTooling.EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
 			}
 
-			var launchArgs = BuildLaunchArguments(
+			var launchArgs = ProfileCommandTransport.BuildLaunchArguments(
 				project.ProjectPath,
 				framework,
 				configuration,
@@ -179,7 +179,7 @@ public static partial class ProfileCommand
 				transport,
 				diagnosticPort,
 				buildInjection);
-			WriteVerbose(formatter, useJson, verbose, $"Launch command: {FormatCommandLine("dotnet", launchArgs)}");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Launch command: {ProfileCommandTooling.FormatCommandLine("dotnet", launchArgs)}");
 
 			if (!useJson && formatter is not SpectreOutputFormatter)
 				formatter.WriteInfo("Deploying and launching the app with startup diagnostics enabled...");
@@ -187,8 +187,8 @@ public static partial class ProfileCommand
 			var launchResult = formatter is SpectreOutputFormatter spectre && !useJson
 				? await spectre.StatusAsync(
 					"Deploying and launching the app...",
-					() => ProcessRunner.RunAsync("dotnet", launchArgs, project.ProjectDirectory, timeout: s_buildLaunchTimeout, environmentVariablesToRemove: s_msbuildSdkEnvVars, cancellationToken: cancellationToken))
-				: await ProcessRunner.RunAsync("dotnet", launchArgs, project.ProjectDirectory, timeout: s_buildLaunchTimeout, environmentVariablesToRemove: s_msbuildSdkEnvVars, cancellationToken: cancellationToken);
+					() => ProcessRunner.RunAsync("dotnet", launchArgs, project.ProjectDirectory, timeout: ProfileCommand.s_buildLaunchTimeout, environmentVariablesToRemove: ProfileCommand.s_msbuildSdkEnvVars, cancellationToken: cancellationToken))
+				: await ProcessRunner.RunAsync("dotnet", launchArgs, project.ProjectDirectory, timeout: ProfileCommand.s_buildLaunchTimeout, environmentVariablesToRemove: ProfileCommand.s_msbuildSdkEnvVars, cancellationToken: cancellationToken);
 
 			if (!launchResult.Success)
 			{
@@ -198,12 +198,12 @@ public static partial class ProfileCommand
 					await traceProcess.WaitForExitAsync();
 				}
 
-				throw CreateProcessFailureException("dotnet build -t:Run", launchResult);
+				throw ProfileCommandTooling.CreateProcessFailureException("dotnet build -t:Run", launchResult);
 			}
 
 			if (startTraceAfterLaunch)
 			{
-				traceProcess = await StartTraceCollectorWithRetryAsync(
+				traceProcess = await ProfileCommandTooling.StartTraceCollectorWithRetryAsync(
 					project.ProjectDirectory,
 					outputPath,
 					outputFormat,
@@ -252,7 +252,7 @@ public static partial class ProfileCommand
 
 			if (exitControlServer is not null)
 			{
-				var appExitRequested = await exitControlServer.TryRequestExitAsync(s_exitControlConnectTimeout, s_exitControlCommandTimeout, cancellationToken);
+				var appExitRequested = await exitControlServer.TryRequestExitAsync(ProfileCommand.s_exitControlConnectTimeout, ProfileCommand.s_exitControlCommandTimeout, cancellationToken);
 				if (!appExitRequested && !useJson)
 				{
 					formatter.WriteWarning(
@@ -281,9 +281,9 @@ public static partial class ProfileCommand
 			if (transport.RequiresManualExitControlPortRouting)
 			{
 				if (reservedPorts is not null)
-					await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, reservedPorts.ExitControlPort);
+					await ProfileCommandTransport.RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, reservedPorts.ExitControlPort);
 				else
-					await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, GetExitControlPort(diagnosticPort));
+					await ProfileCommandTransport.RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, ProfileCommandTransport.GetExitControlPort(diagnosticPort));
 			}
 		}
 
@@ -305,7 +305,7 @@ public static partial class ProfileCommand
 			DeviceId = device.Id,
 			DeviceName = device.Name,
 			Configuration = configuration,
-			Format = FormatOutputFormat(outputFormat),
+			Format = ProfileCommandResolution.FormatOutputFormat(outputFormat),
 			OutputPath = primaryOutputPath,
 			RawTracePath = outputFormat == TraceOutputFormat.Speedscope ? outputPath : null,
 			DsrouterKind = dsrouterKind,
@@ -370,7 +370,7 @@ public static partial class ProfileCommand
 		bool verbose,
 		CancellationToken cancellationToken)
 	{
-		WriteVerbose(
+		ProfileCommandTooling.WriteVerbose(
 			formatter,
 			useJson,
 			verbose,
@@ -414,14 +414,14 @@ public static partial class ProfileCommand
 					var completedTask = await Task.WhenAny(processWaitTask, manualStopSignal.Task);
 					if (completedTask == processWaitTask)
 					{
-						WriteVerbose(formatter, useJson, verbose, "dotnet-trace exited before any manual stop request was needed.");
+						ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "dotnet-trace exited before any manual stop request was needed.");
 						break;
 					}
 
 					if (completedTask == manualStopSignal.Task && !traceProcess.Process.HasExited)
 					{
 						formatter.WriteInfo("Stopping trace and finalizing output...");
-						WriteVerbose(formatter, useJson, verbose, "Manual stop requested from the console.");
+						ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "Manual stop requested from the console.");
 						stopRequested = true;
 						await RequestTraceStopAsync(traceProcess.Process, formatter, useJson, verbose);
 						break;
@@ -447,22 +447,22 @@ public static partial class ProfileCommand
 		{
 			try
 			{
-				await processWaitTask.WaitAsync(s_traceStopTimeout);
+				await processWaitTask.WaitAsync(ProfileCommand.s_traceStopTimeout);
 			}
 			catch (TimeoutException)
 			{
 				throw new MauiToolException(
 					ErrorCodes.InternalError,
-					$"dotnet-trace did not exit within {s_traceStopTimeout.TotalSeconds:0}s after the stop request.",
+					$"dotnet-trace did not exit within {ProfileCommand.s_traceStopTimeout.TotalSeconds:0}s after the stop request.",
 					nativeError: traceProcess.GetCombinedOutput());
 			}
 		}
 
-		WriteVerbose(formatter, useJson, verbose, $"dotnet-trace exited with code {traceProcess.Process.ExitCode}.");
+		ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"dotnet-trace exited with code {traceProcess.Process.ExitCode}.");
 
 		if (stopRequested && traceProcess.Process.ExitCode == 130)
 		{
-			WriteVerbose(
+			ProfileCommandTooling.WriteVerbose(
 				formatter,
 				useJson,
 				verbose,
@@ -483,11 +483,11 @@ public static partial class ProfileCommand
 	{
 		if (traceProcess.HasExited)
 		{
-			WriteVerbose(formatter, useJson, verbose, "dotnet-trace had already exited before the stop request was sent.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "dotnet-trace had already exited before the stop request was sent.");
 			return;
 		}
 
-		WriteVerbose(formatter, useJson, verbose, $"Sending a stop newline to dotnet-trace stdin (PID {traceProcess.Id}).");
+		ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Sending a stop newline to dotnet-trace stdin (PID {traceProcess.Id}).");
 		try
 		{
 			await traceProcess.StandardInput.WriteLineAsync();
@@ -495,7 +495,7 @@ public static partial class ProfileCommand
 		}
 		catch (ObjectDisposedException)
 		{
-			WriteVerbose(formatter, useJson, verbose, "dotnet-trace stdin was already closed before the stop request.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "dotnet-trace stdin was already closed before the stop request.");
 		}
 
 		try
@@ -507,16 +507,16 @@ public static partial class ProfileCommand
 			// Already closed.
 		}
 
-		WriteVerbose(formatter, useJson, verbose, "Closed dotnet-trace stdin after the stop request.");
+		ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "Closed dotnet-trace stdin after the stop request.");
 
-		await Task.Delay(s_traceStopInterruptDelay);
+		await Task.Delay(ProfileCommand.s_traceStopInterruptDelay);
 		if (!traceProcess.HasExited)
 		{
-			WriteVerbose(
+			ProfileCommandTooling.WriteVerbose(
 				formatter,
 				useJson,
 				verbose,
-				$"dotnet-trace was still running {s_traceStopInterruptDelay.TotalSeconds:0.#}s after the stdin stop request; sending SIGINT to the process tree.");
+				$"dotnet-trace was still running {ProfileCommand.s_traceStopInterruptDelay.TotalSeconds:0.#}s after the stdin stop request; sending SIGINT to the process tree.");
 			await SendInterruptToProcessTreeAsync(traceProcess, formatter, useJson, verbose);
 		}
 	}
@@ -528,7 +528,7 @@ public static partial class ProfileCommand
 
 		if (OperatingSystem.IsWindows())
 		{
-			WriteVerbose(formatter, useJson, verbose, "Skipping SIGINT fallback on Windows.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, "Skipping SIGINT fallback on Windows.");
 			return;
 		}
 
@@ -537,7 +537,7 @@ public static partial class ProfileCommand
 
 		foreach (var pid in pids.Distinct().OrderByDescending(pid => pid))
 		{
-			WriteVerbose(formatter, useJson, verbose, $"Sending SIGINT to PID {pid}.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Sending SIGINT to PID {pid}.");
 			_ = await ProcessRunner.RunAsync(
 				"kill",
 				["-INT", pid.ToString()],
@@ -606,12 +606,12 @@ public static partial class ProfileCommand
 		if (process is null || process.HasExited)
 			return;
 
-		WriteVerbose(formatter, useJson, verbose, $"Stopping {processName} (PID {process.Id}).");
+		ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"Stopping {processName} (PID {process.Id}).");
 		try
 		{
 			process.Kill(entireProcessTree: true);
 			await process.WaitForExitAsync();
-			WriteVerbose(formatter, useJson, verbose, $"{processName} exited with code {process.ExitCode} during cleanup.");
+			ProfileCommandTooling.WriteVerbose(formatter, useJson, verbose, $"{processName} exited with code {process.ExitCode} during cleanup.");
 		}
 		catch (InvalidOperationException)
 		{
