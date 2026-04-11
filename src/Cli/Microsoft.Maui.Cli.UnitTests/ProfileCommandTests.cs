@@ -660,11 +660,11 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
-	public void ResolveProfileConfiguration_IosWithoutExplicitOverride_DefaultsToDebug()
+	public void ResolveProfileConfiguration_IosWithoutExplicitOverride_DefaultsToRelease()
 	{
 		var configuration = ProfileCommand.ResolveProfileConfiguration("Release", explicitlySpecified: false, Platforms.iOS);
 
-		Assert.Equal("Debug", configuration);
+		Assert.Equal("Release", configuration);
 	}
 
 	[Fact]
@@ -702,7 +702,7 @@ public class ProfileCommandTests
 
 		Assert.Contains("is empty", exception.Message);
 		Assert.NotNull(exception.Remediation?.ManualSteps);
-		Assert.Contains("--configuration Debug", string.Join(Environment.NewLine, exception.Remediation!.ManualSteps!));
+		Assert.Contains("dotnet-trace", string.Join(Environment.NewLine, exception.Remediation!.ManualSteps!));
 	}
 
 	[Fact]

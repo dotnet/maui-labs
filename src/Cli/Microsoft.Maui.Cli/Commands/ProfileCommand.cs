@@ -80,7 +80,7 @@ public static class ProfileCommand
 		};
 		var configurationOption = new Option<string>("--configuration", "-c")
 		{
-			Description = "Build configuration to use. Defaults to Release on Android and Debug on iOS simulator unless explicitly overridden.",
+			Description = "Build configuration to use. Defaults to Release.",
 			DefaultValueFactory = _ => "Release"
 		};
 		var platformOption = new Option<string>("--platform")
@@ -215,23 +215,6 @@ public static class ProfileCommand
 					platform);
 				var outputPath = ResolveOutputPath(project.ProjectName, parseResult.GetValue(outputOption), outputFormat);
 
-				if (!useJson && string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
-				{
-					if (string.Equals(configuration, "Debug", StringComparison.OrdinalIgnoreCase) &&
-						!WasOptionExplicitlySpecified(parseResult, configurationOption))
-					{
-						formatter.WriteInfo(
-							"Using the Debug configuration for iOS because simulator traces are currently more reliable there. " +
-							"Pass --configuration Release to try the optimized build explicitly.");
-					}
-					else if (string.Equals(configuration, "Release", StringComparison.OrdinalIgnoreCase))
-					{
-						formatter.WriteWarning(
-							"iOS simulator tracing in Release is still experimental and may produce an empty trace. " +
-							"If that happens, retry with --configuration Debug.");
-					}
-				}
-
 				var result = await RunProfileAsync(
 					project,
 					framework,
@@ -340,14 +323,9 @@ public static class ProfileCommand
 
 	internal static string ResolveProfileConfiguration(string? requestedConfiguration, bool explicitlySpecified, string platform)
 	{
-		var configuration = string.IsNullOrWhiteSpace(requestedConfiguration)
+		return string.IsNullOrWhiteSpace(requestedConfiguration)
 			? "Release"
 			: requestedConfiguration.Trim();
-
-		if (!explicitlySpecified && string.Equals(Platforms.Normalize(platform), Platforms.iOS, StringComparison.OrdinalIgnoreCase))
-			return "Debug";
-
-		return configuration;
 	}
 
 	static Task<Device> ResolveProfileDeviceAsync(
@@ -483,6 +461,12 @@ public static class ProfileCommand
 		if (ProcessRunner.GetCommandPath("dnx") is not null)
 			return;
 
+		if (FindInstalledDotnetToolCommand("dotnet-trace") is not null &&
+			FindInstalledDotnetToolCommand("dotnet-dsrouter") is not null)
+		{
+			return;
+		}
+
 		if (FindCachedDotnetToolDll("dotnet-trace") is not null &&
 			FindCachedDotnetToolDll("dotnet-dsrouter") is not null)
 		{
@@ -491,15 +475,26 @@ public static class ProfileCommand
 
 		throw MauiToolException.UserActionRequired(
 			ErrorCodes.DiagnosticsToolNotFound,
-			"'dnx' was not found in PATH.",
+			"Neither 'dnx' nor the required dotnet diagnostics tools were found.",
 			[
-				"'dnx' ships with .NET 10 SDK and later.",
-				"Update your .NET SDK: https://dot.net/download"
+				"Install the global tools: `dotnet tool install -g dotnet-trace` and `dotnet tool install -g dotnet-dsrouter`.",
+				"Or use a .NET 10 SDK with `dnx` available on PATH: https://dot.net/download"
 			]);
 	}
 
 	static void ConfigureDotnetToolStartInfo(ProcessStartInfo startInfo, string packageId, IReadOnlyList<string> toolArgs, out string commandLine)
 	{
+		var installedToolPath = FindInstalledDotnetToolCommand(packageId);
+		if (installedToolPath is not null)
+		{
+			startInfo.FileName = installedToolPath;
+			foreach (var arg in toolArgs)
+				startInfo.ArgumentList.Add(arg);
+
+			commandLine = FormatCommandLine(installedToolPath, [.. toolArgs]);
+			return;
+		}
+
 		var cachedToolDll = FindCachedDotnetToolDll(packageId);
 		if (cachedToolDll is not null)
 		{
@@ -520,6 +515,21 @@ public static class ProfileCommand
 			startInfo.ArgumentList.Add(arg);
 
 		commandLine = FormatCommandLine("dnx", ["-y", packageId, "--", .. toolArgs]);
+	}
+
+	static string? FindInstalledDotnetToolCommand(string packageId)
+	{
+		var commandPath = ProcessRunner.GetCommandPath(packageId);
+		if (!string.IsNullOrWhiteSpace(commandPath))
+			return commandPath;
+
+		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		if (string.IsNullOrWhiteSpace(userProfile))
+			return null;
+
+		var extension = OperatingSystem.IsWindows() ? ".exe" : string.Empty;
+		var candidate = Path.Combine(userProfile, ".dotnet", "tools", packageId + extension);
+		return File.Exists(candidate) ? candidate : null;
 	}
 
 	/// <summary>
@@ -1692,9 +1702,9 @@ public static class ProfileCommand
 		var suggestions = string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
 			? new[]
 			{
-				"Retry with `--configuration Debug` on iOS simulator. That is currently the most reliable path for producing a non-empty trace artifact.",
-				"On iOS simulator this usually means the diagnostics handshake succeeded, but dotnet-trace/dsrouter still produced an empty trace artifact. Rerun with `--verbose` to capture the full diagnostics output.",
-				"If you need immediate iOS profiling data, use a Release build with Instruments while the CLI path is still experimental."
+				"Rerun with `--verbose` to capture the full dotnet-trace and dotnet-dsrouter output.",
+				"Ensure the global `dotnet-trace` and `dotnet-dsrouter` tools are installed and up to date so the CLI can use the supported diagnostics toolchain.",
+				"If Release iOS simulator tracing still produces an empty artifact, treat it as a Mono/EventPipe diagnostics issue to investigate rather than switching to Debug."
 			}
 			: new[]
 			{
