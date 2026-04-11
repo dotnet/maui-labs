@@ -10,6 +10,7 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <NuGetAudit>false</NuGetAudit>
 
     <ApplicationTitle>Comet Go</ApplicationTitle>
     <ApplicationId>com.simplyprofound.cometgo</ApplicationId>

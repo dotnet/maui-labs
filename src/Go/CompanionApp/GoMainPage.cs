@@ -110,11 +110,11 @@ public class GoMainPage : Component<GoAppState>
 			// "or enter manually" divider with horizontal lines
 			new HStack(spacing: 0)
 			{
-				new Spacer().Frame(height: 1).Background(new SolidPaint(borderColor)),
+				new BoxView().Frame(height: 1).Background(new SolidPaint(borderColor)).VerticalLayoutAlignment(Primitives.LayoutAlignment.Center),
 				Text("  or enter manually  ")
 					.FontSize(13)
 					.Color(new Color(100, 75, 50)),
-				new Spacer().Frame(height: 1).Background(new SolidPaint(borderColor)),
+				new BoxView().Frame(height: 1).Background(new SolidPaint(borderColor)).VerticalLayoutAlignment(Primitives.LayoutAlignment.Center),
 			},
 
 			new Spacer().Frame(height: 28),
@@ -127,7 +127,7 @@ public class GoMainPage : Component<GoAppState>
 				.Background(new SolidPaint(new Color(235, 220, 200)))
 				.Padding(new Thickness(16, 14))
 				.Frame(height: 56)
-				.RoundedBorder(14, borderColor)
+				.RoundedBorder(14, borderColor, 2)
 				.AutomationId("ServerUrlField"),
 
 			new Spacer().Frame(height: 16),
@@ -140,7 +140,7 @@ public class GoMainPage : Component<GoAppState>
 				.Background(new SolidPaint(new Color(235, 220, 200)))
 				.CornerRadius(14)
 				.Frame(height: 56)
-				.RoundedBorder(14, borderColor)
+				.RoundedBorder(14, accentColor, 2)
 				.AutomationId("ConnectButton"),
 
 			new Spacer().Frame(height: 20),
