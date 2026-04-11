@@ -73,98 +73,87 @@ public class GoMainPage : Component<GoAppState>
 		{
 			new Spacer(),
 
-			// Logo / Title area
-			new VStack(spacing: 8)
-			{
-				Text("Comet Go")
-					.FontSize(36)
-					.FontWeight(FontWeight.Bold)
-					.Color(Colors.White)
-					.HorizontalTextAlignment(TextAlignment.Center),
+			// Comet logo image
+			new Image("comet_logo.png")
+				.Frame(width: 200, height: 72)
+				.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
 
-				Text("Connect to your dev server")
-					.FontSize(15)
-					.Color(new Color(210, 188, 165))
-					.HorizontalTextAlignment(TextAlignment.Center),
-			}.Padding(new Thickness(0, 0, 0, 40)),
+			new Spacer().Frame(height: 12),
 
-			// Connection form card
-			new VStack(spacing: 16)
+			// Welcome text
+			Text("Welcome to Comet Go")
+				.FontSize(22)
+				.Color(new Color(160, 180, 204))
+				.HorizontalTextAlignment(TextAlignment.Center),
+
+			new Spacer().Frame(height: 40),
+
+			// PRIMARY: Scan QR Code button (large, accent colored)
+			Button("Scan QR Code", OnScanQrTapped)
+				.Color(Colors.White)
+				.FontWeight(FontWeight.Bold)
+				.FontSize(18)
+				.Background(new SolidPaint(new Color(212, 160, 74)))
+				.CornerRadius(14)
+				.Frame(height: 56)
+				.AutomationId("ScanQrButton"),
+
+			new Spacer().Frame(height: 24),
+
+			// "or enter manually" divider
+			new HStack(spacing: 12)
 			{
-				// Server URL label
-				Text("Server URL")
+				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(60, 50, 40))),
+				Text("or enter manually")
 					.FontSize(13)
-					.FontWeight(FontWeight.Semibold)
-					.Color(new Color(210, 188, 165)),
+					.Color(new Color(130, 120, 110)),
+				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(60, 50, 40))),
+			},
 
-				// URL input field — dark card style
-				new TextField(new Signal<string>(State.ServerUrl), "ws://host:9000/comet-go")
-					.OnTextChanged(url => SetState(s => s.ServerUrl = url))
-					.Color(Colors.White)
-					.FontSize(16)
-					.Background(new SolidPaint(new Color(30, 20, 10)))
-					.Padding(new Thickness(14, 12))
-					.AutomationId("ServerUrlField"),
+			new Spacer().Frame(height: 24),
 
-				// Connect button — full width, warm accent
-				Button("Connect", OnConnectTapped)
-					.Color(Colors.White)
-					.Background(new SolidPaint(new Color(212, 160, 74)))
-					.CornerRadius(10)
-					.Frame(height: 48)
-					.AutomationId("ConnectButton"),
+			// Server URL input — outlined style (border, not filled)
+			new TextField(new Signal<string>(State.ServerUrl), "ws://192.168.x.x:9000/maui-go")
+				.OnTextChanged(url => SetState(s => s.ServerUrl = url))
+				.Color(Colors.White)
+				.FontSize(16)
+				.Background(new SolidPaint(new Color(25, 20, 15)))
+				.Padding(new Thickness(16, 14))
+				.RoundedBorder(10, new Color(70, 60, 50))
+				.AutomationId("ServerUrlField"),
 
-				// Divider with "or"
-				new HStack(spacing: 12)
-				{
-					new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(80, 60, 40))),
-					Text("or")
-						.FontSize(13)
-						.Color(new Color(160, 140, 120)),
-					new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(80, 60, 40))),
-				},
+			new Spacer().Frame(height: 16),
 
-				// Scan QR Code button — outlined style
-				Button("Scan QR Code", OnScanQrTapped)
-					.Color(new Color(212, 160, 74))
-					.Background(new SolidPaint(new Color(50, 35, 20)))
-					.CornerRadius(10)
-					.Frame(height: 48)
-					.AutomationId("ScanQrButton"),
-			}
-			.Padding(new Thickness(24, 20))
-			.Background(new SolidPaint(new Color(50, 35, 20)))
-			.RoundedBorder(12, new Color(80, 60, 40)),
+			// SECONDARY: Connect button (outlined/muted)
+			Button("Connect", OnConnectTapped)
+				.Color(new Color(212, 160, 74))
+				.Background(new SolidPaint(new Color(35, 28, 18)))
+				.CornerRadius(14)
+				.Frame(height: 56)
+				.RoundedBorder(14, new Color(70, 60, 50))
+				.AutomationId("ConnectButton"),
 
-			// Status area
-			new VStack(spacing: 8)
-			{
-				Text(State.Status)
+			new Spacer().Frame(height: 20),
+
+			// Status / error text
+			State.ErrorMessage is not null
+				? Text(State.ErrorMessage)
 					.FontSize(13)
-					.Color(State.ErrorMessage is not null ? Colors.OrangeRed : new Color(180, 170, 160))
+					.Color(Colors.OrangeRed)
 					.HorizontalTextAlignment(TextAlignment.Center)
-					.AutomationId("StatusLabel"),
-
-				State.ErrorMessage is not null
-					? Text(State.ErrorMessage)
-						.FontSize(11)
-						.Color(Colors.OrangeRed)
-						.FontFamily("Courier New")
+					.AutomationId("StatusLabel")
+				: (State.Status != "Enter server URL or scan QR code"
+					? Text(State.Status)
+						.FontSize(13)
+						.Color(new Color(160, 150, 140))
 						.HorizontalTextAlignment(TextAlignment.Center)
-					: (View)new Spacer().Frame(height: 1),
-			}.Padding(new Thickness(0, 20, 0, 0)),
+						.AutomationId("StatusLabel")
+					: (View)new Spacer().Frame(height: 1)),
 
 			new Spacer(),
-
-			// Footer
-			Text("Powered by .NET MAUI + Comet")
-				.FontSize(11)
-				.Color(new Color(140, 130, 115))
-				.HorizontalTextAlignment(TextAlignment.Center)
-				.Padding(new Thickness(0, 0, 0, 16)),
 		}
 		.Padding(new Thickness(28))
-		.Background(new SolidPaint(new Color(40, 26, 13)));
+		.Background(new SolidPaint(new Color(25, 18, 10)));
 	}
 
 	View RenderUserView()
@@ -211,24 +200,40 @@ public class GoMainPage : Component<GoAppState>
 
 	async void OnScanQrTapped()
 	{
-		var tcs = new System.Threading.Tasks.TaskCompletionSource<string?>();
-		var scannerPage = new QrScannerPage(tcs);
-
-		var currentPage = Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault()?.Page;
-		if (currentPage is not null)
+		try
 		{
+			var tcs = new System.Threading.Tasks.TaskCompletionSource<string?>();
+			var scannerPage = new QrScannerPage(tcs);
+
+			// In CometApp, get the current page from the window
+			var window = Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault();
+			var currentPage = window?.Page;
+
+			Console.WriteLine($"[QR] Window: {window is not null}, Page: {currentPage?.GetType().Name ?? "null"}");
+
+			if (currentPage is null)
+			{
+				SetState(s => s.ErrorMessage = "Cannot open scanner - no active page found");
+				return;
+			}
+
 			await currentPage.Navigation.PushModalAsync(scannerPage);
 			var result = await tcs.Task;
 
 			if (!string.IsNullOrEmpty(result))
 			{
-				// The QR code contains the WebSocket URL directly
 				SetState(s =>
 				{
 					s.ServerUrl = result;
 					s.Status = "QR code scanned - tap Connect";
+					s.ErrorMessage = null;
 				});
 			}
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[QR] Error: {ex}");
+			SetState(s => s.ErrorMessage = $"Scanner error: {ex.Message}");
 		}
 	}
 
