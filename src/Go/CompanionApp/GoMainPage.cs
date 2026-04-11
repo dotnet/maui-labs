@@ -73,12 +73,12 @@ public class GoMainPage : Component<GoAppState>
 		{
 			new Spacer(),
 
-			// Comet logo image
-			new Image("comet_logo.png")
-				.Frame(width: 200, height: 72)
+			// Comet logo (same as splash screen)
+			new Image("comet_logo.svg")
+				.Frame(width: 280, height: 94)
 				.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
 
-			new Spacer().Frame(height: 12),
+			new Spacer().Frame(height: 16),
 
 			// Welcome text
 			Text("Welcome to Comet Go")
@@ -86,9 +86,9 @@ public class GoMainPage : Component<GoAppState>
 				.Color(new Color(160, 180, 204))
 				.HorizontalTextAlignment(TextAlignment.Center),
 
-			new Spacer().Frame(height: 40),
+			new Spacer().Frame(height: 48),
 
-			// PRIMARY: Scan QR Code button (large, accent colored)
+			// PRIMARY: Scan QR Code button (large, accent colored, with border)
 			Button("Scan QR Code", OnScanQrTapped)
 				.Color(Colors.White)
 				.FontWeight(FontWeight.Bold)
@@ -96,37 +96,40 @@ public class GoMainPage : Component<GoAppState>
 				.Background(new SolidPaint(new Color(212, 160, 74)))
 				.CornerRadius(14)
 				.Frame(height: 56)
+				.RoundedBorder(14, new Color(230, 185, 100))
 				.AutomationId("ScanQrButton"),
 
-			new Spacer().Frame(height: 24),
+			new Spacer().Frame(height: 28),
 
-			// "or enter manually" divider
-			new HStack(spacing: 12)
+			// "or enter manually" divider with horizontal lines
+			new HStack(spacing: 0)
 			{
-				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(60, 50, 40))),
-				Text("or enter manually")
+				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(70, 60, 50))),
+				Text("  or enter manually  ")
 					.FontSize(13)
 					.Color(new Color(130, 120, 110)),
-				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(60, 50, 40))),
+				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(70, 60, 50))),
 			},
 
-			new Spacer().Frame(height: 24),
+			new Spacer().Frame(height: 28),
 
-			// Server URL input — outlined style (border, not filled)
+			// Server URL input — outlined, same height as buttons
 			new TextField(new Signal<string>(State.ServerUrl), "ws://192.168.x.x:9000/maui-go")
 				.OnTextChanged(url => SetState(s => s.ServerUrl = url))
 				.Color(Colors.White)
 				.FontSize(16)
 				.Background(new SolidPaint(new Color(25, 20, 15)))
 				.Padding(new Thickness(16, 14))
-				.RoundedBorder(10, new Color(70, 60, 50))
+				.Frame(height: 56)
+				.RoundedBorder(14, new Color(70, 60, 50))
 				.AutomationId("ServerUrlField"),
 
 			new Spacer().Frame(height: 16),
 
-			// SECONDARY: Connect button (outlined/muted)
+			// SECONDARY: Connect button (outlined, muted)
 			Button("Connect", OnConnectTapped)
 				.Color(new Color(212, 160, 74))
+				.FontSize(16)
 				.Background(new SolidPaint(new Color(35, 28, 18)))
 				.CornerRadius(14)
 				.Frame(height: 56)
@@ -205,19 +208,12 @@ public class GoMainPage : Component<GoAppState>
 			var tcs = new System.Threading.Tasks.TaskCompletionSource<string?>();
 			var scannerPage = new QrScannerPage(tcs);
 
-			// In CometApp, get the current page from the window
-			var window = Microsoft.Maui.Controls.Application.Current?.Windows?.FirstOrDefault();
-			var currentPage = window?.Page;
-
-			Console.WriteLine($"[QR] Window: {window is not null}, Page: {currentPage?.GetType().Name ?? "null"}");
-
-			if (currentPage is null)
+			if (!ModalPresenter.Present(scannerPage))
 			{
-				SetState(s => s.ErrorMessage = "Cannot open scanner - no active page found");
+				SetState(s => s.ErrorMessage = "Cannot open scanner on this platform");
 				return;
 			}
 
-			await currentPage.Navigation.PushModalAsync(scannerPage);
 			var result = await tcs.Task;
 
 			if (!string.IsNullOrEmpty(result))
