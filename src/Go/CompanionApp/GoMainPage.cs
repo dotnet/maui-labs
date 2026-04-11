@@ -71,8 +71,9 @@ public class GoMainPage : Component<GoAppState>
 	{
 		// Match splash screen background color
 		var bgColor = new Color(210, 188, 165); // #D2BCA5
-		var accentColor = new Color(212, 160, 74); // warm gold
+		var accentColor = new Color(139, 90, 43); // darker warm brown — good contrast on beige
 		var textColor = new Color(60, 40, 20); // dark brown
+		var borderColor = new Color(120, 80, 40); // visible brown border
 
 		return new VStack(spacing: 0)
 		{
@@ -93,7 +94,7 @@ public class GoMainPage : Component<GoAppState>
 
 			new Spacer().Frame(height: 48),
 
-			// PRIMARY: Scan QR Code button
+			// PRIMARY: Scan QR Code button — darker brown for contrast
 			Button("Scan QR Code", OnScanQrTapped)
 				.Color(Colors.White)
 				.FontWeight(FontWeight.Bold)
@@ -109,36 +110,37 @@ public class GoMainPage : Component<GoAppState>
 			// "or enter manually" divider with horizontal lines
 			new HStack(spacing: 0)
 			{
-				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(170, 150, 130))),
+				new Spacer().Frame(height: 1).Background(new SolidPaint(borderColor)),
 				Text("  or enter manually  ")
 					.FontSize(13)
-					.Color(new Color(120, 100, 80)),
-				new Spacer().Frame(height: 1).Background(new SolidPaint(new Color(170, 150, 130))),
+					.Color(new Color(100, 75, 50)),
+				new Spacer().Frame(height: 1).Background(new SolidPaint(borderColor)),
 			},
 
 			new Spacer().Frame(height: 28),
 
-			// Server URL input — outlined with accent color, same height as buttons
+			// Server URL input — outlined with visible brown border
 			new TextField(new Signal<string>(State.ServerUrl), "ws://192.168.x.x:9000/maui-go")
 				.OnTextChanged(url => SetState(s => s.ServerUrl = url))
 				.Color(textColor)
 				.FontSize(16)
-				.Background(new SolidPaint(new Color(230, 215, 195)))
+				.Background(new SolidPaint(new Color(235, 220, 200)))
 				.Padding(new Thickness(16, 14))
 				.Frame(height: 56)
-				.RoundedBorder(14, accentColor)
+				.RoundedBorder(14, borderColor)
 				.AutomationId("ServerUrlField"),
 
 			new Spacer().Frame(height: 16),
 
-			// SECONDARY: Connect button (outlined with accent color)
+			// SECONDARY: Connect button — outlined with brown border and text
 			Button("Connect", OnConnectTapped)
 				.Color(accentColor)
 				.FontSize(16)
-				.Background(new SolidPaint(new Color(230, 215, 195)))
+				.FontWeight(FontWeight.Semibold)
+				.Background(new SolidPaint(new Color(235, 220, 200)))
 				.CornerRadius(14)
 				.Frame(height: 56)
-				.RoundedBorder(14, accentColor)
+				.RoundedBorder(14, borderColor)
 				.AutomationId("ConnectButton"),
 
 			new Spacer().Frame(height: 20),
