@@ -5,6 +5,7 @@ using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json;
 
 namespace Microsoft.Maui.Cli.Services;
 
@@ -14,10 +15,14 @@ namespace Microsoft.Maui.Cli.Services;
 public class DeviceManager : IDeviceManager
 {
 	readonly IAndroidProvider? _androidProvider;
+	readonly Func<CancellationToken, Task<IReadOnlyList<Device>>>? _appleDeviceProvider;
 
-	public DeviceManager(IAndroidProvider? androidProvider = null)
+	public DeviceManager(
+		IAndroidProvider? androidProvider = null,
+		Func<CancellationToken, Task<IReadOnlyList<Device>>>? appleDeviceProvider = null)
 	{
 		_androidProvider = androidProvider;
+		_appleDeviceProvider = appleDeviceProvider;
 	}
 
 	public async Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default)
@@ -108,7 +113,11 @@ public class DeviceManager : IDeviceManager
 			}
 		}
 
-		// TODO: Get Apple devices when AppleProvider is implemented
+		var appleDevices = _appleDeviceProvider is not null
+			? await _appleDeviceProvider(cancellationToken)
+			: await GetAppleSimulatorDevicesAsync(cancellationToken);
+		devices.AddRange(appleDevices);
+
 		// TODO: Get Windows devices when WindowsProvider is implemented
 
 		return devices;
@@ -166,5 +175,127 @@ public class DeviceManager : IDeviceManager
 		}
 
 		return (apiLevel, tagId, abi);
+	}
+
+	internal static async Task<IReadOnlyList<Device>> GetAppleSimulatorDevicesAsync(CancellationToken cancellationToken = default)
+	{
+		if (!OperatingSystem.IsMacOS())
+			return [];
+
+		var xcrunPath = ProcessRunner.GetCommandPath("xcrun");
+		if (string.IsNullOrWhiteSpace(xcrunPath))
+			return [];
+
+		var result = await ProcessRunner.RunAsync(
+			xcrunPath,
+			["simctl", "list", "devices", "available", "-j"],
+			timeout: TimeSpan.FromSeconds(15),
+			cancellationToken: cancellationToken);
+
+		if (!result.Success || string.IsNullOrWhiteSpace(result.StandardOutput))
+			return [];
+
+		return ParseAppleSimulatorDevices(result.StandardOutput);
+	}
+
+	internal static IReadOnlyList<Device> ParseAppleSimulatorDevices(string json)
+	{
+		if (string.IsNullOrWhiteSpace(json))
+			return [];
+
+		using var document = JsonDocument.Parse(json);
+		if (!document.RootElement.TryGetProperty("devices", out var devicesByRuntime) || devicesByRuntime.ValueKind != JsonValueKind.Object)
+			return [];
+
+		var architecture = PlatformDetector.IsArm64 ? "arm64" : "x64";
+		var runtimeIdentifier = PlatformDetector.IsArm64 ? "iossimulator-arm64" : "iossimulator-x64";
+		var devices = new List<Device>();
+
+		foreach (var runtime in devicesByRuntime.EnumerateObject())
+		{
+			if (!runtime.Name.Contains("iOS", StringComparison.OrdinalIgnoreCase) || runtime.Value.ValueKind != JsonValueKind.Array)
+				continue;
+
+			var version = TryParseAppleRuntimeVersion(runtime.Name);
+			foreach (var simulator in runtime.Value.EnumerateArray())
+			{
+				if (simulator.TryGetProperty("isAvailable", out var isAvailableElement) &&
+					isAvailableElement.ValueKind == JsonValueKind.False)
+				{
+					continue;
+				}
+
+				var udid = simulator.TryGetProperty("udid", out var udidElement) ? udidElement.GetString() : null;
+				var name = simulator.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+				var state = simulator.TryGetProperty("state", out var stateElement) ? stateElement.GetString() : null;
+				if (string.IsNullOrWhiteSpace(udid) || string.IsNullOrWhiteSpace(name))
+					continue;
+
+				var details = new Dictionary<string, object>
+				{
+					["runtime"] = runtime.Name
+				};
+
+				if (simulator.TryGetProperty("deviceTypeIdentifier", out var deviceTypeElement) &&
+					!string.IsNullOrWhiteSpace(deviceTypeElement.GetString()))
+				{
+					details["device_type"] = deviceTypeElement.GetString()!;
+				}
+
+				if (!string.IsNullOrWhiteSpace(state))
+					details["state"] = state!;
+
+				devices.Add(new Device
+				{
+					Id = udid,
+					Name = name,
+					Platforms = [Platforms.iOS],
+					Type = DeviceType.Simulator,
+					State = ParseAppleSimulatorState(state),
+					IsEmulator = true,
+					IsRunning = string.Equals(state, "Booted", StringComparison.OrdinalIgnoreCase),
+					ConnectionType = Models.ConnectionType.Local,
+					EmulatorId = udid,
+					Model = name,
+					Manufacturer = "Apple",
+					Version = version,
+					VersionName = version is null ? null : $"iOS {version}",
+					Architecture = architecture,
+					PlatformArchitecture = architecture,
+					RuntimeIdentifiers = [runtimeIdentifier],
+					Idiom = InferAppleIdiom(name),
+					Details = details
+				});
+			}
+		}
+
+		return devices
+			.OrderByDescending(device => device.IsRunning)
+			.ThenBy(device => device.Name, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
+	static DeviceState ParseAppleSimulatorState(string? state) => state?.ToLowerInvariant() switch
+	{
+		"booted" => DeviceState.Booted,
+		"shutdown" => DeviceState.Shutdown,
+		"booting" => DeviceState.Booting,
+		"shuttingdown" or "shutting down" => DeviceState.ShuttingDown,
+		_ => DeviceState.Unknown
+	};
+
+	static string InferAppleIdiom(string name) =>
+		name.Contains("iPad", StringComparison.OrdinalIgnoreCase)
+			? DeviceIdiom.Tablet
+			: DeviceIdiom.Phone;
+
+	static string? TryParseAppleRuntimeVersion(string runtimeName)
+	{
+		var markerIndex = runtimeName.IndexOf("iOS-", StringComparison.OrdinalIgnoreCase);
+		if (markerIndex < 0)
+			return null;
+
+		var rawVersion = runtimeName[(markerIndex + "iOS-".Length)..];
+		return rawVersion.Replace('-', '.');
 	}
 }

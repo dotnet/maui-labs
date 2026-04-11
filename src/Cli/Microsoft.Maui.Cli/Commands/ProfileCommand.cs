@@ -26,6 +26,8 @@ public static class ProfileCommand
 {
 	static readonly TimeSpan s_buildLaunchTimeout = TimeSpan.FromMinutes(15);
 	static readonly TimeSpan s_dsrouterStartupTimeout = TimeSpan.FromSeconds(30);
+	static readonly TimeSpan s_traceStartupRetryTimeout = TimeSpan.FromSeconds(15);
+	static readonly TimeSpan s_traceStartupRetryDelay = TimeSpan.FromMilliseconds(500);
 	static readonly TimeSpan s_adbPortForwardTimeout = TimeSpan.FromSeconds(15);
 	static readonly TimeSpan s_exitControlConnectTimeout = TimeSpan.FromSeconds(5);
 	static readonly TimeSpan s_exitControlCommandTimeout = TimeSpan.FromSeconds(10);
@@ -65,7 +67,7 @@ public static class ProfileCommand
 		};
 		var deviceOption = new Option<string?>("--device", "-d")
 		{
-			Description = "Android device or emulator serial to target (defaults to the only running device)"
+			Description = "Device or simulator identifier to target (defaults to the only running compatible device)"
 		};
 		var outputOption = new Option<string?>("--output", "-o")
 		{
@@ -78,7 +80,7 @@ public static class ProfileCommand
 		};
 		var configurationOption = new Option<string>("--configuration", "-c")
 		{
-			Description = "Build configuration to use",
+			Description = "Build configuration to use. Defaults to Release on Android and Debug on iOS simulator unless explicitly overridden.",
 			DefaultValueFactory = _ => "Release"
 		};
 		var platformOption = new Option<string>("--platform")
@@ -154,15 +156,16 @@ public static class ProfileCommand
 					formatter as SpectreOutputFormatter);
 				var platform = ResolveProfilePlatform(requestedPlatform, framework);
 
-				if (!string.Equals(platform, Platforms.Android, StringComparison.OrdinalIgnoreCase))
+				if (!string.Equals(platform, Platforms.Android, StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
 				{
 					throw MauiToolException.UserActionRequired(
 						ErrorCodes.PlatformNotSupported,
 						$"Startup profiling for target framework '{framework}' is not implemented yet because it targets platform '{platform}'.",
 						[
-							"Choose an Android target framework such as --framework net11.0-android.",
-							"Or pass --platform android to filter the available target frameworks.",
-							"Support for iOS and Mac Catalyst can be added in a future iteration."
+							"Choose an Android or iOS simulator target framework such as --framework net10.0-ios.",
+							"Or pass --platform android/ios to filter the available target frameworks.",
+							"Mac Catalyst support can be added in a future iteration."
 						]);
 				}
 
@@ -193,7 +196,8 @@ public static class ProfileCommand
 
 				ValidateDnxAvailable();
 
-				var device = await ResolveAndroidDeviceAsync(
+				var device = await ResolveProfileDeviceAsync(
+					platform,
 					parseResult.GetValue(deviceOption),
 					Program.DeviceManager,
 					isCi || useJson,
@@ -205,14 +209,36 @@ public static class ProfileCommand
 					WasOptionExplicitlySpecified(parseResult, formatOption),
 					isCi || useJson,
 					formatter as SpectreOutputFormatter);
+				var configuration = ResolveProfileConfiguration(
+					parseResult.GetValue(configurationOption),
+					WasOptionExplicitlySpecified(parseResult, configurationOption),
+					platform);
 				var outputPath = ResolveOutputPath(project.ProjectName, parseResult.GetValue(outputOption), outputFormat);
+
+				if (!useJson && string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+				{
+					if (string.Equals(configuration, "Debug", StringComparison.OrdinalIgnoreCase) &&
+						!WasOptionExplicitlySpecified(parseResult, configurationOption))
+					{
+						formatter.WriteInfo(
+							"Using the Debug configuration for iOS because simulator traces are currently more reliable there. " +
+							"Pass --configuration Release to try the optimized build explicitly.");
+					}
+					else if (string.Equals(configuration, "Release", StringComparison.OrdinalIgnoreCase))
+					{
+						formatter.WriteWarning(
+							"iOS simulator tracing in Release is still experimental and may produce an empty trace. " +
+							"If that happens, retry with --configuration Debug.");
+					}
+				}
+
 				var result = await RunProfileAsync(
 					project,
 					framework,
 					device,
 					outputPath,
 					outputFormat,
-					parseResult.GetValue(configurationOption) ?? "Release",
+					configuration,
 					parseResult.GetValue(traceProfileOption),
 					parseResult.GetValue(noBuildOption),
 					parseResult.GetValue(diagnosticPortOption),
@@ -312,6 +338,37 @@ public static class ProfileCommand
 	internal static bool WasOptionExplicitlySpecified<T>(ParseResult parseResult, Option<T> option)
 		=> parseResult.GetResult(option)?.Tokens.Count > 0;
 
+	internal static string ResolveProfileConfiguration(string? requestedConfiguration, bool explicitlySpecified, string platform)
+	{
+		var configuration = string.IsNullOrWhiteSpace(requestedConfiguration)
+			? "Release"
+			: requestedConfiguration.Trim();
+
+		if (!explicitlySpecified && string.Equals(Platforms.Normalize(platform), Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+			return "Debug";
+
+		return configuration;
+	}
+
+	static Task<Device> ResolveProfileDeviceAsync(
+		string platform,
+		string? requestedDevice,
+		IDeviceManager deviceManager,
+		bool nonInteractive,
+		SpectreOutputFormatter? spectre,
+		CancellationToken cancellationToken)
+	{
+		var normalizedPlatform = Platforms.Normalize(platform);
+		return normalizedPlatform switch
+		{
+			Platforms.Android => ResolveAndroidDeviceAsync(requestedDevice, deviceManager, nonInteractive, spectre, cancellationToken),
+			Platforms.iOS => ResolveIosSimulatorAsync(requestedDevice, deviceManager, nonInteractive, spectre, cancellationToken),
+			_ => Task.FromException<Device>(new MauiToolException(
+				ErrorCodes.PlatformNotSupported,
+				$"Startup profiling is not implemented yet for platform '{platform}'.")),
+		};
+	}
+
 	static async Task<Device> ResolveAndroidDeviceAsync(
 		string? requestedDevice,
 		IDeviceManager deviceManager,
@@ -363,6 +420,60 @@ public static class ProfileCommand
 					var type = device.IsEmulator ? "emulator" : "device";
 					var version = string.IsNullOrWhiteSpace(device.VersionName) ? device.Version : device.VersionName;
 					return $"[bold]{Markup.Escape(device.Name)}[/]  [grey]{Markup.Escape(device.Id)}[/]  [dim]{type} {Markup.Escape(version ?? string.Empty)}[/]";
+				})
+				.AddChoices(runningDevices));
+	}
+
+	static async Task<Device> ResolveIosSimulatorAsync(
+		string? requestedDevice,
+		IDeviceManager deviceManager,
+		bool nonInteractive,
+		SpectreOutputFormatter? spectre,
+		CancellationToken cancellationToken)
+	{
+		var runningDevices = (await deviceManager.GetDevicesByPlatformAsync(Platforms.iOS, cancellationToken))
+			.Where(d => d.IsRunning)
+			.ToList();
+
+		if (!runningDevices.Any())
+		{
+			throw MauiToolException.UserActionRequired(
+				ErrorCodes.DeviceNotFound,
+				"No booted iOS simulator was found.",
+				[
+					"Boot a simulator with `xcrun simctl boot <UDID>` or open Simulator.app and start one there.",
+					"Then verify it appears in `maui device list --platform ios`."
+				]);
+		}
+
+		if (!string.IsNullOrWhiteSpace(requestedDevice))
+		{
+			var match = runningDevices.FirstOrDefault(device =>
+				string.Equals(device.Id, requestedDevice, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(device.EmulatorId, requestedDevice, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(device.Name, requestedDevice, StringComparison.OrdinalIgnoreCase));
+
+			if (match == null)
+			{
+				throw new MauiToolException(
+					ErrorCodes.DeviceNotFound,
+					$"iOS simulator '{requestedDevice}' was not found among the booted simulators.");
+			}
+
+			return match;
+		}
+
+		if (runningDevices.Count == 1 || nonInteractive || spectre == null)
+			return runningDevices[0];
+
+		return spectre.Prompt(
+			new SelectionPrompt<Device>()
+				.Title("[bold]Select the iOS simulator to profile[/]")
+				.HighlightStyle(new Style(Color.DodgerBlue1))
+				.UseConverter(device =>
+				{
+					var version = string.IsNullOrWhiteSpace(device.VersionName) ? device.Version : device.VersionName;
+					return $"[bold]{Markup.Escape(device.Name)}[/]  [grey]{Markup.Escape(device.Id)}[/]  [dim]simulator {Markup.Escape(version ?? string.Empty)}[/]";
 				})
 				.AddChoices(runningDevices));
 	}
@@ -667,10 +778,12 @@ public static class ProfileCommand
 				cancellationToken);
 
 			diagnosticPort = reservedPorts.DiagnosticPort;
-			buildInjection = TryCreateBuildInjection(
-				diagnosticAddress,
-				reservedPorts.ExitControlPort,
-				injectBootstrap: !hasStartupProfilingHelper);
+			buildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
+				? null
+				: TryCreateBuildInjection(
+					diagnosticAddress,
+					reservedPorts.ExitControlPort,
+					injectBootstrap: !hasStartupProfilingHelper);
 
 			if (!useJson)
 			{
@@ -692,7 +805,7 @@ public static class ProfileCommand
 				if (!useJson && formatter is not SpectreOutputFormatter)
 					formatter.WriteInfo("Building the app...");
 
-				var buildArgs = BuildCompileArguments(project.ProjectPath, framework, configuration, buildInjection);
+				var buildArgs = BuildCompileArguments(project.ProjectPath, framework, configuration, transport, diagnosticPort, buildInjection);
 				WriteVerbose(formatter, useJson, verbose, $"Build command: {FormatCommandLine("dotnet", buildArgs)}");
 				var buildResult = formatter is SpectreOutputFormatter spectreForBuild && !useJson
 					? await spectreForBuild.StatusAsync(
@@ -722,24 +835,28 @@ public static class ProfileCommand
 			var dsrouterPid = dsrouterStart.DsrouterPid;
 			WriteVerbose(formatter, useJson, verbose, $"dotnet-dsrouter reported PID {dsrouterPid}.");
 			await EnsureDsrouterStartedAsync(dsrouterProcess, diagnosticPort, cancellationToken);
-			traceProcess = StartTraceCollector(
-				project.ProjectDirectory,
-				outputPath,
-				outputFormat,
-				dsrouterPid,
-				device.Id,
-				traceProfile,
-				effectiveDuration,
-				stoppingEventProvider,
-				stoppingEventName,
-				stoppingEventPayloadFilter,
-				formatter,
-				useJson,
-				verbose,
-				cancellationToken);
+			var startTraceAfterLaunch = string.Equals(transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase);
+			if (!startTraceAfterLaunch)
+			{
+				traceProcess = StartTraceCollector(
+					project.ProjectDirectory,
+					outputPath,
+					outputFormat,
+					dsrouterPid,
+					device.Id,
+					traceProfile,
+					effectiveDuration,
+					stoppingEventProvider,
+					stoppingEventName,
+					stoppingEventPayloadFilter,
+					formatter,
+					useJson,
+					verbose,
+					cancellationToken);
 
-			WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect.");
-			await EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
+				WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect.");
+				await EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
+			}
 
 			var launchArgs = BuildLaunchArguments(
 				project.ProjectPath,
@@ -771,9 +888,28 @@ public static class ProfileCommand
 				throw CreateProcessFailureException("dotnet build -t:Run", launchResult);
 			}
 
+			if (startTraceAfterLaunch)
+			{
+				traceProcess = await StartTraceCollectorWithRetryAsync(
+					project.ProjectDirectory,
+					outputPath,
+					outputFormat,
+					dsrouterPid,
+					device.Id,
+					traceProfile,
+					effectiveDuration,
+					stoppingEventProvider,
+					stoppingEventName,
+					stoppingEventPayloadFilter,
+					formatter,
+					useJson,
+					verbose,
+					cancellationToken);
+			}
+
 			if (!useJson)
 			{
-				if (traceProcess.Process.HasExited)
+				if (traceProcess is not null && traceProcess.Process.HasExited)
 				{
 					formatter.WriteWarning(
 						"Trace collection completed during app launch before a manual stop request. " +
@@ -845,6 +981,8 @@ public static class ProfileCommand
 				$"Trace collection completed, but '{primaryOutputPath}' was not created.");
 		}
 
+		ValidateTraceOutput(primaryOutputPath, outputPath, outputFormat, transport.Platform);
+
 		return new MauiProfileResult
 		{
 			ProjectPath = project.ProjectPath,
@@ -866,7 +1004,13 @@ public static class ProfileCommand
 		};
 	}
 
-	static string[] BuildCompileArguments(string projectPath, string framework, string configuration, ProfilingBuildInjection? buildInjection)
+	internal static string[] BuildCompileArguments(
+		string projectPath,
+		string framework,
+		string configuration,
+		ProfileTransportConfiguration transport,
+		int diagnosticPort,
+		ProfilingBuildInjection? buildInjection)
 	{
 		var args = new List<string>
 		{
@@ -877,11 +1021,12 @@ public static class ProfileCommand
 			"--nologo"
 		};
 
+		AppendDiagnosticArguments(args, transport, diagnosticPort);
 		AppendBuildInjectionArguments(args, buildInjection);
 		return [.. args];
 	}
 
-	static string[] BuildLaunchArguments(
+	internal static string[] BuildLaunchArguments(
 		string projectPath,
 		string framework,
 		string configuration,
@@ -897,24 +1042,35 @@ public static class ProfileCommand
 			"-t:Run",
 			"-c", configuration,
 			"-f", framework,
-			$"-p:DiagnosticAddress={transport.DiagnosticAddress}",
-			$"-p:DiagnosticPort={diagnosticPort}",
-			"-p:DiagnosticSuspend=true",
-			$"-p:DiagnosticListenMode={transport.DiagnosticListenMode}",
-			"-p:EnableDiagnostics=true",
 			"-p:WaitForExit=false",
 			// Phase 1 already compiled+packaged; incremental check here is near-instant.
 			// Do NOT pass NoBuild=true — it triggers NETSDK1085 when Build is invoked via -t:Run.
 		};
+
+		AppendDiagnosticArguments(args, transport, diagnosticPort);
 
 		if (string.Equals(transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase))
 		{
 			args.Add($"-p:AdbTarget=-s {device.Id}");
 			args.Add("-p:AndroidEnableProfiler=true");
 		}
+		else if (string.Equals(transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+		{
+			args.Add($"-p:_DeviceName=:v2:udid={device.Id}");
+			args.Add("-p:_MlaunchWaitForExit=false");
+		}
 
 		AppendBuildInjectionArguments(args, buildInjection);
 		return [.. args];
+	}
+
+	static void AppendDiagnosticArguments(List<string> args, ProfileTransportConfiguration transport, int diagnosticPort)
+	{
+		args.Add($"-p:DiagnosticAddress={transport.DiagnosticAddress}");
+		args.Add($"-p:DiagnosticPort={diagnosticPort}");
+		args.Add("-p:DiagnosticSuspend=true");
+		args.Add($"-p:DiagnosticListenMode={transport.DiagnosticListenMode}");
+		args.Add("-p:EnableDiagnostics=true");
 	}
 
 	static void AppendBuildInjectionArguments(List<string> args, ProfilingBuildInjection? buildInjection)
@@ -1137,6 +1293,79 @@ public static class ProfileCommand
 			ErrorCodes.InternalError,
 			"dotnet-trace exited before the app launch started.",
 			nativeError: details);
+	}
+
+	static async Task<MonitoredProcess> StartTraceCollectorWithRetryAsync(
+		string workingDirectory,
+		string outputPath,
+		TraceOutputFormat outputFormat,
+		int dsrouterPid,
+		string androidSerial,
+		string? traceProfile,
+		TimeSpan? duration,
+		string? stoppingEventProvider,
+		string? stoppingEventName,
+		string? stoppingEventPayloadFilter,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		CancellationToken cancellationToken)
+	{
+		var startedAt = Stopwatch.GetTimestamp();
+		MauiToolException? lastFailure = null;
+
+		while (Stopwatch.GetElapsedTime(startedAt) < s_traceStartupRetryTimeout)
+		{
+			var traceProcess = StartTraceCollector(
+				workingDirectory,
+				outputPath,
+				outputFormat,
+				dsrouterPid,
+				androidSerial,
+				traceProfile,
+				duration,
+				stoppingEventProvider,
+				stoppingEventName,
+				stoppingEventPayloadFilter,
+				formatter,
+				useJson,
+				verbose,
+				cancellationToken);
+
+			try
+			{
+				WriteVerbose(formatter, useJson, verbose, $"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect after launching the suspended iOS app.");
+				await EnsureTraceCollectorStartedAsync(traceProcess, cancellationToken);
+				return traceProcess;
+			}
+			catch (MauiToolException ex) when (IsRetryableTraceStartupFailure(ex.NativeError))
+			{
+				lastFailure = ex;
+				traceProcess.Dispose();
+				WriteVerbose(
+					formatter,
+					useJson,
+					verbose,
+					$"dotnet-trace could not connect yet; retrying in {s_traceStartupRetryDelay.TotalSeconds:0.#}s while the iOS runtime finishes opening its diagnostics channel.");
+				await Task.Delay(s_traceStartupRetryDelay, cancellationToken);
+			}
+		}
+
+		throw lastFailure ?? new MauiToolException(
+			ErrorCodes.InternalError,
+			$"dotnet-trace could not connect to the iOS app within {s_traceStartupRetryTimeout.TotalSeconds:0}s.");
+	}
+
+	internal static bool IsRetryableTraceStartupFailure(string? details)
+	{
+		if (string.IsNullOrWhiteSpace(details))
+			return false;
+
+		return details.Contains("EndOfStreamException", StringComparison.OrdinalIgnoreCase) ||
+			details.Contains("ServerNotAvailableException", StringComparison.OrdinalIgnoreCase) ||
+			details.Contains("Unable to connect to the server", StringComparison.OrdinalIgnoreCase) ||
+			details.Contains("Connection refused", StringComparison.OrdinalIgnoreCase) ||
+			details.Contains("Can't assign requested address", StringComparison.OrdinalIgnoreCase);
 	}
 
 	static async Task EnsureDsrouterStartedAsync(MonitoredProcess dsrouterProcess, int diagnosticPort, CancellationToken cancellationToken)
@@ -1439,6 +1668,45 @@ public static class ProfileCommand
 		string.IsNullOrWhiteSpace(result.StandardError)
 			? result.StandardOutput.Trim()
 			: result.StandardError.Trim();
+
+	internal static void ValidateTraceOutput(string primaryOutputPath, string collectorOutputPath, TraceOutputFormat outputFormat, string platform)
+	{
+		var primaryFile = new FileInfo(primaryOutputPath);
+		if (primaryFile.Length > 0)
+			return;
+
+		if (outputFormat == TraceOutputFormat.Speedscope &&
+			!string.Equals(primaryOutputPath, collectorOutputPath, StringComparison.OrdinalIgnoreCase) &&
+			File.Exists(collectorOutputPath) &&
+			new FileInfo(collectorOutputPath).Length > 0)
+		{
+			throw MauiToolException.UserActionRequired(
+				ErrorCodes.InternalError,
+				$"Trace collection produced a raw .nettrace at '{collectorOutputPath}', but the converted output '{primaryOutputPath}' is empty.",
+				[
+					"Rerun with `--format nettrace` to keep the raw trace without conversion.",
+					"Or rerun with `--verbose` to inspect any dotnet-trace conversion errors."
+				]);
+		}
+
+		var suggestions = string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
+			? new[]
+			{
+				"Retry with `--configuration Debug` on iOS simulator. That is currently the most reliable path for producing a non-empty trace artifact.",
+				"On iOS simulator this usually means the diagnostics handshake succeeded, but dotnet-trace/dsrouter still produced an empty trace artifact. Rerun with `--verbose` to capture the full diagnostics output.",
+				"If you need immediate iOS profiling data, use a Release build with Instruments while the CLI path is still experimental."
+			}
+			: new[]
+			{
+				"Rerun with `--verbose` to inspect the full dotnet-trace output.",
+				"If the app exited immediately, retry with a longer `--duration` or stop the trace manually after the app finishes loading."
+			};
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.InternalError,
+			$"Trace collection completed, but '{primaryOutputPath}' is empty.",
+			suggestions);
+	}
 
 	static bool IsPortBindingConflict(string details) =>
 		details.Contains("Address already in use", StringComparison.OrdinalIgnoreCase)
@@ -1792,7 +2060,7 @@ public static class ProfileCommand
 				DiagnosticListenMode: "listen",
 				DsrouterKind: "server-client",
 				DsrouterRuntimeEndpointOption: "-tcpc",
-				DsrouterForwardPort: "iOS",
+				DsrouterForwardPort: device.IsEmulator ? null : "iOS",
 				RequiresManualExitControlPortRouting: false),
 			_ => throw new MauiToolException(
 				ErrorCodes.PlatformNotSupported,

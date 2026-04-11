@@ -577,8 +577,58 @@ public class ProfileCommandTests
 		Assert.Equal("listen", transport.DiagnosticListenMode);
 		Assert.Equal("server-client", transport.DsrouterKind);
 		Assert.Equal("-tcpc", transport.DsrouterRuntimeEndpointOption);
-		Assert.Equal("iOS", transport.DsrouterForwardPort);
+		Assert.Null(transport.DsrouterForwardPort);
 		Assert.False(transport.RequiresManualExitControlPortRouting);
+	}
+
+	[Fact]
+	public void ResolveProfileTransport_IosDevice_UsesUsbForwarding()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.iOS,
+			CreateDevice(Platforms.iOS, isEmulator: false));
+
+		Assert.Equal("iOS", transport.DsrouterForwardPort);
+	}
+
+	[Fact]
+	public void BuildLaunchArguments_IosSimulator_AddsSimulatorUdidAndNonBlockingMlaunchFlag()
+	{
+		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
+
+		var args = ProfileCommand.BuildLaunchArguments(
+			"/fake/MyApp.csproj",
+			"net10.0-ios",
+			"Release",
+			device,
+			transport,
+			9000,
+			buildInjection: null);
+
+		Assert.Contains("-p:_DeviceName=:v2:udid=ios-sim-udid", args);
+		Assert.Contains("-p:_MlaunchWaitForExit=false", args);
+	}
+
+	[Fact]
+	public void BuildCompileArguments_IosSimulator_EmbedsDiagnosticConfiguration()
+	{
+		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
+
+		var args = ProfileCommand.BuildCompileArguments(
+			"/fake/MyApp.csproj",
+			"net10.0-ios",
+			"Release",
+			transport,
+			9000,
+			buildInjection: null);
+
+		Assert.Contains("-p:DiagnosticAddress=127.0.0.1", args);
+		Assert.Contains("-p:DiagnosticPort=9000", args);
+		Assert.Contains("-p:DiagnosticSuspend=true", args);
+		Assert.Contains("-p:DiagnosticListenMode=listen", args);
+		Assert.Contains("-p:EnableDiagnostics=true", args);
 	}
 
 	[Fact]
@@ -592,6 +642,67 @@ public class ProfileCommandTests
 
 		Assert.NotEqual(busyPort, selectedPort);
 		Assert.InRange(selectedPort, busyPort + 1, busyPort + 20);
+	}
+
+	[Theory]
+	[InlineData("System.IO.EndOfStreamException: Attempted to read past the end of the stream.")]
+	[InlineData("Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException: Unable to connect to the server. Connection refused")]
+	[InlineData("SocketException (49): Can't assign requested address")]
+	public void IsRetryableTraceStartupFailure_KnownConnectionErrors_ReturnTrue(string details)
+	{
+		Assert.True(ProfileCommand.IsRetryableTraceStartupFailure(details));
+	}
+
+	[Fact]
+	public void IsRetryableTraceStartupFailure_UnrelatedError_ReturnsFalse()
+	{
+		Assert.False(ProfileCommand.IsRetryableTraceStartupFailure("dotnet-trace exited with code 1."));
+	}
+
+	[Fact]
+	public void ResolveProfileConfiguration_IosWithoutExplicitOverride_DefaultsToDebug()
+	{
+		var configuration = ProfileCommand.ResolveProfileConfiguration("Release", explicitlySpecified: false, Platforms.iOS);
+
+		Assert.Equal("Debug", configuration);
+	}
+
+	[Fact]
+	public void ResolveProfileConfiguration_IosExplicitOverride_PreservesRequestedValue()
+	{
+		var configuration = ProfileCommand.ResolveProfileConfiguration("Release", explicitlySpecified: true, Platforms.iOS);
+
+		Assert.Equal("Release", configuration);
+	}
+
+	[Fact]
+	public void ResolveProfileConfiguration_AndroidWithoutExplicitOverride_RemainsRelease()
+	{
+		var configuration = ProfileCommand.ResolveProfileConfiguration("Release", explicitlySpecified: false, Platforms.Android);
+
+		Assert.Equal("Release", configuration);
+	}
+
+	[Fact]
+	public void ValidateTraceOutput_NonEmptyNettrace_ReturnsWithoutThrowing()
+	{
+		using var output = CreateTempFile("trace.nettrace");
+		File.WriteAllBytes(output.Path, [0x01, 0x02, 0x03]);
+
+		ProfileCommand.ValidateTraceOutput(output.Path, output.Path, TraceOutputFormat.NetTrace, Platforms.Android);
+	}
+
+	[Fact]
+	public void ValidateTraceOutput_EmptyIosTrace_ThrowsHelpfulError()
+	{
+		using var output = CreateTempFile("trace.nettrace");
+
+		var exception = Assert.Throws<MauiToolException>(() =>
+			ProfileCommand.ValidateTraceOutput(output.Path, output.Path, TraceOutputFormat.NetTrace, Platforms.iOS));
+
+		Assert.Contains("is empty", exception.Message);
+		Assert.NotNull(exception.Remediation?.ManualSteps);
+		Assert.Contains("--configuration Debug", string.Join(Environment.NewLine, exception.Remediation!.ManualSteps!));
 	}
 
 	[Fact]
@@ -631,6 +742,15 @@ public class ProfileCommandTests
 		Assert.Equal("Custom.Provider", customResult.ProviderName);
 		Assert.Equal("Done", customResult.EventName);
 		Assert.Equal("kind:start", customResult.PayloadFilter);
+	}
+
+	static TempFile CreateTempFile(string fileName)
+	{
+		var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "maui-cli-profile-tests", Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(directory);
+		var path = System.IO.Path.Combine(directory, fileName);
+		File.WriteAllBytes(path, []);
+		return new TempFile(path);
 	}
 
 	sealed class TempFile(string path) : IDisposable

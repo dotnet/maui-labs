@@ -11,6 +11,9 @@ namespace Microsoft.Maui.Cli.UnitTests;
 
 public class DeviceManagerTests
 {
+	static DeviceManager CreateManager(FakeAndroidProvider? androidProvider = null) =>
+		new(androidProvider, _ => Task.FromResult<IReadOnlyList<Device>>([]));
+
 	[Fact]
 	public async Task GetAllDevicesAsync_ReturnsAndroidDevices()
 	{
@@ -23,7 +26,7 @@ public class DeviceManagerTests
 			}
 		};
 
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var devices = await manager.GetAllDevicesAsync();
@@ -45,7 +48,7 @@ public class DeviceManagerTests
 			}
 		};
 
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var androidOnly = await manager.GetDevicesByPlatformAsync("android");
@@ -68,7 +71,7 @@ public class DeviceManagerTests
 			}
 		};
 
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var device = await manager.GetDeviceByIdAsync("device-2");
@@ -84,7 +87,7 @@ public class DeviceManagerTests
 	{
 		// Arrange
 		var fakeAndroid = new FakeAndroidProvider();
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var device = await manager.GetDeviceByIdAsync("nonexistent");
@@ -105,7 +108,7 @@ public class DeviceManagerTests
 			}
 		};
 
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var devices = await manager.GetAllDevicesAsync();
@@ -144,7 +147,7 @@ public class DeviceManagerTests
 			}
 		};
 
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var devices = await manager.GetAllDevicesAsync();
@@ -183,7 +186,7 @@ public class DeviceManagerTests
 			}
 		};
 
-		var manager = new DeviceManager(fakeAndroid);
+		var manager = CreateManager(fakeAndroid);
 
 		// Act
 		var devices = await manager.GetAllDevicesAsync();
@@ -193,5 +196,53 @@ public class DeviceManagerTests
 		Assert.Equal("emulator-5554", devices[0].Id);
 		Assert.Equal("Pixel_6_API_35", devices[0].EmulatorId);
 		Assert.True(devices[0].IsRunning);
+	}
+
+	[Fact]
+	public void ParseAppleSimulatorDevices_ReturnsBootedAndShutdownIosSimulators()
+	{
+		const string json =
+			"""
+			{
+			  "devices": {
+			    "com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
+			      {
+			        "udid": "BOOTED-SIM",
+			        "name": "iPhone 17 Pro",
+			        "state": "Booted",
+			        "isAvailable": true,
+			        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
+			      },
+			      {
+			        "udid": "SHUTDOWN-SIM",
+			        "name": "iPad Air 11-inch (M3)",
+			        "state": "Shutdown",
+			        "isAvailable": true,
+			        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Air-11-inch-M3"
+			      }
+			    ],
+			    "com.apple.CoreSimulator.SimRuntime.tvOS-26-2": [
+			      {
+			        "udid": "TV-SIM",
+			        "name": "Apple TV",
+			        "state": "Booted",
+			        "isAvailable": true
+			      }
+			    ]
+			  }
+			}
+			""";
+
+		var devices = DeviceManager.ParseAppleSimulatorDevices(json);
+
+		Assert.Equal(2, devices.Count);
+		Assert.Equal("BOOTED-SIM", devices[0].Id);
+		Assert.True(devices[0].IsRunning);
+		Assert.Equal(Platforms.iOS, devices[0].Platform);
+		Assert.Equal("iOS 26.2", devices[0].VersionName);
+
+		Assert.Equal("SHUTDOWN-SIM", devices[1].Id);
+		Assert.False(devices[1].IsRunning);
+		Assert.Equal(DeviceIdiom.Tablet, devices[1].Idiom);
 	}
 }
