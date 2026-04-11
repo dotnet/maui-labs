@@ -660,6 +660,31 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void CanResolveDiagnosticsTool_ReturnsTrueWhenEitherInstalledOrCached()
+	{
+		Assert.True(ProfileCommand.CanResolveDiagnosticsTool("/Users/test/.dotnet/tools/dotnet-trace", null));
+		Assert.True(ProfileCommand.CanResolveDiagnosticsTool(null, "/Users/test/.nuget/packages/dotnet-trace/tools/net8.0/any/dotnet-trace.dll"));
+	}
+
+	[Fact]
+	public void CanUseDiagnosticsTooling_MixedInstalledAndCachedTools_ReturnsTrue()
+	{
+		var hasDotnetTrace = ProfileCommand.CanResolveDiagnosticsTool("/Users/test/.dotnet/tools/dotnet-trace", null);
+		var hasDotnetDsrouter = ProfileCommand.CanResolveDiagnosticsTool(null, "/Users/test/.nuget/packages/dotnet-dsrouter/tools/net8.0/any/dotnet-dsrouter.dll");
+
+		Assert.True(ProfileCommand.CanUseDiagnosticsTooling(
+			hasDnx: false,
+			hasDotnetTrace: hasDotnetTrace,
+			hasDotnetDsrouter: hasDotnetDsrouter));
+	}
+
+	[Fact]
+	public void CanUseDiagnosticsTooling_MissingRequiredToolWithoutDnx_ReturnsFalse()
+	{
+		Assert.False(ProfileCommand.CanUseDiagnosticsTooling(hasDnx: false, hasDotnetTrace: true, hasDotnetDsrouter: false));
+	}
+
+	[Fact]
 	public void ResolveProfileConfiguration_IosWithoutExplicitOverride_DefaultsToRelease()
 	{
 		var configuration = ProfileCommand.ResolveProfileConfiguration("Release", explicitlySpecified: false, Platforms.iOS);

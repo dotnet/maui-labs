@@ -458,17 +458,15 @@ public static class ProfileCommand
 
 	static void ValidateDnxAvailable()
 	{
-		if (ProcessRunner.GetCommandPath("dnx") is not null)
-			return;
+		var hasDnx = ProcessRunner.GetCommandPath("dnx") is not null;
+		var hasDotnetTrace = CanResolveDiagnosticsTool(
+			FindInstalledDotnetToolCommand("dotnet-trace"),
+			FindCachedDotnetToolDll("dotnet-trace"));
+		var hasDotnetDsrouter = CanResolveDiagnosticsTool(
+			FindInstalledDotnetToolCommand("dotnet-dsrouter"),
+			FindCachedDotnetToolDll("dotnet-dsrouter"));
 
-		if (FindInstalledDotnetToolCommand("dotnet-trace") is not null &&
-			FindInstalledDotnetToolCommand("dotnet-dsrouter") is not null)
-		{
-			return;
-		}
-
-		if (FindCachedDotnetToolDll("dotnet-trace") is not null &&
-			FindCachedDotnetToolDll("dotnet-dsrouter") is not null)
+		if (CanUseDiagnosticsTooling(hasDnx, hasDotnetTrace, hasDotnetDsrouter))
 		{
 			return;
 		}
@@ -516,6 +514,12 @@ public static class ProfileCommand
 
 		commandLine = FormatCommandLine("dnx", ["-y", packageId, "--", .. toolArgs]);
 	}
+
+	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
+		=> !string.IsNullOrWhiteSpace(installedToolPath) || !string.IsNullOrWhiteSpace(cachedToolDll);
+
+	internal static bool CanUseDiagnosticsTooling(bool hasDnx, bool hasDotnetTrace, bool hasDotnetDsrouter)
+		=> hasDnx || (hasDotnetTrace && hasDotnetDsrouter);
 
 	static string? FindInstalledDotnetToolCommand(string packageId)
 	{
