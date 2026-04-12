@@ -257,13 +257,13 @@ public static class ProfileCommand
 		string platform,
 		bool nonInteractive,
 		SpectreOutputFormatter? spectre)
-		=> ProfileCommandResolution.ResolveTargetFramework(project, requestedFramework, platform, nonInteractive, spectre);
+		=> ProfileTargetResolver.ResolveTargetFramework(project, requestedFramework, platform, nonInteractive, spectre);
 
 	internal static bool WasOptionExplicitlySpecified<T>(ParseResult parseResult, Option<T> option)
-		=> ProfileCommandResolution.WasOptionExplicitlySpecified(parseResult, option);
+		=> ProfileOutputResolver.WasOptionExplicitlySpecified(parseResult, option);
 
 	internal static string ResolveProfileConfiguration(string? requestedConfiguration, bool explicitlySpecified, string platform)
-		=> ProfileCommandResolution.ResolveProfileConfiguration(requestedConfiguration, explicitlySpecified, platform);
+		=> ProfileOutputResolver.ResolveProfileConfiguration(requestedConfiguration, explicitlySpecified, platform);
 
 	static Task<Device> ResolveProfileDeviceAsync(
 		string platform,
@@ -272,7 +272,7 @@ public static class ProfileCommand
 		bool nonInteractive,
 		SpectreOutputFormatter? spectre,
 		CancellationToken cancellationToken)
-		=> ProfileCommandResolution.ResolveProfileDeviceAsync(
+		=> ProfileTargetResolver.ResolveProfileDeviceAsync(
 			platform,
 			requestedDevice,
 			deviceManager,
@@ -281,33 +281,33 @@ public static class ProfileCommand
 			cancellationToken);
 
 	static void ValidateDnxAvailable()
-		=> ProfileCommandTooling.ValidateDnxAvailable();
+		=> ProfileCommandDiagnostics.ValidateDnxAvailable();
 
 	internal static TraceOutputFormat ResolveTraceOutputFormat(
 		string? requestedFormat,
 		bool explicitlySpecified,
 		bool nonInteractive,
 		SpectreOutputFormatter? spectre)
-		=> ProfileCommandResolution.ResolveTraceOutputFormat(requestedFormat, explicitlySpecified, nonInteractive, spectre);
+		=> ProfileOutputResolver.ResolveTraceOutputFormat(requestedFormat, explicitlySpecified, nonInteractive, spectre);
 
 	internal static TraceOutputFormat ResolveTraceOutputFormat(string? requestedFormat)
-		=> ProfileCommandResolution.ResolveTraceOutputFormat(requestedFormat);
+		=> ProfileOutputResolver.ResolveTraceOutputFormat(requestedFormat);
 
 	internal static string ResolveOutputPath(string projectName, string? requestedOutput, TraceOutputFormat outputFormat)
-		=> ProfileCommandResolution.ResolveOutputPath(projectName, requestedOutput, outputFormat);
+		=> ProfileOutputResolver.ResolveOutputPath(projectName, requestedOutput, outputFormat);
 
 	internal static string GetPrimaryOutputPath(string collectorOutputPath, TraceOutputFormat outputFormat)
-		=> ProfileCommandResolution.GetPrimaryOutputPath(collectorOutputPath, outputFormat);
+		=> ProfileOutputResolver.GetPrimaryOutputPath(collectorOutputPath, outputFormat);
 
 	static void ValidateStoppingEventOptions(string? providerName, string? eventName, string? payloadFilter)
-		=> ProfileCommandResolution.ValidateStoppingEventOptions(providerName, eventName, payloadFilter);
+		=> ProfileOutputResolver.ValidateStoppingEventOptions(providerName, eventName, payloadFilter);
 
 	internal static StoppingEventConfiguration ResolveStoppingEventConfiguration(
 		TimeSpan? duration,
 		string? providerName,
 		string? eventName,
 		string? payloadFilter)
-		=> ProfileCommandResolution.ResolveStoppingEventConfiguration(duration, providerName, eventName, payloadFilter);
+		=> ProfileOutputResolver.ResolveStoppingEventConfiguration(duration, providerName, eventName, payloadFilter);
 
 	static Task<MauiProfileResult> RunProfileAsync(
 		ResolvedMauiProject project,
@@ -328,24 +328,25 @@ public static class ProfileCommand
 		bool useJson,
 		bool verbose,
 		CancellationToken cancellationToken)
-		=> ProfileCommandExecution.RunProfileAsync(
-			project,
-			framework,
-			device,
-			outputPath,
-			outputFormat,
-			configuration,
-			traceProfile,
-			noBuild,
-			diagnosticPort,
-			duration,
-			stoppingEventProvider,
-			stoppingEventName,
-			stoppingEventPayloadFilter,
-			autoSelectedStoppingEvent,
-			formatter,
-			useJson,
-			verbose,
+		=> ProfileSessionRunner.RunAsync(
+			new ProfileSessionRequest(
+				project,
+				framework,
+				device,
+				outputPath,
+				outputFormat,
+				configuration,
+				traceProfile,
+				noBuild,
+				diagnosticPort,
+				duration,
+				stoppingEventProvider,
+				stoppingEventName,
+				stoppingEventPayloadFilter,
+				autoSelectedStoppingEvent,
+				formatter,
+				useJson,
+				verbose),
 			cancellationToken);
 
 	internal static string[] BuildCompileArguments(
@@ -355,7 +356,7 @@ public static class ProfileCommand
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection)
-		=> ProfileCommandTransport.BuildCompileArguments(projectPath, framework, configuration, transport, diagnosticPort, buildInjection);
+		=> ProfileCommandArguments.BuildCompileArguments(projectPath, framework, configuration, transport, diagnosticPort, buildInjection);
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
@@ -365,10 +366,10 @@ public static class ProfileCommand
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection)
-		=> ProfileCommandTransport.BuildLaunchArguments(projectPath, framework, configuration, device, transport, diagnosticPort, buildInjection);
+		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, framework, configuration, device, transport, diagnosticPort, buildInjection);
 
 	internal static string[] BuildDsrouterArguments(ProfileTransportConfiguration transport, int diagnosticPort)
-		=> ProfileCommandTransport.BuildDsrouterArguments(transport, diagnosticPort);
+		=> ProfileCommandArguments.BuildDsrouterArguments(transport, diagnosticPort);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
@@ -379,7 +380,7 @@ public static class ProfileCommand
 		string? stoppingEventProvider,
 		string? stoppingEventName,
 		string? stoppingEventPayloadFilter)
-		=> ProfileCommandTooling.BuildTraceArguments(
+		=> DotnetTraceRunner.BuildTraceArguments(
 			outputPath,
 			outputFormat,
 			dsrouterPid,
@@ -390,32 +391,56 @@ public static class ProfileCommand
 			stoppingEventPayloadFilter);
 
 	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
-		=> ProfileCommandTooling.CanResolveDiagnosticsTool(installedToolPath, cachedToolDll);
+		=> ProfileCommandDiagnostics.CanResolveDiagnosticsTool(installedToolPath, cachedToolDll);
 
 	internal static bool CanUseDiagnosticsTooling(bool hasDnx, bool hasDotnetTrace, bool hasDotnetDsrouter)
-		=> ProfileCommandTooling.CanUseDiagnosticsTooling(hasDnx, hasDotnetTrace, hasDotnetDsrouter);
+		=> ProfileCommandDiagnostics.CanUseDiagnosticsTooling(hasDnx, hasDotnetTrace, hasDotnetDsrouter);
 
 	internal static bool IsRetryableTraceStartupFailure(string? details)
-		=> ProfileCommandTooling.IsRetryableTraceStartupFailure(details);
+		=> DotnetTraceRunner.IsRetryableStartupFailure(details);
 
 	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)
-		=> ProfileCommandTransport.FindAvailableTcpPort(startingPort, maxPort);
+		=> ProfileCommandPortRouter.FindAvailableTcpPort(startingPort, maxPort);
 
 	internal static void ValidateTraceOutput(string primaryOutputPath, string collectorOutputPath, TraceOutputFormat outputFormat, string platform)
-		=> ProfileCommandExecution.ValidateTraceOutput(primaryOutputPath, collectorOutputPath, outputFormat, platform);
+		=> ProfileTraceOutputValidation.ValidateTraceOutput(primaryOutputPath, collectorOutputPath, outputFormat, platform);
 
 	internal static bool IsTargetFrameworkCompatible(string tfm, string platform)
-		=> ProfileCommandResolution.IsTargetFrameworkCompatible(tfm, platform);
+		=> ProfileTargetResolver.IsTargetFrameworkCompatible(tfm, platform);
 
 	internal static string ResolveProfilePlatform(string requestedPlatform, string framework)
-		=> ProfileCommandResolution.ResolveProfilePlatform(requestedPlatform, framework);
+		=> ProfileTargetResolver.ResolveProfilePlatform(requestedPlatform, framework);
 
 	internal static ProfileTransportConfiguration ResolveProfileTransport(string platform, Device device)
-		=> ProfileCommandTransport.ResolveProfileTransport(platform, device);
+	{
+		var normalizedPlatform = Platforms.Normalize(platform);
+		return normalizedPlatform switch
+		{
+			Platforms.Android => new ProfileTransportConfiguration(
+				Platform: Platforms.Android,
+				DiagnosticAddress: device.IsEmulator ? "10.0.2.2" : IPAddress.Loopback.ToString(),
+				DiagnosticListenMode: "connect",
+				DsrouterKind: "server-server",
+				DsrouterRuntimeEndpointOption: "-tcps",
+				DsrouterForwardPort: "Android",
+				RequiresManualExitControlPortRouting: !device.IsEmulator),
+			Platforms.iOS => new ProfileTransportConfiguration(
+				Platform: Platforms.iOS,
+				DiagnosticAddress: IPAddress.Loopback.ToString(),
+				DiagnosticListenMode: "listen",
+				DsrouterKind: "server-client",
+				DsrouterRuntimeEndpointOption: "-tcpc",
+				DsrouterForwardPort: device.IsEmulator ? null : "iOS",
+				RequiresManualExitControlPortRouting: false),
+			_ => throw new MauiToolException(
+				ErrorCodes.PlatformNotSupported,
+				$"Startup profiling is not implemented yet for platform '{platform}'.")
+		};
+	}
 
 	internal static string? InferPlatformFromTargetFramework(string tfm)
-		=> ProfileCommandResolution.InferPlatformFromTargetFramework(tfm);
+		=> ProfileTargetResolver.InferPlatformFromTargetFramework(tfm);
 
 	internal static Version GetFrameworkSortKey(string tfm)
-		=> ProfileCommandResolution.GetFrameworkSortKey(tfm);
+		=> ProfileTargetResolver.GetFrameworkSortKey(tfm);
 }
