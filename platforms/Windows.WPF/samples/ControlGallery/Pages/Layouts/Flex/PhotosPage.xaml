@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="Flexibility.Shared.PhotosPage"
+             Title="Monkeys"
+            >
+
+    <ContentPage.Resources>
+        <StyleSheet Source="/Pages/Layouts/Flex/PhotosPage.css"/>
+        
+        <Style x:Key="flex" TargetType="FlexLayout">
+            <Setter Property="Direction" Value="Row"/>
+            <Setter Property="Wrap" Value="Wrap"/>
+            <Setter Property="AlignItems" Value="Stretch"/>
+            <Setter Property="AlignContent" Value="Start"/>
+        </Style>
+        
+    </ContentPage.Resources>
+    <ScrollView>
+        <FlexLayout Style="{StaticResource flex}">
+            <Image Source="m_01.jpg"
+                   StyleClass="photo"
+                   Aspect="AspectFill" />
+
+            <Image Source="m_02.jpg" 
+                   StyleClass="photo"
+                   Aspect="AspectFill" />
+            
+            <Image Source="m_04.png" 
+                   Aspect="AspectFill"
+                   StyleClass="photo" />
+            
+            <Image Source="m_03.png"
+                   Aspect="AspectFill" 
+                   StyleClass="photo, full" />
+            
+            <Image Source="m_05.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo" />
+            
+            <Image Source="m_06.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo" />
+            
+            <Image Source="m_07.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo" />
+            
+            <Image Source="m_08.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo, half" />
+            
+            <Image Source="m_09.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo, half" />
+            
+            <Image Source="m_10.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo" />
+            
+            <Image Source="m_11.jpeg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo"
+                     />
+            <Image Source="m_12.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo" />
+            
+            <Image Source="m_13.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo, full" />
+            
+            <Image Source="m_14.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo"/>
+            
+            <Image Source="cat_15.jpg" 
+                   Aspect="AspectFill"
+                   StyleClass="photo"/>
+            
+            <Image Source="cat_16.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo" />
+            
+            <Image Source="cat_17.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo" />
+            
+            <Image Source="cat_18.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo" />
+            
+            <Image Source="cat_19.jpg"
+                   Aspect="AspectFill" 
+                   StyleClass="photo" />
+
+        </FlexLayout>
+    </ScrollView>
+    
+</ContentPage>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             xmlns:ios="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific;assembly=Microsoft.Maui.Controls"
+             ios:Page.UseSafeArea="true"
+             x:Class="Flexibility.Shared.ShowPage"
+             BackgroundColor="#16222a">
+    <ContentPage.Resources>
+        <StyleSheet Source="/Pages/Layouts/Flex/ShowPage.css"/>
+        <Style TargetType="Label">
+            <Setter Property="TextColor" Value="White"/>
+            </Style>
+    </ContentPage.Resources>
+
+    <ContentPage.Content>
+        <ScrollView>
+            <FlexLayout StyleClass="content" IgnoreSafeArea="true">
+                <Image StyleClass="poster" Source="seattle.jpg" Aspect="AspectFill" HeightRequest="200"/>
+                <Label FontFamily="FontAwesome" StyleClass="popularity" Text="&#xf005;&#xf005;&#xf005;&#xf005;&#xf005;" />
+                <Label StyleClass="year" Text="2017" />
+                <Label StyleClass="rating" Text="PG-13" />
+                <Label StyleClass="length" Text="2hr 10m" />
+                <BoxView StyleClass="spacer"/>
+
+                <Label StyleClass="title" Text="Exploring Lake Union" />
+                <Label StyleClass="description" Text="It was a night not unlike many others. As the sun settled onto the horizon,the kites began to descend. Bikes brought people to the best overlook of the city skyline. Dodging selfies became to challenge of the day."/>
+                <Label StyleClass="description">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Cast: " FontAttributes="Bold" />
+                            <Span Text="Chris Hemsworth, Tom Hiddleston, Cate Blanchett, Idris Elba, Jeff Goldblum..." />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+                <Label StyleClass="description">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Director: " FontAttributes="Bold" />
+                            <Span Text="Taika Waititi" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+                <Label StyleClass="description">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Writers: " FontAttributes="Bold" />
+                            <Span Text="Eric Pearson, Craig Kyle, Christopher Yost" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+                <Label StyleClass="action" FontFamily="FontAwesome" Text="&#xf0fe;"/>
+                <Label StyleClass="action" FontFamily="FontAwesome" Text="&#xf14d;"/>
+               <BoxView FlexLayout.Grow="1" />
+
+            </FlexLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

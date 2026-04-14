@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!-- <?xaml-comp compile="false" ?> -->
+<ResourceDictionary>
+
+    <OnPlatform x:TypeArguments="x:String"
+        x:Key="RegularFont"
+        Default="OpenSansRegular"
+        />
+
+    <OnPlatform x:TypeArguments="x:String"
+        x:Key="BoldFont"
+        Default="OpenSansSemiBold"
+        />
+
+    <Style TargetType="Label">
+        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Black}, Dark={StaticResource White}}" />
+        <Setter Property="FontFamily" Value="OpenSansRegular" />
+        <Setter Property="FontSize" Value="16" />
+    </Style>
+
+    <Style TargetType="Label"
+            x:Key="LargeTitle">
+        <Setter Property="FontSize"
+                Value="30"/>
+        <Setter Property="FontFamily" Value="{StaticResource BoldFont}"/>
+    </Style>
+    <Style TargetType="Label"
+            x:Key="Title1">
+        <Setter Property="FontSize"
+                Value="26"/>
+        <Setter Property="FontFamily" Value="{StaticResource BoldFont}"/>
+    </Style>
+    <Style TargetType="Label"
+            x:Key="Headline">
+        <Setter Property="FontSize"
+                Value="17"/>
+        <Setter Property="FontFamily" Value="{StaticResource BoldFont}"/>
+    </Style>
+    <Style TargetType="Label"
+            x:Key="Subhead">
+        <Setter Property="FontSize"
+                Value="15"/>
+    </Style>
+    <Style TargetType="Label"
+            x:Key="Footnote">
+        <Setter Property="FontSize"
+                Value="16"/>
+    </Style>
+
+    <!-- Text Color Styles -->
+    <Style TargetType="Label"
+            x:Key="ErrorLabel">
+        <Setter Property="TextColor"
+                Value="{StaticResource Error}"/>
+    </Style>
+    <Style TargetType="Label"
+            x:Key="WarningLabel">
+        <Setter Property="TextColor"
+                Value="{StaticResource Warning}"/>
+    </Style>
+    <Style TargetType="Label"
+            x:Key="Disabled">
+        <Setter Property="TextColor"
+                Value="{StaticResource Gray300}"/>
+    </Style>
+
+
+</ResourceDictionary>

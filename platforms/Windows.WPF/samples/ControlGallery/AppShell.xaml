@@ -1,0 +1,62 @@
+﻿<Shell x:Class="ControlGallery.AppShell"
+        FlyoutBehavior="{OnIdiom Desktop=Locked, Tablet=Locked, Default=Flyout}" 
+    FlyoutHeaderBehavior="Scroll"
+    FlyoutHeaderTemplate="{DataTemplate FlyoutHeader}"
+    ItemTemplate="{DataTemplate CustomFlyoutItem}">
+    
+    <Shell.BindingContext>
+        <AppShellViewModel/>
+    </Shell.BindingContext>
+
+    <FlyoutItem Title="Home"
+               >
+        <ShellContent Route="home" 
+            FlyoutIcon="{FontImageSource FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.Home},
+                                        Size=16,
+                                        Color={StaticResource Gray500}}"
+                ContentTemplate="{DataTemplate HomePage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Controls" FlyoutIcon="view_entry.png">
+        <ShellContent Route="controls" 
+                ContentTemplate="{DataTemplate ControlsPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Layouts" FlyoutIcon="layout_grid.png">
+        <ShellContent Route="alert" 
+                ContentTemplate="{DataTemplate LayoutsPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Features" FlyoutIcon="view_slider.png">
+        <ShellContent Route="features" 
+                ContentTemplate="{DataTemplate FeaturesPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Tips &amp; Tricks" FlyoutIcon="view_image.png">
+        <ShellContent Route="tips" 
+                ContentTemplate="{DataTemplate TipsPage}" />
+    </FlyoutItem>
+
+    <Shell.FlyoutFooterTemplate>
+        <DataTemplate>
+            <Grid>
+                <VerticalStackLayout Margin="15" Spacing="8">
+                    
+                    <Label Text="Appearance"/>
+                    <Picker x:Name="AppearancePicker"
+                    BackgroundColor="Transparent"
+                    SelectedItem="{Binding Appearance}">
+                        <Picker.ItemsSource>
+                            <x:Array Type="{x:Type x:String}">
+                                <x:String>Unspecified</x:String>
+                                <x:String>Dark</x:String>
+                                <x:String>Light</x:String>
+                            </x:Array>
+                        </Picker.ItemsSource>
+                    </Picker>
+                </VerticalStackLayout>
+            </Grid>
+        </DataTemplate>
+    </Shell.FlyoutFooterTemplate>
+</Shell>

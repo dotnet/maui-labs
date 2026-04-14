@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="CollectionViewDemos.Views.EmptyViewNullPage"
+             Title="EmptyView (Null ItemsSource)">
+    <Grid Margin="20">
+        <CollectionView ItemsSource="{Binding EmptyMonkeys}"
+                        EmptyView="No items to display" />
+    </Grid>
+</ContentPage>

@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.Layouts.PhotoWrappingPage"
+             Title="Photo Wrapping">
+    <Grid>
+        <ScrollView>
+            <FlexLayout x:Name="flexLayout"
+                        Wrap="Wrap"
+                        MinimumHeightRequest="1200"
+                        MinimumWidthRequest="800"
+                        Background="silver"
+                        JustifyContent="SpaceAround" />
+        </ScrollView>
+
+        <ActivityIndicator x:Name="activityIndicator"
+                           IsRunning="True"
+                           VerticalOptions="Center" />
+    </Grid>
+</ContentPage>

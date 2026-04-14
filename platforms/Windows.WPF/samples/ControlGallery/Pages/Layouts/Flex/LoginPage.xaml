@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentPage
+             x:Class="Flexibility.Shared.LoginPage">
+    
+    <ContentPage.Resources>
+        <StyleSheet Source="/Pages/Layouts/Flex/LoginPage.css"/>
+
+        <Style TargetType="Entry">
+            <Setter Property="VisualStateManager.VisualStateGroups">
+                <VisualStateGroupList x:Name="CommonStates">
+                    <VisualStateGroup>
+                        <VisualState x:Name="Valid">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="White"></Setter>
+                            </VisualState.Setters>
+                        </VisualState>
+                        <VisualState x:Name="Invalid">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="Red"></Setter>
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateGroupList>
+            </Setter>
+        </Style>
+    </ContentPage.Resources>
+    
+    <FlexLayout StyleClass="body" x:Name="Form">
+        <FlexLayout x:Name="LoginForm" StyleClass="container">
+            <Label Text="Hello, Flex" StyleClass="logo"/>
+            <FlexLayout StyleClass="login-form">
+                <Entry x:Name="UserNameEntry" 
+                       IsSpellCheckEnabled="false" 
+                       MaxLength="7" 
+                       Placeholder="UserName">
+                       <Entry.TextColor>
+                           <OnPlatform x:TypeArguments="Color">
+                               <On Platform="Android" Value="#f1f1f1"/>
+                           </OnPlatform>
+                       </Entry.TextColor>
+                        <Entry.PlaceholderColor x:TypeArguments="Color">
+                            <OnPlatform x:TypeArguments="Color">
+                                   <On Platform="Android" Value="#999"/>
+                               </OnPlatform>
+                        </Entry.PlaceholderColor>
+                </Entry>
+                <Entry x:Name="PasswordEntry" TextChanged="Handle_TextChanged" Placeholder="Password" IsPassword="true">
+                    <Entry.TextColor>
+                           <OnPlatform x:TypeArguments="Color">
+                               <On Platform="Android" Value="#f1f1f1"/>
+                           </OnPlatform>
+                    </Entry.TextColor>
+                    <Entry.PlaceholderColor x:TypeArguments="Color">
+                        <OnPlatform x:TypeArguments="Color">
+                               <On Platform="Android" Value="#999"/>
+                           </OnPlatform>
+                    </Entry.PlaceholderColor>
+                </Entry>
+                <Label x:Name="StrengthIndicator"
+                       FontFamily="FontAwesome"
+                       Text=""
+                       FontSize="24"
+                       StyleClass="strength"
+                       HorizontalTextAlignment="Center" 
+                       HorizontalOptions="Center" />
+                    
+                <Button Text="Log in" Clicked="Handle_Clicked"/>
+            </FlexLayout>
+        </FlexLayout>
+    </FlexLayout>
+</ContentPage>

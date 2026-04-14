@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             xmlns:local="using:Flexibility.Shared"
+             x:Class="Flexibility.Shared.AchievementsPage"
+             Title="Achievements">
+    <ContentPage.Resources>
+
+        <Style x:Key="AchievementViewStyle" TargetType="Grid">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="HeightRequest" Value="100"/>
+            <Setter Property="WidthRequest" Value="90"/>
+        </Style>
+        <StyleSheet>
+            <![CDATA[
+                #container {
+                    justify-content: space-around;
+                    flex-wrap: wrap;
+                    margin: 20 0;
+                }
+            ]]>
+        </StyleSheet>
+    </ContentPage.Resources>
+    
+        <ScrollView>
+            
+            <FlexLayout x:Name="container">
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="First Issue" Icon="&#xf1fc;" IsAchieved="true" />
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="First PR" Icon="&#xf109;" IsAchieved="true" />
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Masher" Icon="&#xf255;" IsAchieved="false" />
+
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Novice Contributor" Icon="&#xf291;" IsAchieved="true" />
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Reviewer" Icon="&#xf075;" IsAchieved="true" />
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Tester" Icon="&#xf05b;" IsAchieved="false" />
+
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Frequent Contrib" Icon="&#xf1c9;" IsAchieved="false" />
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Lab Master" Icon="&#xf0c3;" IsAchieved="false" />
+                <AchievementView Style="{StaticResource AchievementViewStyle}" Achievement="Architect" Icon="&#xf015;" IsAchieved="false" />
+
+            </FlexLayout>
+        </ScrollView>
+    
+</ContentPage>

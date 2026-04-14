@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Border
+             x:Class="ControlGallery.Pages.IconBox"
+        HeightRequest="80"
+        WidthRequest="80"
+        Stroke="{StaticResource Gray300}"
+        StrokeThickness="1"
+        BackgroundColor="{StaticResource White}"
+        Margin="0,0,0,10">
+
+    <Grid>
+        <Label Text="{Binding Icon}"
+            FontSize="24"
+            FontFamily="FontAwesome"
+            VerticalOptions="Center"
+            HorizontalOptions="Center"/>
+
+    </Grid>
+
+</Border>

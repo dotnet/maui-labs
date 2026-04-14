@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.PickerPage"
+             Title="Picker">
+
+    <ScrollView>
+        <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Android='15', Default='30'}">
+            <Picker Title="{OnPlatform 'Select a color', MacCatalyst=''}" ItemsSource="{Binding ColorNames}" SelectedItem="{Binding SelectedColorName, Mode=TwoWay}" />
+            <BoxView Color="{Binding SelectedColor}" HeightRequest="200" />
+        </StackLayout>
+    </ScrollView>
+
+</ContentPage>

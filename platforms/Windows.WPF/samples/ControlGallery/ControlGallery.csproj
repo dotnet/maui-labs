@@ -1,0 +1,65 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>ControlGallery</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <NoWarn>XC0022;CS8632;CS0108;CS0618;CS8785</NoWarn>
+
+    <DefineConstants>$(DefineConstants);MauiAllowImplicitXmlnsDeclaration;WPFAPP</DefineConstants>
+    <EnablePreviewFeatures>true</EnablePreviewFeatures>
+
+    <ApplicationTitle>Control Gallery</ApplicationTitle>
+    <ApplicationId>com.simplyprofound.MauiControlGallery</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="Resources\appicon.svg" ForegroundFile="Resources\appiconfg.svg" Color="#512BD4" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiImage Include="Resources\Images\toolbox\*" />
+    <MauiFont Include="Resources\Fonts\*.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\food_01.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\Raw\ReactTodoApp\**\*" CopyToOutputDirectory="PreserveNewest" Link="ReactTodoApp\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Maui" Version="13.0.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="CodeHollow.FeedReader" Version="1.2.6" />
+    <PackageReference Include="AsyncAwaitBestPractices" Version="9.0.0" />
+    <PackageReference Include="AngleSharp" Version="0.17.1" />
+    <PackageReference Include="Markdown.ColorCode" Version="1.2.0-preview-2" />
+    <PackageReference Include="ColorCode.Core" Version="2.0.14" />
+    <PackageReference Include="CommunityToolkit.Maui.Markup" Version="7.0.1" />
+    <PackageReference Include="Portable.Xaml" Version="0.26.0" />
+    <PackageReference Include="DryIoc.Microsoft.DependencyInjection" Version="6.1.0" />
+    <PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Controls.Maps" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
+    <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
+    <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
+  </ItemGroup>
+
+  <!-- Import Windows.WPF build targets (normally comes from NuGet package) -->
+  <Import Project="..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets" />
+
+</Project>

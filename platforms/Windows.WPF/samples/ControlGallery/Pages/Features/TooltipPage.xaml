@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.TooltipPage"
+             Title="Tooltips">
+    <ContentPage.Content>
+        <ScrollView>
+            <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Android='15', Default='30'}"
+                         Spacing="16"
+                        >
+                <Label Text="Tooltip" Style="{StaticResource Headline}"/>
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label Text="Hover your cursor over the control below"/>
+                <Entry Placeholder="Password"
+                       IsPassword="True"
+                       HorizontalOptions="Start"
+                       MinimumWidthRequest="200"
+                       ToolTipProperties.Text="Eight or more characters, with at least one lowercase and one uppercase letter."
+                       />
+
+            </StackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

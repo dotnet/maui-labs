@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="ControlGallery.Pages.Layouts.AbsoluteLayouts.ProportionalCoordinateCalcDemoPage"
+             Title="Proportional coordinate calculations demo">
+    <ContentView Margin="20"
+                 SizeChanged="OnContentViewSizeChanged">
+        <AbsoluteLayout x:Name="absoluteLayout"
+                        BackgroundColor="{StaticResource Gray500}"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center" />
+    </ContentView>
+</ContentPage>

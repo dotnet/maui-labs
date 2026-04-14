@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Sample/Sample.csproj" />
+    <Project Path="samples/ControlGallery/ControlGallery.csproj" />
+    <Project Path="samples/Maui.Controls.Sample.Blazor/Maui.Controls.Sample.Blazor.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Windows.WPF/Windows.WPF.csproj" />
+    <Project Path="src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HandlerTests/HandlerTests.csproj" />
+    <Project Path="tests/UITests/UITests.csproj" />
+  </Folder>
+</Solution>

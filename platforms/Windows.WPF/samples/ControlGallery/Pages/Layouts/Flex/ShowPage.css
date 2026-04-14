@@ -1,0 +1,56 @@
+﻿.content {
+    align-items: start;
+    align-content: start;
+    flex-wrap: wrap;
+}
+
+.poster {
+    flex-basis: 100%;
+}
+
+.summary {
+    background-color: black;
+    flex-direction: row;
+    justify-content: spacebetween;
+    height: 20;
+    margin: 10;
+}
+
+.popularity {
+    color: red;
+    margin: 5 10 0;
+}
+
+.year, .rating, .length {
+    font-size: 14;
+    color: #f1f1f1;
+    margin: 5 10 0;
+}
+
+.break {
+    flex-basis: 100%;
+    height: 0;
+}
+
+.spacer {
+    flex-basis: 100%;
+    height: 0;
+}
+
+.title {
+    color: #eee;
+    font-size: 24;
+    margin: 10;
+}
+
+.description {
+    color: #ddd;
+    margin: 10,0,10,10;
+    flex-basis: 100%;
+}
+
+.action {
+    color: #FFFFFF;
+    font-size: 48;
+    margin: 0 0 0 10;
+}

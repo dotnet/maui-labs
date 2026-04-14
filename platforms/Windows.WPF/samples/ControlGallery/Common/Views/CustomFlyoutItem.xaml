@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Grid
+             x:Class="ControlGallery.Common.Views.CustomFlyoutItem"
+             ColumnDefinitions="15,50,*">
+        <Grid.Behaviors>
+                <CursorBehavior/>
+        </Grid.Behaviors>
+
+        
+        <Image Source="{Binding FlyoutIcon}"
+                x:Name="ItemImage"
+                Margin="5"
+                HeightRequest="35"
+                Grid.Column="1" />
+        <Label Grid.Column="2"
+                IsVisible="{Binding IsLabelVisible}"
+                Text="{Binding Title}"
+                FontAttributes="Italic"
+                VerticalTextAlignment="Center" />
+                
+    
+    
+</Grid>

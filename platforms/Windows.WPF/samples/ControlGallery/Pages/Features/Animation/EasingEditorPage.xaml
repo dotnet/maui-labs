@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<ContentPage
+    Title="{Binding Card.CardTitle}"
+    x:Class="Animations.EasingEditorPage">
+    <ContentPage.Resources>
+        <BoolToObjectConverter
+            x:Key="BoolToPlayPause"
+            x:TypeArguments="FontImageSource"
+            TrueObject="{StaticResource IconPause}"
+            FalseObject="{StaticResource IconPlay}"/>
+        <InvertedBoolConverter x:Key="InvertedBoolConverter"/>
+
+    </ContentPage.Resources>
+
+    <ContentPage.Content>
+        <Grid RowDefinitions="2*,80,3*"
+              RowSpacing="0">
+
+            <Grid x:Name="PathContainer">
+                <Path Data="M1 84c44 1 81.5 48.6 123-83"
+                      x:Name="EasingPath"
+                      HorizontalOptions="Center"
+                      VerticalOptions="Center"
+                      ScaleX="{Binding ScaleFactor}"
+                      ScaleY="{Binding ScaleFactor}"
+                      Stroke="{StaticResource InGradient}">
+                </Path>
+
+            </Grid>
+            <Grid Grid.Row="1"
+                  x:Name="AnimationTrack"
+                  BackgroundColor="Black"
+                  Padding="8">
+                <BoxView x:Name="Pacer"
+                         WidthRequest="0"
+                         HorizontalOptions="Start"
+                         Margin="-8"
+                         BackgroundColor="#FFFFFF"
+                         Opacity="0.2"/>
+                <BoxView BackgroundColor="{StaticResource ThemePrimary}"
+                         x:Name="Box"
+                         HeightRequest="60"
+                         WidthRequest="60"
+                         HorizontalOptions="Start"
+                         VerticalOptions="Center"
+                         CornerRadius="8"/>
+            </Grid>
+
+            <ScrollView Grid.Row="2">
+                <VerticalStackLayout Spacing="0">
+                    <HorizontalStackLayout
+                        HorizontalOptions="Center">
+                        <ImageButton x:Name="ResetBtn"
+                                     Source="{StaticResource IconReset}"
+                                     Background="Transparent"
+                                     Margin="8,0"
+                                     Clicked="ResetBtn_OnClicked"/>
+                        <ImageButton x:Name="PlayBtn"
+                                     Source="{StaticResource IconPlay}"
+                                     Background="Transparent"
+                                     Margin="8,0"
+                                     IsVisible="{Binding IsPlaying, Converter={StaticResource InvertedBoolConverter}}"
+                                     Clicked="PlayBtn_OnClicked"/>
+                        <ImageButton x:Name="PauseButton"
+                                     Source="{StaticResource IconPause}"
+                                     Background="Transparent"
+                                     Margin="8,0"
+                                     IsVisible="{Binding IsPlaying}"
+                                     Clicked="PlayBtn_OnClicked"/>
+                    </HorizontalStackLayout>
+                    <!-- Options form (replaces TableView) -->
+                    <VerticalStackLayout Padding="0,8,0,8"
+                                         Spacing="12">
+                        <Grid ColumnDefinitions="2*,4*"
+                              RowDefinitions="60"
+                              Padding="15,0">
+                            <Label Text="Duration"
+                                   ToolTipProperties.Text="(milliseconds) How long from beginning to end of the animation"
+                                   VerticalOptions="Center"/>
+                            <Label Text="{Binding Duration}"
+                                   InputTransparent="True"
+                                   Grid.Column="1"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Start"/>
+                            <Slider Grid.Column="1"
+                                    VerticalOptions="Center"
+                                    Value="{Binding Duration, Mode=TwoWay, FallbackValue=250}"
+                                    Maximum="3000"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="1*,3*"
+                              Padding="15,0">
+                            <Label Text="Rate"
+                                   ToolTipProperties.Text="(milliseconds) How long between animation frame updates"
+                                   VerticalOptions="Center"/>
+                            <Entry Text="{Binding Rate, Mode=TwoWay}"
+                                   Keyboard="Numeric"
+                                   Grid.Column="1"
+                                   VerticalOptions="Center"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="1*,3*"
+                              Padding="15,0">
+                            <Label Text="Loop"
+                                   ToolTipProperties.Text="(bool) Should the animation repeat"
+                                   VerticalOptions="Center"/>
+                            <Switch IsToggled="{Binding IsLooping, Mode=TwoWay}"
+                                    Grid.Column="1"
+                                    HorizontalOptions="Start"
+                                    OnColor="{StaticResource ThemePrimary}"/>
+                        </Grid>
+                    </VerticalStackLayout>
+
+                </VerticalStackLayout>
+            </ScrollView>
+        </Grid>
+    </ContentPage.Content>
+</ContentPage>

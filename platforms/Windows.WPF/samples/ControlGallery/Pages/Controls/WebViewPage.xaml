@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.WebViewPage"
+             Title="WebView">
+
+    <WebView Source="https://dot.net/maui"/>
+
+</ContentPage>

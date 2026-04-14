@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             xmlns:xct="http://xamarin.com/schemas/2020/toolkit"
+             xmlns:ios="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific;assembly=Microsoft.Maui.Controls"
+             ios:Page.UseSafeArea="true"
+             Shell.NavBarIsVisible="false"
+             x:Class="ControlGallery.Pages.Layouts.MarginPaddingPage"
+             Title="Margin &amp; Padding"
+             Background="Black"
+             Padding="50,50,50,50">
+    <ContentPage.Content>
+        
+            <Grid Background="#d1d1d1" Padding="50">
+                <BoxView Color="{StaticResource Primary}" 
+                    HorizontalOptions="Fill"
+                    VerticalOptions="Fill" />
+
+                <BoxView Color="{StaticResource Tertiary}" 
+                    Margin="50"
+                    HorizontalOptions="Fill"
+                    VerticalOptions="Fill" />
+            </Grid>
+
+    </ContentPage.Content>
+</ContentPage>

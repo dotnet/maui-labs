@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.PointerGesturePage"
+             Title="Pointer">
+    <ScrollView>
+        <StackLayout Margin="15" Spacing="8">
+            <Label Text="PointerOver VisualState" Style="{StaticResource Headline}"/>
+            <Button Text="Hover Me">
+                <VisualStateManager.VisualStateGroups>
+                     <VisualStateGroupList>
+                         <VisualStateGroup x:Name="CommonStates">
+                             <VisualState x:Name="Normal">
+                                 <VisualState.Setters>
+                                     <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                 </VisualState.Setters>
+                             </VisualState>
+                             <VisualState x:Name="PointerOver">
+                                 <VisualState.Setters>
+                                     <Setter Property="BackgroundColor" Value="{StaticResource Secondary}" />
+                                 </VisualState.Setters>
+                             </VisualState>
+                         </VisualStateGroup>
+                     </VisualStateGroupList>
+                 </VisualStateManager.VisualStateGroups>
+            </Button>
+
+            <Label Text="PointerGestureRecognizer" Style="{StaticResource Headline}"/>
+            <Button x:Name="btn" Text="Hover Me">
+                <Button.GestureRecognizers>
+                    <PointerGestureRecognizer PointerEntered="HoverBegan" PointerExited="HoverEnded" PointerMoved="HoverMoved" />
+                </Button.GestureRecognizers>
+            </Button>
+            <Label x:Name="positionLabel"/>
+            
+        </StackLayout>
+    </ScrollView>
+</ContentPage>

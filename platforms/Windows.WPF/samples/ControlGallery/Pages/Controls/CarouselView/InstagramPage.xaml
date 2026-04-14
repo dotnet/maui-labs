@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             Title="Instagram" 
+             x:Class="ControlGallery.Pages.Controls.CarouselView.InstagramPage">
+    <Grid RowDefinitions="420,30,*">
+        
+        <CarouselView x:Name="cv"
+                      Grid.Row="0"
+                      HorizontalScrollBarVisibility="Never"
+                      IndicatorView="indicatorView"
+                      CurrentItemChanged="cv_CurrentItemChanged"
+                     >
+            <CarouselView.ItemsSource>
+                <x:Array Type="{x:Type InstaPic}">
+                    <InstaPic ImageSource="insta_00.jpg"
+                                    Description="Glenn takes Dan and Dave for a ride!"/>
+                    <InstaPic ImageSource="insta_01.jpg"
+                                    Description="Arrived at the Antwerpen-Berchem station."/>
+                    <InstaPic ImageSource="insta_02.jpg"
+                                    Description="Streets of Antwerp."/>
+                    <InstaPic ImageSource="insta_03.jpg"
+                                    Description="The canals of Utrecht were amazing."/>
+                    <InstaPic ImageSource="insta_04.jpg"
+                                    Description="Chowing down on Bitterballen with Brandon and Alex in Utrecht."/>
+                </x:Array>
+            </CarouselView.ItemsSource>
+            <CarouselView.ItemTemplate>
+                <DataTemplate>
+                    <Image Source="{Binding ImageSource}" />
+                </DataTemplate>
+            </CarouselView.ItemTemplate>
+            <CarouselView.ItemsLayout>
+                <LinearItemsLayout
+                    Orientation="Horizontal"
+                    SnapPointsAlignment="Start"
+                    SnapPointsType="MandatorySingle"
+                    ItemSpacing="0"/>
+            </CarouselView.ItemsLayout>
+        </CarouselView>
+
+        <Grid Grid.Row="1" Margin="15,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackLayout Orientation="Horizontal" Spacing="10" VerticalOptions="Center">
+                <ImageButton Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.Heart},
+                                        Color=Black,
+                                        Size=22
+                                        }"
+                             BackgroundColor="Transparent"/>
+                <ImageButton Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.CommentAlt},
+                                        Color=Black,
+                                        Size=22
+                                        }"
+                             BackgroundColor="Transparent"/>
+                <ImageButton Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.PaperPlane},
+                                        Color=Black,
+                                        Size=22
+                                        }"
+                             BackgroundColor="Transparent"/>
+            </StackLayout>
+            
+            <IndicatorView 
+                Grid.ColumnSpan="3"
+                VerticalOptions="Center"
+                IndicatorColor="LightGray"
+                SelectedIndicatorColor="Black"
+                IndicatorSize="10" HorizontalOptions="Center"
+                x:Name="indicatorView"/>
+
+            <ImageButton Grid.Column="2" 
+                         HorizontalOptions="End"
+                         VerticalOptions="Center"
+                         Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.Bookmark},
+                                        Color=Black,
+                                        Size=22
+                                        }"
+                             BackgroundColor="Transparent"/>
+
+        </Grid>
+
+        <Label x:Name="Description"
+               Margin="15,0"
+               Grid.Row="2"
+               FontSize="16"
+               Text="Placeholder"/>
+
+    </Grid>
+</ContentPage>

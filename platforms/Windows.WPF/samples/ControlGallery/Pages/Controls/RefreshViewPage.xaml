@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.RefreshViewPage"
+    Title="RefreshView">
+    <ContentPage.BindingContext>
+        <RefreshViewDemoPageViewModel/>
+    </ContentPage.BindingContext>
+    <ContentPage.Resources>
+        <DataTemplate x:Key="ColorItemTemplate">
+
+            <Label Text="{Binding Name}"
+                   Padding="8,4"
+                   Margin="5"
+                   HeightRequest="120"
+                   WidthRequest="105"
+                   Background="{Binding Color}"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center"/>
+
+        </DataTemplate>
+    </ContentPage.Resources>
+    <StackLayout Margin="15"
+            Spacing="20">
+
+        <Label Text="Pull the items down to refresh the ScrollView."/>
+        <Label Text="{Binding Items.Count, StringFormat='Number of items: {0}'}"/>
+        <RefreshView IsRefreshing="{Binding IsRefreshing}"
+                     RefreshColor="Teal"
+                     Command="{Binding RefreshCommand}">
+            <ScrollView>
+                <VerticalStackLayout Spacing="10"
+                                     BindableLayout.ItemsSource="{Binding Items}"
+                                     BindableLayout.ItemTemplate="{StaticResource ColorItemTemplate}"/>
+            </ScrollView>
+        </RefreshView>
+    </StackLayout>
+</ContentPage>

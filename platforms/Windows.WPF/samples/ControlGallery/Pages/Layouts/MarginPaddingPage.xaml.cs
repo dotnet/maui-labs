@@ -1,0 +1,20 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+using Microsoft.Maui;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Controls.Xaml;
+
+namespace ControlGallery.Pages.Layouts
+{
+    public partial class MarginPaddingPage : ContentPage
+    {
+        public MarginPaddingPage()
+        {
+            InitializeComponent();
+        }
+    }
+}

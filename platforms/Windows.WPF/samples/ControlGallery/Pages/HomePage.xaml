@@ -1,0 +1,196 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="ControlGallery.Pages.HomePage"
+             x:DataType="HomeViewModel"
+             Title="Gallery">
+
+    <ContentPage.BindingContext>
+        <HomeViewModel/>
+    </ContentPage.BindingContext>
+
+    <ScrollView>
+        <Grid RowDefinitions="40,310, 40, 40, 40, *" RowSpacing="12" Margin="15">
+            <Label Text="From the  Blog" Style="{StaticResource Title1}"/>
+            <ScrollView Orientation="Horizontal" Grid.Row="1" HorizontalScrollBarVisibility="Never">
+                <HorizontalStackLayout
+                    BindableLayout.ItemsSource="{Binding Articles}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Border
+                                x:DataType="FeedItem"
+                                Stroke="Transparent"
+                                StrokeThickness="1"
+                                StrokeShape="{RoundRectangle CornerRadius=12}"
+                                Background="{StaticResource Gray200}"
+                                ToolTipProperties.Text="{Binding Link}"
+                               >
+                                <Grid RowDefinitions="8*,13*,Auto" HeightRequest="300" WidthRequest="300"
+                                      IsClippedToBounds="False"
+                                      Margin="0,-12,0,0"
+                                     >
+                                    <Label Text="{Binding Title}"
+                                               Background="{StaticResource Primary}"
+                                               Padding="12,8"
+                                               TextColor="White"
+                                               VerticalTextAlignment="End"
+                                               Style="{StaticResource Headline}"/>
+                                    
+                                        
+                                    <Label Text="{Binding Description}"
+                                            Grid.Row="1"
+                                        Padding="12,8"
+                                            TextType="Html"/>                                        
+                                    <Label Style="{StaticResource Footnote}"
+                                            Padding="12,8"
+                                            VerticalOptions="End"
+                                            Grid.Row="2">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="{Binding Author}"/>
+                                                <Span Text=""/>
+                                                <Span Text="{Binding PublishingDate, StringFormat='{0:MMMM dd, yyyy}'}"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                </Grid>
+                                <Border.Behaviors>
+                                    <CursorBehavior/>
+                                </Border.Behaviors>
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type HomeViewModel}}, Path=NavigateToCommand}"
+                                                          CommandParameter="{Binding Link}"/>
+                                </Border.GestureRecognizers>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalStackLayout>
+
+            </ScrollView>
+
+
+            <Label Text="Quick Links" Style="{StaticResource Title1}" Grid.Row="2"/>
+            <ScrollView Orientation="Horizontal" Grid.Row="3">
+                <HorizontalStackLayout>
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type QuickLink}">
+                            <QuickLink Title="GitHub" Hyperlink="https://github.com/dotnet/maui"/>
+                            <QuickLink Title="Learn Docs" Hyperlink="https://learn.microsoft.com/dotnet/maui"/>
+                            <QuickLink Title="Samples" Hyperlink="https://github.com/dotnet/maui-samples"/>
+                            <QuickLink Title="Blog" Hyperlink="https://devblogs.microsoft.com/dotnet"/>
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button 
+                                Style="{StaticResource PrimaryButtonOutlineIcon}"
+                                x:DataType="QuickLink"
+                                ImageSource="{FontImageSource Color={StaticResource Primary}, FontFamily=FontAwesome,
+                                    Glyph={x:Static IconFont.ExternalLinkAlt},Size=12}" 
+                                    Text="{Binding Title}"
+                                    Command="{Binding NavigateTo}"/>
+
+                            <!--<Border
+                                x:DataType="QuickLink"
+                                Stroke="Black"
+                                StrokeThickness="1"
+                                StrokeShape="{RoundRectangle CornerRadius=0}"
+                                Background="{StaticResource SecondaryBrush}"
+                                ToolTipProperties.Text="{Binding Hyperlink}"
+                               >
+                                <Grid
+                                    Margin="12,0"
+                                    ColumnDefinitions="5*,13*" RowDefinitions="34" HeightRequest="34" MinimumWidthRequest="120">
+                                    <Label Text="{x:Static IconFont.ExternalLinkAlt}"
+                                           FontFamily="FontAwesome"
+                                           TextColor="White"
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="Center"/>
+                                    <Label Text="{Binding Title}"
+                                           Grid.Column="1"
+                                           TextColor="White"
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="Fill"/>
+                                </Grid>
+                                <Border.Behaviors>
+                                    <CursorBehavior/>
+                                </Border.Behaviors>
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding NavigateTo}"/>
+                                </Border.GestureRecognizers>
+                            </Border>-->
+
+                        </DataTemplate>
+
+                    </BindableLayout.ItemTemplate>
+                    
+
+                    
+
+                </HorizontalStackLayout>
+
+            </ScrollView>
+
+            <Label
+                Grid.Row="4"
+                Text="About .NET MAUI" Style="{StaticResource Title1}"/>
+
+                <VerticalStackLayout Grid.Row="5"
+                Spacing="8">
+                    <Label Text="Latest Release" Style="{StaticResource Headline}"/>
+                    <BoxView Style="{StaticResource HRule}"/>
+                    <Label>
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span Text="{Binding LatestRelease.name, StringFormat='{0}'}"/>
+                                <Span Text="&#10;"/>
+                                <Span Text="{Binding LatestRelease.published_at, StringFormat='Released: {0:D}'}"/>
+                                
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+                    <Button Text="Release Notes" Style="{StaticResource BorderlessButton}"
+                    Padding="0" Margin="0"
+                    ImageSource="{FontImageSource Glyph={x:Static IconFont.ExternalLinkAlt}, FontFamily=FontAwesome, Size=12, Color={StaticResource Primary}}"
+                    Command="{Binding NavigateToCommand}"
+                                            CommandParameter="{Binding LatestRelease.html_url}"/>
+
+                    <Label Text="Build With .NET MAUI Version" Style="{StaticResource Headline}"/>
+                    <BoxView Style="{StaticResource HRule}"/>
+                    <Label Text='{Binding MauiVersion}'
+                            TextColor="{StaticResource Gray300}" />
+
+                </VerticalStackLayout>
+
+                <!-- <VerticalStackLayout> -->
+                <!--     <Label Text="Updated Documentation" Style="{StaticResource Headline}"/> -->
+                <!--     <BoxView Style="{StaticResource HRule}"/> -->
+                <!--     <Label> -->
+                <!--         <Label.FormattedText> -->
+                <!--             <FormattedString> -->
+                <!--                 <Span Text="Version: 7.0.52&#10;"/> -->
+                <!--                 <Span Text="Released: December 13, 2022&#10;"/> -->
+                <!--                 <Span Text="{x:Static IconFont.ExternalLinkAlt}" FontFamily="FontAwesome"/> -->
+                <!--                 <Span Text=" Release Notes" TextDecorations="Underline"/> -->
+                <!--             </FormattedString> -->
+                <!--         </Label.FormattedText> -->
+                <!--     </Label> -->
+                <!-- </VerticalStackLayout> -->
+                <!-- -->
+                <!-- <VerticalStackLayout> -->
+                <!--     <Label Text="Top Contributors" Style="{StaticResource Headline}"/> -->
+                <!--     <BoxView Style="{StaticResource HRule}"/> -->
+                <!--     <Label> -->
+                <!--         <Label.FormattedText> -->
+                <!--             <FormattedString> -->
+                <!--                 <Span Text="Version: 7.0.52&#10;"/> -->
+                <!--                 <Span Text="Released: December 13, 2022&#10;"/> -->
+                <!--                 <Span Text="{x:Static IconFont.ExternalLinkAlt}" FontFamily="FontAwesome"/> -->
+                <!--                 <Span Text=" Release Notes" TextDecorations="Underline"/> -->
+                <!--             </FormattedString> -->
+                <!--         </Label.FormattedText> -->
+                <!--     </Label> -->
+                <!-- </VerticalStackLayout> -->
+            
+
+        </Grid>
+    </ScrollView>
+</ContentPage>

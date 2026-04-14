@@ -1,0 +1,367 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!-- <?xaml-comp compile="true" ?> -->
+<ResourceDictionary>
+
+    <ControlPageTemplate x:Key="ControlPageTemplate"/>
+
+    <!-- Shared CollectionView templates -->
+    <DataTemplate x:Key="SharedCollectionViewGroupHeaderTemplate">
+        <Grid Padding="8"
+              BackgroundColor="Transparent">
+            <Label Text="{Binding Title}"
+                   FontAttributes="Bold"/>
+        </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="SharedCollectionViewItemTemplate">
+        <Grid Padding="12"
+              ColumnDefinitions="Auto,*,Auto">
+            <!-- Icon column (optional) -->
+            <Label Text="{Binding Icon}"
+                   FontFamily="{x:Static FluentUI.FontFamily}"
+                   VerticalOptions="Center"
+                   Margin="0,0,8,0"/>
+
+            <!-- Content column -->
+            <StackLayout Spacing="2"
+                         Grid.Column="1">
+                <Label Text="{Binding Title}"
+                       FontSize="16"/>
+                <Label Text="{Binding Description}"
+                       FontSize="13"
+                       TextColor="Gray"/>
+            </StackLayout>
+
+            <!-- Chevron accessory using FluentUI icon font -->
+            <Label Grid.Column="2"
+                   VerticalOptions="Center"
+                   TextColor="Gray"
+                   FontSize="20"
+                   Text="{x:Static FluentUI.chevron_right_20_regular}"
+                   FontFamily="{x:Static FluentUI.FontFamily}"/>
+
+            <Grid.GestureRecognizers>
+                <!-- Use the NavItem.NavigateTo command so templates are page-agnostic -->
+                <TapGestureRecognizer Command="{Binding NavigateTo}"
+                                      CommandParameter="{Binding .}"/>
+            </Grid.GestureRecognizers>
+        </Grid>
+    </DataTemplate>
+
+    <x:Double x:Key="sizeNone">0</x:Double>
+    <x:Double x:Key="size20">2</x:Double>
+    <x:Double x:Key="size40">4</x:Double>
+    <x:Double x:Key="size60">6</x:Double>
+    <x:Double x:Key="size80">8</x:Double>
+    <x:Double x:Key="size100">10</x:Double>
+    <x:Double x:Key="size120">12</x:Double>
+    <x:Double x:Key="size160">16</x:Double>
+    <x:Double x:Key="size200">20</x:Double>
+    <x:Double x:Key="size240">24</x:Double>
+    <x:Double x:Key="size280">28</x:Double>
+    <x:Double x:Key="size320">32</x:Double>
+    <x:Double x:Key="size360">36</x:Double>
+    <x:Double x:Key="size400">40</x:Double>
+    <x:Double x:Key="size480">48</x:Double>
+    <x:Double x:Key="size520">52</x:Double>
+    <x:Double x:Key="size560">56</x:Double>
+
+    <Color x:Key="DarkBackground">#17171a</Color>
+    <Color x:Key="LightOnDarkBackground">#C3C3C3</Color>
+    <Color x:Key="LightBackground">#F2F2F2</Color>
+    <Color x:Key="DarkOnLightBackground">#0D0D0D</Color>
+
+    <FontImageSource x:Key="IconLight"
+                     Glyph="{x:Static FluentUI.weather_sunny_28_regular}"
+                     FontFamily="{x:Static FluentUI.FontFamily}"
+                     Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}"
+                     Size="{StaticResource size240}"/>
+    <FontImageSource x:Key="IconDark"
+                     Glyph="{x:Static FluentUI.weather_moon_28_regular}"
+                     FontFamily="{x:Static FluentUI.FontFamily}"
+                     Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}"
+                     Size="{StaticResource size240}"/>
+    <FontImageSource x:Key="IconPlay"
+                     Glyph="{x:Static FluentUI.play_24_regular}"
+                     FontFamily="{x:Static FluentUI.FontFamily}"
+                     Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}"
+                     Size="{StaticResource size240}"/>
+    <FontImageSource x:Key="IconPause"
+                     Glyph="{x:Static FluentUI.pause_24_regular}"
+                     FontFamily="{x:Static FluentUI.FontFamily}"
+                     Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}"
+                     Size="{StaticResource size240}"/>
+    <FontImageSource x:Key="IconReset"
+                     Glyph="{x:Static FluentUI.arrow_reset_24_regular}"
+                     FontFamily="{x:Static FluentUI.FontFamily}"
+                     Color="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}"
+                     Size="{StaticResource size240}"/>
+
+
+    <Style TargetType="Label"
+           x:Key="LargeTitle">
+        <Setter Property="FontSize"
+                Value="30"/>
+        <Setter Property="FontFamily"
+                Value="{StaticResource BoldFont}"/>
+    </Style>
+    <Style TargetType="Label"
+           x:Key="Title1">
+        <Setter Property="FontSize"
+                Value="26"/>
+        <Setter Property="FontFamily"
+                Value="{StaticResource BoldFont}"/>
+    </Style>
+    <Style TargetType="Label"
+           x:Key="Headline">
+        <Setter Property="FontSize"
+                Value="17"/>
+        <Setter Property="FontFamily"
+                Value="{StaticResource BoldFont}"/>
+    </Style>
+    <Style TargetType="Label"
+           x:Key="Subhead">
+        <Setter Property="FontSize"
+                Value="15"/>
+    </Style>
+    <Style TargetType="Label"
+           x:Key="Footnote">
+        <Setter Property="FontSize"
+                Value="16"/>
+    </Style>
+
+    <Style TargetType="Label"
+           x:Key="TypographyMeta">
+        <Setter Property="FontSize"
+                Value="12"/>
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Dark={StaticResource Text_Dark}, Light={StaticResource Text_Light}}"/>
+    </Style>
+
+    <!-- hover bg style -->
+    <Style TargetType="Button"
+           Class="hoverable">
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter
+                                Property="Background"
+                                Value="{StaticResource Error}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+
+    </Style>
+
+    <Style TargetType="RadioButton">
+        <Setter Property="CursorBehavior.AttachBehavior"
+                Value="True"/>
+
+    </Style>
+
+    <Style TargetType="Button">
+        <Setter Property="TextColor"
+                Value="{StaticResource TextOnSolid_Light}"/>
+        <Setter Property="FontFamily"
+                Value="{StaticResource RegularFont}"/>
+        <Setter Property="CornerRadius"
+                Value="8"/>
+        <Setter Property="Padding"
+                Value="14,10"/>
+        <Setter Property="HorizontalOptions"
+                Value="Start"/>
+        <Setter Property="CursorBehavior.AttachBehavior"
+                Value="True"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter
+                                Property="BackgroundColor"
+                                Value="{StaticResource Accent}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Normal">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor"
+                                    Value="{StaticResource Primary}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor"
+                                    Value="{StaticResource Neutral}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button"
+           x:Key="PrimaryButtonOutline">
+        <Setter Property="CornerRadius"
+                Value="8"/>
+        <Setter Property="Background"
+                Value="Transparent"/>
+        <Setter Property="TextColor"
+                Value="{StaticResource Primary}"/>
+        <Setter Property="BorderWidth"
+                Value="1"/>
+        <Setter Property="BorderColor"
+                Value="{StaticResource Primary}"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal">
+                        <VisualState.Setters>
+                            <Setter Property="Background"
+                                    Value="Transparent"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="BorderColor"
+                                    Value="{StaticResource Neutral}"/>
+                            <Setter Property="TextColor"
+                                    Value="{StaticResource Neutral}"/>
+                            <Setter Property="Background"
+                                    Value="Transparent"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button"
+           x:Key="PrimaryButtonOutlineIcon"
+           BasedOn="{StaticResource PrimaryButtonOutline}">
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter
+                                Property="Background"
+                                Value="{StaticResource SecondaryBrush}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Normal">
+                        <VisualState.Setters>
+                            <Setter Property="Background"
+                                    Value="Transparent"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="BorderColor"
+                                    Value="{StaticResource Neutral}"/>
+                            <Setter Property="TextColor"
+                                    Value="{StaticResource Neutral}"/>
+                            <Setter Property="Background"
+                                    Value="Transparent"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button"
+           x:Key="SecondaryButtonOutline"
+           BasedOn="{StaticResource PrimaryButtonOutline}">
+        <Setter Property="Padding"
+                Value="4"/>
+    </Style>
+    <Style TargetType="Button"
+           x:Key="TertiaryButtonOutline"
+           BasedOn="{StaticResource PrimaryButtonOutline}">
+    </Style>
+    <Style TargetType="Button"
+           x:Key="BorderlessButton">
+        <Setter Property="Background"
+                Value="Transparent"/>
+        <Setter Property="TextColor"
+                Value="{StaticResource Primary}"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="TextColor"
+                                    Value="{StaticResource Neutral}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="BoxView"
+           x:Key="HRule">
+        <Setter Property="Color"
+                Value="{AppThemeBinding 
+                Dark={StaticResource Neutral},
+                Light={StaticResource NeutralDarker}}"/>
+        <Setter Property="HeightRequest"
+                Value="1"/>
+    </Style>
+
+    <Style TargetType="HorizontalStackLayout">
+        <Setter Property="Spacing"
+                Value="8"/>
+    </Style>
+    <Style TargetType="VerticalStackLayout">
+        <Setter Property="Spacing"
+                Value="8"/>
+    </Style>
+
+    <Style x:Key="MainContainer"
+           TargetType="StackLayout">
+        <Setter Property="Padding"
+                Value="{StaticResource PageInset}"/>
+        <Setter Property="Spacing"
+                Value="8"/>
+    </Style>
+
+    <Style x:Key="Hyperlink"
+           TargetType="Label">
+        <Setter Property="CursorBehavior.AttachBehavior"
+                Value="True"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter
+                                Property="TextDecorations"
+                                Value="Underline"/>
+                            <Setter
+                                Property="TextColor"
+                                Value="{StaticResource Accent}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Normal">
+                        <VisualState.Setters>
+                            <Setter
+                                Property="TextDecorations"
+                                Value="None"/>
+                            <Setter
+                                Property="TextColor"
+                                Value="{StaticResource Black}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+
+                </VisualStateGroup>
+            </VisualStateGroupList>
+
+        </Setter>
+
+    </Style>
+</ResourceDictionary>

@@ -1,0 +1,86 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.ShadowPage"
+             Title="Shadow">
+    <ContentPage.Resources>
+        <Shadow x:Key="BasicShadow"
+                            Brush="{StaticResource BlackBrush}"
+                            Opacity="0.8"
+                            Radius="10"
+                            Offset="10,10"/>
+    </ContentPage.Resources>
+    <ContentPage.Content>
+        <ScrollView>
+            <VerticalStackLayout Margin="15" Spacing="24">
+                <Label Text="On a layout"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <VerticalStackLayout Padding="12" Margin="20" 
+                                     Background="#f1f1f1"
+                                     HorizontalOptions="Start"
+                                     WidthRequest="300" HeightRequest="45" VerticalOptions="Start"
+                                     Shadow="{StaticResource BasicShadow}">
+                    <Label Text="Padding=12, Margin=20"/>
+                </VerticalStackLayout>
+
+                <Label Text="On a label"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                
+                <Label Text="I Have A Shadow" 
+                       Shadow="{StaticResource BasicShadow}"/>
+                
+                <Label Text="Image with clip"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <Image Source="insta_04.jpg"
+                       Aspect="AspectFill"
+                       HeightRequest="120"
+                       WidthRequest="120"
+                       HorizontalOptions="Start"
+                       Shadow="{StaticResource BasicShadow}">
+                    <Image.Clip>
+                        <EllipseGeometry RadiusX="60"
+                                         RadiusY="60"
+                                         Center="60,60"/>
+                    </Image.Clip>
+                </Image>
+
+                <Label Text="Shape"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                
+                <!-- Polygon added programmatically due to XAML parsing issue -->
+                <StackLayout x:Name="shapePolygonContainer"
+                    Shadow="{StaticResource BasicShadow}"
+                    HorizontalOptions="Start" />
+                
+                <Label Text="Compound shapes"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <Grid x:Name="compoundShapesGrid"
+                    HeightRequest="50" WidthRequest="50"
+                    HorizontalOptions="Start"
+                    Shadow="{StaticResource BasicShadow}">
+                    <!-- Polygon children added programmatically -->
+                </Grid>
+
+                <Label Text="Path"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <Path 
+                    HeightRequest="100" WidthRequest="100" 
+                    Fill="{StaticResource PrimaryBrush}"
+                    Shadow="{StaticResource BasicShadow}"
+                    Data="M50,0 L50,50 L25,50 C11.1928813,50 0,38.8071187 0,25 C0,11.3309524 10.9701429,0.224119049 24.5865793,0.00334928573 L25,0 L50,0 Z" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

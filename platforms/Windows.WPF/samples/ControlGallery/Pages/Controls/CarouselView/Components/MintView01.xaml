@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ContentView
+       xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       x:Class="CarouselGallery.Views.Components.MintView01">
+       <Grid Margin="0,15"
+                     RowDefinitions="350,*">
+              <Border BackgroundColor="#66D0EB">
+                     <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="12"/>
+                     </Border.StrokeShape>
+                     <Border.Shadow>
+                            <Shadow Brush="Black"
+                                          Offset="20,20"
+                                          Radius="40"
+                                          Opacity="0.8"/>
+                     </Border.Shadow>
+                     <StackLayout Spacing="15">
+                            <Image Source="{FontImage FontFamily=FontAwesome, Glyph={x:Static IconFont.CalendarWeek}, Size=64,Color='#4E9DB5'}"
+                                          HorizontalOptions="Center"/>
+                            <Label Text="BILLS"
+                                          TextColor="White"
+                                          FontSize="16"
+                                          HorizontalTextAlignment="Center"/>
+                            <Label Text="Nice! You have no bills due for the next 16 days."
+                                          TextColor="White"
+                                          LineBreakMode="WordWrap"
+                                          FontAttributes="Bold"
+                                          FontSize="24"
+                                          HorizontalTextAlignment="Center"/>
+                            <Label Text="Looks like someone is on top of their bills. Well done my friend."
+                                          TextColor="White"
+                                          LineBreakMode="WordWrap"
+                                          FontSize="14"
+                                          HorizontalTextAlignment="Center"/>
+                     </StackLayout>
+
+              </Border>
+
+              <StackLayout Margin="0,30"
+                            Grid.Row="1"
+                            Spacing="30">
+                     <Label Text="Upcoming bills"
+                                   FontAttributes="Bold"
+                                   FontSize="28"
+                                   TextColor="Black"
+                                   HorizontalTextAlignment="Center"/>
+                     <Image Source="{FontImage FontFamily=FontAwesome, Glyph={x:Static IconFont.MoneyBillWave}, Color='#73BFC0', Size=80}"/>
+
+                     <Label Text="No bills to worry about right now."
+                                   FontSize="Small"
+                                   TextColor="DarkGray"
+                                   HorizontalTextAlignment="Center"/>
+
+                     <Button Text="See Activity"
+                                   Margin="0,0,0,100"
+                                   BackgroundColor="White"
+                                   BorderColor="#66D0EB"
+                                   TextColor="#66D0EB"
+                                   BorderWidth="2"
+                                   CornerRadius="20"
+                                   HeightRequest="44"
+                                   Clicked="Button_Clicked"/>
+              </StackLayout>
+
+       </Grid>
+</ContentView>

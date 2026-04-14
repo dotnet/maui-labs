@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.Layouts.CssCatalogItemsPage"
+    Title="CSS Catalog Items">
+    <ContentPage.Resources>
+        <StyleSheet Source="CatalogItemsStyles.css"/>
+
+        <Style TargetType="Border">
+            <Setter Property="Stroke"
+                    Value="Blue"/>
+            <Setter Property="StrokeShape">
+                <Setter.Value>
+                    <RoundRectangle CornerRadius="15"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Text"
+                    Value="LEARN MORE"/>
+            <Setter Property="CornerRadius"
+                    Value="20"/>
+        </Style>
+    </ContentPage.Resources>
+
+    <ScrollView Orientation="Both">
+        <FlexLayout>
+            <Border>
+                <FlexLayout Direction="Column">
+                    <Label Text="Seated Monkey"
+                            StyleClass="header"/>
+                    <Label Text="This monkey is laid back and relaxed, and likes to watch the world go by."/>
+                    <Label Text="  &#x2022; Doesn't make a lot of noise"/>
+                    <Label Text="  &#x2022; Often smiles mysteriously"/>
+                    <Label Text="  &#x2022; Sleeps sitting up"/>
+                    <Image Source="seatedmonkey.jpg"/>
+                    <Label StyleClass="empty"/>
+                    <Button/>
+                </FlexLayout>
+            </Border>
+
+            <Border>
+                <FlexLayout Direction="Column">
+                    <Label Text="Banana Monkey"
+                            StyleClass="header"/>
+                    <Label Text="Watch this monkey eat a giant banana."/>
+                    <Label Text="  &#x2022; More fun than a barrel of monkeys"/>
+                    <Label Text="  &#x2022; Banana not included"/>
+                    <Image Source="banana.jpg"/>
+                    <Label StyleClass="empty"/>
+                    <Button/>
+                </FlexLayout>
+            </Border>
+
+            <Border>
+                <FlexLayout Direction="Column">
+                    <Label Text="Face-Palm Monkey"
+                            StyleClass="header"/>
+                    <Label Text="This monkey reacts appropriately to ridiculous assertions and actions."/>
+                    <Label Text="  &#x2022; Cynical but not unfriendly"/>
+                    <Label Text="  &#x2022; Seven varieties of grimaces"/>
+                    <Label Text="  &#x2022; Doesn't laugh at your jokes"/>
+                    <Image Source="facepalm.jpg"/>
+                    <Label StyleClass="empty"/>
+                    <Button/>
+                </FlexLayout>
+            </Border>
+        </FlexLayout>
+    </ScrollView>
+</ContentPage>

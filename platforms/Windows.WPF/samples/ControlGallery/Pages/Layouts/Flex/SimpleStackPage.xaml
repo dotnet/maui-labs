@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.Layouts.SimpleStackPage"
+             Title="Simple Stack">
+    
+    <FlexLayout Direction="Column"
+                AlignItems="Center"
+                JustifyContent="SpaceEvenly">
+        
+        <Label Text="FlexLayout in Action"
+               FontSize="Large" />
+
+        <Image Source="seatedmonkey.jpg" />
+
+        <Button Text="Do-Nothing Button" />
+
+        <Label Text="Another Label" />
+    </FlexLayout>
+</ContentPage>

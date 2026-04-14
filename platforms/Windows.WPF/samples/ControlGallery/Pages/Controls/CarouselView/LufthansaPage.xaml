@@ -1,0 +1,210 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage Title="Lufthansa"
+             Shell.ForegroundColor="White"
+             Shell.BackgroundColor="Black"
+             x:Class="ControlGallery.Pages.Controls.CarouselView.LufthansaPage">
+    <ContentPage.Content>
+        <Grid Margin="0,15,0,0" RowDefinitions="4*,30,1*">
+
+            <CarouselView x:Name="cv"
+                          IndicatorView="indicatorView"
+                          HorizontalScrollBarVisibility="Never"
+                          PeekAreaInsets="40">
+                <CarouselView.ItemsSource>
+                    <x:Array Type="{x:Type x:String}">
+                        <x:String>rei_01.jpg</x:String>
+                        <x:String>rei_02.jpg</x:String>
+                        <x:String>rei_03.jpg</x:String>
+                        <x:String>rei_04.jpg</x:String>
+                    </x:Array>
+                </CarouselView.ItemsSource>
+                <CarouselView.ItemsLayout>
+                    <LinearItemsLayout ItemSpacing="10"
+                                       SnapPointsAlignment="Center"
+                                       SnapPointsType="Mandatory"
+                                       Orientation="Horizontal"/>
+                </CarouselView.ItemsLayout>
+                <CarouselView.ItemTemplate>
+                    <DataTemplate>
+                        <Border BackgroundColor="#feab05"
+                               StrokeShape="RoundRectangle 12"
+                               Padding="24">
+                            <Grid RowDefinitions="40,*,*">
+                                <FlexLayout Grid.Row="0"
+                                            Direction="Row"
+                                            AlignItems="End"
+                                            JustifyContent="Start"
+                                            VerticalOptions="Start"
+                                            Wrap="NoWrap">
+
+                                    <Image Source="logo_lufthansa.jpg"/>
+                                    <BoxView BackgroundColor="Transparent"
+                                             HeightRequest="1"
+                                             FlexLayout.Grow="1"/>
+                                    <Label Margin="0,0,30,0">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="FLIGHT&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="2711"
+                                                      FontSize="18"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="GATE&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="E33"
+                                                      FontSize="18"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                </FlexLayout>
+
+                                <FlexLayout Grid.Row="1"
+                                            Margin="0,30,0,0"
+                                            Direction="Row"
+                                            AlignItems="Center"
+                                            AlignContent="Start"
+                                            JustifyContent="SpaceBetween"
+                                            Wrap="Wrap">
+                                    <Label FlexLayout.Basis="33%">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="SOFIA&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="SOF"
+                                                      FontSize="36"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+
+                                    <Image FlexLayout.Basis="33%"
+                                        Source="icon_plane.jpg"/>
+
+                                    <Label FlexLayout.Basis="33%">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="MUNICH&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="MUC"
+                                                      FontSize="36"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+
+                                    <Label Margin="0,15">
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="FLIGHT&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="LH1703"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="DATE&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="15NOV18"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="BOARDING&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="13:15"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="CLASS&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="Economy"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="DATA&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="API"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="NAME OF PASSENGER&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="Ortinau, Davidmark"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                    <Label>
+                                        <Label.FormattedText>
+                                            <FormattedString>
+                                                <Span Text="Status&#x0a;"
+                                                      FontSize="10"
+                                                      TextColor="#999999"/>
+                                                <Span Text="M/M"
+                                                      FontSize="16"
+                                                      TextColor="Black"/>
+                                            </FormattedString>
+                                        </Label.FormattedText>
+                                    </Label>
+                                </FlexLayout>
+
+                                <Image Source="qr_code.jpg"
+                                       Grid.Row="2"
+                                       VerticalOptions="End"
+                                       HorizontalOptions="Center"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CarouselView.ItemTemplate>
+            </CarouselView>
+
+            <IndicatorView 
+                Grid.Row="1"
+                IndicatorColor="LightGray"
+                SelectedIndicatorColor="Black"
+                IndicatorSize="10" HorizontalOptions="Center"
+                x:Name="indicatorView"/>
+        </Grid>
+    </ContentPage.Content>
+</ContentPage>

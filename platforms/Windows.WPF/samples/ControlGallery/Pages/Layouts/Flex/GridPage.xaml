@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="Flexibility.Shared.GridPage"
+             Title="Grid Layout"
+            >
+    <ContentPage.Resources>
+        <Style x:Key="gridCell" TargetType="Label">
+            <Setter Property="HeightRequest" Value="80"/>
+            <Setter Property="FlexLayout.Grow" Value="0"/>
+            <Setter Property="VerticalTextAlignment" Value="Center"/>
+            <Setter Property="HorizontalTextAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="Small"/>
+            <Setter Property="TextColor" Value="#556"/>
+            <Setter Property="BackgroundColor" Value="#eed"/>
+        </Style> 
+        <Style x:Key="full" TargetType="Label"
+               BasedOn="{StaticResource gridCell}">
+            <Setter Property="FlexLayout.Basis" Value="100%"/>
+        </Style>
+        <Style x:Key="half" TargetType="Label"
+               BasedOn="{StaticResource gridCell}">
+            <Setter Property="FlexLayout.Basis" Value="50%"/>
+            <Setter Property="BackgroundColor" Value="CornflowerBlue"/>
+        </Style>
+        <Style x:Key="third" TargetType="Label"
+               BasedOn="{StaticResource gridCell}">
+            <Setter Property="FlexLayout.Basis" Value="33.33%"/>
+            <Setter Property="BackgroundColor" Value="Pink"/>
+        </Style>
+        <Style x:Key="fourth" TargetType="Label"
+               BasedOn="{StaticResource gridCell}">
+            <Setter Property="FlexLayout.Basis" Value="25%"/>
+            <Setter Property="BackgroundColor" Value="LightBlue"/>
+        </Style>
+        <Style x:Key="auto" TargetType="Label"
+               BasedOn="{StaticResource gridCell}">
+            <Setter Property="FlexLayout.Grow" Value="1"/>
+            <Setter Property="BackgroundColor" Value="Coral"/>
+        </Style>
+    </ContentPage.Resources>
+     <ScrollView>
+        <StackLayout>
+            <FlexLayout Wrap="Wrap" 
+                        Direction="Row">
+              <Label Style="{StaticResource full}" Text="Full"/>
+              <Label Style="{StaticResource half}" Text="1/2" />
+              <Label Style="{StaticResource half}" Text="1/2" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource half}" Text="1/2" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource third}" Text="1/3" />
+              <Label Style="{StaticResource third}" Text="1/3" />
+              <Label Style="{StaticResource third}" Text="1/3" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource fourth}" Text="1/4" />
+              <Label Style="{StaticResource third}" Text="1/3" />
+              <Label Style="{StaticResource auto}" Text="left-over" />
+            </FlexLayout>
+        </StackLayout>
+    </ScrollView>
+</ContentPage>

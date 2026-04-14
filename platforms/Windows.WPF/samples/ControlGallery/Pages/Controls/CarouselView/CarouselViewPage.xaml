@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.CarouselViewPage"
+    Title="Layouts">
+    <ContentPage.Content>
+        <ScrollView>
+
+            <VerticalStackLayout Margin="15"
+                    Spacing="8">
+                <Label Text="Carousel Samples"
+                        Style="{StaticResource Headline}"
+                        VerticalOptions="Center"/>
+                <HorizontalWrapLayout Margin="0,0,0,60"
+                        Spacing="12">
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="Basic Carousel"
+                                     Destination="{x:Type BasicCarouselPage}"/>
+                            <NavItem Title="Instagram"
+                                     Destination="{x:Type InstagramPage}"/>
+                            <NavItem Title="Lufthansa"
+                                     Destination="{x:Type LufthansaPage}"/>
+                            <NavItem Title="Marriott Bonvoy"
+                                     Destination="{x:Type MarriottPage}"/>
+                            <NavItem Title="Mint"
+                                     Destination="{x:Type MintPage}"/>
+                            <NavItem Title="REI"
+                                     Destination="{x:Type REIPage}"/>
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}">
+                                <Button.Behaviors>
+                                    <CursorBehavior/>
+                                </Button.Behaviors>
+
+                            </Button>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalWrapLayout>
+
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

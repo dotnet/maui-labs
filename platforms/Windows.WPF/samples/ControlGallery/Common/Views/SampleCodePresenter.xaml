@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+             x:Class="ControlGallery.Common.Views.SampleCodePresenter">
+
+    <Grid RowDefinitions="Auto,Auto">
+        <!--<VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SampleProgrammingLanguageState">
+                <VisualState x:Name="XAMLSample">
+                    <VisualState.Setters>
+                        <Setter Target="SampleHeader.Text" Value="XAML"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="CSharpSample">
+                    <VisualState.Setters>
+                        <Setter Target="SampleHeader.Text" Value="C#"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup x:Name="ConfirmDialogGroups">
+                <VisualState x:Name="ConfirmationDialogHidden"/>
+                <VisualState x:Name="ConfirmationDialogVisible">
+                    <VisualState.Setters>
+                        <Setter Target="CopyCodeButton.IsEnabled" Value="False"/>
+                        <Setter Target="CopyConfirmationTeachingTip.Visibility" Value="Visible"/>
+                        <Setter Target="CopyConfirmationTeachingTip.IsOpen" Value="True"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>-->
+
+        <Label x:Name="SampleHeader"/>
+        <ScrollView
+                x:Name="CodeScrollViewer" Padding="0,4,0,10"
+                HorizontalScrollBarVisibility="Always" Grid.Row="1"
+                VerticalScrollBarVisibility="Never">
+            <ContentView x:Name="CodePresenter" Loaded="CodePresenter_Loaded"/>
+        </ScrollView>
+        <Button x:Name="CopyCodeButton" Grid.Row="0"
+                Text="{x:Static IconFont.Copy}"
+                FontFamily="FontAwesome"
+                SemanticProperties.Description="Copy sample code"
+                ToolTipProperties.Text="Copy sample code"
+                VerticalOptions="Start"
+                HorizontalOptions="End"
+                Clicked="CopyCodeButton_Click" Padding="4"/>
+
+        <!--<TeachingTip x:Name="CopyConfirmationTeachingTip" x:Load="False" Visibility="Collapsed"
+            Target="{x:Bind CopyCodeButton}" Subtitle="Copied!" IsLightDismissEnabled="True"/>-->
+    </Grid>
+</ContentView>
+

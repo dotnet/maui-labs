@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.MenuBarPage"
+             Title="MenuBar">
+    <ContentPage.Content>
+        <ScrollView>
+            <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Android='15', Default='30'}">
+                <Label Text="MenuBar" Style="{StaticResource Headline}"/>
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <Label Text="On Windows menus appear at the top of the application window. On macOS, the menus appear in the status bar."/>
+            </StackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

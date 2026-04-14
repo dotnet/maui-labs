@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.ContextMenuPage"
+             Title="ContextMenu">
+    <ScrollView>
+        <StackLayout Margin="15" Spacing="16">
+            <Label Text="ContextMenu" Style="{StaticResource Headline}"/>
+            <Label Text="Right-click the Button for additional actions"/>
+            <Button
+                x:Name="CounterBtn"
+                Text="{Binding CounterValue, StringFormat='You clicked {0} time(s).'}"
+                ToolTipProperties.Text="More than meets the eye"
+                SemanticProperties.Hint="Counts the number of times you click"
+                Clicked="OnCounterClicked"
+                HorizontalOptions="Start">
+                <FlyoutBase.ContextFlyout>
+                    <MenuFlyout>
+                            <MenuFlyoutItem Text="Increment by 10" Clicked="OnIncrementMenuItemClicked" CommandParameter="10"></MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Increment by 20" Clicked="OnIncrementMenuItemClicked" CommandParameter="20"></MenuFlyoutItem>
+                            <MenuFlyoutSubItem Text="More options">
+                                <MenuFlyoutItem Text="Increment by 1,000!" Clicked="OnIncrementMenuItemClicked" CommandParameter="1000"></MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Increment by 1,000,000!" Clicked="OnIncrementMenuItemClicked" CommandParameter="1000000"></MenuFlyoutItem>
+                            </MenuFlyoutSubItem>
+                        </MenuFlyout>
+
+                </FlyoutBase.ContextFlyout>
+                </Button>
+        </StackLayout>
+    </ScrollView>
+</ContentPage>

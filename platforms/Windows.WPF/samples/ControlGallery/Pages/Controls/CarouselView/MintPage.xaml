@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             Title="Mint"
+             x:Class="ControlGallery.Pages.Controls.CarouselView.MintPage">
+
+    <Grid RowDefinitions="*,90">
+        <CarouselView x:Name="cv" Grid.RowSpan="2"
+                      Position="2"
+                      IndicatorView="indicatorView"
+                      PeekAreaInsets="60">
+            <CarouselView.ItemsSource>
+                <x:Array Type="{x:Type ContentView}">
+                    <MintView01/>
+                    <MintView02/>
+                    <MintView01/>
+                    <MintView02/>
+                    <MintView01/>
+                    <MintView02/>
+                </x:Array>
+            </CarouselView.ItemsSource>
+            <CarouselView.ItemTemplate>
+                <DataTemplate>
+                    <ScrollView VerticalScrollBarVisibility="Never">
+                        <ContentView Content="{Binding .}"/>
+                    </ScrollView>
+                </DataTemplate>
+            </CarouselView.ItemTemplate>
+            <CarouselView.ItemsLayout>
+                <LinearItemsLayout
+                    Orientation="Horizontal"
+                    SnapPointsAlignment="Center"
+                    SnapPointsType="MandatorySingle"
+                    ItemSpacing="15"/>
+            </CarouselView.ItemsLayout>
+        </CarouselView>
+
+        <Border Grid.Row="1" HorizontalOptions="Center" 
+               VerticalOptions="Start"
+               StrokeShape="RoundRectangle 20">
+            <IndicatorView 
+                IndicatorColor="LightGray"
+                SelectedIndicatorColor="Black"
+                IndicatorSize="10" HorizontalOptions="Center"
+                x:Name="indicatorView"/>
+        </Border>
+        
+    </Grid>
+    
+</ContentPage>

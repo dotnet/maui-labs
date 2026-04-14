@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             xmlns:xct="http://xamarin.com/schemas/2020/toolkit"
+             x:Class="ControlGallery.Pages.Layouts.CascadeLayoutPage"
+             Title="CascadeLayout">
+    <ContentPage.Resources>
+        <Style TargetType="Border">
+            <Setter Property="WidthRequest" Value="75"/>
+            <Setter Property="HeightRequest" Value="75"/>
+            <Setter Property="Background" Value="{StaticResource Gray950Brush}"/>
+            <Setter Property="Stroke" Value="{StaticResource Gray300Brush}"/>
+            <Setter Property="StrokeThickness" Value="1"/>
+            <Setter Property="StrokeShape" Value="{Rectangle}"/>
+        </Style>
+    </ContentPage.Resources>
+    <ScrollView>
+        <CascadeLayout Spacing="20" Margin="15">
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+            <Border />
+        </CascadeLayout>
+    </ScrollView>
+</ContentPage>

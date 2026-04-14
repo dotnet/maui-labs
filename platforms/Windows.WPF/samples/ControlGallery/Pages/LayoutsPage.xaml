@@ -1,0 +1,206 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="ControlGallery.Pages.LayoutsPage"
+             Title="Layouts">
+    <ContentPage.Content>
+        <ScrollView>
+
+            <VerticalStackLayout Margin="15" Spacing="8">
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_absolutelayout.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="AbsoluteLayout" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+                <HorizontalWrapLayout Margin="0,0,0,60" Spacing="12">
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="Bouncing Text"
+                                   Destination="{x:Type BouncingTextDemoPage}"/>
+                        <NavItem Title="Chessboard"
+                                   Destination="{x:Type ChessboardDemoPage}"/>
+                        <NavItem Title="Proportional Coordinate Calc"
+                                   Destination="{x:Type ProportionalCoordinateCalcDemoPage}"/>
+                        <NavItem Title="Proportional"
+                                   Destination="{x:Type ProportionalDemoPage}"/>
+                        <NavItem Title="Simple Overlay"
+                                   Destination="{x:Type SimpleOverlayDemoPage}"/>
+                        <NavItem Title="Stylish Header"
+                                   Destination="{x:Type StylishHeaderDemoPage}"/>
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button 
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}">
+                                <Button.Behaviors>
+                                    <CursorBehavior />
+                                </Button.Behaviors>
+
+                            </Button>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalWrapLayout>
+
+                <!-- <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_contentview.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="ContentView" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout> -->
+
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_flexlayout.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="FlexLayout" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+                <HorizontalWrapLayout Margin="0,0,0,60" Spacing="12">
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="Achievements Sample"
+                                   Destination="{x:Type AchievementsPage}"/>
+                            <NavItem Title="Alignment Sample"
+                                   Destination="{x:Type AlignmentPage}"/>
+                            <NavItem Title="Grid Sample"
+                                   Destination="{x:Type GridPage}"/>
+                            <NavItem Title="Login Sample"
+                                   Destination="{x:Type LoginPage}"/>
+                            <NavItem Title="Photos Sample"
+                                   Destination="{x:Type PhotosPage}"/>
+                            <NavItem Title="Reading Sample"
+                                   Destination="{x:Type ReadingColumnsPage}"/>
+                            <NavItem Title="Show Sample"
+                                   Destination="{x:Type ShowPage}"/>
+                            <NavItem Title="Basis"
+                                   Destination="{x:Type BasisExperimentPage}"/>
+                            <NavItem Title="Catalog"
+                                   Destination="{x:Type CatalogItemsPage}"/>
+                            <NavItem Title="Grow"
+                                   Destination="{x:Type GrowExperimentPage}"/>
+                            <NavItem Title="Shrink"
+                                   Destination="{x:Type ShrinkExperimentPage}"/>
+                            <NavItem Title="Simple"
+                                   Destination="{x:Type SimpleStackPage}"/>
+                            <NavItem Title="Wrapping"
+                                   Destination="{x:Type PhotoWrappingPage}"/>
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button 
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}"
+                                />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalWrapLayout>
+
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_grid.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="Grid" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+                <HorizontalWrapLayout Margin="0,0,0,60" Spacing="12">
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="Alignment"
+                                   Destination="{x:Type AlignmentGridPage}"/>
+                            <NavItem Title="Basic"
+                                   Destination="{x:Type BasicGridPage}"/>
+                            <NavItem Title="Calculator"
+                                   Destination="{x:Type CalculatorPage}"/>
+                            <NavItem Title="Keypad"
+                                   Destination="{x:Type KeypadPage}"/>
+                            <NavItem Title="Slider"
+                                   Destination="{x:Type SliderGridPage}"/>
+                            <NavItem Title="Spacing"
+                                   Destination="{x:Type SpacingGridPage}"/>
+                            
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button 
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}"
+                                />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalWrapLayout>
+
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_stacklayout.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="StackLayout (HorizontalStackLayout, VerticalStackLayout)" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+                <HorizontalWrapLayout Margin="0,0,0,60" Spacing="12">
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="Alignment"
+                                   Destination="{x:Type AlignmentStackPage}"/>
+                            <NavItem Title="AndExpand"
+                                   Destination="{x:Type AndExpandPage}"/>
+                            <NavItem Title="Combined"
+                                   Destination="{x:Type CombinedStackPage}"/>
+                            <NavItem Title="Expansion"
+                                   Destination="{x:Type ExpansionStackPage}"/>
+                            <NavItem Title="Horizontal"
+                                   Destination="{x:Type HorizontalStackPage}"/>
+                            <NavItem Title="Spacing"
+                                   Destination="{x:Type SpacingStackPage}"/>
+                            <NavItem Title="Vertical"
+                                   Destination="{x:Type VerticalStackPage}"/>
+                            
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button 
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}"
+                                />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalWrapLayout>
+
+                <!-- <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_relativelayout.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="RelativeLayout" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout> -->
+
+                <!-- <HorizontalStackLayout Spacing="8">
+                    <Image Source="layout_scrollview.png" HorizontalOptions="Start" HeightRequest="22" VerticalOptions="Center"/>
+                    <Label Text="ScrollView" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                </HorizontalStackLayout> -->
+
+                <Label Text="Custom Layouts" Style="{StaticResource Headline}" VerticalOptions="Center"/>
+                <HorizontalWrapLayout Margin="0,0,0,60" Spacing="12">
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="HorizontalWrapLayout"
+                                   Destination="{x:Type HorizontalWrapLayoutPage}"/>
+                            <NavItem Title="CascadeLayout"
+                                   Destination="{x:Type CascadeLayoutPage}"/>
+                            <NavItem Title="ColumnLayout"
+                                   Destination="{x:Type ColumnLayoutPage}"/>
+                        </x:Array>
+                    </BindableLayout.ItemsSource>
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Button 
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}"
+                                />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalWrapLayout>
+
+                <Label Text="Other" Style="{StaticResource Headline}"/>
+                <Button 
+                    HorizontalOptions="Start"
+                                Text="{Binding Title}"
+                                Command="{Binding NavigateTo}"
+               >
+                    <Button.BindingContext>
+                        <NavItem Title="Margin + Padding"
+                            Destination="{x:Type MarginPaddingPage}"/>
+                    </Button.BindingContext>
+                </Button>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

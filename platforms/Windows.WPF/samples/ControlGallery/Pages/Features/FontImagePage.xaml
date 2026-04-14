@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.FontImagePage"
+             Title="FontImagePage">
+    <ContentPage.Resources>
+        <FontImageSource
+        x:Key="CircleIconAlt"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource Primary}"
+        Size="80"/>
+    </ContentPage.Resources>
+    
+    <ScrollView>
+        <VerticalStackLayout Padding="{StaticResource PageInset}">
+            <Label Text="Label" Style="{StaticResource Headline}"/>
+            <Label Text="{x:Static IconFont.AirFreshener}"
+                FontSize="24"
+                FontFamily="FontAwesome"
+                    HorizontalOptions="Start" />
+
+            <Label Text="Image" Style="{StaticResource Headline}"/>
+            <Image HeightRequest="80" WidthRequest="80"
+                Source="{StaticResource CircleIconAlt}"
+                HorizontalOptions="Start"/>
+
+            <Label Text="FontAwesome" Style="{StaticResource Headline}"/>
+            <FlexLayout
+                Wrap="Wrap"
+                JustifyContent="SpaceAround">
+
+                <IconBox Icon="{x:Static IconFont.Ad}" />
+                <IconBox Icon="{x:Static IconFont.AddressBook}" />
+                <IconBox Icon="{x:Static IconFont.AddressCard}" />
+                <IconBox Icon="{x:Static IconFont.Adjust}" />
+                <IconBox Icon="{x:Static IconFont.AirFreshener}" />
+                <IconBox Icon="{x:Static IconFont.AlignCenter}" />
+                <IconBox Icon="{x:Static IconFont.AlignJustify}" />
+                <IconBox Icon="{x:Static IconFont.AlignLeft}" />
+                <IconBox Icon="{x:Static IconFont.AlignRight}" />
+                <IconBox Icon="{x:Static IconFont.Allergies}" />
+                <IconBox Icon="{x:Static IconFont.Ambulance}" />
+                <IconBox Icon="{x:Static IconFont.AmericanSignLanguageInterpreting}" />
+                <IconBox Icon="{x:Static IconFont.Anchor}" />
+                <IconBox Icon="{x:Static IconFont.AngleDoubleDown}" />
+                <IconBox Icon="{x:Static IconFont.AngleDoubleLeft}" />
+                <IconBox Icon="{x:Static IconFont.AngleDoubleRight}" />
+                <IconBox Icon="{x:Static IconFont.AngleDoubleUp}" />
+                <IconBox Icon="{x:Static IconFont.AngleDown}" />
+                <IconBox Icon="{x:Static IconFont.AngleLeft}" />
+                <IconBox Icon="{x:Static IconFont.AngleRight}" />
+                <IconBox Icon="{x:Static IconFont.AngleUp}" />
+                <IconBox Icon="{x:Static IconFont.Angry}" />
+                <IconBox Icon="{x:Static IconFont.Ankh}" />
+                <IconBox Icon="{x:Static IconFont.AppleAlt}" />
+                <IconBox Icon="{x:Static IconFont.Archive}" />
+                <IconBox Icon="{x:Static IconFont.Archway}" />
+                <IconBox Icon="{x:Static IconFont.ArrowAltCircleDown}" />
+                <IconBox Icon="{x:Static IconFont.ArrowAltCircleLeft}" />
+                <IconBox Icon="{x:Static IconFont.ArrowAltCircleRight}" />
+                <IconBox Icon="{x:Static IconFont.ArrowAltCircleUp}" />
+                <IconBox Icon="{x:Static IconFont.ArrowCircleDown}" />
+                <IconBox Icon="{x:Static IconFont.ArrowCircleLeft}" />
+                <IconBox Icon="{x:Static IconFont.ArrowCircleRight}" />
+                <IconBox Icon="{x:Static IconFont.ArrowCircleUp}" />
+                <IconBox Icon="{x:Static IconFont.ArrowDown}" />
+                <IconBox Icon="{x:Static IconFont.ArrowLeft}" />
+                <IconBox Icon="{x:Static IconFont.ArrowRight}" />
+                <IconBox Icon="{x:Static IconFont.ArrowUp}" />
+                <IconBox Icon="{x:Static IconFont.ArrowsAltH}" />
+                <IconBox Icon="{x:Static IconFont.ArrowsAltV}" />
+                <IconBox Icon="{x:Static IconFont.ArrowsAlt}" />
+                <IconBox Icon="{x:Static IconFont.AssistiveListeningSystems}" />
+                <IconBox Icon="{x:Static IconFont.Asterisk}" />
+                <IconBox Icon="{x:Static IconFont.At}" />
+                <IconBox Icon="{x:Static IconFont.Atlas}" />
+                <IconBox Icon="{x:Static IconFont.Atom}" />
+                <IconBox Icon="{x:Static IconFont.AudioDescription}" />
+                <IconBox Icon="{x:Static IconFont.Award}" />
+
+            </FlexLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

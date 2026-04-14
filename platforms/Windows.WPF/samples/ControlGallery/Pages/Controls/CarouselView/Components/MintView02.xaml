@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ContentView
+       x:Class="CarouselGallery.Views.Components.MintView02">
+       <Grid Margin="0,15"
+                     RowDefinitions="350,*">
+              <Border
+                     StrokeShape="RoundRectangle 12"
+                     BackgroundColor="#2EC980">
+                     <Border.Shadow>
+                            <Shadow Brush="Black"
+                                    Offset="10,10"
+                                    Radius="10"
+                                    Opacity="0.8"/>
+                     </Border.Shadow>
+                     <StackLayout Spacing="15">
+                            <Image Source="{FontImage
+                                    FontFamily=FontAwesome,
+                    Glyph={x:Static IconFont.DollarSign},
+                    Size=64,Color=DarkGreen}"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="CASH FLOW"
+                                   TextColor="White"
+                                   FontSize="16"
+                                   HorizontalTextAlignment="Center"/>
+                            <Label Text="You earned $2,576 more than you spent"
+                                   TextColor="White"
+                                   LineBreakMode="WordWrap"
+                                   FontSize="24"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="Center"/>
+                            <Label Text="Way to save those Benjamins."
+                                   TextColor="White"
+                                   LineBreakMode="WordWrap"
+                                   FontSize="14"
+                                   HorizontalTextAlignment="Center"/>
+                     </StackLayout>
+
+              </Border>
+
+              <StackLayout Margin="0,30"
+                           Grid.Row="1">
+                     <Label Text="August cash flow"
+                            FontSize="28"
+                            TextColor="Black"
+                            FontAttributes="Bold"
+                            HorizontalTextAlignment="Center"/>
+                     <Label Text="Earned"
+                            FontSize="12"
+                            TextColor="Black"/>
+                     <Label Text="$4,214"
+                            FontSize="12"
+                            BackgroundColor="#2DC777"
+                            Padding="2"
+                            TextColor="White"/>
+
+                     <Label Text="Spent"
+                            FontSize="12"
+                            TextColor="Black"/>
+                     <Border BackgroundColor="#E1DDE1"
+                             Padding="0">
+                            <Border.StrokeShape>
+                                   <RoundRectangle CornerRadius="0"/>
+                            </Border.StrokeShape>
+                            <Label Text="-$1,638"
+                                   FontSize="12"
+                                   BackgroundColor="#ED4E67"
+                                   Padding="2"
+                                   WidthRequest="120"
+                                   HorizontalOptions="Start"
+                                   TextColor="White"/>
+                     </Border>
+
+                     <BoxView HeightRequest="10"
+                              Margin="0,30"
+                              BackgroundColor="#F8F5F9"/>
+
+                     <Label Text="Net income over time"
+                            FontSize="16"
+                            TextColor="Black"
+                            HorizontalTextAlignment="Center"/>
+                     <Image Source="gallery_bar_chart.png"/>
+              </StackLayout>
+
+       </Grid>
+</ContentView>

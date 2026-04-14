@@ -1,0 +1,181 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.RadioButtonPage"
+    Title="RadioButton">
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <Color
+                x:Key="LightRadioButtonColor">#F3F2F1</Color>
+            <Color
+                x:Key="DarkRadioButtonColor">#9B9A99</Color>
+
+            <ControlTemplate
+                x:Key="ImageQualityRadioTemplate">
+                <Border
+                    Stroke="{StaticResource LightRadioButtonColor}"
+                    BackgroundColor="{StaticResource LightRadioButtonColor}"
+                    HeightRequest="100"
+                    WidthRequest="100"
+                    HorizontalOptions="Start"
+                    VerticalOptions="Start"
+                    Padding="0">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroupList>
+                            <VisualStateGroup
+                                x:Name="CheckedStates">
+                                <VisualState
+                                    x:Name="Checked">
+                                    <VisualState.Setters>
+                                        <Setter
+                                            Property="Stroke"
+                                            Value="#FF3300"/>
+                                        <Setter
+                                            TargetName="Check"
+                                            Property="IsVisible"
+                                            Value="True"/>
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState
+                                    x:Name="Unchecked">
+                                    <VisualState.Setters>
+                                        <Setter
+                                            Property="Stroke"
+                                            Value="#F3F2F1"/>
+                                        <Setter
+                                            TargetName="Check"
+                                            Property="IsVisible"
+                                            Value="False"/>
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateGroupList>
+                    </VisualStateManager.VisualStateGroups>
+                    <Grid
+                        Margin="4"
+                        WidthRequest="100">
+                        <Grid
+                            WidthRequest="18"
+                            HeightRequest="18"
+                            HorizontalOptions="End"
+                            VerticalOptions="Start">
+                            <Ellipse
+                                Stroke="#2E2545"
+                                WidthRequest="16"
+                                HeightRequest="16"
+                                StrokeThickness="0.5"
+                                VerticalOptions="Center"
+                                HorizontalOptions="Center"
+                                Fill="White"/>
+                            <Ellipse
+                                x:Name="Check"
+                                WidthRequest="8"
+                                HeightRequest="8"
+                                Fill="#2E2545"
+                                VerticalOptions="Center"
+                                HorizontalOptions="Center"/>
+                        </Grid>
+                        <ContentPresenter/>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+
+            <Style
+                Class="ImageQuality"
+                TargetType="RadioButton">
+                <Setter
+                    Property="ControlTemplate"
+                    Value="{StaticResource ImageQualityRadioTemplate}"/>
+            </Style>
+
+
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <ContentPage.Content>
+        <ScrollView>
+            <VerticalStackLayout
+                Padding="{OnPlatform iOS='30,60,30,30', Default='30'}"
+                Spacing="8">
+                <Label Text="On"
+                       Style="{StaticResource Headline}"/>
+                <StackLayout Orientation="Horizontal">
+                    <RadioButton Content="RadioButton"
+                                 IsChecked="True"/>
+                    <RadioButton Content="RadioButton (Disabled)"
+                                 IsChecked="True"
+                                 IsEnabled="False"/>
+                </StackLayout>
+
+                <Label Text="Off"
+                       Style="{StaticResource Headline}"/>
+                <StackLayout Orientation="Horizontal">
+                    <RadioButton Content="RadioButton"
+                                 IsChecked="False"/>
+                    <RadioButton Content="RadioButton (Disabled)"
+                                 IsChecked="False"
+                                 IsEnabled="False"/>
+                </StackLayout>
+
+
+                <Label Text="RadioButtonGroup"
+                       Style="{StaticResource Headline}"/>
+                <StackLayout Orientation="Horizontal"
+                             RadioButtonGroup.GroupName="Colors">
+                    <RadioButton Content="Red"
+                                 IsChecked="True"/>
+                    <RadioButton Content="Green"/>
+                    <RadioButton Content="Blue"/>
+                </StackLayout>
+
+                <Label Text="RadioButton ContentTemplate"
+                       Style="{StaticResource Headline}"/>
+                <StackLayout
+                    Orientation="Horizontal"
+                    HorizontalOptions="FillAndExpand"
+                    VerticalOptions="FillAndExpand"
+                    BindableLayout.ItemsSource="{Binding QualityOptions}"
+                    RadioButtonGroup.GroupName="Quality"
+                    RadioButtonGroup.SelectedValue="High"
+                    Spacing="8">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <RadioButton StyleClass="ImageQuality">
+                                <RadioButton.Content>
+                                    <StackLayout
+                                        HorizontalOptions="Center"
+                                        VerticalOptions="Center">
+                                        <Image
+                                            Source="{FontImageSource FontFamily=FontAwesome, 
+                                            Glyph={x:Static IconFont.Image}, 
+                                            Color=#323130}"
+                                            Scale="0.75"/>
+                                        <Label HorizontalOptions="Fill"
+                                               HeightRequest="40"
+                                               Text="{Binding Description}"/>
+                                    </StackLayout>
+                                </RadioButton.Content>
+                            </RadioButton>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </StackLayout>
+
+                <RadioButton
+                    TextColor="Red"
+                    FontSize="30"
+                    TextTransform="Uppercase"
+                    FontAttributes="Bold"
+                    Content="Label for Content"/>
+
+                <RadioButton>
+                    <RadioButton.Content>
+                        <Label Text="Label for Content"
+                               TextColor="Red"
+                               FontSize="30"
+                               TextTransform="Uppercase"
+                               FontAttributes="Bold"/>
+                    </RadioButton.Content>
+                </RadioButton>
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

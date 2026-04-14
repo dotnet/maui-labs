@@ -1,0 +1,98 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    Title="Marriott"
+    x:Class="ControlGallery.Pages.Controls.CarouselView.MarriottPage">
+    <Grid RowDefinitions="Auto,*">
+
+        <CarouselView Grid.RowSpan="2">
+            <CarouselView.ItemsLayout>
+                <LinearItemsLayout
+                    Orientation="Vertical"
+                    SnapPointsAlignment="Start"
+                    SnapPointsType="MandatorySingle"/>
+            </CarouselView.ItemsLayout>
+            <CarouselView.ItemsSource>
+                <x:Array Type="{x:Type ContentView}">
+                    <MarriottView01/>
+                    <MarriottView02/>
+                    <MarriottView01/>
+                    <MarriottView02/>
+                </x:Array>
+            </CarouselView.ItemsSource>
+            <CarouselView.ItemTemplate>
+                <DataTemplate>
+                    <ContentView Content="{Binding .}"/>
+                </DataTemplate>
+            </CarouselView.ItemTemplate>
+        </CarouselView>
+
+        <Grid Grid.Row="0"
+              Margin="15"
+              ColumnDefinitions="*,*,*"
+              RowDefinitions="20,20,*"
+              RowSpacing="8">
+
+            <Label Text="Book a Stay"
+                   TextColor="White"
+                   FontAttributes="Bold"
+                   FontSize="16"
+                   Grid.ColumnSpan="3"/>
+
+            <Label Text="David Ortinau"
+                   TextColor="White"
+                   FontSize="14"
+                   Grid.Row="1"
+                   Grid.Column="0"/>
+            <Label Text="67,345 Points"
+                   TextColor="White"
+                   HorizontalTextAlignment="Center"
+                   FontSize="14"
+                   Grid.Row="1"
+                   Grid.Column="1"/>
+            <Label Text="22 Nights"
+                   TextColor="White"
+                   FontSize="14"
+                   Grid.Row="1"
+                   Grid.Column="2"
+                   HorizontalTextAlignment="End"/>
+
+            <Border BackgroundColor="White"
+                    StrokeShape="RoundRectangle 2"
+                    Grid.Row="2"
+                    Grid.ColumnSpan="3"
+                    Padding="0">
+                <Border.Shadow>
+                    <Shadow Brush="Black"
+                            Offset="20,20"
+                            Radius="40"
+                            Opacity="0.8"/>
+                </Border.Shadow>
+                <Grid Margin="10"
+                      ColumnDefinitions="*,1,*"
+                      ColumnSpacing="8"
+                      RowDefinitions="Auto,Auto"
+                      RowSpacing="4">
+
+                    <Label Text="LOCATION"
+                           TextColor="#333333"/>
+                    <Label Text="DATES"
+                           TextColor="#333333"
+                           Grid.Column="2"/>
+                    <Entry
+                        Grid.Row="1"
+                        Placeholder="Where next?"
+                        FontSize="12"/>
+                    <Entry
+                        Grid.Row="1"
+                        Grid.Column="2"
+                            FontSize="12"
+                        Placeholder="Select dates."/>
+
+                    <BoxView BackgroundColor="#666666"
+                             Grid.Column="1"
+                             Grid.RowSpan="2"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentPage>

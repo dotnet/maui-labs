@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.ShapesPage"
+             Title="Shapes">
+             <ContentPage.Resources>
+                <StyleSheet>
+                    <![CDATA[
+                    
+                    
+                    FlexLayout> Microsoft.Maui.Controls.Shapes.Polygon {
+                        -xf-horizontal-options: Center;
+                        -xf-vertical-options: Center;
+                        width: 50;
+                        height: 50;
+                    }
+                    
+                    FlexLayout > Rectangle {
+                        -xf-horizontal-options: Center;
+                        -xf-vertical-options: Center;
+                        width: 50;
+                        height: 50;
+                    }
+                    
+                    FlexLayout > Ellipse {
+                        -xf-horizontal-options: Center;
+                        -xf-vertical-options: Center;
+                        width: 50;
+                        height: 50;
+                    }
+                    
+                    FlexLayout > Grid {
+                        -xf-horizontal-options: Center;
+                        -xf-vertical-options: Center;
+                        width: 50;
+                        height: 50;
+                    }
+                    
+                    FlexLayout > Path {
+                        -xf-horizontal-options: Center;
+                        -xf-vertical-options: Center;
+                        width: 50;
+                        height: 50;
+                    }
+                    ]]>
+                </StyleSheet>
+        </ContentPage.Resources>
+    <ContentPage.Content>
+        <ScrollView>
+            <StackLayout Margin="15">
+                <Label Text="Shapes" Style="{StaticResource Headline}"/>
+                <FlexLayout x:Name="shapesLayout" Wrap="Wrap" AlignContent="SpaceEvenly" JustifyContent="SpaceEvenly">
+                    <Ellipse WidthRequest="50" HeightRequest="50"
+                        Fill="{StaticResource PrimaryBrush}"/>
+                    <Rectangle WidthRequest="50" HeightRequest="50"
+                            Fill="{StaticResource PrimaryBrush}"/>
+                    
+                    <!-- Polygons added programmatically in code-behind due to XAML parsing issue with fully-qualified Polygon type -->
+                    
+                    <Grid Margin="0,10">
+                        <!-- Grid polygon children added programmatically -->
+                    </Grid>
+                    
+                    <Path 
+    Fill="{StaticResource PrimaryBrush}"
+    Data="M50,0 L50,50 L25,50 C11.1928813,50 0,38.8071187 0,25 C0,11.3309524 10.9701429,0.224119049 24.5865793,0.00334928573 L25,0 L50,0 Z" />
+
+                </FlexLayout>                
+            </StackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

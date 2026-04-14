@@ -1,0 +1,12 @@
+﻿^ContentPage {
+    padding: 20;
+}
+
+BoxView {
+}
+
+.header {
+    font-size: 24;
+    color: #16222a;
+    margin-top: 30;
+}

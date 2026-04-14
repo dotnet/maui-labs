@@ -1,0 +1,188 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+             x:Class="ControlGallery.Common.Views.ControlExample">
+
+    <ContentView.Resources>
+        <x:Double x:Key="ExampleMaxWidth">1000</x:Double>
+
+        <ResourceDictionary>
+            <IsNotNullConverter x:Key="IsNotNullConverter" />
+        </ResourceDictionary>
+
+        <!--<Storyboard x:Name="PopOutStoryboard">
+            <PopInThemeAnimation SpeedRatio="2" TargetName="rootGrid" />
+        </Storyboard>
+
+        <Storyboard x:Name="PopInStoryboard">
+            <PopInThemeAnimation FromVerticalOffset="152" SpeedRatio=".2" TargetName="rootGrid" />
+        </Storyboard>-->
+
+    </ContentView.Resources>
+
+    <Grid x:Name="rootGrid" 
+          RowDefinitions="Auto, Auto, *"
+         >
+        <!--<VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="IntermediateLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="740" />
+                    </VisualState.StateTriggers>
+                </VisualState>
+                <VisualState x:Name="PhoneLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="OptionsPresenter.HorizontalContentAlignment" Value="Left" />
+                        <Setter Target="OptionsPresenter.Margin" Value="0,24,0,0" />
+                        <Setter Target="OptionsPresenter.(Grid.Row)" Value="1" />
+                        <Setter Target="OptionsPresenter.(Grid.Column)" Value="0" />
+                        <Setter Target="OptionsPresenter.(Grid.ColumnSpan)" Value="2" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup>
+                <VisualState x:Name="NormalMode"/>
+                <VisualState x:Name="ScreenshotMode">
+                    <VisualState.Setters>
+                        <Setter Target="CodeScrollViewer.Visibility" Value="Collapsed"/>
+                        <Setter Target="ControlPresenter.Padding" Value="{ThemeResource ControlElementScreenshotModePadding}"/>
+                        <Setter Target="ControlPresenter.HorizontalAlignment" Value="Center"/>
+                        <Setter Target="ScreenshotControls.Visibility" Value="Visible"/>
+
+                        <Setter Target="ExampleContainer.Background" Value="{ThemeResource SystemControlPageBackgroundBaseLowBrush}"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup x:Name="SampleCodeSeparatorStates">
+                <VisualState x:Name="SeparatorCollapsed"/>
+                <VisualState x:Name="SeparatorVisible">
+                    <VisualState.Setters>
+                        <Setter Target="SampleCodeSeparator.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>--> 
+
+        <Label Style="{StaticResource Headline}" Margin="0,16" Text="{Binding HeaderText}" />
+
+        <!--<RichTextBlock x:Name="ErrorTextBlock" Visibility="Collapsed" Grid.Row="1" Margin="0,0,0,12" Foreground="Red" IsTextSelectionEnabled="True">
+            <Paragraph>
+                This sample requires a later version of Windows to be fully functional. Learn more about version adaptive apps:
+                <Hyperlink NavigateUri="https://docs.microsoft.com/windows/uwp/debug-test-perf/version-adaptive-apps">https://docs.microsoft.com/windows/uwp/debug-test-perf/version-adaptive-apps</Hyperlink>
+            </Paragraph>
+        </RichTextBlock>-->
+        <!--CornerRadius="8"-->
+        <Grid Grid.Row="2" 
+              RowDefinitions="*,Auto,Auto">
+
+            <Border Stroke="{StaticResource Gray950Brush}"
+                    StrokeShape="{RoundRectangle CornerRadius=8}"
+                    StrokeThickness="1">
+                <Grid
+                    x:Name="ExampleContainer"
+                    x:FieldModifier="Public"
+                    Background="{StaticResource Gray500Brush}"
+                    RowDefinitions="*,Auto"
+                    ColumnDefinitions="*,Auto,Auto">
+                    <!--  Example Display  -->
+                    <Border
+                        Stroke="{StaticResource Gray950Brush}"
+                        StrokeShape="{RoundRectangle CornerRadius=8}"
+                        StrokeThickness="1">
+                        <ContentView
+                            x:Name="ControlPresenter"
+                            Padding="12"
+                            Background="{StaticResource Gray500Brush}"
+                            Content="{Binding Example}" />
+                    </Border>
+                    <!--  Output Display  -->
+
+                    <!--<Border
+                        Grid.Column="1"
+                        Margin="0,12,12,12"
+                        Stroke="Transparent"
+                        StrokeShape="{RoundRectangle CornerRadius=8}"
+                        StrokeThickness="0">
+                        <VerticalStackLayout
+                            Padding="16"
+                            HorizontalOptions="End"
+                            VerticalOptions="Fill"
+                            Background="{StaticResource Gray500Brush}"
+                            IsVisible="{x:Bind Options, Converter={StaticResource IsNotNullConverter}}">
+                            <Label Text="Output:"/>
+                            <ContentPresenter
+                                x:Name="OutputPresenter"
+                                Content="{x:Bind Output}" />
+                        </VerticalStackLayout>
+                    </Border>-->
+
+                    <!--  Options Display  -->
+                    <!--<Border
+                        Grid.Column="2"
+                        Margin="0,12,12,12"
+                        Stroke="Transparent"
+                        StrokeShape="{RoundRectangle CornerRadius=8}"
+                        StrokeThickness="0">
+                        <ContentPresenter
+                            x:Name="OptionsPresenter"
+                            Padding="16"
+                            HorizontalOptions="Fill"
+                            VerticalOptions="Fill"
+                            Background="{StaticResource Gray500Brush}"
+                            Content="{x:Bind Options}"
+                            IsVisible="{x:Bind Options, Converter={StaticResource IsNotNullConverter}}" />
+                    </Border>-->
+                </Grid>
+            </Border>
+
+            <!--  Sample code display  -->
+            <!--<Expander Grid.Row="1" Background="{StaticResource Gray500Brush}">
+
+                <Expander.Header>
+                    <Label Text="Source code"/>
+                </Expander.Header>
+
+                <Expander.Content>
+                    <VerticalStackLayout>
+                        <SampleCodePresenter
+                            x:Name="XamlPresenter"
+                            Code="{x:Bind Xaml}"
+                            CodeSourceFile="{x:Bind XamlSource}"
+                            Substitutions="{x:Bind Substitutions}"/>
+                        <Border x:Name="SampleCodeSeparator" IsVisible="false" Margin="0,20"
+                            StrokeThickness="1" Stroke="{StaticResource Gray300Brush}"/>
+                        <SampleCodePresenter
+                            x:Name="CSharpPresenter"
+                            Code="{x:Bind CSharp}"
+                            CodeSourceFile="{x:Bind CSharpSource}"
+                            Substitutions="{x:Bind Substitutions}"
+                            IsCSharpSample="true"/>
+                    </VerticalStackLayout>
+                </Expander.Content>
+            </Expander>
+
+            <HorizontalStackLayout x:Name="ScreenshotControls" Grid.Row="2"
+                                   Spacing="6" Margin="0,6,0,0" IsVisible="false">
+                <Button
+                    x:Name="ScreenshotButton"
+                    Text="Take Screenshot"
+                    HorizontalOptions="Start"/>
+
+                <Button
+                    x:Name="ScreenshotDelayButton"
+                    Text="Take Screenshot With Delay"
+                    HorizontalOptions="Start"/>
+
+                <Label x:Name="ScreenshotStatusTextBlock" VerticalOptions="Center" Margin="0,0,0,1"/>
+
+                <Label x:Name="PaddingLabel" Text="Padding:" VerticalOptions="Center" Margin="5,0,5,1"/>
+                <Entry x:Name="ControlPaddingBox" 
+                    WidthRequest="150"/>
+            </HorizontalStackLayout>-->
+        </Grid>
+    </Grid>
+</ContentView>

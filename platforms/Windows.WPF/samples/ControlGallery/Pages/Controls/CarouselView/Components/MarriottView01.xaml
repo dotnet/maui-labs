@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ContentView
+             x:Class="CarouselGallery.Views.Components.MarriottView01">
+    <Grid ColumnDefinitions="2*,3*"
+          RowDefinitions="3*,150,3*">
+        <Image Source="IMG_0191.JPG"
+               Grid.RowSpan="3"
+               Grid.ColumnSpan="2"
+               Opacity="0.7"
+               Aspect="AspectFill" />
+        <!-- box -->
+        <StackLayout BackgroundColor="Black"
+                     Padding="15"
+                     Grid.Column="0"
+                     Grid.Row="1">
+            <Label Text="Info on Starwood database incident."
+                   TextColor="White"
+                   FontSize="16" />
+            <Label Text="> Click Here"
+                   TextColor="White"
+                   FontAttributes="Bold"
+                   FontSize="16" />
+        </StackLayout>
+    </Grid>
+</ContentView>

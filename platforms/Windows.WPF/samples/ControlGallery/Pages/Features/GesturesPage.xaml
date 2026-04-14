@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.GesturesPage"
+    Title="Gesture Recognizers">
+    <ScrollView>
+        <StackLayout Margin="15"
+                Spacing="8">
+            <Label Text="Gesture Recognizers"
+                    Style="{StaticResource Headline}"/>
+            <HorizontalWrapLayout Margin="0,0,0,60"
+                    Spacing="12">
+                <BindableLayout.ItemsSource>
+                    <x:Array Type="{x:Type NavItem}">
+                        <NavItem Title="Tap"
+                                 Destination="{x:Type TapGesturePage}"/>
+                        <NavItem Title="Pointer"
+                                 Destination="{x:Type PointerGesturePage}"/>
+                        <NavItem Title="Swipe"
+                                 Destination="{x:Type ColorsPage}"/>
+                        <NavItem Title="Drag and Drop"
+                                 Destination="{x:Type ContextMenuPage}"/>
+                        <NavItem Title="Pan"
+                                 Destination="{x:Type FontImagePage}"/>
+                        <NavItem Title="Pinch"
+                                 Destination="{x:Type MenuBarPage}"/>
+                    </x:Array>
+                </BindableLayout.ItemsSource>
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate>
+                        <Button
+                            Text="{Binding Title}"
+                            Command="{Binding NavigateTo}"/>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalWrapLayout>
+        </StackLayout>
+    </ScrollView>
+</ContentPage>

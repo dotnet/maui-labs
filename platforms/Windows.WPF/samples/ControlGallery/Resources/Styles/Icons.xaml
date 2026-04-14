@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!-- <?xaml-comp compile="true" ?> -->
+<ResourceDictionary>
+
+    <FontImageSource
+        x:Key="AtomIcon"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.Atom}"
+        Color="{StaticResource TextOnSolid_Light}"
+        Size="24"/>
+
+    <FontImageSource
+        x:Key="CircleIcon"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource TextOnSolid_Light}"
+        Size="16"/>
+
+    <FontImageSource
+        x:Key="CircleIconDisabled"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource TextOnSolid_Light}"
+        Size="16"/>
+
+    <FontImageSource
+        x:Key="CircleIconAlt"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource Primary}"
+        Size="16"/>
+    <FontImageSource
+        x:Key="CircleIconAltDisabled"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource Neutral}"
+        Size="16"/>
+    
+</ResourceDictionary>

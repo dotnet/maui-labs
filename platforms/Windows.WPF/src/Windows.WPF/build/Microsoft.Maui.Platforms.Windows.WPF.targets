@@ -1,0 +1,49 @@
+<!--
+  Platform.Maui.WPF MSBuild Targets
+  
+  Handles MAUI asset items for WPF backend:
+  - MauiIcon: Convert SVG/PNG to .ico format for WPF window icon
+  - MauiImage: Copy images to output directory
+  - MauiFont: Copy embedded fonts to output directory
+  - MauiAsset: Copy raw assets to output with LogicalName
+  - MauiSplashScreen: Convert to WPF-compatible splash image
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- Process MauiIcon → copy as application icon -->
+  <Target Name="_WpfProcessMauiIcon" BeforeTargets="Build" Condition="@(MauiIcon) != ''">
+    <ItemGroup>
+      <MauiIcon Update="@(MauiIcon)">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </MauiIcon>
+    </ItemGroup>
+    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiIcon: @(MauiIcon)" />
+    <!-- Copy icon files as content to output -->
+    <Copy SourceFiles="@(MauiIcon)" DestinationFolder="$(OutputPath)Resources" SkipUnchangedFiles="true" Condition="Exists('%(MauiIcon.Identity)')" />
+  </Target>
+
+  <!-- Process MauiImage → copy images to output -->
+  <Target Name="_WpfProcessMauiImage" BeforeTargets="Build" Condition="@(MauiImage) != ''">
+    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiImage: @(MauiImage)" />
+    <Copy SourceFiles="@(MauiImage)" DestinationFolder="$(OutputPath)Resources\Images" SkipUnchangedFiles="true" Condition="Exists('%(MauiImage.Identity)')" />
+  </Target>
+
+  <!-- Process MauiFont → copy fonts to output -->
+  <Target Name="_WpfProcessMauiFont" BeforeTargets="Build" Condition="@(MauiFont) != ''">
+    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiFont: @(MauiFont)" />
+    <Copy SourceFiles="@(MauiFont)" DestinationFolder="$(OutputPath)Resources\Fonts" SkipUnchangedFiles="true" Condition="Exists('%(MauiFont.Identity)')" />
+  </Target>
+
+  <!-- Process MauiAsset → copy to output with LogicalName -->
+  <Target Name="_WpfProcessMauiAsset" BeforeTargets="Build" Condition="@(MauiAsset) != ''">
+    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiAsset: @(MauiAsset)" />
+    <Copy SourceFiles="@(MauiAsset)" DestinationFolder="$(OutputPath)Resources\Raw" SkipUnchangedFiles="true" Condition="Exists('%(MauiAsset.Identity)')" />
+  </Target>
+
+  <!-- Process MauiSplashScreen → copy as splash image -->
+  <Target Name="_WpfProcessMauiSplashScreen" BeforeTargets="Build" Condition="@(MauiSplashScreen) != ''">
+    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiSplashScreen: @(MauiSplashScreen)" />
+    <Copy SourceFiles="@(MauiSplashScreen)" DestinationFolder="$(OutputPath)Resources" SkipUnchangedFiles="true" Condition="Exists('%(MauiSplashScreen.Identity)')" />
+  </Target>
+
+</Project>

@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             BackgroundColor="Wheat"
+             Shell.BackgroundColor="Black"
+             Title="REI"
+             x:Class="ControlGallery.Pages.Controls.CarouselView.REIPage">
+    <ContentPage.Content>
+        <VerticalStackLayout 
+            Margin="30" 
+            Spacing="10">
+            <Border Background="White"
+                   Padding="10"
+                   HorizontalOptions="Center"
+                   Stroke="Black">
+                <CarouselView x:Name="reiCV"
+                    HorizontalOptions="Start"
+                              IndicatorView="indicatorView"
+                              HeightRequest="170">
+                    <CarouselView.ItemsSource>
+                        <x:Array Type="{x:Type x:String}">
+                            <x:String>h01.png</x:String>
+                            <x:String>h02.png</x:String>
+                            <x:String>h03.png</x:String>
+                            <x:String>h04.png</x:String>
+                        </x:Array>
+                    </CarouselView.ItemsSource>
+                    <CarouselView.ItemTemplate>
+                        <DataTemplate>
+                            <Image Source="{Binding .}"/>
+                        </DataTemplate>
+                    </CarouselView.ItemTemplate>
+                </CarouselView>
+            </Border>
+            <IndicatorView 
+                IndicatorColor="LightGray"
+                SelectedIndicatorColor="Black"
+                IndicatorSize="10"
+                HorizontalOptions="Center"
+                x:Name="indicatorView"/>
+            
+            <Button Text="BUTTON" HorizontalOptions="Center"/>
+            <BoxView Color="Blue" HeightRequest="40" MinimumWidthRequest="40" HorizontalOptions="Center"/>
+            <Label Text="LABEL" Background="Blue" TextColor="White" HorizontalOptions="Center" Padding="10"/>
+
+            <Grid HeightRequest="40" Background="Red" HorizontalOptions="Center" Padding="10">
+                <Label Text="GRID" TextColor="White" HorizontalOptions="Center" VerticalOptions="Center"/>
+            </Grid>
+
+            <Grid HorizontalOptions="Center" ColumnDefinitions="Auto" Background="Purple" MinimumHeightRequest="40" MinimumWidthRequest="40">
+                <CollectionView 
+                    HeightRequest="100" 
+                    Background="Green">
+                    <CollectionView.ItemsSource>
+                        <x:Array Type="{x:Type x:String}">
+                            <x:String>CollectionView Item 1</x:String>
+                            <x:String>CollectionView Item 2</x:String>
+                            <x:String>CollectionView Item 3</x:String>
+                        </x:Array>
+                    </CollectionView.ItemsSource>
+                </CollectionView>
+            </Grid>
+
+            <ListView HeightRequest="100" Background="Yellow" HorizontalOptions="Center">
+                <ListView.ItemsSource>
+                    <x:Array Type="{x:Type x:String}">
+                        <x:String>ListView Item 1</x:String>
+                        <x:String>ListView Item 2</x:String>
+                        <x:String>ListView Item 3</x:String>
+                    </x:Array>
+                </ListView.ItemsSource>
+                </ListView>
+
+        </VerticalStackLayout>
+    </ContentPage.Content>
+</ContentPage>

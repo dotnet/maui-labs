@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Grid
+             x:Class="ControlGallery.Common.Views.FlyoutHeader"
+             InputTransparent="True"
+             RowDefinitions="120">
+
+        <Image Source="dotnet_bot.png"
+                HeightRequest="80"
+                WidthRequest="80" InputTransparent="True"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"/>
+    
+    
+</Grid>

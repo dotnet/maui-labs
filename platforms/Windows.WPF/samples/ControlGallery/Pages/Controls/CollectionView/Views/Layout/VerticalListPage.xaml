@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="CollectionViewDemos.Views.VerticalListPage"
+             Title="Vertical list (DataTemplate)">
+    <Grid Margin="0">
+        <CollectionView ItemsSource="{Binding Monkeys}">
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout Orientation="Vertical" ItemSpacing="10"/>
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="10,0,10,0">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="10">
+                            <Image Source="{Binding ImageUrl}" 
+                                Aspect="AspectFill"
+                                HeightRequest="60" 
+                                WidthRequest="60" 
+                                />
+                            <Label Grid.Column="1" 
+                                Text="{Binding Name}" VerticalOptions="Center"
+                                FontAttributes="Bold" />
+                            
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

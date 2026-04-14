@@ -1,0 +1,173 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.LabelPage"
+             Title="Label">
+
+    <ContentPage.Content>
+        <ScrollView Orientation="Both">
+            <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Default='30,30,0,30'}">
+
+                <Label LineBreakMode="NoWrap" LineHeight="1.4">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Font name: OpenSans Regular &#10;"/>
+                            <Span Text="Version: 1.00  &#10;"/>
+                            <Span Text="Digitally Signed, TrueType Outlines &#10;"/>
+                            <Span Text="abcdefghijklmnopqrstuvwxyz "/>
+                            <Span Text="abcdefghijklmnopqrstuvwxyz &#10;" TextTransform="Uppercase"/>
+                            <Span Text="1234567890.:,;'+-*/=  &#10;"/>
+                            <Span Text="12 The quick brown fox jumps over the lazy dog. 1234567890 &#10;" FontSize="12"/>
+                            <Span Text="18 The quick brown fox jumps over the lazy dog. 1234567890 &#10;" FontSize="18"/>
+                            <Span Text="24 The quick brown fox jumps over the lazy dog. 1234567890 &#10;" FontSize="24"/>
+                            <Span Text="36 The quick brown fox jumps over the lazy dog. 1234567890 &#10;" FontSize="36"/>
+                            <Span Text="48 The quick brown fox jumps over the lazy dog. 1234567890 &#10;" FontSize="48"/>
+                            <Span Text="60 The quick brown fox jumps over the lazy dog. 1234567890 &#10;" FontSize="60"/>
+                            <Span Text="72 The quick brown fox jumps over the lazy dog. 1234567890 " FontSize="72">
+                                <Span.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding TapCommand}" CommandParameter="https://google.com" />
+                                </Span.GestureRecognizers>
+                            </Span>
+                        </FormattedString>
+                    </Label.FormattedText>                    
+                </Label>
+
+                <Label Text="Unicode linebreaks"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <!-- Unicode line feed character -->
+                <Label Text="First line &#10; Second line" />
+
+                <Label Text="Property Element linebreaks"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <!-- Property element syntax -->
+                <Label>
+                    <Label.Text>
+                        First line
+                        Second line
+                        Third Line
+                    </Label.Text>
+                </Label>
+
+                <Label Text="CharacterSpacing=10"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label Text="Character spaced text"
+       CharacterSpacing="10" />
+
+                <Label Text="TextTransform=Uppercase"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label Text="This text will be displayed in uppercase."
+       TextTransform="Uppercase" />
+
+                <Label Text="LineBreakMode &amp; LineHeight"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label Text="Lorem ipsum dolor sit amet, consectetur adipiscing elit. In facilisis nulla eu felis fringilla vulputate. Nullam porta eleifend lacinia. Donec at iaculis tellus."
+       LineBreakMode="WordWrap"
+       LineHeight="1.8" />
+
+                <Label Text="HTML"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label 
+                     BackgroundColor="Yellow" 
+                     Text="This is &lt;strong style=&quot;color:red&quot;&gt;HTML&lt;/strong&gt; text."
+                     TextType="Html"  />
+                     <Label 
+                     Text="Some text that is html. &lt;strong&gt;Bold&lt;/strong&gt; &lt;em&gt;Italics&lt;/em&gt; &lt;span style='color:red'&gt;Red Text&lt;/span&gt;"
+                     TextColor="Green"
+                     TextType="Html"  />
+
+                <Label Text="FormattedText &amp; Spans"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <Label LineBreakMode="WordWrap">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Red Bold, " TextColor="Red" FontAttributes="Bold" />
+                            <Span Text="default, " Style="{DynamicResource BodyStyle}">
+                                <Span.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding TapCommand}" />
+                                </Span.GestureRecognizers>
+                            </Span>
+                            <Span Text="italic small." FontAttributes="Italic" FontSize="Small" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+
+                <!--<Label Text="XAML Hot Reload connected and working, unless I make a layout change"
+                       FontSize="12"
+                       TextColor="Red"
+                       WidthRequest="100"
+                       HeightRequest="100"
+                       Padding="10"
+                       Margin="50"
+                       MaxLines="3"
+                       LineBreakMode="TailTruncation"
+                       FontAttributes="Italic"
+                       TextDecorations="Underline"
+                       VerticalTextAlignment="End"
+                       HorizontalTextAlignment="Start"
+                       />-->
+
+
+                <Label Text="App Text Styles"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+
+                <Label Text="Large Title"
+                       Style="{StaticResource LargeTitle}"/>
+                <Label Text="30px, OpenSansSemiBold, #000000" 
+                       Style="{StaticResource TypographyMeta}"/>
+
+                <Label Text="Title 1"
+                       Style="{StaticResource Title1}"/>
+                <Label Text="26px, OpenSansSemiBold, #000000" 
+                       Style="{StaticResource TypographyMeta}"/>
+
+                <Label Text="Headline"
+                       Style="{StaticResource Headline}"/>
+                <Label Text="17px, OpenSansSemiBold, #000000" 
+                       Style="{StaticResource TypographyMeta}"/>
+
+                <Label Text="Body"/>
+                <Label Text="17px, OpenSansRegular, #000000" 
+                       Style="{StaticResource TypographyMeta}"/>
+
+                <Label Text="Subhead"
+                       StyleClass="Subhead"/>
+                <Label Text="15px, OpenSansRegular, #000000" 
+                       Style="{StaticResource TypographyMeta}"/>
+
+                <Label Text="Footnote"
+                       StyleClass="Footnote"/>
+                <Label Text="13px, OpenSansRegular, #000000" 
+                       Style="{StaticResource TypographyMeta}"/>
+
+                <Label Text="Text Color Styles"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label Text="Regular"/>
+                <Label Text="Error" StyleClass="Error"/>
+                <Label Text="Warning" StyleClass="Warning"/>
+                <Label Text="Disabled" StyleClass="Disabled"/>
+
+                <Label Text="Default Styles"
+                       Style="{StaticResource Headline}" />
+                <BoxView Style="{StaticResource HRule}"/>
+                <Label Text="TitleStyle" Style="{DynamicResource TitleStyle}"/>
+                <Label Text="SubtitleStyle" Style="{DynamicResource SubtitleStyle}"/>
+                <Label Text="BodyStyle" Style="{DynamicResource BodyStyle}"/>
+                <Label Text="CaptionStyle" Style="{DynamicResource CaptionStyle}"/>
+                <Label Text="ListItemTextStyle" Style="{DynamicResource ListItemTextStyle}"/>
+                <Label Text="ListItemDetailTextStyle" Style="{DynamicResource ListItemDetailTextStyle}"/>
+
+
+            </StackLayout>
+        </ScrollView>
+
+    </ContentPage.Content>
+</ContentPage>

@@ -1,0 +1,600 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             xmlns:xct="http://xamarin.com/schemas/2020/toolkit"
+             x:Class="ControlGallery.Pages.ButtonPage"
+             Title="Button">
+    <ContentPage.Content>
+        
+        <Grid Margin="30" ColumnDefinitions="{OnIdiom Phone='*,0', Default='*,300'}" ColumnSpacing="30">
+            <ScrollView Margin="0,-30,0,-30">
+                <VerticalStackLayout Padding="0,30,0,30">
+
+                    <Label Text="Button" Style="{StaticResource LargeTitle}"/>
+                    <Label Style="{StaticResource Footnote}">
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span FontAttributes="Bold" Text="Namespace: "/>
+                                <Span Text="Microsoft.Maui.Controls"/>
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+                    <Label Text="The .NET MAUI Button displays text and responds to a tap or click that directs the app to carry out a task. A Button usually displays a short text string indicating a command, but it can also display a bitmap image, or a combination of text and an image. When the Button is pressed with a finger or clicked with a mouse it initiates that command."/>
+
+                    <ExampleView HeaderText="Basic Button">
+                        <ExampleView.Example>
+                            <HorizontalStackLayout>
+                                <Button Text="Button" Clicked="Button_Clicked"/>
+                                <Button Text="Button" IsEnabled="False" Clicked="Button_Clicked"/>
+                            </HorizontalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;HorizontalStackLayout&gt;
+    &lt;Button Text=&quot;Button&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;Button Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+&lt;/HorizontalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+var h = new HorizontalStackLayout
+{
+    Children =
+    {
+        new Button
+        {
+            Text = "Button"
+        },
+        new Button
+        {
+            Text = "Button",
+            IsEnabled = false
+        }
+};
+                            </x:String>
+                        </ExampleView.CSharp>
+                        <ExampleView.Styles>
+                            <x:String>
+&lt;Style TargetType=&quot;Button&quot;&gt;
+    &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource TextOnSolid_Light}&quot;/&gt;
+    &lt;Setter Property=&quot;FontFamily&quot; Value=&quot;{StaticResource RegularFont}&quot;/&gt;
+    &lt;Setter Property=&quot;CornerRadius&quot; Value=&quot;8&quot;/&gt;
+    &lt;Setter Property=&quot;Padding&quot; Value=&quot;14,10&quot;/&gt;
+    &lt;Setter Property=&quot;HorizontalOptions&quot; Value=&quot;Start&quot;/&gt;
+    &lt;Setter Property=&quot;CursorBehavior.AttachBehavior&quot; Value=&quot;True&quot;/&gt;
+    &lt;Setter Property=&quot;VisualStateManager.VisualStateGroups&quot;&gt;
+        &lt;VisualStateGroupList&gt;
+            &lt;VisualStateGroup x:Name=&quot;CommonStates&quot;&gt;
+                    &lt;VisualState x:Name=&quot;PointerOver&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter
+                            Property=&quot;BackgroundColor&quot;
+                            Value=&quot;{StaticResource Accent}&quot;/&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Normal&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;BackgroundColor&quot; Value=&quot;{StaticResource Primary}&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Disabled&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;BackgroundColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+            &lt;/VisualStateGroup&gt;
+        &lt;/VisualStateGroupList&gt;
+    &lt;/Setter&gt;
+&lt;/Style&gt;
+                            </x:String>
+                        </ExampleView.Styles>
+                    </ExampleView>
+
+                    <ExampleView HeaderText="Primary Filled">
+                        <ExampleView.Example>
+                            <VerticalStackLayout>
+                                <HorizontalStackLayout>
+                                    <Button Text="Button" Clicked="Button_Clicked"/>
+                                    <Button Text="Button" IsEnabled="False" Clicked="Button_Clicked"/>
+                                </HorizontalStackLayout>
+                                <HorizontalStackLayout>
+                                    <Button ImageSource="{StaticResource CircleIcon}" Text="Button" Clicked="Button_Clicked"/>
+                                    <Button ImageSource="{StaticResource CircleIcon}" Text="Button" IsEnabled="False" Clicked="Button_Clicked"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout>
+                                    <Button FontFamily="FontAwesome"
+                                            Text="{x:Static IconFont.PaperPlane}" Clicked="Button_Clicked"/>
+                                    <Button FontFamily="FontAwesome"
+                                            Text="{x:Static IconFont.PaperPlane}"
+                                            Clicked="Button_Clicked"
+                                            IsEnabled="False"/>
+                                </HorizontalStackLayout>
+                            </VerticalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;VerticalStackLayout&gt;
+                                &lt;HorizontalStackLayout&gt;
+                                    &lt;Button Text=&quot;Button&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+                                    &lt;Button Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+                                &lt;/HorizontalStackLayout&gt;
+                                &lt;HorizontalStackLayout&gt;
+                                    &lt;Button ImageSource=&quot;{StaticResource CircleIcon}&quot; Text=&quot;Button&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+                                    &lt;Button ImageSource=&quot;{StaticResource CircleIcon}&quot; Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+                                &lt;/HorizontalStackLayout&gt;
+
+                                &lt;HorizontalStackLayout&gt;
+                                    &lt;Button FontFamily=&quot;FontAwesome&quot;
+                                            Text=&quot;{x:Static IconFont.PaperPlane}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+                                    &lt;Button FontFamily=&quot;FontAwesome&quot;
+                                            Text=&quot;{x:Static IconFont.PaperPlane}&quot;
+                                            Clicked=&quot;Button_Clicked&quot;
+                                            IsEnabled=&quot;False&quot;/&gt;
+                                &lt;/HorizontalStackLayout&gt;
+                            &lt;/VerticalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+Content = new VerticalStackLayout
+{
+	Children = {
+		new HorizontalStackLayout
+		{
+			Children =
+			{
+				new Button()
+					.Text("Button")
+					.ClickGesture(()=>Button_Clicked()),
+                new Button()
+                    .Text("Button")
+                    .ClickGesture(()=>Button_Clicked())
+					.IsEnabled(false),
+            }
+		},
+
+        new HorizontalStackLayout
+        {
+            Children =
+            {
+                new Button()
+                    .ImageSource((FontImageSource)Application.Current?.Resources["CircleIcon"])
+                    .Text("Button")
+                    .ClickGesture(()=>Button_Clicked()),
+                new Button()
+                    .ImageSource((FontImageSource)Application.Current?.Resources["CircleIcon"])
+                    .Text("Button")
+                    .ClickGesture(()=>Button_Clicked())
+                    .IsEnabled(false),
+            }
+        },
+        new HorizontalStackLayout
+        {
+            Children =
+            {
+                new Button()
+                    .Font("FontAwesome")
+                    .Text(IconFont.PaperPlane)
+                    .ClickGesture(()=>Button_Clicked()),
+                new Button()
+                    .Font("FontAwesome")
+                    .Text(IconFont.PaperPlane)
+                    .ClickGesture(()=>Button_Clicked())
+                    .IsEnabled(false),
+            }
+        }
+
+    }
+};
+                            </x:String>
+                        </ExampleView.CSharp>
+                        <ExampleView.Styles>
+                            <x:String>
+&lt;Style TargetType=&quot;Button&quot;&gt;
+    &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource TextOnSolid_Light}&quot;/&gt;
+    &lt;Setter Property=&quot;FontFamily&quot; Value=&quot;{StaticResource RegularFont}&quot;/&gt;
+    &lt;Setter Property=&quot;CornerRadius&quot; Value=&quot;8&quot;/&gt;
+    &lt;Setter Property=&quot;Padding&quot; Value=&quot;14,10&quot;/&gt;
+    &lt;Setter Property=&quot;HorizontalOptions&quot; Value=&quot;Start&quot;/&gt;
+    &lt;Setter Property=&quot;CursorBehavior.AttachBehavior&quot; Value=&quot;True&quot;/&gt;
+    &lt;Setter Property=&quot;VisualStateManager.VisualStateGroups&quot;&gt;
+        &lt;VisualStateGroupList&gt;
+            &lt;VisualStateGroup x:Name=&quot;CommonStates&quot;&gt;
+                    &lt;VisualState x:Name=&quot;PointerOver&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter
+                            Property=&quot;BackgroundColor&quot;
+                            Value=&quot;{StaticResource Accent}&quot;/&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Normal&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;BackgroundColor&quot; Value=&quot;{StaticResource Primary}&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Disabled&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;BackgroundColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+            &lt;/VisualStateGroup&gt;
+        &lt;/VisualStateGroupList&gt;
+    &lt;/Setter&gt;
+&lt;/Style&gt;
+                            </x:String>
+                        </ExampleView.Styles>
+                    </ExampleView>
+
+                    <ExampleView HeaderText="Primary Outline">
+                        <ExampleView.Example>
+                            <HorizontalStackLayout>
+                                <Button Text="Button" 
+                                    Style="{StaticResource PrimaryButtonOutline}"
+                                    Clicked="Button_Clicked"/>
+                                <Button Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutline}" Clicked="Button_Clicked"/>
+                            </HorizontalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;HorizontalStackLayout&gt;
+    &lt;Button Text=&quot;Button&quot; 
+        Style=&quot;{StaticResource PrimaryButtonOutline}&quot;
+        Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;Button Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource PrimaryButtonOutline}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+&lt;/HorizontalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+Content = new HorizontalStackLayout
+{
+	Children =
+	{
+		new Button()
+			.Text("Button")
+			.Style("PrimaryButtonOutline")
+			.ClickGesture(()=>Button_Clicked()),
+		new Button()
+			.Text("Button")
+            .Style("PrimaryButtonOutline")
+            .ClickGesture(()=>Button_Clicked())
+			.IsEnabled(false),
+	}
+};
+                            </x:String>
+                        </ExampleView.CSharp>
+                        <ExampleView.Styles>
+                            <x:String>
+&lt;Style TargetType=&quot;Button&quot; x:Key=&quot;PrimaryButtonOutline&quot;&gt;
+    &lt;Setter Property=&quot;CornerRadius&quot; Value=&quot;8&quot;/&gt;
+    &lt;Setter Property=&quot;Background&quot; Value=&quot;Transparent&quot;/&gt;
+    &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource Primary}&quot;/&gt;
+    &lt;Setter Property=&quot;BorderWidth&quot; Value=&quot;1&quot;/&gt;
+    &lt;Setter Property=&quot;BorderColor&quot; Value=&quot;{StaticResource Primary}&quot;/&gt;
+    &lt;Setter Property=&quot;VisualStateManager.VisualStateGroups&quot;&gt;
+        &lt;VisualStateGroupList&gt;
+            &lt;VisualStateGroup x:Name=&quot;CommonStates&quot;&gt;
+                &lt;VisualState x:Name=&quot;Normal&quot;&gt;
+                    &lt;VisualState.Setters&gt;   
+                        &lt;Setter Property=&quot;Background&quot; Value=&quot;Transparent&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Disabled&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;BorderColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                        &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                        &lt;Setter Property=&quot;Background&quot; Value=&quot;Transparent&quot;/&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+            &lt;/VisualStateGroup&gt;
+        &lt;/VisualStateGroupList&gt;
+    &lt;/Setter&gt;
+&lt;/Style&gt;
+                            </x:String>
+                        </ExampleView.Styles>
+                    </ExampleView>  
+
+                    
+
+                    <!--<ExampleView HeaderText="Styled PrimaryButtonOutlineIcon">
+                        <ExampleView.Example>
+                            <VerticalStackLayout>
+                                <HorizontalStackLayout>
+                                    <Button
+                                    ImageSource="{StaticResource CircleIconAlt}" Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                    <Button
+                                    ImageSource="{StaticResource CircleIconAlt}" Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout>
+                                    <Button ImageSource="{StaticResource CircleIconAlt}"
+                                            ContentLayout="Right"
+                                            Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                    <Button ImageSource="{StaticResource CircleIconAlt}"
+                                            ContentLayout="Right"
+                                            Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout>
+                                    <Button ImageSource="{StaticResource CircleIconAlt}"
+                                            ContentLayout="Top"
+                                            Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                    <Button ImageSource="{StaticResource CircleIconAlt}"
+                                            ContentLayout="Top"
+                                            Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout>
+                                    <Button ImageSource="{StaticResource CircleIconAlt}"
+                                            ContentLayout="Bottom"
+                                            Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                    <Button ImageSource="{StaticResource CircleIconAlt}"
+                                            ContentLayout="Bottom"
+                                            Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                                </HorizontalStackLayout>
+                            </VerticalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;VerticalStackLayout&gt;
+    &lt;HorizontalStackLayout&gt;
+        &lt;Button
+        ImageSource=&quot;{StaticResource CircleIconAlt}&quot; Text=&quot;Button&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+        &lt;Button
+        ImageSource=&quot;{StaticResource CircleIconAlt}&quot; Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;/HorizontalStackLayout&gt;
+
+    &lt;HorizontalStackLayout&gt;
+        &lt;Button ImageSource=&quot;{StaticResource CircleIconAlt}&quot;
+                ContentLayout=&quot;Right&quot;
+                Text=&quot;Button&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+        &lt;Button ImageSource=&quot;{StaticResource CircleIconAlt}&quot;
+                ContentLayout=&quot;Right&quot;
+                Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;/HorizontalStackLayout&gt;
+
+    &lt;HorizontalStackLayout&gt;
+        &lt;Button ImageSource=&quot;{StaticResource CircleIconAlt}&quot;
+                ContentLayout=&quot;Top&quot;
+                Text=&quot;Button&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+        &lt;Button ImageSource=&quot;{StaticResource CircleIconAlt}&quot;
+                ContentLayout=&quot;Top&quot;
+                Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;/HorizontalStackLayout&gt;
+
+    &lt;HorizontalStackLayout&gt;
+        &lt;Button ImageSource=&quot;{StaticResource CircleIconAlt}&quot;
+                ContentLayout=&quot;Bottom&quot;
+                Text=&quot;Button&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+        &lt;Button ImageSource=&quot;{StaticResource CircleIconAlt}&quot;
+                ContentLayout=&quot;Bottom&quot;
+                Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource PrimaryButtonOutlineIcon}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;/HorizontalStackLayout&gt;
+&lt;/VerticalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+
+
+                            </x:String>
+                        </ExampleView.CSharp>
+                        <ExampleView.Styles>
+                            <x:String>
+&lt;Style TargetType=&quot;Button&quot; x:Key=&quot;PrimaryButtonOutlineIcon&quot; BasedOn=&quot;{StaticResource PrimaryButtonOutline}&quot;&gt;
+    &lt;Setter Property=&quot;VisualStateManager.VisualStateGroups&quot;&gt;
+        &lt;VisualStateGroupList&gt;
+            &lt;VisualStateGroup x:Name=&quot;CommonStates&quot;&gt;
+                &lt;VisualState x:Name=&quot;PointerOver&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter
+                            Property=&quot;Background&quot;
+                            Value=&quot;{StaticResource SecondaryBrush}&quot;/&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Normal&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;Background&quot; Value=&quot;Transparent&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+                &lt;VisualState x:Name=&quot;Disabled&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;BorderColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                        &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                        &lt;Setter Property=&quot;Background&quot; Value=&quot;Transparent&quot;/&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+            &lt;/VisualStateGroup&gt;
+        &lt;/VisualStateGroupList&gt;
+    &lt;/Setter&gt;
+&lt;/Style&gt;
+                            </x:String>
+                        </ExampleView.Styles>
+                    </ExampleView>
+
+                    <ExampleView HeaderText="Styled SecondarybuttonOutline">
+                        <ExampleView.Example>
+                            <HorizontalStackLayout>
+                                <Button Text="Button" Style="{StaticResource SecondaryButtonOutline}" Clicked="Button_Clicked"/>
+                                <Button Text="Button" IsEnabled="False" Style="{StaticResource SecondaryButtonOutline}" Clicked="Button_Clicked"/>
+                            </HorizontalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;HorizontalStackLayout&gt;
+    &lt;Button Text=&quot;Button&quot; Style=&quot;{StaticResource SecondaryButtonOutline}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;Button Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource SecondaryButtonOutline}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+&lt;/HorizontalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+
+
+                            </x:String>
+                        </ExampleView.CSharp>
+                        <ExampleView.Styles>
+                            <x:String>
+&lt;Style TargetType=&quot;Button&quot; x:Key=&quot;SecondaryButtonOutline&quot; BasedOn=&quot;{StaticResource PrimaryButtonOutline}&quot;&gt;
+    &lt;Setter Property=&quot;Padding&quot; Value=&quot;4&quot;/&gt;
+&lt;/Style&gt;
+                            </x:String>
+                        </ExampleView.Styles>
+                    </ExampleView>-->
+                    
+                    <ExampleView HeaderText="Styled BorderlessButton">
+                        <ExampleView.Example>
+                            <HorizontalStackLayout HorizontalOptions="Start">
+                                <Button Text="Button" Style="{StaticResource BorderlessButton}" Clicked="Button_Clicked"/>
+                                <Button Text="Button" IsEnabled="False" Style="{StaticResource BorderlessButton}" Clicked="Button_Clicked"/>
+                            </HorizontalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;HorizontalStackLayout HorizontalOptions=&quot;Start&quot;&gt;
+    &lt;Button Text=&quot;Button&quot; Style=&quot;{StaticResource BorderlessButton}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+    &lt;Button Text=&quot;Button&quot; IsEnabled=&quot;False&quot; Style=&quot;{StaticResource BorderlessButton}&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+&lt;/HorizontalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+Content = new HorizontalStackLayout
+{
+	Children =
+	{
+		new Button()
+			.Text("Button")
+			.Style("BorderlessButton")
+			.ClickGesture(()=>Button_Clicked()),
+		new Button()
+			.Text("Button")
+            .Style("BorderlessButton")
+            .ClickGesture(()=>Button_Clicked())
+			.IsEnabled(false),
+	}
+};
+                            </x:String>
+                        </ExampleView.CSharp>
+                        <ExampleView.Styles>
+                            <x:String>
+&lt;Style TargetType=&quot;Button&quot; x:Key=&quot;BorderlessButton&quot;&gt;
+    &lt;Setter Property=&quot;Background&quot; Value=&quot;Transparent&quot;/&gt;
+    &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource Primary}&quot;/&gt;
+    &lt;Setter Property=&quot;VisualStateManager.VisualStateGroups&quot;&gt;
+        &lt;VisualStateGroupList&gt;
+            &lt;VisualStateGroup x:Name=&quot;CommonStates&quot;&gt;
+                &lt;VisualState x:Name=&quot;Disabled&quot;&gt;
+                    &lt;VisualState.Setters&gt;
+                        &lt;Setter Property=&quot;TextColor&quot; Value=&quot;{StaticResource Neutral}&quot; /&gt;
+                    &lt;/VisualState.Setters&gt;
+                &lt;/VisualState&gt;
+            &lt;/VisualStateGroup&gt;
+        &lt;/VisualStateGroupList&gt;
+    &lt;/Setter&gt;
+&lt;/Style&gt;
+
+                            </x:String>
+                        </ExampleView.Styles>
+                    </ExampleView>
+
+                    <!--<ExampleView HeaderText="Miscellaneous">
+                        <ExampleView.Example>
+                            <VerticalStackLayout>
+                                <Button Text="uppercase" TextTransform="Uppercase" Clicked="Button_Clicked"/>
+
+                                <Button Text="Corner 20" CornerRadius="20" HeightRequest="40" Padding="20,0" Clicked="Button_Clicked"/>
+
+                                <Button Text="Sm" HorizontalOptions="Start" Clicked="Button_Clicked"/>
+
+                                <Button Text="This is a lot of text for a button" HorizontalOptions="Start" Clicked="Button_Clicked"/>
+                            </VerticalStackLayout>
+                        </ExampleView.Example>
+                        <ExampleView.Xaml>
+                            <x:String>
+&lt;VerticalStackLayout&gt;
+    &lt;Button Text=&quot;uppercase&quot; TextTransform=&quot;Uppercase&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+
+    &lt;Button Text=&quot;Corner 20&quot; CornerRadius=&quot;20&quot; HeightRequest=&quot;40&quot; Padding=&quot;20,0&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+
+    &lt;Button Text=&quot;Sm&quot; HorizontalOptions=&quot;Start&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+
+    &lt;Button Text=&quot;This is a lot of text for a button&quot; HorizontalOptions=&quot;Start&quot; Clicked=&quot;Button_Clicked&quot;/&gt;
+&lt;/VerticalStackLayout&gt;
+                            </x:String>
+                        </ExampleView.Xaml>
+                        <ExampleView.CSharp>
+                            <x:String>
+
+
+                            </x:String>
+                        </ExampleView.CSharp>
+                    </ExampleView>-->
+
+                    <VerticalStackLayout>
+                        <HorizontalStackLayout>
+                            <Button
+                            ImageSource="{StaticResource CircleIconAlt}" Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                            <Button
+                            ImageSource="{StaticResource CircleIconAlt}" Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout>
+                            <Button ImageSource="{StaticResource CircleIconAlt}"
+                                    ContentLayout="Right"
+                                    Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                            <Button ImageSource="{StaticResource CircleIconAlt}"
+                                    ContentLayout="Right"
+                                    Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout>
+                            <Button ImageSource="{StaticResource CircleIconAlt}"
+                                    ContentLayout="Top"
+                                    Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                            <Button ImageSource="{StaticResource CircleIconAlt}"
+                                    ContentLayout="Top"
+                                    Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout>
+                            <Button ImageSource="{StaticResource CircleIconAlt}"
+                                    ContentLayout="Bottom"
+                                    Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                            <Button ImageSource="{StaticResource CircleIconAlt}"
+                                    ContentLayout="Bottom"
+                                    Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}" Clicked="Button_Clicked"/>
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+
+                </VerticalStackLayout>
+            </ScrollView>
+
+            
+
+            <VerticalStackLayout Grid.Column="1" Spacing="8">
+                <Label Text="Documentation" Style="{StaticResource Headline}"/>
+                <Label Text="API Doc - Microsoft.Maui.Controls.Button"  Style="{StaticResource Hyperlink}"/>
+                <Label Text="Learn Doc" Style="{StaticResource Hyperlink}"/>
+
+                <Label Text="Related" Style="{StaticResource Headline}" Margin="0,16,0,0"/>
+                <Label Text="ImageButton" Style="{StaticResource Hyperlink}" />
+                <Label Text="TapGesture" Style="{StaticResource Hyperlink}" />
+                <Label Text="VisualStateManager" Style="{StaticResource Hyperlink}" />
+
+                <Button Text="Profile"
+                        Clicked="Button_Clicked_1"
+                        IsVisible="False"
+                        />
+
+                <Label Text="Button Counter" Style="{StaticResource Headline}" Margin="0,16,0,0"/>
+                <Label x:Name="CounterLbl"
+                   Text="{Binding Counter}"
+                   
+                   />
+
+            </VerticalStackLayout>
+        </Grid>
+    </ContentPage.Content>
+</ContentPage>

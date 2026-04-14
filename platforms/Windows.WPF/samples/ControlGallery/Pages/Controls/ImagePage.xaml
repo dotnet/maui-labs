@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.ImagePage"
+             Title="Image">
+    <ContentPage.Resources>
+        <Style TargetType="Image">
+            <Setter Property="Background" Value="#f1f1f1"/>
+            <Setter Property="HorizontalOptions" Value="Start"/>
+        </Style>
+    </ContentPage.Resources>
+    <ContentPage.Content>
+        <ScrollView>
+            <VerticalStackLayout 
+                Style="{StaticResource MainContainer}"
+                Spacing="9">
+                <Label Text="Embedded Resource" Style="{StaticResource Headline}"/>
+                <Image x:Name="ImgTarget"
+                       HeightRequest="100" 
+                       WidthRequest="100"/>
+                
+                <Label Text="Image with 40x40 and #f1f1f1 bg"
+                Style="{StaticResource Headline}"/>
+                <Image Source="dotnet_bot.png" 
+                       BackgroundColor="#f1f1f1"
+                       HeightRequest="40" WidthRequest="40"/>
+
+                <Label Text="Image with AspectFill 40x100"
+                Style="{StaticResource Headline}"/>
+                <Image Source="dotnet_bot.png" 
+                       BackgroundColor="#f1f1f1"
+                       HeightRequest="40" 
+                       WidthRequest="100"
+                       Aspect="AspectFill"
+                       />
+
+                <Label Text="Image with AspectFit 40x100"
+                Style="{StaticResource Headline}"/>
+                <Image Source="dotnet_bot.png" 
+                       HeightRequest="40" WidthRequest="100"
+                       BackgroundColor="#f1f1f1"
+                       Aspect="AspectFit"
+                       />
+
+                <!--<Label Text="Image with Center 40x100"/>
+                <Image Source="dotnet_bot.png" 
+                       HeightRequest="40" WidthRequest="100"
+                       Aspect="Center"
+                       />-->
+
+                <Label Text="Image with Fill 40x100"
+                Style="{StaticResource Headline}"/>
+                <Image Source="dotnet_bot.png" 
+                       HeightRequest="40" WidthRequest="100"
+                       Aspect="Fill"
+                       />
+
+                <Label Text="Online image"
+                Style="{StaticResource Headline}"/>
+                <Image Source="https://aka.ms/campus.jpg" 
+                       WidthRequest="200"
+                       HeightRequest="200"/>
+
+                <Label Text="Online image clipped"
+                Style="{StaticResource Headline}"/>
+                <Image Source="https://aka.ms/campus.jpg" 
+                       Aspect="AspectFill"
+                       WidthRequest="100"
+                       HeightRequest="100">
+                    <Image.Clip>
+                        <EllipseGeometry 
+                            Center="50,50"
+                            RadiusX="50" RadiusY="50" />
+                    </Image.Clip>
+                </Image>
+
+                <Label Text="Animated GIF"
+                Style="{StaticResource Headline}"/>
+                <Image Source="animated_heart.gif"
+                IsAnimationPlaying="True" 
+                HorizontalOptions="Start" />
+
+                <Label Text="Image without sizing info"
+                Style="{StaticResource Headline}"/>
+                <Image Source="dotnet_bot.png" HorizontalOptions="Start" />
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

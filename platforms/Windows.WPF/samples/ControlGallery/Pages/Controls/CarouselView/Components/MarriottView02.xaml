@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ContentView
+             x:Class="CarouselGallery.Views.Components.MarriottView02">
+    <Grid ColumnDefinitions="2*,3*"
+          RowDefinitions="5*,150,1*">
+        <Image Source="IMG_0193.JPG"
+               Grid.RowSpan="3"
+               Grid.ColumnSpan="2"
+               Opacity="0.7"
+               Aspect="AspectFill" />
+        <!-- box -->
+        <StackLayout BackgroundColor="LightGray"
+                     Padding="15"
+                     Grid.Column="0"
+                     Grid.Row="1">
+            <Label Text="More than a beach: 5 must-dos in Miami."
+                   TextColor="Black"
+                   FontSize="16" />
+            <Label Text="> Learn More"
+                   TextColor="Black"
+                   FontAttributes="Bold"
+                   FontSize="16" />
+        </StackLayout>
+    </Grid>
+</ContentView>

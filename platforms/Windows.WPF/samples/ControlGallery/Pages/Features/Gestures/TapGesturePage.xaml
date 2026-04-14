@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.TapGesturePage"
+             Title="Tap">
+    
+        <StackLayout Style="{StaticResource MainContainer}">
+            <StackLayout.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnTapGestureRecognizerTapped"/>
+            </StackLayout.GestureRecognizers>
+
+            <Label Text="TapGestureRecognizer" Style="{StaticResource Headline}"/>
+            
+        </StackLayout>
+    
+</ContentPage>

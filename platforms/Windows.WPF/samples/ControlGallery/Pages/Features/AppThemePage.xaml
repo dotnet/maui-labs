@@ -1,0 +1,180 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.AppThemePage"
+    Title="AppThemes"
+    x:DataType="AppThemeViewModel">
+    <ContentPage.BindingContext>
+        <AppThemeViewModel/>
+    </ContentPage.BindingContext>
+
+    <ContentPage.Resources>
+        <ControlTemplate x:Key="ThemeRadioTemplate">
+            <Border
+                Stroke="{StaticResource Gray100}"
+                StrokeThickness="1"
+                Background="{StaticResource Gray100}"
+                HeightRequest="120"
+                WidthRequest="100"
+                HorizontalOptions="Start"
+                VerticalOptions="Start"
+                Padding="0">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="8"/>
+                </Border.StrokeShape>
+
+                <VisualStateManager.VisualStateGroups>
+                    <VisualStateGroupList>
+                        <VisualStateGroup
+                            x:Name="CheckedStates">
+
+                            <VisualState
+                                x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter
+                                        Property="Stroke"
+                                        Value="{StaticResource Primary}"/>
+                                    <Setter
+                                        TargetName="Check"
+                                        Property="Opacity"
+                                        Value="1"/>
+                                </VisualState.Setters>
+                            </VisualState>
+
+                            <VisualState
+                                x:Name="Unchecked">
+                                <VisualState.Setters>
+                                    <Setter
+                                        Property="Stroke"
+                                        Value="{StaticResource Gray100}"/>
+                                    <Setter
+                                        TargetName="Check"
+                                        Property="Opacity"
+                                        Value="0"/>
+                                </VisualState.Setters>
+                            </VisualState>
+
+                        </VisualStateGroup>
+                    </VisualStateGroupList>
+                </VisualStateManager.VisualStateGroups>
+
+                <Grid
+                    Margin="8"
+                    WidthRequest="100">
+                    <Grid
+                        WidthRequest="18"
+                        HeightRequest="18"
+                        Margin="0,0,8,0"
+                        HorizontalOptions="End"
+                        VerticalOptions="Start">
+                        <Ellipse
+                            Stroke="{StaticResource Gray900}"
+                            WidthRequest="16"
+                            HeightRequest="16"
+                            StrokeThickness="0.5"
+                            VerticalOptions="Center"
+                            HorizontalOptions="Center"
+                            Fill="White"/>
+                        <Ellipse
+                            x:Name="Check"
+                            WidthRequest="8"
+                            HeightRequest="8"
+                            Stroke="{StaticResource Primary}"
+                            Fill="{StaticResource Primary}"
+                            VerticalOptions="Center"
+                            HorizontalOptions="Center"/>
+                    </Grid>
+                    <ContentPresenter></ContentPresenter>
+                </Grid>
+            </Border>
+        </ControlTemplate>
+
+
+    </ContentPage.Resources>
+
+    <ContentPage.Content>
+        <ScrollView Orientation="Vertical">
+            <VerticalStackLayout Margin="{OnPlatform iOS='30,60,30,30', Default='30'}"
+                    Spacing="8">
+                <Label x:Name="CurrentThemeLabel"
+                       Style="{StaticResource Headline}"/>
+                <HorizontalStackLayout
+                    Spacing="12"
+                    RadioButtonGroup.GroupName="AppTheme"
+                    RadioButtonGroup.SelectedValue="{Binding CurrentTheme}">
+                    <HorizontalStackLayout.Resources>
+                        <Style TargetType="RadioButton">
+                            <Setter Property="ControlTemplate"
+                                    Value="{StaticResource ThemeRadioTemplate}"/>
+                        </Style>
+                    </HorizontalStackLayout.Resources>
+                    <RadioButton Value="{x:Static AppTheme.Unspecified}">
+                        <RadioButton.Content>
+                            <Grid RowDefinitions="4*,1*">
+                                <Image
+                                    VerticalOptions="Center"
+                                    HorizontalOptions="Center"
+                                    HeightRequest="42"
+                                    Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.Mobile},
+                                        Color={StaticResource Gray900},
+                                        Size=42}"/>
+                                <Label
+                                    Text="System"
+                                    TextColor="{StaticResource Gray950}"
+                                    VerticalOptions="Center"
+                                    HorizontalOptions="Center"
+                                    Grid.Row="1"/>
+                            </Grid>
+                        </RadioButton.Content>
+                    </RadioButton>
+                    <RadioButton Value="{x:Static AppTheme.Dark}">
+                        <RadioButton.Content>
+                            <Grid RowDefinitions="4*,1*">
+                                <Image
+                                    VerticalOptions="Center"
+                                    HorizontalOptions="Center"
+                                    HeightRequest="42"
+                                    Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.Lightbulb},
+                                        Color=Black,
+                                        Size=42}"/>
+                                <Label
+                                    Text="Dark"
+                                    TextColor="{StaticResource Gray950}"
+                                    VerticalOptions="Center"
+                                    HorizontalOptions="Center"
+                                    Grid.Row="1"/>
+                            </Grid>
+                        </RadioButton.Content>
+                    </RadioButton>
+                    <RadioButton Value="{x:Static AppTheme.Light}">
+                        <RadioButton.Content>
+                            <Grid RowDefinitions="4*,1*">
+                                <Image
+                                    VerticalOptions="Center"
+                                    HorizontalOptions="Center"
+                                    HeightRequest="42"
+                                    Source="{FontImage
+                                        FontFamily=FontAwesome,
+                                        Glyph={x:Static IconFont.Lightbulb},
+                                        Color=White,
+                                        Size=42}"/>
+                                <Label
+                                    Text="Light"
+                                    TextColor="{StaticResource Gray950}"
+                                    VerticalOptions="Center"
+                                    HorizontalOptions="Center"
+                                    Grid.Row="1"/>
+                            </Grid>
+                        </RadioButton.Content>
+                    </RadioButton>
+                </HorizontalStackLayout>
+
+
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

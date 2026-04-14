@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="ControlGallery.Pages.FeaturesPage"
+             Title="Features">
+       <ContentPage.Content>
+              <ScrollView>
+
+            <VerticalStackLayout Margin="15" Spacing="8">
+                <Label Text="UI Features" Style="{StaticResource Headline}"/>
+                <HorizontalWrapLayout Margin="0,0,0,60" Spacing="12"
+                           >
+                    <BindableLayout.ItemsSource>
+                        <x:Array Type="{x:Type NavItem}">
+                            <NavItem Title="Animations"
+                                   Destination="{x:Type AnimationsPage}"/>
+                            <NavItem Title="AppThemeBinding"
+                                   Destination="{x:Type AppThemePage}"/>
+                            <NavItem Title="Behaviors"
+                                   Destination="{x:Type BehaviorsPage}"/>
+                            <NavItem Title="Clipping"
+                                   Destination="{x:Type ClippingPage}"/>
+                            <NavItem Title="Colors"
+                                   Destination="{x:Type ColorsPage}"/>
+                            <NavItem Title="ContextMenu"
+                                   Destination="{x:Type ContextMenuPage}"/>
+                            <NavItem Title="FontImageSource"
+                                   Destination="{x:Type FontImagePage}"/>
+                            <NavItem Title="Gestures"
+                                   Destination="{x:Type GesturesPage}"/>
+                            <NavItem Title="MenuBar"
+                                   Destination="{x:Type MenuBarPage}"/>
+                            <NavItem Title="Native Views"
+                                   Destination="{x:Type NativeViewsPage}"/>
+                            <NavItem Title="Shadow"
+                                   Destination="{x:Type ShadowPage}"/>
+                            <NavItem Title="Tooltips"
+                                   Destination="{x:Type TooltipPage}"/>
+                            <NavItem Title="Triggers"
+                                   Destination="{x:Type TriggersPage}"/>
+                            <NavItem Title="HybridWebView"
+                                   Destination="{x:Type HybridWebViewPage}"/>
+
+                            
+
+                                          </x:Array>
+                                   </BindableLayout.ItemsSource>
+                                   <BindableLayout.ItemTemplate>
+                                          <DataTemplate>
+                                                 <Button
+                                                        Text="{Binding Title}"
+                                                        Command="{Binding NavigateTo}"/>
+                                          </DataTemplate>
+                                   </BindableLayout.ItemTemplate>
+                            </HorizontalWrapLayout>
+
+                     </VerticalStackLayout>
+              </ScrollView>
+       </ContentPage.Content>
+</ContentPage>

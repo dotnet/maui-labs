@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.EntryPage"
+             Title="Entry">
+    <ContentPage.Resources>
+        <Style TargetType="HorizontalStackLayout">
+            <Setter Property="Spacing" Value="8"/>
+        </Style>
+
+        <Style TargetType="Entry">
+            <Setter Property="MinimumWidthRequest" Value="150"/>
+        </Style>
+    </ContentPage.Resources>
+
+    <ContentPage.Content>
+        <ScrollView>
+            <VerticalStackLayout Padding="{OnPlatform iOS='30,60,30,30', Default='30'}" Spacing="8">
+                <Label Text="Basic" Style="{StaticResource Headline}" />
+                <Entry Completed="Entry_Completed" />
+                <HorizontalStackLayout>
+                    <Entry />
+                    <Entry IsEnabled="False"/>
+                </HorizontalStackLayout>
+
+                <Label Text="With Placeholder" Style="{StaticResource Headline}" />
+                <HorizontalStackLayout>
+                    <Entry Placeholder="Placeholder"/>
+                    <Entry Placeholder="Placeholder color" PlaceholderColor="{StaticResource Accent}"/>
+                    <Entry Placeholder="Placeholder" IsEnabled="False"/>
+                </HorizontalStackLayout>
+                
+                <Label Text="Password" Style="{StaticResource Headline}" />
+                <HorizontalStackLayout>
+                    <Entry IsPassword="True" />
+                    <Entry IsPassword="True" IsEnabled="False"/>
+                </HorizontalStackLayout>
+
+                <Label Text="With Text" Style="{StaticResource Headline}" />
+                <HorizontalStackLayout>
+                    <Entry Text="Text" TextChanged="OnTextChanged" />
+                    <Entry Text="Text Color" TextColor="{StaticResource Accent}"/>
+                    <Entry Text="Text" IsEnabled="False"/>
+                </HorizontalStackLayout>
+
+                <Label Text="Read-only" Style="{StaticResource Headline}" />
+                <HorizontalStackLayout>
+                    <Entry Text="I am read only" IsReadOnly="True"/>
+                </HorizontalStackLayout>
+
+                <Label Text="With Purple Background" Style="{StaticResource Headline}" />
+                <HorizontalStackLayout>
+                    <Entry Placeholder="Placeholder"
+                           TextColor="{StaticResource TextOnSolid_Light}"
+                           PlaceholderColor="{StaticResource TextOnSolid_Light}"
+                           Background="{StaticResource TertiaryBrush}"/>
+                    <Entry Placeholder="Placeholder" IsEnabled="False"
+                           TextColor="{StaticResource TextOnSolid_Light}"
+                           PlaceholderColor="{StaticResource TextOnSolid_Light}"
+                           Background="{StaticResource TertiaryBrush}"/>
+                </HorizontalStackLayout>
+
+                <Label Text="Community Toolkit Helpers" Style="{StaticResource Headline}"/>
+                <Label Text="With error message" StyleClass="Subhead" />
+                <HorizontalStackLayout>
+                    <Entry Text="" />
+                </HorizontalStackLayout>
+
+                <Label Text="Input mask" StyleClass="Subhead" />
+                <HorizontalStackLayout>
+                    <Entry Text="" />
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

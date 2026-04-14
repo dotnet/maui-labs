@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.ProgressBarPage"
+             Title="ProgressBar">
+
+    <ContentPage.Content>
+        <ScrollView>
+            <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Default='30'}">
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                
+                <ProgressBar Progress="0.5" ProgressColor="Red"/>
+                <ProgressBar x:Name="progressBar" />
+            
+                <Label Text="Styled" Style="{StaticResource Headline}"/>
+            
+                <Label Text="HeightRequest" StyleClass="Subhead"/>
+                <ProgressBar HeightRequest="20" Progress="0.2"/>
+            
+                <Label Text="ProgressColor" StyleClass="Subhead"/>
+                <ProgressBar HeightRequest="20" Progress="0.3" 
+                    ProgressColor="{StaticResource Primary}"/>
+
+                <Label Text="BackgroundColor" StyleClass="Subhead"/>
+                <ProgressBar HeightRequest="20" 
+                             Progress="0.4" 
+                             BackgroundColor="{StaticResource Secondary}"
+                             ProgressColor="{StaticResource Primary}"/>
+            </StackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

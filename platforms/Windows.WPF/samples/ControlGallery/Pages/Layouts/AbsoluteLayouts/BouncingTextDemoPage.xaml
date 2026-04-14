@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="ControlGallery.Pages.Layouts.AbsoluteLayouts.BouncingTextDemoPage"
+             Title="Bouncing text demo">
+    <AbsoluteLayout>
+        <Label x:Name="label1"
+               Text="Bouncing text"
+               FontSize="Large"
+               AbsoluteLayout.LayoutFlags="PositionProportional" />
+        <Label x:Name="label2"
+               Text="Bouncing text"
+               FontSize="Large"
+               AbsoluteLayout.LayoutFlags="PositionProportional" />
+    </AbsoluteLayout>
+</ContentPage>

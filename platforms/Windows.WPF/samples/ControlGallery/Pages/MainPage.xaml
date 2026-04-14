@@ -1,0 +1,472 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.MainPage"
+             Title="Main Pages"
+            >
+<ContentPage.Resources>
+    <Color x:Key="Primary">#512BD4</Color>
+        <Color x:Key="Secondary">#DFD8F7</Color>
+        <Color x:Key="Tertiary">#2B0B98</Color>
+        <Color x:Key="Neutral">#969696</Color>
+        <Color x:Key="NeutralLighter">#E5E5E1</Color>
+        <Color x:Key="NeutralDarker">#505050</Color>
+        <Color x:Key="White">#FFFFFF</Color>
+        <Color x:Key="Black">#000000</Color>
+        <Color x:Key="Accent">#F7B548</Color>
+        <Color x:Key="Error">#C00</Color>
+        <Color x:Key="Warning">#FFCC00</Color>
+        <Color x:Key="Text_Light">#000000</Color>
+        <Color x:Key="Text_Dark">#FFFFFF</Color>
+        <Color x:Key="TextOnSolid_Light">#FFFFFF</Color>
+        <Color x:Key="TextOnSolid_Dark">#000000</Color>
+        <Color x:Key="TextSecondary_Light">#1d1d1d</Color>
+        <Color x:Key="TextSecondary_Dark">#f1f1f1</Color>
+
+        <Style TargetType="Page" ApplyToDerivedTypes="True">
+                <Setter Property="Padding" Value="15"/>
+        </Style>
+
+        <Style TargetType="Label">
+        <Setter Property="FontFamily" Value="OpenSansRegular"/>
+        <Setter Property="FontSize"
+                Value="17"/>
+        <Setter Property="TextColor"
+                Value="{StaticResource Text_Light}"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="LargeTitle">
+        <Setter Property="FontSize"
+                Value="30"/>
+        <Setter Property="FontFamily" Value="OpenSansSemiBold"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Title1">
+        <Setter Property="FontSize"
+                Value="26"/>
+        <Setter Property="FontFamily" Value="OpenSansSemiBold"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Headline">
+        <Setter Property="FontSize"
+                Value="17"/>
+        <Setter Property="FontFamily" Value="OpenSansSemiBold"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Subhead">
+        <Setter Property="FontSize"
+                Value="15"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Footnote">
+        <Setter Property="FontSize"
+                Value="13"/>
+    </Style>
+
+    <!-- Text Color Styles -->
+    <Style TargetType="Label"
+            Class="Secondary">
+        <Setter Property="TextColor"
+                Value="{StaticResource Text_Light}"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Primary">
+        <Setter Property="TextColor"
+                Value="{StaticResource Primary}"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Error">
+        <Setter Property="TextColor"
+                Value="{StaticResource Error}"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Warning">
+        <Setter Property="TextColor"
+                Value="{StaticResource Warning}"/>
+    </Style>
+    <Style TargetType="Label"
+            Class="Disabled">
+        <Setter Property="TextColor"
+                Value="{StaticResource Neutral}"/>
+    </Style>
+
+    <FontImageSource
+        x:Key="CircleIcon"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource TextOnSolid_Light}"
+        Size="16"/>
+
+    <FontImageSource
+        x:Key="CircleIconDisabled"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource TextOnSolid_Light}"
+        Size="16"/>
+
+    <FontImageSource
+        x:Key="CircleIconAlt"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource Primary}"
+        Size="16"/>
+    <FontImageSource
+        x:Key="CircleIconAltDisabled"
+        FontFamily="FontAwesome"
+        Glyph="{x:Static IconFont.DotCircle}"
+        Color="{StaticResource Neutral}"
+        Size="16"/>
+
+    <Style TargetType="Button">
+        <Setter Property="TextColor" Value="White"></Setter>
+        <Setter Property="FontFamily" Value="OpenSansRegular"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="14,10"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource Neutral}" />
+                            <Setter Property="TextColor" Value="White"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button" x:Key="PrimaryButtonOutline">
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="BackgroundColor" Value="Transparent"/>
+        <Setter Property="TextColor" Value="{StaticResource Primary}"/>
+        <Setter Property="BorderWidth" Value="1"/>
+        <Setter Property="BorderColor" Value="{StaticResource Primary}"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="BorderColor" Value="{StaticResource Neutral}" />
+                            <Setter Property="TextColor" Value="{StaticResource Neutral}" />
+                            <Setter Property="BackgroundColor" Value="Transparent"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button" x:Key="PrimaryButtonOutlineIcon" BasedOn="{StaticResource PrimaryButtonOutline}">
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="ImageSource" Value="{StaticResource CircleIconAltDisabled}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button" x:Key="SecondaryButtonOutline" BasedOn="{StaticResource PrimaryButtonOutline}">
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style TargetType="Button" x:Key="TertiaryButtonOutline" BasedOn="{StaticResource PrimaryButtonOutline}">
+    </Style>
+    <Style TargetType="Button" x:Key="BorderlessButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="TextColor" Value="{StaticResource Primary}"/>
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="TextColor" Value="{StaticResource Neutral}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style TargetType="StackLayout" Class="CheckBoxContainer">
+        <Setter Property="Spacing" Value="0"/>
+        <Setter Property="Orientation" Value="Horizontal"/>
+    </Style>
+
+    <Style TargetType="StackLayout" Class="SwitchContainer">
+            <Setter Property="Spacing" Value="0"/>
+            <Setter Property="Orientation" Value="Horizontal"/>
+        </Style>
+</ContentPage.Resources>
+
+    <ContentPage.Content>
+        <ScrollView>
+            <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Default='30'}">
+                
+                <Label Text="Text Styles"
+                       Style="{StaticResource Headline}"
+                    HorizontalOptions="Center" />
+                <Label Text="Large Title is Bold 30"
+                       Style="{StaticResource LargeTitle}"/>
+                <Label Text="Title 1 is Bold 26"
+                       Style="{StaticResource Title1}"/>
+                <Label Text="Headline is Bold 17"
+                       Style="{StaticResource Headline}"/>
+                <Label Text="Body is Regular 17"/>
+                <Label Text="Subhead is Regular 15"
+                       StyleClass="Subhead"/>
+                <Label Text="Footnote is Regular 13"
+                       StyleClass="Footnote"/>
+
+                <Label Text="Text Color Styles"
+                       Style="{StaticResource Headline}"
+                    HorizontalOptions="Center" />
+                <Label Text="Regular"/>
+                <Label Text="Error" StyleClass="Error"/>
+                <Label Text="Warning" StyleClass="Warning"/>
+                <Label Text="Disabled" StyleClass="Disabled"/>
+
+                <!-- ActivityIndicators -->
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                <Label Text="IsRunning" StyleClass="Subhead"/>
+                <ActivityIndicator IsRunning="True" />
+
+                <Label Text="Styled" Style="{StaticResource Headline}"/>
+                <Label Text="Color" StyleClass="Subhead"/>
+                <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}" />
+
+                <Label Text="Primary filled"/>
+                <StackLayout Orientation="Horizontal">
+                    <Button Text="Button"/>
+                    <Button Text="Button" IsEnabled="False"/>
+                </StackLayout>
+
+                <StackLayout Orientation="Horizontal">
+                    <Button ImageSource="{StaticResource CircleIcon}" Text="Button"/>
+                    <Button ImageSource="{StaticResource CircleIcon}" Text="Button" IsEnabled="False"/>
+                </StackLayout>
+
+                <StackLayout Orientation="Horizontal">
+                    <Button ImageSource="{StaticResource CircleIcon}"/>
+                    <Button ImageSource="{StaticResource CircleIcon}" IsEnabled="False"/>
+                </StackLayout>
+
+                <Label Text="Primary outline"/>
+                <StackLayout Orientation="Horizontal">
+                    <Button Text="Button" Style="{StaticResource PrimaryButtonOutline}"/>
+                    <Button Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutline}"/>
+                </StackLayout>
+
+                <StackLayout Orientation="Horizontal">
+                    <Button ImageSource="{StaticResource CircleIconAlt}" Text="Button" Style="{StaticResource PrimaryButtonOutlineIcon}"/>
+                    <Button ImageSource="{StaticResource CircleIconAlt}" Text="Button" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}"/>
+                </StackLayout>
+
+                <StackLayout Orientation="Horizontal">
+                    <Button ImageSource="{StaticResource CircleIconAlt}" Style="{StaticResource PrimaryButtonOutlineIcon}"/>
+                    <Button ImageSource="{StaticResource CircleIconAlt}" IsEnabled="False" Style="{StaticResource PrimaryButtonOutlineIcon}"/>
+                </StackLayout>
+
+                <Label Text="Secondary outline"/>
+                <StackLayout Orientation="Horizontal">
+                    <Button Text="Button" Style="{StaticResource SecondaryButtonOutline}"/>
+                    <Button Text="Button" IsEnabled="False" Style="{StaticResource SecondaryButtonOutline}"/>
+                </StackLayout>
+
+                <Label Text="Teriary outline"/>
+                <StackLayout Orientation="Horizontal">
+                    <Button Text="Button" Style="{StaticResource TertiaryButtonOutline}"/>
+                    <Button Text="Button" IsEnabled="False" Style="{StaticResource TertiaryButtonOutline}"/>
+                </StackLayout>
+
+                <Label Text="Borderless"/>
+                <StackLayout Orientation="Horizontal">
+                    <Button Text="Button" Style="{StaticResource BorderlessButton}"/>
+                    <Button Text="Button" IsEnabled="False" Style="{StaticResource BorderlessButton}"/>
+                </StackLayout>
+
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                <StackLayout StyleClass="CheckBoxContainer">
+                    <CheckBox/>
+                    <Label Text="Unchecked" VerticalOptions="Center"/>
+                </StackLayout>
+                <StackLayout StyleClass="CheckBoxContainer">
+                    <CheckBox IsChecked="True"/>
+                    <Label Text="Checked" VerticalOptions="Center"/>
+                </StackLayout>
+                <StackLayout StyleClass="CheckBoxContainer">
+                    <CheckBox IsEnabled="False"/>
+                    <Label Text="Disabled" VerticalOptions="Center"/>
+                </StackLayout>
+                <StackLayout StyleClass="CheckBoxContainer">
+                    <CheckBox IsEnabled="False" IsChecked="True"/>
+                    <Label Text="Disabled checked" VerticalOptions="Center"/>
+                </StackLayout>
+
+                <Label Text="Styling" Style="{StaticResource Headline}"/>
+                <StackLayout StyleClass="CheckBoxContainer">
+                    <CheckBox Color="{StaticResource Accent}"/>
+                    <Label Text="Accent" VerticalOptions="Center"/>
+                </StackLayout>
+
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+            <Editor/>
+
+            <Label Text="Placeholder" Style="{StaticResource Headline}"/>
+            <Editor Placeholder="Placeholder"/>
+            
+            <Label Text="Disabled" Style="{StaticResource Headline}"/>
+            <Editor Text="I am disabled" IsEnabled="False"/>
+
+            <Label Text="Read-only" Style="{StaticResource Headline}"/>
+            <Editor Text="I am read only" IsReadOnly="True"/>
+
+            <Label Text="With error message" Style="{StaticResource Headline}"/>
+            <Editor />
+
+            <Label Text="Multiline" Style="{StaticResource Headline}"/>
+            <Label Text="AutoSize" StyleClass="Subhead"/>
+            <Editor Placeholder="Placeholder" AutoSize="TextChanges"/>
+
+            <Label Text="Fixed Height" StyleClass="Subhead"/>
+            <Editor Placeholder="Placeholder" HeightRequest="200"/>
+<!--
+            <Label Text="Basic" Style="{StaticResource Headline}" />
+            <StackLayout Orientation="Horizontal">
+                <Entry/>
+                <Entry IsEnabled="False"/>
+            </StackLayout>
+
+            <Label Text="With Placeholder" Style="{StaticResource Headline}" />
+            <StackLayout Orientation="Horizontal">
+                <Entry Placeholder="Placeholder"/>
+                <Entry Placeholder="Placeholder color" 
+                    PlaceholderColor="{StaticResource Accent}"/>
+                <Entry Placeholder="Placeholder" IsEnabled="False"/>
+            </StackLayout>
+            
+            <Label Text="Password" Style="{StaticResource Headline}" />
+            <StackLayout Orientation="Horizontal">
+                <Entry IsPassword="True" />
+                <Entry IsPassword="True" IsEnabled="False"/>
+            </StackLayout>
+
+            <Label Text="With Text" Style="{StaticResource Headline}" />
+            <StackLayout Orientation="Horizontal">
+                <Entry Text="Text"/>
+                <Entry Text="Text Color" TextColor="{StaticResource Accent}"/>
+                <Entry Text="Text" IsEnabled="False"/>
+            </StackLayout>
+
+            <Label Text="Read-only" Style="{StaticResource Headline}" />
+            <StackLayout Orientation="Horizontal">
+                <Entry Text="I am read only" IsReadOnly="True"/>
+            </StackLayout>
+
+            <Label Text="With Purple Background" Style="{StaticResource Headline}" />
+            <StackLayout Orientation="Horizontal">
+                <Entry Placeholder="Placeholder" 
+                       Background="{StaticResource Tertiary}"/>
+                <Entry Placeholder="Placeholder" IsEnabled="False"
+                       Background="{StaticResource Tertiary}"/>
+            </StackLayout>
+
+            <Label Text="Community Toolkit Helpers" Style="{StaticResource Headline}"/>
+            <Label Text="With error message" StyleClass="Subhead" />
+            <StackLayout Orientation="Horizontal">
+                <Entry Text="" />
+            </StackLayout>
+
+            <Label Text="Input mask" StyleClass="Subhead" />
+            <StackLayout Orientation="Horizontal">
+                <Entry Text="" />
+            </StackLayout>
+-->
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                
+                <ProgressBar Progress="0.5"/>
+                <ProgressBar x:Name="progressBar" />
+            
+                <Label Text="Styled" Style="{StaticResource Headline}"/>
+            
+                <Label Text="HeightRequest" StyleClass="Subhead"/>
+                <ProgressBar HeightRequest="20" Progress="0.2"/>
+            
+                <Label Text="ProgressColor" StyleClass="Subhead"/>
+                <ProgressBar HeightRequest="20" Progress="0.3" 
+                    ProgressColor="{StaticResource Primary}"/>
+
+                <Label Text="BackgroundColor" StyleClass="Subhead"/>
+                <ProgressBar HeightRequest="20" 
+                             Progress="0.4" 
+                             BackgroundColor="{StaticResource Secondary}"
+                             ProgressColor="{StaticResource Primary}"/>
+
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                <Slider/>
+
+                <Label Text="MinimumTrackColor" Style="{StaticResource Headline}"/>
+                <Slider MinimumTrackColor="{StaticResource Neutral}" Value="0.5"/>
+
+                <Label Text="MaximumTrackColor" Style="{StaticResource Headline}"/>
+                <Slider MaximumTrackColor="{StaticResource Neutral}" Value="0.5"/>
+
+                <Label Text="ThumbColor" Style="{StaticResource Headline}"/>
+                <Slider ThumbColor="{StaticResource Primary}" Value="0.5"/>
+
+
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                <StackLayout Orientation="Horizontal">
+                    <Stepper/>
+                    <Stepper IsEnabled="False"/>
+                </StackLayout>
+
+                <Label Text="Styled" Style="{StaticResource Headline}"/>
+
+                <Label Text="BackgroundColor" StyleClass="Subhead"/>
+                <StackLayout Orientation="Horizontal">
+                    <Stepper BackgroundColor="{StaticResource Secondary}"/>
+                    <Stepper BackgroundColor="{StaticResource Secondary}" 
+                             IsEnabled="False"/>
+                </StackLayout>
+
+                <Label Text="BackgroundColor" StyleClass="Subhead"/>
+                <StackLayout Orientation="Horizontal">
+                    <Stepper Increment="2"/>
+                    <Stepper BackgroundColor="{StaticResource Secondary}" 
+                             IsEnabled="False"/>
+                </StackLayout>
+
+                <Label Text="Default" Style="{StaticResource Headline}"/>
+                <Label Text="Enabled and untoggled" StyleClass="Subhead"/>
+                <Switch/>
+
+                <Label Text="Enabled and toggled" StyleClass="Subhead"/>
+                <Switch IsToggled="True"/>
+
+                <Label Text="Disabled and untoggled" StyleClass="Subhead"/>
+                <Switch IsEnabled="False"/>
+
+                <Label Text="Disabled and toggled" StyleClass="Subhead"/>
+                <Switch IsToggled="True" IsEnabled="False"/>
+
+                <Label Text="Styled" Style="{StaticResource Headline}"/>
+                <Label Text="OnColor" StyleClass="Subhead"/>
+                <Switch IsToggled="True" OnColor="{StaticResource Accent}"/>
+
+                <Label Text="ThumbColor" StyleClass="Subhead"/>
+                <Switch IsToggled="True" ThumbColor="{StaticResource Accent}" />
+
+
+            </StackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

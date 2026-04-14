@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ContentPage
+             x:Class="CollectionViewDemos.Views.VerticalListEmptyGroupsPage"
+             Title="Grouping including empty groups">
+    <Grid Margin="20">
+        <CollectionView ItemsSource="{Binding Animals}"
+                        IsGrouped="true">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="10" ColumnSpacing="10" 
+                        ColumnDefinitions="60,Auto"
+                        RowDefinitions="Auto,Auto">
+                        <Image Grid.RowSpan="2" 
+                               Source="{Binding ImageUrl}" 
+                               Aspect="AspectFill"
+                               HeightRequest="60" 
+                               WidthRequest="60" />
+                        <Label Grid.Column="1" 
+                               Text="{Binding Name}" 
+                               FontSize="Subtitle"
+                               FontAttributes="Bold" />
+                        <Label Grid.Row="1"
+                               Grid.Column="1" 
+                               Text="{Binding Location}"
+                               FontSize="Caption"
+                               VerticalOptions="Start" />
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate>
+                    <Grid RowDefinitions="Auto,1" RowSpacing="4">
+                        <Label Text="{Binding Name}"
+                            FontSize="Title"
+                            Padding="4" />
+                        <BoxView Color="{AppThemeBinding Light=Black, Dark=White}" Grid.Row="1"/>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
+            <CollectionView.GroupFooterTemplate>
+                <DataTemplate>
+                    <Label 
+                        Margin="0,0,0,10"
+                        HorizontalTextAlignment="End">
+                        <Label.Text>
+                            <MultiBinding StringFormat="Total {0}: {1:D}">
+                                <Binding Path="Name" />
+                                <Binding Path="Count" />
+                            </MultiBinding>
+                        </Label.Text>
+                    </Label>
+                </DataTemplate>
+            </CollectionView.GroupFooterTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

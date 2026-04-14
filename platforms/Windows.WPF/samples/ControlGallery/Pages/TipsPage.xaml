@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="ControlGallery.Pages.TipsPage"
+             Title="Tips &amp; Tricks">
+    <ContentPage.Content>
+        <ScrollView>
+
+            <VerticalStackLayout Margin="15" Spacing="8">
+                <Label Text="UI Features" Style="{StaticResource Headline}"/>
+                
+            </VerticalStackLayout>
+        </ScrollView>
+    </ContentPage.Content>
+</ContentPage>

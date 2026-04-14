@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+             x:DataType="ExampleView"
+             x:Class="ControlGallery.Common.Views.ExampleView">
+    <ContentView.Resources>
+        <IntToBoolConverter x:Key="IntToBoolConverter"/>
+        <IsStringNotNullOrEmptyConverter x:Key="IsNotNullConverter"/>
+        <ColorSyntaxConverter x:Key="ColorSyntaxConverter"/>
+
+        <ControlTemplate x:Key="TabTemplate">
+            <Grid RowDefinitions="40,4" WidthRequest="100">
+                <VisualStateManager.VisualStateGroups>
+                    <VisualStateGroupList>
+                        <VisualStateGroup x:Name="CheckedStates">
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter
+                                        TargetName="TextLabel"
+                                        Property="Label.TextColor"
+                                        Value="{StaticResource Primary}"/>
+                                    <Setter
+                                        TargetName="Indicator"
+                                        Property="BoxView.Color"
+                                        Value="{StaticResource Primary}"/>
+                                </VisualState.Setters>
+                            </VisualState>
+
+                            <VisualState x:Name="Unchecked">
+                                <VisualState.Setters>
+                                    <Setter
+                                        TargetName="TextLabel"
+                                        Property="Label.TextColor"
+                                        Value="{StaticResource Gray500}"/>
+                                    <Setter
+                                        TargetName="Indicator"
+                                        Property="BoxView.Color"
+                                        Value="Transparent"/>
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter
+                                        TargetName="Indicator"
+                                        Property="BoxView.Color"
+                                        Value="{StaticResource Primary}"/>
+                        </VisualState.Setters>
+                    </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateGroupList>
+                </VisualStateManager.VisualStateGroups>
+                <Label Text="{TemplateBinding Content}" x:Name="TextLabel" HorizontalOptions="Center"/>
+                <BoxView x:Name="Indicator" Grid.Row="1" Color="Transparent"/>
+            </Grid>
+        </ControlTemplate>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="ControlTemplate" Value="{StaticResource TabTemplate}"/>
+        </Style>
+    </ContentView.Resources>
+    <Grid x:Name="rootGrid" 
+          RowDefinitions="Auto, Auto, *">
+
+        <Label Style="{StaticResource Headline}"
+               Margin="0,16"
+               Text="{Binding HeaderText}" />
+
+        <Grid Grid.Row="2"
+              RowSpacing="15"
+              RowDefinitions="*,Auto,Auto">
+            <ContentView
+                x:Name="ControlPresenter"
+                Padding="30"
+                Content="{Binding Example}"
+                Background="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
+                />
+
+            <!--  Sample code display  -->
+            <Border Grid.Row="1"
+                    Stroke="{StaticResource Gray300}"
+                    StrokeThickness="1"
+                    StrokeShape="{RoundRectangle CornerRadius=0}">
+                <Grid
+                    ColumnDefinitions="0,*"
+                    RowDefinitions="58,Auto"
+                    IsClippedToBounds="True">
+                    <BoxView Color="{StaticResource Gray300}"
+                             Grid.ColumnSpan="2"
+                             HeightRequest="1"
+                             Margin="0"
+                             VerticalOptions="End"/>
+                    <HorizontalStackLayout Margin="15"
+                                           Grid.ColumnSpan="2"
+                                           VerticalOptions="End">
+                        <RadioButton Content="C#" Value="1" x:Name="rCsharp" IsChecked="True"
+                                     CursorBehavior.AttachBehavior="True"
+                                     IsVisible="{Binding CSharp, Converter={StaticResource IsNotNullConverter}}"/>
+                        <RadioButton Content="XAML" Value="0" x:Name="rXaml"
+                                     CursorBehavior.AttachBehavior="True"
+                                     IsVisible="{Binding Xaml, Converter={StaticResource IsNotNullConverter}}"/>
+                        <RadioButton Content="Style" Value="2" x:Name="rStyle"
+                                     CursorBehavior.AttachBehavior="True"
+                                     IsVisible="{Binding Styles, Converter={StaticResource IsNotNullConverter}}"
+                                     />
+                    
+                    </HorizontalStackLayout>
+                    <Button ImageSource="{FontImageSource FontFamily=FontAwesome, Glyph={x:Static IconFont.Copy}, Color={StaticResource Gray500},Size=18}"
+                                HorizontalOptions="End"
+                                Style="{StaticResource BorderlessButton}"
+                                Margin="0"
+                                VerticalOptions="Center"
+                                Grid.Column="1"
+                                Clicked="Button_Clicked"
+                                />
+
+                    <!--<Label Grid.Row="1"
+                           Grid.Column="0"
+                           IsVisible="false"
+                           Margin="15,15,0,0"
+                           LineHeight="0.87"
+                           TextColor="{StaticResource Gray300}"
+                           Text="1&#10;2&#10;3&#10;4&#10;5&#10;6&#10;7&#10;8&#10;9&#10;10&#10;11&#10;12&#10;13&#10;14&#10;15&#10;16&#10;17&#10;18&#10;19&#10;20&#10;"
+                           FontSize="16"
+                           x:Name="LineNumbers"/>-->
+
+                    <Label Grid.Row="1"
+                           Grid.Column="1"
+                           FormattedText="{Binding Xaml, Converter={StaticResource ColorSyntaxConverter}, ConverterParameter={x:Static Languages.Xml}}"
+                            IsVisible="{Binding IsChecked, Source={x:Reference rXaml}}"
+                            FontSize="16"
+                            Margin="15"
+                            />
+                    <Label  Grid.Row="1"
+                            Grid.Column="1"
+                            FormattedText="{Binding CSharp, Converter={StaticResource ColorSyntaxConverter}, ConverterParameter={x:Static Languages.CSharp}}"
+                            IsVisible="{Binding IsChecked, Source={x:Reference rCsharp}}"
+                            FontSize="16"
+                            Margin="15"
+                            />
+                    <Label  Grid.Row="1"
+                            Grid.Column="1"
+                            FormattedText="{Binding Styles, Converter={StaticResource ColorSyntaxConverter}, ConverterParameter={x:Static Languages.Xml}}"
+                            IsVisible="{Binding IsChecked, Source={x:Reference rStyle}}"
+                            FontSize="16"
+                            Margin="15"
+                            />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentView>
+

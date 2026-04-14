@@ -1,0 +1,148 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.ControlsPage"
+    Title="Controls">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem IconImageSource="{FontImageSource Glyph={x:Static IconFont.Boxes}, FontFamily=FontAwesome}"
+                     Clicked="ToolbarItem_Clicked"/>
+        <ToolbarItem IconImageSource="{FontImageSource Glyph={x:Static IconFont.List}, FontFamily=FontAwesome}"
+                     Clicked="ToolbarItem_Clicked_1"/>
+    </ContentPage.ToolbarItems>
+
+    <ContentPage.Resources>
+        <DataTemplate x:Key="ListTemplate">
+            <Grid ColumnDefinitions="44,*"
+                  RowDefinitions="44,1">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding NavigateTo}"/>
+                </Grid.GestureRecognizers>
+                <Image Source="{Binding Icon}"
+                       VerticalOptions="Center"
+                       HorizontalOptions="Center"/>
+                <Label Grid.Column="1"
+                       VerticalOptions="Center"
+                       Text="{Binding Title}"/>
+                <BoxView Color="{StaticResource Gray200}"
+                         Grid.ColumnSpan="2"
+                         Grid.Row="1"/>
+                <Grid.Behaviors>
+                    <CursorBehavior/>
+                </Grid.Behaviors>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="GridTemplate">
+            <Border Stroke="{StaticResource Gray200Brush}"
+                    StrokeThickness="1"
+                    CursorBehavior.AttachBehavior="True">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="8"/>
+                </Border.StrokeShape>
+                <Grid ColumnDefinitions="*"
+                      RowDefinitions="13*,8*"
+                      MinimumHeightRequest="100">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding NavigateTo}"/>
+                    </Grid.GestureRecognizers>
+                    <Image Source="{Binding Icon}"
+                           Grid.Row="0"
+                           VerticalOptions="Center"
+                           HorizontalOptions="Center"/>
+                    <Label Grid.Row="1"
+                           VerticalOptions="Center"
+                           HorizontalOptions="Center"
+                           Text="{Binding Title}"/>
+                    <Grid.Behaviors>
+                        <CursorBehavior/>
+                    </Grid.Behaviors>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DisplayTemplateSelector x:Key="TemplateSelector"
+                                 GridTemplate="{StaticResource GridTemplate}"
+                                 ListTemplate="{StaticResource ListTemplate}"/>
+
+    </ContentPage.Resources>
+
+    <CollectionView Grid.Row="1"
+                    x:Name="ControlsList"
+                    ContentInsetAdjustmentBehavior.ContentInset="{StaticResource PageInset}"
+                    ItemTemplate="{StaticResource TemplateSelector}">
+        <CollectionView.Effects>
+            <ContentInsetAdjustmentBehaviorRoutingEffect/>
+        </CollectionView.Effects>
+        <CollectionView.ItemsSource>
+            <x:Array Type="{x:Type NavItem}">
+                <NavItem Title="ActivityIndicator"
+                         Icon="view_activityindicator.png"
+                         Destination="{x:Type ActivityIndicatorPage}"/>
+                <NavItem Title="Alerts"
+                         Destination="{x:Type AlertPage}"/>
+                <NavItem Title="Borders"
+                         Destination="{x:Type BorderPage}"/>
+                <NavItem Title="BoxView"
+                         Destination="{x:Type BoxViewPage}"/>
+                <NavItem Title="Buttons"
+                         Icon="view_button.png"
+                         Destination="{x:Type ButtonPage}"/>
+                <NavItem Title="CheckBoxes"
+                         Destination="{x:Type CheckboxPage}"/>
+                <NavItem Title="CarouselView"
+                         Icon="view_listview.png"
+                         Destination="{x:Type CarouselViewPage}"/>
+                <NavItem Title="CollectionView"
+                         Icon="view_listview.png"
+                         Destination="{x:Type CollectionViewPage}"/>
+                <NavItem Title="Date Picker"
+                         Icon="view_datepicker.png"
+                         Destination="{x:Type DatePickerPage}"/>
+                <NavItem Title="Editors"
+                         Icon="view_editor.png"
+                         Destination="{x:Type EditorPage}"/>
+                <NavItem Title="Entry"
+                         Icon="view_entry.png"
+                         Destination="{x:Type EntryPage}"/>
+                <NavItem Title="Images"
+                         Icon="view_image.png"
+                         Destination="{x:Type ImagePage}"/>
+                <NavItem Title="Labels"
+                         Icon="view_label.png"
+                         Destination="{x:Type LabelPage}"/>
+                <NavItem Title="Map"
+                         Icon="view_map.png"
+                         Destination="{x:Type MapPage}"/>
+                <NavItem Title="Picker"
+                         Icon="view_picker.png"
+                         Destination="{x:Type PickerPage}"/>
+                <NavItem Title="Progress Bars"
+                         Icon="view_progressbar.png"
+                         Destination="{x:Type ProgressBarPage}"/>
+                <NavItem Title="Radio Buttons"
+                         Destination="{x:Type RadioButtonPage}"/>
+                <NavItem Title="RefreshView"
+                         Destination="{x:Type RefreshViewPage}"/>
+                <NavItem Title="SearchBar"
+                         Icon="view_searchbar.png"
+                         Destination="{x:Type SearchBarPage}"/>
+                <NavItem Title="Shapes"
+                         Destination="{x:Type ShapesPage}"/>
+                <NavItem Title="Sliders"
+                         Icon="view_slider.png"
+                         Destination="{x:Type SliderPage}"/>
+                <NavItem Title="Steppers"
+                         Icon="view_stepper.png"
+                         Destination="{x:Type StepperPage}"/>
+                <NavItem Title="Switches"
+                         Icon="view_switch.png"
+                         Destination="{x:Type SwitchPage}"/>
+                <NavItem Title="TimePicker"
+                         Icon="view_timepicker.png"
+                         Destination="{x:Type TimePickerPage}"/>
+                <NavItem Title="WebView"
+                         Icon="view_webview.png"
+                         Destination="{x:Type WebViewPage}"/>
+            </x:Array>
+        </CollectionView.ItemsSource>
+    </CollectionView>
+</ContentPage>

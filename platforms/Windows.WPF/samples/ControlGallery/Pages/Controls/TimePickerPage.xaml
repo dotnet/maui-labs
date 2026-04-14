@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.TimePickerPage"
+             Title="TimePicker">
+
+    <ScrollView>
+        <StackLayout Padding="{OnPlatform iOS='30,60,30,30', Android='15', Default='30'}">
+            <TimePicker/>
+        </StackLayout>
+    </ScrollView>
+
+</ContentPage>

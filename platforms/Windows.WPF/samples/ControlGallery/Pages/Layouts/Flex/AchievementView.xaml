@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Grid
+    WidthRequest="90"
+    HeightRequest="110"
+    Padding="0"
+    RowSpacing="4"
+    RowDefinitions="90,20"
+    x:Class="Flexibility.Shared.AchievementView">
+    <Grid.Resources>
+
+
+        <Style
+            x:Key="NakedButton"
+            TargetType="Button">
+            <Setter
+                Property="BackgroundColor"
+                Value="Transparent"/>
+            <Setter
+                Property="TextColor"
+                Value="#fff"/>
+            <Setter
+                Property="BorderColor"
+                Value="Transparent"/>
+            <Setter
+                Property="BorderWidth"
+                Value="0"/>
+            <Setter
+                Property="FontSize"
+                Value="16"/>
+        </Style>
+
+        <Style x:Key="IconFontButton"
+               BasedOn="{StaticResource NakedButton}"
+               TargetType="Button">
+            <Setter Property="FontFamily"
+                    Value="FontAwesome"/>
+        </Style>
+    </Grid.Resources>
+
+    <Button Grid.Row="0"
+            BorderColor="#fff"
+            BorderWidth="1"
+            BackgroundColor="#4D000000"
+            HeightRequest="90"
+            CornerRadius="45"
+            WidthRequest="90"
+            Style="{StaticResource IconFontButton}"
+            FontSize="32"
+            Text="{Binding Icon}"/>
+
+    <Label Grid.Row="1"
+           Text="{Binding Achievement}"
+           Margin="0,4,0,0"
+           HeightRequest="20"
+           FontSize="12"
+           HorizontalTextAlignment="Center"
+           HorizontalOptions="Center"/>
+
+
+</Grid>

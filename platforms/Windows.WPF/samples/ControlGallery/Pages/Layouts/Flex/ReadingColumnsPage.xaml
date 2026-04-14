@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="ControlGallery.Pages.Layouts.ReadingColumnsPage"
+    Title="Reading Columns">
+    <ScrollView>
+        <FlexLayout Wrap="Wrap">
+            <Border BackgroundColor="#f1f1f1"
+                    FlexLayout.Basis="33.33%"
+                    StrokeThickness="0">
+                <Label Text="Column 1"/>
+            </Border>
+            <Border BackgroundColor="#f1f1f1"
+                    FlexLayout.Basis="33.33%"
+                    StrokeThickness="0">
+                <Label Text="Column 2"/>
+            </Border>
+            <Border BackgroundColor="#f1f1f1"
+                    FlexLayout.Basis="33.33%"
+                    StrokeThickness="0">
+                <Label Text="Column 3"/>
+            </Border>
+        </FlexLayout>
+    </ScrollView>
+</ContentPage>

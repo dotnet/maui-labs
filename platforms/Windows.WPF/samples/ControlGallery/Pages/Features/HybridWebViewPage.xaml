@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.HybridWebViewPage"
+             Title="HybridWebView">    
+
+    <Grid ColumnDefinitions="*" RowDefinitions="Auto,*">
+        <Label
+                Text="{Binding TodoAppTitle}"
+                FontSize="32"
+                HorizontalOptions="Center" />
+
+        <HybridWebView Grid.Row="1" 
+            MinimumHeightRequest="400"
+            MinimumWidthRequest="600"
+            x:Name="myHybridWebView" 
+            HybridRoot="ReactTodoApp" 
+            DefaultFile="index.html"
+             />
+    </Grid>
+
+</ContentPage>

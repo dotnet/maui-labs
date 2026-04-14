@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+             x:Class="ControlGallery.Pages.ClippingPage"
+             Title="Clipping">
+    <ScrollView>
+        <StackLayout Margin="15" Spacing="8">
+            <Label Text="Clip with Ellipse" Style="{StaticResource Headline}"/>
+            <Image Source="insta_04.jpg" WidthRequest="200" HeightRequest="200" Aspect="AspectFill"
+                   HorizontalOptions="Start">
+                <Image.Clip>
+                    <EllipseGeometry RadiusX="80" RadiusY="80" Center="80,80"/>
+                </Image.Clip>
+            </Image>
+
+            <Label Text="Clip with Path" Style="{StaticResource Headline}"/>
+            <Image Source="insta_04.jpg" Aspect="AspectFill" WidthRequest="200" HeightRequest="200"
+                   HorizontalOptions="Start">
+                <Image.Clip>
+                    <PathGeometry Figures="M45.00003 0.0003755092 C48.6566 3.115492 53.39751 4.995667 58.57761 4.995667 C63.75768 4.995667 68.49864 3.115117 72.15516 0 L90 17.84482 C86.71619 22.5125 84.78809 28.20319 84.78809 34.34386 C84.78809 38.76054 85.78532 42.94414 87.56722 46.68191 C89.10684 49.91339 90 53.59571 90 57.41377 C90 71.12593 78.88458 82.24136 65.17242 82.24136 L61.27555 82.24136 C54.7048 82.24136 48.84069 85.26647 45.00003 90 C41.15929 85.26647 35.29517 82.24136 28.72452 82.24136 L24.82755 82.24136 C11.1155 82.24136 0 71.12593 0 57.41377 C0 53.59571 0.8931539 49.91339 2.432828 46.68191 C4.21465 42.94414 5.212069 38.76054 5.212069 34.34386 C5.212069 28.20319 3.283775 22.5125 8.583069E-05 17.84482 L17.84488 0 C21.50145 3.115117 26.24229 4.995667 31.42246 4.995667 C36.60254 4.995667 41.3435 3.115492 45.00003 0.0003755092 Z"
+                                  />
+                </Image.Clip>
+            </Image>
+
+            <Label Text="Clip with Rectangle" Style="{StaticResource Headline}"/>
+            <Image Source="insta_04.jpg" WidthRequest="200" HeightRequest="200" Aspect="AspectFill"
+                   HorizontalOptions="Start">
+                <Image.Clip>
+                    <RectangleGeometry Rect="0,0,200,200" />
+                </Image.Clip>
+            </Image>
+
+            <Label Text="Clip with RoundedRectangle" Style="{StaticResource Headline}"/>
+            <Image Source="insta_04.jpg" WidthRequest="200" HeightRequest="200" Aspect="AspectFill"
+                   HorizontalOptions="Start">
+                <Image.Clip>
+                    <RoundRectangleGeometry Rect="0,0,200,200" CornerRadius="25" />
+                </Image.Clip>
+            </Image>
+        </StackLayout>
+    </ScrollView>
+</ContentPage>
