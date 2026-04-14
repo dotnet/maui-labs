@@ -21,34 +21,46 @@ public class ProfileCommandTests
 		var command = ProfileCommand.Create();
 		Assert.NotNull(command);
 		Assert.Equal("profile", command.Name);
+		Assert.Contains(command.Subcommands, c => c.Name == "startup");
+		Assert.DoesNotContain(command.Options, o => o.Name == "--project");
 	}
 
 	[Fact]
-	public void ProfileCommand_HasExpectedOptions()
+	public void ProfileCommand_UsesStartupSubcommandForExecutionSurface()
 	{
 		var command = ProfileCommand.Create();
-		Assert.Contains(command.Options, o => o.Name == "--project");
-		Assert.Contains(command.Options, o => o.Name == "--framework");
-		Assert.Contains(command.Options, o => o.Name == "--device");
-		Assert.Contains(command.Options, o => o.Name == "--output");
-		Assert.Contains(command.Options, o => o.Name == "--format");
-		Assert.Contains(command.Options, o => o.Name == "--configuration");
-		Assert.Contains(command.Options, o => o.Name == "--platform");
-		Assert.Contains(command.Options, o => o.Name == "--duration");
-		Assert.Contains(command.Options, o => o.Name == "--trace-profile");
-		Assert.Contains(command.Options, o => o.Name == "--no-build");
-		Assert.Contains(command.Options, o => o.Name == "--diagnostic-port");
-		Assert.Contains(command.Options, o => o.Name == "--stopping-event-provider-name");
-		Assert.Contains(command.Options, o => o.Name == "--stopping-event-event-name");
-		Assert.Contains(command.Options, o => o.Name == "--stopping-event-payload-filter");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+
+		Assert.Contains(startup.Options, o => o.Name == "--project");
+	}
+
+	[Fact]
+	public void ProfileStartupCommand_HasExpectedOptions()
+	{
+		var startup = ProfileCommand.Create().Subcommands.Single(c => c.Name == "startup");
+		Assert.Contains(startup.Options, o => o.Name == "--project");
+		Assert.Contains(startup.Options, o => o.Name == "--framework");
+		Assert.Contains(startup.Options, o => o.Name == "--device");
+		Assert.Contains(startup.Options, o => o.Name == "--output");
+		Assert.Contains(startup.Options, o => o.Name == "--format");
+		Assert.Contains(startup.Options, o => o.Name == "--configuration");
+		Assert.Contains(startup.Options, o => o.Name == "--platform");
+		Assert.Contains(startup.Options, o => o.Name == "--duration");
+		Assert.Contains(startup.Options, o => o.Name == "--trace-profile");
+		Assert.Contains(startup.Options, o => o.Name == "--no-build");
+		Assert.Contains(startup.Options, o => o.Name == "--diagnostic-port");
+		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-provider-name");
+		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-event-name");
+		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-payload-filter");
 	}
 
 	[Fact]
 	public void ProfileCommand_DefaultConfigurationIsRelease()
 	{
 		var command = ProfileCommand.Create();
-		var configOption = (Option<string>)command.Options.First(o => o.Name == "--configuration");
-		var parseResult = command.Parse("profile");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var configOption = (Option<string>)startup.Options.First(o => o.Name == "--configuration");
+		var parseResult = command.Parse("profile startup");
 		Assert.Equal("Release", parseResult.GetValue(configOption));
 	}
 
@@ -56,8 +68,9 @@ public class ProfileCommandTests
 	public void ProfileCommand_DefaultFormatIsNetTrace()
 	{
 		var command = ProfileCommand.Create();
-		var formatOption = (Option<string>)command.Options.First(o => o.Name == "--format");
-		var parseResult = command.Parse("profile");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var formatOption = (Option<string>)startup.Options.First(o => o.Name == "--format");
+		var parseResult = command.Parse("profile startup");
 		Assert.Equal("nettrace", parseResult.GetValue(formatOption));
 	}
 
@@ -65,8 +78,9 @@ public class ProfileCommandTests
 	public void ProfileCommand_FormatOptionIsNotExplicitWhenOmitted()
 	{
 		var command = ProfileCommand.Create();
-		var formatOption = (Option<string>)command.Options.First(o => o.Name == "--format");
-		var parseResult = command.Parse("profile");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var formatOption = (Option<string>)startup.Options.First(o => o.Name == "--format");
+		var parseResult = command.Parse("profile startup");
 
 		Assert.False(ProfileCommand.WasOptionExplicitlySpecified(parseResult, formatOption));
 	}
@@ -75,8 +89,9 @@ public class ProfileCommandTests
 	public void ProfileCommand_FormatOptionIsExplicitWhenProvided()
 	{
 		var command = ProfileCommand.Create();
-		var formatOption = (Option<string>)command.Options.First(o => o.Name == "--format");
-		var parseResult = command.Parse("profile --format speedscope");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var formatOption = (Option<string>)startup.Options.First(o => o.Name == "--format");
+		var parseResult = command.Parse("profile startup --format speedscope");
 
 		Assert.True(ProfileCommand.WasOptionExplicitlySpecified(parseResult, formatOption));
 	}
@@ -109,8 +124,9 @@ public class ProfileCommandTests
 	public void ProfileCommand_DefaultPlatformIsAll()
 	{
 		var command = ProfileCommand.Create();
-		var platformOption = (Option<string>)command.Options.First(o => o.Name == "--platform");
-		var parseResult = command.Parse("profile");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var platformOption = (Option<string>)startup.Options.First(o => o.Name == "--platform");
+		var parseResult = command.Parse("profile startup");
 		Assert.Equal("all", parseResult.GetValue(platformOption));
 	}
 
@@ -118,8 +134,9 @@ public class ProfileCommandTests
 	public void ProfileCommand_DefaultDiagnosticPortIs9000()
 	{
 		var command = ProfileCommand.Create();
-		var portOption = (Option<int>)command.Options.First(o => o.Name == "--diagnostic-port");
-		var parseResult = command.Parse("profile");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var portOption = (Option<int>)startup.Options.First(o => o.Name == "--diagnostic-port");
+		var parseResult = command.Parse("profile startup");
 		Assert.Equal(9000, parseResult.GetValue(portOption));
 	}
 
@@ -127,8 +144,9 @@ public class ProfileCommandTests
 	public void ProfileCommand_NoBuildDefaultIsFalse()
 	{
 		var command = ProfileCommand.Create();
-		var noBuildOption = (Option<bool>)command.Options.First(o => o.Name == "--no-build");
-		var parseResult = command.Parse("profile");
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var noBuildOption = (Option<bool>)startup.Options.First(o => o.Name == "--no-build");
+		var parseResult = command.Parse("profile startup");
 		Assert.False(parseResult.GetValue(noBuildOption));
 	}
 

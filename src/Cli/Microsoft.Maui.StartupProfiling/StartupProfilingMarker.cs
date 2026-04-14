@@ -21,7 +21,7 @@ namespace Microsoft.Maui.StartupProfiling;
 /// first page is shown or after <c>Application.Current.MainPage</c> is fully constructed.
 /// </para>
 /// <para>
-/// When running under <c>maui profile</c> (or any dotnet-trace session configured with
+/// When running under <c>maui profile startup</c> or any dotnet-trace session configured with
 /// <c>--stopping-event-provider-name Microsoft.Maui.StartupProfiling
 /// --stopping-event-event-name StartupComplete</c>), the trace will stop automatically
 /// when this method is called.
@@ -55,7 +55,7 @@ public static class StartupProfilingMarker
     /// <summary>
     /// Returns <see langword="true"/> when the <c>MAUI_STARTUP_PROFILING</c> environment
     /// variable is set to <c>1</c> or <c>true</c>, indicating the app was launched by
-    /// <c>maui profile</c> for profiling purposes.
+    /// <c>maui profile startup</c> for profiling purposes.
     /// </summary>
     public static bool IsProfilingSession =>
         IsEnabledEnvironmentVariable(ProfilingEnvironmentVariable)
@@ -281,7 +281,7 @@ internal static class StartupProfilingExitChannel
                     StartupProfilingDiagnostics.Log($"Exit control channel message received: '{message}'.");
                     if (string.Equals(message.Trim(), "exit", StringComparison.OrdinalIgnoreCase))
                     {
-                        StartupProfilingDiagnostics.Log("Graceful exit requested by maui profile; terminating the app process.");
+                        StartupProfilingDiagnostics.Log("Graceful exit requested by maui profile startup; terminating the app process.");
                         StartupProfilingDiagnostics.Log($"Calling Environment.Exit(0) now from exit control channel. PID={Environment.ProcessId}");
                         StartupProfilingDiagnostics.Flush();
                         Environment.Exit(0);

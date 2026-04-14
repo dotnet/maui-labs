@@ -208,7 +208,7 @@ internal static class ProfileCommandPortRouter
 				"ADB was not found, so the app exit-control port could not be opened on the Android device.",
 				[
 					"Install the Android SDK platform-tools so adb is available.",
-					"Or add adb to PATH and rerun `maui profile`."
+					"Or add adb to PATH and rerun `maui profile startup`."
 				]);
 		}
 
@@ -235,7 +235,7 @@ internal static class ProfileCommandPortRouter
 					$"Failed to open Android reverse port forwarding for {portSpec} on '{device.Id}'.",
 					[
 						$"Reconnect the device or emulator and verify `adb -s {device.Id} reverse {portSpec} {portSpec}` succeeds.",
-						"Then rerun `maui profile`."
+						"Then rerun `maui profile startup`."
 					],
 					nativeError: details);
 			}

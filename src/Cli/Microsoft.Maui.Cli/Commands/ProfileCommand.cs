@@ -13,7 +13,7 @@ using Spectre.Console;
 namespace Microsoft.Maui.Cli.Commands;
 
 /// <summary>
-/// Implementation of 'maui profile' command.
+/// Implementation of <c>maui profile startup</c>.
 /// </summary>
 public static class ProfileCommand
 {
@@ -49,6 +49,13 @@ public static class ProfileCommand
 	];
 
 	public static Command Create()
+	{
+		var command = new Command("profile", "Profile a .NET MAUI app");
+		command.Add(CreateStartupCommand());
+		return command;
+	}
+
+	static Command CreateStartupCommand()
 	{
 		var projectOption = new Option<string?>("--project")
 		{
@@ -101,7 +108,7 @@ public static class ProfileCommand
 		var stoppingEventProviderOption = new Option<string?>("--stopping-event-provider-name")
 		{
 			Description = "Optional event provider name for an event-based stop condition. " +
-				"When omitted, maui profile waits for --duration or a manual Enter stop."
+				"When omitted, the startup trace waits for --duration or a manual Enter stop."
 		};
 		var stoppingEventNameOption = new Option<string?>("--stopping-event-event-name")
 		{
@@ -112,7 +119,7 @@ public static class ProfileCommand
 			Description = "Optional payload filter (key:value,key:value) to combine with the stopping event options"
 		};
 
-		var command = new Command("profile", "Collect a startup trace for a .NET MAUI app")
+		var command = new Command("startup", "Collect a startup trace for a .NET MAUI app")
 		{
 			projectOption,
 			frameworkOption,
@@ -130,125 +137,160 @@ public static class ProfileCommand
 			stoppingEventPayloadFilterOption
 		};
 
-		command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
-		{
-			var formatter = Program.GetFormatter(parseResult);
-			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
-			var isCi = Program.IsCiMode(parseResult);
-			var verbose = Program.IsVerbose(parseResult);
-
-			try
-			{
-				var requestedPlatform = Platforms.Normalize(parseResult.GetValue(platformOption));
-				var project = MauiProjectResolver.Resolve(parseResult.GetValue(projectOption));
-				var framework = ResolveTargetFramework(
-					project,
-					parseResult.GetValue(frameworkOption),
-					requestedPlatform,
-					isCi || useJson,
-					formatter as SpectreOutputFormatter);
-				var platform = ResolveProfilePlatform(requestedPlatform, framework);
-
-				if (!string.Equals(platform, Platforms.Android, StringComparison.OrdinalIgnoreCase)
-					&& !string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
-				{
-					throw MauiToolException.UserActionRequired(
-						ErrorCodes.PlatformNotSupported,
-						$"Startup profiling for target framework '{framework}' is not implemented yet because it targets platform '{platform}'.",
-						[
-							"Choose an Android or iOS simulator target framework such as --framework net10.0-ios.",
-							"Or pass --platform android/ios to filter the available target frameworks.",
-							"Mac Catalyst support can be added in a future iteration."
-						]);
-				}
-
-				ValidateStoppingEventOptions(
-					parseResult.GetValue(stoppingEventProviderOption),
-					parseResult.GetValue(stoppingEventNameOption),
-					parseResult.GetValue(stoppingEventPayloadFilterOption));
-
-				var duration = parseResult.GetValue(durationOption);
-				var stoppingEvent = ResolveStoppingEventConfiguration(
-					duration,
-					parseResult.GetValue(stoppingEventProviderOption),
-					parseResult.GetValue(stoppingEventNameOption),
-					parseResult.GetValue(stoppingEventPayloadFilterOption));
-
-				if ((isCi || useJson)
-					&& duration is null
-					&& string.IsNullOrWhiteSpace(stoppingEvent.ProviderName))
-				{
-					throw MauiToolException.UserActionRequired(
-						ErrorCodes.InvalidArgument,
-						"Non-interactive profile runs require an explicit stop condition because the default behavior waits for a manual Enter stop.",
-						[
-							"Add --duration 00:00:15 for a fixed-length startup trace.",
-							"Or pass --stopping-event-provider-name/--stopping-event-event-name to stop on a custom EventSource marker."
-						]);
-				}
-
-				ValidateDnxAvailable();
-
-				var device = await ResolveProfileDeviceAsync(
-					platform,
-					parseResult.GetValue(deviceOption),
-					Program.DeviceManager,
-					isCi || useJson,
-					formatter as SpectreOutputFormatter,
-					cancellationToken);
-
-				var outputFormat = ResolveTraceOutputFormat(
-					parseResult.GetValue(formatOption),
-					WasOptionExplicitlySpecified(parseResult, formatOption),
-					isCi || useJson,
-					formatter as SpectreOutputFormatter);
-				var configuration = ResolveProfileConfiguration(
-					parseResult.GetValue(configurationOption),
-					WasOptionExplicitlySpecified(parseResult, configurationOption),
-					platform);
-				var outputPath = ResolveOutputPath(project.ProjectName, parseResult.GetValue(outputOption), outputFormat);
-
-				var result = await RunProfileAsync(
-					project,
-					framework,
-					device,
-					outputPath,
-					outputFormat,
-					configuration,
-					parseResult.GetValue(traceProfileOption),
-					parseResult.GetValue(noBuildOption),
-					parseResult.GetValue(diagnosticPortOption),
-					duration,
-					stoppingEvent.ProviderName,
-					stoppingEvent.EventName,
-					stoppingEvent.PayloadFilter,
-					stoppingEvent.AutoSelected,
-					formatter,
-					useJson,
-					verbose,
-					cancellationToken);
-
-				if (useJson)
-				{
-					formatter.Write(result);
-				}
-				else
-				{
-					var successMessage = string.IsNullOrWhiteSpace(result.RawTracePath)
-						? $"Startup trace saved to {result.OutputPath}"
-						: $"Startup trace saved to {result.OutputPath} (raw .nettrace companion: {result.RawTracePath})";
-					formatter.WriteSuccess(successMessage);
-				}
-
-				return 0;
-			}
-			catch (Exception ex)
-			{
-				return Program.HandleCommandException(formatter, ex);
-			}
-		});
+		command.SetAction((ParseResult parseResult, CancellationToken cancellationToken) =>
+			ExecuteAsync(
+				parseResult,
+				projectOption,
+				frameworkOption,
+				deviceOption,
+				outputOption,
+				formatOption,
+				configurationOption,
+				platformOption,
+				durationOption,
+				traceProfileOption,
+				noBuildOption,
+				diagnosticPortOption,
+				stoppingEventProviderOption,
+				stoppingEventNameOption,
+				stoppingEventPayloadFilterOption,
+				cancellationToken));
 
 		return command;
+	}
+
+	static async Task<int> ExecuteAsync(
+		ParseResult parseResult,
+		Option<string?> projectOption,
+		Option<string?> frameworkOption,
+		Option<string?> deviceOption,
+		Option<string?> outputOption,
+		Option<string> formatOption,
+		Option<string> configurationOption,
+		Option<string> platformOption,
+		Option<TimeSpan?> durationOption,
+		Option<string?> traceProfileOption,
+		Option<bool> noBuildOption,
+		Option<int> diagnosticPortOption,
+		Option<string?> stoppingEventProviderOption,
+		Option<string?> stoppingEventNameOption,
+		Option<string?> stoppingEventPayloadFilterOption,
+		CancellationToken cancellationToken)
+	{
+		var formatter = Program.GetFormatter(parseResult);
+		var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+		var isCi = Program.IsCiMode(parseResult);
+		var verbose = Program.IsVerbose(parseResult);
+
+		try
+		{
+			var requestedPlatform = Platforms.Normalize(parseResult.GetValue(platformOption));
+			var project = MauiProjectResolver.Resolve(parseResult.GetValue(projectOption));
+			var framework = ResolveTargetFramework(
+				project,
+				parseResult.GetValue(frameworkOption),
+				requestedPlatform,
+				isCi || useJson,
+				formatter as SpectreOutputFormatter);
+			var platform = ResolveProfilePlatform(requestedPlatform, framework);
+
+			if (!string.Equals(platform, Platforms.Android, StringComparison.OrdinalIgnoreCase)
+				&& !string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+			{
+				throw MauiToolException.UserActionRequired(
+					ErrorCodes.PlatformNotSupported,
+					$"Startup profiling for target framework '{framework}' is not implemented yet because it targets platform '{platform}'.",
+					[
+						"Choose an Android or iOS simulator target framework such as --framework net10.0-ios.",
+						"Or pass --platform android/ios to filter the available target frameworks.",
+						"Mac Catalyst support can be added in a future iteration."
+					]);
+			}
+
+			ValidateStoppingEventOptions(
+				parseResult.GetValue(stoppingEventProviderOption),
+				parseResult.GetValue(stoppingEventNameOption),
+				parseResult.GetValue(stoppingEventPayloadFilterOption));
+
+			var duration = parseResult.GetValue(durationOption);
+			var stoppingEvent = ResolveStoppingEventConfiguration(
+				duration,
+				parseResult.GetValue(stoppingEventProviderOption),
+				parseResult.GetValue(stoppingEventNameOption),
+				parseResult.GetValue(stoppingEventPayloadFilterOption));
+
+			if ((isCi || useJson)
+				&& duration is null
+				&& string.IsNullOrWhiteSpace(stoppingEvent.ProviderName))
+			{
+				throw MauiToolException.UserActionRequired(
+					ErrorCodes.InvalidArgument,
+					"Non-interactive profile runs require an explicit stop condition because the default behavior waits for a manual Enter stop.",
+					[
+						"Add --duration 00:00:15 for a fixed-length startup trace.",
+						"Or pass --stopping-event-provider-name/--stopping-event-event-name to stop on a custom EventSource marker."
+					]);
+			}
+
+			ValidateDnxAvailable();
+
+			var device = await ResolveProfileDeviceAsync(
+				platform,
+				parseResult.GetValue(deviceOption),
+				Program.DeviceManager,
+				isCi || useJson,
+				formatter as SpectreOutputFormatter,
+				cancellationToken);
+
+			var outputFormat = ResolveTraceOutputFormat(
+				parseResult.GetValue(formatOption),
+				WasOptionExplicitlySpecified(parseResult, formatOption),
+				isCi || useJson,
+				formatter as SpectreOutputFormatter);
+			var configuration = ResolveProfileConfiguration(
+				parseResult.GetValue(configurationOption),
+				WasOptionExplicitlySpecified(parseResult, configurationOption),
+				platform);
+			var outputPath = ResolveOutputPath(project.ProjectName, parseResult.GetValue(outputOption), outputFormat);
+
+			var result = await RunProfileAsync(
+				project,
+				framework,
+				device,
+				outputPath,
+				outputFormat,
+				configuration,
+				parseResult.GetValue(traceProfileOption),
+				parseResult.GetValue(noBuildOption),
+				parseResult.GetValue(diagnosticPortOption),
+				duration,
+				stoppingEvent.ProviderName,
+				stoppingEvent.EventName,
+				stoppingEvent.PayloadFilter,
+				stoppingEvent.AutoSelected,
+				formatter,
+				useJson,
+				verbose,
+				cancellationToken);
+
+			if (useJson)
+			{
+				formatter.Write(result);
+			}
+			else
+			{
+				var successMessage = string.IsNullOrWhiteSpace(result.RawTracePath)
+					? $"Startup trace saved to {result.OutputPath}"
+					: $"Startup trace saved to {result.OutputPath} (raw .nettrace companion: {result.RawTracePath})";
+				formatter.WriteSuccess(successMessage);
+			}
+
+			return 0;
+		}
+		catch (Exception ex)
+		{
+			return Program.HandleCommandException(formatter, ex);
+		}
 	}
 
 	internal static string ResolveTargetFramework(
