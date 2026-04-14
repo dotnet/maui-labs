@@ -60,20 +60,23 @@ internal static class ProfileTraceLifecycle
 				while (true)
 				{
 					var completedTask = await Task.WhenAny(processWaitTask, manualStopSignal.Task);
-					if (completedTask == processWaitTask)
+					if (!ShouldRequestManualStop(completedTask, processWaitTask, traceProcess.Process.HasExited))
 					{
-						ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "dotnet-trace exited before any manual stop request was needed.");
+						ProfileCommandProcessHelpers.WriteVerbose(
+							formatter,
+							useJson,
+							verbose,
+							completedTask == processWaitTask
+								? "dotnet-trace exited before any manual stop request was needed."
+								: "A manual stop was requested after dotnet-trace had already exited; no stop request was needed.");
 						break;
 					}
 
-					if (completedTask == manualStopSignal.Task && !traceProcess.Process.HasExited)
-					{
-						formatter.WriteInfo("Stopping trace and finalizing output...");
-						ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "Manual stop requested from the console.");
-						stopRequested = true;
-						await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose);
-						break;
-					}
+					formatter.WriteInfo("Stopping trace and finalizing output...");
+					ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "Manual stop requested from the console.");
+					stopRequested = true;
+					await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose);
+					break;
 				}
 			}
 			finally
@@ -126,6 +129,9 @@ internal static class ProfileTraceLifecycle
 				nativeError: traceProcess.GetCombinedOutput());
 		}
 	}
+
+	internal static bool ShouldRequestManualStop(Task completedTask, Task processWaitTask, bool processHasExited)
+		=> completedTask != processWaitTask && !processHasExited;
 
 	internal static async Task RequestStopAsync(Process traceProcess, IOutputFormatter formatter, bool useJson, bool verbose)
 	{

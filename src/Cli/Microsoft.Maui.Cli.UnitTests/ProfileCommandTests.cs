@@ -749,6 +749,34 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ShouldRequestManualStop_WhenTraceAlreadyExited_ReturnsFalse()
+	{
+		var processWaitTask = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously).Task;
+		var manualStopTask = Task.CompletedTask;
+
+		var result = ProfileTraceLifecycle.ShouldRequestManualStop(
+			manualStopTask,
+			processWaitTask,
+			processHasExited: true);
+
+		Assert.False(result);
+	}
+
+	[Fact]
+	public void ShouldRequestManualStop_WhenManualStopWinsWhileTraceIsRunning_ReturnsTrue()
+	{
+		var processWaitTask = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously).Task;
+		var manualStopTask = Task.CompletedTask;
+
+		var result = ProfileTraceLifecycle.ShouldRequestManualStop(
+			manualStopTask,
+			processWaitTask,
+			processHasExited: false);
+
+		Assert.True(result);
+	}
+
+	[Fact]
 	public void ResolveStoppingEventConfiguration_LeavesStoppingEventUnsetWithoutExplicitOptions()
 	{
 		var result = ProfileCommand.ResolveStoppingEventConfiguration(
