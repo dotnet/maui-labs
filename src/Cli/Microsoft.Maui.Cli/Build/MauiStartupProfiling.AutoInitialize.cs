@@ -59,8 +59,8 @@ internal static class __MauiStartupProfilingInjectedBootstrap
 
     static async Task CompleteOrExitAsync()
     {
-        // For the simplified "exit from inside" experiment, do not rely on the
-        // StartupComplete marker at all: just terminate from the app assembly.
+        // Keep direct process exit opt-in for diagnostics only. The normal path
+        // signals startup completion and lets the CLI request shutdown later.
         if (TryGetDirectExitDelay(out var delay) && delay > TimeSpan.Zero)
         {
             await Task.Delay(delay).ConfigureAwait(false);

@@ -25,8 +25,25 @@ internal static class ProfileSessionLaunch
 
 		if (context.UseRuntimeOwnedTraceCollection)
 		{
+			context.ExitControlServer = ExitControlServer.Attach(context.ReservedPorts!.ExitControlReservation, context.Formatter, context.UseJson, context.Verbose);
+			context.ReservedPorts.DiagnosticReservation.Dispose();
+
 			await RuntimeOwnedTraceCollector.PrepareAsync(context, cancellationToken);
 			await LaunchAppAsync(context, cancellationToken);
+			WriteTraceStatusMessage(context);
+
+			if (context.BuildInjection?.DirectExitDelayMs is null)
+			{
+				await ProfileTraceLifecycle.WaitForStopSignalAsync(
+					context.EffectiveDuration,
+					allowManualStop: !context.UseJson,
+					context.Formatter,
+					context.UseJson,
+					context.Verbose,
+					cancellationToken);
+				await ProfileSessionRunner.TryRequestAppExitAsync(context, cancellationToken);
+			}
+
 			await RuntimeOwnedTraceCollector.WaitForAndPullAsync(context, cancellationToken);
 			WriteTraceStatusMessage(context);
 			return;
@@ -129,7 +146,17 @@ internal static class ProfileSessionLaunch
 
 		if (context.UseRuntimeOwnedTraceCollection)
 		{
-			context.Formatter.WriteInfo("Runtime-owned Android startup trace finalized and copied from the device.");
+			if (File.Exists(context.PrimaryOutputPath))
+			{
+				context.Formatter.WriteInfo("Runtime-owned Android startup trace finalized and copied from the device.");
+			}
+			else
+			{
+				var runtimeOwnedStatusMessage = context.EffectiveDuration is { } runtimeDuration
+					? $"Startup trace is running. It will stop automatically after {FormatDuration(runtimeDuration)} unless you press Enter sooner."
+					: "Startup trace is running. Press Enter to stop and finalize the trace output.";
+				context.Formatter.WriteInfo(runtimeOwnedStatusMessage);
+			}
 			return;
 		}
 

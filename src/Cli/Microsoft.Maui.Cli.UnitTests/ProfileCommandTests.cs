@@ -677,10 +677,10 @@ public class ProfileCommandTests
 		var buildInjection = new ProfilingBuildInjection(
 			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
 			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
-			ExitControlHost: string.Empty,
-			ExitControlPort: 0,
+			ExitControlHost: "10.0.2.2",
+			ExitControlPort: 9001,
 			InjectBootstrap: true,
-			DirectExitDelayMs: 10_000,
+			DirectExitDelayMs: null,
 			EnableRuntimePgo: true,
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
@@ -694,6 +694,9 @@ public class ProfileCommandTests
 
 		Assert.DoesNotContain("-p:DiagnosticSuspend=true", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
+		Assert.Contains("-p:MauiStartupProfilingExitHost=10.0.2.2", args);
+		Assert.Contains("-p:MauiStartupProfilingExitPort=9001", args);
+		Assert.DoesNotContain(args, arg => arg.StartsWith("-p:MauiStartupProfilingDirectExitDelayMs=", StringComparison.Ordinal));
 		Assert.Contains("-p:MauiStartupProfilingEnableRuntimePgo=true", args);
 		Assert.Contains("-p:MauiStartupProfilingEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
 	}
@@ -706,10 +709,10 @@ public class ProfileCommandTests
 		var buildInjection = new ProfilingBuildInjection(
 			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
 			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
-			ExitControlHost: string.Empty,
-			ExitControlPort: 0,
+			ExitControlHost: "10.0.2.2",
+			ExitControlPort: 9001,
 			InjectBootstrap: true,
-			DirectExitDelayMs: 10_000,
+			DirectExitDelayMs: null,
 			EnableRuntimePgo: true,
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
@@ -725,6 +728,8 @@ public class ProfileCommandTests
 		Assert.DoesNotContain("-p:AndroidEnableProfiler=true", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains("-p:Device=android-emu", args);
+		Assert.Contains("-p:MauiStartupProfilingExitHost=10.0.2.2", args);
+		Assert.Contains("-p:MauiStartupProfilingExitPort=9001", args);
 	}
 
 	[Fact]

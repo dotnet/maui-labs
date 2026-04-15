@@ -65,6 +65,9 @@ return true;
             and '$(UseMaui)' == 'true'
             and '$(TargetFramework)' != ''
             and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))">
+    <Error Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true' and '$(UseMonoRuntime)' == 'true'"
+           Text="Android startup profiling with --format nettrace currently requires CoreCLR. Mono runtime projects are not supported for this mode; use CoreCLR or choose --format speedscope." />
+
     <ItemGroup>
       <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING=1" />
       <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING_EXIT_HOST=$(MauiStartupProfilingExitHost)"

@@ -35,27 +35,24 @@ internal static class ProfileSessionSetup
 		WriteSessionHeader(context);
 		WriteVerboseSettings(context);
 
-		if (!context.UseRuntimeOwnedTraceCollection)
-		{
-			context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
-				context.Device,
-				context.Transport,
-				context.DiagnosticPort,
-				context.Formatter,
-				context.UseJson,
-				context.Verbose,
-				cancellationToken);
+		context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+			context.Device,
+			context.Transport,
+			context.DiagnosticPort,
+			context.Formatter,
+			context.UseJson,
+			context.Verbose,
+			cancellationToken);
 
-			context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
-		}
+		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
 		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.StartupProfilingPackageId);
-		var directExitDelayMs = ResolveDirectExitDelayMs(context);
+		var directExitDelayMs = ResolveDirectExitDelayMs();
 		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
 			? null
 			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
-				context.UseRuntimeOwnedTraceCollection ? string.Empty : context.DiagnosticAddress,
-				context.UseRuntimeOwnedTraceCollection ? 0 : context.ReservedPorts!.ExitControlPort,
+				context.DiagnosticAddress,
+				context.ReservedPorts!.ExitControlPort,
 				injectBootstrap: !hasStartupProfilingHelper,
 				directExitDelayMs: directExitDelayMs,
 				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection,
@@ -117,7 +114,7 @@ internal static class ProfileSessionSetup
 
 		if (context.UseRuntimeOwnedTraceCollection)
 		{
-			context.Formatter.WriteInfo("Using PR-54114-style runtime-owned EventPipe collection for Android/CoreCLR startup PGO.");
+			context.Formatter.WriteInfo("Using runtime-owned EventPipe collection for Android/CoreCLR startup tracing.");
 			return;
 		}
 
@@ -132,11 +129,8 @@ internal static class ProfileSessionSetup
 		}
 	}
 
-	static int? ResolveDirectExitDelayMs(ProfileSessionContext context)
+	static int? ResolveDirectExitDelayMs()
 	{
-		if (context.UseRuntimeOwnedTraceCollection)
-			return 10_000;
-
 		// A bare inside-app Environment.Exit(0) is useful for diagnostics, but it can
 		// truncate Android traces ("Read past end of stream"). Keep it opt-in only.
 		var value = Environment.GetEnvironmentVariable("MAUI_CLI_STARTUP_DIRECT_EXIT_DELAY_MS");

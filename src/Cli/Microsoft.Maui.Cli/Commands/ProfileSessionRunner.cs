@@ -25,7 +25,9 @@ internal static class ProfileSessionRunner
 					cancellationToken);
 			}
 
-			if (context.ExitControlServer is not null && context.BuildInjection?.DirectExitDelayMs is null)
+			if (!context.UseRuntimeOwnedTraceCollection
+				&& context.ExitControlServer is not null
+				&& context.BuildInjection?.DirectExitDelayMs is null)
 				await TryRequestAppExitAsync(context, cancellationToken);
 		}
 		finally
@@ -82,7 +84,7 @@ internal static class ProfileSessionRunner
 		}
 	}
 
-	static async Task TryRequestAppExitAsync(ProfileSessionContext context, CancellationToken cancellationToken)
+	internal static async Task TryRequestAppExitAsync(ProfileSessionContext context, CancellationToken cancellationToken)
 	{
 		var appExitRequested = await context.ExitControlServer!.TryRequestExitAsync(
 			ProfileCommand.s_exitControlConnectTimeout,
