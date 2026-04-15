@@ -1,0 +1,57 @@
+name: CI - WPF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platforms/Windows.WPF/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'platforms/Windows.WPF/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install workloads
+        run: dotnet workload install maui
+
+      - name: Build, Test and Pack
+        run: >
+          eng\common\cibuild.cmd
+          -configuration Release
+          -prepareMachine
+          -projects %CD%\platforms\Windows.WPF\Windows.WPF.slnx
+        shell: cmd
+
+      - name: Upload packages
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-wpf
+          path: artifacts/packages/**/*.nupkg
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-wpf
+          path: artifacts/TestResults/**/*.xml

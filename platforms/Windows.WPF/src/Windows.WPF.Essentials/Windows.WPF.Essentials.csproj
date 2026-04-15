@@ -11,6 +11,7 @@
     <Description>MAUI Essentials implementations for the WPF backend — clipboard, preferences, device info, connectivity, and more using WPF and Windows APIs.</Description>
     <PackageTags>maui;windows;wpf;essentials;desktop;clipboard;preferences</PackageTags>
     <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
   </PropertyGroup>
 
   <ItemGroup>

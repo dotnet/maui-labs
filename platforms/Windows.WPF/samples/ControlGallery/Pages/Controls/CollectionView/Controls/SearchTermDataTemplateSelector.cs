@@ -10,7 +10,7 @@ namespace CollectionViewDemos.Controls
         protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
         {
             string query = (string)item;
-            return query.ToLower().Equals("xamarin") ? OtherTemplate : DefaultTemplate;
+            return string.Equals(query, "xamarin", StringComparison.OrdinalIgnoreCase) ? OtherTemplate : DefaultTemplate;
         }
     }
 }

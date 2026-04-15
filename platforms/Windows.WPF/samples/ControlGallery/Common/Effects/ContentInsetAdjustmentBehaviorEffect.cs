@@ -12,7 +12,7 @@ public static class ContentInsetAdjustmentBehavior
         return (Thickness)view.GetValue(ContentInsetProperty);
     }
 
-    public static void SetContentInset(BindableObject view, bool value)
+    public static void SetContentInset(BindableObject view, Thickness value)
     {
         view.SetValue(ContentInsetProperty, value);
     }
@@ -20,4 +20,8 @@ public static class ContentInsetAdjustmentBehavior
 
 public class ContentInsetAdjustmentBehaviorRoutingEffect : RoutingEffect
 {
+    public ContentInsetAdjustmentBehaviorRoutingEffect()
+        : base("ControlGallery.Effects.ContentInsetAdjustmentBehaviorEffect")
+    {
+    }
 }

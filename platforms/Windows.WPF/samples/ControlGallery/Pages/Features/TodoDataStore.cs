@@ -6,9 +6,9 @@ public class TodoDataStore
 {
     private readonly List<TodoTask> _taskData = new List<TodoTask>()
     {
-        new(){ id="todo-0", name="Eat", completed=true  },
-        new(){ id="todo-1", name="Sleep", completed=false  },
-        new(){ id="todo-2", name="Repeat", completed=false  },
+        new(){ Id="todo-0", Name="Eat", Completed=true  },
+        new(){ Id="todo-1", Name="Sleep", Completed=false  },
+        new(){ Id="todo-2", Name="Repeat", Completed=false  },
     };
 
     public event EventHandler TaskDataChanged;
@@ -22,7 +22,7 @@ public class TodoDataStore
 
     public void AddTask(TodoTask newTask)
     {
-        Debug.WriteLine($"AddTask: {newTask.id}: {newTask.name} ({(newTask.completed ? "" : "not ")}completed)");
+        Debug.WriteLine($"AddTask: {newTask.Id}: {newTask.Name} ({(newTask.Completed ? "" : "not ")}completed)");
         _taskData.Add(newTask);
         OnTaskDataChanged();
     }
@@ -30,22 +30,22 @@ public class TodoDataStore
     public void EditTask(string id, string newName)
     {
         Debug.WriteLine($"EditTask: {id}: {newName}");
-        _taskData.Single(t => t.id == id).name = newName;
+        _taskData.Single(t => t.Id == id).Name = newName;
         OnTaskDataChanged();
     }
 
     public void DeleteTask(string id)
     {
         Debug.WriteLine($"DeleteTask: {id}");
-        _taskData.Remove(_taskData.Single(t => t.id == id));
+        _taskData.Remove(_taskData.Single(t => t.Id == id));
         OnTaskDataChanged();
     }
 
     public void ToggleCompletedTask(string id)
     {
         Debug.WriteLine($"ToggleCompletedTask: {id}");
-        var task = _taskData.Single(t => t.id == id);
-        task.completed = !task.completed;
+        var task = _taskData.Single(t => t.Id == id);
+        task.Completed = !task.Completed;
         OnTaskDataChanged();
     }
 }

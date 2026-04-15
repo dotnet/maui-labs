@@ -2,7 +2,7 @@
 
 public class TodoTask
 {
-    public string id { get; set; }
-    public string name { get; set; }
-    public bool completed { get; set; }
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public bool Completed { get; set; }
 }

@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="UTF-8" ?>
-<ContentPage
-             x:Class="CollectionViewDemos.Views.HorizontalGridHeaderFooterViewPage"
-             Title="Grid header and footer (View)">
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CollectionViewDemos.Views.VerticalGridHeaderFooterViewPage"
+             Title="Vertical Grid header and footer (View)">
     <Grid Margin="20">
         <CollectionView ItemsSource="{Binding Monkeys}"
                         ItemsLayout="HorizontalGrid, 4">

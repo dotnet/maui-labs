@@ -23,10 +23,7 @@ namespace ControlGallery.Pages.Features.Animation
                     if (string.IsNullOrEmpty(route))
                         return;
 
-                    if (!route.StartsWith("/"))
-                        await Shell.Current.GoToAsync(route);
-                    else
-                        await Shell.Current.GoToAsync(route);
+                    await Shell.Current.GoToAsync(route);
                 });
 
             PopulateGroups();

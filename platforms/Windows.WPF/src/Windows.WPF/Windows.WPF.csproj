@@ -10,6 +10,7 @@
     <Description>A .NET MAUI backend for Windows using WPF. Run your MAUI apps on Windows desktops with native WPF controls.</Description>
     <PackageTags>maui;windows;wpf;desktop;dotnet;cross-platform</PackageTags>
     <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
   </PropertyGroup>
 
   <ItemGroup>

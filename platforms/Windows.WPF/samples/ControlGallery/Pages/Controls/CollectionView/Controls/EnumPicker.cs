@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace CollectionViewDemos.Controls
 {
-    class EnumPicker : Picker
+    public class EnumPicker : Picker
     {
         public static readonly BindableProperty EnumTypeProperty = 
             BindableProperty.Create(nameof(EnumType), typeof(Type), typeof(EnumPicker),

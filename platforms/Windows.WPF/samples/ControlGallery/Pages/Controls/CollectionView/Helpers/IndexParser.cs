@@ -16,7 +16,7 @@ namespace CollectionViewDemos.Helpers
         public static bool ParseIndexes(string text, int count, out int[] indexes)
         {
             indexes = text.Split(',').Select(v => ParseToken(v.Trim())).ToArray();
-            return indexes.Length == count;
+            return indexes.Length == count && indexes.All(i => i >= 0);
         }
     }
 }
