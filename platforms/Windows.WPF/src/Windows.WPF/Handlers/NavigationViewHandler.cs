@@ -102,7 +102,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void UpdateToolbarTheme()
 		{
-			bool dark = Platform.WPF.ThemeManager.GetCurrentTheme() == ApplicationModel.AppTheme.Dark;
+			bool dark = ThemeManager.GetCurrentTheme() == ApplicationModel.AppTheme.Dark;
 			if (Microsoft.Maui.Controls.Application.Current is { } app && app.RequestedTheme != ApplicationModel.AppTheme.Unspecified)
 				dark = app.RequestedTheme == ApplicationModel.AppTheme.Dark;
 			_toolbarPanel.Background = dark

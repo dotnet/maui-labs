@@ -99,7 +99,7 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 
 
 #pragma warning disable CS0612, CA1416 // Type or member is obsolete, 'ResourcesProvider' is unsupported on: 'iOS' 14.0 and later
-			DependencyService.Register<Platform.WPF.ResourcesProvider>();
+			DependencyService.Register<ResourcesProvider>();
 
 
 			//DependencyService.Register<PlatformSizeService>();

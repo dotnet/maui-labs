@@ -272,13 +272,13 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			base.ConnectHandler(platformView);
 			_themeChangedHandler = _ => PlatformView?.Dispatcher.InvokeAsync(RefreshItems);
-			Platform.WPF.ThemeManager.ThemeChanged += _themeChangedHandler;
+			ThemeManager.ThemeChanged += _themeChangedHandler;
 		}
 
 		protected override void DisconnectHandler(FrameworkElement platformView)
 		{
 			if (_themeChangedHandler != null)
-				Platform.WPF.ThemeManager.ThemeChanged -= _themeChangedHandler;
+				ThemeManager.ThemeChanged -= _themeChangedHandler;
 			if (_listBox != null)
 			{
 				_listBox.SelectionChanged -= OnSelectionChanged;

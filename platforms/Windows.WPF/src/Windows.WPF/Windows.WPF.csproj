@@ -11,6 +11,8 @@
     <PackageTags>maui;windows;wpf;desktop;dotnet;cross-platform</PackageTags>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
+    <!-- Suppress obsolete warnings: this backend implements handlers for deprecated MAUI types (ListView, TableView, Frame, NamedSize) -->
+    <NoWarn>$(NoWarn);CS0612;CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -32,7 +32,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 
 			//winuiWndow.Activated += WinuiWndow_Activated;
-			winuiWndow.SetWindowHandler(window, mauiContext);
+			// TODO: SetWindowHandler was removed in newer MAUI versions — window handler setup needs rework
+			// winuiWndow.SetWindowHandler(window, mauiContext);
 
 			//applicationContext.Services.InvokeLifecycleEvents<WindowsLifecycle.OnWindowCreated>(del => del(winuiWndow));
 

@@ -179,7 +179,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			var app = Microsoft.Maui.Controls.Application.Current;
 			if (app != null && app.RequestedTheme != AppTheme.Unspecified)
 				return app.RequestedTheme == AppTheme.Dark;
-			return Platform.WPF.ThemeManager.GetCurrentTheme() == AppTheme.Dark;
+			return ThemeManager.GetCurrentTheme() == AppTheme.Dark;
 		}
 
 		void UpdateFlyoutTheme()
@@ -551,7 +551,7 @@ namespace Microsoft.Maui.Handlers.WPF
 							try
 							{
 								var fontManager = mauiContext.Services.GetService<IFontManager>();
-								if (fontManager is Platform.WPF.WPFFontManager wpfFontManager)
+								if (fontManager is WPFFontManager wpfFontManager)
 								{
 									var family = wpfFontManager.GetFontFamily(Microsoft.Maui.Font.OfSize(fontSource.FontFamily, fontSource.Size));
 									tb.FontFamily = family;
@@ -827,7 +827,7 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 
 				// Subscribe to theme changes to update Shell chrome
-				Platform.WPF.ThemeManager.ThemeChanged += OnThemeChanged;
+				ThemeManager.ThemeChanged += OnThemeChanged;
 			}
 		}
 
@@ -839,7 +839,7 @@ namespace Microsoft.Maui.Handlers.WPF
 				VirtualView.Navigating -= OnShellNavigating;
 				VirtualView.PropertyChanged -= OnShellPropertyChanged;
 			}
-			Platform.WPF.ThemeManager.ThemeChanged -= OnThemeChanged;
+			ThemeManager.ThemeChanged -= OnThemeChanged;
 			base.DisconnectHandler(platformView);
 		}
 
