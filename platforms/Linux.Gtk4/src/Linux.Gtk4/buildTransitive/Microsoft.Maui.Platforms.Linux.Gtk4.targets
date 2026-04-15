@@ -1,0 +1,59 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup Condition="'$(ApplicationId)' != ''">
+    <AssemblyMetadata Include="MauiApplicationId" Value="$(ApplicationId)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableDefaultMauiResourceItems)' == 'true' and '@(MauiIcon)' == ''">
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" Condition="Exists('Resources\AppIcon\appicon.svg')" />
+    <MauiIcon Include="Resources\AppIcon\appicon.png" Condition="!Exists('Resources\AppIcon\appicon.svg') and Exists('Resources\AppIcon\appicon.png')" />
+    <MauiIcon Include="Resources\AppIcon\appicon.ico" Condition="!Exists('Resources\AppIcon\appicon.svg') and !Exists('Resources\AppIcon\appicon.png') and Exists('Resources\AppIcon\appicon.ico')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ContentWithTargetPath Include="@(MauiImage)">
+      <TargetPath>%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </ContentWithTargetPath>
+
+    <ContentWithTargetPath Include="@(MauiFont)">
+      <TargetPath>%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </ContentWithTargetPath>
+
+    <ContentWithTargetPath Include="@(MauiAsset)">
+      <TargetPath Condition="'%(LogicalName)' != ''">%(LogicalName)</TargetPath>
+      <TargetPath Condition="'%(LogicalName)' == ''">%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </ContentWithTargetPath>
+
+    <ContentWithTargetPath Include="@(MauiIcon)">
+      <TargetPath>hicolor/scalable/apps/%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </ContentWithTargetPath>
+
+    <ContentWithTargetPath Include="$(MSBuildThisFileDirectory)hicolor.index.theme"
+                           Condition="'@(MauiIcon)' != '' and Exists('$(MSBuildThisFileDirectory)hicolor.index.theme')">
+      <TargetPath>hicolor/index.theme</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </ContentWithTargetPath>
+  </ItemGroup>
+
+  <!-- Import AppImage packaging targets (active when CreateAppImage=true) -->
+  <Import Project="$(MSBuildThisFileDirectory)Microsoft.Maui.Platforms.Linux.Gtk4.AppImage.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)Microsoft.Maui.Platforms.Linux.Gtk4.AppImage.targets')" />
+
+  <!-- Import Deb packaging targets (active when CreateDeb=true) -->
+  <Import Project="$(MSBuildThisFileDirectory)Microsoft.Maui.Platforms.Linux.Gtk4.Deb.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)Microsoft.Maui.Platforms.Linux.Gtk4.Deb.targets')" />
+
+  <!-- Import Flatpak packaging targets (active when CreateFlatpak=true) -->
+  <Import Project="$(MSBuildThisFileDirectory)Microsoft.Maui.Platforms.Linux.Gtk4.Flatpak.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)Microsoft.Maui.Platforms.Linux.Gtk4.Flatpak.targets')" />
+
+</Project>

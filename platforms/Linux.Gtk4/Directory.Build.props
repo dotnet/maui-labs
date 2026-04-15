@@ -1,0 +1,28 @@
+<Project>
+  <Import Project="../../Directory.Build.props" />
+
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <MauiVersion>10.0.41</MauiVersion>
+    <!-- Set to false when the maui-labs DevFlow projects should not be referenced by the sample -->
+    <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+    <DefineConstants>$(DefineConstants);MAUIDEVFLOW</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Common NuGet package properties for all src/ projects -->
+  <PropertyGroup>
+    <VersionPrefix>0.6.0</VersionPrefix>
+    <Version>$(VersionPrefix)</Version>
+    <Authors>Microsoft</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Linux.Gtk4</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+</Project>

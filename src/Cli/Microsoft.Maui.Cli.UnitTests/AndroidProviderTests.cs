@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
@@ -29,18 +30,18 @@ public class AndroidProviderIsSdkInstalledTests : IDisposable
 	/// </summary>
 	static bool IsSdkInstalledCheck(string? sdkPath) =>
 		!string.IsNullOrEmpty(sdkPath)
-		&& Directory.Exists(sdkPath)
-		&& Directory.Exists(Path.Combine(sdkPath, "cmdline-tools"));
+		&& Directory.Exists(sdkPath);
 
 	[Fact]
-	public void IsSdkInstalled_ReturnsFalse_WhenSdkDirectoryExistsButCmdlineToolsMissing()
+	public void IsSdkInstalled_ReturnsTrue_WhenSdkDirectoryExistsButCmdlineToolsAreMissing()
 	{
 		// The SDK directory exists but cmdline-tools subdirectory does NOT exist —
-		// this is the exact scenario described in issue E2102.
+		// this should still count as "SDK directory present" so the health check can
+		// surface the more specific sdkmanager-missing error.
 		Assert.True(Directory.Exists(_tempDir));
 		Assert.False(Directory.Exists(Path.Combine(_tempDir, "cmdline-tools")));
 
-		Assert.False(IsSdkInstalledCheck(_tempDir));
+		Assert.True(IsSdkInstalledCheck(_tempDir));
 	}
 
 	[Fact]
@@ -66,9 +67,103 @@ public class AndroidProviderIsSdkInstalledTests : IDisposable
 	}
 }
 
+public class SdkManagerTests : IDisposable
+{
+	readonly string _tempDir;
+
+	public SdkManagerTests()
+	{
+		_tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		Directory.CreateDirectory(_tempDir);
+	}
+
+	public void Dispose()
+	{
+		if (Directory.Exists(_tempDir))
+			Directory.Delete(_tempDir, recursive: true);
+	}
+
+	[Fact]
+	public void SdkManagerPath_FindsVersionedCmdlineToolsLayout()
+	{
+		var sdkManagerPath = Path.Combine(_tempDir, "cmdline-tools", "16.0", "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
+		File.WriteAllText(sdkManagerPath, string.Empty);
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Equal(sdkManagerPath, sdkManager.SdkManagerPath);
+	}
+
+	[Fact]
+	public void ResolveSdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
+	{
+		Directory.CreateDirectory(Path.Combine(_tempDir, "cmdline-tools", "latest", "bin"));
+
+		Assert.Null(SdkManager.ResolveSdkManagerPath(_tempDir));
+	}
+}
 
 public class AndroidProviderTests
 {
+	sealed class StubJdkManager : IJdkManager
+	{
+		public string? DetectedJdkPath { get; init; } = Path.GetTempPath();
+		public int? DetectedJdkVersion { get; init; } = 17;
+		public bool IsInstalled => true;
+
+		public Task<HealthCheck> CheckHealthAsync(CancellationToken cancellationToken = default) =>
+			Task.FromResult(new HealthCheck
+			{
+				Category = "android",
+				Name = "JDK",
+				Status = CheckStatus.Ok,
+				Message = "JDK 17"
+			});
+
+		public Task InstallAsync(int version = 17, string? installPath = null, CancellationToken cancellationToken = default) =>
+			Task.CompletedTask;
+
+		public Task InstallAsync(int version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default) =>
+			Task.CompletedTask;
+
+		public IEnumerable<int> GetAvailableVersions() => [17, 21];
+	}
+
+	[Fact]
+	public async Task CheckHealthAsync_ReturnsSdkManagerError_WhenSdkDirectoryExistsButManagerIsMissing()
+	{
+		var tempSdk = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		Directory.CreateDirectory(tempSdk);
+
+		var originalAndroidHome = Environment.GetEnvironmentVariable("ANDROID_HOME");
+		var originalAndroidSdkRoot = Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT");
+
+		try
+		{
+			Environment.SetEnvironmentVariable("ANDROID_HOME", tempSdk);
+			Environment.SetEnvironmentVariable("ANDROID_SDK_ROOT", null);
+
+			using var provider = new AndroidProvider(new StubJdkManager());
+			var checks = await provider.CheckHealthAsync();
+
+			Assert.Contains(checks, c => c.Name == "Android SDK" && c.Status == CheckStatus.Ok);
+			Assert.Contains(checks, c =>
+				c.Name == "SDK Manager"
+				&& c.Status == CheckStatus.Error
+				&& c.Fix?.IssueId == ErrorCodes.AndroidSdkManagerNotFound);
+		}
+		finally
+		{
+			Environment.SetEnvironmentVariable("ANDROID_HOME", originalAndroidHome);
+			Environment.SetEnvironmentVariable("ANDROID_SDK_ROOT", originalAndroidSdkRoot);
+
+			if (Directory.Exists(tempSdk))
+				Directory.Delete(tempSdk, recursive: true);
+		}
+	}
+
 	[Fact]
 	public async Task GetMostRecentSystemImageAsync_ReturnsHighestApiLevel()
 	{

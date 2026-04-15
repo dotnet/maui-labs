@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
 using System.Text.Json;
 
@@ -15,14 +16,12 @@ namespace Microsoft.Maui.Cli.Services;
 public class DeviceManager : IDeviceManager
 {
 	readonly IAndroidProvider? _androidProvider;
-	readonly Func<CancellationToken, Task<IReadOnlyList<Device>>>? _appleDeviceProvider;
+	readonly IAppleProvider? _appleProvider;
 
-	public DeviceManager(
-		IAndroidProvider? androidProvider = null,
-		Func<CancellationToken, Task<IReadOnlyList<Device>>>? appleDeviceProvider = null)
+	public DeviceManager(IAndroidProvider? androidProvider = null, IAppleProvider? appleProvider = null)
 	{
 		_androidProvider = androidProvider;
-		_appleDeviceProvider = appleDeviceProvider;
+		_appleProvider = appleProvider;
 	}
 
 	public async Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default)
@@ -187,8 +186,8 @@ public class DeviceManager : IDeviceManager
 	}
 
 	async Task<IReadOnlyList<Device>> GetAppleDevicesAsync(CancellationToken cancellationToken)
-		=> _appleDeviceProvider is not null
-			? await _appleDeviceProvider(cancellationToken)
+		=> _appleProvider is not null
+			? _appleProvider.GetDevices()
 			: await GetAppleSimulatorDevicesAsync(cancellationToken);
 
 	internal static async Task<IReadOnlyList<Device>> GetAppleSimulatorDevicesAsync(CancellationToken cancellationToken = default)

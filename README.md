@@ -13,7 +13,8 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **Environment diagnostics** (`maui doctor`) with auto-fix capabilities
 - **Android SDK and JDK management** — install, update, and configure
 - **Emulator management** — create, start, stop, and delete Android emulators
-- **Device listing** across all connected platforms
+- **Apple platform management** (macOS) — Xcode, simulator, and runtime management
+- **Device listing** across all connected platforms (Android emulators + iOS simulators)
 - **DevFlow app automation** (`maui devflow`) — visual tree inspection, screenshots, CDP, MCP server
 - **JSON output** (`--json`) for CI pipelines and scripting
 

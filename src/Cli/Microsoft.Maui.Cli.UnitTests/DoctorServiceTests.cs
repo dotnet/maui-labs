@@ -60,6 +60,41 @@ public class DoctorServiceTests
 	}
 
 	[Fact]
+	public async Task RunAllChecksAsync_IncludesAppleChecks_WhenProviderReturnsChecks()
+	{
+		// Arrange
+		var fakeApple = new FakeAppleProvider
+		{
+			HealthChecks = new List<HealthCheck>
+			{
+				new HealthCheck
+				{
+					Category = "apple",
+					Name = "Xcode",
+					Status = CheckStatus.Ok,
+					Message = "Xcode 16.0"
+				},
+				new HealthCheck
+				{
+					Category = "apple",
+					Name = "Command Line Tools",
+					Status = CheckStatus.Ok,
+					Message = "CLT installed"
+				}
+			}
+		};
+
+		var service = new DoctorService(appleProvider: fakeApple);
+
+		// Act
+		var report = await service.RunAllChecksAsync();
+
+		// Assert
+		Assert.Contains(report.Checks, c => c.Category == "apple" && c.Name == "Xcode");
+		Assert.Contains(report.Checks, c => c.Category == "apple" && c.Name == "Command Line Tools");
+	}
+
+	[Fact]
 	public async Task RunAllChecksAsync_CalculatesCorrectSummary()
 	{
 		// Arrange
@@ -106,6 +141,27 @@ public class DoctorServiceTests
 	}
 
 	[Fact]
+	public async Task RunCategoryChecksAsync_AppleCategory_ReturnsAppleChecks()
+	{
+		// Arrange
+		var fakeApple = new FakeAppleProvider
+		{
+			HealthChecks = new List<HealthCheck>
+			{
+				new HealthCheck { Category = "apple", Name = "Xcode", Status = CheckStatus.Ok, Message = "Xcode 16.0" }
+			}
+		};
+
+		var service = new DoctorService(appleProvider: fakeApple);
+
+		// Act
+		var report = await service.RunCategoryChecksAsync("apple");
+
+		// Assert
+		Assert.Contains(report.Checks, c => c.Category == "apple" && c.Name == "Xcode");
+	}
+
+	[Fact]
 	public async Task RunAllChecksAsync_IncludesAndroidChecks_WhenProviderReturnsAndroidOnly()
 	{
 		// Arrange
@@ -124,5 +180,34 @@ public class DoctorServiceTests
 
 		// Assert - android checks should be present
 		Assert.Contains(report.Checks, c => c.Category == "android" && c.Name == "JDK");
+	}
+
+	[Fact]
+	public async Task RunAllChecksAsync_BothProviders_IncludesBothChecks()
+	{
+		// Arrange
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			HealthChecks = new List<HealthCheck>
+			{
+				new HealthCheck { Category = "android", Name = "JDK", Status = CheckStatus.Ok }
+			}
+		};
+		var fakeApple = new FakeAppleProvider
+		{
+			HealthChecks = new List<HealthCheck>
+			{
+				new HealthCheck { Category = "apple", Name = "Xcode", Status = CheckStatus.Ok }
+			}
+		};
+
+		var service = new DoctorService(fakeAndroid, fakeApple);
+
+		// Act
+		var report = await service.RunAllChecksAsync();
+
+		// Assert
+		Assert.Contains(report.Checks, c => c.Category == "android");
+		Assert.Contains(report.Checks, c => c.Category == "apple");
 	}
 }

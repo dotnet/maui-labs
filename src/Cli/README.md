@@ -46,6 +46,23 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
+### 4. Set up Apple development (macOS only)
+
+```bash
+# List installed Xcode versions
+maui apple xcode list
+
+# List simulator runtimes
+maui apple runtime list
+maui apple runtime list --platform iOS
+
+# Manage simulators
+maui apple simulator list
+maui apple simulator start "iPhone 16 Pro"
+maui apple simulator stop "iPhone 16 Pro"
+maui apple simulator delete "iPhone 16 Pro"
+```
+
 ## Commands
 
 | Command | Description |
@@ -61,6 +78,12 @@ maui android emulator start --name MyEmulator
 | `maui android emulator start` | Start an Android emulator |
 | `maui android emulator stop` | Stop a running emulator |
 | `maui android emulator delete` | Delete an emulator |
+| `maui apple xcode list` | List installed Xcode versions (macOS only) |
+| `maui apple runtime list` | List installed simulator runtimes (macOS only) |
+| `maui apple simulator list` | List simulator devices (macOS only) |
+| `maui apple simulator start` | Boot a simulator (macOS only) |
+| `maui apple simulator stop` | Shut down a simulator (macOS only) |
+| `maui apple simulator delete` | Delete a simulator (macOS only) |
 | `maui devflow` | MAUI app automation via Agent API and Blazor WebViews via CDP |
 | `maui devflow MAUI tree` | Dump the visual tree of a running MAUI app |
 | `maui devflow MAUI screenshot` | Take a screenshot of a running MAUI app |
@@ -94,11 +117,11 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| macOS | ✅ |
-| Windows | ✅ |
-| Linux | ✅ |
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS | ✅ | Full support including Apple commands (Xcode, simulators, runtimes) |
+| Windows | ✅ | Android and Windows SDK commands |
+| Linux | ✅ | Android commands |
 
 ## Development
 

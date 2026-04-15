@@ -39,6 +39,7 @@
   <ItemGroup Label="Cli">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
     <PackageVersion Include="Xamarin.Android.Tools.AndroidSdk" Version="$(XamarinAndroidToolsAndroidSdkVersion)" />
+    <PackageVersion Include="Xamarin.Apple.Tools.MaciOS" Version="$(XamarinAppleToolsMaciOSVersion)" />
   </ItemGroup>
 
   <!-- Platform extensions (pinned) -->

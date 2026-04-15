@@ -1,0 +1,18 @@
+@page "/"
+
+<h1>Hello from Blazor on Linux!</h1>
+
+<p>This is a Blazor Hybrid page running inside a .NET MAUI app on Linux via WebKitGTK.</p>
+
+<p>Current count: @currentCount</p>
+
+<button @onclick="IncrementCount">Click me</button>
+
+@code {
+    private int currentCount = 0;
+
+    private void IncrementCount()
+    {
+        currentCount++;
+    }
+}

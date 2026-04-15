@@ -11,8 +11,8 @@ namespace Microsoft.Maui.Cli.UnitTests;
 
 public class DeviceManagerTests
 {
-	static DeviceManager CreateManager(FakeAndroidProvider? androidProvider = null) =>
-		new(androidProvider, _ => Task.FromResult<IReadOnlyList<Device>>([]));
+	static DeviceManager CreateManager(FakeAndroidProvider? androidProvider = null, FakeAppleProvider? appleProvider = null) =>
+		new(androidProvider, appleProvider ?? new FakeAppleProvider());
 
 	[Fact]
 	public async Task GetAllDevicesAsync_ReturnsAndroidDevices()
@@ -34,6 +34,70 @@ public class DeviceManagerTests
 		// Assert
 		Assert.Single(devices);
 		Assert.Contains(devices, d => d.Platforms.Contains("android"));
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_ReturnsAppleSimulators()
+	{
+		// Arrange
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "sim-udid-1234",
+					Name = "iPhone 15 Pro",
+					Platforms = new[] { "ios" },
+					Type = DeviceType.Simulator,
+					State = DeviceState.Booted,
+					IsEmulator = true,
+					IsRunning = true,
+					EmulatorId = "sim-udid-1234",
+					Version = "18.0"
+				}
+			}
+		};
+
+		var manager = new DeviceManager(appleProvider: fakeApple);
+
+		// Act
+		var devices = await manager.GetAllDevicesAsync();
+
+		// Assert
+		Assert.Single(devices);
+		Assert.Contains(devices, d => d.Platforms.Contains("ios"));
+		Assert.Equal(DeviceType.Simulator, devices[0].Type);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_ReturnsBothAndroidAndApple()
+	{
+		// Arrange
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = new[] { "android" }, Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "sim-udid", Name = "iPhone 15", Platforms = new[] { "ios" }, Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		// Act
+		var devices = await manager.GetAllDevicesAsync();
+
+		// Assert
+		Assert.Equal(2, devices.Count);
+		Assert.Contains(devices, d => d.Platforms.Contains("android"));
+		Assert.Contains(devices, d => d.Platforms.Contains("ios"));
 	}
 
 	[Fact]
@@ -68,22 +132,19 @@ public class DeviceManagerTests
 				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = ["android"], Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
 			]
 		};
-		var appleCalls = 0;
-		var manager = new DeviceManager(
-			fakeAndroid,
-			_ =>
-			{
-				appleCalls++;
-				return Task.FromResult<IReadOnlyList<Device>>(
-				[
-					new Device { Id = "ios-sim", Name = "iPhone", Platforms = [Platforms.iOS], Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
-				]);
-			});
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices =
+			[
+				new Device { Id = "ios-sim", Name = "iPhone", Platforms = [Platforms.iOS], Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			]
+		};
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
 
 		var devices = await manager.GetDevicesByPlatformAsync(Platforms.Android);
 
 		Assert.Single(devices);
-		Assert.Equal(0, appleCalls);
+		Assert.Equal(0, fakeApple.GetDevicesCalled);
 		Assert.Equal(1, fakeAndroid.GetDevicesCalled);
 	}
 
@@ -97,19 +158,51 @@ public class DeviceManagerTests
 				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = ["android"], Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
 			]
 		};
-		var manager = new DeviceManager(
-			fakeAndroid,
-			_ => Task.FromResult<IReadOnlyList<Device>>(
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices =
 			[
 				new Device { Id = "ios-sim", Name = "iPhone", Platforms = [Platforms.iOS], Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
-			]));
+			]
+		};
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
 
 		var devices = await manager.GetDevicesByPlatformAsync(Platforms.iOS);
 
 		Assert.Single(devices);
 		Assert.Equal(0, fakeAndroid.GetDevicesCalled);
 		Assert.Equal(0, fakeAndroid.GetAvdsCalled);
+		Assert.Equal(1, fakeApple.GetDevicesCalled);
 		Assert.Equal(Platforms.iOS, devices[0].Platform);
+	}
+
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_FiltersIosDevices()
+	{
+		// Arrange
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = new[] { "android" }, Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "sim-udid", Name = "iPhone 15", Platforms = new[] { "ios" }, Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		// Act
+		var iosOnly = await manager.GetDevicesByPlatformAsync("ios");
+
+		// Assert
+		Assert.Single(iosOnly);
+		Assert.All(iosOnly, d => Assert.Contains("ios", d.Platforms));
 	}
 
 	[Fact]

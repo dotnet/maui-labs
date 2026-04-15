@@ -27,6 +27,7 @@
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
+    <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
     <PackageReference Include="XenoAtom.Terminal.UI" />
   </ItemGroup>
 

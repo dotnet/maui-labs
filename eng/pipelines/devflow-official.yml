@@ -74,13 +74,11 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                useGlobalJson: true
-            - script: dotnet workload install maui macos maui-tizen
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
               displayName: Install MAUI workloads
-            - script: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)

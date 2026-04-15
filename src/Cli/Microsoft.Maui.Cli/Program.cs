@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Services;
 using Microsoft.Maui.Cli.Utils;
 
@@ -37,6 +38,7 @@ public class Program
 
 	// Convenience accessors for services
 	internal static IAndroidProvider AndroidProvider => Services.GetRequiredService<IAndroidProvider>();
+	internal static IAppleProvider AppleProvider => Services.GetRequiredService<IAppleProvider>();
 	internal static IDoctorService DoctorService => Services.GetRequiredService<IDoctorService>();
 	internal static IDeviceManager DeviceManager => Services.GetRequiredService<IDeviceManager>();
 	internal static IJdkManager JdkManager => Services.GetRequiredService<IJdkManager>();
@@ -103,6 +105,7 @@ public class Program
 
 		// Platform-specific command groups
 		rootCommand.Add(AndroidCommands.Create());
+		rootCommand.Add(AppleCommands.Create());
 
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));
