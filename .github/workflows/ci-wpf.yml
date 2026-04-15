@@ -41,7 +41,7 @@ jobs:
           -configuration Release
           -ci
           -prepareMachine
-          -projects %CD%\platforms\Windows.WPF\Windows.WPF.slnx
+          -projects %CD%\platforms\Windows.WPF\Windows.WPF.CI.slnx
         shell: cmd
 
       - name: Upload packages
