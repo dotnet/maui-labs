@@ -34,10 +34,12 @@ jobs:
       - name: Install workloads
         run: dotnet workload install maui
 
-      - name: Build, Test and Pack
+      - name: Build and Pack
         run: >
-          eng\common\cibuild.cmd
+          eng\common\build.cmd
+          -restore -build -pack
           -configuration Release
+          -ci
           -prepareMachine
           -projects %CD%\platforms\Windows.WPF\Windows.WPF.slnx
         shell: cmd
