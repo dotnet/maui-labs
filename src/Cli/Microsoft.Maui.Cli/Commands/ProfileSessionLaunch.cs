@@ -32,17 +32,14 @@ internal static class ProfileSessionLaunch
 			await LaunchAppAsync(context, cancellationToken);
 			WriteTraceStatusMessage(context);
 
-			if (context.BuildInjection?.DirectExitDelayMs is null)
-			{
-				await ProfileTraceLifecycle.WaitForStopSignalAsync(
-					context.EffectiveDuration,
-					allowManualStop: !context.UseJson,
-					context.Formatter,
-					context.UseJson,
-					context.Verbose,
-					cancellationToken);
-				await ProfileSessionRunner.TryRequestAppExitAsync(context, cancellationToken);
-			}
+			await ProfileTraceLifecycle.WaitForStopSignalAsync(
+				context.EffectiveDuration,
+				allowManualStop: !context.UseJson,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
+			await ProfileSessionRunner.TryRequestAppExitAsync(context, cancellationToken);
 
 			await RuntimeOwnedTraceCollector.WaitForAndPullAsync(context, cancellationToken);
 			WriteTraceStatusMessage(context);

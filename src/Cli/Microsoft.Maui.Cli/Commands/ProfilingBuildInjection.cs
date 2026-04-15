@@ -9,6 +9,5 @@ internal sealed record ProfilingBuildInjection(
 	string ExitControlHost,
 	int ExitControlPort,
 	bool InjectBootstrap,
-	int? DirectExitDelayMs,
 	bool EnableRuntimePgo,
 	string? EventPipeOutputPath);

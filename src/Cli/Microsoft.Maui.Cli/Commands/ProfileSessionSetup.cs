@@ -47,14 +47,12 @@ internal static class ProfileSessionSetup
 		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
 		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.StartupProfilingPackageId);
-		var directExitDelayMs = ResolveDirectExitDelayMs();
 		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
 			? null
 			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
 				context.DiagnosticAddress,
 				context.ReservedPorts!.ExitControlPort,
 				injectBootstrap: !hasStartupProfilingHelper,
-				directExitDelayMs: directExitDelayMs,
 				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection,
 				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
 
@@ -80,12 +78,6 @@ internal static class ProfileSessionSetup
 			context.Formatter.WriteInfo(
 				$"Stopping event: {ProfileCommand.StartupProfilingProviderName}/{ProfileCommand.StartupProfilingEventName} " +
 				"(auto-detected from the app's startup profiling helper).");
-		}
-
-		if (context.BuildInjection?.DirectExitDelayMs is int directExitDelayMs)
-		{
-			context.Formatter.WriteInfo(
-				$"Injected inside-app exit: {directExitDelayMs} ms after the first MAUI UI becomes ready.");
 		}
 
 		if (context.UseRuntimeOwnedTraceCollection && !string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
@@ -127,16 +119,6 @@ internal static class ProfileSessionSetup
 			context.Formatter.WriteWarning(
 				"The CLI's startup profiling injection assets were not found next to the tool binaries, so automatic startup-complete and graceful app-exit injection are unavailable for this run.");
 		}
-	}
-
-	static int? ResolveDirectExitDelayMs()
-	{
-		// A bare inside-app Environment.Exit(0) is useful for diagnostics, but it can
-		// truncate Android traces ("Read past end of stream"). Keep it opt-in only.
-		var value = Environment.GetEnvironmentVariable("MAUI_CLI_STARTUP_DIRECT_EXIT_DELAY_MS");
-		return int.TryParse(value, out var milliseconds) && milliseconds > 0
-			? milliseconds
-			: null;
 	}
 
 	static bool ShouldUseRuntimeOwnedTraceCollection(ProfileSessionContext context)

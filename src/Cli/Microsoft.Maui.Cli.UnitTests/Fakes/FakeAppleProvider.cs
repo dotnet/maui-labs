@@ -36,7 +36,6 @@ public class FakeAppleProvider : IAppleProvider
 	public List<string> ShutdownSimulators { get; } = new();
 	public List<string> DeletedSimulators { get; } = new();
 	public List<(string Name, string DeviceType, string? Runtime)> CreatedSimulators { get; } = new();
-	public int GetDevicesCalled { get; private set; }
 
 	// --- IAppleProvider implementation ---
 
@@ -93,9 +92,5 @@ public class FakeAppleProvider : IAppleProvider
 
 	public List<HealthCheck> CheckHealth() => HealthChecks;
 
-	public List<Device> GetDevices()
-	{
-		GetDevicesCalled++;
-		return Devices;
-	}
+	public List<Device> GetDevices() => Devices;
 }

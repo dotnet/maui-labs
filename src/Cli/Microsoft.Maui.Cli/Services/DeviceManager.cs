@@ -6,7 +6,6 @@ using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
-using System.Text.Json;
 
 namespace Microsoft.Maui.Cli.Services;
 
@@ -28,9 +27,96 @@ public class DeviceManager : IDeviceManager
 	{
 		var devices = new List<Device>();
 
-		devices.AddRange(await GetAndroidDevicesAsync(cancellationToken));
+		// Get Android devices
+		if (_androidProvider != null)
+		{
+			var androidDevices = await _androidProvider.GetDevicesAsync(cancellationToken);
+			devices.AddRange(androidDevices);
 
-		devices.AddRange(await GetAppleDevicesAsync(cancellationToken));
+			// Also get AVDs (virtual devices that may not be running)
+			var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
+			foreach (var avd in avds)
+			{
+				// Check if this AVD is already in the running devices list
+				// Match by AVD name in details dict or by EmulatorId
+				var runningIndex = devices.FindIndex(d =>
+					d.Platforms.Contains("android") &&
+					d.IsEmulator &&
+					(
+						(d.Details != null &&
+						 d.Details.TryGetValue("avd", out var avdName) &&
+						 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
+						||
+						string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
+					));
+
+				// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
+				var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
+				var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
+
+				if (runningIndex >= 0)
+				{
+					// Merge AVD metadata into the running emulator device
+					var running = devices[runningIndex];
+					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
+					var details = running.Details != null
+						? new Dictionary<string, object>(running.Details)
+						: new Dictionary<string, object>();
+					details["tag_id"] = tagId ?? "default";
+					details["target"] = avd.Target ?? "unknown";
+
+					devices[runningIndex] = running with
+					{
+						EmulatorId = avd.Name,
+						SubModel = subModel,
+						Details = details
+					};
+				}
+				else
+				{
+					var architecture = AndroidEnvironment.MapAbiToArchitecture(abi) ?? (PlatformDetector.IsArm64 ? "arm64" : "x64");
+					var resolvedAbi = abi ?? (PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64");
+					var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
+					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
+					devices.Add(new Device
+					{
+						Id = avd.Name,
+						Name = avd.Name,
+						Platforms = new[] { "android" },
+						Type = DeviceType.Emulator,
+						State = DeviceState.Shutdown,
+						IsEmulator = true,
+						IsRunning = false,
+						ConnectionType = Models.ConnectionType.Local,
+						EmulatorId = avd.Name,
+						Model = avd.DeviceProfile,
+						SubModel = subModel,
+						Manufacturer = "Google",
+						Version = apiLevel,
+						VersionName = versionName,
+						Architecture = architecture,
+						PlatformArchitecture = resolvedAbi,
+						RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
+						Idiom = DeviceIdiom.Phone,
+						Details = new Dictionary<string, object>
+						{
+							["avd"] = avd.Name,
+							["target"] = avd.Target ?? "unknown",
+							["api_level"] = apiLevel ?? "unknown",
+							["abi"] = resolvedAbi,
+							["tag_id"] = tagId ?? "default"
+						}
+					});
+				}
+			}
+		}
+
+		// Get Apple devices (simulators) when on macOS
+		if (_appleProvider != null)
+		{
+			var appleDevices = _appleProvider.GetDevices();
+			devices.AddRange(appleDevices);
+		}
 
 		// TODO: Get Windows devices when WindowsProvider is implemented
 
@@ -39,13 +125,8 @@ public class DeviceManager : IDeviceManager
 
 	public async Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default)
 	{
-		return Platforms.Normalize(platform) switch
-		{
-			Platforms.Android => await GetAndroidDevicesAsync(cancellationToken),
-			Platforms.iOS => await GetAppleDevicesAsync(cancellationToken),
-			Platforms.All => await GetAllDevicesAsync(cancellationToken),
-			_ => []
-		};
+		var allDevices = await GetAllDevicesAsync(cancellationToken);
+		return allDevices.Where(d => d.Platforms.Any(p => p.Equals(platform, StringComparison.OrdinalIgnoreCase))).ToList();
 	}
 
 	public async Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default)
@@ -94,221 +175,5 @@ public class DeviceManager : IDeviceManager
 		}
 
 		return (apiLevel, tagId, abi);
-	}
-
-	async Task<IReadOnlyList<Device>> GetAndroidDevicesAsync(CancellationToken cancellationToken)
-	{
-		if (_androidProvider is null)
-			return [];
-
-		var devices = new List<Device>();
-		var androidDevices = await _androidProvider.GetDevicesAsync(cancellationToken);
-		devices.AddRange(androidDevices);
-
-		// Also get AVDs (virtual devices that may not be running)
-		var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
-		foreach (var avd in avds)
-		{
-			// Check if this AVD is already in the running devices list
-			// Match by AVD name in details dict or by EmulatorId
-			var runningIndex = devices.FindIndex(d =>
-				d.Platforms.Contains("android") &&
-				d.IsEmulator &&
-				(
-					(d.Details != null &&
-					 d.Details.TryGetValue("avd", out var avdName) &&
-					 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
-					||
-					string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
-				));
-
-			// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
-			var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
-			var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
-
-			if (runningIndex >= 0)
-			{
-				// Merge AVD metadata into the running emulator device
-				var running = devices[runningIndex];
-				var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-				var details = running.Details != null
-					? new Dictionary<string, object>(running.Details)
-					: new Dictionary<string, object>();
-				details["tag_id"] = tagId ?? "default";
-				details["target"] = avd.Target ?? "unknown";
-
-				devices[runningIndex] = running with
-				{
-					EmulatorId = avd.Name,
-					SubModel = subModel,
-					Details = details
-				};
-			}
-			else
-			{
-				var architecture = AndroidEnvironment.MapAbiToArchitecture(abi) ?? (PlatformDetector.IsArm64 ? "arm64" : "x64");
-				var resolvedAbi = abi ?? (PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64");
-				var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
-				var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-				devices.Add(new Device
-				{
-					Id = avd.Name,
-					Name = avd.Name,
-					Platforms = ["android"],
-					Type = DeviceType.Emulator,
-					State = DeviceState.Shutdown,
-					IsEmulator = true,
-					IsRunning = false,
-					ConnectionType = Models.ConnectionType.Local,
-					EmulatorId = avd.Name,
-					Model = avd.DeviceProfile,
-					SubModel = subModel,
-					Manufacturer = "Google",
-					Version = apiLevel,
-					VersionName = versionName,
-					Architecture = architecture,
-					PlatformArchitecture = resolvedAbi,
-					RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
-					Idiom = DeviceIdiom.Phone,
-					Details = new Dictionary<string, object>
-					{
-						["avd"] = avd.Name,
-						["target"] = avd.Target ?? "unknown",
-						["api_level"] = apiLevel ?? "unknown",
-						["abi"] = resolvedAbi,
-						["tag_id"] = tagId ?? "default"
-					}
-				});
-			}
-		}
-
-		return devices;
-	}
-
-	async Task<IReadOnlyList<Device>> GetAppleDevicesAsync(CancellationToken cancellationToken)
-		=> _appleProvider is not null
-			? _appleProvider.GetDevices()
-			: await GetAppleSimulatorDevicesAsync(cancellationToken);
-
-	internal static async Task<IReadOnlyList<Device>> GetAppleSimulatorDevicesAsync(CancellationToken cancellationToken = default)
-	{
-		if (!OperatingSystem.IsMacOS())
-			return [];
-
-		var xcrunPath = ProcessRunner.GetCommandPath("xcrun");
-		if (string.IsNullOrWhiteSpace(xcrunPath))
-			return [];
-
-		var result = await ProcessRunner.RunAsync(
-			xcrunPath,
-			["simctl", "list", "devices", "available", "-j"],
-			timeout: TimeSpan.FromSeconds(15),
-			cancellationToken: cancellationToken);
-
-		if (!result.Success || string.IsNullOrWhiteSpace(result.StandardOutput))
-			return [];
-
-		return ParseAppleSimulatorDevices(result.StandardOutput);
-	}
-
-	internal static IReadOnlyList<Device> ParseAppleSimulatorDevices(string json)
-	{
-		if (string.IsNullOrWhiteSpace(json))
-			return [];
-
-		using var document = JsonDocument.Parse(json);
-		if (!document.RootElement.TryGetProperty("devices", out var devicesByRuntime) || devicesByRuntime.ValueKind != JsonValueKind.Object)
-			return [];
-
-		var architecture = PlatformDetector.IsArm64 ? "arm64" : "x64";
-		var runtimeIdentifier = PlatformDetector.IsArm64 ? "iossimulator-arm64" : "iossimulator-x64";
-		var devices = new List<Device>();
-
-		foreach (var runtime in devicesByRuntime.EnumerateObject())
-		{
-			if (!runtime.Name.Contains("iOS", StringComparison.OrdinalIgnoreCase) || runtime.Value.ValueKind != JsonValueKind.Array)
-				continue;
-
-			var version = TryParseAppleRuntimeVersion(runtime.Name);
-			foreach (var simulator in runtime.Value.EnumerateArray())
-			{
-				if (simulator.TryGetProperty("isAvailable", out var isAvailableElement) &&
-					isAvailableElement.ValueKind == JsonValueKind.False)
-				{
-					continue;
-				}
-
-				var udid = simulator.TryGetProperty("udid", out var udidElement) ? udidElement.GetString() : null;
-				var name = simulator.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
-				var state = simulator.TryGetProperty("state", out var stateElement) ? stateElement.GetString() : null;
-				if (string.IsNullOrWhiteSpace(udid) || string.IsNullOrWhiteSpace(name))
-					continue;
-
-				var details = new Dictionary<string, object>
-				{
-					["runtime"] = runtime.Name
-				};
-
-				if (simulator.TryGetProperty("deviceTypeIdentifier", out var deviceTypeElement) &&
-					!string.IsNullOrWhiteSpace(deviceTypeElement.GetString()))
-				{
-					details["device_type"] = deviceTypeElement.GetString()!;
-				}
-
-				if (!string.IsNullOrWhiteSpace(state))
-					details["state"] = state!;
-
-				devices.Add(new Device
-				{
-					Id = udid,
-					Name = name,
-					Platforms = [Platforms.iOS],
-					Type = DeviceType.Simulator,
-					State = ParseAppleSimulatorState(state),
-					IsEmulator = true,
-					IsRunning = string.Equals(state, "Booted", StringComparison.OrdinalIgnoreCase),
-					ConnectionType = Models.ConnectionType.Local,
-					EmulatorId = udid,
-					Model = name,
-					Manufacturer = "Apple",
-					Version = version,
-					VersionName = version is null ? null : $"iOS {version}",
-					Architecture = architecture,
-					PlatformArchitecture = architecture,
-					RuntimeIdentifiers = [runtimeIdentifier],
-					Idiom = InferAppleIdiom(name),
-					Details = details
-				});
-			}
-		}
-
-		return devices
-			.OrderByDescending(device => device.IsRunning)
-			.ThenBy(device => device.Name, StringComparer.OrdinalIgnoreCase)
-			.ToList();
-	}
-
-	static DeviceState ParseAppleSimulatorState(string? state) => state?.ToLowerInvariant() switch
-	{
-		"booted" => DeviceState.Booted,
-		"shutdown" => DeviceState.Shutdown,
-		"booting" => DeviceState.Booting,
-		"shuttingdown" or "shutting down" => DeviceState.ShuttingDown,
-		_ => DeviceState.Unknown
-	};
-
-	static string InferAppleIdiom(string name) =>
-		name.Contains("iPad", StringComparison.OrdinalIgnoreCase)
-			? DeviceIdiom.Tablet
-			: DeviceIdiom.Phone;
-
-	static string? TryParseAppleRuntimeVersion(string runtimeName)
-	{
-		var markerIndex = runtimeName.IndexOf("iOS-", StringComparison.OrdinalIgnoreCase);
-		if (markerIndex < 0)
-			return null;
-
-		var rawVersion = runtimeName[(markerIndex + "iOS-".Length)..];
-		return rawVersion.Replace('-', '.');
 	}
 }

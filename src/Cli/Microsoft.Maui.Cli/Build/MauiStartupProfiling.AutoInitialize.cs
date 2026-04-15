@@ -11,14 +11,14 @@ using Microsoft.Maui.StartupProfiling;
 
 internal static class __MauiStartupProfilingInjectedBootstrap
 {
-    const string ProfilingEnvironmentVariable = "MAUI_STARTUP_PROFILING";
-    const string DirectExitDelayEnvironmentVariable = "MAUI_STARTUP_PROFILING_DIRECT_EXIT_DELAY_MS";
+    static readonly TimeSpan s_pollInterval = TimeSpan.FromMilliseconds(100);
+    static readonly TimeSpan s_maxWait = TimeSpan.FromSeconds(30);
     static int s_completionSignaled;
 
     [ModuleInitializer]
     internal static void Initialize()
     {
-        if (!IsProfilingSession())
+        if (!StartupProfilingMarker.IsProfilingSession)
             return;
 
         _ = WaitForStartupCompletionAsync();
@@ -26,18 +26,18 @@ internal static class __MauiStartupProfilingInjectedBootstrap
 
     static async Task WaitForStartupCompletionAsync()
     {
-        for (var attempt = 0; attempt < 300; attempt++)
+        var deadline = DateTime.UtcNow + s_maxWait;
+        while (DateTime.UtcNow < deadline)
         {
             if (await IsMainPageReadyAsync().ConfigureAwait(false))
             {
-                await CompleteOrExitAsync().ConfigureAwait(false);
-                return;
+                break;
             }
 
-            await Task.Delay(100).ConfigureAwait(false);
+            await Task.Delay(s_pollInterval).ConfigureAwait(false);
         }
 
-        await CompleteOrExitAsync().ConfigureAwait(false);
+        await SignalStartupCompleteOnMainThreadAsync().ConfigureAwait(false);
     }
 
     static async Task<bool> IsMainPageReadyAsync()
@@ -55,20 +55,6 @@ internal static class __MauiStartupProfilingInjectedBootstrap
         {
             return false;
         }
-    }
-
-    static async Task CompleteOrExitAsync()
-    {
-        // Keep direct process exit opt-in for diagnostics only. The normal path
-        // signals startup completion and lets the CLI request shutdown later.
-        if (TryGetDirectExitDelay(out var delay) && delay > TimeSpan.Zero)
-        {
-            await Task.Delay(delay).ConfigureAwait(false);
-            await ExitProcessAsync().ConfigureAwait(false);
-            return;
-        }
-
-        await SignalStartupCompleteOnMainThreadAsync().ConfigureAwait(false);
     }
 
     static async Task SignalStartupCompleteOnMainThreadAsync()
@@ -89,40 +75,5 @@ internal static class __MauiStartupProfilingInjectedBootstrap
             return;
 
         StartupProfilingMarker.Complete();
-    }
-
-    static async Task ExitProcessAsync()
-    {
-        try
-        {
-            await MainThread.InvokeOnMainThreadAsync(() => Environment.Exit(0)).ConfigureAwait(false);
-        }
-        catch
-        {
-            Environment.Exit(0);
-        }
-    }
-
-    static bool IsProfilingSession()
-        => IsEnabledEnvironmentVariable(ProfilingEnvironmentVariable);
-
-    static bool IsEnabledEnvironmentVariable(string variableName)
-    {
-        var value = Environment.GetEnvironmentVariable(variableName);
-        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
-    }
-
-    static bool TryGetDirectExitDelay(out TimeSpan delay)
-    {
-        delay = TimeSpan.Zero;
-
-        var value = Environment.GetEnvironmentVariable(DirectExitDelayEnvironmentVariable);
-        if (!int.TryParse(value, out var milliseconds) || milliseconds <= 0)
-            return false;
-
-        delay = TimeSpan.FromMilliseconds(milliseconds);
-        return true;
     }
 }

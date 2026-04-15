@@ -74,8 +74,6 @@ return true;
                                              Condition="'$(MauiStartupProfilingExitHost)' != ''" />
       <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING_EXIT_PORT=$(MauiStartupProfilingExitPort)"
                                              Condition="'$(MauiStartupProfilingExitPort)' != ''" />
-      <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING_DIRECT_EXIT_DELAY_MS=$(MauiStartupProfilingDirectExitDelayMs)"
-                                             Condition="'$(MauiStartupProfilingDirectExitDelayMs)' != ''" />
       <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EnableEventPipe=1"
                                              Condition="'$(MauiStartupProfilingEventPipeOutputPath)' != ''" />
       <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EventPipeConfig=$(MauiStartupProfilingEventPipeConfig)"

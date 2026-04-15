@@ -58,8 +58,6 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<string> StoppedEmulators { get; } = new();
 	public List<List<string>> UninstalledPackageSets { get; } = new();
 	public int AcceptLicensesCalled { get; private set; }
-	public int GetDevicesCalled { get; private set; }
-	public int GetAvdsCalled { get; private set; }
 	public List<(string? SdkPath, string? JdkPath, int JdkVersion, List<string>? AdditionalPackages)> InstallCalls { get; } = new();
 	public List<string> InstallSdkToolsCalls { get; } = new();
 	public List<int> InstallJdkCalls { get; } = new();
@@ -71,16 +69,10 @@ public class FakeAndroidProvider : IAndroidProvider
 		=> Task.FromResult(HealthChecks);
 
 	public Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default)
-	{
-		GetDevicesCalled++;
-		return Task.FromResult(Devices);
-	}
+		=> Task.FromResult(Devices);
 
 	public Task<List<AvdInfo>> GetAvdsAsync(CancellationToken cancellationToken = default)
-	{
-		GetAvdsCalled++;
-		return Task.FromResult(Avds);
-	}
+		=> Task.FromResult(Avds);
 
 	public Task<AvdInfo> CreateAvdAsync(string name, string deviceProfile, string systemImage, bool force = false, CancellationToken cancellationToken = default)
 	{

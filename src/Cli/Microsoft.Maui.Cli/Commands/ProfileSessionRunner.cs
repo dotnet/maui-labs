@@ -26,8 +26,7 @@ internal static class ProfileSessionRunner
 			}
 
 			if (!context.UseRuntimeOwnedTraceCollection
-				&& context.ExitControlServer is not null
-				&& context.BuildInjection?.DirectExitDelayMs is null)
+				&& context.ExitControlServer is not null)
 				await TryRequestAppExitAsync(context, cancellationToken);
 		}
 		finally

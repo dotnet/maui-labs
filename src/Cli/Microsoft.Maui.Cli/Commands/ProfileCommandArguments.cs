@@ -92,8 +92,6 @@ internal static class ProfileCommandArguments
 		args.Add($"-p:MauiStartupProfilingInjectBootstrap={(buildInjection.InjectBootstrap ? "true" : "false")}");
 		if (buildInjection.EnableRuntimePgo)
 			args.Add("-p:MauiStartupProfilingEnableRuntimePgo=true");
-		if (buildInjection.DirectExitDelayMs is int directExitDelayMs && directExitDelayMs > 0)
-			args.Add($"-p:MauiStartupProfilingDirectExitDelayMs={directExitDelayMs}");
 		if (!string.IsNullOrWhiteSpace(buildInjection.EventPipeOutputPath))
 			args.Add($"-p:MauiStartupProfilingEventPipeOutputPath={buildInjection.EventPipeOutputPath}");
 

@@ -9,7 +9,6 @@ internal static class ProfileCommandBuildInjectionResolver
 		string exitControlHost,
 		int exitControlPort,
 		bool injectBootstrap,
-		int? directExitDelayMs = null,
 		bool enableRuntimePgo = false,
 		string? eventPipeOutputPath = null)
 	{
@@ -26,7 +25,6 @@ internal static class ProfileCommandBuildInjectionResolver
 			exitControlHost,
 			exitControlPort,
 			injectBootstrap,
-			directExitDelayMs,
 			enableRuntimePgo,
 			eventPipeOutputPath);
 	}

@@ -644,32 +644,6 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
-	public void BuildCompileArguments_WithBuildInjection_AddsTimedExitDelay()
-	{
-		var device = CreateDevice(Platforms.Android, isEmulator: true);
-		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
-		var buildInjection = new ProfilingBuildInjection(
-			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
-			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
-			ExitControlHost: "10.0.2.2",
-			ExitControlPort: 9001,
-			InjectBootstrap: true,
-			DirectExitDelayMs: 10_000,
-			EnableRuntimePgo: false,
-			EventPipeOutputPath: null);
-
-		var args = ProfileCommand.BuildCompileArguments(
-			"/fake/MyApp.csproj",
-			"net10.0-android",
-			"Release",
-			transport,
-			9000,
-			buildInjection);
-
-		Assert.Contains("-p:MauiStartupProfilingDirectExitDelayMs=10000", args);
-	}
-
-	[Fact]
 	public void BuildCompileArguments_WithRuntimeOwnedEventPipe_SkipsDiagnosticArgsAndAddsRuntimePgoProperties()
 	{
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
@@ -680,7 +654,6 @@ public class ProfileCommandTests
 			ExitControlHost: "10.0.2.2",
 			ExitControlPort: 9001,
 			InjectBootstrap: true,
-			DirectExitDelayMs: null,
 			EnableRuntimePgo: true,
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
@@ -696,7 +669,6 @@ public class ProfileCommandTests
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains("-p:MauiStartupProfilingExitHost=10.0.2.2", args);
 		Assert.Contains("-p:MauiStartupProfilingExitPort=9001", args);
-		Assert.DoesNotContain(args, arg => arg.StartsWith("-p:MauiStartupProfilingDirectExitDelayMs=", StringComparison.Ordinal));
 		Assert.Contains("-p:MauiStartupProfilingEnableRuntimePgo=true", args);
 		Assert.Contains("-p:MauiStartupProfilingEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
 	}
@@ -712,7 +684,6 @@ public class ProfileCommandTests
 			ExitControlHost: "10.0.2.2",
 			ExitControlPort: 9001,
 			InjectBootstrap: true,
-			DirectExitDelayMs: null,
 			EnableRuntimePgo: true,
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 

@@ -59,9 +59,6 @@ protected override void OnAppearing()
 | Variable | Values | Effect |
 |---|---|---|
 | `MAUI_STARTUP_PROFILING` | `1` / `true` | Indicates that the app is running in a profiling session. |
-| `MAUI_STARTUP_PROFILING_AUTO_EXIT` | `1` / `true` | Exits the process immediately after `Complete()` is called. Mainly useful for custom or CI-driven flows. |
-| `MAUI_STARTUP_PROFILING_DIRECT_EXIT_DELAY_MS` | positive integer milliseconds | When set, the injected app-assembly bootstrap waits this long after the first MAUI UI becomes ready and then calls `Environment.Exit(0)` directly from inside the app assembly. This intentionally avoids depending on the `StartupComplete` marker for the simplified exit experiment. |
-| `MAUI_STARTUP_PROFILING_DIAGNOSTICS` | `1` / `true` | Forces verbose helper diagnostics even outside a CLI-started profiling session. |
 | `MAUI_STARTUP_PROFILING_EXIT_HOST` | host name / IP | Optional explicit host for the CLI exit-control channel. |
 | `MAUI_STARTUP_PROFILING_EXIT_PORT` | TCP port | Optional explicit port for the CLI exit-control channel. |
 
@@ -69,7 +66,7 @@ protected override void OnAppearing()
 
 - The helper registers an `EventSource` named `Microsoft.Maui.StartupProfiling` via a module initializer.
 - `StartupProfilingMarker.Complete()` emits the `StartupComplete` event on that provider.
-- When the CLI injects the bootstrap source, it waits for the first MAUI page handler to exist and either calls `Complete()` or, for the simplified direct-exit experiment, just terminates the app from inside the app assembly.
+- When the CLI injects the bootstrap source, it waits for the first MAUI page handler to exist and then calls `Complete()` from inside the app assembly.
 - During `maui profile startup`, the helper can also connect back to the CLI over a small TCP exit-control channel so the app can terminate cleanly after trace finalization.
 
 ### Notes on MIBC generation
@@ -78,4 +75,4 @@ protected override void OnAppearing()
 - Android startup-profile runs also inject the same core runtime-PGO knobs used by the known-good `dotnet-optimization` IBC flow, including `DOTNET_TieredPGO=1` and `DOTNET_ReadyToRun=0`.
 - This produces a valid startup MIBC based on the methods observed in the trace.
 - If you dump a resulting `.mibc` and only see a `Methods` list, that usually means the trace did not contain the raw sample/LBR data needed for richer SPGO block/edge attribution.
-- A bare delayed `Environment.Exit(0)` is useful as a diagnostic experiment, but marker- or duration-based stop conditions are usually more reliable for getting a fully finalized trace file.
+- Marker- or duration-based stop conditions are more reliable than force-closing the app when you need a fully finalized trace file.
