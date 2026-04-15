@@ -10,6 +10,7 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Handlers.WPF;
 using Microsoft.Maui.Platforms.Windows.WPF;
+using Microsoft.Maui.Controls.Platform.WPF;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Maui.Controls.Hosting.WPF

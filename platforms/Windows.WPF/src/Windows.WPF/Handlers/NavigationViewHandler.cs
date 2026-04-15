@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
+using Microsoft.Maui.Platforms.Windows.WPF;
 using WButton = System.Windows.Controls.Button;
 using WTextBlock = System.Windows.Controls.TextBlock;
 using WColor = System.Windows.Media.Color;

@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using Microsoft.Maui.Handlers;
+using Microsoft.Maui.Platforms.Windows.WPF;
 using WBorder = System.Windows.Controls.Border;
 using WGrid = System.Windows.Controls.Grid;
 using WListBox = System.Windows.Controls.ListBox;

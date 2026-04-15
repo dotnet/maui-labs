@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
+using Microsoft.Maui.Platforms.Windows.WPF;
 using WButton = global::System.Windows.Controls.Button;
 using WGrid = global::System.Windows.Controls.Grid;
 using WBorder = global::System.Windows.Controls.Border;

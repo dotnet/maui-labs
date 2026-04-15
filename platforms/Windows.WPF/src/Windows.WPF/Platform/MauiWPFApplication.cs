@@ -31,7 +31,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			Application = Services.GetRequiredService<IApplication>();
 
-			this.SetApplicationHandler(Application, applicationContext);
+			// TODO: SetApplicationHandler was removed in newer MAUI versions — application handler setup needs rework
+			// this.SetApplicationHandler(Application, applicationContext);
 
 			// Apply platform theme to MAUI Application so AppThemeBinding resolves correctly
 			ThemeManager.ApplyThemeToApplication();
