@@ -5,7 +5,13 @@ namespace Microsoft.Maui.Cli.Commands;
 
 internal static class ProfileCommandBuildInjectionResolver
 {
-	internal static ProfilingBuildInjection? TryCreateBuildInjection(string exitControlHost, int exitControlPort, bool injectBootstrap)
+	internal static ProfilingBuildInjection? TryCreateBuildInjection(
+		string exitControlHost,
+		int exitControlPort,
+		bool injectBootstrap,
+		int? directExitDelayMs = null,
+		bool enableRuntimePgo = false,
+		string? eventPipeOutputPath = null)
 	{
 		var targetsPath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingInjectionTargetsFileName);
 		var assemblyPath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingAssemblyFileName);
@@ -14,7 +20,15 @@ internal static class ProfileCommandBuildInjectionResolver
 		if (targetsPath is null || assemblyPath is null || sourcePath is null)
 			return null;
 
-		return new ProfilingBuildInjection(targetsPath, assemblyPath, exitControlHost, exitControlPort, injectBootstrap);
+		return new ProfilingBuildInjection(
+			targetsPath,
+			assemblyPath,
+			exitControlHost,
+			exitControlPort,
+			injectBootstrap,
+			directExitDelayMs,
+			enableRuntimePgo,
+			eventPipeOutputPath);
 	}
 
 	static string? TryResolveBuildAssetPath(string fileName)

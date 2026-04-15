@@ -283,7 +283,7 @@ public class ProfileCommandTests
 	public void GetPrimaryOutputPath_SpeedscopeUsesSidecarJsonFile()
 	{
 		var path = ProfileCommand.GetPrimaryOutputPath("/tmp/my-trace.nettrace", TraceOutputFormat.Speedscope);
-		Assert.Equal("/tmp/my-trace.nettrace.speedscope.json", path);
+		Assert.Equal("/tmp/my-trace.speedscope.json", path);
 	}
 
 	// ── Tool version parsing ──────────────────────────────────────────────────
@@ -421,10 +421,12 @@ public class ProfileCommandTests
 		// When no stopping event is specified and no trace profile is given,
 		// no --profile or --providers flags should be passed so dotnet-trace
 		// applies its own defaults (dotnet-common + dotnet-sampled-thread-time).
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.NetTrace,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: null,
 			duration: null,
 			stoppingEventProvider: null,
@@ -434,9 +436,9 @@ public class ProfileCommandTests
 		Assert.DoesNotContain("--profile", args);
 		Assert.DoesNotContain("--providers", args);
 		Assert.DoesNotContain("--stopping-event-provider-name", args);
-		// Should use --process-id, not --dsrouter
-		Assert.Contains("--process-id", args);
-		Assert.DoesNotContain("--dsrouter", args);
+		Assert.DoesNotContain("--process-id", args);
+		Assert.Contains("--dsrouter", args);
+		Assert.Contains("android-emu", args);
 		Assert.Equal("NetTrace", args[Array.IndexOf(args, "--format") + 1]);
 	}
 
@@ -445,12 +447,14 @@ public class ProfileCommandTests
 	{
 		// When a stopping event provider is specified, --profile must include the
 		// default profiles so runtime/sampling events are still collected, and
-		// --providers must enable the stopping event provider so dotnet-trace
-		// actually receives the event (--stopping-event-provider-name alone is not enough).
+		// --providers must enable both the startup marker provider and the
+		// runtime JIT/R2R provider so dotnet-pgo can later create a richer MIBC.
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.NetTrace,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: null,
 			duration: null,
 			stoppingEventProvider: "Microsoft.Maui.StartupProfiling",
@@ -466,6 +470,8 @@ public class ProfileCommandTests
 		var providersIdx = Array.IndexOf(args, "--providers");
 		Assert.True(providersIdx >= 0, "--providers flag should be present");
 		Assert.Contains("Microsoft.Maui.StartupProfiling", args[providersIdx + 1]);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime", args[providersIdx + 1]);
+		Assert.Contains("0x1F000080018:5", args[providersIdx + 1]);
 
 		// Stopping event flags present
 		Assert.Contains("--stopping-event-provider-name", args);
@@ -477,10 +483,12 @@ public class ProfileCommandTests
 	{
 		// When the user explicitly specifies a trace profile, we must not override it
 		// with the default profiles.
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.NetTrace,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: "gc-verbose",
 			duration: null,
 			stoppingEventProvider: null,
@@ -501,10 +509,12 @@ public class ProfileCommandTests
 		// When the user specifies both a profile AND a stopping event provider,
 		// we use their profile (not the defaults) but still inject the stopping
 		// event provider via --providers.
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.NetTrace,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: "gc-verbose",
 			duration: null,
 			stoppingEventProvider: "Microsoft.Maui.StartupProfiling",
@@ -519,15 +529,19 @@ public class ProfileCommandTests
 		var providersIdx = Array.IndexOf(args, "--providers");
 		Assert.True(providersIdx >= 0);
 		Assert.Contains("Microsoft.Maui.StartupProfiling", args[providersIdx + 1]);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime", args[providersIdx + 1]);
+		Assert.Contains("0x1F000080018:5", args[providersIdx + 1]);
 	}
 
 	[Fact]
 	public void BuildTraceArguments_Speedscope_UsesSpeedscopeFormat()
 	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.Speedscope,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: null,
 			duration: null,
 			stoppingEventProvider: null,
@@ -541,23 +555,6 @@ public class ProfileCommandTests
 
 
 	[Fact]
-	public void BuildDsrouterArguments_UsesSelectedDiagnosticPort()
-	{
-		var transport = ProfileCommand.ResolveProfileTransport(
-			Platforms.Android,
-			CreateDevice(Platforms.Android, isEmulator: false));
-		var args = ProfileCommand.BuildDsrouterArguments(transport, 9012);
-
-		Assert.Equal("server-server", args[0]);
-
-		var tcpServerIdx = Array.IndexOf(args, "-tcps");
-		Assert.True(tcpServerIdx >= 0);
-		Assert.Equal("127.0.0.1:9012", args[tcpServerIdx + 1]);
-		Assert.Contains("--forward-port", args);
-		Assert.Contains("Android", args);
-	}
-
-	[Fact]
 	public void ResolveProfileTransport_AndroidEmulator_UsesEmulatorLoopbackAlias()
 	{
 		var transport = ProfileCommand.ResolveProfileTransport(
@@ -566,9 +563,7 @@ public class ProfileCommandTests
 
 		Assert.Equal("10.0.2.2", transport.DiagnosticAddress);
 		Assert.Equal("connect", transport.DiagnosticListenMode);
-		Assert.Equal("server-server", transport.DsrouterKind);
-		Assert.Equal("-tcps", transport.DsrouterRuntimeEndpointOption);
-		Assert.Equal("Android", transport.DsrouterForwardPort);
+		Assert.Equal("android-emu", transport.DsrouterKind);
 		Assert.False(transport.RequiresManualExitControlPortRouting);
 	}
 
@@ -581,6 +576,7 @@ public class ProfileCommandTests
 
 		Assert.Equal("127.0.0.1", transport.DiagnosticAddress);
 		Assert.Equal("connect", transport.DiagnosticListenMode);
+		Assert.Equal("android", transport.DsrouterKind);
 		Assert.True(transport.RequiresManualExitControlPortRouting);
 	}
 
@@ -593,9 +589,7 @@ public class ProfileCommandTests
 
 		Assert.Equal("127.0.0.1", transport.DiagnosticAddress);
 		Assert.Equal("listen", transport.DiagnosticListenMode);
-		Assert.Equal("server-client", transport.DsrouterKind);
-		Assert.Equal("-tcpc", transport.DsrouterRuntimeEndpointOption);
-		Assert.Null(transport.DsrouterForwardPort);
+		Assert.Equal("ios-sim", transport.DsrouterKind);
 		Assert.False(transport.RequiresManualExitControlPortRouting);
 	}
 
@@ -606,11 +600,11 @@ public class ProfileCommandTests
 			Platforms.iOS,
 			CreateDevice(Platforms.iOS, isEmulator: false));
 
-		Assert.Equal("iOS", transport.DsrouterForwardPort);
+		Assert.Equal("ios", transport.DsrouterKind);
 	}
 
 	[Fact]
-	public void BuildLaunchArguments_IosSimulator_AddsSimulatorUdidAndNonBlockingMlaunchFlag()
+	public void BuildLaunchArguments_IosSimulator_UsesCrossPlatformDevicePropertyAndNonBlockingMlaunchFlag()
 	{
 		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
@@ -624,7 +618,7 @@ public class ProfileCommandTests
 			9000,
 			buildInjection: null);
 
-		Assert.Contains("-p:_DeviceName=:v2:udid=ios-sim-udid", args);
+		Assert.Contains("-p:Device=ios-sim-udid", args);
 		Assert.Contains("-p:_MlaunchWaitForExit=false", args);
 	}
 
@@ -647,6 +641,90 @@ public class ProfileCommandTests
 		Assert.Contains("-p:DiagnosticSuspend=true", args);
 		Assert.Contains("-p:DiagnosticListenMode=listen", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
+	}
+
+	[Fact]
+	public void BuildCompileArguments_WithBuildInjection_AddsTimedExitDelay()
+	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var buildInjection = new ProfilingBuildInjection(
+			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
+			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
+			ExitControlHost: "10.0.2.2",
+			ExitControlPort: 9001,
+			InjectBootstrap: true,
+			DirectExitDelayMs: 10_000,
+			EnableRuntimePgo: false,
+			EventPipeOutputPath: null);
+
+		var args = ProfileCommand.BuildCompileArguments(
+			"/fake/MyApp.csproj",
+			"net10.0-android",
+			"Release",
+			transport,
+			9000,
+			buildInjection);
+
+		Assert.Contains("-p:MauiStartupProfilingDirectExitDelayMs=10000", args);
+	}
+
+	[Fact]
+	public void BuildCompileArguments_WithRuntimeOwnedEventPipe_SkipsDiagnosticArgsAndAddsRuntimePgoProperties()
+	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var buildInjection = new ProfilingBuildInjection(
+			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
+			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
+			ExitControlHost: string.Empty,
+			ExitControlPort: 0,
+			InjectBootstrap: true,
+			DirectExitDelayMs: 10_000,
+			EnableRuntimePgo: true,
+			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
+
+		var args = ProfileCommand.BuildCompileArguments(
+			"/fake/MyApp.csproj",
+			"net10.0-android",
+			"Release",
+			transport,
+			9000,
+			buildInjection);
+
+		Assert.DoesNotContain("-p:DiagnosticSuspend=true", args);
+		Assert.Contains("-p:EnableDiagnostics=true", args);
+		Assert.Contains("-p:MauiStartupProfilingEnableRuntimePgo=true", args);
+		Assert.Contains("-p:MauiStartupProfilingEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
+	}
+
+	[Fact]
+	public void BuildLaunchArguments_WithRuntimeOwnedEventPipe_UsesCrossPlatformDeviceProperty()
+	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var buildInjection = new ProfilingBuildInjection(
+			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
+			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
+			ExitControlHost: string.Empty,
+			ExitControlPort: 0,
+			InjectBootstrap: true,
+			DirectExitDelayMs: 10_000,
+			EnableRuntimePgo: true,
+			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
+
+		var args = ProfileCommand.BuildLaunchArguments(
+			"/fake/MyApp.csproj",
+			"net10.0-android",
+			"Release",
+			device,
+			transport,
+			9000,
+			buildInjection);
+
+		Assert.DoesNotContain("-p:AndroidEnableProfiler=true", args);
+		Assert.Contains("-p:EnableDiagnostics=true", args);
+		Assert.Contains("-p:Device=android-emu", args);
 	}
 
 	[Fact]

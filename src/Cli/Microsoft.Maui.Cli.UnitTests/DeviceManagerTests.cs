@@ -59,6 +59,60 @@ public class DeviceManagerTests
 	}
 
 	[Fact]
+	public async Task GetDevicesByPlatformAsync_Android_DoesNotQueryAppleProvider()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices =
+			[
+				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = ["android"], Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			]
+		};
+		var appleCalls = 0;
+		var manager = new DeviceManager(
+			fakeAndroid,
+			_ =>
+			{
+				appleCalls++;
+				return Task.FromResult<IReadOnlyList<Device>>(
+				[
+					new Device { Id = "ios-sim", Name = "iPhone", Platforms = [Platforms.iOS], Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+				]);
+			});
+
+		var devices = await manager.GetDevicesByPlatformAsync(Platforms.Android);
+
+		Assert.Single(devices);
+		Assert.Equal(0, appleCalls);
+		Assert.Equal(1, fakeAndroid.GetDevicesCalled);
+	}
+
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_Ios_DoesNotQueryAndroidProvider()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices =
+			[
+				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = ["android"], Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			]
+		};
+		var manager = new DeviceManager(
+			fakeAndroid,
+			_ => Task.FromResult<IReadOnlyList<Device>>(
+			[
+				new Device { Id = "ios-sim", Name = "iPhone", Platforms = [Platforms.iOS], Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			]));
+
+		var devices = await manager.GetDevicesByPlatformAsync(Platforms.iOS);
+
+		Assert.Single(devices);
+		Assert.Equal(0, fakeAndroid.GetDevicesCalled);
+		Assert.Equal(0, fakeAndroid.GetAvdsCalled);
+		Assert.Equal(Platforms.iOS, devices[0].Platform);
+	}
+
+	[Fact]
 	public async Task GetDeviceByIdAsync_FindsCorrectDevice()
 	{
 		// Arrange

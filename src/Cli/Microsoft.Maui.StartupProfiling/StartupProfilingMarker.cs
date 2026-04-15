@@ -38,6 +38,7 @@ public static class StartupProfilingMarker
     internal const string DiagnosticsEnvironmentVariable = "MAUI_STARTUP_PROFILING_DIAGNOSTICS";
     internal const string ExitControlHostEnvironmentVariable = "MAUI_STARTUP_PROFILING_EXIT_HOST";
     internal const string ExitControlPortEnvironmentVariable = "MAUI_STARTUP_PROFILING_EXIT_PORT";
+    internal const string DirectExitDelayEnvironmentVariable = "MAUI_STARTUP_PROFILING_DIRECT_EXIT_DELAY_MS";
     internal const string DiagnosticPortsEnvironmentVariable = "DOTNET_DiagnosticPorts";
     internal const string LegacyDiagnosticPortsEnvironmentVariable = "COMPlus_DiagnosticPorts";
 

@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Net;
 using Microsoft.Maui.Cli.Models;
 
 namespace Microsoft.Maui.Cli.Commands;
@@ -25,7 +24,11 @@ internal static class ProfileCommandArguments
 			"--nologo"
 		};
 
-		AppendDiagnosticArguments(args, transport, diagnosticPort);
+		AppendEnableDiagnosticsArgument(args);
+
+		if (!UsesRuntimeOwnedEventPipe(buildInjection))
+			AppendDiagnosticArguments(args, transport, diagnosticPort);
+
 		AppendBuildInjectionArguments(args, buildInjection);
 		return [.. args];
 	}
@@ -46,41 +49,21 @@ internal static class ProfileCommandArguments
 			"-t:Run",
 			"-c", configuration,
 			"-f", framework,
+			$"-p:Device={device.Id}",
 			"-p:WaitForExit=false",
 		};
 
-		AppendDiagnosticArguments(args, transport, diagnosticPort);
+		AppendEnableDiagnosticsArgument(args);
 
-		if (string.Equals(transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase))
+		if (!UsesRuntimeOwnedEventPipe(buildInjection))
+			AppendDiagnosticArguments(args, transport, diagnosticPort);
+
+		if (string.Equals(transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
 		{
-			args.Add($"-p:AdbTarget=-s {device.Id}");
-			args.Add("-p:AndroidEnableProfiler=true");
-		}
-		else if (string.Equals(transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
-		{
-			args.Add($"-p:_DeviceName=:v2:udid={device.Id}");
 			args.Add("-p:_MlaunchWaitForExit=false");
 		}
 
 		AppendBuildInjectionArguments(args, buildInjection);
-		return [.. args];
-	}
-
-	internal static string[] BuildDsrouterArguments(ProfileTransportConfiguration transport, int diagnosticPort)
-	{
-		var args = new List<string>
-		{
-			transport.DsrouterKind,
-			transport.DsrouterRuntimeEndpointOption,
-			$"{IPAddress.Loopback}:{diagnosticPort}"
-		};
-
-		if (!string.IsNullOrWhiteSpace(transport.DsrouterForwardPort))
-		{
-			args.Add("--forward-port");
-			args.Add(transport.DsrouterForwardPort);
-		}
-
 		return [.. args];
 	}
 
@@ -90,8 +73,10 @@ internal static class ProfileCommandArguments
 		args.Add($"-p:DiagnosticPort={diagnosticPort}");
 		args.Add("-p:DiagnosticSuspend=true");
 		args.Add($"-p:DiagnosticListenMode={transport.DiagnosticListenMode}");
-		args.Add("-p:EnableDiagnostics=true");
 	}
+
+	static void AppendEnableDiagnosticsArgument(List<string> args)
+		=> args.Add("-p:EnableDiagnostics=true");
 
 	static void AppendBuildInjectionArguments(List<string> args, ProfilingBuildInjection? buildInjection)
 	{
@@ -100,11 +85,22 @@ internal static class ProfileCommandArguments
 
 		args.Add($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}");
 		args.Add("-p:MauiStartupProfilingInject=true");
-		args.Add($"-p:MauiStartupProfilingExitHost={buildInjection.ExitControlHost}");
-		args.Add($"-p:MauiStartupProfilingExitPort={buildInjection.ExitControlPort}");
+		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))
+			args.Add($"-p:MauiStartupProfilingExitHost={buildInjection.ExitControlHost}");
+		if (buildInjection.ExitControlPort > 0)
+			args.Add($"-p:MauiStartupProfilingExitPort={buildInjection.ExitControlPort}");
 		args.Add($"-p:MauiStartupProfilingInjectBootstrap={(buildInjection.InjectBootstrap ? "true" : "false")}");
+		if (buildInjection.EnableRuntimePgo)
+			args.Add("-p:MauiStartupProfilingEnableRuntimePgo=true");
+		if (buildInjection.DirectExitDelayMs is int directExitDelayMs && directExitDelayMs > 0)
+			args.Add($"-p:MauiStartupProfilingDirectExitDelayMs={directExitDelayMs}");
+		if (!string.IsNullOrWhiteSpace(buildInjection.EventPipeOutputPath))
+			args.Add($"-p:MauiStartupProfilingEventPipeOutputPath={buildInjection.EventPipeOutputPath}");
 
 		if (!string.IsNullOrWhiteSpace(buildInjection.AssemblyPath))
 			args.Add($"-p:MauiStartupProfilingAssemblyPath={buildInjection.AssemblyPath}");
 	}
+
+	static bool UsesRuntimeOwnedEventPipe(ProfilingBuildInjection? buildInjection)
+		=> !string.IsNullOrWhiteSpace(buildInjection?.EventPipeOutputPath);
 }

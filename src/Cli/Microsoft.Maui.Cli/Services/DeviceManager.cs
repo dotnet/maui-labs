@@ -29,94 +29,9 @@ public class DeviceManager : IDeviceManager
 	{
 		var devices = new List<Device>();
 
-		// Get Android devices
-		if (_androidProvider != null)
-		{
-			var androidDevices = await _androidProvider.GetDevicesAsync(cancellationToken);
-			devices.AddRange(androidDevices);
+		devices.AddRange(await GetAndroidDevicesAsync(cancellationToken));
 
-			// Also get AVDs (virtual devices that may not be running)
-			var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
-			foreach (var avd in avds)
-			{
-				// Check if this AVD is already in the running devices list
-				// Match by AVD name in details dict or by EmulatorId
-				var runningIndex = devices.FindIndex(d =>
-					d.Platforms.Contains("android") &&
-					d.IsEmulator &&
-					(
-						(d.Details != null &&
-						 d.Details.TryGetValue("avd", out var avdName) &&
-						 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
-						||
-						string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
-					));
-
-				// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
-				var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
-				var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
-
-				if (runningIndex >= 0)
-				{
-					// Merge AVD metadata into the running emulator device
-					var running = devices[runningIndex];
-					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-					var details = running.Details != null
-						? new Dictionary<string, object>(running.Details)
-						: new Dictionary<string, object>();
-					details["tag_id"] = tagId ?? "default";
-					details["target"] = avd.Target ?? "unknown";
-
-					devices[runningIndex] = running with
-					{
-						EmulatorId = avd.Name,
-						SubModel = subModel,
-						Details = details
-					};
-				}
-				else
-				{
-					var architecture = AndroidEnvironment.MapAbiToArchitecture(abi) ?? (PlatformDetector.IsArm64 ? "arm64" : "x64");
-					var resolvedAbi = abi ?? (PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64");
-					var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
-					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-					devices.Add(new Device
-					{
-						Id = avd.Name,
-						Name = avd.Name,
-						Platforms = new[] { "android" },
-						Type = DeviceType.Emulator,
-						State = DeviceState.Shutdown,
-						IsEmulator = true,
-						IsRunning = false,
-						ConnectionType = Models.ConnectionType.Local,
-						EmulatorId = avd.Name,
-						Model = avd.DeviceProfile,
-						SubModel = subModel,
-						Manufacturer = "Google",
-						Version = apiLevel,
-						VersionName = versionName,
-						Architecture = architecture,
-						PlatformArchitecture = resolvedAbi,
-						RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
-						Idiom = DeviceIdiom.Phone,
-						Details = new Dictionary<string, object>
-						{
-							["avd"] = avd.Name,
-							["target"] = avd.Target ?? "unknown",
-							["api_level"] = apiLevel ?? "unknown",
-							["abi"] = resolvedAbi,
-							["tag_id"] = tagId ?? "default"
-						}
-					});
-				}
-			}
-		}
-
-		var appleDevices = _appleDeviceProvider is not null
-			? await _appleDeviceProvider(cancellationToken)
-			: await GetAppleSimulatorDevicesAsync(cancellationToken);
-		devices.AddRange(appleDevices);
+		devices.AddRange(await GetAppleDevicesAsync(cancellationToken));
 
 		// TODO: Get Windows devices when WindowsProvider is implemented
 
@@ -125,8 +40,13 @@ public class DeviceManager : IDeviceManager
 
 	public async Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default)
 	{
-		var allDevices = await GetAllDevicesAsync(cancellationToken);
-		return allDevices.Where(d => d.Platforms.Any(p => p.Equals(platform, StringComparison.OrdinalIgnoreCase))).ToList();
+		return Platforms.Normalize(platform) switch
+		{
+			Platforms.Android => await GetAndroidDevicesAsync(cancellationToken),
+			Platforms.iOS => await GetAppleDevicesAsync(cancellationToken),
+			Platforms.All => await GetAllDevicesAsync(cancellationToken),
+			_ => []
+		};
 	}
 
 	public async Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default)
@@ -176,6 +96,100 @@ public class DeviceManager : IDeviceManager
 
 		return (apiLevel, tagId, abi);
 	}
+
+	async Task<IReadOnlyList<Device>> GetAndroidDevicesAsync(CancellationToken cancellationToken)
+	{
+		if (_androidProvider is null)
+			return [];
+
+		var devices = new List<Device>();
+		var androidDevices = await _androidProvider.GetDevicesAsync(cancellationToken);
+		devices.AddRange(androidDevices);
+
+		// Also get AVDs (virtual devices that may not be running)
+		var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
+		foreach (var avd in avds)
+		{
+			// Check if this AVD is already in the running devices list
+			// Match by AVD name in details dict or by EmulatorId
+			var runningIndex = devices.FindIndex(d =>
+				d.Platforms.Contains("android") &&
+				d.IsEmulator &&
+				(
+					(d.Details != null &&
+					 d.Details.TryGetValue("avd", out var avdName) &&
+					 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
+					||
+					string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
+				));
+
+			// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
+			var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
+			var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
+
+			if (runningIndex >= 0)
+			{
+				// Merge AVD metadata into the running emulator device
+				var running = devices[runningIndex];
+				var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
+				var details = running.Details != null
+					? new Dictionary<string, object>(running.Details)
+					: new Dictionary<string, object>();
+				details["tag_id"] = tagId ?? "default";
+				details["target"] = avd.Target ?? "unknown";
+
+				devices[runningIndex] = running with
+				{
+					EmulatorId = avd.Name,
+					SubModel = subModel,
+					Details = details
+				};
+			}
+			else
+			{
+				var architecture = AndroidEnvironment.MapAbiToArchitecture(abi) ?? (PlatformDetector.IsArm64 ? "arm64" : "x64");
+				var resolvedAbi = abi ?? (PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64");
+				var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
+				var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
+				devices.Add(new Device
+				{
+					Id = avd.Name,
+					Name = avd.Name,
+					Platforms = ["android"],
+					Type = DeviceType.Emulator,
+					State = DeviceState.Shutdown,
+					IsEmulator = true,
+					IsRunning = false,
+					ConnectionType = Models.ConnectionType.Local,
+					EmulatorId = avd.Name,
+					Model = avd.DeviceProfile,
+					SubModel = subModel,
+					Manufacturer = "Google",
+					Version = apiLevel,
+					VersionName = versionName,
+					Architecture = architecture,
+					PlatformArchitecture = resolvedAbi,
+					RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
+					Idiom = DeviceIdiom.Phone,
+					Details = new Dictionary<string, object>
+					{
+						["avd"] = avd.Name,
+						["target"] = avd.Target ?? "unknown",
+						["api_level"] = apiLevel ?? "unknown",
+						["abi"] = resolvedAbi,
+						["tag_id"] = tagId ?? "default"
+					}
+				});
+			}
+		}
+
+		return devices;
+	}
+
+	async Task<IReadOnlyList<Device>> GetAppleDevicesAsync(CancellationToken cancellationToken)
+		=> _appleDeviceProvider is not null
+			? await _appleDeviceProvider(cancellationToken)
+			: await GetAppleSimulatorDevicesAsync(cancellationToken);
 
 	internal static async Task<IReadOnlyList<Device>> GetAppleSimulatorDevicesAsync(CancellationToken cancellationToken = default)
 	{

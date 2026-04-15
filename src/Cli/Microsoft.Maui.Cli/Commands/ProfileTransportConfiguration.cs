@@ -8,6 +8,4 @@ internal sealed record ProfileTransportConfiguration(
 	string DiagnosticAddress,
 	string DiagnosticListenMode,
 	string DsrouterKind,
-	string DsrouterRuntimeEndpointOption,
-	string? DsrouterForwardPort,
 	bool RequiresManualExitControlPortRouting);

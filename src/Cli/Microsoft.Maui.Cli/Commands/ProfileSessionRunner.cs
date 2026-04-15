@@ -25,7 +25,7 @@ internal static class ProfileSessionRunner
 					cancellationToken);
 			}
 
-			if (context.ExitControlServer is not null)
+			if (context.ExitControlServer is not null && context.BuildInjection?.DirectExitDelayMs is null)
 				await TryRequestAppExitAsync(context, cancellationToken);
 		}
 		finally
@@ -71,12 +71,6 @@ internal static class ProfileSessionRunner
 		{
 			await ProfileTraceLifecycle.StopBackgroundProcessAsync(context.TraceProcess.Process, "dotnet-trace", context.Formatter, context.UseJson, context.Verbose);
 			context.TraceProcess.Dispose();
-		}
-
-		if (context.DsrouterProcess is not null)
-		{
-			await ProfileTraceLifecycle.StopBackgroundProcessAsync(context.DsrouterProcess.Process, "dotnet-dsrouter", context.Formatter, context.UseJson, context.Verbose);
-			context.DsrouterProcess.Dispose();
 		}
 
 		if (context.Transport.RequiresManualExitControlPortRouting)

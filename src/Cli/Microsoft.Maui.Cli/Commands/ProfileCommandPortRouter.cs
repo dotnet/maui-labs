@@ -102,7 +102,7 @@ internal static class ProfileCommandPortRouter
 						formatter,
 						useJson,
 						verbose,
-						$"dotnet-dsrouter will handle the diagnostics port; configuring adb reverse for the auxiliary exit-control port on {device.Id}.");
+						$"dotnet-trace/dsrouter will handle the diagnostics port; configuring adb reverse for the auxiliary exit-control port on {device.Id}.");
 					await EnsureAdbPortRoutingAsync(device, formatter, useJson, verbose, cancellationToken, exitControlPort);
 				}
 
@@ -258,7 +258,7 @@ internal static class ProfileCommandPortRouter
 			cancellationToken: cancellationToken);
 	}
 
-	static string? ResolveAdbPath()
+	internal static string? ResolveAdbPath()
 	{
 		var adbPath = ProcessRunner.GetCommandPath("adb");
 		if (!string.IsNullOrWhiteSpace(adbPath))

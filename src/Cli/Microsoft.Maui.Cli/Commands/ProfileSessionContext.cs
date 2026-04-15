@@ -50,11 +50,11 @@ internal sealed class ProfileSessionContext
 	internal int RequestedDiagnosticPort { get; }
 	internal int DiagnosticPort { get; set; }
 	internal DateTimeOffset StartedAtUtc { get; }
-	internal bool StartTraceAfterLaunch => string.Equals(Transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase);
+	internal bool UseRuntimeOwnedTraceCollection { get; set; }
+	internal string? RuntimeOwnedTraceDevicePath { get; set; }
 
 	internal ReservedProfilePorts? ReservedPorts { get; set; }
 	internal ExitControlServer? ExitControlServer { get; set; }
 	internal ProfilingBuildInjection? BuildInjection { get; set; }
-	internal MonitoredProcess? DsrouterProcess { get; set; }
 	internal MonitoredProcess? TraceProcess { get; set; }
 }

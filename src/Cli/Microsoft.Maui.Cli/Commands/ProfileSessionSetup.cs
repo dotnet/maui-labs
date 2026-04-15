@@ -24,28 +24,42 @@ internal static class ProfileSessionSetup
 		var profilePlatform = ProfileTargetResolver.InferPlatformFromTargetFramework(request.Framework) ?? request.Device.Platform;
 		var transport = ProfileCommand.ResolveProfileTransport(profilePlatform, request.Device);
 		var context = new ProfileSessionContext(request, primaryOutputPath, profilePlatform, transport);
+		context.UseRuntimeOwnedTraceCollection = ShouldUseRuntimeOwnedTraceCollection(context);
+		if (context.UseRuntimeOwnedTraceCollection)
+		{
+			context.RuntimeOwnedTraceDevicePath = ResolveRuntimeOwnedTraceDevicePath(context);
+			if (string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
+				context.UseRuntimeOwnedTraceCollection = false;
+		}
 
 		WriteSessionHeader(context);
 		WriteVerboseSettings(context);
 
-		context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
-			context.Device,
-			context.Transport,
-			context.DiagnosticPort,
-			context.Formatter,
-			context.UseJson,
-			context.Verbose,
-			cancellationToken);
+		if (!context.UseRuntimeOwnedTraceCollection)
+		{
+			context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+				context.Device,
+				context.Transport,
+				context.DiagnosticPort,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
 
-		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
+			context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
+		}
 
 		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.StartupProfilingPackageId);
+		var directExitDelayMs = ResolveDirectExitDelayMs(context);
 		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
 			? null
 			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
-				context.DiagnosticAddress,
-				context.ReservedPorts.ExitControlPort,
-				injectBootstrap: !hasStartupProfilingHelper);
+				context.UseRuntimeOwnedTraceCollection ? string.Empty : context.DiagnosticAddress,
+				context.UseRuntimeOwnedTraceCollection ? 0 : context.ReservedPorts!.ExitControlPort,
+				injectBootstrap: !hasStartupProfilingHelper,
+				directExitDelayMs: directExitDelayMs,
+				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection,
+				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
 
 		WriteDiagnosticPortInfo(context);
 		return context;
@@ -70,6 +84,17 @@ internal static class ProfileSessionSetup
 				$"Stopping event: {ProfileCommand.StartupProfilingProviderName}/{ProfileCommand.StartupProfilingEventName} " +
 				"(auto-detected from the app's startup profiling helper).");
 		}
+
+		if (context.BuildInjection?.DirectExitDelayMs is int directExitDelayMs)
+		{
+			context.Formatter.WriteInfo(
+				$"Injected inside-app exit: {directExitDelayMs} ms after the first MAUI UI becomes ready.");
+		}
+
+		if (context.UseRuntimeOwnedTraceCollection && !string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
+		{
+			context.Formatter.WriteInfo($"Android runtime-owned EventPipe trace: {context.RuntimeOwnedTraceDevicePath}");
+		}
 	}
 
 	static void WriteVerboseSettings(ProfileSessionContext context)
@@ -90,6 +115,12 @@ internal static class ProfileSessionSetup
 		if (context.UseJson)
 			return;
 
+		if (context.UseRuntimeOwnedTraceCollection)
+		{
+			context.Formatter.WriteInfo("Using PR-54114-style runtime-owned EventPipe collection for Android/CoreCLR startup PGO.");
+			return;
+		}
+
 		context.Formatter.WriteInfo($"Diagnostic port: {context.DiagnosticPort}");
 		if (context.DiagnosticPort != context.RequestedDiagnosticPort)
 			context.Formatter.WriteInfo($"Port {context.RequestedDiagnosticPort} was busy, so the profiler selected {context.DiagnosticPort}.");
@@ -99,5 +130,36 @@ internal static class ProfileSessionSetup
 			context.Formatter.WriteWarning(
 				"The CLI's startup profiling injection assets were not found next to the tool binaries, so automatic startup-complete and graceful app-exit injection are unavailable for this run.");
 		}
+	}
+
+	static int? ResolveDirectExitDelayMs(ProfileSessionContext context)
+	{
+		if (context.UseRuntimeOwnedTraceCollection)
+			return 10_000;
+
+		// A bare inside-app Environment.Exit(0) is useful for diagnostics, but it can
+		// truncate Android traces ("Read past end of stream"). Keep it opt-in only.
+		var value = Environment.GetEnvironmentVariable("MAUI_CLI_STARTUP_DIRECT_EXIT_DELAY_MS");
+		return int.TryParse(value, out var milliseconds) && milliseconds > 0
+			? milliseconds
+			: null;
+	}
+
+	static bool ShouldUseRuntimeOwnedTraceCollection(ProfileSessionContext context)
+	{
+		if (!string.Equals(context.Transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		return context.OutputFormat == TraceOutputFormat.NetTrace;
+	}
+
+	static string? ResolveRuntimeOwnedTraceDevicePath(ProfileSessionContext context)
+	{
+		var applicationId = MauiProjectResolver.GetAndroidApplicationId(context.Project.ProjectPath, context.Framework, context.Configuration);
+		if (string.IsNullOrWhiteSpace(applicationId))
+			return null;
+
+		var fileName = $"{context.Project.ProjectName}_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}_startup.nettrace";
+		return $"/data/user/0/{applicationId}/files/{fileName}";
 	}
 }

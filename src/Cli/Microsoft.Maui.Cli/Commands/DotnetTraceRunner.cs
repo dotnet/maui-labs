@@ -3,18 +3,23 @@
 
 using System.Diagnostics;
 using Microsoft.Maui.Cli.Errors;
+using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
 
 namespace Microsoft.Maui.Cli.Commands;
 
 internal static class DotnetTraceRunner
 {
+	// Match the provider mask/verbosity used by the known-good Android IBC flow in
+	// dotnet-optimization so dotnet-pgo can see the richer JIT/R2R/profile payload.
+	const string StartupPgoRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x1F000080018:5";
+
 	internal static MonitoredProcess StartCollector(
 		string workingDirectory,
 		string outputPath,
 		TraceOutputFormat outputFormat,
-		int dsrouterPid,
-		string androidSerial,
+		ProfileTransportConfiguration transport,
+		Device device,
 		string? traceProfile,
 		TimeSpan? duration,
 		string? stoppingEventProvider,
@@ -38,7 +43,7 @@ internal static class DotnetTraceRunner
 		var traceArgs = BuildTraceArguments(
 			outputPath,
 			outputFormat,
-			dsrouterPid,
+			transport,
 			traceProfile,
 			duration,
 			stoppingEventProvider,
@@ -47,7 +52,8 @@ internal static class DotnetTraceRunner
 		ProfileCommandDiagnostics.ConfigureDotnetToolStartInfo(startInfo, "dotnet-trace", traceArgs, out var commandLine);
 		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Trace command: {commandLine}");
 
-		startInfo.EnvironmentVariables["ANDROID_SERIAL"] = androidSerial;
+		if (string.Equals(transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase))
+			startInfo.EnvironmentVariables["ANDROID_SERIAL"] = device.Id;
 
 		var process = new Process
 		{
@@ -68,7 +74,7 @@ internal static class DotnetTraceRunner
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
 		TraceOutputFormat outputFormat,
-		int dsrouterPid,
+		ProfileTransportConfiguration transport,
 		string? traceProfile,
 		TimeSpan? duration,
 		string? stoppingEventProvider,
@@ -78,8 +84,8 @@ internal static class DotnetTraceRunner
 		var args = new List<string>
 		{
 			"collect",
-			"--process-id",
-			dsrouterPid.ToString(),
+			"--dsrouter",
+			transport.DsrouterKind,
 			"--format",
 			outputFormat switch
 			{
@@ -111,7 +117,7 @@ internal static class DotnetTraceRunner
 		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
 		{
 			args.Add("--providers");
-			args.Add($"{stoppingEventProvider}:ffffffffffffffff:5");
+			args.Add(BuildProviderList(stoppingEventProvider));
 		}
 
 		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
@@ -135,6 +141,18 @@ internal static class DotnetTraceRunner
 		return args;
 	}
 
+	static string BuildProviderList(string stoppingEventProvider)
+	{
+		// dotnet-pgo create-mibc needs runtime JIT/R2R events in the trace.
+		// Keep the startup-complete provider too so dotnet-trace can still stop automatically.
+		return string.Join(
+			",",
+			[
+				StartupPgoRuntimeProvider,
+				$"{stoppingEventProvider}:ffffffffffffffff:5"
+			]);
+	}
+
 	internal static async Task EnsureStartedAsync(MonitoredProcess traceProcess, CancellationToken cancellationToken)
 	{
 		await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
@@ -147,71 +165,6 @@ internal static class DotnetTraceRunner
 			ErrorCodes.InternalError,
 			"dotnet-trace exited before the app launch started.",
 			nativeError: details);
-	}
-
-	internal static async Task<MonitoredProcess> StartWithRetryAsync(
-		string workingDirectory,
-		string outputPath,
-		TraceOutputFormat outputFormat,
-		int dsrouterPid,
-		string androidSerial,
-		string? traceProfile,
-		TimeSpan? duration,
-		string? stoppingEventProvider,
-		string? stoppingEventName,
-		string? stoppingEventPayloadFilter,
-		IOutputFormatter formatter,
-		bool useJson,
-		bool verbose,
-		CancellationToken cancellationToken)
-	{
-		var startedAt = Stopwatch.GetTimestamp();
-		MauiToolException? lastFailure = null;
-
-		while (Stopwatch.GetElapsedTime(startedAt) < ProfileCommand.s_traceStartupRetryTimeout)
-		{
-			var traceProcess = StartCollector(
-				workingDirectory,
-				outputPath,
-				outputFormat,
-				dsrouterPid,
-				androidSerial,
-				traceProfile,
-				duration,
-				stoppingEventProvider,
-				stoppingEventName,
-				stoppingEventPayloadFilter,
-				formatter,
-				useJson,
-				verbose,
-				cancellationToken);
-
-			try
-			{
-				ProfileCommandProcessHelpers.WriteVerbose(
-					formatter,
-					useJson,
-					verbose,
-					$"Waiting briefly for dotnet-trace (PID {traceProcess.Process.Id}) to connect after launching the suspended iOS app.");
-				await EnsureStartedAsync(traceProcess, cancellationToken);
-				return traceProcess;
-			}
-			catch (MauiToolException ex) when (IsRetryableStartupFailure(ex.NativeError))
-			{
-				lastFailure = ex;
-				traceProcess.Dispose();
-				ProfileCommandProcessHelpers.WriteVerbose(
-					formatter,
-					useJson,
-					verbose,
-					$"dotnet-trace could not connect yet; retrying in {ProfileCommand.s_traceStartupRetryDelay.TotalSeconds:0.#}s while the iOS runtime finishes opening its diagnostics channel.");
-				await Task.Delay(ProfileCommand.s_traceStartupRetryDelay, cancellationToken);
-			}
-		}
-
-		throw lastFailure ?? new MauiToolException(
-			ErrorCodes.InternalError,
-			$"dotnet-trace could not connect to the iOS app within {ProfileCommand.s_traceStartupRetryTimeout.TotalSeconds:0}s.");
 	}
 
 	internal static bool IsRetryableStartupFailure(string? details)

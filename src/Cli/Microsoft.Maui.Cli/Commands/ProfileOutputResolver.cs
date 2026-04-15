@@ -70,7 +70,9 @@ internal static class ProfileOutputResolver
 
 	internal static string GetPrimaryOutputPath(string collectorOutputPath, TraceOutputFormat outputFormat) => outputFormat switch
 	{
-		TraceOutputFormat.Speedscope => collectorOutputPath + ProfileCommand.SpeedscopeExtension,
+		TraceOutputFormat.Speedscope => collectorOutputPath.EndsWith(".nettrace", StringComparison.OrdinalIgnoreCase)
+			? collectorOutputPath[..^".nettrace".Length] + ProfileCommand.SpeedscopeExtension
+			: collectorOutputPath + ProfileCommand.SpeedscopeExtension,
 		_ => collectorOutputPath
 	};
 

@@ -410,13 +410,10 @@ public static class ProfileCommand
 		ProfilingBuildInjection? buildInjection)
 		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, framework, configuration, device, transport, diagnosticPort, buildInjection);
 
-	internal static string[] BuildDsrouterArguments(ProfileTransportConfiguration transport, int diagnosticPort)
-		=> ProfileCommandArguments.BuildDsrouterArguments(transport, diagnosticPort);
-
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
 		TraceOutputFormat outputFormat,
-		int dsrouterPid,
+		ProfileTransportConfiguration transport,
 		string? traceProfile,
 		TimeSpan? duration,
 		string? stoppingEventProvider,
@@ -425,7 +422,7 @@ public static class ProfileCommand
 		=> DotnetTraceRunner.BuildTraceArguments(
 			outputPath,
 			outputFormat,
-			dsrouterPid,
+			transport,
 			traceProfile,
 			duration,
 			stoppingEventProvider,
@@ -462,17 +459,13 @@ public static class ProfileCommand
 				Platform: Platforms.Android,
 				DiagnosticAddress: device.IsEmulator ? "10.0.2.2" : IPAddress.Loopback.ToString(),
 				DiagnosticListenMode: "connect",
-				DsrouterKind: "server-server",
-				DsrouterRuntimeEndpointOption: "-tcps",
-				DsrouterForwardPort: "Android",
+				DsrouterKind: device.IsEmulator ? "android-emu" : "android",
 				RequiresManualExitControlPortRouting: !device.IsEmulator),
 			Platforms.iOS => new ProfileTransportConfiguration(
 				Platform: Platforms.iOS,
 				DiagnosticAddress: IPAddress.Loopback.ToString(),
 				DiagnosticListenMode: "listen",
-				DsrouterKind: "server-client",
-				DsrouterRuntimeEndpointOption: "-tcpc",
-				DsrouterForwardPort: device.IsEmulator ? null : "iOS",
+				DsrouterKind: device.IsEmulator ? "ios-sim" : "ios",
 				RequiresManualExitControlPortRouting: false),
 			_ => throw new MauiToolException(
 				ErrorCodes.PlatformNotSupported,
