@@ -41,7 +41,7 @@ jobs:
           -configuration Release
           -ci
           -prepareMachine
-          -projects %CD%\platforms\Windows.WPF\Windows.WPF.CI.slnx
+          -projects %CD%\platforms\Windows.WPF\Windows.WPF.slnx
         shell: cmd
 
       - name: Upload packages
@@ -50,10 +50,3 @@ jobs:
         with:
           name: packages-wpf
           path: artifacts/packages/**/*.nupkg
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-wpf
-          path: artifacts/TestResults/**/*.xml
