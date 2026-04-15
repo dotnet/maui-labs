@@ -10,6 +10,17 @@ namespace Microsoft.Maui.Cli.Commands;
 
 internal static class ProfileTraceLifecycle
 {
+	enum StopSignalReason
+	{
+		None,
+		Manual,
+		Timed,
+		ExternalCompletion
+	}
+
+	static readonly Task s_neverCompletes = Task.Delay(Timeout.InfiniteTimeSpan, CancellationToken.None);
+	static readonly TimeSpan s_consoleReadJoinTimeout = TimeSpan.FromMilliseconds(100);
+
 	internal static async Task WaitForCompletionAsync(
 		MonitoredProcess traceProcess,
 		bool allowManualStop,
@@ -28,70 +39,29 @@ internal static class ProfileTraceLifecycle
 
 		var processWaitTask = traceProcess.WaitForExitAsync();
 		var stopRequested = false;
-		if (!allowManualStop)
+
+		var stopReason = await WaitForStopSignalCoreAsync(
+			externalCompletionTask: processWaitTask,
+			duration: null,
+			allowManualStop: allowManualStop,
+			formatter,
+			useJson,
+			verbose,
+			cancellationToken);
+
+		if (stopReason == StopSignalReason.ExternalCompletion)
 		{
-			await processWaitTask;
+			ProfileCommandProcessHelpers.WriteVerbose(
+				formatter,
+				useJson,
+				verbose,
+				"dotnet-trace exited before any manual stop request was needed.");
 		}
-		else
+		else if (stopReason is StopSignalReason.Manual or StopSignalReason.Timed)
 		{
-			var manualStopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-			ConsoleCancelEventHandler? cancelHandler = null;
-			cancelHandler = (_, e) =>
-			{
-				e.Cancel = true;
-				manualStopSignal.TrySetResult(true);
-			};
-
-			Console.CancelKeyPress += cancelHandler;
-			var readLineTask = Task.Run(() =>
-			{
-				try
-				{
-					Console.ReadLine();
-				}
-				finally
-				{
-					manualStopSignal.TrySetResult(true);
-				}
-			}, CancellationToken.None);
-
-			try
-			{
-				while (true)
-				{
-					var completedTask = await Task.WhenAny(processWaitTask, manualStopSignal.Task);
-					if (!ShouldRequestManualStop(completedTask, processWaitTask, traceProcess.Process.HasExited))
-					{
-						ProfileCommandProcessHelpers.WriteVerbose(
-							formatter,
-							useJson,
-							verbose,
-							completedTask == processWaitTask
-								? "dotnet-trace exited before any manual stop request was needed."
-								: "A manual stop was requested after dotnet-trace had already exited; no stop request was needed.");
-						break;
-					}
-
-					formatter.WriteInfo("Stopping trace and finalizing output...");
-					ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "Manual stop requested from the console.");
-					stopRequested = true;
-					await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose);
-					break;
-				}
-			}
-			finally
-			{
-				Console.CancelKeyPress -= cancelHandler;
-				manualStopSignal.TrySetResult(true);
-				try
-				{
-					await readLineTask.WaitAsync(TimeSpan.FromMilliseconds(100));
-				}
-				catch
-				{
-					// Ignore any late console-read completions.
-				}
-			}
+			formatter.WriteInfo("Stopping trace and finalizing output...");
+			stopRequested = true;
+			await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose);
 		}
 
 		if (stopRequested)
@@ -138,6 +108,33 @@ internal static class ProfileTraceLifecycle
 		bool verbose,
 		CancellationToken cancellationToken)
 	{
+		var stopReason = await WaitForStopSignalCoreAsync(
+			externalCompletionTask: null,
+			duration,
+			allowManualStop,
+			formatter,
+			useJson,
+			verbose,
+			cancellationToken);
+
+		if (stopReason is StopSignalReason.Manual or StopSignalReason.Timed && !useJson)
+			formatter.WriteInfo("Stopping trace and finalizing output...");
+	}
+
+	internal static bool ShouldRequestManualStop(Task completedTask, Task processWaitTask, bool processHasExited)
+		=> completedTask != processWaitTask && !processHasExited;
+
+	static async Task<StopSignalReason> WaitForStopSignalCoreAsync(
+		Task? externalCompletionTask,
+		TimeSpan? duration,
+		bool allowManualStop,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		CancellationToken cancellationToken)
+	{
+		var completionTask = externalCompletionTask ?? s_neverCompletes;
+
 		if (!allowManualStop)
 		{
 			if (duration is { } nonInteractiveDuration)
@@ -147,12 +144,15 @@ internal static class ProfileTraceLifecycle
 					useJson,
 					verbose,
 					$"Waiting {nonInteractiveDuration} before requesting app exit for runtime-owned trace finalization.");
-				await Task.Delay(nonInteractiveDuration, cancellationToken);
-				if (!useJson)
-					formatter.WriteInfo("Stopping trace and finalizing output...");
+				var completedTask = await Task.WhenAny(completionTask, Task.Delay(nonInteractiveDuration, cancellationToken));
+				return completedTask == completionTask ? StopSignalReason.ExternalCompletion : StopSignalReason.Timed;
 			}
 
-			return;
+			if (externalCompletionTask is null)
+				return StopSignalReason.None;
+
+			await completionTask;
+			return StopSignalReason.ExternalCompletion;
 		}
 
 		var manualStopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -178,30 +178,26 @@ internal static class ProfileTraceLifecycle
 
 		try
 		{
-			if (duration is { } manualDuration)
+			var durationTask = duration is { } waitDuration
+				? Task.Delay(waitDuration, cancellationToken)
+				: s_neverCompletes;
+			var completedTask = await Task.WhenAny(completionTask, durationTask, manualStopSignal.Task);
+
+			if (externalCompletionTask is not null && completedTask == completionTask)
+				return StopSignalReason.ExternalCompletion;
+
+			if (duration is not null && completedTask == durationTask)
 			{
-				var durationTask = Task.Delay(manualDuration, cancellationToken);
-				var completedTask = await Task.WhenAny(durationTask, manualStopSignal.Task);
 				ProfileCommandProcessHelpers.WriteVerbose(
 					formatter,
 					useJson,
 					verbose,
-					completedTask == durationTask
-						? $"Runtime-owned trace duration {manualDuration} elapsed."
-						: "Manual stop requested from the console for the runtime-owned trace.");
-			}
-			else
-			{
-				await manualStopSignal.Task.WaitAsync(cancellationToken);
-				ProfileCommandProcessHelpers.WriteVerbose(
-					formatter,
-					useJson,
-					verbose,
-					"Manual stop requested from the console for the runtime-owned trace.");
+					$"Trace duration {duration} elapsed.");
+				return StopSignalReason.Timed;
 			}
 
-			if (!useJson)
-				formatter.WriteInfo("Stopping trace and finalizing output...");
+			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "Manual stop requested from the console.");
+			return StopSignalReason.Manual;
 		}
 		finally
 		{
@@ -209,17 +205,14 @@ internal static class ProfileTraceLifecycle
 			manualStopSignal.TrySetResult(true);
 			try
 			{
-				await readLineTask.WaitAsync(TimeSpan.FromMilliseconds(100));
+				await readLineTask.WaitAsync(s_consoleReadJoinTimeout);
 			}
-			catch
+			catch (TimeoutException)
 			{
-				// Ignore any late console-read completions.
+				// Console.ReadLine() can outlive the profiling stop path; ignore that case.
 			}
 		}
 	}
-
-	internal static bool ShouldRequestManualStop(Task completedTask, Task processWaitTask, bool processHasExited)
-		=> completedTask != processWaitTask && !processHasExited;
 
 	internal static async Task RequestStopAsync(Process traceProcess, IOutputFormatter formatter, bool useJson, bool verbose)
 	{

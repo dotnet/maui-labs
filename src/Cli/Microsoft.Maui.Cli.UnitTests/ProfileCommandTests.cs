@@ -831,6 +831,24 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void TryParseLongListingSize_ValidAndroidListing_ReturnsExpectedSize()
+	{
+		var output = "-rw-rw---- 1 10234 10234 473559 2026-04-15 17:20 startup.nettrace";
+
+		var size = RuntimeOwnedTraceCollector.TryParseLongListingSize(output);
+
+		Assert.Equal(473559, size);
+	}
+
+	[Fact]
+	public void TryParseLongListingSize_InvalidListing_ReturnsZero()
+	{
+		var size = RuntimeOwnedTraceCollector.TryParseLongListingSize("No such file or directory");
+
+		Assert.Equal(0, size);
+	}
+
+	[Fact]
 	public void ResolveStoppingEventConfiguration_LeavesStoppingEventUnsetWithoutExplicitOptions()
 	{
 		var result = ProfileCommand.ResolveStoppingEventConfiguration(

@@ -12,6 +12,8 @@ internal static class RuntimeOwnedTraceCollector
 	static readonly TimeSpan s_traceWaitTimeout = TimeSpan.FromMinutes(2);
 	static readonly TimeSpan s_pollDelay = TimeSpan.FromSeconds(2);
 	static readonly TimeSpan s_postExitFlushDelay = TimeSpan.FromSeconds(3);
+	static readonly TimeSpan s_pullTimeout = TimeSpan.FromMinutes(2);
+	const int RequiredStableSamples = 2;
 
 	internal static async Task PrepareAsync(ProfileSessionContext context, CancellationToken cancellationToken)
 	{
@@ -55,49 +57,24 @@ internal static class RuntimeOwnedTraceCollector
 
 		if (UsesAppInternalStorage(context.RuntimeOwnedTraceDevicePath))
 		{
-			await WaitForInternalTraceAsync(adbPath, context, applicationId, cancellationToken);
+			await WaitForStableTraceAsync(
+				cancellationToken => ProbeInternalTraceAsync(adbPath, context, applicationId, cancellationToken),
+				$"The Android runtime-owned EventPipe trace at '{context.RuntimeOwnedTraceDevicePath}' never stabilized after the app exited.",
+				cancellationToken);
 			await PullInternalTraceAsync(adbPath, context, applicationId, cancellationToken);
 			await DeleteInternalTraceAsync(adbPath, context, applicationId, CancellationToken.None);
 			return;
 		}
 
-		var startedAt = Stopwatch.GetTimestamp();
-		long? previousSize = null;
-		var stableSamples = 0;
-
-		while (Stopwatch.GetElapsedTime(startedAt) < s_traceWaitTimeout)
-		{
-			cancellationToken.ThrowIfCancellationRequested();
-
-			var result = await ProcessRunner.RunAsync(
-				adbPath,
-				["-s", context.Device.Id, "shell", "ls", "-l", context.RuntimeOwnedTraceDevicePath],
-				timeout: ProfileCommand.s_adbPortForwardTimeout,
-				cancellationToken: cancellationToken);
-
-			if (result.Success)
-			{
-				var size = TryParseLsSize(result.StandardOutput);
-				if (size > 0)
-				{
-					if (previousSize == size)
-						stableSamples++;
-					else
-						stableSamples = 0;
-
-					previousSize = size;
-					if (stableSamples >= 2)
-						break;
-				}
-			}
-
-			await Task.Delay(s_pollDelay, cancellationToken);
-		}
+		await WaitForStableTraceAsync(
+			cancellationToken => ProbeExternalTraceAsync(adbPath, context, cancellationToken),
+			$"The Android runtime-owned EventPipe trace at '{context.RuntimeOwnedTraceDevicePath}' never stabilized after the app exited.",
+			cancellationToken);
 
 		var pullResult = await ProcessRunner.RunAsync(
 			adbPath,
 			["-s", context.Device.Id, "pull", context.RuntimeOwnedTraceDevicePath, context.OutputPath],
-			timeout: TimeSpan.FromMinutes(2),
+			timeout: s_pullTimeout,
 			cancellationToken: cancellationToken);
 
 		if (!pullResult.Success || !File.Exists(context.OutputPath))
@@ -125,7 +102,7 @@ internal static class RuntimeOwnedTraceCollector
 					"Or add adb to PATH and rerun `maui profile startup`."
 				]);
 
-	static long TryParseLsSize(string output)
+	internal static long TryParseLongListingSize(string output)
 	{
 		var line = output
 			.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -150,48 +127,38 @@ internal static class RuntimeOwnedTraceCollector
 				ErrorCodes.InternalError,
 				$"Could not resolve the Android application ID for '{context.Project.ProjectPath}'.");
 
-	static async Task WaitForInternalTraceAsync(string adbPath, ProfileSessionContext context, string applicationId, CancellationToken cancellationToken)
+	static async Task WaitForStableTraceAsync(
+		Func<CancellationToken, Task<TraceProbeResult>> probeAsync,
+		string timeoutMessage,
+		CancellationToken cancellationToken)
 	{
 		var startedAt = Stopwatch.GetTimestamp();
 		long? previousSize = null;
 		var stableSamples = 0;
+		string? lastFailure = null;
 
 		while (Stopwatch.GetElapsedTime(startedAt) < s_traceWaitTimeout)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
+			var probe = await probeAsync(cancellationToken);
+			if (!string.IsNullOrWhiteSpace(probe.FailureDetails))
+				lastFailure = probe.FailureDetails;
 
-			var result = await ProcessRunner.RunAsync(
-				adbPath,
-				["-s", context.Device.Id, "shell", "run-as", applicationId, "ls", "-l", context.RuntimeOwnedTraceDevicePath!],
-				timeout: ProfileCommand.s_adbPortForwardTimeout,
-				cancellationToken: cancellationToken);
-
-			if (result.StandardError.Contains("package not debuggable", StringComparison.OrdinalIgnoreCase))
+			if (probe.Size > 0)
 			{
-				throw new MauiToolException(
-					ErrorCodes.InternalError,
-					$"The Android profiling app '{applicationId}' was installed without debug access, so the runtime-owned trace could not be retrieved.",
-					nativeError: result.StandardError);
-			}
-
-			if (result.Success)
-			{
-				var size = TryParseLsSize(result.StandardOutput);
-				if (size > 0)
-				{
-					if (previousSize == size)
-						stableSamples++;
-					else
-						stableSamples = 0;
-
-					previousSize = size;
-					if (stableSamples >= 2)
-						return;
-				}
+				stableSamples = previousSize == probe.Size ? stableSamples + 1 : 0;
+				previousSize = probe.Size;
+				if (stableSamples >= RequiredStableSamples)
+					return;
 			}
 
 			await Task.Delay(s_pollDelay, cancellationToken);
 		}
+
+		throw new MauiToolException(
+			ErrorCodes.InternalError,
+			timeoutMessage,
+			nativeError: lastFailure);
 	}
 
 	static async Task PullInternalTraceAsync(string adbPath, ProfileSessionContext context, string applicationId, CancellationToken cancellationToken)
@@ -261,5 +228,45 @@ internal static class RuntimeOwnedTraceCollector
 
 			await Task.Delay(s_pollDelay, cancellationToken);
 		}
+
+		throw new MauiToolException(
+			ErrorCodes.InternalError,
+			$"The Android app '{applicationId}' did not exit in time, so the runtime-owned startup trace could not be finalized.");
 	}
+
+	static async Task<TraceProbeResult> ProbeInternalTraceAsync(string adbPath, ProfileSessionContext context, string applicationId, CancellationToken cancellationToken)
+	{
+		var result = await ProcessRunner.RunAsync(
+			adbPath,
+			["-s", context.Device.Id, "shell", "run-as", applicationId, "ls", "-ln", context.RuntimeOwnedTraceDevicePath!],
+			timeout: ProfileCommand.s_adbPortForwardTimeout,
+			cancellationToken: cancellationToken);
+
+		if (result.StandardError.Contains("package not debuggable", StringComparison.OrdinalIgnoreCase))
+		{
+			throw new MauiToolException(
+				ErrorCodes.InternalError,
+				$"The Android profiling app '{applicationId}' was installed without debug access, so the runtime-owned trace could not be retrieved.",
+				nativeError: result.StandardError);
+		}
+
+		return new TraceProbeResult(
+			Size: result.Success ? TryParseLongListingSize(result.StandardOutput) : 0,
+			FailureDetails: result.Success ? null : ProfileCommandProcessHelpers.GetProcessFailureDetails(result));
+	}
+
+	static async Task<TraceProbeResult> ProbeExternalTraceAsync(string adbPath, ProfileSessionContext context, CancellationToken cancellationToken)
+	{
+		var result = await ProcessRunner.RunAsync(
+			adbPath,
+			["-s", context.Device.Id, "shell", "ls", "-ln", context.RuntimeOwnedTraceDevicePath!],
+			timeout: ProfileCommand.s_adbPortForwardTimeout,
+			cancellationToken: cancellationToken);
+
+		return new TraceProbeResult(
+			Size: result.Success ? TryParseLongListingSize(result.StandardOutput) : 0,
+			FailureDetails: result.Success ? null : ProfileCommandProcessHelpers.GetProcessFailureDetails(result));
+	}
+
+	readonly record struct TraceProbeResult(long Size, string? FailureDetails);
 }
