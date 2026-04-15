@@ -88,9 +88,9 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			handlersCollection.AddHandler<RadioButton, RadioButtonHandler>();
 			handlersCollection.AddHandler<ImageButton, ImageButtonHandler>();
 
-			// WebView + GraphicsView + HybridWebView
-			handlersCollection.AddHandler<Microsoft.Maui.Controls.WebView, WebViewHandler>();
-			handlersCollection.AddHandler<Microsoft.Maui.Controls.HybridWebView, HybridWebViewHandler>();
+			// TODO: WebView handlers require Microsoft.Web.WebView2.Wpf (not in dnceng feeds)
+			// handlersCollection.AddHandler<Microsoft.Maui.Controls.WebView, WebViewHandler>();
+			// handlersCollection.AddHandler<Microsoft.Maui.Controls.HybridWebView, HybridWebViewHandler>();
 			handlersCollection.AddHandler<GraphicsView, GraphicsViewHandler>();
 
 			return handlersCollection;
