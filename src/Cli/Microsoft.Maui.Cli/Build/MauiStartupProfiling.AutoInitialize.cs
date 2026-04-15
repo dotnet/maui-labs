@@ -26,18 +26,27 @@ internal static class __MauiStartupProfilingInjectedBootstrap
 
     static async Task WaitForStartupCompletionAsync()
     {
-        var deadline = DateTime.UtcNow + s_maxWait;
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            if (await IsMainPageReadyAsync().ConfigureAwait(false))
+            var deadline = DateTime.UtcNow + s_maxWait;
+            while (DateTime.UtcNow < deadline)
             {
-                break;
+                if (await IsMainPageReadyAsync().ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                await Task.Delay(s_pollInterval).ConfigureAwait(false);
             }
 
-            await Task.Delay(s_pollInterval).ConfigureAwait(false);
+            await SignalStartupCompleteOnMainThreadAsync().ConfigureAwait(false);
         }
-
-        await SignalStartupCompleteOnMainThreadAsync().ConfigureAwait(false);
+        catch
+        {
+            // This bootstrap is best-effort; emitting the marker here avoids
+            // hanging the profiling session if a platform-specific dispatcher call fails.
+            SignalStartupComplete();
+        }
     }
 
     static async Task<bool> IsMainPageReadyAsync()

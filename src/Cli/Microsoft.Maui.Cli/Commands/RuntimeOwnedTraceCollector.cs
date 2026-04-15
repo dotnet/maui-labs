@@ -184,19 +184,43 @@ internal static class RuntimeOwnedTraceCollector
 
 		await using var outputStream = File.Create(context.OutputPath);
 		var stderrTask = process.StandardError.ReadToEndAsync();
-		await process.StandardOutput.BaseStream.CopyToAsync(outputStream, cancellationToken);
-		await process.WaitForExitAsync(cancellationToken);
-		var stderr = await stderrTask;
 
-		if (process.ExitCode != 0 || !File.Exists(context.OutputPath) || new FileInfo(context.OutputPath).Length == 0)
+		try
 		{
+			await process.StandardOutput.BaseStream.CopyToAsync(outputStream, cancellationToken);
+			await process.WaitForExitAsync(cancellationToken);
+			var stderr = await stderrTask;
+
+			if (process.ExitCode != 0 || !File.Exists(context.OutputPath) || new FileInfo(context.OutputPath).Length == 0)
+			{
+				if (File.Exists(context.OutputPath))
+					File.Delete(context.OutputPath);
+
+				throw new MauiToolException(
+					ErrorCodes.InternalError,
+					$"The Android runtime-owned EventPipe trace could not be copied from '{context.RuntimeOwnedTraceDevicePath}'.",
+					nativeError: string.IsNullOrWhiteSpace(stderr) ? $"adb exited with code {process.ExitCode}." : stderr);
+			}
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			try
+			{
+				if (!process.HasExited)
+				{
+					process.Kill(entireProcessTree: true);
+					await process.WaitForExitAsync(CancellationToken.None);
+				}
+			}
+			catch (InvalidOperationException)
+			{
+				// The process exited while cleanup was in progress.
+			}
+
 			if (File.Exists(context.OutputPath))
 				File.Delete(context.OutputPath);
 
-			throw new MauiToolException(
-				ErrorCodes.InternalError,
-				$"The Android runtime-owned EventPipe trace could not be copied from '{context.RuntimeOwnedTraceDevicePath}'.",
-				nativeError: string.IsNullOrWhiteSpace(stderr) ? $"adb exited with code {process.ExitCode}." : stderr);
+			throw;
 		}
 	}
 
@@ -212,6 +236,8 @@ internal static class RuntimeOwnedTraceCollector
 	static async Task WaitForAppExitAsync(string adbPath, ProfileSessionContext context, string applicationId, CancellationToken cancellationToken)
 	{
 		var startedAt = Stopwatch.GetTimestamp();
+		var sawRunning = false;
+		string? lastFailure = null;
 
 		while (Stopwatch.GetElapsedTime(startedAt) < s_traceWaitTimeout)
 		{
@@ -223,16 +249,34 @@ internal static class RuntimeOwnedTraceCollector
 				timeout: ProfileCommand.s_adbPortForwardTimeout,
 				cancellationToken: cancellationToken);
 
-			if (!result.Success || string.IsNullOrWhiteSpace(result.StandardOutput))
+			if (result.Success && !string.IsNullOrWhiteSpace(result.StandardOutput))
+			{
+				sawRunning = true;
+			}
+			else if (ShouldTreatAppAsExited(sawRunning, result))
+			{
 				return;
+			}
+			else if (!result.Success)
+			{
+				lastFailure = ProfileCommandProcessHelpers.GetProcessFailureDetails(result);
+			}
 
 			await Task.Delay(s_pollDelay, cancellationToken);
 		}
 
 		throw new MauiToolException(
 			ErrorCodes.InternalError,
-			$"The Android app '{applicationId}' did not exit in time, so the runtime-owned startup trace could not be finalized.");
+			sawRunning
+				? $"The Android app '{applicationId}' did not exit in time, so the runtime-owned startup trace could not be finalized."
+				: $"The Android app '{applicationId}' was never observed running after launch, so the runtime-owned startup trace could not be finalized.",
+			nativeError: lastFailure);
 	}
+
+	internal static bool ShouldTreatAppAsExited(bool sawRunning, ProcessResult result)
+		=> sawRunning
+			&& result.Success
+			&& string.IsNullOrWhiteSpace(result.StandardOutput);
 
 	static async Task<TraceProbeResult> ProbeInternalTraceAsync(string adbPath, ProfileSessionContext context, string applicationId, CancellationToken cancellationToken)
 	{

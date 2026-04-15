@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
+using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -846,6 +847,23 @@ public class ProfileCommandTests
 		var size = RuntimeOwnedTraceCollector.TryParseLongListingSize("No such file or directory");
 
 		Assert.Equal(0, size);
+	}
+
+	[Fact]
+	public void ShouldTreatAppAsExited_RequiresPriorRunningObservation()
+	{
+		var result = new ProcessResult { ExitCode = 0, StandardOutput = string.Empty };
+
+		Assert.False(RuntimeOwnedTraceCollector.ShouldTreatAppAsExited(sawRunning: false, result));
+		Assert.True(RuntimeOwnedTraceCollector.ShouldTreatAppAsExited(sawRunning: true, result));
+	}
+
+	[Fact]
+	public void ShouldTreatAppAsExited_IgnoresTransientPidFailures()
+	{
+		var result = new ProcessResult { ExitCode = 1, StandardOutput = string.Empty, StandardError = "adb: device offline" };
+
+		Assert.False(RuntimeOwnedTraceCollector.ShouldTreatAppAsExited(sawRunning: true, result));
 	}
 
 	[Fact]
