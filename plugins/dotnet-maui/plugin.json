@@ -32,7 +32,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/check-devflow.js\" SessionStart"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check.sh SessionStart"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check.cmd SessionStart"
           }
         ]
       }
@@ -43,7 +47,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/check-devflow.js\" PostToolUse"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check.sh PostToolUse"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check.cmd PostToolUse"
           }
         ]
       }

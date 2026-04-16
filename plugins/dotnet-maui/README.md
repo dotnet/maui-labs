@@ -67,11 +67,14 @@ The `SessionStart` / `PostToolUse` hook applies the same MSBuild evaluation. Tes
 
 ## Hooks
 
-The hook script (`hooks/check-devflow.js`) runs in Node and asks MSBuild for the authoritative view of each csproj in the project root via `dotnet msbuild -getProperty:UseMaui,EnableDevFlow -getItem:PackageReference`. That JSON output already accounts for `Directory.Build.props`, `Directory.Packages.props`, custom SDKs, and transitive `.targets` imports — so the nudge doesn't false-fire when the wiring lives somewhere other than the csproj itself. A failed or timed-out MSBuild evaluation stays silent.
+The hook logic lives in the `maui` CLI itself — `maui devflow hook check <event>` does the MSBuild evaluation, classification, debounce, and JSON emission. The plugin ships two tiny platform wrappers (`hooks/check.sh` for macOS/Linux, `hooks/check.cmd` for Windows) that detect a missing `maui` CLI and forward to the subcommand otherwise. Keeping the logic in the CLI means there's no extra runtime dependency (no Node, no Python, no `jq`) — the same evaluator the rest of the tool uses handles hooks too.
+
+The CLI asks MSBuild for the authoritative view of each csproj in the project root via `dotnet msbuild -getProperty:UseMaui,EnableDevFlow -getItem:PackageReference`. That JSON output already accounts for `Directory.Build.props`, `Directory.Packages.props`, custom SDKs, and transitive `.targets` imports — so the nudge doesn't false-fire when the wiring lives somewhere other than the csproj itself. A failed or timed-out MSBuild evaluation stays silent.
 
 - Fires on `SessionStart` once per changed project state.
 - Fires on `PostToolUse` only when the edited file is `MauiProgram.cs`, a `.csproj`, `Directory.Packages.props`, or a `Directory.Build.*` file. Unrelated edits short-circuit before MSBuild runs.
-- Debounces via `.devflow/hook-state.json` in the project root so repeated identical nudges are suppressed.
+- Debounces via `${CLAUDE_PLUGIN_DATA}/hook-state/<repo-hash>.json` — **outside** the user's repo, so there's no clash with the `.devflow` config file and no `.gitignore` hygiene to worry about.
+- When the `maui` CLI is not on PATH the wrapper prints a one-shot install hint (`dotnet tool install -g Microsoft.Maui.Cli --prerelease`) and exits silently otherwise.
 - Never blocks the host — exits 0 with empty stdout if in doubt.
 
 Opt out by uninstalling the plugin, or disable it globally in the host's plugin settings.

@@ -45,6 +45,19 @@ public class Program
 
 	public static async Task<int> Main(string[] args)
 	{
+		// Fast path: the dotnet-maui plugin hook should never trigger broker
+		// startup or any agent-port resolution. Dispatch directly.
+		if (args.Length >= 3 && args[0] == "devflow" && args[1] == "hook" && args[2] == "check")
+		{
+			var eventName = args.Length >= 4 ? args[3] : "SessionStart";
+			string? cwd = null;
+			for (int i = 4; i < args.Length - 1; i++)
+			{
+				if (args[i] == "--cwd") { cwd = args[i + 1]; break; }
+			}
+			return await Microsoft.Maui.Cli.DevFlow.HookCheckCommand.RunAsync(eventName, cwd);
+		}
+
 		var rootCommand = BuildRootCommand();
 
 		// Handle help rendering with Spectre.Console before the parser runs

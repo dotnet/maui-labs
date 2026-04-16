@@ -190,12 +190,10 @@ If the user has a preferred port (rare — the CLI auto-discovers), write
 
 Otherwise skip this step. The CLI broker picks a free port automatically.
 
-Add `.devflow/` (the hook state directory) to the project's `.gitignore`:
-
-```
-# DevFlow session state
-.devflow/
-```
+Note: the plugin's SessionStart/PostToolUse hook keeps its debounce state
+in the plugin-host's per-user data directory (outside the repo), so there
+is **no** `.devflow/` directory to add to `.gitignore`. `.devflow` is only
+ever a file — the optional port config.
 
 If a legacy `.mauidevflow` file exists, migrate it to `.devflow` and delete
 the old one. The `.targets` prefers `.devflow` and warns on the legacy name.

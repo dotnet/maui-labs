@@ -1249,6 +1249,23 @@ public class DevFlowCommands
         });
         devflowCommand.Add(diagnoseCmd);
 
+        // ===== hook command family (for plugin-host integrations) =====
+        var hookCommand = new Command("hook", "Plugin-host hook integration (SessionStart / PostToolUse)");
+        var hookEventArg = new Argument<string>("event") { Description = "Hook event name (SessionStart | PostToolUse)" };
+        var hookCwdOption = new Option<string?>("--cwd") { Description = "Working directory to inspect (defaults to CLAUDE_PROJECT_DIR or cwd)", DefaultValueFactory = _ => null };
+        var hookCheckCmd = new Command("check", "Inspect the project and emit a nudge if DevFlow isn't wired")
+        {
+            hookEventArg, hookCwdOption
+        };
+        hookCheckCmd.SetAction(async (ctx, ct) =>
+        {
+            var evt = ctx.GetValue(hookEventArg) ?? "SessionStart";
+            var cwd = ctx.GetValue(hookCwdOption);
+            Environment.ExitCode = await HookCheckCommand.RunAsync(evt, cwd);
+        });
+        hookCommand.Add(hookCheckCmd);
+        devflowCommand.Add(hookCommand);
+
         // ===== wait command (wait for agent to connect) =====
         var waitTimeoutOption = new Option<int>("--timeout", "-t") { Description = "Maximum seconds to wait for an agent to connect", DefaultValueFactory = _ => 120 };
         var waitProjectOption = new Option<string?>("--project") { Description = "Filter by project path (csproj). Resolves to full path for matching.", DefaultValueFactory = _ => null };
