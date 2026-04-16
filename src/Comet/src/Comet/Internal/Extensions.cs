@@ -39,7 +39,22 @@ namespace Comet.Internal
 
 		public static Func<View> GetBody(this View view)
 		{
-			var bodyMethod = view.GetType().GetDeepMethodInfo(typeof(BodyAttribute));
+			// Match [Body] attribute by name, not by type identity, because the user's
+			// dynamically-loaded assembly may reference a different Comet assembly (NuGet)
+			// than the companion app (project reference).
+			var bodyMethod = view.GetType().GetMethods(
+					System.Reflection.BindingFlags.NonPublic |
+					System.Reflection.BindingFlags.Public |
+					System.Reflection.BindingFlags.Instance)
+				.FirstOrDefault(m => m.GetCustomAttributes(false)
+					.Any(a => a.GetType().FullName == "Comet.BodyAttribute"));
+
+			if (bodyMethod is null)
+			{
+				// Fall back to type-based matching (same-assembly case)
+				bodyMethod = view.GetType().GetDeepMethodInfo(typeof(BodyAttribute));
+			}
+
 			if (bodyMethod is not null)
 				return (Func<View>)Delegate.CreateDelegate(typeof(Func<View>), view, bodyMethod.Name);
 			return null;
