@@ -112,12 +112,13 @@ scenarios:
       fence. Wire DevFlow.
     assertions:
       - type: "output_matches"
-        pattern: "(?i)label|marker|fence|manually managed|user.managed"
+        pattern: "(?i)already wired|already set up|label|marker|fence|manually managed|user.managed"
       - type: "output_matches"
-        pattern: "(?i)ask|confirm|should I|would you like"
+        pattern: "(?i)ask|confirm|should I|would you like|promote"
     rubric:
-      - "Notices the bare PackageReference lacks the Label=\"DevFlow\" / <DevFlow> wiring marker"
-      - "Treats it as user-managed and stops to ask the user whether to promote it to the standard shape"
+      - "Recognizes via MSBuild (dotnet msbuild -getItem:PackageReference) that the DevFlow Agent package is already resolved for the project"
+      - "Notices the block is missing the Label=\"DevFlow\" / <DevFlow> idempotency marker"
+      - "Stops to ask the user whether to leave it alone (user-managed) or promote it to the standard labeled shape"
       - "Does NOT silently delete or move the existing reference"
     timeout: 180
 

@@ -5,16 +5,11 @@
 // hook script. Run directly:
 //   node tests/dotnet-maui/check-devflow-hook.test.js
 //
-// Asserts silent exit vs. nudge JSON across:
-//   - empty dir (not a project)
-//   - non-MAUI .csproj
-//   - standard MAUI app (fires)
-//   - MAUI Blazor app (fires with "Blazor hybrid" label)
-//   - GTK app (fires with "GTK" label; detects without <UseMaui>)
-//   - already-wired (silent)
-//   - debounced repeat (silent)
-//   - PostToolUse with unrelated file path (silent)
-//   - PostToolUse editing MauiProgram.cs (fires)
+// The hook defers detection to `dotnet msbuild -getProperty -getItem`.
+// Rather than require a fully restored .NET SDK inside tests, we feed
+// the hook canned MSBuild JSON via the MAUI_DEVFLOW_HOOK_STUB env var.
+// That isolates the tests from environment drift while still exercising
+// the hook's parsing and decision logic end-to-end.
 
 "use strict";
 
@@ -42,10 +37,34 @@ function assertContains(actual, needle, label) {
   fails.push(`FAIL: ${label}\n  expected to contain: ${JSON.stringify(needle)}\n  actual: ${JSON.stringify(actual)}`);
 }
 
-function runHook(cwd, event, stdinPayload) {
+// Build a JSON object in the same shape `dotnet msbuild -getProperty -getItem`
+// emits: { "Properties": { ... }, "Items": { "PackageReference": [...] } }.
+function stubJson(props, packageIds) {
+  return {
+    Properties: {
+      UseMaui: props.UseMaui ?? "",
+      EnableDevFlow: props.EnableDevFlow ?? ""
+    },
+    Items: {
+      PackageReference: (packageIds || []).map(id => ({ Identity: id }))
+    }
+  };
+}
+
+function writeStub(dir, data) {
+  const p = path.join(dir, "stub.json");
+  fs.writeFileSync(p, JSON.stringify(data));
+  return p;
+}
+
+function runHook(cwd, event, { stubPath, stdinPayload, cliPresent = true } = {}) {
+  const env = { ...process.env, CLAUDE_PROJECT_DIR: cwd };
+  if (cliPresent) env.MAUI_DEVFLOW_HOOK_ASSUME_CLI = "1";
+  else            env.MAUI_DEVFLOW_HOOK_ASSUME_CLI = "0";
+  if (stubPath) env.MAUI_DEVFLOW_HOOK_STUB = stubPath;
   const result = spawnSync("node", [SCRIPT, event], {
     cwd,
-    env: { ...process.env, MAUI_DEVFLOW_HOOK_ASSUME_CLI: "1", CLAUDE_PROJECT_DIR: cwd },
+    env,
     input: stdinPayload ? JSON.stringify(stdinPayload) : "",
     encoding: "utf8",
   });
@@ -56,8 +75,11 @@ function mkTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "devflow-hook-"));
 }
 
-function writeCsproj(dir, name, content) {
-  fs.writeFileSync(path.join(dir, name), content);
+function writeCsproj(dir, name) {
+  // Contents don't matter — the hook hands the path to MSBuild (or the
+  // stub override). We only need a file with a .csproj extension.
+  fs.writeFileSync(path.join(dir, name),
+    `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>`);
 }
 
 // --- tests ---
@@ -65,6 +87,7 @@ function writeCsproj(dir, name, content) {
 function testEmptyDir() {
   const dir = mkTempDir();
   try {
+    // No csproj at all, no stub either — hook should exit silently.
     const r = runHook(dir, "SessionStart");
     assertEq(r.stdout, "", "empty dir is silent");
     assertEq(r.status, 0, "empty dir exits 0");
@@ -74,9 +97,9 @@ function testEmptyDir() {
 function testNonMauiCsproj() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>`);
-    const r = runHook(dir, "SessionStart");
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir, stubJson({}, []));
+    const r = runHook(dir, "SessionStart", { stubPath: stub });
     assertEq(r.stdout, "", "non-MAUI csproj is silent");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -84,9 +107,10 @@ function testNonMauiCsproj() {
 function testStandardMaui() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><UseMaui>true</UseMaui></PropertyGroup></Project>`);
-    const r = runHook(dir, "SessionStart");
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" }, ["Microsoft.Maui.Controls"]));
+    const r = runHook(dir, "SessionStart", { stubPath: stub });
     assertContains(r.stdout, "(standard)", "standard MAUI reports standard flavor");
     assertContains(r.stdout, "set up DevFlow", "standard MAUI suggests setup");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -95,12 +119,11 @@ function testStandardMaui() {
 function testBlazorMaui() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk">
-        <PropertyGroup><UseMaui>true</UseMaui></PropertyGroup>
-        <ItemGroup><PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" /></ItemGroup>
-      </Project>`);
-    const r = runHook(dir, "SessionStart");
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" },
+        ["Microsoft.Maui.Controls", "Microsoft.AspNetCore.Components.WebView.Maui"]));
+    const r = runHook(dir, "SessionStart", { stubPath: stub });
     assertContains(r.stdout, "Blazor hybrid", "Blazor hybrid flavor reported");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -108,11 +131,12 @@ function testBlazorMaui() {
 function testGtkMaui() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk.Razor">
-        <ItemGroup><PackageReference Include="Platform.Maui.Linux.Gtk4" /></ItemGroup>
-      </Project>`);
-    const r = runHook(dir, "SessionStart");
+    writeCsproj(dir, "App.csproj");
+    // GTK apps don't set <UseMaui>true</UseMaui>; they pull in the MAUI
+    // runtime via Platform.Maui.Linux.Gtk4 (+ related) packages.
+    const stub = writeStub(dir,
+      stubJson({}, ["Platform.Maui.Linux.Gtk4"]));
+    const r = runHook(dir, "SessionStart", { stubPath: stub });
     assertContains(r.stdout, "(GTK)", "GTK flavor reported");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -120,26 +144,40 @@ function testGtkMaui() {
 function testAlreadyWired() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk">
-        <PropertyGroup><UseMaui>true</UseMaui></PropertyGroup>
-        <ItemGroup Label="DevFlow" Condition="'$(EnableDevFlow)' == 'true'">
-          <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="0.1.0-preview.4" />
-        </ItemGroup>
-      </Project>`);
-    const r = runHook(dir, "SessionStart");
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" },
+        ["Microsoft.Maui.Controls", "Microsoft.Maui.DevFlow.Agent"]));
+    const r = runHook(dir, "SessionStart", { stubPath: stub });
     assertEq(r.stdout, "", "already-wired project is silent");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+function testAlreadyWiredViaCpm() {
+  // The new design trusts MSBuild: a DevFlow package reference authored
+  // in Directory.Packages.props (and surfaced to MSBuild item resolution)
+  // should be treated as wired, even without a Label="DevFlow" marker.
+  const dir = mkTempDir();
+  try {
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" },
+        ["Microsoft.Maui.Controls", "Microsoft.Maui.DevFlow.Agent"]));
+    const r = runHook(dir, "SessionStart", { stubPath: stub });
+    assertEq(r.stdout, "",
+      "DevFlow package discovered via MSBuild evaluation counts as wired regardless of how it was authored");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 function testDebounce() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><UseMaui>true</UseMaui></PropertyGroup></Project>`);
-    const r1 = runHook(dir, "SessionStart");
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" }, ["Microsoft.Maui.Controls"]));
+    const r1 = runHook(dir, "SessionStart", { stubPath: stub });
     assertContains(r1.stdout, "set up DevFlow", "first SessionStart nudges");
-    const r2 = runHook(dir, "SessionStart");
+    const r2 = runHook(dir, "SessionStart", { stubPath: stub });
     assertEq(r2.stdout, "", "second SessionStart debounced");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -147,9 +185,11 @@ function testDebounce() {
 function testPostToolUseUnrelated() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><UseMaui>true</UseMaui></PropertyGroup></Project>`);
-    const r = runHook(dir, "PostToolUse", { tool_input: { file_path: path.join(dir, "README.md") } });
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" }, ["Microsoft.Maui.Controls"]));
+    const r = runHook(dir, "PostToolUse",
+      { stubPath: stub, stdinPayload: { tool_input: { file_path: path.join(dir, "README.md") } } });
     assertEq(r.stdout, "", "PostToolUse on README is silent");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -157,10 +197,24 @@ function testPostToolUseUnrelated() {
 function testPostToolUseRelevant() {
   const dir = mkTempDir();
   try {
-    writeCsproj(dir, "App.csproj",
-      `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><UseMaui>true</UseMaui></PropertyGroup></Project>`);
-    const r = runHook(dir, "PostToolUse", { tool_input: { file_path: path.join(dir, "MauiProgram.cs") } });
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" }, ["Microsoft.Maui.Controls"]));
+    const r = runHook(dir, "PostToolUse",
+      { stubPath: stub, stdinPayload: { tool_input: { file_path: path.join(dir, "MauiProgram.cs") } } });
     assertContains(r.stdout, "set up DevFlow", "PostToolUse on MauiProgram.cs nudges");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+function testMauiCliMissing() {
+  const dir = mkTempDir();
+  try {
+    writeCsproj(dir, "App.csproj");
+    const stub = writeStub(dir,
+      stubJson({ UseMaui: "true" }, ["Microsoft.Maui.Controls"]));
+    const r = runHook(dir, "SessionStart", { stubPath: stub, cliPresent: false });
+    assertContains(r.stdout, "`maui` CLI isn't on PATH", "missing CLI prompt shown");
+    assertContains(r.stdout, "dotnet tool install", "install hint included");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
@@ -171,9 +225,11 @@ testStandardMaui();
 testBlazorMaui();
 testGtkMaui();
 testAlreadyWired();
+testAlreadyWiredViaCpm();
 testDebounce();
 testPostToolUseUnrelated();
 testPostToolUseRelevant();
+testMauiCliMissing();
 
 if (failed > 0) {
   for (const f of fails) console.error(f);

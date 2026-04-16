@@ -11,26 +11,25 @@
 //   - Exits 0 always. Emits a JSON object on stdout when it wants to
 //     inject context; otherwise stays silent.
 //
-// Decision rules (plan D3.1):
-//   1. If cwd has no .csproj -> silent exit.
-//   2. If `maui --version` fails -> emit install hint, exit 0.
-//   3. If any .csproj already carries a Label="DevFlow" marker OR a
-//      <!-- <DevFlow> --> fence AND a Microsoft.Maui.DevFlow.*
-//      PackageReference -> silent exit (already wired).
-//   4. If none of the cwd .csproj files look like MAUI (no <UseMaui>true
-//      and no Microsoft.Maui.* / Platform.Maui.* PackageReference) ->
-//      silent exit.
-//   5. Otherwise emit the setup nudge.
+// Detection strategy: ask MSBuild. `dotnet msbuild <csproj> -nologo
+// -getProperty:UseMaui,EnableDevFlow -getItem:PackageReference` yields
+// authoritative JSON that already accounts for Directory.Build.props,
+// Directory.Packages.props, SDKs, and transitive .targets imports.
+// We avoid brittle regex over a single csproj file.
 //
 // Debounce: .devflow/hook-state.json in CWD stores the last state we
 // nudged for; a nudge is only emitted when the state changes inside a
 // single session.
+//
+// Test override: set MAUI_DEVFLOW_HOOK_STUB=<json-file> to feed a canned
+// MSBuild response (used by tests/dotnet-maui/check-devflow-hook.test.js
+// so CI does not depend on a fully restored .NET SDK state).
 
 "use strict";
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { execSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 
 const EVENT = process.argv[2] || "SessionStart";
 const CWD = process.env.CLAUDE_PROJECT_DIR || process.cwd();
@@ -66,28 +65,62 @@ function listCsprojs(dir) {
   } catch { return []; }
 }
 
-function readText(p) {
-  try { return fs.readFileSync(p, "utf8"); } catch { return ""; }
+// Invoke `dotnet msbuild <csproj> -getProperty:UseMaui,EnableDevFlow
+// -getItem:PackageReference` and return the parsed JSON, or null on
+// failure. Short timeout so a hook never blocks the host.
+function evaluateCsproj(csproj) {
+  const stub = process.env.MAUI_DEVFLOW_HOOK_STUB;
+  if (stub) {
+    try {
+      return JSON.parse(fs.readFileSync(stub, "utf8"));
+    } catch { return null; }
+  }
+  try {
+    const result = spawnSync(
+      "dotnet",
+      ["msbuild", csproj, "-nologo",
+       "-getProperty:UseMaui,EnableDevFlow",
+       "-getItem:PackageReference"],
+      { encoding: "utf8", timeout: 15000 }
+    );
+    if (result.status !== 0 || !result.stdout) return null;
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
 }
 
-function isMauiCsproj(text) {
-  if (/<UseMaui>\s*true\s*<\/UseMaui>/i.test(text)) return true;
-  if (/<PackageReference[^>]*Include\s*=\s*"(Microsoft\.Maui\.|Platform\.Maui\.)[^"]*"/.test(text)) return true;
-  if (/<ProjectReference[^>]*Include\s*=\s*"[^"]*Microsoft\.Maui\.[^"]*"/.test(text)) return true;
+function packageIdentities(eval_) {
+  const items = (eval_ && eval_.Items && eval_.Items.PackageReference) || [];
+  return items.map(i => i.Identity || "").filter(Boolean);
+}
+
+function isMauiProject(eval_) {
+  if (!eval_) return false;
+  const props = eval_.Properties || {};
+  if (typeof props.UseMaui === "string" && props.UseMaui.toLowerCase() === "true") return true;
+  for (const id of packageIdentities(eval_)) {
+    if (/^Microsoft\.Maui\./i.test(id)) return true;
+    if (/^Platform\.Maui\./i.test(id)) return true;
+  }
   return false;
 }
 
-function isDevFlowWired(text) {
-  const hasPackage = /<PackageReference[^>]*Include\s*=\s*"Microsoft\.Maui\.DevFlow\.[^"]*"/.test(text);
-  if (!hasPackage) return false;
-  const hasLabel = /<(ItemGroup|PropertyGroup)[^>]*Label\s*=\s*"DevFlow"/.test(text);
-  const hasFence = /<!--\s*<DevFlow>\s*-->/.test(text);
-  return hasLabel || hasFence;
+function isDevFlowWired(eval_) {
+  if (!eval_) return false;
+  for (const id of packageIdentities(eval_)) {
+    if (/^Microsoft\.Maui\.DevFlow\./i.test(id)) return true;
+  }
+  return false;
 }
 
-function detectFlavor(text) {
-  const hasBlazor = /Microsoft\.AspNetCore\.Components\.WebView\.Maui/.test(text);
-  const hasGtk = /Platform\.Maui\.Linux\.Gtk4/.test(text);
+function detectFlavor(eval_) {
+  const ids = packageIdentities(eval_);
+  const hasBlazor = ids.some(id => /^Microsoft\.AspNetCore\.Components\.WebView\.Maui$/i.test(id));
+  const hasGtk = ids.some(id =>
+    /^Platform\.Maui\.Linux\.Gtk/i.test(id) ||
+    /^Microsoft\.Maui\.DevFlow\.Agent\.Gtk$/i.test(id) ||
+    /^Microsoft\.Maui\.DevFlow\.Blazor\.Gtk$/i.test(id));
   if (hasGtk && hasBlazor) return "blazor-gtk";
   if (hasGtk) return "gtk";
   if (hasBlazor) return "blazor";
@@ -98,7 +131,7 @@ function mauiCliAvailable() {
   if (process.env.MAUI_DEVFLOW_HOOK_ASSUME_CLI === "1") return true;
   if (process.env.MAUI_DEVFLOW_HOOK_ASSUME_CLI === "0") return false;
   try {
-    execSync("maui --version", { stdio: "ignore", timeout: 5000 });
+    execFileSync("maui", ["--version"], { stdio: "ignore", timeout: 5000 });
     return true;
   } catch {
     return false;
@@ -135,20 +168,18 @@ function main() {
   const csprojs = listCsprojs(CWD);
   if (csprojs.length === 0) return; // not a project dir
 
-  // Pick the first MAUI-looking csproj (good enough for a nudge).
-  let mauiCsproj = null;
-  let text = "";
-  for (const p of csprojs) {
-    const t = readText(p);
-    if (isMauiCsproj(t)) {
-      mauiCsproj = p;
-      text = t;
-      break;
-    }
+  // Evaluate each csproj with MSBuild and pick the first one that looks
+  // like MAUI. If MSBuild eval fails (missing SDK, restore required,
+  // timeout), we stay silent — a nudge hook should never yell about a
+  // project it can't understand.
+  let mauiEval = null;
+  for (const csproj of csprojs) {
+    const ev = evaluateCsproj(csproj);
+    if (isMauiProject(ev)) { mauiEval = ev; break; }
   }
-  if (!mauiCsproj) return; // not a MAUI project
+  if (!mauiEval) return; // not MAUI, or MSBuild couldn't evaluate
 
-  if (isDevFlowWired(text)) {
+  if (isDevFlowWired(mauiEval)) {
     // Already wired — no nudge. Don't record state either, so that
     // un-wiring cleanly re-arms the nudge on the next session.
     return;
@@ -162,7 +193,7 @@ function main() {
     return;
   }
 
-  const flavor = detectFlavor(text);
+  const flavor = detectFlavor(mauiEval);
   const flavorLabel = flavor === "blazor-gtk" ? "Blazor GTK"
                     : flavor === "gtk"        ? "GTK"
                     : flavor === "blazor"     ? "Blazor hybrid"

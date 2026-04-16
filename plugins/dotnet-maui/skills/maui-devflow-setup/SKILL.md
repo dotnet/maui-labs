@@ -40,46 +40,57 @@ that one instead.
    ```bash
    dotnet tool install -g Microsoft.Maui.Cli --prerelease
    ```
-2. Find the MAUI project. Look for a `.csproj` whose content matches any
-   of these:
-   - `<UseMaui>true</UseMaui>`
-   - A `PackageReference` whose `Include` starts with `Microsoft.Maui.` or
-     `Platform.Maui.`
-   - A `ProjectReference` whose target matches the above
+2. Find the MAUI project. Prefer **MSBuild evaluation** over reading
+   the csproj XML — props/targets/CPM can live anywhere in the build
+   graph, and MSBuild already resolves all of it. For each candidate
+   `.csproj`:
+   ```bash
+   dotnet msbuild <project>.csproj -nologo \
+       -getProperty:UseMaui,EnableDevFlow \
+       -getItem:PackageReference
+   ```
+   The project is MAUI if `Properties.UseMaui == "true"` **or** any
+   `Items.PackageReference[].Identity` starts with `Microsoft.Maui.` or
+   `Platform.Maui.`.
 3. If there are multiple candidates, **ask the user which one**. Do not
    guess. Record the absolute path and work exclusively with that file.
-4. If no candidate exists, stop. Say: "This doesn't look like a .NET MAUI
-   project — DevFlow only supports MAUI apps today."
+4. If no candidate qualifies, stop. Say: "This doesn't look like a .NET
+   MAUI project — DevFlow only supports MAUI apps today."
 
 ## Step 2 — Determine the flavor
 
-Inspect the csproj. Pick exactly one:
+Use the same MSBuild evaluation from Step 1. Pick exactly one:
 
-| Flavor | Signal | Packages to add |
+| Flavor | Signal (from `PackageReference` identities) | Packages to add |
 |---|---|---|
 | `standard` | Default when none of the others match | `Microsoft.Maui.DevFlow.Agent` |
-| `blazor` | References `Microsoft.AspNetCore.Components.WebView.Maui` | `Microsoft.Maui.DevFlow.Agent` + `Microsoft.Maui.DevFlow.Blazor` |
-| `gtk` | References `Platform.Maui.Linux.Gtk4` (SDK is usually `Microsoft.NET.Sdk.Razor`) | `Microsoft.Maui.DevFlow.Agent.Gtk` |
-| `blazor-gtk` | Both GTK4 *and* WebView Maui references | `Microsoft.Maui.DevFlow.Agent.Gtk` + `Microsoft.Maui.DevFlow.Blazor.Gtk` |
+| `blazor` | Contains `Microsoft.AspNetCore.Components.WebView.Maui` | `Microsoft.Maui.DevFlow.Agent` + `Microsoft.Maui.DevFlow.Blazor` |
+| `gtk` | Contains `Platform.Maui.Linux.Gtk4` (SDK is usually `Microsoft.NET.Sdk.Razor`) | `Microsoft.Maui.DevFlow.Agent.Gtk` |
+| `blazor-gtk` | Both GTK4 *and* WebView Maui entries | `Microsoft.Maui.DevFlow.Agent.Gtk` + `Microsoft.Maui.DevFlow.Blazor.Gtk` |
 
 GTK projects often do **not** set `<UseMaui>true</UseMaui>` — detect them by
 the `Platform.Maui.Linux.Gtk4` package reference.
 
 ## Step 3 — Check "already wired"
 
-The project is already wired only when **both** are true:
+The project is already wired if MSBuild resolves any
+`Microsoft.Maui.DevFlow.*` entry in `Items.PackageReference`. That captures
+every authoring shape — csproj, `Directory.Packages.props`, custom
+`.targets`, SDK — without you having to grep for each one.
 
-1. A `PackageReference` to a `Microsoft.Maui.DevFlow.*` package exists.
-2. That reference sits in an `ItemGroup` or `PropertyGroup` with
-   `Label="DevFlow"`, or the csproj contains the comment marker
-   `<!-- <DevFlow> -->` fencing the DevFlow block.
+If that's the case:
 
-If both hold → report "already wired", run `maui devflow diagnose`, and stop.
-
-If a bare `Microsoft.Maui.DevFlow.*` reference exists **without** the
-`Label="DevFlow"` marker, the user is managing it manually. **Do not edit
-it.** Tell the user what you found and ask whether to take over (promote
-their block to the standard labeled shape) or leave it alone.
+- **Also** verify the shape you'll re-edit is labeled: a
+  `PropertyGroup`/`ItemGroup` with `Label="DevFlow"`, or the csproj has a
+  `<!-- <DevFlow> -->` comment fence. The label is the skill's
+  idempotency marker: it lets re-runs find and update your block cleanly.
+- If the package is resolved but the label is missing, tell the user
+  what you found and ask whether to:
+  1. Leave it alone (user is managing DevFlow manually — safe default), or
+  2. Promote the existing block to the labeled shape so future
+     automated edits can find it.
+- When the user confirms "already wired, no changes needed", run
+  `maui devflow diagnose` to sanity-check broker/agent state and stop.
 
 ## Step 4 — Check for Central Package Management (CPM)
 

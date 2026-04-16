@@ -55,22 +55,22 @@ Say **"set up DevFlow"** (or "install MAUI DevFlow"), and the specialist subagen
 
 ## How it knows what to edit
 
-The skill teaches the AI to inspect the project directly — there is **no** `maui devflow recommend-packages` helper. Detection rules live in the skill body (see `skills/maui-devflow-setup/SKILL.md`):
+The skill teaches the AI to inspect the project directly — there is **no** `maui devflow recommend-packages` helper. Detection uses MSBuild as the source of truth whenever possible, not regex (see `skills/maui-devflow-setup/SKILL.md`):
 
-- **Is this MAUI?** `<UseMaui>true</UseMaui>` **or** any `Microsoft.Maui.*` / `Platform.Maui.*` `PackageReference` / `ProjectReference`.
-- **Blazor hybrid?** references `Microsoft.AspNetCore.Components.WebView.Maui`.
-- **GTK?** references `Platform.Maui.Linux.Gtk4` (or the `Agent.Gtk` / `Blazor.Gtk` packages).
+- **Is this MAUI?** `dotnet msbuild -getProperty:UseMaui` returns `true`, **or** the `PackageReference` items (also from MSBuild) include anything under `Microsoft.Maui.*` / `Platform.Maui.*`.
+- **Blazor hybrid?** `PackageReference` items include `Microsoft.AspNetCore.Components.WebView.Maui`.
+- **GTK?** `PackageReference` items include `Platform.Maui.Linux.Gtk4` (or the `Agent.Gtk` / `Blazor.Gtk` DevFlow packages).
 - **Central Package Management?** `Directory.Packages.props` with `ManagePackageVersionsCentrally=true` found walking upward from the csproj.
-- **Already wired?** A `Microsoft.Maui.DevFlow.*` `PackageReference` **and** a `Label="DevFlow"` group or `<DevFlow>` comment fence.
+- **Already wired?** Any `Microsoft.Maui.DevFlow.*` entry in the resolved `PackageReference` list. This works whether the reference lives in the csproj, a `Directory.Packages.props`, a custom `.targets`, or gets surfaced by an SDK — because MSBuild is doing the evaluation, not a regex over one file.
 
-The `SessionStart` / `PostToolUse` hook applies the same rules with a `MAUI_DEVFLOW_HOOK_ASSUME_CLI=1` override available for tests.
+The `SessionStart` / `PostToolUse` hook applies the same MSBuild evaluation. Tests override the eval via `MAUI_DEVFLOW_HOOK_STUB=<json-file>` so CI does not need a fully restored .NET SDK.
 
 ## Hooks
 
-The hook script (`hooks/check-devflow.js`) runs in Node and:
+The hook script (`hooks/check-devflow.js`) runs in Node and asks MSBuild for the authoritative view of each csproj in the project root via `dotnet msbuild -getProperty:UseMaui,EnableDevFlow -getItem:PackageReference`. That JSON output already accounts for `Directory.Build.props`, `Directory.Packages.props`, custom SDKs, and transitive `.targets` imports — so the nudge doesn't false-fire when the wiring lives somewhere other than the csproj itself. A failed or timed-out MSBuild evaluation stays silent.
 
 - Fires on `SessionStart` once per changed project state.
-- Fires on `PostToolUse` only when the edited file is `MauiProgram.cs`, a `.csproj`, `Directory.Packages.props`, or a `Directory.Build.*` file. Unrelated edits short-circuit.
+- Fires on `PostToolUse` only when the edited file is `MauiProgram.cs`, a `.csproj`, `Directory.Packages.props`, or a `Directory.Build.*` file. Unrelated edits short-circuit before MSBuild runs.
 - Debounces via `.devflow/hook-state.json` in the project root so repeated identical nudges are suppressed.
 - Never blocks the host — exits 0 with empty stdout if in doubt.
 
