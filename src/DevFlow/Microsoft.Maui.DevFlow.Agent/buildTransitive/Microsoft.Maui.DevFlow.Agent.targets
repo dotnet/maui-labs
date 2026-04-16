@@ -1,34 +1,102 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
-    Reads port from .mauidevflow in the project directory, or from -p:MauiDevFlowPort.
-    CLI override (-p:MauiDevFlowPort=9225) takes priority over the config file.
-    If neither is set, the agent uses its default port (9223).
+    Microsoft.Maui.DevFlow.Agent build props/targets.
+
+    Configuration:
+      - DevFlow is enabled when '$(EnableDevFlow)' == 'true'. Defaults to true in
+        Debug configurations and false otherwise; override either way.
+      - When enabled, the DEVFLOW compiler symbol (or the value of
+        $(DevFlowConstant)) is appended to DefineConstants, so call sites
+        wrapped in '#if DEBUG && DEVFLOW' compile in.
+      - Port comes from -p:DevFlowPort (or legacy -p:MauiDevFlowPort), or from
+        a .devflow file in the project directory (fallback: legacy .mauidevflow).
+      - If neither is set, the agent uses its default port (9223).
+
+    Assembly metadata emitted for runtime discovery:
+      - DevFlowPort / Microsoft.Maui.DevFlowPort (legacy name preserved)
+      - DevFlowProject / Microsoft.Maui.DevFlowProject (legacy name preserved)
+      - DevFlowTfm / Microsoft.Maui.DevFlowTfm (legacy name preserved)
+      - DevFlowEnabled (new)
   -->
-  <Target Name="_ReadMauiDevFlowConfig" BeforeTargets="_SetMauiDevFlowPort"
-          Condition="'$(MauiDevFlowPort)' == '' AND Exists('$(MSBuildProjectDirectory)/.mauidevflow')">
+
+  <!-- =====================================================================
+       1. Default EnableDevFlow based on configuration (users can override).
+       ===================================================================== -->
+  <PropertyGroup>
+    <EnableDevFlow Condition="'$(EnableDevFlow)' == '' AND '$(Configuration)' == 'Debug'">true</EnableDevFlow>
+    <EnableDevFlow Condition="'$(EnableDevFlow)' == ''">false</EnableDevFlow>
+    <DevFlowConstant Condition="'$(DevFlowConstant)' == ''">DEVFLOW</DevFlowConstant>
+  </PropertyGroup>
+
+  <!-- =====================================================================
+       2. Inject the DevFlow compiler symbol when enabled.
+          Runs before CoreCompile so DefineConstants is final.
+       ===================================================================== -->
+  <Target Name="_AddDevFlowCompilerSymbol" BeforeTargets="CoreCompile"
+          Condition="'$(EnableDevFlow)' == 'true' AND '$(DevFlowConstant)' != ''">
     <PropertyGroup>
-      <_MauiDevFlowConfigContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/.mauidevflow'))</_MauiDevFlowConfigContent>
-      <_MauiDevFlowConfigPort>$([System.Text.RegularExpressions.Regex]::Match($(_MauiDevFlowConfigContent), '"port"\s*:\s*(\d+)').Groups[1].Value)</_MauiDevFlowConfigPort>
-      <MauiDevFlowPort Condition="'$(_MauiDevFlowConfigPort)' != ''">$(_MauiDevFlowConfigPort)</MauiDevFlowPort>
+      <DefineConstants>$(DefineConstants);$(DevFlowConstant)</DefineConstants>
     </PropertyGroup>
   </Target>
 
-  <Target Name="_SetMauiDevFlowPort" BeforeTargets="CoreCompile">
-    <PropertyGroup>
-      <_MauiDevFlowPortFile>$(IntermediateOutputPath)Microsoft.Maui.DevFlowPort.g.cs</_MauiDevFlowPortFile>
-      <_MauiDevFlowMetadata></_MauiDevFlowMetadata>
-      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowPort)' != ''">$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowPort", "$(MauiDevFlowPort)")]
-</_MauiDevFlowMetadata>
-      <_MauiDevFlowProjectPath>$([MSBuild]::ValueOrDefault('$(MSBuildProjectFullPath)','').Replace('\','\\'))</_MauiDevFlowProjectPath>
-      <_MauiDevFlowMetadata>$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowProject", "$(_MauiDevFlowProjectPath)")]
-[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowTfm", "$(TargetFramework)")]</_MauiDevFlowMetadata>
+  <!-- =====================================================================
+       3. Resolve the port from (in priority order):
+            a. -p:DevFlowPort / -p:MauiDevFlowPort
+            b. .devflow JSON file in the project directory
+            c. .mauidevflow (legacy) JSON file — emits a one-time warning.
+       ===================================================================== -->
+  <Target Name="_ReadDevFlowConfig" BeforeTargets="_SetDevFlowPort">
+    <!-- Promote legacy -p:MauiDevFlowPort to DevFlowPort when only the old one is set. -->
+    <PropertyGroup Condition="'$(DevFlowPort)' == '' AND '$(MauiDevFlowPort)' != ''">
+      <DevFlowPort>$(MauiDevFlowPort)</DevFlowPort>
     </PropertyGroup>
-    <WriteLinesToFile File="$(_MauiDevFlowPortFile)"
-                     Lines="$(_MauiDevFlowMetadata)"
+
+    <!-- Pick config file (prefer .devflow). -->
+    <PropertyGroup Condition="'$(DevFlowPort)' == ''">
+      <_DevFlowConfigPath Condition="Exists('$(MSBuildProjectDirectory)/.devflow')">$(MSBuildProjectDirectory)/.devflow</_DevFlowConfigPath>
+      <_DevFlowConfigPath Condition="'$(_DevFlowConfigPath)' == '' AND Exists('$(MSBuildProjectDirectory)/.mauidevflow')">$(MSBuildProjectDirectory)/.mauidevflow</_DevFlowConfigPath>
+      <_DevFlowConfigIsLegacy Condition="'$(_DevFlowConfigPath)' != '' AND !Exists('$(MSBuildProjectDirectory)/.devflow') AND Exists('$(MSBuildProjectDirectory)/.mauidevflow')">true</_DevFlowConfigIsLegacy>
+    </PropertyGroup>
+
+    <Warning Text="DevFlow: '.mauidevflow' is a legacy config filename. Rename it to '.devflow' to silence this warning."
+             Condition="'$(_DevFlowConfigIsLegacy)' == 'true'" />
+
+    <!-- Read port from JSON. -->
+    <PropertyGroup Condition="'$(DevFlowPort)' == '' AND '$(_DevFlowConfigPath)' != ''">
+      <_DevFlowConfigContent>$([System.IO.File]::ReadAllText('$(_DevFlowConfigPath)'))</_DevFlowConfigContent>
+      <_DevFlowConfigPort>$([System.Text.RegularExpressions.Regex]::Match($(_DevFlowConfigContent), '"port"\s*:\s*(\d+)').Groups[1].Value)</_DevFlowConfigPort>
+      <DevFlowPort Condition="'$(_DevFlowConfigPort)' != ''">$(_DevFlowConfigPort)</DevFlowPort>
+    </PropertyGroup>
+  </Target>
+
+  <!-- =====================================================================
+       4. Emit assembly metadata for runtime discovery.
+          Parallel DevFlow* + legacy Microsoft.Maui.DevFlow* entries so both
+          old and new tooling can read the values.
+       ===================================================================== -->
+  <Target Name="_SetDevFlowPort" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_DevFlowMetadataFile>$(IntermediateOutputPath)Microsoft.Maui.DevFlowPort.g.cs</_DevFlowMetadataFile>
+      <_DevFlowProjectPath>$([MSBuild]::ValueOrDefault('$(MSBuildProjectFullPath)','').Replace('\','\\'))</_DevFlowProjectPath>
+      <_DevFlowMetadata></_DevFlowMetadata>
+      <!-- Port (only if set) -->
+      <_DevFlowMetadata Condition="'$(DevFlowPort)' != ''">$(_DevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("DevFlowPort", "$(DevFlowPort)")]
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowPort", "$(DevFlowPort)")]
+</_DevFlowMetadata>
+      <!-- Project path + TFM (always) -->
+      <_DevFlowMetadata>$(_DevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("DevFlowProject", "$(_DevFlowProjectPath)")]
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowProject", "$(_DevFlowProjectPath)")]
+[assembly: System.Reflection.AssemblyMetadataAttribute("DevFlowTfm", "$(TargetFramework)")]
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowTfm", "$(TargetFramework)")]
+[assembly: System.Reflection.AssemblyMetadataAttribute("DevFlowEnabled", "$(EnableDevFlow)")]
+</_DevFlowMetadata>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_DevFlowMetadataFile)"
+                     Lines="$(_DevFlowMetadata)"
                      Overwrite="true"
                      WriteOnlyWhenDifferent="true" />
     <ItemGroup>
-      <Compile Include="$(_MauiDevFlowPortFile)" />
+      <Compile Include="$(_DevFlowMetadataFile)" />
     </ItemGroup>
   </Target>
 </Project>
