@@ -35,8 +35,28 @@ const { execSync } = require("node:child_process");
 const EVENT = process.argv[2] || "SessionStart";
 const CWD = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
-// We don't need stdin content, but drain it so the host doesn't block.
-try { fs.readFileSync(0, "utf8"); } catch { /* no stdin */ }
+// Drain stdin and — for PostToolUse — peek at the edited file path so we
+// can short-circuit edits unrelated to project wiring.
+let stdinPayload = null;
+try {
+  const raw = fs.readFileSync(0, "utf8");
+  if (raw && raw.trim().length > 0) stdinPayload = JSON.parse(raw);
+} catch { /* no stdin or not JSON */ }
+
+if (EVENT === "PostToolUse" && stdinPayload) {
+  const input = stdinPayload.tool_input || stdinPayload.toolInput || {};
+  const editedPath = input.file_path || input.filePath || input.path || "";
+  if (editedPath) {
+    const base = path.basename(editedPath).toLowerCase();
+    const relevant =
+      base === "mauiprogram.cs" ||
+      base.endsWith(".csproj") ||
+      base === "directory.packages.props" ||
+      base === "directory.build.props" ||
+      base === "directory.build.targets";
+    if (!relevant) process.exit(0);
+  }
+}
 
 function listCsprojs(dir) {
   try {
