@@ -18,6 +18,12 @@
     "ui-automation",
     "mcp"
   ],
-  "skills": ["./skills/"]
+  "skills": ["./skills/"],
+  "mcpServers": {
+    "maui-devflow": {
+      "command": "maui",
+      "args": ["devflow", "mcp"]
+    }
+  }
 }
 
