@@ -13,5 +13,5 @@ public class MainPage : View
 			.FontWeight(FontWeight.Bold),
 		Button("Increment", () => count.Value++),
 		Button("Reset", () => count.Value = 0)
-	).Center();
+	).Alignment(Alignment.Center);
 }
