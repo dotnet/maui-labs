@@ -19,6 +19,7 @@
     "mcp"
   ],
   "skills": ["./skills/"],
+  "agents": ["./agents/"],
   "mcpServers": {
     "maui-devflow": {
       "command": "maui",
