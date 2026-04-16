@@ -2,10 +2,12 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Debug",
-			"type": "comet",
+			"name": "Debug (Mac Catalyst)",
+			"type": "dotnet",
 			"request": "launch",
-			"preLaunchTask": "comet: Build"
+			"preLaunchTask": "build",
+			"projectPath": "${workspaceFolder}/CometApp1/CometApp1.csproj",
+			"args": ["-f", "net11.0-maccatalyst"]
 		}
 	]
 }
