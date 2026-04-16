@@ -1,6 +1,23 @@
 {
   "name": "dotnet-maui",
   "version": "0.1.0",
-  "description": "Skills for .NET MAUI development: DevFlow automation, profiling, accessibility, platform bindings, and diagnostics. Some skills require the maui CLI tool.",
+  "description": "Everything you need to use .NET MAUI DevFlow from an AI coding agent: the DevFlow MCP server, a one-shot setup skill, a connect/debug skill, a MAUI-aware specialist subagent, and session hooks that detect unwired MAUI projects.",
+  "author": {
+    "name": ".NET MAUI",
+    "url": "https://github.com/dotnet/maui-labs"
+  },
+  "homepage": "https://github.com/dotnet/maui-labs/tree/main/plugins/dotnet-maui",
+  "repository": "https://github.com/dotnet/maui-labs",
+  "license": "MIT",
+  "keywords": [
+    "maui",
+    "dotnet",
+    "devflow",
+    "blazor",
+    "mobile",
+    "ui-automation",
+    "mcp"
+  ],
   "skills": ["./skills/"]
 }
+
