@@ -58,6 +58,29 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development se
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
+## Quick start: wire DevFlow into a MAUI app
+
+The fastest path for any developer using an AI coding agent:
+
+```bash
+# 1. Install the CLI (one-time)
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
+
+# 2. In your AI host (Copilot CLI, Claude Code, VS Code), add the marketplace and install the plugin
+/plugin marketplace add dotnet/maui-labs
+/plugin install dotnet-maui@dotnet-maui-labs
+```
+
+The plugin ships the DevFlow MCP server, a `maui-devflow-setup` skill, a `maui-devflow-specialist` subagent, and project hooks. After install:
+
+1. Open your MAUI project in the host.
+2. A `SessionStart` hook detects an unwired MAUI project and nudges you.
+3. Say **"set up DevFlow"** — the specialist subagent reads your csproj, picks the right packages (standard / Blazor / GTK), wires `<EnableDevFlow>` + `#if DEBUG && DEVFLOW` into `MauiProgram.cs`, and verifies with `maui devflow diagnose`.
+
+No manual package install, no `.vscode/mcp.json` edit, no `AddMauiDevFlowAgent()` copy-paste required.
+
+Prefer the hand-wired flow (no plugin)? See [`plugins/dotnet-maui/README.md`](plugins/dotnet-maui/README.md) for the full onboarding reference, including manual csproj + `MauiProgram.cs` snippets and how to configure `maui devflow mcp` directly in your host.
+
 ## Agent Skills
 
 This repository is also a marketplace for distributable agent skills for .NET MAUI development. Skills are organized as plugins compatible with Copilot CLI, Claude Code, and VS Code.
