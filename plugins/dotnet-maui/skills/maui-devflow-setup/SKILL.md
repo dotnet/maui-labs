@@ -192,16 +192,65 @@ the old one. The `.targets` prefers `.devflow` and warns on the legacy name.
 ## Step 8 — Verify
 
 1. Build the project once in Debug: `dotnet build -c Debug`. It should
-   succeed and emit `DEVFLOW` (you can confirm with
-   `dotnet build -c Debug /getProperty:DefineConstants` which should contain
-   `DEVFLOW`).
-2. Run `maui devflow diagnose`. It should report the new package, the
-   `EnableDevFlow` property, and the `DEVFLOW` symbol as consistent.
+   succeed. Confirm the `DEVFLOW` symbol is present with
+   `dotnet build -c Debug /getProperty:DefineConstants` — the output should
+   contain `DEVFLOW`.
+2. Run `maui devflow diagnose`. It reports broker status, connected
+   agents, and which projects reference a `Microsoft.Maui.DevFlow.*`
+   package. Read the output and check:
+   - Your project is listed under "DevFlow-enabled projects".
+   - The broker is running (or you know how to start it).
+   - There are no unexpected agent processes from another session.
 3. Tell the user what to do next:
    - Launch the app in Debug.
    - Run `maui devflow wait` to confirm the agent registers with the broker.
    - Once connected, the MCP tools (`maui_tree`, `maui_tap`, etc.) are
      available to this session.
+
+## Diagnosing an existing setup
+
+If the user asks *"why isn't DevFlow working?"* or *"is my project wired
+correctly?"*, **do the inspection yourself** — do not rely on a CLI to
+flag mismatches. The CLI can't always see through `Directory.Build.props`,
+transitive NuGet `.targets`, or custom SDKs. You can.
+
+Check all of the following and call out anything that doesn't match:
+
+1. **Package present?** Is `Microsoft.Maui.DevFlow.Agent` (or `.Agent.Gtk`)
+   referenced via `PackageReference` — either in the csproj, a
+   `Directory.Packages.props`, a `Directory.Build.props`, or a shared
+   `.props`/`.targets` file imported by the project? Use `grep -r` across
+   the solution if you're not sure. For Blazor hybrid projects, also check
+   for `Microsoft.Maui.DevFlow.Blazor` (or `.Blazor.Gtk`).
+2. **`EnableDevFlow` declared?** Is the `<EnableDevFlow>` property set
+   somewhere MSBuild will evaluate for this project? It only needs to end
+   up `true` for Debug. Watch for:
+   - Unconditional `<EnableDevFlow>true</EnableDevFlow>` (will leak into
+     Release — flag this).
+   - `<EnableDevFlow>` conditioned on `'$(Configuration)' == 'Release'`
+     (almost always wrong — flag this).
+   - No `<EnableDevFlow>` at all (the `.targets` from the Agent package
+     will never define `DEVFLOW` — flag this and offer to add it).
+3. **`DEVFLOW` symbol actually defined?** Run
+   `dotnet build -c Debug /getProperty:DefineConstants` and look for
+   `DEVFLOW` in the output. If it's missing, the `#if DEBUG && DEVFLOW`
+   block in `MauiProgram.cs` is being skipped. If it's *also* defined in
+   Release, something is hard-coding it into `<DefineConstants>` — find
+   and remove that override.
+4. **Call site guarded?** Grep for `AddMauiDevFlowAgent()` and verify
+   every call is inside `#if DEBUG && DEVFLOW`. An unguarded call ships
+   DevFlow into Release builds.
+5. **Labeled block intact?** Is the `Label="DevFlow"` still on the
+   PropertyGroup and ItemGroup? If a merge or refactor stripped the
+   labels, the setup skill won't treat the block as owned on re-run.
+6. **Runtime connection?** Ask the user what they see from
+   `maui devflow list` or `maui devflow wait`. If the agent never
+   registers, route to the `devflow-connect` skill (broker lifecycle,
+   port forwarding on Android emulators, etc.).
+
+Report findings as a short bullet list with concrete suggested fixes.
+Prefer to *propose* edits over making them silently — diagnosis time is
+not setup time.
 
 ## Guardrails
 

@@ -4001,18 +4001,7 @@ public class DevFlowCommands
         // Scan for devflow-enabled projects
         var projects = ScanForDevFlowProjects();
         diagnostics["projects"] = projects;
-
-        // Analyze each project for EnableDevFlow / DEVFLOW / wiring mismatches.
-        var cwd = Directory.GetCurrentDirectory();
-        var warnings = new List<Dictionary<string, string>>();
-        foreach (var relPath in projects)
-        {
-            var fullPath = Path.GetFullPath(Path.Combine(cwd, relPath));
-            foreach (var w in AnalyzeDevFlowProjectWiring(fullPath))
-                warnings.Add(new Dictionary<string, string> { ["project"] = relPath, ["code"] = w.Code, ["message"] = w.Message });
-        }
-        diagnostics["wiring_warnings"] = warnings;
-
+        
         if (json)
         {
             Output.WriteResult(diagnostics, json);
@@ -4074,86 +4063,6 @@ public class DevFlowCommands
         else
         {
             Console.WriteLine("📦 DevFlow-enabled projects: (none found in current directory)");
-        }
-
-        if (warnings.Count > 0)
-        {
-            Console.WriteLine();
-            Console.WriteLine("⚠️  Project wiring warnings:");
-            foreach (var w in warnings)
-            {
-                Console.WriteLine($"   • {w["project"]}: [{w["code"]}] {w["message"]}");
-            }
-            Console.WriteLine();
-            Console.WriteLine("   Say 'set up DevFlow' to run the maui-devflow-setup skill and fix these.");
-        }
-    }
-
-    private readonly record struct DevFlowWiringWarning(string Code, string Message);
-
-    // Flag EnableDevFlow / DEVFLOW / DevFlow-package mismatches documented in
-    // the onboarding plan. Intentionally regex-based: the csproj is user-authored
-    // and MSBuild evaluation here would be overkill.
-    private static IEnumerable<DevFlowWiringWarning> AnalyzeDevFlowProjectWiring(string csprojPath)
-    {
-        string text;
-        try { text = File.ReadAllText(csprojPath); }
-        catch { yield break; }
-
-        bool hasPackage = System.Text.RegularExpressions.Regex.IsMatch(
-            text, @"<PackageReference\s+[^>]*Include=""Microsoft\.Maui\.DevFlow\.");
-        bool hasEnableDevFlowTrue = System.Text.RegularExpressions.Regex.IsMatch(
-            text, @"<EnableDevFlow\b[^>]*>\s*true\s*</EnableDevFlow>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        bool hasEnableDevFlowElement = System.Text.RegularExpressions.Regex.IsMatch(
-            text, @"<EnableDevFlow\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        bool hasLabeledItemGroup = System.Text.RegularExpressions.Regex.IsMatch(
-            text, @"<ItemGroup\s+[^>]*Label=""DevFlow""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        bool hasDevFlowFence = text.Contains("<DevFlow>") || text.Contains("<!-- <DevFlow>");
-        bool hasDefineConstantsDevflow = System.Text.RegularExpressions.Regex.IsMatch(
-            text, @"<DefineConstants\b[^>]*>[^<]*\bDEVFLOW\b");
-
-        if (hasPackage && !hasEnableDevFlowElement)
-        {
-            yield return new("DF001",
-                "Microsoft.Maui.DevFlow.* package referenced but <EnableDevFlow> property is not declared; " +
-                "the Agent .targets will not define the DEVFLOW symbol.");
-        }
-
-        if (hasPackage && !hasLabeledItemGroup && !hasDevFlowFence)
-        {
-            yield return new("DF002",
-                "DevFlow package is referenced without the Label=\"DevFlow\" ItemGroup marker; " +
-                "treating as user-managed. Say 'set up DevFlow' to promote it to the standard shape.");
-        }
-
-        if (hasEnableDevFlowTrue)
-        {
-            // Look for an unconditional EnableDevFlow=true OR one explicitly conditioned on Release.
-            var matches = System.Text.RegularExpressions.Regex.Matches(
-                text, @"<EnableDevFlow\b([^>]*)>\s*true\s*</EnableDevFlow>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            foreach (System.Text.RegularExpressions.Match m in matches)
-            {
-                var attrs = m.Groups[1].Value;
-                if (!attrs.Contains("Condition", StringComparison.OrdinalIgnoreCase))
-                {
-                    yield return new("DF003",
-                        "<EnableDevFlow>true</EnableDevFlow> is set unconditionally; this will enable DevFlow in Release builds. " +
-                        "Gate it with Condition=\"'$(Configuration)' == 'Debug'\".");
-                }
-                else if (System.Text.RegularExpressions.Regex.IsMatch(
-                    attrs, @"Configuration[^=]*==[^'""]*['""]Release['""]",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                {
-                    yield return new("DF004",
-                        "<EnableDevFlow> is conditionally enabled for Release configuration; DevFlow should not ship in Release builds.");
-                }
-            }
-        }
-
-        if (hasDefineConstantsDevflow)
-        {
-            yield return new("DF005",
-                "DEVFLOW is hard-coded into <DefineConstants>; let the Agent package's .targets inject it based on <EnableDevFlow> instead.");
         }
     }
 

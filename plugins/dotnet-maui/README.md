@@ -89,17 +89,17 @@ Opt out by uninstalling the plugin, or disable it globally in the host's plugin 
 
 ## Troubleshooting
 
-Run `maui devflow diagnose` — the command reports broker status, connected agents, DevFlow-enabled projects, and flags common wiring mismatches:
+Run `maui devflow diagnose` — it reports broker status, connected agents, and DevFlow-enabled projects in the current directory.
 
-| Code | Meaning |
-|---|---|
-| `DF001` | Agent package referenced but `<EnableDevFlow>` missing (DEVFLOW symbol won't be defined). |
-| `DF002` | Agent package present without the `Label="DevFlow"` marker (treated as user-managed). |
-| `DF003` | `<EnableDevFlow>true</EnableDevFlow>` unconditional (would leak into Release). |
-| `DF004` | `<EnableDevFlow>` explicitly enabled for Release. |
-| `DF005` | `DEVFLOW` hard-coded into `<DefineConstants>` instead of flowing from `<EnableDevFlow>`. |
+Deeper *"is my project wired correctly?"* diagnosis is handled by the `maui-devflow-setup` skill, not the CLI. Static regex checks over a single csproj can't see through `Directory.Build.props`, transitive NuGet `.targets`, or custom SDKs — the AI can. Ask the agent something like *"check my DevFlow wiring"* and it will:
 
-Connection failures (agent doesn't show up in `maui devflow list`)? Ask the agent — the `devflow-connect` skill covers broker lifecycle, `adb reverse` for Android emulators, port conflicts, and iOS-simulator specifics.
+- Grep the solution for `Microsoft.Maui.DevFlow.*` package references (including in shared props/targets).
+- Evaluate where `<EnableDevFlow>` is set and whether it's correctly gated to Debug.
+- Confirm the `DEVFLOW` compile symbol actually reaches the MAUI app via `dotnet build -c Debug /getProperty:DefineConstants`.
+- Verify every `AddMauiDevFlowAgent()` call site is guarded by `#if DEBUG && DEVFLOW`.
+- Route runtime connection failures to the `devflow-connect` skill.
+
+Connection failures (agent doesn't show up in `maui devflow list`) are covered by the `devflow-connect` skill — broker lifecycle, `adb reverse` for Android emulators, port conflicts, and iOS-simulator specifics.
 
 ## Manual alternative (no plugin)
 
