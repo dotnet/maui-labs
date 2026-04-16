@@ -11,12 +11,13 @@ Experimental packages and tooling for .NET MAUI. This repository hosts pre-relea
 A command-line tool for .NET MAUI development environment setup, device management, and app automation.
 
 - **Environment diagnostics** (`maui doctor`) with auto-fix capabilities
-- **Android SDK and JDK management** — install, update, and configure
-- **Emulator management** — create, start, stop, and delete Android emulators
-- **Apple platform management** (macOS) — Xcode, simulator, and runtime management
-- **Device listing** across all connected platforms (Android emulators + iOS simulators)
-- **DevFlow app automation** (`maui devflow`) — visual tree inspection, screenshots, CDP, MCP server
-- **JSON output** (`--json`) for CI pipelines and scripting
+- **Android SDK and JDK management** (`maui android`) — install, update, and configure
+- **Emulator management** (`maui android emulator`) — create, start, stop, and delete Android emulators
+- **Apple platform management** (`maui apple`) — Xcode, simulator, and runtime management (macOS)
+- **Device listing** (`maui device list`) across all connected platforms
+- **DevFlow app automation** (`maui devflow`) — visual tree inspection, element interaction, screenshots, WebView/CDP automation, network monitoring, profiling, storage access, real-time log/sensor streaming, and MCP server for AI agents
+- **Version info** (`maui version`)
+- **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
 
 | Package | Description |
 |---------|-------------|
@@ -37,6 +38,9 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 - **MCP server** for AI agent integration (via `maui devflow mcp`)
 - **Platform drivers** for iOS, Android, Mac Catalyst, Windows, and Linux/GTK
 - **Network monitoring** and **performance profiling**
+- **Real-time streaming** — WebSocket channels for logs, network requests, sensor data, profiler samples, and UI events
+- **Storage access** — read/write app preferences and secure storage
+- **Device introspection** — battery, connectivity, geolocation, display info, and permissions
 
 | Package | Description |
 |---------|-------------|
@@ -51,6 +55,8 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 ## Getting Started
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
+
+For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
 ## Support
 

@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
+using Microsoft.Maui.DevFlow.Agent.Core;
+using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -21,7 +24,7 @@ public class ProfilerAgentClientTests
                 using var stream = client.GetStream();
                 var request = await ReadRequestAsync(stream);
 
-                if (request.Contains("POST /api/profiler/start", StringComparison.Ordinal))
+                if (request.Contains("POST /api/v1/profiler/sessions", StringComparison.Ordinal))
                 {
                     var body = """
                     {
@@ -40,7 +43,7 @@ public class ProfilerAgentClientTests
                     continue;
                 }
 
-                if (request.Contains("GET /api/profiler/samples", StringComparison.Ordinal))
+                if (request.Contains("GET /api/v1/profiler/sessions/s-1/samples", StringComparison.Ordinal))
                 {
                     var body = """
                     {
@@ -95,7 +98,7 @@ public class ProfilerAgentClientTests
                     continue;
                 }
 
-                if (request.Contains("POST /api/profiler/stop", StringComparison.Ordinal))
+                if (request.Contains("DELETE /api/v1/profiler/sessions/s-1", StringComparison.Ordinal))
                 {
                     var body = """
                     {
@@ -122,7 +125,7 @@ public class ProfilerAgentClientTests
         Assert.Equal("s-1", started.SessionId);
         Assert.True(started.IsActive);
 
-        var batch = await client.GetProfilerSamplesAsync();
+        var batch = await client.GetProfilerSamplesAsync(started.SessionId);
         Assert.NotNull(batch);
         Assert.Equal("s-1", batch.SessionId);
         Assert.Single(batch.Samples);
@@ -136,11 +139,46 @@ public class ProfilerAgentClientTests
         Assert.Equal(1, batch.MarkerCursor);
         Assert.Equal(1, batch.SpanCursor);
 
-        var stopped = await client.StopProfilerAsync();
+        var stopped = await client.StopProfilerAsync(started.SessionId);
         Assert.NotNull(stopped);
         Assert.False(stopped.IsActive);
 
         await serverTask;
+    }
+
+    [Fact]
+    public async Task Profiler_SessionHandlers_RejectUnknownSessionIds()
+    {
+        using var service = new DevFlowAgentService(new AgentOptions { Enabled = false, EnableProfiler = true });
+
+        var storeField = typeof(DevFlowAgentService).GetField("_profilerSessions", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(storeField);
+
+        var store = Assert.IsType<ProfilerSessionStore>(storeField.GetValue(service));
+        var session = store.Start(250);
+
+        var method = typeof(DevFlowAgentService).GetMethod("HandleProfilerSamples", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var missingSessionRequest = new HttpRequest
+        {
+            RouteParams = new Dictionary<string, string> { ["id"] = "other-session" },
+            QueryParams = new Dictionary<string, string>()
+        };
+
+        var missingSessionResponse = await ((Task<HttpResponse>)method.Invoke(service, [missingSessionRequest])!);
+        Assert.Equal(404, missingSessionResponse.StatusCode);
+        Assert.Contains("other-session", missingSessionResponse.Body);
+
+        var currentSessionRequest = new HttpRequest
+        {
+            RouteParams = new Dictionary<string, string> { ["id"] = session.SessionId },
+            QueryParams = new Dictionary<string, string>()
+        };
+
+        var currentSessionResponse = await ((Task<HttpResponse>)method.Invoke(service, [currentSessionRequest])!);
+        Assert.Equal(200, currentSessionResponse.StatusCode);
+        Assert.Contains(session.SessionId, currentSessionResponse.Body);
     }
 
     private static async Task<string> ReadRequestAsync(NetworkStream stream)

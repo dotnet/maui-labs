@@ -7,7 +7,7 @@ description: >
   filling text, screenshots, property queries), (3) Debugging Blazor WebView content via CDP, (4) Managing
   simulators or emulators, (5) Setting up MauiDevFlow in a MAUI project, (6) Completing a build-deploy-inspect-fix
   feedback loop, (7) Handling permission dialogs and system alerts, (8) Managing multiple simultaneous apps via
-  the broker daemon. Covers: maui-devflow CLI, androidsdk.tool, appledev.tools, adb, xcrun simctl, xdotool,
+  the broker daemon. Covers: the unified `maui devflow` CLI, androidsdk.tool, appledev.tools, adb, xcrun simctl, xdotool,
   and dotnet build/run for all MAUI target platforms including macOS (AppKit) and Linux/GTK.
 ---
 
@@ -19,13 +19,13 @@ feedback loop: **build → deploy → inspect → fix → rebuild**.
 ## Prerequisites
 
 ```bash
-dotnet tool install --global Microsoft.Maui.DevFlow.CLI || dotnet tool update --global Microsoft.Maui.DevFlow.CLI
+dotnet tool install --global Microsoft.Maui.Cli --prerelease || dotnet tool update --global Microsoft.Maui.Cli --prerelease
 dotnet tool install --global androidsdk.tool    # Android only
 dotnet tool install --global appledev.tools     # iOS/Mac only
 ```
 
-Keep the skill up to date: `maui-devflow update-skill`. Check installed version vs remote
-with `maui-devflow skill-version`. For full update procedures, see
+Keep the skill up to date: `maui devflow update-skill`. Check installed version vs remote
+with `maui devflow skill-version`. For full update procedures, see
 [references/setup.md](references/setup.md#checking-for-updates).
 
 ## Integrating MauiDevFlow into a MAUI App
@@ -55,13 +55,13 @@ Before building or launching anything, determine if DevFlow is available for the
 grep -rl "MauiDevFlow\|Maui\.DevFlow" --include="*.csproj" .
 ```
 
-If grep returns results, DevFlow IS integrated — even if `maui-devflow list` shows nothing.
+If grep returns results, DevFlow IS integrated — even if `maui devflow list` shows nothing.
 
 **Check runtime connection:**
 ```bash
-maui-devflow list                          # shows connected agents
-maui-devflow broker status                 # shows broker health
-maui-devflow diagnose                      # full end-to-end health check (recommended)
+maui devflow list                          # shows connected agents
+maui devflow broker status                 # shows broker health
+maui devflow diagnose                      # full end-to-end health check (recommended)
 ```
 
 **Decision tree — what to do based on results:**
@@ -69,16 +69,16 @@ maui-devflow diagnose                      # full end-to-end health check (recom
 | Project has DevFlow packages? | Agent in `list`? | Action |
 |-------------------------------|------------------|--------|
 | ✅ Yes | ✅ Yes | Ready — proceed to inspection/interaction |
-| ✅ Yes | ❌ No | App not running in Debug, or broker issue. Launch app, then `maui-devflow wait` |
+| ✅ Yes | ❌ No | App not running in Debug, or broker issue. Launch app, then `maui devflow wait` |
 | ❌ No | — | Need to integrate DevFlow (see "Integrating MauiDevFlow into a MAUI App") |
 
-**⚠️ CRITICAL:** `maui-devflow list` shows RUNTIME state (connected agents), NOT project integration.
+**⚠️ CRITICAL:** `maui devflow list` shows RUNTIME state (connected agents), NOT project integration.
 An empty list does NOT mean "DevFlow is not installed." Always check project files first.
 
 **After launching the app (via `dotnet build -t:Run` or through Aspire):**
 ```bash
-maui-devflow wait                          # blocks until agent connects (default 120s)
-maui-devflow wait --project path/to/App.csproj  # filter to specific project
+maui devflow wait                          # blocks until agent connects (default 120s)
+maui devflow wait --project path/to/App.csproj  # filter to specific project
 ```
 ALWAYS run `wait` after launching. Never assume the agent is connected — verify it.
 
@@ -89,7 +89,7 @@ ALWAYS run `wait` after launching. Never assume the agent is connected — verif
 prevent apps from replacing each other. Check what's already in use first:
 
 ```bash
-maui-devflow list     # check if any agents are already connected (runtime state only — see Step 0 for integration check)
+maui devflow list     # check if any agents are already connected (runtime state only — see Step 0 for integration check)
 ```
 
 If another iOS or Android agent is already registered, **create a new simulator/emulator**
@@ -133,12 +133,12 @@ Use the detected version (e.g. `net9.0`) in all build commands. The examples use
 Follow these steps for every launch and rebuild.
 
 **Step 1: Kill any previous instance** (skip on first launch).
-A stale app's agent stays registered with the broker, causing `maui-devflow wait` to return
+A stale app's agent stays registered with the broker, causing `maui devflow wait` to return
 the old port instantly instead of waiting for the new build.
 
 ```bash
 # Stop the async shell from the previous launch, then confirm:
-maui-devflow list                 # should show no agents (or only unrelated ones)
+maui devflow list                 # should show no agents (or only unrelated ones)
 ```
 
 **Step 2: Launch in an async shell.**
@@ -171,12 +171,12 @@ dotnet run --project <path-to-gtk-project>
 **Step 3: Wait for the agent** — never use `sleep`.
 
 ```bash
-maui-devflow wait                                # blocks until agent registers (default 120s)
-maui-devflow wait --project path/to/App.csproj   # filter to specific project
+maui devflow wait                                # blocks until agent registers (default 120s)
+maui devflow wait --project path/to/App.csproj   # filter to specific project
 ```
 
-`maui-devflow wait` prints the assigned port as soon as the agent connects. Exit code 1
-means timeout. If `wait` times out, run `maui-devflow diagnose` to identify the issue.
+`maui devflow wait` prints the assigned port as soon as the agent connects. Exit code 1
+means timeout. If `wait` times out, run `maui devflow diagnose` to identify the issue.
 Check async shell output for build errors.
 
 **Android only** — set up port forwarding after the agent connects:
@@ -191,59 +191,59 @@ if the build fails.
 ### 4. Inspect and Interact
 
 **Typical inspection flow:**
-1. `maui-devflow MAUI tree --depth 15 --fields "id,type,text,automationId"` — tree with key fields only (depth 15 reaches most controls)
-2. `maui-devflow MAUI tree --window 1` — filter to a specific window (0-based index)
-3. `maui-devflow MAUI query --automationId "MyButton"` — find specific elements
-4. `maui-devflow MAUI query --type Entry --fields "id,text,automationId"` — all Entry fields with specific fields
-5. `maui-devflow MAUI element <id>` — get full details (type, bounds, visibility, children)
-6. `maui-devflow MAUI property <id> Text` — read any property by name
-7. `maui-devflow MAUI screenshot --output screen.png` — visual verification (auto-scaled to 1x on HiDPI)
-8. `maui-devflow MAUI screenshot --id <elementId> --output el.png` — element-only screenshot
-9. `maui-devflow MAUI screenshot --selector "Button" --output btn.png` — screenshot by CSS selector
+1. `maui devflow ui tree --depth 15 --fields "id,type,text,automationId"` — tree with key fields only (depth 15 reaches most controls)
+2. `maui devflow ui tree --window 1` — filter to a specific window (0-based index)
+3. `maui devflow ui query --automationId "MyButton"` — find specific elements
+4. `maui devflow ui query --type Entry --fields "id,text,automationId"` — all Entry fields with specific fields
+5. `maui devflow ui element <id>` — get full details (type, bounds, visibility, children)
+6. `maui devflow ui property <id> Text` — read any property by name
+7. `maui devflow ui screenshot --output screen.png` — visual verification (auto-scaled to 1x on HiDPI)
+8. `maui devflow ui screenshot --id <elementId> --output el.png` — element-only screenshot
+9. `maui devflow ui screenshot --selector "Button" --output btn.png` — screenshot by CSS selector
 
 **Property inspection** is more reliable than screenshots for verifying exact runtime values:
 ```bash
-maui-devflow MAUI property <id> BackgroundColor    # verify dark mode colors
-maui-devflow MAUI property <id> IsVisible          # check element visibility
+maui devflow ui property <id> BackgroundColor    # verify dark mode colors
+maui devflow ui property <id> IsVisible          # check element visibility
 ```
 
 **Live editing (no rebuild needed):**
 ```bash
-maui-devflow MAUI set-property <id> TextColor "Tomato"
-maui-devflow MAUI set-property <id> FontSize "24"
+maui devflow ui set-property <id> TextColor "Tomato"
+maui devflow ui set-property <id> FontSize "24"
 ```
 Supports: string, bool, int, double, Color (named/hex), Thickness, enums. Changes persist
 until the app restarts — safe for experimentation.
 
 **Typical interaction flow:**
-1. `maui-devflow MAUI fill --automationId "MyEntry" "text"` — type into Entry/Editor fields (no query needed)
-2. `maui-devflow MAUI tap --automationId "MyButton"` — tap buttons, checkboxes, list items
-3. `maui-devflow MAUI clear --automationId "MyEntry"` — clear text fields
-4. Or use element IDs from tree/query: `maui-devflow MAUI tap <elementId>`
+1. `maui devflow ui fill --automationId "MyEntry" "text"` — type into Entry/Editor fields (no query needed)
+2. `maui devflow ui tap --automationId "MyButton"` — tap buttons, checkboxes, list items
+3. `maui devflow ui clear --automationId "MyEntry"` — clear text fields
+4. Or use element IDs from tree/query: `maui devflow ui tap <elementId>`
 5. Take screenshot to verify result, or use `--and-screenshot` on the action
 
 **Blazor WebView (if applicable):**
-1. `maui-devflow cdp snapshot` — DOM tree as accessible text (best for AI)
-2. `maui-devflow cdp Input fill "css-selector" "text"` — fill inputs
-3. `maui-devflow cdp Input dispatchClickEvent "css-selector"` — click elements
-4. `maui-devflow cdp Runtime evaluate "js-expression"` — run JS
+1. `maui devflow webview snapshot` — DOM tree as accessible text (best for AI)
+2. `maui devflow webview Input fill "css-selector" "text"` — fill inputs
+3. `maui devflow webview Input dispatchClickEvent "css-selector"` — click elements
+4. `maui devflow webview Runtime evaluate "js-expression"` — run JS
 
 **Multiple BlazorWebViews:** If the app has more than one `BlazorWebView`, each is
-registered independently with its `AutomationId`. Use `cdp webviews` to list them,
+registered independently with its `AutomationId`. Use `webview webviews` to list them,
 then target a specific one with `--webview` (or `-w`):
 
 ```bash
-maui-devflow cdp webviews                                  # list all WebViews
-maui-devflow cdp -w BlazorLeft snapshot                    # snapshot of a specific WebView
-maui-devflow cdp -w 1 Runtime evaluate "document.title"    # target by index
+maui devflow webview webviews                                  # list all WebViews
+maui devflow webview -w BlazorLeft snapshot                    # snapshot of a specific WebView
+maui devflow webview -w 1 Runtime evaluate "document.title"    # target by index
 ```
 
 Without `--webview`, commands target the first (index 0) WebView.
 
 **Live CSS/DOM editing in Blazor (no rebuild needed):**
 ```bash
-maui-devflow cdp Runtime evaluate "document.querySelector('h1').style.color = 'tomato'"
-maui-devflow cdp Runtime evaluate "document.documentElement.style.setProperty('--bg-color', '#1a1a2e')"
+maui devflow webview Runtime evaluate "document.querySelector('h1').style.color = 'tomato'"
+maui devflow webview Runtime evaluate "document.documentElement.style.setProperty('--bg-color', '#1a1a2e')"
 ```
 
 ### 5. Reading Application Logs
@@ -252,16 +252,16 @@ MauiDevFlow automatically captures all `ILogger` output and WebView `console.*` 
 to rotating log files, retrievable remotely:
 
 ```bash
-maui-devflow MAUI logs                   # fetch 100 most recent log entries
-maui-devflow MAUI logs --limit 50        # fetch 50 entries
-maui-devflow MAUI logs --source webview  # only WebView/Blazor console logs
-maui-devflow MAUI logs --source native   # only native ILogger logs
-maui-devflow MAUI logs --follow          # stream logs in real-time (Ctrl+C to stop)
-maui-devflow MAUI logs -f --source native  # stream only native logs
-maui-devflow MAUI logs -f --json         # stream as JSONL (machine-readable)
+maui devflow ui logs                   # fetch 100 most recent log entries
+maui devflow ui logs --limit 50        # fetch 50 entries
+maui devflow ui logs --source webview  # only WebView/Blazor console logs
+maui devflow ui logs --source native   # only native ILogger logs
+maui devflow ui logs --follow          # stream logs in real-time (Ctrl+C to stop)
+maui devflow ui logs -f --source native  # stream only native logs
+maui devflow ui logs -f --json         # stream as JSONL (machine-readable)
 ```
 
-**Debugging workflow:** Reproduce the issue → `maui-devflow MAUI logs --limit 20` → check for
+**Debugging workflow:** Reproduce the issue → `maui devflow ui logs --limit 20` → check for
 errors. Add temporary `ILogger` calls for more detail, rebuild, reproduce, and fetch logs again.
 
 ### 6. Screen Recording
@@ -271,15 +271,15 @@ using platform-native tools.
 
 ```bash
 # Start recording (default 30s timeout)
-maui-devflow MAUI recording start --output demo.mp4
+maui devflow recording start --output demo.mp4
 
 # Interact with the app
-maui-devflow MAUI tap <buttonId>
-maui-devflow MAUI navigate "//blazor"
-maui-devflow MAUI fill <entryId> "Hello World"
+maui devflow ui tap <buttonId>
+maui devflow ui navigate "//blazor"
+maui devflow ui fill <entryId> "Hello World"
 
 # Stop and save
-maui-devflow MAUI recording stop
+maui devflow recording stop
 ```
 
 **Platform tools used automatically:**
@@ -299,23 +299,23 @@ needed beyond the standard `AddMauiDevFlowAgent()` setup.
 
 ```bash
 # Live monitor — streams requests as they happen (Ctrl+C to stop)
-maui-devflow MAUI network
+maui devflow network
 
 # JSONL streaming — machine-readable, one JSON object per line
-maui-devflow MAUI network --json
+maui devflow network --json
 
 # One-shot: list recent captured requests
-maui-devflow MAUI network list
+maui devflow network list
 
 # Filter by method or host
-maui-devflow MAUI network list --method POST
-maui-devflow MAUI network list --host api.example.com
+maui devflow network list --method POST
+maui devflow network list --host api.example.com
 
 # Full request/response details (headers + body)
-maui-devflow MAUI network detail <requestId>
+maui devflow network detail <requestId>
 
 # Clear captured requests
-maui-devflow MAUI network clear
+maui devflow network clear
 ```
 
 **How it works:**
@@ -328,7 +328,7 @@ maui-devflow MAUI network clear
 
 **JSONL output** is ideal for AI parsing — pipe to `jq` or process programmatically:
 ```bash
-maui-devflow MAUI network --json | jq 'select(.statusCode >= 400)'
+maui devflow network --json | jq 'select(.statusCode >= 400)'
 ```
 
 **WebSocket streaming:** The live monitor uses WebSocket (`/ws/network`) for real-time push.
@@ -341,23 +341,23 @@ debugging state, resetting app configuration, or injecting test values.
 
 ```bash
 # Preferences (typed key-value store)
-maui-devflow MAUI preferences list                       # list all known keys
-maui-devflow MAUI preferences get theme_mode             # get a string value
-maui-devflow MAUI preferences get counter --type int     # get a typed value
-maui-devflow MAUI preferences set api_url "https://dev.example.com"
-maui-devflow MAUI preferences set dark_mode true --type bool
-maui-devflow MAUI preferences delete temp_key
-maui-devflow MAUI preferences clear                      # clear all
+maui devflow preferences list                       # list all known keys
+maui devflow preferences get theme_mode             # get a string value
+maui devflow preferences get counter --type int     # get a typed value
+maui devflow preferences set api_url "https://dev.example.com"
+maui devflow preferences set dark_mode true --type bool
+maui devflow preferences delete temp_key
+maui devflow preferences clear                      # clear all
 
 # Shared preferences containers
-maui-devflow MAUI preferences list --sharedName settings
-maui-devflow MAUI preferences set key val --sharedName settings
+maui devflow preferences list --sharedName settings
+maui devflow preferences set key val --sharedName settings
 
 # Secure Storage (encrypted, string values only)
-maui-devflow MAUI secure-storage get auth_token
-maui-devflow MAUI secure-storage set auth_token "eyJhbGc..."
-maui-devflow MAUI secure-storage delete auth_token
-maui-devflow MAUI secure-storage clear
+maui devflow secure-storage get auth_token
+maui devflow secure-storage set auth_token "eyJhbGc..."
+maui devflow secure-storage delete auth_token
+maui devflow secure-storage clear
 ```
 
 **Note:** Preference key listing uses an internal registry (keys set via the agent are tracked).
@@ -368,16 +368,16 @@ Keys set directly in app code won't appear in `list` unless also set via the age
 Query read-only device and app state. These are one-shot snapshot reads.
 
 ```bash
-maui-devflow MAUI platform app-info         # app name, version, build, theme
-maui-devflow MAUI platform device-info      # manufacturer, model, OS, idiom
-maui-devflow MAUI platform display          # screen density, size, orientation
-maui-devflow MAUI platform battery          # charge level, state, power source
-maui-devflow MAUI platform connectivity     # WiFi/Cellular/Ethernet, network access
-maui-devflow MAUI platform version-tracking # version history, first launch detection
-maui-devflow MAUI platform permissions      # check all common permission statuses
-maui-devflow MAUI platform permissions camera  # check a specific permission
-maui-devflow MAUI platform geolocation      # current GPS coordinates
-maui-devflow MAUI platform geolocation --accuracy High --timeout 15
+maui devflow platform app-info         # app name, version, build, theme
+maui devflow platform device-info      # manufacturer, model, OS, idiom
+maui devflow platform display          # screen density, size, orientation
+maui devflow platform battery          # charge level, state, power source
+maui devflow platform connectivity     # WiFi/Cellular/Ethernet, network access
+maui devflow platform version-tracking # version history, first launch detection
+maui devflow platform permissions      # check all common permission statuses
+maui devflow platform permissions camera  # check a specific permission
+maui devflow platform geolocation      # current GPS coordinates
+maui devflow platform geolocation --accuracy High --timeout 15
 ```
 
 ### 10. Device Sensors
@@ -385,14 +385,14 @@ maui-devflow MAUI platform geolocation --accuracy High --timeout 15
 Start, stop, and stream real-time sensor data. Sensors auto-start when streaming.
 
 ```bash
-maui-devflow MAUI sensors list                    # list sensors + status
-maui-devflow MAUI sensors start accelerometer     # start a sensor
-maui-devflow MAUI sensors stop accelerometer
+maui devflow sensors list                    # list sensors + status
+maui devflow sensors start accelerometer     # start a sensor
+maui devflow sensors stop accelerometer
 
 # Stream readings to stdout (JSONL)
-maui-devflow MAUI sensors stream accelerometer          # Ctrl+C to stop
-maui-devflow MAUI sensors stream gyroscope --speed Game  # higher frequency
-maui-devflow MAUI sensors stream compass --duration 10  # stop after 10 seconds
+maui devflow sensors stream accelerometer          # Ctrl+C to stop
+maui devflow sensors stream gyroscope --speed Game  # higher frequency
+maui devflow sensors stream compass --duration 10  # stop after 10 seconds
 ```
 
 Available sensors: `accelerometer`, `barometer`, `compass`, `gyroscope`, `magnetometer`, `orientation`.
@@ -403,7 +403,7 @@ real-time push. Each reading is a JSON object with `sensor`, `timestamp`, and `d
 
 ## Command Reference
 
-### maui-devflow MAUI (Native Agent)
+### maui devflow ui (Native Agent)
 
 Global options (work on any subcommand):
 - `--agent-host` (default localhost), `--agent-port` (auto-discovered via broker), `--platform`
@@ -421,13 +421,13 @@ resolution options are provided.
 
 | Command | Description |
 |---------|-------------|
-| `MAUI status [--window W]` | Agent connection status, platform, app name, window count |
-| `MAUI tree [--depth N] [--window W] [--fields F] [--format compact]` | Visual tree. `--fields "id,type,text"` projects specific fields. `--format compact` returns only id, type, text, automationId, bounds |
-| `MAUI query [--type T] [--automationId A] [--text T] [--selector S] [--fields F] [--format compact] [--wait-until exists\|gone] [--timeout N]` | Find elements. `--wait-until` polls until condition met (default 30s timeout). `--fields` and `--format` same as tree |
-| `MAUI hittest <x> <y> [--window W]` | Find elements at a point (deepest first). Returns IDs, types, bounds |
-| `MAUI tap [elementId] [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree] [--and-tree-depth N]` | Tap element by ID or implicit resolution |
-| `MAUI fill [elementId] <text> [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree]` | Fill text into Entry/Editor. elementId optional when using resolution options |
-| `MAUI clear [elementId] [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree]` | Clear text. elementId optional when using resolution options |
+| `ui status [--window W]` | Agent connection status, platform, app name, window count |
+| `ui tree [--depth N] [--window W] [--fields F] [--format compact]` | Visual tree. `--fields "id,type,text"` projects specific fields. `--format compact` returns only id, type, text, automationId, bounds |
+| `ui query [--type T] [--automationId A] [--text T] [--selector S] [--fields F] [--format compact] [--wait-until exists\|gone] [--timeout N]` | Find elements. `--wait-until` polls until condition met (default 30s timeout). `--fields` and `--format` same as tree |
+| `ui hittest <x> <y> [--window W]` | Find elements at a point (deepest first). Returns IDs, types, bounds |
+| `ui tap [elementId] [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree] [--and-tree-depth N]` | Tap element by ID or implicit resolution |
+| `ui fill [elementId] <text> [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree]` | Fill text into Entry/Editor. elementId optional when using resolution options |
+| `ui clear [elementId] [--automationId A] [--type T] [--text T] [--index N] [--and-screenshot [path]] [--and-tree]` | Clear text. elementId optional when using resolution options |
 | `MAUI focus [elementId] [--automationId A] [--type T] [--text T] [--index N]` | Set focus. elementId optional when using resolution options |
 | `MAUI assert [--id ID] [--automationId A] <property> <expected>` | Assert element property value. Exit 0 if match, 1 if mismatch. Ideal for verification without screenshots |
 | `MAUI screenshot [--output path.png] [--window W] [--id ID] [--selector SEL] [--overwrite] [--max-width N] [--scale native]` | PNG screenshot. Auto-scales to 1x logical resolution on HiDPI displays (2x, 3x). Use `--scale native` for full resolution. `--max-width N` overrides auto-scaling with explicit width. `--overwrite` replaces existing file |
@@ -476,7 +476,7 @@ AutomationId, suffixes are appended: `TodoCheckBox`, `TodoCheckBox_1`, `TodoChec
 navigation, page changes, or significant UI updates, re-query to get fresh IDs. AutomationIds
 are stable across rebuilds (they come from XAML), so prefer `--automationId` for scripted flows.
 
-### maui-devflow cdp (Blazor WebView CDP)
+### maui devflow webview (Blazor WebView CDP)
 
 Global options: `--agent-host` (default localhost), `--agent-port` (auto-discovered via broker).
 CDP commands use the same agent port — all communication goes through a single port.
@@ -504,9 +504,9 @@ by index, AutomationId, or element ID. Default: first WebView.
 
 **Multi-WebView targeting:** If the app has multiple BlazorWebViews, use `cdp webviews`
 to list them, then `--webview <index-or-automationId>` on any command to target a specific one.
-Example: `maui-devflow cdp --webview 1 snapshot` or `maui-devflow cdp -w MyWebView Runtime evaluate "1+1"`.
+Example: `maui devflow webview --webview 1 snapshot` or `maui devflow webview -w MyWebView Runtime evaluate "1+1"`.
 
-### maui-devflow Broker & Discovery
+### maui devflow broker & discovery
 
 The broker is a background daemon that manages port assignments for all running agents.
 The CLI auto-starts the broker on first use — no manual setup needed.
@@ -520,13 +520,13 @@ The CLI auto-starts the broker on first use — no manual setup needed.
 | `broker stop` | Stop broker daemon |
 | `broker log` | Show broker log file |
 
-### maui-devflow batch (Multi-Command Execution)
+### maui devflow batch (Multi-Command Execution)
 
 Execute multiple commands in one invocation via stdin. Returns JSONL responses. Use for
 multi-step interactions to avoid repeated port resolution.
 
 ```bash
-echo "MAUI fill textUsername user; MAUI fill textPassword pwd123; MAUI tap buttonLogin" | maui-devflow batch
+echo "ui fill textUsername user; ui fill textPassword pwd123; ui tap buttonLogin" | maui devflow batch
 ```
 
 For full options, JSONL format, and streaming details, see [references/batch.md](references/batch.md).
@@ -554,7 +554,7 @@ or otherwise disrupt the user's desktop. The user is likely working on the same 
 - Any command that moves the mouse cursor or simulates input at the OS level
 - `open -a` to bring apps to the foreground (use `open` only to launch, not to focus)
 
-**Instead:** All inspection and interaction goes through `maui-devflow` CLI commands, which
+**Instead:** All inspection and interaction goes through `maui devflow` CLI commands, which
 communicate with the in-app agent over HTTP — no foreground focus required. If you need
 something that would require OS-level control (e.g., dismissing a system dialog outside the
 app), **ask the user** to do it manually rather than attempting automation that would hijack
@@ -562,13 +562,13 @@ their input.
 
 ## Tips
 
-- **`maui-devflow list` shows runtime state, not project integration.** Empty list ≠ "not installed."
+- **`maui devflow list` shows runtime state, not project integration.** Empty list ≠ "not installed."
   Always check project files (`grep -rl "MauiDevFlow" --include="*.csproj" .`) before concluding DevFlow is unavailable.
-- **`maui-devflow diagnose`** is the fastest way to check the entire chain: CLI → broker → agents → projects.
-- After launching through Aspire, always run `maui-devflow wait` before attempting any interaction.
-- **Use `maui-devflow batch`** for multi-step interactions — resolves port once, adds delays,
+- **`maui devflow diagnose`** is the fastest way to check the entire chain: CLI → broker → agents → projects.
+- After launching through Aspire, always run `maui devflow wait` before attempting any interaction.
+- **Use `maui devflow batch`** for multi-step interactions — resolves port once, adds delays,
   returns structured JSONL. See [references/batch.md](references/batch.md).
-- **Always use `maui-devflow MAUI screenshot`** — captures in-process, app does NOT need
+- **Always use `maui devflow ui screenshot`** — captures in-process, app does NOT need
   foreground focus.
 - Use `AutomationId` on important MAUI controls for stable element references.
 - For Blazor Hybrid, `cdp snapshot` is the most AI-friendly way to read page state.
@@ -611,46 +611,46 @@ Screenshots are **automatically scaled to 1x logical resolution** by default. Th
 the device's display density (2x on Retina, 3x on iPhone Pro Max, 1x on desktop) and divides
 the screenshot dimensions accordingly. This happens server-side before transfer.
 
-- **No action needed** — just use `maui-devflow MAUI screenshot --output screen.png` and the
+- **No action needed** — just use `maui devflow ui screenshot --output screen.png` and the
   image will be appropriately sized for AI understanding.
 - **Full resolution:** Use `--scale native` when you need pixel-perfect images (e.g., verifying
   exact colors, alignment, or anti-aliasing).
   ```bash
-  maui-devflow MAUI screenshot --output full-res.png --scale native
+  maui devflow ui screenshot --output full-res.png --scale native
   ```
 - **Explicit max width:** Use `--max-width N` to override auto-scaling with a specific pixel width.
   ```bash
-  maui-devflow MAUI screenshot --output screen.png --max-width 600
+  maui devflow ui screenshot --output screen.png --max-width 600
   ```
 
 ### Eliminating Round-Trips
 - **Use implicit resolution** instead of query-then-act:
   ```bash
   # Instead of: query → get ID → tap
-  maui-devflow MAUI tap --automationId "LoginButton"
-  maui-devflow MAUI fill --automationId "Username" "admin"
-  maui-devflow MAUI tap --type Button --index 0  # first Button
+  maui devflow ui tap --automationId "LoginButton"
+  maui devflow ui fill --automationId "Username" "admin"
+  maui devflow ui tap --type Button --index 0  # first Button
   ```
 - **Use `--wait-until`** instead of polling loops:
   ```bash
-  maui-devflow MAUI query --automationId "ResultsList" --wait-until exists --timeout 10
-  maui-devflow MAUI query --automationId "Spinner" --wait-until gone --timeout 30
+  maui devflow ui query --automationId "ResultsList" --wait-until exists --timeout 10
+  maui devflow ui query --automationId "Spinner" --wait-until gone --timeout 30
   ```
 - **Use post-action flags** to verify in one call:
   ```bash
-  maui-devflow MAUI tap abc123 --and-screenshot --and-tree --and-tree-depth 5
+  maui devflow ui tap abc123 --and-screenshot --and-tree --and-tree-depth 5
   ```
 - **Use `MAUI assert`** for quick state checks:
   ```bash
-  maui-devflow MAUI assert --id abc123 Text "Welcome!"
-  maui-devflow MAUI assert --automationId "Counter" Text "5"
+  maui devflow ui assert --id abc123 Text "Welcome!"
+  maui devflow ui assert --automationId "Counter" Text "5"
   ```
 
 ### Element IDs
 - Element IDs are **ephemeral** — re-query after navigation or state changes.
 - Don't cache element IDs across multiple actions — refresh with `tree` or `query`.
 - Prefer `--automationId` for stable references (set in XAML).
-- Use `maui-devflow commands --json` to discover available commands at runtime.
+- Use `maui devflow commands --json` to discover available commands at runtime.
 
 ### Shell Navigation
 - **Routes are case-sensitive** and come from `ShellContent Route=""` in XAML, not from
@@ -662,7 +662,7 @@ the screenshot dimensions accordingly. This happens server-side before transfer.
   at the top level of the tree output. Don't try to tap Labels inside flyout items.
 - **Flyout dismissal:** After tapping a flyout item, the flyout may stay open. Dismiss with:
   ```bash
-  maui-devflow MAUI set-property <shellId> FlyoutIsPresented "false"
+  maui devflow ui set-property <shellId> FlyoutIsPresented "false"
   ```
 
 ### CollectionView / ListView
@@ -673,19 +673,19 @@ the screenshot dimensions accordingly. This happens server-side before transfer.
   The tree shows `itemCount` in the CollectionView's properties so you know total items.
 - **Scrolling by item index** (best for reaching off-screen items):
   ```bash
-  maui-devflow MAUI scroll --element <cvId> --item-index 20 --position Center
+  maui devflow ui scroll --element <cvId> --item-index 20 --position Center
   ```
   This works even for items not in the tree yet — the platform scrolls to materialize them.
 - **Scrolling by pixel delta** (for fine-grained scrolling):
   ```bash
-  maui-devflow MAUI scroll --element <cvId> --dy -500
+  maui devflow ui scroll --element <cvId> --dy -500
   ```
   Uses native platform scroll (UIScrollView/RecyclerView) — works on CollectionView.
 - **Workflow:** Get tree → note `itemCount` → scroll by index → re-query tree → interact:
   ```bash
-  maui-devflow MAUI tree --depth 15   # CollectionView shows itemCount: 25
-  maui-devflow MAUI scroll --item-index 20
-  maui-devflow MAUI tree --depth 15   # items around index 20 now visible
+  maui devflow ui tree --depth 15   # CollectionView shows itemCount: 25
+  maui devflow ui scroll --item-index 20
+  maui devflow ui tree --depth 15   # items around index 20 now visible
   ```
 
 ### Implicit Resolution Gotchas
@@ -700,33 +700,33 @@ the screenshot dimensions accordingly. This happens server-side before transfer.
 
 **Login flow:**
 ```bash
-maui-devflow MAUI query --automationId "LoginPage" --wait-until exists --timeout 15
-maui-devflow MAUI fill --automationId "UsernameField" "admin"
-maui-devflow MAUI fill --automationId "PasswordField" "password"
-maui-devflow MAUI tap --automationId "LoginButton" --and-screenshot
-maui-devflow MAUI query --automationId "HomePage" --wait-until exists --timeout 10
+maui devflow ui query --automationId "LoginPage" --wait-until exists --timeout 15
+maui devflow ui fill --automationId "UsernameField" "admin"
+maui devflow ui fill --automationId "PasswordField" "password"
+maui devflow ui tap --automationId "LoginButton" --and-screenshot
+maui devflow ui query --automationId "HomePage" --wait-until exists --timeout 10
 ```
 
 **Shell navigation:**
 ```bash
 # Discover routes from XAML
 grep -i 'Route=' AppShell.xaml                              # find route names
-maui-devflow MAUI navigate "//home"                         # navigate to a route
-maui-devflow MAUI tap FlyoutButton                          # open flyout
-maui-devflow MAUI tree --depth 3 --fields "id,type,text"    # find flyout items
-maui-devflow MAUI tap <flyoutItemId>                        # tap item
-maui-devflow MAUI set-property <shellId> FlyoutIsPresented "false"  # dismiss flyout
+maui devflow ui navigate "//home"                         # navigate to a route
+maui devflow ui tap FlyoutButton                          # open flyout
+maui devflow ui tree --depth 3 --fields "id,type,text"    # find flyout items
+maui devflow ui tap <flyoutItemId>                        # tap item
+maui devflow ui set-property <shellId> FlyoutIsPresented "false"  # dismiss flyout
 ```
 
 **Element inspection:**
 ```bash
-maui-devflow MAUI query --automationId "MyControl" --json --fields "id,type,text,bounds"
-maui-devflow MAUI element <id> --json
-maui-devflow MAUI property <id> Text
+maui devflow ui query --automationId "MyControl" --json --fields "id,type,text,bounds"
+maui devflow ui element <id> --json
+maui devflow ui property <id> Text
 ```
 
 **State verification:**
 ```bash
-maui-devflow MAUI tap --automationId "IncrementButton"
-maui-devflow MAUI assert --automationId "CounterLabel" Text "1"
+maui devflow ui tap --automationId "IncrementButton"
+maui devflow ui assert --automationId "CounterLabel" Text "1"
 ```

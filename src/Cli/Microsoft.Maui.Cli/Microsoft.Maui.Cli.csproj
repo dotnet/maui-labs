@@ -11,6 +11,7 @@
     <Description>CLI for .NET MAUI development environment setup and device management</Description>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
+    <IsAotCompatible>true</IsAotCompatible>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>

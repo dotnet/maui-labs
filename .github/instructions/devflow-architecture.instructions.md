@@ -11,7 +11,7 @@ DevFlow uses a three-tier architecture:
 ```
 ┌──────────────┐                ┌──────────────┐                ┌──────────────────────────┐
 │  CLI / MCP   │  HTTP (direct) │    Broker     │  WebSocket     │  Agent (in-app)          │
-│  (maui-devflow)│ ◄──────────► │  (port 19223) │ ◄───────────── │  (dynamic port)          │
+│  (maui devflow)│ ◄──────────► │  (port 19223) │ ◄───────────── │  (dynamic port)          │
 └──────────────┘  (after port   └──────────────┘  (registration) └──────────────────────────┘
       │            discovery)          │                                │
       │ HTTP (direct, after discovery) │                                │ Platform APIs
@@ -29,7 +29,7 @@ DevFlow uses a three-tier architecture:
 
 1. **Agent** runs inside the MAUI app process (added via NuGet package). Exposes HTTP API on a dynamic port. Registers with the Broker over WebSocket. Has direct access to the visual tree, pages, platform views.
 2. **Broker** runs on the developer machine (port 19223). Agents register with it via WebSocket. CLI discovers agent ports through the broker's HTTP API.
-3. **CLI** (`maui-devflow`) discovers agents via the broker, then communicates **directly** with agents over HTTP. Also hosts the MCP server for AI agent integration.
+3. **CLI** (`maui devflow`) discovers agents via the broker, then communicates **directly** with agents over HTTP. Also hosts the MCP server for AI agent integration.
 
 ## Package Dependency Graph
 

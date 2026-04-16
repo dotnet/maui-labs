@@ -1,0 +1,11 @@
+{
+  "actions": [
+    { "action": "tap", "elementId": "txt_email" },
+    { "action": "fill", "elementId": "txt_email", "text": "user@example.com" },
+    { "action": "tap", "elementId": "txt_password" },
+    { "action": "fill", "elementId": "txt_password", "text": "MyP@ssw0rd" },
+    { "action": "tap", "elementId": "btn_signin" }
+  ],
+  "include": ["screenshot"],
+  "continueOnError": false
+}

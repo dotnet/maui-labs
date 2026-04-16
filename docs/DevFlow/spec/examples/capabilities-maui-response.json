@@ -1,0 +1,56 @@
+{
+  "agent": {
+    "name": "devflow-maui",
+    "version": "1.0.0",
+    "framework": "maui",
+    "frameworkVersion": "10.0"
+  },
+  "capabilities": {
+    "ui.tree": {
+      "version": 1,
+      "features": ["css-selectors", "hit-test", "native-layer", "render-layer"]
+    },
+    "ui.actions": {
+      "version": 1,
+      "features": [
+        "tap",
+        "fill",
+        "clear",
+        "scroll",
+        "focus",
+        "navigate",
+        "back",
+        "gesture",
+        "batch"
+      ]
+    },
+    "ui.screenshot": {
+      "version": 1,
+      "features": ["fullPage", "element"]
+    },
+    "profiler": {
+      "version": 1,
+      "features": ["samples", "spans", "markers", "hotspots"]
+    },
+    "logs": {
+      "version": 1,
+      "features": ["stream", "query"]
+    },
+    "device.info": {
+      "version": 1,
+      "features": ["display", "battery", "connectivity", "geolocation"]
+    },
+    "device.sensors": {
+      "version": 1,
+      "features": ["accelerometer", "gyroscope", "magnetometer"]
+    },
+    "storage.preferences": {
+      "version": 1,
+      "features": ["get", "set", "delete", "clear"]
+    },
+    "storage.secure": {
+      "version": 1,
+      "features": ["get", "set", "delete", "clear"]
+    }
+  }
+}

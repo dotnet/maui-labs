@@ -1,0 +1,8 @@
+{
+  "type": "https://devflow.dev/errors/element-not-found",
+  "title": "Element Not Found",
+  "status": 404,
+  "detail": "No element found with ID 'btn_nonexistent'. The element may have been removed from the visual tree.",
+  "instance": "/api/v1/ui/elements/btn_nonexistent",
+  "errorCode": "element-not-found"
+}

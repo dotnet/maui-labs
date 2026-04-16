@@ -1,0 +1,105 @@
+[
+  {
+    "_comment": "Server sends replay of recent requests on connect to /ws/v1/network",
+    "direction": "server → client",
+    "message": {
+      "type": "replay",
+      "timestamp": "2025-01-15T10:30:00.000Z",
+      "entries": [
+        {
+          "id": "req_a1b2c3",
+          "timestamp": "2025-01-15T10:29:45.120Z",
+          "method": "GET",
+          "url": "https://api.example.com/api/v2/user/profile",
+          "host": "api.example.com",
+          "path": "/api/v2/user/profile",
+          "statusCode": 200,
+          "statusText": "OK",
+          "durationMs": 142,
+          "requestContentType": null,
+          "responseContentType": "application/json",
+          "requestSize": 0,
+          "responseSize": 1024
+        },
+        {
+          "id": "req_d4e5f6",
+          "timestamp": "2025-01-15T10:29:50.340Z",
+          "method": "GET",
+          "url": "https://api.example.com/api/v2/user/settings",
+          "host": "api.example.com",
+          "path": "/api/v2/user/settings",
+          "statusCode": 200,
+          "statusText": "OK",
+          "durationMs": 89,
+          "requestContentType": null,
+          "responseContentType": "application/json",
+          "requestSize": 0,
+          "responseSize": 512
+        }
+      ]
+    }
+  },
+  {
+    "_comment": "Server sends a new live request event (POST to /api/login)",
+    "direction": "server → client",
+    "message": {
+      "type": "request",
+      "timestamp": "2025-01-15T10:30:12.550Z",
+      "entry": {
+        "id": "req_g7h8i9",
+        "timestamp": "2025-01-15T10:30:12.200Z",
+        "method": "POST",
+        "url": "https://api.example.com/api/v2/auth/login",
+        "host": "api.example.com",
+        "path": "/api/v2/auth/login",
+        "statusCode": 200,
+        "statusText": "OK",
+        "durationMs": 350,
+        "requestContentType": "application/json",
+        "responseContentType": "application/json",
+        "requestSize": 86,
+        "responseSize": 2048
+      }
+    }
+  },
+  {
+    "_comment": "Client requests full details for a specific request via GET /api/v1/network/requests/{id}",
+    "direction": "client → server (HTTP)",
+    "request": "GET /api/v1/network/requests/req_g7h8i9"
+  },
+  {
+    "_comment": "Server responds with full request details including headers and body",
+    "direction": "server → client (HTTP)",
+    "response": {
+      "id": "req_g7h8i9",
+      "timestamp": "2025-01-15T10:30:12.200Z",
+      "method": "POST",
+      "url": "https://api.example.com/api/v2/auth/login",
+      "host": "api.example.com",
+      "path": "/api/v2/auth/login",
+      "statusCode": 200,
+      "statusText": "OK",
+      "durationMs": 350,
+      "requestContentType": "application/json",
+      "responseContentType": "application/json",
+      "requestSize": 86,
+      "responseSize": 2048,
+      "requestHeaders": {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "MyApp/2.1.0 (maccatalyst)"
+      },
+      "responseHeaders": {
+        "Content-Type": "application/json; charset=utf-8",
+        "X-Request-Id": "abc123-def456",
+        "Cache-Control": "no-store"
+      },
+      "requestBody": "{\"email\":\"user@example.com\",\"password\":\"***\"}",
+      "responseBody": "{\"token\":\"eyJhbGciOiJSUzI1NiIs...truncated...\",\"expiresIn\":3600,\"user\":{\"id\":\"u_42\",\"name\":\"John Doe\"}}",
+      "requestBodyEncoding": "utf-8",
+      "responseBodyEncoding": "utf-8",
+      "requestBodyTruncated": false,
+      "responseBodyTruncated": false
+    }
+  }
+]

@@ -1,0 +1,81 @@
+{
+  "success": true,
+  "screenshot": "iVBORw0KGgo...truncated...",
+  "tree": [
+    {
+      "id": "win_main",
+      "parentId": null,
+      "type": "Window",
+      "fullType": "Microsoft.Maui.Controls.Window",
+      "framework": "maui",
+      "text": "MyApp",
+      "role": "window",
+      "traits": ["focusable"],
+      "state": {
+        "displayed": true,
+        "enabled": true,
+        "selected": false,
+        "focused": true,
+        "opacity": 1.0
+      },
+      "bounds": { "x": 0, "y": 0, "width": 1280, "height": 800, "coordinate": "screen" },
+      "children": [
+        {
+          "id": "nav_page_0",
+          "parentId": "win_main",
+          "type": "NavigationPage",
+          "fullType": "Microsoft.Maui.Controls.NavigationPage",
+          "framework": "maui",
+          "text": "Dashboard",
+          "state": {
+            "displayed": true,
+            "enabled": true,
+            "selected": false,
+            "focused": false,
+            "opacity": 1.0
+          },
+          "bounds": { "x": 0, "y": 0, "width": 1280, "height": 800 },
+          "children": [
+            {
+              "id": "page_dashboard",
+              "parentId": "nav_page_0",
+              "type": "ContentPage",
+              "fullType": "Microsoft.Maui.Controls.ContentPage",
+              "framework": "maui",
+              "text": "Dashboard",
+              "role": "heading",
+              "state": {
+                "displayed": true,
+                "enabled": true,
+                "selected": false,
+                "focused": false,
+                "opacity": 1.0
+              },
+              "bounds": { "x": 0, "y": 48, "width": 1280, "height": 752 },
+              "children": [
+                {
+                  "id": "lbl_dashboard_title",
+                  "parentId": "page_dashboard",
+                  "type": "Label",
+                  "fullType": "Microsoft.Maui.Controls.Label",
+                  "framework": "maui",
+                  "text": "Good morning, John!",
+                  "role": "heading",
+                  "traits": ["header"],
+                  "state": {
+                    "displayed": true,
+                    "enabled": true,
+                    "selected": false,
+                    "focused": false,
+                    "opacity": 1.0
+                  },
+                  "bounds": { "x": 40, "y": 80, "width": 600, "height": 36 }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

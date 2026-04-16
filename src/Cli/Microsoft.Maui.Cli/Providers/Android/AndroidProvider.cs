@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
 
@@ -85,7 +86,7 @@ public class AndroidProvider : IAndroidProvider
 			Category = "android",
 			Name = "Android SDK",
 			Status = CheckStatus.Ok,
-			Details = new Dictionary<string, object> { ["path"] = SdkPath! }
+			Details = new JsonObject { ["path"] = SdkPath! }
 		});
 
 		// Check SDK Manager

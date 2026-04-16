@@ -1,0 +1,96 @@
+name: DevFlow Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Target platform for the real app integration suite
+        required: true
+        default: maccatalyst
+        type: choice
+        options:
+          - maccatalyst
+          - ios
+          - android
+          - windows
+      ios-version:
+        description: Optional iOS version filter used by the simulator fixture (for example 18.x)
+        required: false
+        default: ""
+        type: string
+      android-api:
+        description: Android API level used by the emulator fixture
+        required: false
+        default: "35"
+        type: string
+
+jobs:
+  integration-apple-android:
+    if: ${{ inputs.platform != 'windows' }}
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DEVFLOW_TEST_PLATFORM: ${{ inputs.platform }}
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-version }}
+      DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        run: dotnet workload install maui ios android maccatalyst
+
+      - name: Run DevFlow integration tests
+        run: >
+          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
+          --logger "trx;LogFileName=devflow-integration-${{ inputs.platform }}.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/${{ inputs.platform }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devflow-integration-${{ inputs.platform }}-results
+          path: ./artifacts/TestResults/devflow-integration/${{ inputs.platform }}/
+          retention-days: 30
+
+  integration-windows:
+    if: ${{ inputs.platform == 'windows' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DEVFLOW_TEST_PLATFORM: windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        run: dotnet workload install maui
+
+      - name: Run DevFlow integration tests
+        run: >
+          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
+          --logger "trx;LogFileName=devflow-integration-windows.trx"
+          --logger "console;verbosity=normal"
+          --results-directory .\artifacts\TestResults\devflow-integration\windows
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devflow-integration-windows-results
+          path: .\artifacts\TestResults\devflow-integration\windows\
+          retention-days: 30

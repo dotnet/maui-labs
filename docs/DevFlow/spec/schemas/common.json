@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.json",
+  "title": "Common Types",
+  "description": "Common types used across all DevFlow Agent Protocol schemas.",
+  "$defs": {
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 date-time timestamp."
+    },
+    "ElementId": {
+      "type": "string",
+      "description": "Globally unique element identifier within the visual tree."
+    },
+    "LocatorStrategy": {
+      "type": "string",
+      "enum": [
+        "accessibility-id",
+        "css-selector",
+        "type",
+        "text",
+        "xpath"
+      ],
+      "description": "Strategy used to locate an element in the visual tree."
+    },
+    "CoordinateSystem": {
+      "type": "string",
+      "enum": [
+        "window",
+        "screen"
+      ],
+      "description": "Coordinate system for bounding rectangles and points."
+    },
+    "ProblemDetails": {
+      "type": "object",
+      "description": "RFC 7807 Problem Details error response.",
+      "required": [
+        "type",
+        "title",
+        "status"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "format": "uri",
+          "description": "A URI reference that identifies the problem type."
+        },
+        "title": {
+          "type": "string",
+          "description": "A short, human-readable summary of the problem type."
+        },
+        "status": {
+          "type": "integer",
+          "description": "The HTTP status code for this occurrence of the problem.",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "detail": {
+          "type": "string",
+          "description": "A human-readable explanation specific to this occurrence of the problem."
+        },
+        "instance": {
+          "type": "string",
+          "format": "uri",
+          "description": "A URI reference that identifies the specific occurrence of the problem."
+        },
+        "errorCode": {
+          "type": "string",
+          "enum": [
+            "element-not-found",
+            "stale-element-reference",
+            "element-not-interactable",
+            "invalid-selector",
+            "timeout",
+            "unknown-command",
+            "unsupported-capability",
+            "internal-error"
+          ],
+          "description": "Machine-readable error code identifying the category of failure."
+        }
+      }
+    }
+  }
+}

@@ -178,11 +178,19 @@ public class SensorManager : IDisposable
             return;
         _lastBroadcast[sensorName] = now;
 
+        var timestamp = now.ToString("O");
         var json = JsonSerializer.Serialize(new
         {
+            type = "reading",
+            timestamp,
             sensor = sensorName,
-            timestamp = now.ToString("O"),
-            data
+            data,
+            reading = new
+            {
+                sensor = sensorName,
+                timestamp,
+                values = data
+            }
         });
 
         if (_subscribers.TryGetValue(sensorName, out var subs))

@@ -29,12 +29,7 @@ public static class VersionCommand
 			if (useJson)
 			{
 				var formatter = Program.GetFormatter(parseResult);
-				formatter.Write(new
-				{
-					version = version,
-					runtime = Environment.Version.ToString(),
-					os = Environment.OSVersion.ToString()
-				});
+				formatter.WriteVersion(version, Environment.Version.ToString(), Environment.OSVersion.ToString());
 			}
 			else
 			{

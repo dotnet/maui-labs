@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bounds-info.json",
+  "title": "BoundsInfo",
+  "description": "Bounding rectangle for a visual element.",
+  "type": "object",
+  "required": [
+    "x",
+    "y",
+    "width",
+    "height"
+  ],
+  "properties": {
+    "x": {
+      "type": "number",
+      "description": "The x-coordinate of the top-left corner."
+    },
+    "y": {
+      "type": "number",
+      "description": "The y-coordinate of the top-left corner."
+    },
+    "width": {
+      "type": "number",
+      "description": "The width of the bounding rectangle.",
+      "minimum": 0
+    },
+    "height": {
+      "type": "number",
+      "description": "The height of the bounding rectangle.",
+      "minimum": 0
+    },
+    "coordinate": {
+      "$ref": "common.json#/$defs/CoordinateSystem",
+      "description": "The coordinate system for this bounding rectangle.",
+      "default": "window"
+    }
+  }
+}

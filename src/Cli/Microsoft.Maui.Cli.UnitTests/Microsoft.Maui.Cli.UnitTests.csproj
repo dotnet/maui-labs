@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj" />
   </ItemGroup>
 

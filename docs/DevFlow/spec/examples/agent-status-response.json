@@ -1,0 +1,22 @@
+{
+  "agent": {
+    "name": "devflow-maui",
+    "version": "1.0.0",
+    "framework": "maui",
+    "frameworkVersion": "10.0"
+  },
+  "platform": "maccatalyst",
+  "device": {
+    "model": "MacBook Pro",
+    "manufacturer": "Apple",
+    "osVersion": "15.2",
+    "idiom": "desktop"
+  },
+  "app": {
+    "name": "MyApp",
+    "version": "2.1.0",
+    "packageId": "com.example.myapp"
+  },
+  "running": true,
+  "uptime": "PT5M30S"
+}

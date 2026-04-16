@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "storage.json",
+  "title": "Storage Models",
+  "description": "Storage models for application preferences and secure storage operations.",
+  "$defs": {
+    "PreferenceValueType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "int",
+        "bool",
+        "double",
+        "float",
+        "long",
+        "datetime"
+      ],
+      "description": "Data type of a preference value."
+    },
+    "PreferenceEntry": {
+      "type": "object",
+      "description": "A single preference key-value entry.",
+      "required": [
+        "key",
+        "value",
+        "type"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Preference key name."
+        },
+        "value": {
+          "description": "Preference value. The actual JSON type depends on the type field."
+        },
+        "type": {
+          "$ref": "#/$defs/PreferenceValueType",
+          "description": "Data type of the preference value."
+        }
+      }
+    },
+    "PreferenceSetRequest": {
+      "type": "object",
+      "description": "Request to set a preference value.",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "description": "The value to set for the preference."
+        },
+        "type": {
+          "oneOf": [
+            { "$ref": "#/$defs/PreferenceValueType" },
+            { "type": "null" }
+          ],
+          "description": "Data type of the value. If null, the type is auto-detected from the JSON value."
+        },
+        "sharedName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Shared preference container name. If null, uses the default container."
+        }
+      }
+    },
+    "SecureStorageSetRequest": {
+      "type": "object",
+      "description": "Request to set a value in secure (encrypted) storage.",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "The string value to store securely."
+        }
+      }
+    }
+  }
+}

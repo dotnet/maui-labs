@@ -10,7 +10,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 | Product | Package / Tool | Description |
 |---------|---------------|-------------|
-| **DevFlow** | `Microsoft.Maui.DevFlow.*` (8 packages), `maui-devflow` CLI | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
+| **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 
 ### Technology Stack
 
@@ -85,7 +85,7 @@ maui-labs/
 │       ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
 │       ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
 │       ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
-│       ├── Microsoft.Maui.DevFlow.CLI/           # CLI global tool (maui-devflow)
+│       ├── Microsoft.Maui.DevFlow.CLI/           # DevFlow command implementation behind `maui devflow`
 │       │   ├── Broker/                           # Connection management
 │       │   └── Mcp/Tools/                        # MCP tool implementations
 │       ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
@@ -123,7 +123,7 @@ maui-labs/
 ## Packaging and Signing
 
 - Packages are built by the Arcade SDK's `Pack` target
-- **PackAsTool**: Both CLIs (`maui-devflow`, `maui`) set `PackAsTool=true`
+- **PackAsTool**: The user-facing global tool is `maui`; DevFlow functionality is exposed via `maui devflow`
 - **IsShipping/IsPackable**: Default `false` in `Directory.Build.props`; shipped projects override to `true`
 - **Signing**: `eng/Signing.props` configures Microsoft .NET certificate for first-party DLLs, `3PartySHA2` for third-party dependencies, `NuGet` certificate for `.nupkg` files
 - **Version flow**: `eng/Versions.props` defines `VersionPrefix`/`VersionSuffix`, Arcade SDK applies them

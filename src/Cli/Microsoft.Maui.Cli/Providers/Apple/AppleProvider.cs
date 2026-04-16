@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json.Nodes;
 using Xamarin.MacDev;
 
 namespace Microsoft.Maui.Cli.Providers.Apple;
@@ -171,7 +172,7 @@ public class AppleProvider : IAppleProvider
 				Name = "Xcode",
 				Status = CheckStatus.Ok,
 				Message = $"Xcode {xcode.Version} ({xcode.Build}) at {xcode.Path}",
-				Details = new Dictionary<string, object>
+				Details = new JsonObject
 				{
 					["version"] = xcode.Version.ToString(),
 					["build"] = xcode.Build,
@@ -301,7 +302,7 @@ public class AppleProvider : IAppleProvider
 				Version = s.OSVersion,
 				VersionName = s.Platform != null ? $"{s.Platform} {s.OSVersion}" : s.OSVersion,
 				Idiom = s.DeviceTypeIdentifier?.Contains("iPad") == true ? DeviceIdiom.Tablet : DeviceIdiom.Phone,
-				Details = new Dictionary<string, object>
+				Details = new JsonObject
 				{
 					["runtime"] = s.RuntimeIdentifier ?? "",
 					["device_type"] = s.DeviceTypeIdentifier ?? "",

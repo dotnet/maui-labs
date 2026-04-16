@@ -1,0 +1,908 @@
+asyncapi: 3.0.0
+
+info:
+  title: DevFlow Agent Protocol — WebSocket Channels
+  version: 1.0.0
+  description: |
+    Real-time streaming channels for the DevFlow Agent Protocol.
+    These complement the HTTP API defined in openapi.yaml.
+
+    All messages (both directions) use a standard envelope:
+    ```json
+    {
+      "type": "string (event/command type)",
+      "timestamp": "ISO 8601 datetime",
+      "data": { ... }
+    }
+    ```
+
+servers:
+  agent:
+    host: localhost:{port}
+    protocol: ws
+    description: Agent WebSocket server
+    variables:
+      port:
+        description: Port number the agent is listening on.
+
+defaultContentType: application/json
+
+# ---------------------------------------------------------------------------
+# Channels
+# ---------------------------------------------------------------------------
+channels:
+
+  # ── Network Request Stream ───────────────────────────────────────────────
+  network:
+    address: /ws/v1/network
+    description: |
+      Real-time stream of captured HTTP requests. On connect the server replays
+      recent requests, then streams new requests as they are captured. Clients
+      may request full details for a specific request or clear the buffer.
+    servers:
+      - $ref: '#/servers/agent'
+    messages:
+      # ── server → client ──
+      networkReplay:
+        name: networkReplay
+        title: Network Replay
+        summary: Initial replay of recent requests on connect.
+        contentType: application/json
+        payload:
+          type: object
+          description: Replay of recent network request entries.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: replay
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  items:
+                    $ref: './schemas/network.json#/$defs/NetworkRequestSummary'
+                  description: Array of recent network request summaries.
+
+      networkRequest:
+        name: networkRequest
+        title: Network Request Captured
+        summary: New HTTP request captured.
+        contentType: application/json
+        payload:
+          type: object
+          description: Live network request event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: request
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [entry]
+              properties:
+                entry:
+                  $ref: './schemas/network.json#/$defs/NetworkRequestSummary'
+                  description: The captured network request summary.
+
+      networkDetails:
+        name: networkDetails
+        title: Request Details Response
+        summary: Full details for a previously captured network request.
+        contentType: application/json
+        payload:
+          type: object
+          description: Response containing full request/response details.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: details
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [entry]
+              properties:
+                entry:
+                  $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
+                  description: Full details of the network request.
+
+      networkCleared:
+        name: networkCleared
+        title: Buffer Cleared
+        summary: Server confirms the request buffer has been cleared.
+        contentType: application/json
+        payload:
+          type: object
+          description: Confirmation that the request buffer was cleared.
+          required: [type, timestamp]
+          properties:
+            type:
+              type: string
+              const: cleared
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+
+      # ── client → server ──
+      networkGetDetails:
+        name: networkGetDetails
+        title: Get Request Details
+        summary: Request full details for a specific captured network request.
+        contentType: application/json
+        payload:
+          type: object
+          description: Command to retrieve full details for a network request.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: get_details
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  description: Unique identifier of the network request to retrieve.
+
+      networkClear:
+        name: networkClear
+        title: Clear Request Buffer
+        summary: Clear the server's captured request buffer.
+        contentType: application/json
+        payload:
+          type: object
+          description: Command to clear the request buffer.
+          required: [type, timestamp]
+          properties:
+            type:
+              type: string
+              const: clear
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+
+  # ── Log Stream ───────────────────────────────────────────────────────────
+  logs:
+    address: /ws/v1/logs
+    description: |
+      Real-time application log streaming. Supports filtering by source and
+      minimum severity level via query-string parameters. Replays recent
+      entries on connect.
+    servers:
+      - $ref: '#/servers/agent'
+    bindings:
+      ws:
+        query:
+          type: object
+          description: Connection query-string parameters for log filtering.
+          properties:
+            source:
+              type: string
+              enum: [native, webview, framework, all]
+              default: all
+              description: Filter logs by source.
+            level:
+              type: string
+              enum: [trace, debug, info, warning, error, critical]
+              default: info
+              description: Minimum log severity level to stream.
+            replay:
+              type: integer
+              default: 100
+              minimum: 0
+              description: Number of recent entries to replay on connect.
+    messages:
+      logReplay:
+        name: logReplay
+        title: Log Replay
+        summary: Initial replay of recent log entries on connect.
+        contentType: application/json
+        payload:
+          type: object
+          description: Replay of recent log entries.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: replay
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  items:
+                    $ref: './schemas/logs.json#/$defs/LogEntry'
+                  description: Array of recent log entries.
+
+      logEntry:
+        name: logEntry
+        title: Log Entry
+        summary: New log entry from the application.
+        contentType: application/json
+        payload:
+          type: object
+          description: Live log entry event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: log
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [entry]
+              properties:
+                entry:
+                  $ref: './schemas/logs.json#/$defs/LogEntry'
+                  description: The log entry.
+
+  # ── Sensor Readings Stream ──────────────────────────────────────────────
+  sensors:
+    address: /ws/v1/device/sensors
+    description: |
+      Live sensor data streaming. Connect with query parameters to specify the
+      sensor, reading speed, and throttle interval. Supports subscribing to
+      different sensors or changing settings over the same connection.
+    servers:
+      - $ref: '#/servers/agent'
+    bindings:
+      ws:
+        query:
+          type: object
+          description: Connection query-string parameters.
+          required: [sensor]
+          properties:
+            sensor:
+              type: string
+              enum: [accelerometer, barometer, compass, gyroscope, magnetometer, orientation]
+              description: Sensor to subscribe to (required).
+            speed:
+              type: string
+              enum: [UI, Game, Fastest, Default]
+              default: UI
+              description: Reading speed preset.
+            throttleMs:
+              type: integer
+              default: 100
+              minimum: 0
+              description: Minimum milliseconds between readings.
+    messages:
+      # ── server → client ──
+      sensorSubscribed:
+        name: sensorSubscribed
+        title: Sensor Subscribed
+        summary: Confirmation that the sensor subscription is active.
+        contentType: application/json
+        payload:
+          type: object
+          description: Sensor subscription confirmation.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: subscribed
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [sensor, speed, throttleMs]
+              properties:
+                sensor:
+                  type: string
+                  description: Name of the subscribed sensor.
+                speed:
+                  type: string
+                  description: Active reading speed.
+                throttleMs:
+                  type: number
+                  description: Active throttle interval in milliseconds.
+
+      sensorReading:
+        name: sensorReading
+        title: Sensor Reading
+        summary: New sensor reading.
+        contentType: application/json
+        payload:
+          type: object
+          description: Live sensor reading event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: reading
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              $ref: './schemas/device.json#/$defs/SensorReading'
+              description: Sensor reading data (shape varies by sensor type).
+
+      sensorError:
+        name: sensorError
+        title: Sensor Error
+        summary: Error occurred while reading sensor data.
+        contentType: application/json
+        payload:
+          type: object
+          description: Sensor error notification.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: error
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [sensor, message]
+              properties:
+                sensor:
+                  type: string
+                  description: Name of the sensor that encountered an error.
+                message:
+                  type: string
+                  description: Human-readable error message.
+
+      sensorStopped:
+        name: sensorStopped
+        title: Sensor Stopped
+        summary: Sensor data streaming has stopped.
+        contentType: application/json
+        payload:
+          type: object
+          description: Sensor stopped notification.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: stopped
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [sensor]
+              properties:
+                sensor:
+                  type: string
+                  description: Name of the sensor that was stopped.
+
+      # ── client → server ──
+      sensorSubscribe:
+        name: sensorSubscribe
+        title: Subscribe to Sensor
+        summary: Subscribe to a different sensor or change settings.
+        contentType: application/json
+        payload:
+          type: object
+          description: Command to subscribe to a sensor or update settings.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: subscribe
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [sensor]
+              properties:
+                sensor:
+                  type: string
+                  description: Name of the sensor to subscribe to.
+                speed:
+                  type: string
+                  enum: [UI, Game, Fastest, Default]
+                  description: Reading speed preset.
+                throttleMs:
+                  type: integer
+                  minimum: 0
+                  description: Minimum milliseconds between readings.
+
+      sensorUnsubscribe:
+        name: sensorUnsubscribe
+        title: Unsubscribe from Sensor
+        summary: Stop receiving readings for a sensor.
+        contentType: application/json
+        payload:
+          type: object
+          description: Command to unsubscribe from a sensor.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: unsubscribe
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [sensor]
+              properties:
+                sensor:
+                  type: string
+                  description: Name of the sensor to unsubscribe from.
+
+  # ── Profiler Data Stream ────────────────────────────────────────────────
+  profiler:
+    address: /ws/v1/profiler
+    description: |
+      Real-time profiler data stream. Streams periodic batches of samples,
+      markers, and spans from an active profiling session. Use cursor
+      parameters to resume from a specific position.
+    servers:
+      - $ref: '#/servers/agent'
+    bindings:
+      ws:
+        query:
+          type: object
+          description: Connection query-string parameters.
+          required: [sessionId]
+          properties:
+            sessionId:
+              type: string
+              description: Profiler session ID (required).
+            sampleCursor:
+              type: integer
+              default: 0
+              minimum: 0
+              description: Starting sample cursor position.
+            markerCursor:
+              type: integer
+              default: 0
+              minimum: 0
+              description: Starting marker cursor position.
+            spanCursor:
+              type: integer
+              default: 0
+              minimum: 0
+              description: Starting span cursor position.
+    messages:
+      profilerBatch:
+        name: profilerBatch
+        title: Profiler Batch
+        summary: Periodic batch of profiler samples, markers, and spans.
+        contentType: application/json
+        payload:
+          type: object
+          description: Batch of profiler data with updated cursors.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: batch
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              $ref: './schemas/profiler.json#/$defs/ProfilerBatch'
+              description: >
+                Profiler batch containing samples, markers, spans, and
+                updated cursor positions for pagination.
+
+      profilerStopped:
+        name: profilerStopped
+        title: Profiler Stopped
+        summary: Profiling session has ended.
+        contentType: application/json
+        payload:
+          type: object
+          description: Notification that a profiling session ended.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: stopped
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId:
+                  type: string
+                  description: Identifier of the stopped profiler session.
+
+  # ── UI Lifecycle Events Stream ──────────────────────────────────────────
+  uiEvents:
+    address: /ws/v1/ui/events
+    description: |
+      Real-time UI state change notifications including navigation, lifecycle
+      changes, visual tree mutations, system alerts, and unhandled exceptions.
+      Clients subscribe to the event types they are interested in.
+    servers:
+      - $ref: '#/servers/agent'
+    messages:
+      # ── server → client ──
+      uiNavigation:
+        name: uiNavigation
+        title: Navigation Event
+        summary: Page or screen navigation occurred.
+        contentType: application/json
+        payload:
+          type: object
+          description: Navigation event indicating a page or route change.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: navigation
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [to, timestamp]
+              properties:
+                from:
+                  type:
+                    - string
+                    - 'null'
+                  description: Route or page navigated away from.
+                to:
+                  type: string
+                  description: Route or page navigated to.
+                route:
+                  type:
+                    - string
+                    - 'null'
+                  description: Route pattern, if applicable.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+                  description: Timestamp when the navigation occurred.
+
+      uiLifecycle:
+        name: uiLifecycle
+        title: Lifecycle Event
+        summary: Application lifecycle state change.
+        contentType: application/json
+        payload:
+          type: object
+          description: Application lifecycle event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: lifecycle
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [state, timestamp]
+              properties:
+                state:
+                  type: string
+                  enum: [started, resumed, paused, stopped, backgrounded, foregrounded]
+                  description: New lifecycle state.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+                  description: Timestamp when the lifecycle change occurred.
+
+      uiTreeChange:
+        name: uiTreeChange
+        title: Tree Change Event
+        summary: Visual tree structure changed (element added, removed, or modified).
+        contentType: application/json
+        payload:
+          type: object
+          description: Visual tree mutation event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: treeChange
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [changeType, elementId, elementType, timestamp]
+              properties:
+                changeType:
+                  type: string
+                  enum: [added, removed, modified]
+                  description: Type of tree change.
+                elementId:
+                  type: string
+                  description: Identifier of the changed element.
+                elementType:
+                  type: string
+                  description: Type name of the changed element.
+                parentId:
+                  type:
+                    - string
+                    - 'null'
+                  description: Identifier of the parent element, or null for root elements.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+                  description: Timestamp when the tree change occurred.
+
+      uiAlert:
+        name: uiAlert
+        title: Alert Event
+        summary: System alert or dialog appeared.
+        contentType: application/json
+        payload:
+          type: object
+          description: System alert / dialog event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: alert
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [buttons, timestamp]
+              properties:
+                title:
+                  type:
+                    - string
+                    - 'null'
+                  description: Alert title.
+                message:
+                  type:
+                    - string
+                    - 'null'
+                  description: Alert message body.
+                buttons:
+                  type: array
+                  items:
+                    type: string
+                  description: Labels of the alert buttons.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+                  description: Timestamp when the alert appeared.
+
+      uiError:
+        name: uiError
+        title: Unhandled Error Event
+        summary: Unhandled exception occurred in the application.
+        contentType: application/json
+        payload:
+          type: object
+          description: Unhandled exception event.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: error
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [message, timestamp]
+              properties:
+                message:
+                  type: string
+                  description: Error message.
+                stackTrace:
+                  type:
+                    - string
+                    - 'null'
+                  description: Stack trace, if available.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+                  description: Timestamp when the error occurred.
+
+      # ── client → server ──
+      uiSubscribe:
+        name: uiSubscribe
+        title: Subscribe to Events
+        summary: Subscribe to specific UI event types.
+        contentType: application/json
+        payload:
+          type: object
+          description: Command to subscribe to UI event types.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: subscribe
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                  description: >
+                    Event types to subscribe to. Use "all" to receive every
+                    event type.
+
+      uiUnsubscribe:
+        name: uiUnsubscribe
+        title: Unsubscribe from Events
+        summary: Unsubscribe from specific UI event types.
+        contentType: application/json
+        payload:
+          type: object
+          description: Command to unsubscribe from UI event types.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: unsubscribe
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                  description: Event types to unsubscribe from.
+
+# ---------------------------------------------------------------------------
+# Operations
+# ---------------------------------------------------------------------------
+operations:
+
+  # ── Network ──────────────────────────────────────────────────────────────
+  sendNetworkEvents:
+    action: send
+    channel:
+      $ref: '#/channels/network'
+    summary: Server streams network request events to the client.
+    description: |
+      Sends a replay of recent requests on connect, followed by individual
+      request events as new HTTP traffic is captured. Also sends detail
+      responses and buffer-cleared confirmations in reply to client commands.
+    messages:
+      - $ref: '#/channels/network/messages/networkReplay'
+      - $ref: '#/channels/network/messages/networkRequest'
+      - $ref: '#/channels/network/messages/networkDetails'
+      - $ref: '#/channels/network/messages/networkCleared'
+
+  receiveNetworkCommands:
+    action: receive
+    channel:
+      $ref: '#/channels/network'
+    summary: Client sends commands to the network channel.
+    description: |
+      Clients can request full details for a captured request or clear the
+      request buffer.
+    messages:
+      - $ref: '#/channels/network/messages/networkGetDetails'
+      - $ref: '#/channels/network/messages/networkClear'
+
+  # ── Logs ─────────────────────────────────────────────────────────────────
+  sendLogEvents:
+    action: send
+    channel:
+      $ref: '#/channels/logs'
+    summary: Server streams log entries to the client.
+    description: |
+      Sends a replay of recent log entries on connect (filtered by query-string
+      parameters), then streams new entries in real time.
+    messages:
+      - $ref: '#/channels/logs/messages/logReplay'
+      - $ref: '#/channels/logs/messages/logEntry'
+
+  # ── Sensors ──────────────────────────────────────────────────────────────
+  sendSensorEvents:
+    action: send
+    channel:
+      $ref: '#/channels/sensors'
+    summary: Server streams sensor data to the client.
+    description: |
+      Sends subscription confirmation, live sensor readings, error
+      notifications, and stop events for device sensors.
+    messages:
+      - $ref: '#/channels/sensors/messages/sensorSubscribed'
+      - $ref: '#/channels/sensors/messages/sensorReading'
+      - $ref: '#/channels/sensors/messages/sensorError'
+      - $ref: '#/channels/sensors/messages/sensorStopped'
+
+  receiveSensorCommands:
+    action: receive
+    channel:
+      $ref: '#/channels/sensors'
+    summary: Client sends sensor subscription commands.
+    description: |
+      Clients can subscribe to a different sensor or change settings,
+      or unsubscribe to stop receiving readings.
+    messages:
+      - $ref: '#/channels/sensors/messages/sensorSubscribe'
+      - $ref: '#/channels/sensors/messages/sensorUnsubscribe'
+
+  # ── Profiler ─────────────────────────────────────────────────────────────
+  sendProfilerEvents:
+    action: send
+    channel:
+      $ref: '#/channels/profiler'
+    summary: Server streams profiler data to the client.
+    description: |
+      Sends periodic batches of profiler samples, markers, and spans.
+      Sends a stopped event when the profiling session ends.
+    messages:
+      - $ref: '#/channels/profiler/messages/profilerBatch'
+      - $ref: '#/channels/profiler/messages/profilerStopped'
+
+  # ── UI Events ────────────────────────────────────────────────────────────
+  sendUIEvents:
+    action: send
+    channel:
+      $ref: '#/channels/uiEvents'
+    summary: Server streams UI lifecycle events to the client.
+    description: |
+      Sends real-time notifications for navigation, lifecycle changes,
+      visual tree mutations, system alerts, and unhandled exceptions.
+    messages:
+      - $ref: '#/channels/uiEvents/messages/uiNavigation'
+      - $ref: '#/channels/uiEvents/messages/uiLifecycle'
+      - $ref: '#/channels/uiEvents/messages/uiTreeChange'
+      - $ref: '#/channels/uiEvents/messages/uiAlert'
+      - $ref: '#/channels/uiEvents/messages/uiError'
+
+  receiveUICommands:
+    action: receive
+    channel:
+      $ref: '#/channels/uiEvents'
+    summary: Client sends subscription commands for UI events.
+    description: |
+      Clients can subscribe or unsubscribe to specific UI event types.
+    messages:
+      - $ref: '#/channels/uiEvents/messages/uiSubscribe'
+      - $ref: '#/channels/uiEvents/messages/uiUnsubscribe'

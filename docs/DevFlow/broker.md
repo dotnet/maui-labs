@@ -85,7 +85,7 @@ When a MAUI app starts with `AddMicrosoft.Maui.DevFlowAgent()`:
 
 ### CLI Discovery
 
-When you run a CLI command like `maui-devflow MAUI status`:
+When you run a CLI command like `maui devflow ui status`:
 
 1. The CLI calls `EnsureBrokerRunningAsync()` to make sure the broker is alive
    (starting it if necessary).
@@ -169,17 +169,17 @@ the last app exits in case you're about to rebuild and relaunch.
 For troubleshooting, you can manage the broker directly:
 
 ```bash
-maui-devflow broker start              # Start detached (same as auto-start)
-maui-devflow broker start --foreground # Start in current terminal (debug mode)
-maui-devflow broker stop               # Graceful shutdown
-maui-devflow broker status             # Show PID, port, uptime, connected agents
-maui-devflow broker log                # Show last 50 lines of broker.log
+maui devflow broker start              # Start detached (same as auto-start)
+maui devflow broker start --foreground # Start in current terminal (debug mode)
+maui devflow broker stop               # Graceful shutdown
+maui devflow broker status             # Show PID, port, uptime, connected agents
+maui devflow broker log                # Show last 50 lines of broker.log
 ```
 
 ### Listing Connected Agents
 
 ```bash
-maui-devflow list
+maui devflow list
 ```
 
 Shows all agents currently registered with the broker:
@@ -205,7 +205,7 @@ ID             App                  Platform       TFM                      Port
 7ff0e6fd13d9   MauiTodo             MacCatalyst    net10.0-maccatalyst      10223
 a3c9e1f20b44   MauiTodo             Android        net10.0-android          10224
 
-Example: maui-devflow MAUI status --agent-port <port>
+Example: maui devflow ui status --agent-port <port>
 ```
 
 This output is **non-interactive** by design. AI agents can parse it and re-run
@@ -322,13 +322,13 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
 
 - **Port 19223 in use?** Check with `lsof -i :19223` (macOS/Linux) or
   `netstat -ano | findstr 19223` (Windows). Kill the conflicting process or
-  stop the existing broker with `maui-devflow broker stop`.
+  stop the existing broker with `maui devflow broker stop`.
 - **Stale state file?** Delete `~/.mauidevflow/broker.json` and try again.
 - **Permissions?** The broker binds to `localhost` only — no admin/root required.
 
-### Agent not appearing in `maui-devflow list`
+### Agent not appearing in `maui devflow list`
 
-- **Broker running?** Run `maui-devflow broker status` to check.
+- **Broker running?** Run `maui devflow broker status` to check.
 - **App actually started?** The agent registers during app startup. Verify the
   app launched successfully.
 - **Firewall?** On Android, ensure `adb reverse tcp:19223 tcp:19223` is set up.
@@ -338,7 +338,7 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
 ### CLI can't connect to agent
 
 - **Port mismatch?** The broker may have assigned a different port than expected.
-  Run `maui-devflow list` to see actual port assignments.
+  Run `maui devflow list` to see actual port assignments.
 - **Agent crashed after registration?** The broker may show the agent briefly
   before detecting the disconnect. Wait a moment and check again.
 - **Android?** You need `adb reverse` for **both** port 19223 (broker) and the

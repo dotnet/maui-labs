@@ -1,0 +1,76 @@
+[
+  {
+    "_comment": "Client subscribes to accelerometer sensor on /ws/v1/sensors",
+    "direction": "client → server",
+    "message": {
+      "type": "subscribe",
+      "filter": {
+        "sensor": "accelerometer"
+      }
+    }
+  },
+  {
+    "_comment": "Server confirms sensor subscription",
+    "direction": "server → client",
+    "message": {
+      "type": "subscribed",
+      "timestamp": "2025-01-15T10:31:00.000Z",
+      "sensor": {
+        "name": "accelerometer",
+        "available": true,
+        "active": true
+      }
+    }
+  },
+  {
+    "_comment": "Server sends first accelerometer reading",
+    "direction": "server → client",
+    "message": {
+      "type": "reading",
+      "timestamp": "2025-01-15T10:31:00.050Z",
+      "reading": {
+        "sensor": "accelerometer",
+        "timestamp": "2025-01-15T10:31:00.048Z",
+        "values": {
+          "x": 0.0123,
+          "y": -0.0045,
+          "z": -9.7891
+        }
+      }
+    }
+  },
+  {
+    "_comment": "Server sends second accelerometer reading",
+    "direction": "server → client",
+    "message": {
+      "type": "reading",
+      "timestamp": "2025-01-15T10:31:00.100Z",
+      "reading": {
+        "sensor": "accelerometer",
+        "timestamp": "2025-01-15T10:31:00.098Z",
+        "values": {
+          "x": 0.0156,
+          "y": -0.0031,
+          "z": -9.7924
+        }
+      }
+    }
+  },
+  {
+    "_comment": "Server sends third accelerometer reading",
+    "direction": "server → client",
+    "message": {
+      "type": "reading",
+      "timestamp": "2025-01-15T10:31:00.150Z",
+      "reading": {
+        "sensor": "accelerometer",
+        "timestamp": "2025-01-15T10:31:00.149Z",
+        "values": {
+          "x": 0.0189,
+          "y": -0.0058,
+          "z": -9.7856
+        }
+      }
+    }
+  }
+]

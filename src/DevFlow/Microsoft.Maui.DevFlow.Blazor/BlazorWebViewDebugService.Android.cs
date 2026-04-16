@@ -14,6 +14,11 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
 {
     public BlazorWebViewDebugService() { }
 
+    /// <summary>
+    /// Override to give Android WebView more time to load Blazor and inject chobitsu.
+    /// </summary>
+    protected override int GetWebViewLoadDelayMs() => 5000;
+
     public override void ConfigureHandler()
     {
         Log("[BlazorDevFlow] ConfigureHandler called (Android)");
@@ -57,6 +62,15 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                     (url) => MainThread.BeginInvokeOnMainThread(() => androidWebView.LoadUrl(url)),
                     automationId);
                 Log($"[BlazorDevFlow] Android WebView captured as bridge {idx} (automationId={automationId})");
+
+                // Install WebViewClient to detect page load completion and re-inject
+                // API level 26 is required, but MAUI min target is API 24. Suppress warning as MAUI
+                // practically requires a higher level and this is a dev-time tool.
+#pragma warning disable CA1416
+                var existingClient = androidWebView.WebViewClient;
+#pragma warning restore CA1416
+                androidWebView.SetWebViewClient(new DevFlowWebViewClient(this, idx, existingClient));
+
                 await InitializeBridgeAsync(idx);
             }
             else
@@ -82,6 +96,50 @@ internal class JsValueCallback : Java.Lang.Object, IValueCallback
     public void OnReceiveValue(Java.Lang.Object? value)
     {
         _callback(value?.ToString());
+    }
+}
+
+/// <summary>
+/// Custom WebViewClient that detects page load completion and triggers chobitsu re-injection.
+/// </summary>
+internal class DevFlowWebViewClient : WebViewClient
+{
+    private readonly BlazorWebViewDebugServiceBase _service;
+    private readonly int _bridgeIndex;
+    private readonly WebViewClient? _innerClient;
+
+    public DevFlowWebViewClient(BlazorWebViewDebugServiceBase service, int bridgeIndex, WebViewClient? innerClient)
+    {
+        _service = service;
+        _bridgeIndex = bridgeIndex;
+        _innerClient = innerClient;
+    }
+
+    public override void OnPageFinished(AWebView? view, string? url)
+    {
+        base.OnPageFinished(view, url);
+        _innerClient?.OnPageFinished(view, url);
+
+        if (url?.Contains("about:blank") == false)
+        {
+            _service.Log($"[BlazorDevFlow] Android OnPageFinished: {url} — re-initializing bridge {_bridgeIndex}");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _service.ResetAndReinitializeBridgeAsync(_bridgeIndex);
+                }
+                catch (Exception ex)
+                {
+                    _service.LogError($"[BlazorDevFlow] Failed to reinitialize bridge {_bridgeIndex}", ex);
+                }
+            });
+        }
+    }
+
+    public override bool ShouldOverrideUrlLoading(AWebView? view, IWebResourceRequest? request)
+    {
+        return _innerClient?.ShouldOverrideUrlLoading(view, request) ?? base.ShouldOverrideUrlLoading(view, request);
     }
 }
 #endif

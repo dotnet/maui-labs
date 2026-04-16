@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "websocket-messages.json",
+  "title": "WebSocket Messages",
+  "description": "WebSocket message envelope and event types for real-time streaming channels.",
+  "$defs": {
+    "WebSocketMessage": {
+      "type": "object",
+      "description": "Base envelope for all WebSocket messages.",
+      "required": [
+        "type",
+        "timestamp"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Message type identifier."
+        },
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC timestamp when this message was produced."
+        },
+        "data": {
+          "description": "Message payload. Structure varies by message type."
+        }
+      }
+    },
+    "SubscribeMessage": {
+      "type": "object",
+      "description": "Client-sent message to subscribe to a streaming channel with an optional filter.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "subscribe",
+          "description": "Message type, always 'subscribe'."
+        },
+        "filter": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true,
+          "description": "Channel-specific filter criteria. Structure varies by channel type."
+        }
+      }
+    },
+    "NetworkEvent": {
+      "description": "Network monitoring event. Supports replay of historical entries and live streaming.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Replay of historical network request entries.",
+          "required": [
+            "type",
+            "timestamp",
+            "entries"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replay",
+              "description": "Event type for historical replay."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the replay message."
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "network.json#/$defs/NetworkRequestSummary"
+              },
+              "description": "Array of historical network request summaries."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Live network request event.",
+          "required": [
+            "type",
+            "timestamp",
+            "entry"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "request",
+              "description": "Event type for a live network request."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "entry": {
+              "$ref": "network.json#/$defs/NetworkRequestSummary",
+              "description": "The network request summary."
+            }
+          }
+        }
+      ]
+    },
+    "LogEvent": {
+      "description": "Log streaming event. Supports replay of historical entries and live streaming.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Replay of historical log entries.",
+          "required": [
+            "type",
+            "timestamp",
+            "entries"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replay",
+              "description": "Event type for historical replay."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the replay message."
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "logs.json#/$defs/LogEntry"
+              },
+              "description": "Array of historical log entries."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Live log entry event.",
+          "required": [
+            "type",
+            "timestamp",
+            "entry"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "log",
+              "description": "Event type for a live log entry."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "entry": {
+              "$ref": "logs.json#/$defs/LogEntry",
+              "description": "The log entry."
+            }
+          }
+        }
+      ]
+    },
+    "SensorEvent": {
+      "description": "Sensor streaming event. Includes subscription confirmation and live readings.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Sensor subscription confirmation.",
+          "required": [
+            "type",
+            "timestamp",
+            "sensor"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "subscribed",
+              "description": "Event type for subscription confirmation."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the confirmation."
+            },
+            "sensor": {
+              "$ref": "device.json#/$defs/SensorInfo",
+              "description": "Information about the subscribed sensor."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Live sensor reading event.",
+          "required": [
+            "type",
+            "timestamp",
+            "reading"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "reading",
+              "description": "Event type for a live sensor reading."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "reading": {
+              "$ref": "device.json#/$defs/SensorReading",
+              "description": "The sensor reading data."
+            }
+          }
+        }
+      ]
+    },
+    "ProfilerEvent": {
+      "description": "Profiler streaming event. Supports batch samples, individual markers, and spans.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Batch of profiler samples.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "samples",
+              "description": "Event type for a batch of profiler samples."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "$ref": "profiler.json#/$defs/ProfilerBatch",
+              "description": "Profiler batch containing samples, markers, and spans."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Individual profiler marker event.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "marker",
+              "description": "Event type for a profiler marker."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "$ref": "profiler.json#/$defs/ProfilerMarker",
+              "description": "The profiler marker data."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Individual profiler span event.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "span",
+              "description": "Event type for a profiler span."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "$ref": "profiler.json#/$defs/ProfilerSpan",
+              "description": "The profiler span data."
+            }
+          }
+        }
+      ]
+    },
+    "UIEvent": {
+      "description": "UI lifecycle and change events.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Navigation event indicating a page or route change.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "navigation",
+              "description": "Event type for a navigation change."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "type": "object",
+              "description": "Navigation event data.",
+              "properties": {
+                "from": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Route or page navigated away from."
+                },
+                "to": {
+                  "type": "string",
+                  "description": "Route or page navigated to."
+                },
+                "navigationType": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Type of navigation (e.g. 'push', 'pop', 'replace', 'modal')."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Application lifecycle event.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lifecycle",
+              "description": "Event type for an application lifecycle change."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "type": "object",
+              "description": "Lifecycle event data.",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "description": "Lifecycle state (e.g. 'created', 'started', 'resumed', 'paused', 'stopped', 'destroyed')."
+                },
+                "previousState": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Previous lifecycle state."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Visual tree change event.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "treeChange",
+              "description": "Event type for a visual tree mutation."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "type": "object",
+              "description": "Tree change event data.",
+              "properties": {
+                "changeType": {
+                  "type": "string",
+                  "description": "Type of tree change (e.g. 'added', 'removed', 'modified', 'reordered')."
+                },
+                "elementId": {
+                  "$ref": "common.json#/$defs/ElementId",
+                  "description": "Identifier of the element that changed."
+                },
+                "parentId": {
+                  "oneOf": [
+                    { "$ref": "common.json#/$defs/ElementId" },
+                    { "type": "null" }
+                  ],
+                  "description": "Identifier of the parent element."
+                },
+                "summary": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Human-readable summary of the change."
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

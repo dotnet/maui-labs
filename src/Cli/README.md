@@ -70,26 +70,44 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui doctor` | Run environment diagnostics and auto-fix issues |
 | `maui device list` | List connected devices and emulators |
 | `maui version` | Display version information |
+| **Android** | |
 | `maui android install` | Full interactive Android environment setup |
 | `maui android sdk list` | List available and installed Android SDK packages |
 | `maui android sdk install` | Install Android SDK packages |
+| `maui android sdk check` | Check Android SDK installation status |
+| `maui android sdk uninstall` | Uninstall Android SDK packages |
+| `maui android sdk accept-licenses` | Accept Android SDK licenses interactively |
 | `maui android jdk install` | Install and manage JDK versions |
+| `maui android jdk check` | Check JDK installation status |
+| `maui android jdk list` | List available JDK versions |
 | `maui android emulator create` | Create an Android emulator |
 | `maui android emulator start` | Start an Android emulator |
 | `maui android emulator stop` | Stop a running emulator |
 | `maui android emulator delete` | Delete an emulator |
-| `maui apple xcode list` | List installed Xcode versions (macOS only) |
-| `maui apple runtime list` | List installed simulator runtimes (macOS only) |
-| `maui apple simulator list` | List simulator devices (macOS only) |
-| `maui apple simulator start` | Boot a simulator (macOS only) |
-| `maui apple simulator stop` | Shut down a simulator (macOS only) |
-| `maui apple simulator delete` | Delete a simulator (macOS only) |
-| `maui devflow` | MAUI app automation via Agent API and Blazor WebViews via CDP |
-| `maui devflow MAUI tree` | Dump the visual tree of a running MAUI app |
-| `maui devflow MAUI screenshot` | Take a screenshot of a running MAUI app |
-| `maui devflow cdp` | Blazor WebView automation via Chrome DevTools Protocol |
-| `maui devflow mcp` | Start MCP server for AI agent integration |
-| `maui devflow broker` | Manage the DevFlow agent broker |
+| `maui android emulator list` | List available emulators |
+| **Apple (macOS only)** | |
+| `maui apple xcode list` | List installed Xcode versions |
+| `maui apple runtime list` | List installed simulator runtimes |
+| `maui apple simulator list` | List simulator devices |
+| `maui apple simulator start` | Boot a simulator |
+| `maui apple simulator stop` | Shut down a simulator |
+| `maui apple simulator delete` | Delete a simulator |
+| **DevFlow** | |
+| `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
+| `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
+| `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
+| `maui devflow logs` | Fetch and stream application logs |
+| `maui devflow network` | Monitor HTTP network requests |
+| `maui devflow storage` | Access app preferences and secure storage |
+| `maui devflow agent` | Discover and inspect connected DevFlow agents |
+| `maui devflow broker` | Manage the DevFlow agent broker (start, stop, status, log) |
+| `maui devflow batch` | Execute commands from stdin for scripting |
+| `maui devflow commands` | List all available commands (schema discovery) |
+| `maui devflow diagnose` | Check DevFlow agent health |
+| `maui devflow wait` | Wait for an agent to connect |
+| `maui devflow mcp` | Start the MCP server for AI agent integration |
+
+Run `maui <command> --help` for detailed options on any command.
 
 ## Global Options
 

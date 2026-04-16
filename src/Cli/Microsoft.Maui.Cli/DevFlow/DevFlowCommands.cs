@@ -51,9 +51,10 @@ public class DevFlowCommands
         noJsonOption.Recursive = true;
         devflowCommand.Add(noJsonOption);
 
-        // ===== CDP commands (Blazor WebView) =====
+        // ===== WebView commands (Blazor WebView / CDP) =====
         
-        var cdpCommand = new Command("cdp", "Blazor WebView automation via Chrome DevTools Protocol");
+        var cdpCommand = new Command("webview", "Blazor WebView automation via Chrome DevTools Protocol");
+        cdpCommand.Aliases.Add("cdp");
 
         var webviewOption = new Option<string?>("--webview", "-w") { Description = "Target WebView by index, AutomationId, or element ID (default: first WebView)", DefaultValueFactory = _ => null };
         webviewOption.Recursive = true;
@@ -266,9 +267,10 @@ public class DevFlowCommands
         
         devflowCommand.Add(cdpCommand);
         
-        // ===== MAUI Native commands =====
+        // ===== UI commands =====
 
-        var mauiCommand = new Command("MAUI", "Native MAUI app automation commands");
+        var mauiCommand = new Command("ui", "Native app UI automation commands");
+        mauiCommand.Aliases.Add("MAUI");
 
         // Shared window option for commands that target a specific window
         var windowOption = new Option<int?>("--window") { Description = "Window index (0-based, default: first window)" };
@@ -337,7 +339,8 @@ public class DevFlowCommands
         // MAUI hittest
         var hitTestXArg = new Argument<double>("x") { Description = "X coordinate" };
         var hitTestYArg = new Argument<double>("y") { Description = "Y coordinate" };
-        var mauiHitTestCmd = new Command("hittest", "Find elements at a point") { hitTestXArg, hitTestYArg, windowOption };
+        var mauiHitTestCmd = new Command("hit-test", "Find elements at a point") { hitTestXArg, hitTestYArg, windowOption };
+        mauiHitTestCmd.Aliases.Add("hittest");
         mauiHitTestCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
@@ -490,7 +493,7 @@ public class DevFlowCommands
         recordingStatusCmd.SetAction((ctx, ct) => { RecordingStatusAsync(); return Task.CompletedTask; });
         recordingCommand.Add(recordingStatusCmd);
 
-        mauiCommand.Add(recordingCommand);
+        devflowCommand.Add(recordingCommand);
 
         // MAUI property
         var propIdArg = new Argument<string>("elementId") { Description = "Element ID" };
@@ -755,7 +758,7 @@ public class DevFlowCommands
             else
                 await MauiLogsAsync(host, port, isJson, ctx.GetValue(logsLimitOption), ctx.GetValue(logsSkipOption), ctx.GetValue(logsSourceOption));
         });
-        mauiCommand.Add(mauiLogsCmd);
+        devflowCommand.Add(mauiLogsCmd);
 
         // ── Network monitoring command ──
         var networkCommand = new Command("network", "Monitor HTTP network requests");
@@ -822,9 +825,12 @@ public class DevFlowCommands
         });
         networkCommand.Add(networkClearCmd);
 
-        mauiCommand.Add(networkCommand);
+        devflowCommand.Add(networkCommand);
 
-        // ===== MAUI preferences subcommands =====
+        // ===== storage subcommands =====
+        var storageCommand = new Command("storage", "Manage app preferences and secure storage");
+
+        // ===== preferences subcommands =====
         var prefsCommand = new Command("preferences", "Manage app preferences (key-value store)");
 
         var prefsSharedNameOption = new Option<string?>("--sharedName") { Description = "Shared preferences container name" };
@@ -839,7 +845,7 @@ public class DevFlowCommands
             var sharedName = ctx.GetValue(prefsSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
             var qs = sharedName != null ? $"?sharedName={Uri.EscapeDataString(sharedName)}" : "";
-            await SimpleGetAsync(host, port, $"/api/preferences{qs}", isJson);
+            await SimpleGetAsync(host, port, $"/api/v1/storage/preferences{qs}", isJson);
         });
         prefsCommand.Add(prefsListCmd);
 
@@ -858,7 +864,7 @@ public class DevFlowCommands
             var isJson = output.ResolveJsonMode(json, noJson);
             var qs = $"?type={Uri.EscapeDataString(type)}";
             if (sharedName != null) qs += $"&sharedName={Uri.EscapeDataString(sharedName)}";
-            await SimpleGetAsync(host, port, $"/api/preferences/{Uri.EscapeDataString(key)}{qs}", isJson);
+            await SimpleGetAsync(host, port, $"/api/v1/storage/preferences/{Uri.EscapeDataString(key)}{qs}", isJson);
         });
         prefsCommand.Add(prefsGetCmd);
 
@@ -884,7 +890,7 @@ public class DevFlowCommands
                 ["type"] = type,
                 ["sharedName"] = sharedName
             };
-            await SimplePostAsync(host, port, $"/api/preferences/{Uri.EscapeDataString(key)}", body, isJson);
+            await SimplePutAsync(host, port, $"/api/v1/storage/preferences/{Uri.EscapeDataString(key)}", body, isJson);
         });
         prefsCommand.Add(prefsSetCmd);
 
@@ -901,7 +907,7 @@ public class DevFlowCommands
             var sharedName = ctx.GetValue(prefsDeleteSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
             var qs = sharedName != null ? $"?sharedName={Uri.EscapeDataString(sharedName)}" : "";
-            await SimpleDeleteAsync(host, port, $"/api/preferences/{Uri.EscapeDataString(key)}{qs}", isJson);
+            await SimpleDeleteAsync(host, port, $"/api/v1/storage/preferences/{Uri.EscapeDataString(key)}{qs}", isJson);
         });
         prefsCommand.Add(prefsDeleteCmd);
 
@@ -916,11 +922,11 @@ public class DevFlowCommands
             var sharedName = ctx.GetValue(prefsClearSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
             var qs = sharedName != null ? $"?sharedName={Uri.EscapeDataString(sharedName)}" : "";
-            await SimplePostAsync(host, port, $"/api/preferences/clear{qs}", null, isJson);
+            await SimpleDeleteAsync(host, port, $"/api/v1/storage/preferences{qs}", isJson);
         });
         prefsCommand.Add(prefsClearCmd);
 
-        mauiCommand.Add(prefsCommand);
+        storageCommand.Add(prefsCommand);
 
         // ===== MAUI secure-storage subcommands =====
         var secureCommand = new Command("secure-storage", "Manage secure storage (encrypted key-value store)");
@@ -935,7 +941,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var key = ctx.GetValue(secureGetKeyArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleGetAsync(host, port, $"/api/secure-storage/{Uri.EscapeDataString(key)}", isJson);
+            await SimpleGetAsync(host, port, $"/api/v1/storage/secure/{Uri.EscapeDataString(key)}", isJson);
         });
         secureCommand.Add(secureGetCmd);
 
@@ -951,7 +957,7 @@ public class DevFlowCommands
             var key = ctx.GetValue(secureSetKeyArg)!;
             var value = ctx.GetValue(secureSetValueArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, $"/api/secure-storage/{Uri.EscapeDataString(key)}", new JsonObject
+            await SimplePutAsync(host, port, $"/api/v1/storage/secure/{Uri.EscapeDataString(key)}", new JsonObject
             {
                 ["value"] = value
             }, isJson);
@@ -968,7 +974,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var key = ctx.GetValue(secureDeleteKeyArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleDeleteAsync(host, port, $"/api/secure-storage/{Uri.EscapeDataString(key)}", isJson);
+            await SimpleDeleteAsync(host, port, $"/api/v1/storage/secure/{Uri.EscapeDataString(key)}", isJson);
         });
         secureCommand.Add(secureDeleteCmd);
 
@@ -980,14 +986,16 @@ public class DevFlowCommands
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, "/api/secure-storage/clear", null, isJson);
+            await SimpleDeleteAsync(host, port, "/api/v1/storage/secure", isJson);
         });
         secureCommand.Add(secureClearCmd);
 
-        mauiCommand.Add(secureCommand);
+        storageCommand.Add(secureCommand);
+        devflowCommand.Add(storageCommand);
 
-        // ===== MAUI platform subcommands (read-only) =====
-        var platformCommand = new Command("platform", "Query platform features and device info");
+        // ===== device subcommands (read-only) =====
+        var platformCommand = new Command("device", "Query app, device, and sensor information");
+        platformCommand.Aliases.Add("platform");
 
         var platformAppInfoCmd = new Command("app-info", "Get app name, version, package name, theme");
         platformAppInfoCmd.SetAction(async (ctx, ct) =>
@@ -996,7 +1004,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/platform/app-info", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/app", output.ResolveJsonMode(json, noJson));
         });
         platformCommand.Add(platformAppInfoCmd);
 
@@ -1007,7 +1015,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/platform/device-info", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/info", output.ResolveJsonMode(json, noJson));
         });
         platformCommand.Add(platformDeviceInfoCmd);
 
@@ -1018,7 +1026,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/platform/device-display", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/display", output.ResolveJsonMode(json, noJson));
         });
         platformCommand.Add(platformDisplayCmd);
 
@@ -1029,7 +1037,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/platform/battery", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/battery", output.ResolveJsonMode(json, noJson));
         });
         platformCommand.Add(platformBatteryCmd);
 
@@ -1040,7 +1048,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/platform/connectivity", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/connectivity", output.ResolveJsonMode(json, noJson));
         });
         platformCommand.Add(platformConnectivityCmd);
 
@@ -1051,7 +1059,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/platform/version-tracking", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/version-tracking", output.ResolveJsonMode(json, noJson));
         });
         platformCommand.Add(platformVersionTrackingCmd);
 
@@ -1066,8 +1074,8 @@ public class DevFlowCommands
             var permName = ctx.GetValue(platformPermsNameArg);
             var isJson = output.ResolveJsonMode(json, noJson);
             var path = permName != null
-            ? $"/api/platform/permissions/{Uri.EscapeDataString(permName)}"
-            : "/api/platform/permissions";
+            ? $"/api/v1/device/permissions/{Uri.EscapeDataString(permName)}"
+            : "/api/v1/device/permissions";
             await SimpleGetAsync(host, port, path, isJson);
         });
         platformCommand.Add(platformPermsCmd);
@@ -1084,11 +1092,11 @@ public class DevFlowCommands
             var accuracy = ctx.GetValue(platformGeoAccuracyOption)!;
             var timeout = ctx.GetValue(platformGeoTimeoutOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleGetAsync(host, port, $"/api/platform/geolocation?accuracy={Uri.EscapeDataString(accuracy)}&timeout={timeout}", isJson);
+            await SimpleGetAsync(host, port, $"/api/v1/device/geolocation?accuracy={Uri.EscapeDataString(accuracy)}&timeout={timeout}", isJson);
         });
         platformCommand.Add(platformGeoCmd);
 
-        mauiCommand.Add(platformCommand);
+        devflowCommand.Add(platformCommand);
 
         // ===== MAUI sensors subcommands =====
         var sensorsCommand = new Command("sensors", "Monitor device sensors");
@@ -1100,7 +1108,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/sensors", output.ResolveJsonMode(json, noJson));
+            await SimpleGetAsync(host, port, "/api/v1/device/sensors", output.ResolveJsonMode(json, noJson));
         });
         sensorsCommand.Add(sensorsListCmd);
 
@@ -1116,7 +1124,7 @@ public class DevFlowCommands
             var sensor = ctx.GetValue(sensorsStartSensorArg)!;
             var speed = ctx.GetValue(sensorsStartSpeedOption)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, $"/api/sensors/{Uri.EscapeDataString(sensor)}/start?speed={Uri.EscapeDataString(speed)}", null, isJson);
+            await SimplePostAsync(host, port, $"/api/v1/device/sensors/{Uri.EscapeDataString(sensor)}/start?speed={Uri.EscapeDataString(speed)}", null, isJson);
         });
         sensorsCommand.Add(sensorsStartCmd);
 
@@ -1130,7 +1138,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var sensor = ctx.GetValue(sensorsStopSensorArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, $"/api/sensors/{Uri.EscapeDataString(sensor)}/stop", null, isJson);
+            await SimplePostAsync(host, port, $"/api/v1/device/sensors/{Uri.EscapeDataString(sensor)}/stop", null, isJson);
         });
         sensorsCommand.Add(sensorsStopCmd);
 
@@ -1154,7 +1162,7 @@ public class DevFlowCommands
         });
         sensorsCommand.Add(sensorsStreamCmd);
 
-        mauiCommand.Add(sensorsCommand);
+        platformCommand.Add(sensorsCommand);
 
         devflowCommand.Add(mauiCommand);
 
@@ -1260,6 +1268,60 @@ public class DevFlowCommands
         });
         devflowCommand.Add(waitCmd);
 
+        // ===== agent command family =====
+        var agentCommand = new Command("agent", "Discover and inspect connected DevFlow agents");
+
+        var agentStatusWindowOption = new Option<int?>("--window") { Description = "Window index (0-based, default: first window)" };
+        var agentStatusCmd = new Command("status", "Check the selected agent connection") { agentStatusWindowOption };
+        agentStatusCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            var window = ctx.GetValue(agentStatusWindowOption);
+            await MauiStatusAsync(host, port, output.ResolveJsonMode(json, noJson), window);
+        });
+        agentCommand.Add(agentStatusCmd);
+
+        var agentListCmd = new Command("list", "List all connected agents");
+        agentListCmd.SetAction(async (ctx, ct) =>
+        {
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson));
+        });
+        agentCommand.Add(agentListCmd);
+
+        var agentWaitTimeoutOption = new Option<int>("--timeout", "-t") { Description = "Maximum seconds to wait for an agent to connect", DefaultValueFactory = _ => 120 };
+        var agentWaitProjectOption = new Option<string?>("--project") { Description = "Filter by project path (csproj). Resolves to full path for matching.", DefaultValueFactory = _ => null };
+        var agentWaitPlatformOption = new Option<string?>("--platform") { Description = "Filter by platform (e.g., macOS, iOS, Android)", DefaultValueFactory = _ => null };
+        var agentWaitCmd = new Command("wait", "Wait for an agent to connect")
+        {
+            agentWaitTimeoutOption, agentWaitProjectOption, agentWaitPlatformOption
+        };
+        agentWaitCmd.SetAction(async (ctx, ct) =>
+        {
+            var timeout = ctx.GetValue(agentWaitTimeoutOption);
+            var project = ctx.GetValue(agentWaitProjectOption);
+            var waitPlatform = ctx.GetValue(agentWaitPlatformOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson));
+        });
+        agentCommand.Add(agentWaitCmd);
+
+        var agentDiagnoseCmd = new Command("diagnose", "Check DevFlow health: broker, agents, and project integration");
+        agentDiagnoseCmd.SetAction(async (ctx, ct) =>
+        {
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson));
+        });
+        agentCommand.Add(agentDiagnoseCmd);
+
+        devflowCommand.Add(agentCommand);
+
         // ===== batch command (interactive stdin/stdout) =====
         var batchDelayOption = new Option<int>("--delay") { Description = "Delay in ms between commands", DefaultValueFactory = _ => 250 };
         var batchContinueOption = new Option<bool>("--continue-on-error") { Description = "Continue executing after a command fails", DefaultValueFactory = _ => false };
@@ -1308,9 +1370,10 @@ public class DevFlowCommands
         devflowCommand.Add(commandsCmd);
 
         // ===== MCP server command =====
-        var mcpServeCmd = new Command("mcp", "Start MCP (Model Context Protocol) server for AI agent integration via stdio");
-        mcpServeCmd.SetAction(async (ctx, ct) => { await Mcp.McpServerHost.RunAsync(); });
-        devflowCommand.Add(mcpServeCmd);
+        var mcpCmd = new Command("mcp", "Start MCP (Model Context Protocol) server for AI agent integration via stdio");
+        mcpCmd.Aliases.Add("mcp-serve");
+        mcpCmd.SetAction(async (ctx, ct) => { await Mcp.McpServerHost.RunAsync(); });
+        devflowCommand.Add(mcpCmd);
 
         _devflowCommand = devflowCommand;
 
@@ -1562,7 +1625,7 @@ public class DevFlowCommands
         {
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(5);
-            var response = await http.GetAsync($"http://{host}:{port}/api/status");
+            var response = await http.GetAsync($"http://{host}:{port}/api/v1/agent/status");
             var body = await response.Content.ReadAsStringAsync();
             var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
@@ -1761,6 +1824,28 @@ public class DevFlowCommands
         }
     }
 
+    private static async Task SimplePutAsync(string host, int port, string path, JsonNode? bodyObj, bool json)
+    {
+        try
+        {
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(30);
+            using var content = new StringContent(
+                CliJson.SerializeUntyped(bodyObj ?? new JsonObject(), indented: false),
+                Encoding.UTF8,
+                "application/json");
+            var response = await http.PutAsync($"http://{host}:{port}{path}", content);
+            var body = await response.Content.ReadAsStringAsync();
+            Console.WriteLine(body);
+            if (!response.IsSuccessStatusCode) _errorOccurred = true;
+        }
+        catch (Exception ex)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+    }
+
     private static async Task SimpleDeleteAsync(string host, int port, string path, bool json)
     {
         try
@@ -1784,7 +1869,7 @@ public class DevFlowCommands
         try
         {
             using var client = new System.Net.WebSockets.ClientWebSocket();
-            var uri = new Uri($"ws://{host}:{port}/ws/sensors?sensor={Uri.EscapeDataString(sensor)}&speed={Uri.EscapeDataString(speed)}&throttleMs={throttleMs}");
+            var uri = new Uri($"ws://{host}:{port}/ws/v1/sensors?sensor={Uri.EscapeDataString(sensor)}&speed={Uri.EscapeDataString(speed)}&throttleMs={throttleMs}");
             using var cts = duration > 0
                 ? new CancellationTokenSource(TimeSpan.FromSeconds(duration))
                 : new CancellationTokenSource();
@@ -1851,7 +1936,7 @@ public class DevFlowCommands
                 if (type != null) criteria.Add($"type=\"{type}\"");
                 if (text != null) criteria.Add($"text=\"{text}\"");
                 Output.WriteError($"No elements found matching {string.Join(", ", criteria)}", json,
-                    suggestions: new[] { "Run 'MAUI tree' to see available elements", "Check automationId spelling" });
+                    suggestions: new[] { "Run 'ui tree' to see available elements", "Check automationId spelling" });
                 _errorOccurred = true;
                 return null;
             }
@@ -1882,14 +1967,14 @@ public class DevFlowCommands
         if (id.Any(c => c < 0x20))
         {
             Output.WriteError($"Element ID contains control characters: '{id}'", json, "InvocationError",
-                suggestions: new[] { "Element IDs should not contain control characters", "Run 'MAUI tree' to get valid IDs" });
+                suggestions: new[] { "Element IDs should not contain control characters", "Run 'ui tree' to get valid IDs" });
             _errorOccurred = true;
             return;
         }
         if (id.Contains('?') || id.Contains('#'))
         {
             Output.WriteError($"Element ID contains '?' or '#': '{id}' — this looks like a URL fragment, not an element ID", json, "InvocationError",
-                suggestions: new[] { "Run 'MAUI tree' to get valid element IDs" });
+                suggestions: new[] { "Run 'ui tree' to get valid element IDs" });
             _errorOccurred = true;
             return;
         }
@@ -1958,80 +2043,81 @@ public class DevFlowCommands
 
     private static List<CommandDescription> GetCommandDescriptions() => new()
     {
-        new("MAUI status", "Check agent connection and app info", false),
-        new("MAUI tree", "Dump visual element tree", false),
-        new("MAUI query", "Find elements by type, automationId, text, or CSS selector", false),
-        new("MAUI element", "Get detailed element info by ID", false),
-        new("MAUI hittest", "Find elements at screen coordinates", false),
-        new("MAUI tap", "Tap a UI element", true),
-        new("MAUI fill", "Fill text into an input element", true),
-        new("MAUI clear", "Clear text from an input element", true),
-        new("MAUI focus", "Set focus to an element", true),
-        new("MAUI navigate", "Navigate to a Shell route", true),
-        new("MAUI scroll", "Scroll content or scroll element into view", true),
-        new("MAUI resize", "Resize app window", true),
-        new("MAUI property", "Get element property value", false),
-        new("MAUI set-property", "Set element property value", true),
-        new("MAUI screenshot", "Take screenshot of app or element", false),
-        new("MAUI assert", "Assert element property equals expected value", false),
-        new("MAUI recording start", "Start screen recording", true),
-        new("MAUI recording stop", "Stop screen recording", true),
-        new("MAUI recording status", "Check recording status", false),
-        new("MAUI alert detect", "Check if a system dialog is visible", false),
-        new("MAUI alert dismiss", "Dismiss a system dialog", true),
-        new("MAUI alert tree", "Show accessibility tree for dialog detection", false),
-        new("MAUI permission grant", "Grant iOS simulator permission", true),
-        new("MAUI permission revoke", "Revoke iOS simulator permission", true),
-        new("MAUI permission reset", "Reset iOS simulator permission", true),
-        new("MAUI logs", "Fetch or stream application logs", false),
-        new("MAUI network", "Monitor HTTP network requests (live)", false),
-        new("MAUI network list", "List recent network requests", false),
-        new("MAUI network detail", "Show full network request details", false),
-        new("MAUI network clear", "Clear network request buffer", true),
-        new("MAUI preferences list", "List all known preference keys", false),
-        new("MAUI preferences get", "Get a preference value by key", false),
-        new("MAUI preferences set", "Set a preference value", true),
-        new("MAUI preferences delete", "Remove a preference", true),
-        new("MAUI preferences clear", "Clear all preferences", true),
-        new("MAUI secure-storage get", "Get a secure storage value", false),
-        new("MAUI secure-storage set", "Set a secure storage value", true),
-        new("MAUI secure-storage delete", "Remove a secure storage entry", true),
-        new("MAUI secure-storage clear", "Clear all secure storage", true),
-        new("MAUI platform app-info", "Get app name, version, theme", false),
-        new("MAUI platform device-info", "Get device manufacturer, model, OS", false),
-        new("MAUI platform display", "Get screen density, size, orientation", false),
-        new("MAUI platform battery", "Get battery level, state, power source", false),
-        new("MAUI platform connectivity", "Get network access and profiles", false),
-        new("MAUI platform version-tracking", "Get version history and launch info", false),
-        new("MAUI platform permissions", "Check permission status", false),
-        new("MAUI platform geolocation", "Get current GPS coordinates", false),
-        new("MAUI sensors list", "List available sensors and status", false),
-        new("MAUI sensors start", "Start a device sensor", true),
-        new("MAUI sensors stop", "Stop a device sensor", true),
-        new("MAUI sensors stream", "Stream sensor readings via WebSocket", false),
-        new("cdp webviews", "List available CDP WebViews", false),
-        new("cdp status", "Check CDP connection status", false),
-        new("cdp Browser getVersion", "Get browser version", false),
-        new("cdp Runtime evaluate", "Evaluate JavaScript expression", false),
-        new("cdp DOM getDocument", "Get DOM document tree", false),
-        new("cdp DOM querySelector", "Find element by CSS selector", false),
-        new("cdp DOM querySelectorAll", "Find all elements by CSS selector", false),
-        new("cdp DOM getOuterHTML", "Get element outer HTML", false),
-        new("cdp Input click", "Click element by CSS selector", true),
-        new("cdp Input insertText", "Insert text at cursor", true),
-        new("cdp Input fill", "Fill form field by CSS selector", true),
-        new("cdp Page navigate", "Navigate WebView to URL", true),
-        new("cdp Page reload", "Reload WebView page", true),
-        new("cdp Page captureScreenshot", "Take WebView screenshot", false),
-        new("cdp snapshot", "Get simplified DOM snapshot", false),
-        new("cdp source", "Get page HTML source", false),
-        new("list", "List all connected agents", false),
-        new("wait", "Wait for an agent to connect", false),
+        new("ui status", "Check agent connection and app info", false),
+        new("ui tree", "Dump visual element tree", false),
+        new("ui query", "Find elements by type, automationId, text, or CSS selector", false),
+        new("ui element", "Get detailed element info by ID", false),
+        new("ui hit-test", "Find elements at screen coordinates", false),
+        new("ui tap", "Tap a UI element", true),
+        new("ui fill", "Fill text into an input element", true),
+        new("ui clear", "Clear text from an input element", true),
+        new("ui focus", "Set focus to an element", true),
+        new("ui navigate", "Navigate to a Shell route", true),
+        new("ui scroll", "Scroll content or scroll element into view", true),
+        new("ui resize", "Resize app window", true),
+        new("ui property", "Get element property value", false),
+        new("ui set-property", "Set element property value", true),
+        new("ui screenshot", "Take screenshot of app or element", false),
+        new("ui assert", "Assert element property equals expected value", false),
+        new("recording start", "Start screen recording", true),
+        new("recording stop", "Stop screen recording", true),
+        new("recording status", "Check recording status", false),
+        new("ui alert detect", "Check if a system dialog is visible", false),
+        new("ui alert dismiss", "Dismiss a system dialog", true),
+        new("ui alert tree", "Show accessibility tree for dialog detection", false),
+        new("ui permission grant", "Grant iOS simulator permission", true),
+        new("ui permission revoke", "Revoke iOS simulator permission", true),
+        new("ui permission reset", "Reset iOS simulator permission", true),
+        new("logs", "Fetch or stream application logs", false),
+        new("network", "Monitor HTTP network requests (live)", false),
+        new("network list", "List recent network requests", false),
+        new("network detail", "Show full network request details", false),
+        new("network clear", "Clear network request buffer", true),
+        new("storage preferences list", "List all known preference keys", false),
+        new("storage preferences get", "Get a preference value by key", false),
+        new("storage preferences set", "Set a preference value", true),
+        new("storage preferences delete", "Remove a preference", true),
+        new("storage preferences clear", "Clear all preferences", true),
+        new("storage secure-storage get", "Get a secure storage value", false),
+        new("storage secure-storage set", "Set a secure storage value", true),
+        new("storage secure-storage delete", "Remove a secure storage entry", true),
+        new("storage secure-storage clear", "Clear all secure storage", true),
+        new("device app-info", "Get app name, version, theme", false),
+        new("device device-info", "Get device manufacturer, model, OS", false),
+        new("device display", "Get screen density, size, orientation", false),
+        new("device battery", "Get battery level, state, power source", false),
+        new("device connectivity", "Get network access and profiles", false),
+        new("device version-tracking", "Get version history and launch info", false),
+        new("device permissions", "Check permission status", false),
+        new("device geolocation", "Get current GPS coordinates", false),
+        new("device sensors list", "List available sensors and status", false),
+        new("device sensors start", "Start a device sensor", true),
+        new("device sensors stop", "Stop a device sensor", true),
+        new("device sensors stream", "Stream sensor readings via WebSocket", false),
+        new("webview webviews", "List available CDP WebViews", false),
+        new("webview status", "Check CDP connection status", false),
+        new("webview Browser getVersion", "Get browser version", false),
+        new("webview Runtime evaluate", "Evaluate JavaScript expression", false),
+        new("webview DOM getDocument", "Get DOM document tree", false),
+        new("webview DOM querySelector", "Find element by CSS selector", false),
+        new("webview DOM querySelectorAll", "Find all elements by CSS selector", false),
+        new("webview DOM getOuterHTML", "Get element outer HTML", false),
+        new("webview Input click", "Click element by CSS selector", true),
+        new("webview Input insertText", "Insert text at cursor", true),
+        new("webview Input fill", "Fill form field by CSS selector", true),
+        new("webview Page navigate", "Navigate WebView to URL", true),
+        new("webview Page reload", "Reload WebView page", true),
+        new("webview Page captureScreenshot", "Take WebView screenshot", false),
+        new("webview snapshot", "Get simplified DOM snapshot", false),
+        new("webview source", "Get page HTML source", false),
+        new("agent list", "List all connected agents", false),
+        new("agent wait", "Wait for an agent to connect", false),
         new("batch", "Execute commands from stdin", true),
         new("broker start", "Start the broker daemon", true),
         new("broker stop", "Stop the broker daemon", true),
         new("broker status", "Show broker status", false),
         new("broker log", "Show broker log", false),
+        new("mcp", "Start the MCP server", false),
         new("commands", "List all available commands", false),
         new("version", "Show CLI version", false),
     };
@@ -2256,10 +2342,10 @@ public class DevFlowCommands
             }
             Output.WriteResult(status, json, s =>
             {
-                Console.WriteLine($"Agent: {s.Agent} v{s.Version}");
-                Console.WriteLine($"Platform: {s.Platform}");
-                Console.WriteLine($"Device: {s.DeviceType} ({s.Idiom})");
-                Console.WriteLine($"App: {s.AppName}");
+                Console.WriteLine($"Agent: {s.Agent?.Name ?? "unknown"} v{s.Agent?.Version ?? s.Version ?? "unknown"}");
+                Console.WriteLine($"Platform: {s.Device?.Platform ?? s.Platform ?? "unknown"}");
+                Console.WriteLine($"Device: {s.Device?.DeviceType ?? s.DeviceType ?? "unknown"} ({s.Device?.Idiom ?? s.Idiom ?? "unknown"})");
+                Console.WriteLine($"App: {s.App?.Name ?? s.AppName ?? "unknown"}");
             });
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
@@ -2317,7 +2403,7 @@ public class DevFlowCommands
                         Output.WriteError(
                             $"Timeout after {timeout}s: condition '{waitUntil}' not met",
                             json, "RuntimeError", retryable: true,
-                            suggestions: new[] { "Increase --timeout", "Check element identifiers with 'MAUI tree'" });
+                            suggestions: new[] { "Increase --timeout", "Check element identifiers with 'ui tree'" });
                         _errorOccurred = true;
                         return;
                     }
@@ -2390,7 +2476,7 @@ public class DevFlowCommands
                 success ? $"Tapped: {elementId}" : $"Failed to tap: {elementId}");
             if (!success) _errorOccurred = true;
         }
-        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'MAUI tree' to refresh element IDs" }); _errorOccurred = true; }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
     private static async Task MauiFillAsync(string host, int port, bool json, string elementId, string text)
@@ -2403,7 +2489,7 @@ public class DevFlowCommands
                 success ? $"Filled: {elementId}" : $"Failed to fill: {elementId}");
             if (!success) _errorOccurred = true;
         }
-        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'MAUI tree' to refresh element IDs" }); _errorOccurred = true; }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
     private static async Task MauiClearAsync(string host, int port, bool json, string elementId)
@@ -2416,7 +2502,7 @@ public class DevFlowCommands
                 success ? $"Cleared: {elementId}" : $"Failed to clear: {elementId}");
             if (!success) _errorOccurred = true;
         }
-        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'MAUI tree' to refresh element IDs" }); _errorOccurred = true; }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
     private static async Task MauiScreenshotAsync(string host, int port, bool json, string? output, int? window, string? id, string? selector, bool overwrite = false, int? maxWidth = null, string? scale = null)
@@ -2679,7 +2765,7 @@ public class DevFlowCommands
             if (el == null)
             {
                 Output.WriteError($"Element '{elementId}' not found", json,
-                    suggestions: new[] { "Run 'MAUI tree' to refresh element IDs", "Element IDs are ephemeral — re-query after navigation" });
+                    suggestions: new[] { "Run 'ui tree' to refresh element IDs", "Element IDs are ephemeral — re-query after navigation" });
                 _errorOccurred = true;
                 return;
             }
@@ -2791,7 +2877,7 @@ public class DevFlowCommands
             queryParams.Add($"source={Uri.EscapeDataString(source)}");
         if (replay != 100)
             queryParams.Add($"replay={replay}");
-        var wsUrl = $"ws://{host}:{port}/ws/logs";
+        var wsUrl = $"ws://{host}:{port}/ws/v1/logs";
         if (queryParams.Count > 0)
             wsUrl += "?" + string.Join("&", queryParams);
 
@@ -2924,7 +3010,7 @@ public class DevFlowCommands
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
         int counter = 0;
-        var wsUrl = $"ws://{host}:{port}/ws/network";
+        var wsUrl = $"ws://{host}:{port}/ws/v1/network";
 
         while (!cts.Token.IsCancellationRequested)
         {
@@ -3434,10 +3520,11 @@ public class DevFlowCommands
         {
             using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
             var status = await client.GetStatusAsync();
-            if (status?.AppName != null)
+            var appName = status?.App?.Name ?? status?.AppName;
+            if (!string.IsNullOrWhiteSpace(appName))
             {
                 // Find process by app name
-                var pgrepResult = await ProcessRunner.RunAsync("pgrep", new[] { "-f", status.AppName });
+                var pgrepResult = await ProcessRunner.RunAsync("pgrep", new[] { "-f", appName });
                 var lines = pgrepResult.StandardOutput.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries);
                 if (lines.Length > 0 && int.TryParse(lines[0].Trim(), out var resolved))
                     return resolved;
@@ -3456,16 +3543,17 @@ public class DevFlowCommands
         {
             using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
             var status = await client.GetStatusAsync();
-            if (status?.AppName != null)
+            var appName = status?.App?.Name ?? status?.AppName;
+            if (!string.IsNullOrWhiteSpace(appName))
             {
-                var processes = System.Diagnostics.Process.GetProcessesByName(status.AppName);
+                var processes = System.Diagnostics.Process.GetProcessesByName(appName);
                 if (processes.Length > 0)
                     return processes[0].Id;
 
                 var match = System.Diagnostics.Process.GetProcesses()
                     .FirstOrDefault(p =>
                     {
-                        try { return p.ProcessName.Contains(status.AppName, StringComparison.OrdinalIgnoreCase); }
+                        try { return p.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase); }
                         catch { return false; }
                     });
                 if (match != null)
@@ -3697,7 +3785,7 @@ public class DevFlowCommands
                 foreach (var a in agents)
                     Console.Error.WriteLine($"{a.Id,-15}{a.AppName,-20}{a.Platform,-15}{a.Tfm,-25}{a.Port,-7}");
                 Console.Error.WriteLine();
-                Console.Error.WriteLine("Example: maui devflow MAUI status --agent-port <port>");
+                Console.Error.WriteLine("Example: maui devflow ui status --agent-port <port>");
             }
         }
         catch { /* broker unavailable, fall through */ }
@@ -4064,9 +4152,9 @@ public class DevFlowCommands
                 if (args.Length == 0) continue;
 
                 var prefix = args[0].ToUpperInvariant();
-                if (prefix != "MAUI" && prefix != "CDP")
+                if (prefix != "UI" && prefix != "WEBVIEW" && prefix != "MAUI" && prefix != "CDP")
                 {
-                    var errMsg = $"Only MAUI and cdp commands are supported in batch mode, got: {args[0]}";
+                    var errMsg = $"Only ui and webview commands are supported in batch mode, got: {args[0]}";
                     if (human)
                     {
                         originalOut.WriteLine($"[{commandIndex}] {rawCmd}");

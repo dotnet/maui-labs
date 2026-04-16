@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Maui.Cli.Errors;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Providers.Apple;
@@ -272,7 +273,7 @@ public class DoctorService : IDoctorService
 			Name = ".NET SDK",
 			Status = CheckStatus.Ok,
 			Message = $".NET {version}",
-			Details = new Dictionary<string, object>
+			Details = new JsonObject
 			{
 				["version"] = version,
 				["path"] = dotnetPath
@@ -373,7 +374,7 @@ public class DoctorService : IDoctorService
 			Name = "Windows SDK",
 			Status = CheckStatus.Ok,
 			Message = installedVersion != null ? $"Windows SDK {installedVersion}" : "Windows SDK found",
-			Details = new Dictionary<string, object>
+			Details = new JsonObject
 			{
 				["path"] = sdkPath,
 				["version"] = installedVersion ?? "unknown"

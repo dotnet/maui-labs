@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.Cli.Models;
@@ -28,7 +29,7 @@ public record ErrorResult
 
 	[JsonPropertyName("context")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-	public Dictionary<string, object>? Context { get; init; }
+	public JsonObject? Context { get; init; }
 
 	[JsonPropertyName("remediation")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -74,6 +75,7 @@ public record ErrorResult
 				Category = GetCategory(mex.Code),
 				Message = mex.Message,
 				NativeError = mex.NativeError,
+				Context = ToJsonObject(mex.Context),
 				Remediation = mex.Remediation != null ? new RemediationResult
 				{
 					Type = mex.Remediation.Type.ToString().ToLowerInvariant(),
@@ -89,6 +91,33 @@ public record ErrorResult
 			Category = "tool",
 			Message = exception.Message
 		};
+	}
+
+	static JsonObject? ToJsonObject(Dictionary<string, object>? context)
+	{
+		if (context is null || context.Count == 0)
+			return null;
+
+		var result = new JsonObject();
+
+		foreach (var (key, value) in context)
+		{
+			result[key] = value switch
+			{
+				null => null,
+				string text => text,
+				bool boolean => boolean,
+				int number => number,
+				long number => number,
+				double number => number,
+				float number => number,
+				decimal number => number,
+				IEnumerable<string> values => new JsonArray(values.Select(v => (JsonNode?)v).ToArray()),
+				_ => value.ToString()
+			};
+		}
+
+		return result;
 	}
 }
 

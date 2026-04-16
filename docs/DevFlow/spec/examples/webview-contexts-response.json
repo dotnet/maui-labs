@@ -1,0 +1,18 @@
+{
+  "contexts": [
+    {
+      "id": "webview_0",
+      "elementId": "blazor_main",
+      "url": "https://app/_content/index.html",
+      "title": "Dashboard",
+      "ready": true
+    },
+    {
+      "id": "webview_1",
+      "elementId": "help_webview",
+      "url": "https://docs.example.com/help",
+      "title": "Help Center",
+      "ready": true
+    }
+  ]
+}

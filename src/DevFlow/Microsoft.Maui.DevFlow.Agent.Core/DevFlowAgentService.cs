@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Maui;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
@@ -64,6 +65,8 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     private readonly ConditionalWeakTable<Page, PageLifecycleState> _pageLifecycleStates = new();
     private readonly ConditionalWeakTable<VisualElement, ElementRenderState> _elementRenderStates = new();
     private readonly ConditionalWeakTable<BindableObject, ScrollBatchState> _scrollBatchStates = new();
+    private readonly List<UiEventSubscription> _uiEventSubscriptions = new();
+    private readonly object _uiEventSubscriptionGate = new();
 
     private sealed class UiHookState
     {
@@ -104,6 +107,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         public int? StartLastVisibleIndex { get; set; }
         public int? LastFirstVisibleIndex { get; set; }
         public int? LastLastVisibleIndex { get; set; }
+    }
+
+    private sealed class UiEventSubscription
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Queue { get; } = new();
+        public HashSet<string> Events { get; } = new(StringComparer.OrdinalIgnoreCase) { "all" };
     }
 
     /// <summary>
@@ -371,6 +380,11 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             // has not been associated with one yet.
         }
         Console.WriteLine("[Microsoft.Maui.DevFlow.Agent] Application bound to running agent");
+        PublishUiEvent("lifecycle", new
+        {
+            state = "started",
+            timestamp = DateTimeOffset.UtcNow.ToString("O")
+        });
     }
 
     public async Task StopAsync()
@@ -381,78 +395,95 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private void RegisterRoutes()
     {
-        _server.MapGet("/api/status", HandleStatus);
-        _server.MapGet("/api/tree", HandleTree);
-        _server.MapGet("/api/element/{id}", HandleElement);
-        _server.MapGet("/api/query", HandleQuery);
-        _server.MapGet("/api/hittest", HandleHitTest);
-        _server.MapGet("/api/screenshot", HandleScreenshot);
-        _server.MapGet("/api/property/{id}/{name}", HandleProperty);
-        _server.MapPost("/api/property/{id}/{name}", HandleSetProperty);
-        _server.MapPost("/api/action/tap", HandleTap);
-        _server.MapPost("/api/action/fill", HandleFill);
-        _server.MapPost("/api/action/clear", HandleClear);
-        _server.MapPost("/api/action/focus", HandleFocus);
-        _server.MapPost("/api/action/navigate", HandleNavigate);
-        _server.MapPost("/api/action/resize", HandleResize);
-        _server.MapPost("/api/action/scroll", HandleScroll);
-        _server.MapGet("/api/logs", HandleLogs);
-        _server.MapPost("/api/cdp", HandleCdp);
-        _server.MapGet("/api/cdp/webviews", HandleCdpWebViews);
-        _server.MapGet("/api/cdp/source", HandleCdpSource);
-        _server.MapGet("/api/profiler/capabilities", HandleProfilerCapabilities);
-        _server.MapPost("/api/profiler/start", HandleProfilerStart);
-        _server.MapPost("/api/profiler/stop", HandleProfilerStop);
-        _server.MapGet("/api/profiler/samples", HandleProfilerSamples);
-        _server.MapPost("/api/profiler/marker", HandleProfilerMarker);
-        _server.MapPost("/api/profiler/span", HandleProfilerSpan);
-        _server.MapGet("/api/profiler/hotspots", HandleProfilerHotspots);
+        // Canonical DevFlow v1 routes aligned with the formal spec.
+        _server.MapGet("/api/v1/agent/status", HandleStatus);
+        _server.MapGet("/api/v1/agent/capabilities", HandleCapabilities);
 
-        // Network monitoring
-        _server.MapGet("/api/network", HandleNetworkList);
-        _server.MapGet("/api/network/{id}", HandleNetworkDetail);
-        _server.MapPost("/api/network/clear", HandleNetworkClear);
+        _server.MapGet("/api/v1/ui/tree", HandleTree);
+        _server.MapGet("/api/v1/ui/elements", HandleQuery);
+        _server.MapGet("/api/v1/ui/elements/{id}", HandleElement);
+        _server.MapGet("/api/v1/ui/hit-test", HandleHitTest);
+        _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
+        _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
+        _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", HandleSetProperty);
+        _server.MapPost("/api/v1/ui/actions/tap", HandleTap);
+        _server.MapPost("/api/v1/ui/actions/fill", HandleFill);
+        _server.MapPost("/api/v1/ui/actions/clear", HandleClear);
+        _server.MapPost("/api/v1/ui/actions/focus", HandleFocus);
+        _server.MapPost("/api/v1/ui/actions/navigate", HandleNavigate);
+        _server.MapPost("/api/v1/ui/actions/resize", HandleResize);
+        _server.MapPost("/api/v1/ui/actions/scroll", HandleScroll);
+        _server.MapPost("/api/v1/ui/actions/back", HandleBack);
+        _server.MapPost("/api/v1/ui/actions/key", HandleKey);
+        _server.MapPost("/api/v1/ui/actions/gesture", HandleGesture);
+        _server.MapPost("/api/v1/ui/actions/batch", HandleBatch);
 
-        // WebSocket: live network monitoring stream
-        _server.MapWebSocket("/ws/network", HandleNetworkWebSocket);
+        _server.MapGet("/api/v1/logs", HandleLogs);
+        _server.MapWebSocket("/ws/v1/logs", HandleLogsWebSocket);
 
-        // WebSocket: live log streaming
-        _server.MapWebSocket("/ws/logs", HandleLogsWebSocket);
+        _server.MapPost("/api/v1/webview/evaluate", HandleCdp);
+        _server.MapGet("/api/v1/webview/contexts", HandleCdpWebViews);
+        _server.MapGet("/api/v1/webview/source", HandleCdpSource);
+        _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
+        _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery);
+        _server.MapPost("/api/v1/webview/navigate", HandleWebViewNavigate);
+        _server.MapPost("/api/v1/webview/input/click", HandleWebViewInputClick);
+        _server.MapPost("/api/v1/webview/input/fill", HandleWebViewInputFill);
+        _server.MapPost("/api/v1/webview/input/text", HandleWebViewInputText);
+        _server.MapGet("/api/v1/webview/network", HandleWebViewNetwork);
+        _server.MapGet("/api/v1/webview/console", HandleWebViewConsole);
+        _server.MapGet("/api/v1/webview/screenshot", HandleWebViewScreenshot);
 
-        // Preferences (CRUD)
-        _server.MapGet("/api/preferences", HandlePreferencesList);
-        _server.MapGet("/api/preferences/{key}", HandlePreferencesGet);
-        _server.MapPost("/api/preferences/{key}", HandlePreferencesSet);
-        _server.MapDelete("/api/preferences/{key}", HandlePreferencesDelete);
-        _server.MapPost("/api/preferences/clear", HandlePreferencesClear);
+        _server.MapGet("/api/v1/profiler/capabilities", HandleProfilerCapabilities);
+        _server.MapPost("/api/v1/profiler/sessions", HandleProfilerStart);
+        _server.MapDelete("/api/v1/profiler/sessions/{id}", HandleProfilerStop);
+        _server.MapGet("/api/v1/profiler/sessions/{id}/samples", HandleProfilerSamples);
+        _server.MapPost("/api/v1/profiler/markers", HandleProfilerMarker);
+        _server.MapPost("/api/v1/profiler/spans", HandleProfilerSpan);
+        _server.MapGet("/api/v1/profiler/hotspots", HandleProfilerHotspots);
+        _server.MapWebSocket("/ws/v1/profiler", HandleProfilerWebSocket);
 
-        // Secure Storage (CRUD)
-        _server.MapGet("/api/secure-storage/{key}", HandleSecureStorageGet);
-        _server.MapPost("/api/secure-storage/{key}", HandleSecureStorageSet);
-        _server.MapDelete("/api/secure-storage/{key}", HandleSecureStorageDelete);
-        _server.MapPost("/api/secure-storage/clear", HandleSecureStorageClear);
+        _server.MapGet("/api/v1/network/requests", HandleNetworkList);
+        _server.MapGet("/api/v1/network/requests/{id}", HandleNetworkDetail);
+        _server.MapDelete("/api/v1/network/requests", HandleNetworkClear);
+        _server.MapWebSocket("/ws/v1/network", HandleNetworkWebSocket);
 
-        // Platform info (read-only)
-        _server.MapGet("/api/platform/app-info", HandlePlatformAppInfo);
-        _server.MapGet("/api/platform/device-info", HandlePlatformDeviceInfo);
-        _server.MapGet("/api/platform/device-display", HandlePlatformDeviceDisplay);
-        _server.MapGet("/api/platform/battery", HandlePlatformBattery);
-        _server.MapGet("/api/platform/connectivity", HandlePlatformConnectivity);
-        _server.MapGet("/api/platform/version-tracking", HandlePlatformVersionTracking);
-        _server.MapGet("/api/platform/permissions", HandlePlatformPermissions);
-        _server.MapGet("/api/platform/permissions/{permission}", HandlePlatformPermissionCheck);
-        _server.MapGet("/api/platform/geolocation", HandlePlatformGeolocation);
+        _server.MapWebSocket("/ws/v1/ui/events", HandleUiEventsWebSocket);
 
-        // Sensors
-        _server.MapGet("/api/sensors", HandleSensorsList);
-        _server.MapPost("/api/sensors/{sensor}/start", HandleSensorStart);
-        _server.MapPost("/api/sensors/{sensor}/stop", HandleSensorStop);
-        _server.MapWebSocket("/ws/sensors", HandleSensorWebSocket);
+        _server.MapGet("/api/v1/device/app", HandlePlatformAppInfo);
+        _server.MapGet("/api/v1/device/info", HandlePlatformDeviceInfo);
+        _server.MapGet("/api/v1/device/display", HandlePlatformDeviceDisplay);
+        _server.MapGet("/api/v1/device/battery", HandlePlatformBattery);
+        _server.MapGet("/api/v1/device/connectivity", HandlePlatformConnectivity);
+        _server.MapGet("/api/v1/device/version-tracking", HandlePlatformVersionTracking);
+        _server.MapGet("/api/v1/device/permissions", HandlePlatformPermissions);
+        _server.MapGet("/api/v1/device/permissions/{permission}", HandlePlatformPermissionCheck);
+        _server.MapGet("/api/v1/device/geolocation", HandlePlatformGeolocation);
+        _server.MapGet("/api/v1/device/sensors", HandleSensorsList);
+        _server.MapPost("/api/v1/device/sensors/{sensor}/start", HandleSensorStart);
+        _server.MapPost("/api/v1/device/sensors/{sensor}/stop", HandleSensorStop);
+        _server.MapWebSocket("/ws/v1/sensors", HandleSensorWebSocket);
+
+        _server.MapGet("/api/v1/storage/preferences", HandlePreferencesList);
+        _server.MapGet("/api/v1/storage/preferences/{key}", HandlePreferencesGet);
+        _server.MapPut("/api/v1/storage/preferences/{key}", HandlePreferencesSet);
+        _server.MapDelete("/api/v1/storage/preferences/{key}", HandlePreferencesDelete);
+        _server.MapDelete("/api/v1/storage/preferences", HandlePreferencesClear);
+        _server.MapGet("/api/v1/storage/secure/{key}", HandleSecureStorageGet);
+        _server.MapPut("/api/v1/storage/secure/{key}", HandleSecureStorageSet);
+        _server.MapDelete("/api/v1/storage/secure/{key}", HandleSecureStorageDelete);
+        _server.MapDelete("/api/v1/storage/secure", HandleSecureStorageClear);
     }
 
     private async Task<HttpResponse> HandleStatus(HttpRequest request)
     {
         var windowIndex = ParseWindowIndex(request);
+        var appName = TryGetAppInfoString(() => AppInfo.Current.Name)
+            ?? _app?.GetType().Assembly.GetName().Name
+            ?? "unknown";
+        var packageId = TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown";
+        var appVersion = TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown";
+        var appBuild = TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown";
         var result = await DispatchAsync(() =>
         {
             var window = GetWindow(windowIndex);
@@ -469,26 +500,116 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
             return new
             {
-                agent = "Microsoft.Maui.DevFlow.Agent",
-                version = typeof(DevFlowAgentService).Assembly
-                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
-                platform = PlatformName,
-                deviceType = DeviceTypeName,
-                idiom = IdiomName,
-                displayDensity = GetWindowDisplayDensity(window),
-                appName = _app?.GetType().Assembly.GetName().Name ?? "unknown",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                agent = new
+                {
+                    name = "Microsoft.Maui.DevFlow.Agent",
+                    version = typeof(DevFlowAgentService).Assembly
+                        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
+                    framework = ".NET MAUI",
+                    frameworkVersion = Environment.Version.ToString(),
+                },
+                device = new
+                {
+                    platform = PlatformName,
+                    deviceType = DeviceTypeName,
+                    idiom = IdiomName,
+                    displayDensity = GetWindowDisplayDensity(window),
+                    windowCount = _app?.Windows.Count ?? 0,
+                    windowWidth = double.IsFinite(w) ? w : 0,
+                    windowHeight = double.IsFinite(h) ? h : 0,
+                },
+                app = new
+                {
+                    name = appName,
+                    packageId = packageId,
+                    version = appVersion,
+                    build = appBuild,
+                },
+                capabilities = new
+                {
+                    ui = true,
+                    screenshots = true,
+                    webview = _cdpWebViews.Any(v => v.IsReady),
+                    network = true,
+                    logs = true,
+                    sensors = true,
+                    storage = true,
+                    profiler = IsProfilerFeatureAvailable,
+                },
                 running = _app != null,
-                cdpReady = _cdpWebViews.Any(w => w.IsReady),
+                cdpReady = _cdpWebViews.Any(v => v.IsReady),
                 cdpWebViewCount = _cdpWebViews.Count,
-                windowCount = _app?.Windows.Count ?? 0,
-                windowWidth = double.IsFinite(w) ? w : 0,
-                windowHeight = double.IsFinite(h) ? h : 0,
                 profiler = BuildProfilerCapabilitiesPayload(),
                 profilerSession = _profilerSessions.CurrentSession
             };
         });
 
         return HttpResponse.Json(result!);
+    }
+
+    private static string? TryGetAppInfoString(Func<string?> getter)
+    {
+        try
+        {
+            return getter();
+        }
+        catch (Exception ex) when (ex.GetType().Name == "NotImplementedInReferenceAssemblyException")
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private Task<HttpResponse> HandleCapabilities(HttpRequest request)
+    {
+        var result = new
+        {
+            ui = new
+            {
+                supported = true,
+                features = new[] { "tree", "query", "hit-test", "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties", "screenshot" }
+            },
+            webview = new
+            {
+                supported = _cdpWebViews.Any(v => v.IsReady),
+                features = _cdpWebViews.Any(v => v.IsReady)
+                    ? new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" }
+                    : Array.Empty<string>()
+            },
+            network = new
+            {
+                supported = true,
+                features = new[] { "list", "detail", "clear", "stream" }
+            },
+            logs = new
+            {
+                supported = true,
+                features = new[] { "list", "stream" }
+            },
+            sensors = new
+            {
+                supported = true,
+                features = new[] { "list", "start", "stop", "stream" }
+            },
+            storage = new
+            {
+                supported = true,
+                features = new[] { "preferences", "secure-storage" }
+            },
+            profiler = new
+            {
+                supported = IsProfilerFeatureAvailable,
+                features = IsProfilerFeatureAvailable
+                    ? new[] { "capabilities", "sessions", "samples", "markers", "spans", "hotspots" }
+                    : Array.Empty<string>()
+            }
+        };
+
+        return Task.FromResult(HttpResponse.Json(result));
     }
 
     private async Task<HttpResponse> HandleTree(HttpRequest request)
@@ -771,7 +892,10 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
 
         // Element-level screenshot by ID
-        if (request.QueryParams.TryGetValue("id", out var elementId) && !string.IsNullOrWhiteSpace(elementId))
+        var hasElementId = request.QueryParams.TryGetValue("id", out var elementId)
+            || request.QueryParams.TryGetValue("elementId", out elementId);
+
+        if (hasElementId && !string.IsNullOrWhiteSpace(elementId))
         {
             try
             {
@@ -1136,6 +1260,18 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             result == "ok" ? null : result,
             id,
             new { property = propName });
+
+        if (result == "ok")
+        {
+            PublishUiEvent("treeChange", new
+            {
+                changeType = "modified",
+                elementId = id,
+                elementType = "property",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+        }
 
         return result == "ok"
             ? HttpResponse.Json(new { id, property = propName, value = body.Value })
@@ -1517,6 +1653,18 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             body.ElementId,
             new { textLength = body.Text.Length });
 
+        if (result == "ok")
+        {
+            PublishUiEvent("treeChange", new
+            {
+                changeType = "modified",
+                elementId = body.ElementId,
+                elementType = "input",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+        }
+
         return result == "ok" ? HttpResponse.Ok("Text set") : HttpResponse.Error(result);
     }
 
@@ -1557,6 +1705,18 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             success ? null : "Element does not accept text input",
             body.ElementId);
 
+        if (success)
+        {
+            PublishUiEvent("treeChange", new
+            {
+                changeType = "modified",
+                elementId = body.ElementId,
+                elementType = "input",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+        }
+
         return success ? HttpResponse.Ok("Cleared") : HttpResponse.Error("Element does not accept text input");
     }
 
@@ -1596,6 +1756,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("route is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        var fromRoute = Shell.Current?.CurrentState?.Location?.ToString();
         Publish(new ProfilerMarker
         {
             TsUtc = DateTime.UtcNow,
@@ -1636,6 +1797,26 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             result == "ok" ? null : result,
             elementPath: body.Route,
             tags: new { route = body.Route });
+
+        if (result == "ok")
+        {
+            PublishUiEvent("navigation", new
+            {
+                from = fromRoute,
+                to = body.Route,
+                route = body.Route,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+        }
+        else
+        {
+            PublishUiEvent("error", new
+            {
+                message = result ?? "Navigation failed",
+                stackTrace = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+        }
 
         return result == "ok" ? HttpResponse.Ok($"Navigated to {body.Route}") : HttpResponse.Error(result ?? "Navigation failed");
     }
@@ -1694,6 +1875,354 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     }
 
     private record ResizeRequest(int Width, int Height);
+
+    private sealed class KeyActionRequest
+    {
+        public string? ElementId { get; set; }
+        public string? Key { get; set; }
+        public string? Text { get; set; }
+    }
+
+    private sealed class GestureActionRequest
+    {
+        public string? ElementId { get; set; }
+        public string? Type { get; set; }
+        public string? Direction { get; set; }
+        public double Distance { get; set; } = 120;
+        public int DurationMs { get; set; } = 200;
+    }
+
+    private sealed class BatchRequest
+    {
+        public List<BatchActionRequest> Actions { get; set; } = [];
+        public bool ContinueOnError { get; set; }
+    }
+
+    private sealed class BatchActionRequest
+    {
+        public string? Action { get; set; }
+        public string? Type { get; set; }
+        public string? ElementId { get; set; }
+        public string? Text { get; set; }
+        public string? Route { get; set; }
+        public string? Property { get; set; }
+        public string? Value { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public double DeltaX { get; set; }
+        public double DeltaY { get; set; }
+        public int? ItemIndex { get; set; }
+        public int? GroupIndex { get; set; }
+        public string? ScrollToPosition { get; set; }
+        public bool Animated { get; set; } = true;
+        public string? Key { get; set; }
+        public string? Direction { get; set; }
+        public double Distance { get; set; } = 120;
+        public int DurationMs { get; set; } = 200;
+    }
+
+    private async Task<HttpResponse> HandleBack(HttpRequest request)
+    {
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
+
+        var startedAtUtc = DateTime.UtcNow;
+        var windowIndex = ParseWindowIndex(request);
+        var result = await DispatchAsync(async () =>
+        {
+            try
+            {
+                if (Shell.Current != null)
+                {
+                    await Shell.Current.GoToAsync("..");
+                    return "ok";
+                }
+
+                var page = GetWindow(windowIndex)?.Page;
+                if (page?.Navigation?.ModalStack?.Count > 0)
+                {
+                    await page.Navigation.PopModalAsync();
+                    return "ok";
+                }
+
+                if (page?.Navigation?.NavigationStack?.Count > 1)
+                {
+                    await page.Navigation.PopAsync();
+                    return "ok";
+                }
+
+                return "No navigation stack available";
+            }
+            catch (Exception ex)
+            {
+                return ex.GetBaseException().Message;
+            }
+        });
+
+        PublishUiOperationSpan("action.back", startedAtUtc, result == "ok", result == "ok" ? null : result);
+
+        return result == "ok"
+            ? HttpResponse.Ok("Navigated back")
+            : HttpResponse.Error(result ?? "Back navigation failed");
+    }
+
+    private async Task<HttpResponse> HandleKey(HttpRequest request)
+    {
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<KeyActionRequest>();
+        if (body == null || (string.IsNullOrWhiteSpace(body.Key) && string.IsNullOrWhiteSpace(body.Text)))
+            return HttpResponse.Error("key or text is required");
+
+        var startedAtUtc = DateTime.UtcNow;
+        var keyValue = body.Key ?? body.Text ?? string.Empty;
+        var result = await DispatchAsync(() =>
+        {
+            object? el = null;
+            if (!string.IsNullOrWhiteSpace(body.ElementId))
+            {
+                el = _treeWalker.GetElementById(body.ElementId, _app);
+                if (el == null)
+                    return "Element not found";
+            }
+
+            var normalizedKey = keyValue.Trim().ToLowerInvariant();
+            var text = body.Text ?? (keyValue.Length == 1 ? keyValue : null);
+
+            switch (el)
+            {
+                case Entry entry:
+                    if (normalizedKey is "enter" or "return")
+                    {
+                        entry.SendCompleted();
+                        return "ok";
+                    }
+                    if (normalizedKey is "backspace" or "delete")
+                    {
+                        entry.Text = entry.Text?.Length > 0 ? entry.Text[..^1] : string.Empty;
+                        return "ok";
+                    }
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        entry.Text += text;
+                        return "ok";
+                    }
+                    return $"Unsupported key '{keyValue}' for Entry";
+
+                case Editor editor:
+                    if (normalizedKey is "backspace" or "delete")
+                    {
+                        editor.Text = editor.Text?.Length > 0 ? editor.Text[..^1] : string.Empty;
+                        return "ok";
+                    }
+                    if (normalizedKey is "enter" or "return")
+                    {
+                        editor.Text += Environment.NewLine;
+                        return "ok";
+                    }
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        editor.Text += text;
+                        return "ok";
+                    }
+                    return $"Unsupported key '{keyValue}' for Editor";
+
+                case SearchBar searchBar:
+                    if (normalizedKey is "backspace" or "delete")
+                    {
+                        searchBar.Text = searchBar.Text?.Length > 0 ? searchBar.Text[..^1] : string.Empty;
+                        return "ok";
+                    }
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        searchBar.Text += text;
+                        return "ok";
+                    }
+                    return normalizedKey is "enter" or "return"
+                        ? "ok"
+                        : $"Unsupported key '{keyValue}' for SearchBar";
+
+                case null:
+                    return "ok";
+
+                default:
+                    return $"Element '{body.ElementId}' does not accept keyboard input";
+            }
+        });
+
+        PublishUiOperationSpan(
+            "action.key",
+            startedAtUtc,
+            result == "ok",
+            result == "ok" ? null : result,
+            body.ElementId,
+            new { key = keyValue, text = body.Text });
+
+        return result == "ok"
+            ? HttpResponse.Json(new { success = true, key = keyValue, text = body.Text, elementId = body.ElementId })
+            : HttpResponse.Error(result ?? "Key action failed");
+    }
+
+    private async Task<HttpResponse> HandleGesture(HttpRequest request)
+    {
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<GestureActionRequest>();
+        if (body == null || string.IsNullOrWhiteSpace(body.Type))
+            return HttpResponse.Error("type is required");
+
+        var gestureType = body.Type.Trim().ToLowerInvariant();
+
+        return gestureType switch
+        {
+            "tap" => await HandleTap(new HttpRequest
+            {
+                Method = "POST",
+                Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
+            }),
+            "longpress" or "long-press" => await HandleTap(new HttpRequest
+            {
+                Method = "POST",
+                Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
+            }),
+            "swipe" => await HandleScroll(new HttpRequest
+            {
+                Method = "POST",
+                Body = JsonSerializer.Serialize(new ScrollRequest
+                {
+                    ElementId = body.ElementId,
+                    DeltaX = body.Direction?.Equals("left", StringComparison.OrdinalIgnoreCase) == true ? -body.Distance :
+                        body.Direction?.Equals("right", StringComparison.OrdinalIgnoreCase) == true ? body.Distance : 0,
+                    DeltaY = body.Direction?.Equals("up", StringComparison.OrdinalIgnoreCase) == true ? -body.Distance :
+                        body.Direction?.Equals("down", StringComparison.OrdinalIgnoreCase) == true ? body.Distance : 0,
+                    Animated = body.DurationMs <= 0 || body.DurationMs < 400
+                })
+            }),
+            _ => HttpResponse.Error($"Gesture '{body.Type}' is not supported")
+        };
+    }
+
+    private async Task<HttpResponse> HandleBatch(HttpRequest request)
+    {
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<BatchRequest>();
+        if (body?.Actions == null || body.Actions.Count == 0)
+            return HttpResponse.Error("actions are required");
+
+        var results = new List<object>(body.Actions.Count);
+        var allSucceeded = true;
+
+        foreach (var action in body.Actions)
+        {
+            var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
+            HttpResponse response;
+
+            switch (actionName)
+            {
+                case "tap":
+                    response = await HandleTap(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    break;
+                case "fill":
+                    response = await HandleFill(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new FillRequest { ElementId = action.ElementId, Text = action.Text ?? string.Empty })
+                    });
+                    break;
+                case "clear":
+                    response = await HandleClear(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    break;
+                case "focus":
+                    response = await HandleFocus(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    break;
+                case "navigate":
+                    response = await HandleNavigate(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
+                    });
+                    break;
+                case "resize":
+                    response = await HandleResize(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ResizeRequest(action.Width, action.Height)) });
+                    break;
+                case "scroll":
+                    response = await HandleScroll(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new ScrollRequest
+                        {
+                            ElementId = action.ElementId,
+                            DeltaX = action.DeltaX,
+                            DeltaY = action.DeltaY,
+                            ItemIndex = action.ItemIndex,
+                            GroupIndex = action.GroupIndex,
+                            ScrollToPosition = action.ScrollToPosition,
+                            Animated = action.Animated
+                        })
+                    });
+                    break;
+                case "back":
+                    response = await HandleBack(new HttpRequest { Method = "POST" });
+                    break;
+                case "key":
+                    response = await HandleKey(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new KeyActionRequest { ElementId = action.ElementId, Key = action.Key, Text = action.Text })
+                    });
+                    break;
+                case "gesture":
+                    response = await HandleGesture(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new GestureActionRequest
+                        {
+                            ElementId = action.ElementId,
+                            Type = action.Type ?? action.Action,
+                            Direction = action.Direction,
+                            Distance = action.Distance,
+                            DurationMs = action.DurationMs
+                        })
+                    });
+                    break;
+                case "set-property":
+                case "set_property":
+                    response = await HandleSetProperty(new HttpRequest
+                    {
+                        Method = "PUT",
+                        RouteParams = new Dictionary<string, string>
+                        {
+                            ["id"] = action.ElementId ?? string.Empty,
+                            ["name"] = action.Property ?? string.Empty
+                        },
+                        Body = JsonSerializer.Serialize(new SetPropertyRequest { Value = action.Value ?? string.Empty })
+                    });
+                    break;
+                default:
+                    response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
+                    break;
+            }
+
+            var succeeded = response.StatusCode < 400;
+            allSucceeded &= succeeded;
+            results.Add(new
+            {
+                action = actionName,
+                success = succeeded,
+                statusCode = response.StatusCode,
+                response = response.Body
+            });
+
+            if (!succeeded && !body.ContinueOnError)
+                break;
+        }
+
+        return HttpResponse.Json(new
+        {
+            success = allSucceeded,
+            results
+        });
+    }
 
     private async Task<HttpResponse> HandleScroll(HttpRequest request)
     {
@@ -2076,6 +2605,27 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         };
     }
 
+    private string GetRequestedProfilerSessionId(HttpRequest request)
+    {
+        if (request.RouteParams.TryGetValue("id", out var routeId) && !string.IsNullOrWhiteSpace(routeId))
+            return routeId;
+        if (request.QueryParams.TryGetValue("sessionId", out var sessionId) && !string.IsNullOrWhiteSpace(sessionId))
+            return sessionId;
+        return "current";
+    }
+
+    private HttpResponse? ValidateProfilerSessionRequest(HttpRequest request, out string requestedSessionId)
+    {
+        requestedSessionId = GetRequestedProfilerSessionId(request);
+        if (requestedSessionId.Equals("current", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var currentSession = _profilerSessions.CurrentSession;
+        return currentSession != null && currentSession.SessionId.Equals(requestedSessionId, StringComparison.Ordinal)
+            ? null
+            : HttpResponse.NotFound($"Profiler session '{requestedSessionId}' not found");
+    }
+
     private Task<HttpResponse> HandleProfilerCapabilities(HttpRequest request)
         => Task.FromResult(HttpResponse.Json(BuildProfilerCapabilitiesPayload()));
 
@@ -2095,12 +2645,20 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleProfilerStop(HttpRequest request)
     {
+        var validationError = ValidateProfilerSessionRequest(request, out _);
+        if (validationError != null)
+            return validationError;
+
         var session = await StopProfilerAsync();
         return HttpResponse.Json(new { session, stoppedAtUtc = DateTime.UtcNow });
     }
 
     private Task<HttpResponse> HandleProfilerSamples(HttpRequest request)
     {
+        var validationError = ValidateProfilerSessionRequest(request, out _);
+        if (validationError != null)
+            return Task.FromResult(validationError);
+
         if (!long.TryParse(request.QueryParams.GetValueOrDefault("sampleCursor", "0"), out var sampleCursor))
             sampleCursor = 0;
         if (!long.TryParse(request.QueryParams.GetValueOrDefault("markerCursor", "0"), out var markerCursor))
@@ -2982,6 +3540,13 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             PayloadJson = JsonSerializer.Serialize(new { route, source, page = currentPage })
         });
         RememberUserAction("navigation.route", route, endedAtUtc);
+        PublishUiEvent("navigation", new
+        {
+            from = (string?)null,
+            to = route,
+            route,
+            timestamp = endedAtUtc.ToString("O")
+        });
 
         PublishUiOperationSpan(
             "navigation.shell.completed",
@@ -3046,6 +3611,75 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 currentRoute = route,
                 page = page.GetType().Name
             });
+    }
+
+    private void PublishUiEvent(string type, object data)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            type,
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            data
+        });
+
+        lock (_uiEventSubscriptionGate)
+        {
+            foreach (var subscription in _uiEventSubscriptions)
+            {
+                if (subscription.Events.Contains("all") || subscription.Events.Contains(type))
+                    subscription.Queue.Enqueue(payload);
+            }
+        }
+    }
+
+    private static void ApplyUiEventSubscriptionMessage(UiEventSubscription subscription, JsonElement message)
+    {
+        if (!message.TryGetProperty("type", out var typeElement))
+            return;
+
+        var messageType = typeElement.GetString();
+        if (!message.TryGetProperty("data", out var dataElement) ||
+            !dataElement.TryGetProperty("events", out var eventsElement) ||
+            eventsElement.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var events = eventsElement.EnumerateArray()
+            .Select(static e => e.GetString())
+            .Where(static e => !string.IsNullOrWhiteSpace(e))
+            .Select(static e => e!)
+            .ToArray();
+
+        if (events.Length == 0)
+            return;
+
+        if (string.Equals(messageType, "subscribe", StringComparison.OrdinalIgnoreCase))
+        {
+            if (events.Contains("all", StringComparer.OrdinalIgnoreCase))
+            {
+                subscription.Events.Clear();
+                subscription.Events.Add("all");
+                return;
+            }
+
+            if (subscription.Events.Contains("all"))
+                subscription.Events.Clear();
+
+            foreach (var eventName in events)
+                subscription.Events.Add(eventName);
+        }
+        else if (string.Equals(messageType, "unsubscribe", StringComparison.OrdinalIgnoreCase))
+        {
+            if (events.Contains("all", StringComparer.OrdinalIgnoreCase))
+            {
+                subscription.Events.Clear();
+                return;
+            }
+
+            foreach (var eventName in events)
+                subscription.Events.Remove(eventName);
+        }
     }
 
     private void TrackUiInteraction(string name, Element? element, object? tags = null)
@@ -3364,6 +3998,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         var replayMsg = JsonSerializer.Serialize(new
         {
             type = "replay",
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
             entries = recent.Select(e => e.ToSummary())
         });
         await AgentHttpServer.WebSocketSendTextAsync(stream, replayMsg, ct);
@@ -3394,7 +4029,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                         {
                             var id = idEl.GetString();
                             var entry = id != null ? NetworkStore.GetById(id) : null;
-                            var resp = JsonSerializer.Serialize(new { type = "details", entry });
+                            var resp = JsonSerializer.Serialize(new
+                            {
+                                type = "details",
+                                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                                entry
+                            });
                             await AgentHttpServer.WebSocketSendTextAsync(stream, resp, cts.Token);
                         }
                         else if (msgType == "clear")
@@ -3414,7 +4054,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 {
                     try
                     {
-                        var json = JsonSerializer.Serialize(new { type = "request", entry = entry.ToSummary() });
+                        var json = JsonSerializer.Serialize(new
+                        {
+                            type = "request",
+                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                            entry = entry.ToSummary()
+                        });
                         await AgentHttpServer.WebSocketSendTextAsync(stream, json, cts.Token);
                     }
                     catch { await cts.CancelAsync(); break; }
@@ -3463,7 +4108,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (replayCount > 0)
         {
             var recent = _logProvider.Reader.Read(replayCount, 0, sourceFilter);
-            var replayMsg = JsonSerializer.Serialize(new { type = "replay", entries = recent });
+            var replayMsg = JsonSerializer.Serialize(new
+            {
+                type = "replay",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                entries = recent
+            });
             await AgentHttpServer.WebSocketSendTextAsync(stream, replayMsg, ct);
         }
 
@@ -3499,7 +4149,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 {
                     try
                     {
-                        var json = JsonSerializer.Serialize(new { type = "log", entry });
+                        var json = JsonSerializer.Serialize(new
+                        {
+                            type = "log",
+                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                            entry
+                        });
                         await AgentHttpServer.WebSocketSendTextAsync(stream, json, cts.Token);
                     }
                     catch { await cts.CancelAsync(); break; }
@@ -3527,6 +4182,260 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
+    private async Task HandleProfilerWebSocket(
+        System.Net.Sockets.TcpClient client,
+        System.Net.Sockets.NetworkStream stream,
+        HttpRequest request,
+        CancellationToken ct)
+    {
+        var requestedSessionId = request.QueryParams.GetValueOrDefault("sessionId");
+        if (string.IsNullOrWhiteSpace(requestedSessionId))
+        {
+            await AgentHttpServer.WebSocketSendTextAsync(stream,
+                JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    error = "sessionId query parameter is required"
+                }), ct);
+            return;
+        }
+
+        if (!long.TryParse(request.QueryParams.GetValueOrDefault("sampleCursor", "0"), out var sampleCursor))
+            sampleCursor = 0;
+        if (!long.TryParse(request.QueryParams.GetValueOrDefault("markerCursor", "0"), out var markerCursor))
+            markerCursor = 0;
+        if (!long.TryParse(request.QueryParams.GetValueOrDefault("spanCursor", "0"), out var spanCursor))
+            spanCursor = 0;
+        if (!int.TryParse(request.QueryParams.GetValueOrDefault("limit", "500"), out var limit))
+            limit = 500;
+
+        limit = Math.Clamp(limit, 1, 5000);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        try
+        {
+            var readTask = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
+                    if (msg == null)
+                    {
+                        await cts.CancelAsync();
+                        break;
+                    }
+                }
+            }, cts.Token);
+
+            var sentInitialBatch = false;
+            var lastPing = DateTime.UtcNow;
+
+            while (!cts.Token.IsCancellationRequested)
+            {
+                var currentSession = _profilerSessions.CurrentSession;
+                if (currentSession == null)
+                {
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
+                    {
+                        type = "stopped",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        data = new { sessionId = requestedSessionId }
+                    }), cts.Token);
+                    break;
+                }
+
+                if (!requestedSessionId.Equals("current", StringComparison.OrdinalIgnoreCase) &&
+                    !requestedSessionId.Equals(currentSession.SessionId, StringComparison.Ordinal))
+                {
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
+                    {
+                        type = "error",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        error = $"Profiler session '{requestedSessionId}' not found"
+                    }), cts.Token);
+                    break;
+                }
+
+                var batch = _profilerSessions.GetBatch(sampleCursor, markerCursor, limit, spanCursor);
+                var hasNewData = batch.SampleCursor != sampleCursor ||
+                    batch.MarkerCursor != markerCursor ||
+                    batch.SpanCursor != spanCursor;
+
+                if (!sentInitialBatch || hasNewData)
+                {
+                    sampleCursor = batch.SampleCursor;
+                    markerCursor = batch.MarkerCursor;
+                    spanCursor = batch.SpanCursor;
+                    sentInitialBatch = true;
+
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
+                    {
+                        type = "batch",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        data = batch
+                    }), cts.Token);
+                }
+
+                if (!batch.IsActive)
+                {
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
+                    {
+                        type = "stopped",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        data = new { sessionId = batch.SessionId }
+                    }), cts.Token);
+                    break;
+                }
+
+                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
+                        lastPing = DateTime.UtcNow;
+                    }
+                    catch
+                    {
+                        await cts.CancelAsync();
+                        break;
+                    }
+                }
+
+                try
+                {
+                    await Task.Delay(Math.Max(100, currentSession.SampleIntervalMs / 2), cts.Token);
+                }
+                catch
+                {
+                    break;
+                }
+            }
+
+            await readTask;
+        }
+        catch
+        {
+            await cts.CancelAsync();
+        }
+    }
+
+    private async Task HandleUiEventsWebSocket(
+        System.Net.Sockets.TcpClient client,
+        System.Net.Sockets.NetworkStream stream,
+        HttpRequest request,
+        CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var subscription = new UiEventSubscription();
+
+        lock (_uiEventSubscriptionGate)
+        {
+            _uiEventSubscriptions.Add(subscription);
+        }
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            subscription.Queue.Enqueue(JsonSerializer.Serialize(new
+            {
+                type = "lifecycle",
+                timestamp = now,
+                data = new
+                {
+                    state = _app != null ? "started" : "stopped",
+                    timestamp = now
+                }
+            }));
+
+            var currentRoute = Shell.Current?.CurrentState?.Location?.ToString();
+            if (!string.IsNullOrWhiteSpace(currentRoute))
+            {
+                subscription.Queue.Enqueue(JsonSerializer.Serialize(new
+                {
+                    type = "navigation",
+                    timestamp = now,
+                    data = new
+                    {
+                        from = (string?)null,
+                        to = currentRoute,
+                        route = currentRoute,
+                        timestamp = now
+                    }
+                }));
+            }
+
+            var readTask = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
+                    if (msg == null)
+                    {
+                        await cts.CancelAsync();
+                        break;
+                    }
+
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(msg);
+                        lock (_uiEventSubscriptionGate)
+                        {
+                            ApplyUiEventSubscriptionMessage(subscription, doc.RootElement);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }, cts.Token);
+
+            var lastPing = DateTime.UtcNow;
+            while (!cts.Token.IsCancellationRequested)
+            {
+                while (subscription.Queue.TryDequeue(out var message))
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendTextAsync(stream, message, cts.Token);
+                    }
+                    catch
+                    {
+                        await cts.CancelAsync();
+                        break;
+                    }
+                }
+
+                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
+                        lastPing = DateTime.UtcNow;
+                    }
+                    catch
+                    {
+                        await cts.CancelAsync();
+                        break;
+                    }
+                }
+
+                try { await Task.Delay(50, cts.Token); }
+                catch { break; }
+            }
+
+            await readTask;
+        }
+        finally
+        {
+            lock (_uiEventSubscriptionGate)
+            {
+                _uiEventSubscriptions.Remove(subscription);
+            }
+        }
+    }
+
     private Task<HttpResponse> HandleLogs(HttpRequest request)
     {
         if (_logProvider == null)
@@ -3543,19 +4452,84 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         return Task.FromResult(HttpResponse.Json(entries));
     }
 
-    private async Task<HttpResponse> HandleCdp(HttpRequest request)
+    private static string? GetRequestedWebViewId(HttpRequest request, string? contextId = null)
+        => request.QueryParams.GetValueOrDefault("webview")
+            ?? request.QueryParams.GetValueOrDefault("contextId")
+            ?? contextId;
+
+    private bool TryResolveReadyCdpWebView(
+        string? webviewId,
+        [NotNullWhen(true)] out CdpWebViewInfo? webView,
+        [NotNullWhen(false)] out HttpResponse? error)
     {
         if (_cdpWebViews.Count == 0)
-            return HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
+        {
+            webView = null;
+            error = HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
+            return false;
+        }
 
-        request.QueryParams.TryGetValue("webview", out var webviewId);
-        var webView = ResolveCdpWebView(webviewId);
-
+        webView = ResolveCdpWebView(webviewId);
         if (webView == null)
-            return HttpResponse.Error($"WebView '{webviewId}' not found. Use GET /api/cdp/webviews to list available WebViews.");
+        {
+            error = HttpResponse.Error($"WebView '{webviewId}' not found. Use GET /api/v1/webview/contexts to list available WebViews.");
+            return false;
+        }
 
         if (!webView.IsReady)
-            return HttpResponse.Error($"CDP not ready on WebView {webView.Index} (WebView not initialized)");
+        {
+            error = HttpResponse.Error($"CDP not ready on WebView {webView.Index} (WebView not initialized)");
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static string BuildCdpCommand(int id, string method, object? parameters = null)
+        => JsonSerializer.Serialize(new { id, method, @params = parameters });
+
+    private static string? TryGetCdpError(JsonElement root)
+    {
+        if (!root.TryGetProperty("error", out var errorElement))
+            return null;
+
+        return errorElement.ValueKind switch
+        {
+            JsonValueKind.String => errorElement.GetString(),
+            JsonValueKind.Object when errorElement.TryGetProperty("message", out var messageElement) => messageElement.GetString(),
+            _ => errorElement.GetRawText()
+        };
+    }
+
+    private async Task<JsonElement?> EvaluateWebViewExpressionAsync(CdpWebViewInfo webView, string expression, int id = 99996)
+    {
+        var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new
+        {
+            expression,
+            returnByValue = true
+        }));
+
+        using var doc = JsonDocument.Parse(resultJson);
+        var error = TryGetCdpError(doc.RootElement);
+        if (!string.IsNullOrWhiteSpace(error))
+            throw new InvalidOperationException(error);
+
+        if (doc.RootElement.TryGetProperty("result", out var result) &&
+            result.TryGetProperty("result", out var innerResult) &&
+            innerResult.TryGetProperty("value", out var value))
+        {
+            return value.Clone();
+        }
+
+        return null;
+    }
+
+    private async Task<HttpResponse> HandleCdp(HttpRequest request)
+    {
+        request.QueryParams.TryGetValue("webview", out var webviewId);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
 
         if (string.IsNullOrEmpty(request.Body))
             return HttpResponse.Error("Missing CDP command body");
@@ -3575,14 +4549,320 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
+    private sealed class WebViewDomQueryRequest
+    {
+        public string? Selector { get; set; }
+        public string? ContextId { get; set; }
+    }
+
+    private async Task<HttpResponse> HandleWebViewNavigate(HttpRequest request)
+    {
+        var body = request.BodyAs<WebViewNavigateRequest>();
+        if (string.IsNullOrWhiteSpace(body?.Url))
+            return HttpResponse.Error("url is required");
+
+        var webviewId = GetRequestedWebViewId(request, body.ContextId);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
+
+        try
+        {
+            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99995, "Page.navigate", new { url = body.Url }));
+            using var doc = JsonDocument.Parse(resultJson);
+            var cdpError = TryGetCdpError(doc.RootElement);
+            if (!string.IsNullOrWhiteSpace(cdpError))
+                return HttpResponse.Error($"WebView navigation failed: {cdpError}");
+
+            webView.Url = body.Url;
+            PublishUiEvent("navigation", new
+            {
+                from = (string?)null,
+                to = body.Url,
+                route = body.Url,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+
+            return HttpResponse.Json(new
+            {
+                success = true,
+                contextId = webviewId ?? webView.Index.ToString(),
+                url = body.Url
+            });
+        }
+        catch (Exception ex)
+        {
+            return HttpResponse.Error($"WebView navigation failed: {ex.Message}");
+        }
+    }
+
+    private async Task<HttpResponse> HandleWebViewInputClick(HttpRequest request)
+    {
+        var body = request.BodyAs<WebViewInputClickRequest>();
+        if (string.IsNullOrWhiteSpace(body?.Selector))
+            return HttpResponse.Error("selector is required");
+
+        var webviewId = GetRequestedWebViewId(request, body.ContextId);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
+
+        try
+        {
+            var selectorJson = JsonSerializer.Serialize(body.Selector);
+            var value = await EvaluateWebViewExpressionAsync(
+                webView!,
+                $@"(function() {{
+                    const el = document.querySelector({selectorJson});
+                    if (!el) return {{ success: false, error: 'Element not found' }};
+                    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({{ block: 'center', inline: 'center' }});
+                    if (typeof el.focus === 'function') el.focus();
+                    if (typeof el.click === 'function') el.click();
+                    else el.dispatchEvent(new MouseEvent('click', {{ bubbles: true, cancelable: true, view: window }}));
+                    return {{ success: true, tagName: el.tagName ? el.tagName.toLowerCase() : null }};
+                }})()");
+
+            if (value is not JsonElement clickResult)
+                return HttpResponse.Error("Click did not return a result");
+
+            if (clickResult.ValueKind == JsonValueKind.Object &&
+                clickResult.TryGetProperty("success", out var successElement) &&
+                !successElement.GetBoolean())
+            {
+                return HttpResponse.NotFound($"No element matches selector '{body.Selector}'");
+            }
+
+            return new HttpResponse
+            {
+                ContentType = "application/json",
+                Body = clickResult.GetRawText()
+            };
+        }
+        catch (Exception ex)
+        {
+            return HttpResponse.Error($"WebView click failed: {ex.Message}");
+        }
+    }
+
+    private async Task<HttpResponse> HandleWebViewInputFill(HttpRequest request)
+    {
+        var body = request.BodyAs<WebViewInputFillRequest>();
+        if (string.IsNullOrWhiteSpace(body?.Selector))
+            return HttpResponse.Error("selector is required");
+        if (body.Text == null)
+            return HttpResponse.Error("text is required");
+
+        var webviewId = GetRequestedWebViewId(request, body.ContextId);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
+
+        try
+        {
+            var selectorJson = JsonSerializer.Serialize(body.Selector);
+            var textJson = JsonSerializer.Serialize(body.Text);
+            var value = await EvaluateWebViewExpressionAsync(
+                webView!,
+                $@"(function() {{
+                    const el = document.querySelector({selectorJson});
+                    if (!el) return {{ success: false, error: 'Element not found' }};
+                    if (typeof el.focus === 'function') el.focus();
+
+                    if ('value' in el) el.value = {textJson};
+                    else if (el.isContentEditable) el.textContent = {textJson};
+                    else return {{ success: false, error: 'Element does not accept text input' }};
+
+                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    return {{ success: true, textLength: {body.Text.Length} }};
+                }})()");
+
+            if (value is not JsonElement fillResult)
+                return HttpResponse.Error("Fill did not return a result");
+
+            if (fillResult.ValueKind == JsonValueKind.Object &&
+                fillResult.TryGetProperty("success", out var successElement) &&
+                !successElement.GetBoolean())
+            {
+                var errorMessage = fillResult.TryGetProperty("error", out var errorElement)
+                    ? errorElement.GetString()
+                    : null;
+
+                return string.Equals(errorMessage, "Element not found", StringComparison.OrdinalIgnoreCase)
+                    ? HttpResponse.NotFound($"No element matches selector '{body.Selector}'")
+                    : HttpResponse.Error(errorMessage ?? "WebView fill failed");
+            }
+
+            PublishUiEvent("treeChange", new
+            {
+                changeType = "modified",
+                elementId = body.Selector,
+                elementType = "webview-input",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+
+            return new HttpResponse
+            {
+                ContentType = "application/json",
+                Body = fillResult.GetRawText()
+            };
+        }
+        catch (Exception ex)
+        {
+            return HttpResponse.Error($"WebView fill failed: {ex.Message}");
+        }
+    }
+
+    private async Task<HttpResponse> HandleWebViewInputText(HttpRequest request)
+    {
+        var body = request.BodyAs<WebViewInputTextRequest>();
+        if (body?.Text == null)
+            return HttpResponse.Error("text is required");
+
+        var webviewId = GetRequestedWebViewId(request, body.ContextId);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
+
+        try
+        {
+            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99994, "Input.insertText", new { text = body.Text }));
+            using var doc = JsonDocument.Parse(resultJson);
+            var cdpError = TryGetCdpError(doc.RootElement);
+            if (!string.IsNullOrWhiteSpace(cdpError))
+                return HttpResponse.Error($"WebView text input failed: {cdpError}");
+
+            PublishUiEvent("treeChange", new
+            {
+                changeType = "modified",
+                elementId = body.ContextId ?? webviewId ?? webView.Index.ToString(),
+                elementType = "webview-input",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+
+            return HttpResponse.Json(new
+            {
+                success = true,
+                textLength = body.Text.Length
+            });
+        }
+        catch (Exception ex)
+        {
+            return HttpResponse.Error($"WebView text input failed: {ex.Message}");
+        }
+    }
+
+    private Task<HttpResponse> HandleWebViewDom(HttpRequest request)
+        => HandleCdpSource(request);
+
+    private async Task<HttpResponse> HandleWebViewDomQuery(HttpRequest request)
+    {
+        var body = request.BodyAs<WebViewDomQueryRequest>();
+        if (string.IsNullOrWhiteSpace(body?.Selector))
+            return HttpResponse.Error("selector is required");
+
+        var webviewId = GetRequestedWebViewId(request, body.ContextId);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
+
+        try
+        {
+            var selectorJson = JsonSerializer.Serialize(body.Selector);
+            var cdpCommand = JsonSerializer.Serialize(new
+            {
+                id = 99998,
+                method = "Runtime.evaluate",
+                @params = new
+                {
+                    expression = $@"(function() {{
+                        return Array.from(document.querySelectorAll({selectorJson})).map((el, index) => ({{
+                            index,
+                            tagName: el.tagName ? el.tagName.toLowerCase() : null,
+                            id: el.id || null,
+                            className: el.className || null,
+                            text: (el.innerText || el.textContent || '').trim(),
+                            html: el.outerHTML
+                        }}));
+                    }})()",
+                    returnByValue = true
+                }
+            });
+
+            var resultJson = await webView.CommandHandler(cdpCommand);
+            using var doc = JsonDocument.Parse(resultJson);
+            if (doc.RootElement.TryGetProperty("result", out var result) &&
+                result.TryGetProperty("result", out var innerResult) &&
+                innerResult.TryGetProperty("value", out var value))
+            {
+                return new HttpResponse
+                {
+                    ContentType = "application/json",
+                    Body = value.GetRawText()
+                };
+            }
+
+            return HttpResponse.Error("Failed to query DOM");
+        }
+        catch (Exception ex)
+        {
+            return HttpResponse.Error($"DOM query failed: {ex.Message}");
+        }
+    }
+
+    private Task<HttpResponse> HandleWebViewNetwork(HttpRequest request)
+        => HandleNetworkList(request);
+
+    private Task<HttpResponse> HandleWebViewConsole(HttpRequest request)
+    {
+        request.QueryParams["source"] = "webview";
+        return HandleLogs(request);
+    }
+
+    private async Task<HttpResponse> HandleWebViewScreenshot(HttpRequest request)
+    {
+        var webviewId = GetRequestedWebViewId(request);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
+
+        try
+        {
+            var cdpCommand = JsonSerializer.Serialize(new
+            {
+                id = 99997,
+                method = "Page.captureScreenshot",
+                @params = new { format = "png" }
+            });
+
+            var resultJson = await webView.CommandHandler(cdpCommand);
+            using var doc = JsonDocument.Parse(resultJson);
+            if (doc.RootElement.TryGetProperty("result", out var result) &&
+                result.TryGetProperty("data", out var data) &&
+                data.GetString() is { Length: > 0 } base64)
+            {
+                return HttpResponse.Png(Convert.FromBase64String(base64));
+            }
+
+            return HttpResponse.Error("Failed to capture WebView screenshot");
+        }
+        catch (Exception ex)
+        {
+            return HttpResponse.Error($"WebView screenshot failed: {ex.Message}");
+        }
+    }
+
     private Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
     {
         var webviews = _cdpWebViews.Select(w => new
         {
+            id = !string.IsNullOrWhiteSpace(w.AutomationId)
+                ? w.AutomationId
+                : !string.IsNullOrWhiteSpace(w.ElementId)
+                    ? w.ElementId
+                    : w.Index.ToString(),
             index = w.Index,
             automationId = w.AutomationId,
             elementId = w.ElementId,
             url = w.Url,
+            title = (string?)null,
+            ready = w.IsReady,
             isReady = w.IsReady,
         }).ToList();
 
@@ -3591,17 +4871,9 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleCdpSource(HttpRequest request)
     {
-        if (_cdpWebViews.Count == 0)
-            return HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
-
-        request.QueryParams.TryGetValue("webview", out var webviewId);
-        var webView = ResolveCdpWebView(webviewId);
-
-        if (webView == null)
-            return HttpResponse.Error($"WebView '{webviewId}' not found. Use GET /api/cdp/webviews to list available WebViews.");
-
-        if (!webView.IsReady)
-            return HttpResponse.Error($"CDP not ready on WebView {webView.Index} (WebView not initialized)");
+        var webviewId = GetRequestedWebViewId(request);
+        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+            return error!;
 
         try
         {
@@ -4392,7 +5664,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (string.IsNullOrEmpty(sensorName))
         {
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new { error = "sensor query parameter is required (e.g., ?sensor=accelerometer)" }), ct);
+                JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    error = "sensor query parameter is required (e.g., ?sensor=accelerometer)"
+                }), ct);
             return;
         }
 
@@ -4413,7 +5690,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (startError != null)
         {
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new { error = startError }), ct);
+                JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    error = startError
+                }), ct);
             return;
         }
 
@@ -4424,8 +5706,22 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         try
         {
             // Confirm subscription
+            var subscribedAt = DateTimeOffset.UtcNow.ToString("O");
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new { type = "subscribed", sensor = sensorName, speed = speed.ToString(), throttleMs = Sensors.ThrottleMs }), ct);
+                JsonSerializer.Serialize(new
+                {
+                    type = "subscribed",
+                    timestamp = subscribedAt,
+                    sensor = new
+                    {
+                        name = sensorName,
+                        available = Sensors.SupportedSensors.Contains(sensorName),
+                        active = true
+                    },
+                    sensorName = sensorName,
+                    speed = speed.ToString(),
+                    throttleMs = Sensors.ThrottleMs
+                }), ct);
 
             // Read loop (detects disconnection)
             var readTask = Task.Run(async () =>
@@ -4488,6 +5784,31 @@ public class FillRequest
 public class NavigateRequest
 {
     public string? Route { get; set; }
+}
+
+public class WebViewNavigateRequest
+{
+    public string? Url { get; set; }
+    public string? ContextId { get; set; }
+}
+
+public class WebViewInputClickRequest
+{
+    public string? Selector { get; set; }
+    public string? ContextId { get; set; }
+}
+
+public class WebViewInputFillRequest
+{
+    public string? Selector { get; set; }
+    public string? Text { get; set; }
+    public string? ContextId { get; set; }
+}
+
+public class WebViewInputTextRequest
+{
+    public string? Text { get; set; }
+    public string? ContextId { get; set; }
 }
 
 public class SetPropertyRequest

@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-capabilities.json",
+  "title": "AgentCapabilities",
+  "description": "Capability discovery response describing what the agent supports.",
+  "type": "object",
+  "required": [
+    "agent",
+    "capabilities"
+  ],
+  "properties": {
+    "agent": {
+      "type": "object",
+      "description": "Information about the DevFlow agent itself.",
+      "required": [
+        "name",
+        "version",
+        "framework",
+        "frameworkVersion"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the DevFlow agent implementation."
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version of the agent."
+        },
+        "framework": {
+          "type": "string",
+          "description": "The UI framework the agent is instrumented for."
+        },
+        "frameworkVersion": {
+          "type": "string",
+          "description": "Version of the UI framework."
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Map of capability namespaces to their details. Keys are dot-separated namespaces.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "version",
+          "features"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "Capability version number.",
+            "minimum": 1
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of supported features within this capability namespace."
+          }
+        },
+        "additionalProperties": true,
+        "description": "Capability details including version, features, and optional extra fields."
+      },
+      "examples": [
+        {
+          "ui.tree": {
+            "version": 1,
+            "features": [
+              "find",
+              "query",
+              "snapshot"
+            ]
+          },
+          "ui.actions": {
+            "version": 1,
+            "features": [
+              "tap",
+              "fill",
+              "scroll",
+              "gesture"
+            ]
+          },
+          "ui.screenshot": {
+            "version": 1,
+            "features": [
+              "fullPage",
+              "element"
+            ]
+          },
+          "webview": {
+            "version": 1,
+            "features": [
+              "evaluate",
+              "dom",
+              "navigate"
+            ]
+          },
+          "profiler": {
+            "version": 1,
+            "features": [
+              "samples",
+              "spans",
+              "markers"
+            ]
+          },
+          "network": {
+            "version": 1,
+            "features": [
+              "capture",
+              "detail"
+            ]
+          },
+          "logs": {
+            "version": 1,
+            "features": [
+              "stream",
+              "query"
+            ]
+          },
+          "device.info": {
+            "version": 1,
+            "features": [
+              "display",
+              "battery",
+              "connectivity"
+            ]
+          },
+          "device.sensors": {
+            "version": 1,
+            "features": [
+              "accelerometer",
+              "gyroscope",
+              "compass"
+            ]
+          },
+          "storage.preferences": {
+            "version": 1,
+            "features": [
+              "get",
+              "set",
+              "delete"
+            ]
+          },
+          "storage.secure": {
+            "version": 1,
+            "features": [
+              "get",
+              "set",
+              "delete"
+            ]
+          }
+        }
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Map of extension namespaces (reverse-domain notation) to their route registrations.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "routes"
+        ],
+        "properties": {
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "method",
+                "path"
+              ],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "description": "HTTP method for this route (e.g. 'GET', 'POST')."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "URL path for this route."
+                }
+              }
+            },
+            "description": "Routes registered by this extension."
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of this extension."
+          }
+        },
+        "description": "Extension details including registered routes."
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "type": "https://devflow.dev/errors/element-not-interactable",
+  "title": "Element Not Interactable",
+  "status": 400,
+  "detail": "Element 'btn_submit' exists but is not interactable: IsEnabled=false, IsVisible=true.",
+  "instance": "/api/v1/ui/actions/tap",
+  "errorCode": "element-not-interactable"
+}

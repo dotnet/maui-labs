@@ -32,7 +32,7 @@ public static class AgentServiceExtensions
         // to avoid deadlock with SynchronizationContext — AddMauiDevFlowAgent runs on
         // the main thread). When a custom port is set, we tell the broker our port so it
         // uses it instead of assigning from the pool; the agent stays discoverable via
-        // `maui-devflow list` regardless of port configuration.
+        // `maui devflow list` regardless of port configuration.
         BrokerRegistration? brokerReg = null;
         bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
         try
@@ -78,7 +78,7 @@ public static class AgentServiceExtensions
         }
 
         // Fall back to assembly metadata port if broker didn't assign one
-        if (brokerReg?.AssignedPort == null)
+        if (!hasCustomPort && brokerReg?.AssignedPort == null)
         {
             var metaPort = ReadAssemblyMetadataPort();
             if (metaPort.HasValue)

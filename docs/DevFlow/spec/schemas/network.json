@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "network.json",
+  "title": "Network Models",
+  "description": "Network monitoring models for capturing and inspecting HTTP request/response traffic.",
+  "$defs": {
+    "NetworkRequestSummary": {
+      "type": "object",
+      "description": "Summary of a captured network request with key metadata and timing.",
+      "required": [
+        "id",
+        "timestamp",
+        "method",
+        "url"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this network request."
+        },
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC timestamp when the request was initiated."
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method (e.g. 'GET', 'POST', 'PUT', 'DELETE')."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Full URL of the request."
+        },
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Hostname portion of the URL."
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Path portion of the URL."
+        },
+        "statusCode": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "HTTP status code of the response, or null if the request has not completed.",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "statusText": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "HTTP status text of the response (e.g. 'OK', 'Not Found')."
+        },
+        "durationMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Total request/response duration in milliseconds.",
+          "minimum": 0
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Error message if the request failed."
+        },
+        "requestContentType": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Content-Type header of the request."
+        },
+        "responseContentType": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Content-Type header of the response."
+        },
+        "requestSize": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Size of the request body in bytes.",
+          "minimum": 0
+        },
+        "responseSize": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Size of the response body in bytes.",
+          "minimum": 0
+        }
+      }
+    },
+    "NetworkRequestDetail": {
+      "description": "Detailed view of a captured network request including headers and body content.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/NetworkRequestSummary"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "requestHeaders": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Request headers as key-value pairs."
+            },
+            "responseHeaders": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Response headers as key-value pairs."
+            },
+            "requestBody": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Request body content as a string."
+            },
+            "responseBody": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Response body content as a string."
+            },
+            "requestBodyEncoding": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Encoding of the request body (e.g. 'utf-8', 'base64')."
+            },
+            "responseBodyEncoding": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Encoding of the response body (e.g. 'utf-8', 'base64')."
+            },
+            "requestBodyTruncated": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": "Whether the request body was truncated due to size limits."
+            },
+            "responseBodyTruncated": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": "Whether the response body was truncated due to size limits."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

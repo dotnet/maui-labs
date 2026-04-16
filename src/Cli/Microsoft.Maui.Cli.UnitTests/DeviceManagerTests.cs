@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Services;
@@ -228,7 +229,7 @@ public class DeviceManagerTests
 					IsEmulator = true,
 					IsRunning = true,
 					EmulatorId = "Pixel_6_API_35",
-					Details = new Dictionary<string, object> { ["avd"] = "Pixel_6_API_35" }
+					Details = new JsonObject { ["avd"] = "Pixel_6_API_35" }
 				}
 			},
 			Avds = new List<AvdInfo>
@@ -267,7 +268,7 @@ public class DeviceManagerTests
 					IsEmulator = true,
 					IsRunning = true,
 					EmulatorId = "Pixel_6_API_35",
-					Details = new Dictionary<string, object>()
+					Details = new JsonObject()
 				}
 			},
 			Avds = new List<AvdInfo>
