@@ -23,17 +23,11 @@
         "datatype": "string",
         "replaces": "com.companyname.cometapp1"
       },
-      "mauiVersion": {
-        "type": "parameter",
-        "dataType": "string",
-        "replaces": "MAUI_VERSION",
-        "defaultValue": "10.0.41"
-      },
       "cometVersion": {
         "type": "parameter",
         "dataType": "string",
         "replaces": "COMET_VERSION",
-        "defaultValue": "0.4.0"
+        "defaultValue": "0.4.0-dev"
       }
     },
     "defaultName": "CometApp1"
