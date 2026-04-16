@@ -19,12 +19,6 @@ public class App : CometApp
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			});
 
-		//-:cnd
-#if DEBUG
-		builder.EnableHotReload();
-#endif
-		//+:cnd
-
 		return builder.Build();
 	}
 }
