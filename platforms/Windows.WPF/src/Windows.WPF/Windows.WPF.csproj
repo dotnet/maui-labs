@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="$(MauiVersion)" />
   </ItemGroup>
 
   <!-- Include MSBuild targets for MAUI asset processing -->

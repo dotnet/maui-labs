@@ -66,8 +66,7 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Path, ShapeViewHandler>();
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Polygon, ShapeViewHandler>();
 			handlersCollection.AddHandler<Microsoft.Maui.Controls.Shapes.Polyline, ShapeViewHandler>();
-			// TODO: BlazorWebView handler requires Microsoft.AspNetCore.Components.WebView.Wpf (not in dnceng feeds)
-			// handlersCollection.AddHandler<AspNetCore.Components.WebView.Maui.BlazorWebView, AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
+			handlersCollection.AddHandler<AspNetCore.Components.WebView.Maui.BlazorWebView, AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
 
 			// Navigation handlers
 			handlersCollection.AddHandler<NavigationPage, NavigationViewHandler>();
@@ -88,9 +87,8 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 			handlersCollection.AddHandler<RadioButton, RadioButtonHandler>();
 			handlersCollection.AddHandler<ImageButton, ImageButtonHandler>();
 
-			// TODO: WebView handlers require Microsoft.Web.WebView2.Wpf (not in dnceng feeds)
-			// handlersCollection.AddHandler<Microsoft.Maui.Controls.WebView, WebViewHandler>();
-			// handlersCollection.AddHandler<Microsoft.Maui.Controls.HybridWebView, HybridWebViewHandler>();
+			handlersCollection.AddHandler<Microsoft.Maui.Controls.WebView, WebViewHandler>();
+			handlersCollection.AddHandler<Microsoft.Maui.Controls.HybridWebView, HybridWebViewHandler>();
 			handlersCollection.AddHandler<GraphicsView, GraphicsViewHandler>();
 
 			return handlersCollection;
