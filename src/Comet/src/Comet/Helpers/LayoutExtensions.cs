@@ -50,6 +50,12 @@ namespace Comet
 			return view;
 		}
 
+		public static T Center<T>(this T view) where T : View => view.Alignment(Comet.Alignment.Center);
+		public static T Top<T>(this T view) where T : View => view.Alignment(Comet.Alignment.Top);
+		public static T Bottom<T>(this T view) where T : View => view.Alignment(Comet.Alignment.Bottom);
+		public static T Leading<T>(this T view) where T : View => view.Alignment(Comet.Alignment.Leading);
+		public static T Trailing<T>(this T view) where T : View => view.Alignment(Comet.Alignment.Trailing);
+
 		public static T Cell<T>(
 			this T view,
 			int row = 0,
