@@ -1,0 +1,145 @@
+scenarios:
+  - name: "Standard MAUI app — full wiring"
+    prompt: |
+      I have a brand new .NET MAUI app. The csproj sets <UseMaui>true</UseMaui>
+      and targets net10.0-android + net10.0-ios. MauiProgram.cs has the default
+      CreateMauiApp with UseMauiApp<App>() and nothing else. Please set up
+      DevFlow so I can use the MCP tools against this app.
+    assertions:
+      - type: "output_contains"
+        value: "Microsoft.Maui.DevFlow.Agent"
+      - type: "output_contains"
+        value: "EnableDevFlow"
+      - type: "output_contains"
+        value: "Label=\"DevFlow\""
+      - type: "output_matches"
+        pattern: "#if DEBUG && DEVFLOW"
+      - type: "output_matches"
+        pattern: "AddMauiDevFlowAgent\\(\\)"
+      - type: "output_not_contains"
+        value: "Microsoft.Maui.DevFlow.Blazor"
+      - type: "output_not_contains"
+        value: "Microsoft.Maui.DevFlow.Agent.Gtk"
+    rubric:
+      - "Adds a PropertyGroup with Label=\"DevFlow\" and the EnableDevFlow property gated to Debug"
+      - "Adds a labeled ItemGroup with Condition on '$(EnableDevFlow)' == 'true' containing the Agent package"
+      - "Wraps the AddMauiDevFlowAgent() call in #if DEBUG && DEVFLOW in MauiProgram.cs"
+      - "Does not include Blazor or GTK packages for a standard MAUI project"
+      - "Mentions running `maui devflow diagnose` to verify"
+    timeout: 240
+
+  - name: "Blazor Hybrid app with Central Package Management"
+    prompt: |
+      My MAUI project is a Blazor Hybrid app. The csproj already references
+      Microsoft.AspNetCore.Components.WebView.Maui. The repo uses Central
+      Package Management (Directory.Packages.props sets
+      ManagePackageVersionsCentrally to true). Wire DevFlow for me.
+    assertions:
+      - type: "output_contains"
+        value: "Microsoft.Maui.DevFlow.Agent"
+      - type: "output_contains"
+        value: "Microsoft.Maui.DevFlow.Blazor"
+      - type: "output_contains"
+        value: "Directory.Packages.props"
+      - type: "output_contains"
+        value: "PackageVersion"
+      - type: "output_matches"
+        pattern: "AddMauiBlazorDevFlowTools\\(\\)"
+    rubric:
+      - "Selects both Microsoft.Maui.DevFlow.Agent and Microsoft.Maui.DevFlow.Blazor for a Blazor Hybrid app"
+      - "Puts the version numbers in Directory.Packages.props via PackageVersion entries (not on PackageReference)"
+      - "Keeps PackageReference entries in the csproj without Version= attributes"
+      - "Adds both AddMauiDevFlowAgent() and AddMauiBlazorDevFlowTools() calls"
+    timeout: 240
+
+  - name: "GTK app with Microsoft.NET.Sdk.Razor (no UseMaui)"
+    prompt: |
+      I have a .NET MAUI Linux/GTK project. The csproj uses
+      <Project Sdk="Microsoft.NET.Sdk.Razor">, does not set <UseMaui>true</UseMaui>,
+      and references Platform.Maui.Linux.Gtk4 and
+      Microsoft.AspNetCore.Components.WebView.Maui. Wire DevFlow.
+    assertions:
+      - type: "output_contains"
+        value: "Microsoft.Maui.DevFlow.Agent.Gtk"
+      - type: "output_contains"
+        value: "Microsoft.Maui.DevFlow.Blazor.Gtk"
+      - type: "output_not_contains"
+        value: "\"Microsoft.Maui.DevFlow.Agent\" Version"
+      - type: "output_matches"
+        pattern: "AddMauiDevFlowAgent\\(\\)"
+    rubric:
+      - "Detects MAUI from the Platform.Maui.Linux.Gtk4 reference even though <UseMaui> is not set"
+      - "Picks the GTK-specific DevFlow packages (Agent.Gtk + Blazor.Gtk) instead of the default ones"
+      - "Does not try to add the non-GTK Microsoft.Maui.DevFlow.Agent package alongside the GTK variants"
+    timeout: 240
+
+  - name: "Already wired via labeled ItemGroup"
+    prompt: |
+      My csproj has this block already:
+
+      ```xml
+      <PropertyGroup Label="DevFlow">
+        <EnableDevFlow Condition="'$(EnableDevFlow)' == '' AND '$(Configuration)' == 'Debug'">true</EnableDevFlow>
+      </PropertyGroup>
+      <ItemGroup Label="DevFlow" Condition="'$(EnableDevFlow)' == 'true'">
+        <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="0.1.0-preview.4" />
+      </ItemGroup>
+      ```
+
+      MauiProgram.cs also calls AddMauiDevFlowAgent() under #if DEBUG && DEVFLOW.
+      I ran "set up DevFlow" again by mistake. What should you do?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)already wired|already set up|already configured"
+      - type: "output_matches"
+        pattern: "(?i)maui devflow diagnose"
+    rubric:
+      - "Recognizes the project is already wired correctly (labeled groups + DevFlow package + guarded call site)"
+      - "Does NOT propose new edits to the csproj or MauiProgram.cs"
+      - "Suggests running `maui devflow diagnose` to verify connectivity"
+    timeout: 180
+
+  - name: "Bare DevFlow reference without Label — ask before editing"
+    prompt: |
+      My csproj has this at the top of an ItemGroup that also contains many
+      unrelated packages:
+
+      ```xml
+      <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="0.1.0-preview.3" />
+      ```
+
+      There is no Label="DevFlow" on the ItemGroup and no <DevFlow> comment
+      fence. Wire DevFlow.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)label|marker|fence|manually managed|user.managed"
+      - type: "output_matches"
+        pattern: "(?i)ask|confirm|should I|would you like"
+    rubric:
+      - "Notices the bare PackageReference lacks the Label=\"DevFlow\" / <DevFlow> wiring marker"
+      - "Treats it as user-managed and stops to ask the user whether to promote it to the standard shape"
+      - "Does NOT silently delete or move the existing reference"
+    timeout: 180
+
+  - name: "Non-MAUI project — refuse"
+    prompt: |
+      I have a .NET console app csproj:
+
+      ```xml
+      <Project Sdk="Microsoft.NET.Sdk">
+        <PropertyGroup>
+          <OutputType>Exe</OutputType>
+          <TargetFramework>net10.0</TargetFramework>
+        </PropertyGroup>
+      </Project>
+      ```
+
+      Set up DevFlow.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)not.*a .net maui|not a maui|doesn.t look like a .net maui|only.*MAUI"
+    rubric:
+      - "Recognizes the project is not a .NET MAUI app"
+      - "Refuses to edit the csproj and explains DevFlow only supports MAUI apps"
+      - "Does not suggest adding <UseMaui>true</UseMaui> to force-fit the project"
+    timeout: 180
