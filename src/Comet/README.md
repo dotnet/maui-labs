@@ -389,6 +389,6 @@ dotnet test tests/Comet.Tests/Comet.Tests.csproj --no-build -c Release
 
 Comet targets every platform .NET MAUI supports: **Android**, **iOS**, **macOS (Catalyst)**, and **Windows**.
 
-## Disclaimer
+## Status
 
-Comet is a **proof of concept**. There is no official support. Use at your own risk.
+Comet is **experimental** and lives in [maui-labs](https://github.com/dotnet/maui-labs) — the home for pre-release .NET MAUI tooling. APIs may change between releases. Community contributions and feedback are welcome.

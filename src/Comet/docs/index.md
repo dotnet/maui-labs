@@ -112,27 +112,4 @@ Independent reviews of the state management v2 proposal across multiple rounds:
 - [Review Response (Holden)](research/reviews/REVIEW_RESPONSE.md)
 
 
-## Internal
 
-Implementation tracking, audit reports, coverage matrices, and remediation plans
-consumed during development. Retained for project history.
-
-- [Implementation Status](internal/IMPLEMENTATION_STATUS.md)
-- [Implementation Summary](internal/IMPLEMENTATION_SUMMARY.md)
-- [Verification Checklist](internal/VERIFICATION_CHECKLIST.md)
-- [Sample Validation Report](internal/SAMPLE_VALIDATION_REPORT.md)
-- [MAUI 9.0 Audit Report](internal/MAUI_9_0_AUDIT_REPORT.md)
-- [MAUI 9.0 Coverage Checklist](internal/MAUI_9_0_COVERAGE_CHECKLIST.md)
-- [MAUI 9.0 Coverage Matrix](internal/MAUI_9_0_COVERAGE_MATRIX.txt)
-- [MAUI SDK Coverage Audit](internal/MAUI_SDK_COVERAGE_AUDIT.md)
-- [Comprehensive Audit Index](internal/COMPREHENSIVE_AUDIT_INDEX.md)
-- [Audit Index](internal/AUDIT_INDEX.md)
-- [Audit Summary](internal/AUDIT_SUMMARY.txt)
-- [Audit Execution Summary](internal/AUDIT_EXECUTION_SUMMARY.txt)
-- [Control Coverage (Phase 8.1)](internal/CONTROL_COVERAGE_PHASE_8_1.md)
-- [Phase 4 Validation Report](internal/PHASE4_VALIDATION_REPORT.md)
-- [Phase 6.2 Interop Baseline](internal/PHASE_6_2_INTEROP_BASELINE.md)
-- [Option B Implementation Roadmap](internal/OPTION_B_IMPLEMENTATION_ROADMAP.md)
-- [Remediation Plan](internal/REMEDIATION_PLAN.md)
-- [Remediation Roadmap (SDK Only)](internal/REMEDIATION_ROADMAP_MAUI_SDK_ONLY.md)
-- [Remediation Implementation Log](internal/REMEDIATION_IMPLEMENTATION.md)
