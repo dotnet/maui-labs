@@ -51,6 +51,8 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		// Store delegate so we can unsubscribe
 		Action<AppTheme>? _onThemeChanged;
+		SizeChangedEventHandler? _onSizeChanged;
+		EventHandler? _onLocationChanged;
 
 		protected override void ConnectHandler(PlatformView platformView)
 		{
@@ -72,6 +74,39 @@ namespace Microsoft.Maui.Handlers.WPF
 			ApplyWindowTheme(platformView);
 			_onThemeChanged = theme => PlatformView?.Dispatcher.InvokeAsync(() => ApplyWindowTheme(PlatformView));
 			ThemeManager.ThemeChanged += _onThemeChanged;
+
+			// Propagate platform size/position to the virtual view so MainPage and
+			// descendants receive non-zero frames (required for layout, hit-testing,
+			// and DevFlow inspection).
+			_onSizeChanged = (s, e) => UpdateVirtualViewFrame(platformView);
+			_onLocationChanged = (s, e) => UpdateVirtualViewFrame(platformView);
+			platformView.SizeChanged += _onSizeChanged;
+			platformView.LocationChanged += _onLocationChanged;
+
+			// Set an initial frame in case the window is already sized.
+			platformView.Dispatcher.BeginInvoke(new Action(() => UpdateVirtualViewFrame(platformView)),
+				System.Windows.Threading.DispatcherPriority.Loaded);
+		}
+
+		void UpdateVirtualViewFrame(PlatformView platformView)
+		{
+			if (VirtualView == null) return;
+			double w = platformView.ActualWidth;
+			double h = platformView.ActualHeight;
+			if (w <= 0 || h <= 0) return;
+			double x = double.IsNaN(platformView.Left) ? 0 : platformView.Left;
+			double y = double.IsNaN(platformView.Top) ? 0 : platformView.Top;
+			VirtualView.FrameChanged(new Microsoft.Maui.Graphics.Rect(x, y, w, h));
+
+			// MAUI's cross-platform layout isn't driven by WPF's layout pass on the root
+			// Content, so pages (FlyoutPage / ContentPage / Shell) never receive a non-zero
+			// Frame. Manually arrange the root content whenever the window resizes so
+			// VisualElement.Bounds are correct for layout, hit-testing, and inspection.
+			if (VirtualView.Content is IView content)
+			{
+				var bounds = new Microsoft.Maui.Graphics.Rect(0, 0, w, h);
+				content.Arrange(bounds);
+			}
 		}
 
 		static void ApplyWindowTheme(PlatformView? window)
@@ -89,19 +124,10 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			if (_onThemeChanged != null)
 				ThemeManager.ThemeChanged -= _onThemeChanged;
-			//MauiContext
-			//	?.GetNavigationRootManager()
-			//	?.Disconnect();
-
-			//if (platformView.Content is WindowRootViewContainer container)
-			//{
-			//	container.Children.Clear();
-			//	platformView.Content = null;
-			//}
-
-			//var appWindow = platformView.GetAppWindow();
-			//if (appWindow is not null)
-			//	appWindow.Changed -= OnWindowChanged;
+			if (_onSizeChanged != null)
+				platformView.SizeChanged -= _onSizeChanged;
+			if (_onLocationChanged != null)
+				platformView.LocationChanged -= _onLocationChanged;
 
 			base.DisconnectHandler(platformView);
 		}

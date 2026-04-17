@@ -1,7 +1,9 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 using Maui.Controls.Sample.WPF;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.LifecycleEvents;
+using Microsoft.Maui.LifecycleEvents.WPF;
 using Microsoft.Maui.WPF;
 using PlatformApplication = System.Windows.Application;
 using PlatformWindow = System.Windows.Window;
@@ -30,14 +32,14 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 			var window = application.CreateWindow(activationState);
 
-
-			//winuiWndow.Activated += WinuiWndow_Activated;
-			// TODO: SetWindowHandler was removed in newer MAUI versions — window handler setup needs rework
-			// winuiWndow.SetWindowHandler(window, mauiContext);
-
-			//applicationContext.Services.InvokeLifecycleEvents<WindowsLifecycle.OnWindowCreated>(del => del(winuiWndow));
+			// Wire up WindowHandler (replaces removed SetWindowHandler API)
+			var windowHandler = new Microsoft.Maui.Handlers.WPF.WindowHandler();
+			windowHandler.SetMauiContext(mauiContext);
+			windowHandler.SetVirtualView(window);
 
 			winuiWndow.Show();
+
+			applicationContext.Services.InvokeLifecycleEvents<WPFLifecycle.OnActivated>(del => del(winuiWndow, EventArgs.Empty));
 
 			//void WinuiWndow_Activated(object? sender, System.EventArgs e)
 			//{

@@ -3,4 +3,7 @@
     <Project Path="src/Windows.WPF/Windows.WPF.csproj" />
     <Project Path="src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/WpfControlGallery/WpfControlGallery.csproj" />
+  </Folder>
 </Solution>
