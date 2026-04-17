@@ -166,7 +166,6 @@ namespace Comet
 	{
 		public string Property { get; set; }
 		public object Value { get; set; }
-		public List<Setter> Setters { get; } = new();
 	}
 
 	/// <summary>
@@ -197,7 +196,6 @@ namespace Comet
 	public class MultiTrigger : TriggerBase
 	{
 		public List<Condition> Conditions { get; } = new();
-		public List<Setter> Setters { get; } = new();
 	}
 
 	/// <summary>

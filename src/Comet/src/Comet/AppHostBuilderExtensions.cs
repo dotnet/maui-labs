@@ -97,13 +97,7 @@ namespace Comet
 
 			//AnimationManger.SetTicker(new iOSTicker());
 
-			//Set Default Style
-			var style = new Styles.Style();
-			style.Apply();
-
 			// Initialize the token-based theme system with Material 3 defaults.
-			// This must happen after legacy style.Apply() so the old environment
-			// keys are set first, then the new ThemeManager overlays token values.
 			// Fork the shared Defaults.Light via `with { }` so the framework's
 			// ButtonStyles.Filled registration doesn't mutate the shared singleton
 			// (records copy the _controlStyles ImmutableDictionary on `with`, so
@@ -1288,6 +1282,7 @@ namespace Comet
 			// Snapshot what the modifier would write (without mutating the view)
 			// so we can replay each write to the view's cascading context at the
 			// right priority.
+			Dictionary<(ContextualObject view, string property, bool cascades), (object oldValue, object newValue)> changes;
 			ContextualObject.MonitorChanges();
 			try
 			{
@@ -1295,30 +1290,31 @@ namespace Comet
 			}
 			finally
 			{
-				var changes = ContextualObject.StopMonitoringChanges();
-				if (changes is null)
-					return;
+				changes = ContextualObject.StopMonitoringChanges();
+			}
 
-				foreach (var entry in changes)
-				{
-					// Only replay writes that targeted this specific view — the
-					// modifier may set properties on child/composed views it
-					// created internally, and those should reach their own
-					// contexts untouched.
-					if (!ReferenceEquals(entry.Key.view, view))
-						continue;
+			if (changes is null)
+				return;
 
-					var key = entry.Key.property;
-					var newValue = entry.Value.newValue;
-					if (newValue is null)
-						continue;
+			foreach (var entry in changes)
+			{
+				// Only replay writes that targeted this specific view — the
+				// modifier may set properties on child/composed views it
+				// created internally, and those should reach their own
+				// contexts untouched.
+				if (!ReferenceEquals(entry.Key.view, view))
+					continue;
 
-					// cascades: true routes to the view's Context slot, which is
-					// below LocalContext (explicit fluent) but above the parent /
-					// global environment. Exactly the precedence a style default
-					// should have, and scoped to this instance only.
-					view.SetEnvironment(key, newValue, cascades: true);
-				}
+				var key = entry.Key.property;
+				var newValue = entry.Value.newValue;
+				if (newValue is null)
+					continue;
+
+				// cascades: true routes to the view's Context slot, which is
+				// below LocalContext (explicit fluent) but above the parent /
+				// global environment. Exactly the precedence a style default
+				// should have, and scoped to this instance only.
+				view.SetEnvironment(key, newValue, cascades: true);
 			}
 		}
 	}

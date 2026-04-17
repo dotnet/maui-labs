@@ -87,12 +87,6 @@ namespace Comet
 			internal set => SetPropertyInContext(value);
 		}
 
-		public ResourceDictionary Resources
-		{
-			get => GetPropertyFromContext<ResourceDictionary>();
-			set => SetPropertyInContext(value);
-		}
-
 		public IList<Behavior> Behaviors
 		{
 			get => GetPropertyFromContext<List<Behavior>>() ?? (IList<Behavior>)(SetPropertyInContext(new List<Behavior>()));
@@ -754,7 +748,6 @@ namespace Comet
 				builtView = null;
 				body = null;
 				Context(false)?.Clear();
-				VisualStateManager.ClearVisualStateGroups(this);
 			}
 			finally
 			{

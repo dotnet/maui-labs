@@ -46,10 +46,6 @@ namespace Comet.Tests
 			Services = app.Services;
 
 			MauiHotReloadHelper.IsEnabled = true;
-
-			//Set Default Style
-			var style = new Styles.Style();
-			style.Apply();
 		}
 	}
 }

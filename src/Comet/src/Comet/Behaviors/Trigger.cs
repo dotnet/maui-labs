@@ -7,7 +7,6 @@ namespace Comet
 	{
 		public string Property { get; set; }
 		public object Value { get; set; }
-		public List<Setter> Setters { get; } = new List<Setter>();
 
 		internal View AssociatedObject { get; private set; }
 

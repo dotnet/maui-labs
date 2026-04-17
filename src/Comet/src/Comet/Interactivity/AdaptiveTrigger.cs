@@ -5,11 +5,8 @@ namespace Comet
 {
 	/// <summary>
 	/// A trigger that fires based on window size thresholds.
-	/// Used for responsive layouts in MVU:
-	///   myView.AddTrigger(new AdaptiveTrigger(minWindowWidth: 720)
-	///   {
-	///       Setters = { new Setter { Property = "WidthRequest", Value = 600.0 } }
-	///   })
+	/// Used for responsive layouts in MVU. Prefer <see cref="AdaptiveTrigger{T}"/>
+	/// for functional (non-setter) responsive adjustments.
 	/// </summary>
 	public class AdaptiveTrigger : DataTrigger
 	{
@@ -35,18 +32,19 @@ namespace Comet
 		}
 
 		/// <summary>
-		/// Applies this trigger's setters to the associated view if the size thresholds are met.
+		/// Evaluates the trigger against the provided dimensions. The typed
+		/// subclass <see cref="AdaptiveTrigger{T}"/> is the preferred way to
+		/// apply size-based changes — it uses functional setters instead of
+		/// the legacy <c>Setter</c> collection (removed in Phase 1).
 		/// </summary>
 		public void Apply(double currentWidth, double currentHeight)
 		{
 			if (AssociatedObject is null)
 				return;
 
-			if (Evaluate(currentWidth, currentHeight))
-			{
-				foreach (var setter in Setters)
-					AssociatedObject.SetEnvironment(setter.Property, setter.Value, false);
-			}
+			// Base untyped trigger no longer carries setters; consumers should
+			// use AdaptiveTrigger<T> with functional setter/undoSetter.
+			_ = Evaluate(currentWidth, currentHeight);
 		}
 	}
 

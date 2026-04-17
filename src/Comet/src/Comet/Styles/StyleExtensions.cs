@@ -1,5 +1,4 @@
-﻿using Comet.Styles;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -82,22 +81,6 @@ namespace Comet
 		{
 			text.StyleId = EnvironmentKeys.Text.Style.Overline;
 			return text;
-		}
-
-		public static T ApplyStyle<T>(this T view, Style style) where T : ContextualObject
-		{
-			style.Apply(view);
-			return view;
-		}
-
-		/// <summary>
-		/// Applies a typed functional Style&lt;T&gt; to a view.
-		/// Usage: new Text("Hello").StyleApply(headerStyle);
-		/// </summary>
-		public static T StyleApply<T>(this T view, Style<T> style) where T : View
-		{
-			style.Apply(view);
-			return view;
 		}
 	}
 }

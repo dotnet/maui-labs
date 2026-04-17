@@ -51,7 +51,10 @@ namespace Comet
 			CrossPlatformArrange(frame);
 		}
 
-		protected virtual Thickness GetDefaultPadding() => this.GetEnvironment<Thickness>(nameof(Styles.Style.LayoutPadding));
+		// Default layout padding for Comet layouts (matches the legacy Style.LayoutPadding
+		// default of 6pt). Spacing tokens from the theme system will supersede this once
+		// layout-level token wiring is implemented.
+		protected virtual Thickness GetDefaultPadding() => new Thickness(6);
 
 		Size lastMeasureSize;
 		public override Size GetDesiredSize(Size availableSize)

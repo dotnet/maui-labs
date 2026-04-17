@@ -303,28 +303,6 @@ namespace Comet
 		public static T MaximumWidth<T>(this T view, double value) where T : View =>
 			view.SetEnvironment(nameof(IView.MaximumWidth), value, false);
 
-		// ResourceDictionary
-		public static TValue StaticResource<TValue>(this View view, string key)
-		{
-			if (view.Resources?.TryGetResource(key, out var value) == true && value is TValue typedValue)
-				return typedValue;
-
-			var parent = view.Parent;
-			while (parent is not null)
-			{
-				if (parent.Resources?.TryGetResource(key, out value) == true && value is TValue typedValue2)
-					return typedValue2;
-				parent = parent.Parent;
-			}
-
-			return default;
-		}
-
-		public static object DynamicResource(this View view, string key)
-		{
-			return view.StaticResource<object>(key);
-		}
-
 		// Behaviors
 		public static T AddBehavior<T>(this T view, Behavior behavior) where T : View
 		{
@@ -377,18 +355,8 @@ namespace Comet
 			return view.AddBehavior(effect);
 		}
 
-		// Visual States
-		public static T WithVisualStateGroups<T>(this T view, params VisualStateGroup[] groups) where T : View
-		{
-			VisualStateManager.SetVisualStateGroups(view, new List<VisualStateGroup>(groups));
-			return view;
-		}
-
-		public static T GoToState<T>(this T view, string stateName) where T : View
-		{
-			VisualStateManager.GoToState(view, stateName);
-			return view;
-		}
+		// Visual States — removed in Phase 1; superseded by IControlStyle<T, TConfig> + ControlState.
+		// See docs/architecture/STYLE_THEME_SPEC.md §9.
 
 		// Lifecycle convenience methods
 		public static T OnLoaded<T>(this T view, Action action) where T : View

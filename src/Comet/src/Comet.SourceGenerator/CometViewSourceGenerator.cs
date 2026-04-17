@@ -183,47 +183,11 @@ namespace {{NameSpace}} {
 ";
 
 		const string styleBuilderMustacheTemplate = @"
-using System;
-using Comet;
-using Comet.Styles;
-using Microsoft.Maui;
-using Microsoft.Maui.Graphics;
-namespace Comet.Styles {
-	public class {{ClassName}}StyleBuilder
-	{
-		private readonly ControlStyle<{{ClassName}}> _style = new ControlStyle<{{ClassName}}>();
-
-		public {{ClassName}}StyleBuilder Background(Paint background)
-		{
-			_style.Set(EnvironmentKeys.Colors.Background, background);
-			return this;
-		}
-
-		public {{ClassName}}StyleBuilder TextColor(Color color)
-		{
-			_style.Set(EnvironmentKeys.Colors.Color, color);
-			return this;
-		}
-
-		{{#StyleProperties}}
-		{{#StylePropertyFunc}}
-		{{/StylePropertyFunc}}
-		{{/StyleProperties}}
-
-		public ControlStyle<{{ClassName}}> Build() => _style;
-
-		public static implicit operator ControlStyle<{{ClassName}}>({{ClassName}}StyleBuilder builder)
-			=> builder._style;
-	}
-}
+// StyleBuilder generator removed in Phase 1 (legacy ControlStyle<T> deleted per
+// STYLE_THEME_SPEC.md §1.2 ""one way to do each thing""). See BuiltInStyles.cs for
+// the replacement IControlStyle<TControl, TConfig> pattern.
 ";
-		const string styleBuilderPropertyMustache = @"
-		public {{ClassName}}StyleBuilder {{Name}}({{{Type}}} {{LowercaseName}})
-		{
-			_style.Set(nameof({{FullName}}), {{LowercaseName}});
-			return this;
-		}
-";
+		const string styleBuilderPropertyMustache = @"";
 
 		static Dictionary<(bool HasGet, bool HasSet), (string FromEnvironment, string FromProperty)> interfacePropertyDictionary;
 
@@ -298,10 +262,6 @@ namespace Comet.Styles {
 
 				var factorySource = stubble.Render(factoryMustacheTemplate, input);
 				context.AddSource($"{item.name}Factory.g.cs", factorySource);
-
-				// Phase 2.3: Generate style builder class
-				var styleBuilderSource = stubble.Render(styleBuilderMustacheTemplate, input);
-				context.AddSource($"{item.name}StyleBuilder.g.cs", styleBuilderSource);
 			}
 		}
 		public static string GetFullName(ISymbol symbol, string ending = null)
