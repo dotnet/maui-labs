@@ -1,0 +1,76 @@
+scenarios:
+  - name: "Diagnose no agents found on Android emulator"
+    prompt: |
+      I'm running my MAUI app on an Android emulator. When I run `maui devflow list`
+      it shows no agents. The app is running and I can see it on screen. I added the
+      Microsoft.Maui.DevFlow.Agent NuGet package and called AddMauiDevFlowAgent() in
+      MauiProgram.cs. What's wrong?
+    assertions:
+      - type: "output_contains"
+        value: "adb reverse"
+      - type: "output_contains"
+        value: "tcp:19223"
+      - type: "output_contains"
+        value: "tcp:9223"
+      - type: "output_contains"
+        value: "broker"
+    rubric:
+      - "Identifies adb port forwarding as the likely issue for Android emulator connectivity"
+      - "Provides the correct adb reverse commands for both broker and agent ports"
+      - "Suggests checking broker status with maui devflow broker status"
+      - "Does not suggest iOS or macOS-specific troubleshooting steps"
+    timeout: 240
+
+  - name: "Resolve port conflict on agent port"
+    prompt: |
+      When my MAUI app starts, I see an error about port 9223 being already in use.
+      I think a previous debugging session left something running. How do I fix this
+      so DevFlow can connect?
+    assertions:
+      - type: "output_matches"
+        pattern: "lsof.*9223|netstat.*9223"
+      - type: "output_matches"
+        pattern: "kill|stop"
+    rubric:
+      - "Suggests checking what process is using port 9223 with lsof or netstat"
+      - "Provides a command to terminate the stale process"
+      - "Mentions that restarting the app should resolve the issue after clearing the port"
+    timeout: 240
+
+  - name: "iOS simulator connection troubleshooting"
+    prompt: |
+      My MAUI app runs fine on the iOS simulator but maui devflow tree returns
+      "Cannot connect to agent at localhost:9223". I've confirmed the DevFlow agent
+      is integrated. What should I check?
+    assertions:
+      - type: "output_not_contains"
+        value: "adb reverse"
+      - type: "output_matches"
+        pattern: "(?i)broker|maui devflow broker"
+      - type: "output_matches"
+        pattern: "lsof|port|9223"
+    rubric:
+      - "Does NOT suggest adb reverse (iOS simulators share host network)"
+      - "Checks if the broker is running and the agent registered"
+      - "Suggests verifying the port is accessible on localhost"
+      - "Recommends checking app logs for DevFlow agent initialization errors"
+    timeout: 240
+
+  - name: "Full connectivity diagnostic workflow"
+    prompt: |
+      I just set up DevFlow for the first time in my MAUI app. I've added the NuGet
+      package and the AddMauiDevFlowAgent() call. The app builds and runs on Mac Catalyst.
+      Walk me through verifying everything is connected properly.
+    assertions:
+      - type: "output_contains"
+        value: "maui devflow broker"
+      - type: "output_contains"
+        value: "maui devflow list"
+      - type: "output_contains"
+        value: "maui devflow tree"
+    rubric:
+      - "Starts with broker status check before anything else"
+      - "Progresses logically: broker → list agents → test with tree command"
+      - "Mentions Mac Catalyst uses direct localhost (no port forwarding needed)"
+      - "Includes a final verification step to confirm the connection works"
+    timeout: 240

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Platform.Maui.Linux.Gtk4 Sample Icon">
+  <defs>
+    <linearGradient id="bg" x1="84" y1="64" x2="420" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6f46ff"/>
+      <stop offset="0.55" stop-color="#5a35e6"/>
+      <stop offset="1" stop-color="#4220b8"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="150" y1="170" x2="370" y2="370" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="110" fill="url(#bg)"/>
+  <rect x="44" y="44" width="424" height="424" rx="98" fill="none" stroke="#c8baff" stroke-opacity="0.45" stroke-width="8"/>
+  <rect x="66" y="66" width="380" height="180" rx="72" fill="url(#highlight)"/>
+
+  <g>
+    <path d="M146 358c-15 0-24-16-16-29l80-122c8-13 28-13 36 0l42 64 32-48c8-13 28-13 36 0l64 98c8 13-1 29-16 29H146z" fill="#f5f2ff"/>
+    <path d="M216 358l58-88 20 31 23-35 60 92z" fill="#d9d1ff"/>
+    <circle cx="228" cy="262" r="20" fill="#5d38e2"/>
+    <circle cx="228" cy="262" r="9" fill="#a8f1ff"/>
+  </g>
+
+  <circle cx="366" cy="154" r="14" fill="#ffffff" fill-opacity="0.95"/>
+  <path d="M366 126v56M338 154h56" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-opacity="0.9"/>
+</svg>

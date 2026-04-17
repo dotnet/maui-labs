@@ -19,7 +19,7 @@ public static class McpServerHost
 		builder.Services
 			.AddMcpServer(options =>
 			{
-				options.ServerInfo = new() { Name = "maui-devflow", Version = version };
+				options.ServerInfo = new() { Name = "maui", Version = version };
 			})
 			.WithStdioServerTransport()
 			.WithTools<ScreenshotTool>()

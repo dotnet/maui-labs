@@ -52,8 +52,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -191,7 +190,13 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, name = name, package = package, device = device });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Name = name,
+						Package = package,
+						Device = device
+					});
 				}
 				else
 				{
@@ -201,8 +206,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -282,7 +286,12 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, name = name, status = "started" });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Name = name,
+						Status = "started"
+					});
 				}
 				else
 				{
@@ -292,8 +301,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -341,12 +349,12 @@ public static partial class AndroidCommands
 							.HighlightStyle(new Style(Color.DodgerBlue1))
 							.UseConverter(d =>
 							{
-								var avdName = d.Details?.TryGetValue("avd", out var avd) == true ? avd?.ToString() : null;
+								var avdName = d.Details?.TryGetPropertyValue("avd", out var avd) == true ? avd?.ToString() : null;
 								var label = avdName ?? d.Name ?? d.Id;
 								return $"[bold]{Markup.Escape(label)}[/]  [dim]{Markup.Escape(d.Id)}[/]";
 							})
 							.AddChoices(runningEmulators));
-					name = selectedDevice.Details?.TryGetValue("avd", out var avdVal) == true
+					name = selectedDevice.Details?.TryGetPropertyValue("avd", out var avdVal) == true
 						? avdVal?.ToString() ?? selectedDevice.Id
 						: selectedDevice.Id;
 				}
@@ -359,7 +367,7 @@ public static partial class AndroidCommands
 
 				var emulator = runningEmulators.FirstOrDefault(d =>
 					d.Details != null &&
-					d.Details.TryGetValue("avd", out var avd) &&
+					d.Details.TryGetPropertyValue("avd", out var avd) &&
 					string.Equals(avd?.ToString(), name, StringComparison.OrdinalIgnoreCase));
 
 				if (emulator == null)
@@ -398,7 +406,13 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, name = name, serial = serial, status = "stopped" });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Name = name,
+						Serial = serial,
+						Status = "stopped"
+					});
 				}
 				else
 				{
@@ -408,8 +422,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 		command.Add(stopCommand);
@@ -475,7 +488,12 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, name = name, status = "deleted" });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Name = name,
+						Status = "deleted"
+					});
 				}
 				else
 				{
@@ -485,8 +503,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 		command.Add(deleteCommand);

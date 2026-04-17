@@ -2,8 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Maui.Cli.Errors;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.Services;
@@ -14,10 +16,12 @@ namespace Microsoft.Maui.Cli.Services;
 public class DoctorService : IDoctorService
 {
 	readonly IAndroidProvider? _androidProvider;
+	readonly IAppleProvider? _appleProvider;
 
-	public DoctorService(IAndroidProvider? androidProvider = null)
+	public DoctorService(IAndroidProvider? androidProvider = null, IAppleProvider? appleProvider = null)
 	{
 		_androidProvider = androidProvider;
+		_appleProvider = appleProvider;
 	}
 
 	public async Task<DoctorReport> RunAllChecksAsync(CancellationToken cancellationToken = default)
@@ -35,6 +39,13 @@ public class DoctorService : IDoctorService
 		{
 			var androidChecks = await _androidProvider.CheckHealthAsync(cancellationToken);
 			checks.AddRange(androidChecks);
+		}
+
+		// Apple checks (macOS only)
+		if (_appleProvider != null)
+		{
+			var appleChecks = _appleProvider.CheckHealth();
+			checks.AddRange(appleChecks);
 		}
 
 		// Windows checks (Windows only)
@@ -65,6 +76,23 @@ public class DoctorService : IDoctorService
 				}
 				break;
 
+			case "apple":
+				if (_appleProvider != null)
+				{
+					checks.AddRange(_appleProvider.CheckHealth());
+				}
+				else if (!PlatformDetector.IsMacOS)
+				{
+					checks.Add(new HealthCheck
+					{
+						Category = "apple",
+						Name = "Platform",
+						Status = CheckStatus.Skipped,
+						Message = "Apple checks only available on macOS"
+					});
+				}
+				break;
+
 			case "windows":
 				if (PlatformDetector.IsWindows)
 				{
@@ -85,7 +113,7 @@ public class DoctorService : IDoctorService
 			default:
 				throw new MauiToolException(
 					ErrorCodes.InvalidArgument,
-					$"Unknown category: {category}. Valid categories: dotnet, android, windows");
+					$"Unknown category: {category}. Valid categories: dotnet, android, apple, windows");
 		}
 
 		return CreateReport(checks);
@@ -245,7 +273,7 @@ public class DoctorService : IDoctorService
 			Name = ".NET SDK",
 			Status = CheckStatus.Ok,
 			Message = $".NET {version}",
-			Details = new Dictionary<string, object>
+			Details = new JsonObject
 			{
 				["version"] = version,
 				["path"] = dotnetPath
@@ -346,7 +374,7 @@ public class DoctorService : IDoctorService
 			Name = "Windows SDK",
 			Status = CheckStatus.Ok,
 			Message = installedVersion != null ? $"Windows SDK {installedVersion}" : "Windows SDK found",
-			Details = new Dictionary<string, object>
+			Details = new JsonObject
 			{
 				["path"] = sdkPath,
 				["version"] = installedVersion ?? "unknown"

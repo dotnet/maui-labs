@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Microsoft.Maui.Platforms.Linux.Gtk4.Sample</RootNamespace>
+    <ApplicationId>com.microsoft.maui.platforms.linux.gtk4.sample</ApplicationId>
+    <EnableFontAwesomeSample Condition="'$(EnableFontAwesomeSample)' == ''">false</EnableFontAwesomeSample>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableFontAwesomeSample)' == 'true'">
+    <DefineConstants>$(DefineConstants);FONTAWESOME_SAMPLE</DefineConstants>
+  </PropertyGroup>
+
+  <Import Project="..\..\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props" Condition="Exists('..\..\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props')" />
+
+  <ItemGroup>
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <MauiIcon Include="Resources\AppIcon\appicon-modern.svg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Linux.Gtk4\Linux.Gtk4.csproj" />
+    <ProjectReference Include="..\..\src\Linux.Gtk4.Essentials\Linux.Gtk4.Essentials.csproj" />
+    <ProjectReference Include="..\..\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Gtk\Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor.Gtk\Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableFontAwesomeSample)' == 'true'">
+    <PackageReference Include="AathifMahir.Maui.MauiIcons.FontAwesome" Version="5.0.0" />
+    <PackageReference Include="AathifMahir.Maui.MauiIcons.FontAwesome.Solid" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableFontAwesomeSample)' != 'true'">
+    <Compile Remove="Pages\FontAwesomePage.cs" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets" Condition="Exists('..\..\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets')" />
+
+</Project>

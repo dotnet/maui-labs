@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
@@ -268,57 +269,78 @@ public static class BrokerClient
                 return null;
             }
 
-            // Capture stderr asynchronously so we can report startup errors
-            var stderrTask = process.StandardError.ReadToEndAsync();
+            var stderr = new StringBuilder();
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(e.Data))
+                    return;
 
-            // Close stdout and stdin — we only need stderr for diagnostics
+                lock (stderr)
+                {
+                    if (stderr.Length > 0)
+                        stderr.AppendLine();
+                    stderr.Append(e.Data);
+                }
+            };
+            process.BeginErrorReadLine();
+
+            // Close stdout and stdin — the daemon is fully detached and stderr is captured above.
             process.StandardOutput.Close();
             process.StandardInput.Close();
 
-            // Poll until broker is ready
-            var port = BrokerServer.DefaultPort;
-            for (int i = 0; i < 25; i++) // 25 * 200ms = 5s
+            try
             {
-                await Task.Delay(200);
+                string GetCapturedStderr()
+                {
+                    lock (stderr)
+                        return stderr.ToString().Trim();
+                }
 
-                // Check if the child process has crashed during startup
+                // Poll until broker is ready
+                var port = BrokerServer.DefaultPort;
+                for (int i = 0; i < 25; i++) // 25 * 200ms = 5s
+                {
+                    await Task.Delay(200);
+
+                    // Check if the child process has crashed during startup
+                    if (process.HasExited)
+                    {
+                        var exitCode = process.ExitCode;
+                        var stderrText = GetCapturedStderr();
+                        Console.Error.WriteLine($"[DevFlow Broker] Daemon process exited prematurely with code {exitCode}");
+                        if (!string.IsNullOrWhiteSpace(stderrText))
+                            Console.Error.WriteLine($"[DevFlow Broker] stderr: {stderrText}");
+                        return null;
+                    }
+
+                    // Check if state file was written (may have a different port)
+                    var statePort = ReadBrokerPort();
+                    if (statePort.HasValue) port = statePort.Value;
+
+                    if (await IsBrokerAliveAsync(port))
+                        return port;
+                }
+
+                // Timeout — check if the child is still running or crashed
                 if (process.HasExited)
                 {
-                    var stderr = await stderrTask;
-                    var exitCode = process.ExitCode;
-                    Console.Error.WriteLine($"[DevFlow Broker] Daemon process exited prematurely with code {exitCode}");
-                    if (!string.IsNullOrWhiteSpace(stderr))
-                        Console.Error.WriteLine($"[DevFlow Broker] stderr: {stderr.Trim()}");
-                    return null;
+                    var stderrText = GetCapturedStderr();
+                    Console.Error.WriteLine($"[DevFlow Broker] Daemon exited with code {process.ExitCode} before becoming ready");
+                    if (!string.IsNullOrWhiteSpace(stderrText))
+                        Console.Error.WriteLine($"[DevFlow Broker] stderr: {stderrText}");
                 }
-
-                // Check if state file was written (may have a different port)
-                var statePort = ReadBrokerPort();
-                if (statePort.HasValue) port = statePort.Value;
-
-                if (await IsBrokerAliveAsync(port))
+                else
                 {
-                    // Broker is alive — close stderr reader (don't block on it)
-                    process.StandardError.Close();
-                    return port;
+                    Console.Error.WriteLine($"[DevFlow Broker] Daemon process started (PID {process.Id}) but TCP listener not reachable after 5s");
                 }
-            }
 
-            // Timeout — check if the child is still running or crashed
-            if (process.HasExited)
-            {
-                var stderr = await stderrTask;
-                Console.Error.WriteLine($"[DevFlow Broker] Daemon exited with code {process.ExitCode} before becoming ready");
-                if (!string.IsNullOrWhiteSpace(stderr))
-                    Console.Error.WriteLine($"[DevFlow Broker] stderr: {stderr.Trim()}");
+                return null;
             }
-            else
+            finally
             {
-                Console.Error.WriteLine($"[DevFlow Broker] Daemon process started (PID {process.Id}) but TCP listener not reachable after 5s");
-                process.StandardError.Close();
+                try { process.CancelErrorRead(); } catch { /* process may already be gone */ }
+                process.Dispose();
             }
-
-            return null;
         }
         catch (Exception ex)
         {

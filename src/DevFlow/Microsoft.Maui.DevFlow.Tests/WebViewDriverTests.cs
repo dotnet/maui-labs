@@ -171,11 +171,14 @@ public class ElementInfoTests
         Assert.Equal(string.Empty, info.Id);
         Assert.Null(info.ParentId);
         Assert.Equal(string.Empty, info.Type);
+        Assert.Equal("maui", info.Framework);
         Assert.Null(info.AutomationId);
         Assert.Null(info.Text);
         Assert.False(info.IsVisible);
         Assert.False(info.IsEnabled);
         Assert.False(info.IsFocused);
+        Assert.NotNull(info.State);
+        Assert.False(info.State.Displayed);
         Assert.Null(info.Bounds);
         Assert.Null(info.Children);
     }
@@ -188,10 +191,14 @@ public class ElementInfoTests
             Id = "btn1",
             Type = "Button",
             FullType = "Microsoft.Maui.Controls.Button",
+            Framework = "maui",
             AutomationId = "SubmitBtn",
             Text = "Submit",
             IsVisible = true,
             IsEnabled = true,
+            StyleClass = ["primary-button"],
+            NativeType = "UIButton",
+            NativeProperties = new Dictionary<string, string?> { ["title"] = "Submit" },
             Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 44 }
         };
 
@@ -199,13 +206,60 @@ public class ElementInfoTests
         var deserialized = System.Text.Json.JsonSerializer.Deserialize<ElementInfo>(json);
 
         Assert.NotNull(deserialized);
+        Assert.Contains("\"framework\":\"maui\"", json);
+        Assert.Contains("\"role\":\"button\"", json);
+        Assert.Contains("\"traits\":", json);
+        Assert.Contains("\"state\":", json);
+        Assert.Contains("\"style\":", json);
+        Assert.Contains("\"nativeView\":", json);
         Assert.Equal("btn1", deserialized.Id);
         Assert.Equal("Button", deserialized.Type);
+        Assert.Equal("maui", deserialized.Framework);
         Assert.Equal("SubmitBtn", deserialized.AutomationId);
         Assert.Equal("Submit", deserialized.Text);
         Assert.True(deserialized.IsVisible);
+        Assert.NotNull(deserialized.State);
+        Assert.True(deserialized.State.Displayed);
+        Assert.False(deserialized.State.Selected);
+        Assert.Equal("button", deserialized.Role);
+        Assert.NotNull(deserialized.Traits);
+        Assert.Contains("interactive", deserialized.Traits!);
+        Assert.NotNull(deserialized.Style);
+        Assert.Contains("primary-button", deserialized.Style!.Classes!);
+        Assert.NotNull(deserialized.NativeView);
+        Assert.Equal("UIButton", deserialized.NativeView!.Type);
         Assert.NotNull(deserialized.Bounds);
         Assert.Equal(100, deserialized.Bounds.Width);
+    }
+
+    [Fact]
+    public void Deserialization_MapsSpecStyleAndStateShape()
+    {
+        var json = """
+        {
+          "id":"btn1",
+          "type":"Button",
+          "fullType":"Microsoft.Maui.Controls.Button",
+          "framework":"maui",
+          "text":"Submit",
+          "state":{"displayed":true,"enabled":true,"selected":false,"focused":false,"opacity":1.0},
+          "style":{"classes":["primary-button"]},
+          "nativeView":{"type":"UIButton","properties":{"title":"Submit"}},
+          "bounds":{"x":10,"y":20,"width":100,"height":44}
+        }
+        """;
+
+        var deserialized = System.Text.Json.JsonSerializer.Deserialize<ElementInfo>(json);
+
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized.IsVisible);
+        Assert.True(deserialized.IsEnabled);
+        Assert.Equal("maui", deserialized.Framework);
+        Assert.NotNull(deserialized.StyleClass);
+        Assert.Contains("primary-button", deserialized.StyleClass);
+        Assert.Equal("UIButton", deserialized.NativeType);
+        Assert.NotNull(deserialized.NativeProperties);
+        Assert.Equal("Submit", deserialized.NativeProperties["title"]);
     }
 }
 
@@ -214,11 +268,11 @@ public class AgentStatusTests
     [Fact]
     public void Deserialization_Works()
     {
-        var json = """{"agent":"Microsoft.Maui.DevFlow.Agent","version":"1.0.0","platform":"MacCatalyst","deviceType":"Virtual","idiom":"Desktop","appName":"SampleMauiApp","running":true}""";
+        var json = """{"agent":{"name":"Microsoft.Maui.DevFlow.Agent","version":"1.0.0","framework":".NET MAUI","frameworkVersion":"10.0"},"device":{"platform":"MacCatalyst","deviceType":"Virtual","idiom":"Desktop"},"app":{"name":"SampleMauiApp"},"running":true}""";
         var status = System.Text.Json.JsonSerializer.Deserialize<AgentStatus>(json);
 
         Assert.NotNull(status);
-        Assert.Equal("Microsoft.Maui.DevFlow.Agent", status.Agent);
+        Assert.Equal("Microsoft.Maui.DevFlow.Agent", status.Agent?.Name);
         Assert.Equal("1.0.0", status.Version);
         Assert.Equal("MacCatalyst", status.Platform);
         Assert.True(status.Running);

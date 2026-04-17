@@ -69,6 +69,12 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
     public abstract void ConfigureHandler();
 
     /// <summary>
+    /// Platform-specific delay in milliseconds to wait for WebView to load before injecting debug scripts.
+    /// Default is 2000ms. Override in platform subclasses if more time is needed.
+    /// </summary>
+    protected virtual int GetWebViewLoadDelayMs() => 2000;
+
+    /// <summary>
     /// Register a new WebView bridge. Called by platform subclasses when a WebView is captured.
     /// Returns the bridge index.
     /// </summary>
@@ -89,10 +95,29 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         if (bridgeIndex < 0 || bridgeIndex >= _bridges.Count) return;
         var bridge = _bridges[bridgeIndex];
 
-        Log($"[BlazorDevFlow] Waiting 2s for WebView {bridgeIndex} to load...");
-        await Task.Delay(2000);
+        var delayMs = GetWebViewLoadDelayMs();
+        Log($"[BlazorDevFlow] Waiting {delayMs}ms for WebView {bridgeIndex} to load...");
+        await Task.Delay(delayMs);
 
         Log($"[BlazorDevFlow] Injecting debug script into WebView {bridgeIndex}...");
+        await bridge.InjectDebugScriptAsync();
+    }
+
+    /// <summary>
+    /// Reset bridge state and re-inject debug scripts after page navigation.
+    /// Called by platform-specific navigation detection (e.g., Android OnPageFinished).
+    /// </summary>
+    internal async Task ResetAndReinitializeBridgeAsync(int bridgeIndex)
+    {
+        if (bridgeIndex < 0 || bridgeIndex >= _bridges.Count) return;
+        var bridge = _bridges[bridgeIndex];
+
+        var delayMs = GetWebViewLoadDelayMs();
+        Log($"[BlazorDevFlow] Re-initialization: waiting {delayMs}ms for WebView {bridgeIndex} to settle...");
+        await Task.Delay(delayMs);
+
+        Log($"[BlazorDevFlow] Re-injecting debug script into WebView {bridgeIndex}...");
+        bridge.ResetReadyState();
         await bridge.InjectDebugScriptAsync();
     }
 
@@ -187,6 +212,14 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
             {
                 _injecting = false;
             }
+        }
+
+        /// <summary>
+        /// Reset the ready state so the script can be re-injected after page navigation.
+        /// </summary>
+        internal void ResetReadyState()
+        {
+            _chobitsuLoaded = false;
         }
 
         private async Task InjectDebugScriptCoreAsync()
@@ -288,7 +321,7 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
                 await Task.Delay(50);
 
                 string? result = null;
-                for (int i = 0; i < 60; i++)
+                for (int i = 0; i < 200; i++)
                 {
                     result = await _owner.RunOnMainThreadAsync(async () =>
                     {
@@ -305,7 +338,7 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
                     await Task.Delay(50);
                 }
 
-                _owner.Log($"[BlazorDevFlow] SendCdpCommand: no response after polling");
+                _owner.Log($"[BlazorDevFlow] SendCdpCommand: no response after polling (10s timeout)");
                 return "{\"error\":\"cdp timeout\"}";
             }
             catch (Exception ex)

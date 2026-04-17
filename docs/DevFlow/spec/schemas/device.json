@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "device.json",
+  "title": "Device Models",
+  "description": "Device information models for hardware, display, battery, connectivity, sensors, and permissions.",
+  "$defs": {
+    "DeviceInfo": {
+      "type": "object",
+      "description": "Hardware and platform information about the device.",
+      "required": [
+        "model",
+        "manufacturer",
+        "osVersion",
+        "platform",
+        "idiom",
+        "architecture"
+      ],
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Device model name (e.g. 'iPhone 15 Pro', 'Pixel 8')."
+        },
+        "manufacturer": {
+          "type": "string",
+          "description": "Device manufacturer (e.g. 'Apple', 'Google', 'Samsung')."
+        },
+        "osVersion": {
+          "type": "string",
+          "description": "Operating system version string."
+        },
+        "platform": {
+          "type": "string",
+          "description": "Platform identifier (e.g. 'ios', 'android', 'maccatalyst', 'windows')."
+        },
+        "idiom": {
+          "type": "string",
+          "description": "Device form factor (e.g. 'phone', 'tablet', 'desktop', 'tv', 'watch')."
+        },
+        "architecture": {
+          "type": "string",
+          "description": "CPU architecture (e.g. 'arm64', 'x64', 'x86')."
+        }
+      }
+    },
+    "DisplayInfo": {
+      "type": "object",
+      "description": "Display characteristics of the device screen.",
+      "required": [
+        "width",
+        "height",
+        "density",
+        "orientation"
+      ],
+      "properties": {
+        "width": {
+          "type": "number",
+          "description": "Display width in device-independent pixels.",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "description": "Display height in device-independent pixels.",
+          "minimum": 0
+        },
+        "density": {
+          "type": "number",
+          "description": "Display pixel density (ratio of physical to logical pixels).",
+          "exclusiveMinimum": 0
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "landscape"
+          ],
+          "description": "Current display orientation."
+        },
+        "refreshRate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Display refresh rate in Hz, or null if unavailable.",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "BatteryInfo": {
+      "type": "object",
+      "description": "Battery status information.",
+      "required": [
+        "level",
+        "state",
+        "powerSource"
+      ],
+      "properties": {
+        "level": {
+          "type": "number",
+          "description": "Battery charge level from empty (0) to full (1).",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "charging",
+            "discharging",
+            "full",
+            "notCharging"
+          ],
+          "description": "Current battery charging state."
+        },
+        "powerSource": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "battery",
+            "ac",
+            "usb",
+            "wireless"
+          ],
+          "description": "Current power source."
+        }
+      }
+    },
+    "ConnectivityInfo": {
+      "type": "object",
+      "description": "Network connectivity status.",
+      "required": [
+        "networkAccess",
+        "connectionProfiles"
+      ],
+      "properties": {
+        "networkAccess": {
+          "type": "string",
+          "enum": [
+            "none",
+            "local",
+            "internet",
+            "constrainedInternet"
+          ],
+          "description": "Level of network access available."
+        },
+        "connectionProfiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Active connection profiles (e.g. 'wifi', 'cellular', 'ethernet', 'bluetooth')."
+        }
+      }
+    },
+    "AppInfo": {
+      "type": "object",
+      "description": "Application metadata.",
+      "required": [
+        "name",
+        "version",
+        "buildNumber",
+        "packageId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the application."
+        },
+        "version": {
+          "type": "string",
+          "description": "Application version string."
+        },
+        "buildNumber": {
+          "type": "string",
+          "description": "Application build number."
+        },
+        "packageId": {
+          "type": "string",
+          "description": "Application package identifier (e.g. 'com.example.myapp')."
+        },
+        "theme": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Current application theme (e.g. 'light', 'dark', 'system')."
+        }
+      }
+    },
+    "SensorInfo": {
+      "type": "object",
+      "description": "Information about a device sensor.",
+      "required": [
+        "name",
+        "available",
+        "active"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the sensor (e.g. 'accelerometer', 'gyroscope', 'magnetometer', 'barometer', 'compass')."
+        },
+        "available": {
+          "type": "boolean",
+          "description": "Whether this sensor is available on the device."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether this sensor is currently active and streaming data."
+        }
+      }
+    },
+    "SensorReading": {
+      "type": "object",
+      "description": "A reading from a device sensor. The values object varies by sensor type.",
+      "required": [
+        "sensor",
+        "timestamp",
+        "values"
+      ],
+      "properties": {
+        "sensor": {
+          "type": "string",
+          "description": "Name of the sensor that produced this reading."
+        },
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC timestamp when the reading was taken."
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Sensor-specific values. Common shapes: {x, y, z} for accelerometer/gyroscope/magnetometer, {heading, accuracy} for compass, {pressure} for barometer."
+        }
+      }
+    },
+    "PermissionInfo": {
+      "type": "object",
+      "description": "Status of a device permission.",
+      "required": [
+        "name",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the permission (e.g. 'camera', 'location', 'microphone', 'photos', 'contacts')."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "denied",
+            "granted",
+            "restricted",
+            "limited"
+          ],
+          "description": "Current status of this permission."
+        }
+      }
+    },
+    "GeolocationResult": {
+      "type": "object",
+      "description": "A geolocation reading.",
+      "required": [
+        "latitude",
+        "longitude",
+        "accuracy",
+        "timestamp"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "description": "Latitude in decimal degrees.",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude in decimal degrees.",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "altitude": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Altitude in meters above sea level, or null if unavailable."
+        },
+        "accuracy": {
+          "type": "number",
+          "description": "Horizontal accuracy in meters.",
+          "minimum": 0
+        },
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC timestamp when the location was determined."
+        }
+      }
+    }
+  }
+}

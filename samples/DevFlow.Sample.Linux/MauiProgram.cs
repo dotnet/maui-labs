@@ -8,6 +8,11 @@ namespace DevFlow.Sample;
 
 public static partial class MauiProgram
 {
+	static int ResolveAgentPort()
+		=> int.TryParse(Environment.GetEnvironmentVariable("DEVFLOW_TEST_PORT"), out var envPort)
+			? envPort
+			: 9223;
+
 	public static MauiApp CreateMauiApp()
 	{
 		var builder = MauiApp.CreateBuilder();
@@ -36,7 +41,11 @@ public static partial class MauiProgram
 
 #if DEBUG
 		builder.Logging.AddDebug();
-		builder.AddMauiDevFlowAgent(options => { options.Port = 9223; });
+		builder.AddMauiDevFlowAgent(options =>
+		{
+			options.Port = ResolveAgentPort();
+			options.EnableProfiler = true;
+		});
 		builder.AddMauiBlazorDevFlowTools();
 #endif
 

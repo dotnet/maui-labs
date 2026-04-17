@@ -1,0 +1,269 @@
+[
+  {
+    "id": "win_main",
+    "parentId": null,
+    "type": "Window",
+    "fullType": "Microsoft.Maui.Controls.Window",
+    "framework": "maui",
+    "text": "MyApp",
+    "role": "window",
+    "traits": ["focusable"],
+    "state": {
+      "displayed": true,
+      "enabled": true,
+      "selected": false,
+      "focused": true,
+      "opacity": 1.0
+    },
+    "bounds": { "x": 0, "y": 0, "width": 1280, "height": 800, "coordinate": "screen" },
+    "children": [
+      {
+        "id": "nav_page_0",
+        "parentId": "win_main",
+        "type": "NavigationPage",
+        "fullType": "Microsoft.Maui.Controls.NavigationPage",
+        "framework": "maui",
+        "text": "Sign In",
+        "state": {
+          "displayed": true,
+          "enabled": true,
+          "selected": false,
+          "focused": false,
+          "opacity": 1.0
+        },
+        "bounds": { "x": 0, "y": 0, "width": 1280, "height": 800 },
+        "children": [
+          {
+            "id": "page_login",
+            "parentId": "nav_page_0",
+            "type": "ContentPage",
+            "fullType": "Microsoft.Maui.Controls.ContentPage",
+            "framework": "maui",
+            "text": "Sign In",
+            "role": "heading",
+            "state": {
+              "displayed": true,
+              "enabled": true,
+              "selected": false,
+              "focused": false,
+              "opacity": 1.0
+            },
+            "bounds": { "x": 0, "y": 48, "width": 1280, "height": 752 },
+            "children": [
+              {
+                "id": "layout_root",
+                "parentId": "page_login",
+                "type": "VerticalStackLayout",
+                "fullType": "Microsoft.Maui.Controls.VerticalStackLayout",
+                "framework": "maui",
+                "state": {
+                  "displayed": true,
+                  "enabled": true,
+                  "selected": false,
+                  "focused": false,
+                  "opacity": 1.0
+                },
+                "bounds": { "x": 40, "y": 120, "width": 400, "height": 340 },
+                "children": [
+                  {
+                    "id": "lbl_welcome",
+                    "parentId": "layout_root",
+                    "type": "Label",
+                    "fullType": "Microsoft.Maui.Controls.Label",
+                    "framework": "maui",
+                    "text": "Welcome back, John",
+                    "role": "heading",
+                    "traits": ["header"],
+                    "state": {
+                      "displayed": true,
+                      "enabled": true,
+                      "selected": false,
+                      "focused": false,
+                      "opacity": 1.0
+                    },
+                    "bounds": { "x": 40, "y": 120, "width": 400, "height": 32 },
+                    "style": { "classes": ["title-label"] }
+                  },
+                  {
+                    "id": "txt_email",
+                    "parentId": "layout_root",
+                    "type": "Entry",
+                    "fullType": "Microsoft.Maui.Controls.Entry",
+                    "framework": "maui",
+                    "automationId": "txt_email",
+                    "text": "Email",
+                    "value": "",
+                    "role": "textbox",
+                    "traits": ["interactive", "focusable"],
+                    "state": {
+                      "displayed": true,
+                      "enabled": true,
+                      "selected": false,
+                      "focused": false,
+                      "opacity": 1.0
+                    },
+                    "bounds": { "x": 40, "y": 172, "width": 400, "height": 44 },
+                    "nativeView": {
+                      "type": "AppKit.NSTextField",
+                      "properties": {
+                        "placeholderString": "Email",
+                        "isEditable": true
+                      }
+                    },
+                    "frameworkProperties": {
+                      "maui:bindingContext": "MyApp.ViewModels.LoginViewModel",
+                      "maui:keyboard": "Email"
+                    }
+                  },
+                  {
+                    "id": "txt_password",
+                    "parentId": "layout_root",
+                    "type": "Entry",
+                    "fullType": "Microsoft.Maui.Controls.Entry",
+                    "framework": "maui",
+                    "automationId": "txt_password",
+                    "text": "Password",
+                    "value": "",
+                    "role": "textbox",
+                    "traits": ["interactive", "focusable"],
+                    "state": {
+                      "displayed": true,
+                      "enabled": true,
+                      "selected": false,
+                      "focused": false,
+                      "opacity": 1.0
+                    },
+                    "bounds": { "x": 40, "y": 232, "width": 400, "height": 44 },
+                    "nativeView": {
+                      "type": "AppKit.NSSecureTextField",
+                      "properties": {
+                        "placeholderString": "Password",
+                        "isEditable": true
+                      }
+                    }
+                  },
+                  {
+                    "id": "btn_signin",
+                    "parentId": "layout_root",
+                    "type": "Button",
+                    "fullType": "Microsoft.Maui.Controls.Button",
+                    "framework": "maui",
+                    "automationId": "btn_signin",
+                    "text": "Sign In",
+                    "role": "button",
+                    "traits": ["interactive", "focusable"],
+                    "gestures": ["tap"],
+                    "state": {
+                      "displayed": true,
+                      "enabled": true,
+                      "selected": false,
+                      "focused": false,
+                      "opacity": 1.0
+                    },
+                    "bounds": { "x": 40, "y": 296, "width": 400, "height": 48 },
+                    "style": { "classes": ["primary-button"] }
+                  },
+                  {
+                    "id": "lbl_forgot",
+                    "parentId": "layout_root",
+                    "type": "Label",
+                    "fullType": "Microsoft.Maui.Controls.Label",
+                    "framework": "maui",
+                    "text": "Forgot password?",
+                    "role": "link",
+                    "traits": ["interactive"],
+                    "gestures": ["tap"],
+                    "state": {
+                      "displayed": true,
+                      "enabled": true,
+                      "selected": false,
+                      "focused": false,
+                      "opacity": 1.0
+                    },
+                    "bounds": { "x": 40, "y": 360, "width": 140, "height": 20 },
+                    "style": { "classes": ["link-label"] }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "win_secondary",
+    "parentId": null,
+    "type": "Window",
+    "fullType": "Microsoft.Maui.Controls.Window",
+    "framework": "maui",
+    "text": "Settings",
+    "role": "window",
+    "traits": ["focusable"],
+    "state": {
+      "displayed": true,
+      "enabled": true,
+      "selected": false,
+      "focused": false,
+      "opacity": 1.0
+    },
+    "bounds": { "x": 300, "y": 100, "width": 640, "height": 480, "coordinate": "screen" },
+    "children": [
+      {
+        "id": "page_settings",
+        "parentId": "win_secondary",
+        "type": "ContentPage",
+        "fullType": "Microsoft.Maui.Controls.ContentPage",
+        "framework": "maui",
+        "text": "Settings",
+        "role": "heading",
+        "state": {
+          "displayed": true,
+          "enabled": true,
+          "selected": false,
+          "focused": false,
+          "opacity": 1.0
+        },
+        "bounds": { "x": 0, "y": 48, "width": 640, "height": 432 },
+        "children": [
+          {
+            "id": "lbl_settings_title",
+            "parentId": "page_settings",
+            "type": "Label",
+            "fullType": "Microsoft.Maui.Controls.Label",
+            "framework": "maui",
+            "text": "App Settings",
+            "role": "heading",
+            "traits": ["header"],
+            "state": {
+              "displayed": true,
+              "enabled": true,
+              "selected": false,
+              "focused": false,
+              "opacity": 1.0
+            },
+            "bounds": { "x": 20, "y": 68, "width": 600, "height": 28 }
+          },
+          {
+            "id": "switch_darkmode",
+            "parentId": "page_settings",
+            "type": "Switch",
+            "fullType": "Microsoft.Maui.Controls.Switch",
+            "framework": "maui",
+            "automationId": "switch_darkmode",
+            "role": "checkbox",
+            "traits": ["interactive", "focusable", "adjustable"],
+            "state": {
+              "displayed": true,
+              "enabled": true,
+              "selected": true,
+              "focused": false,
+              "opacity": 1.0
+            },
+            "bounds": { "x": 540, "y": 116, "width": 51, "height": 31 }
+          }
+        ]
+      }
+    ]
+  }
+]

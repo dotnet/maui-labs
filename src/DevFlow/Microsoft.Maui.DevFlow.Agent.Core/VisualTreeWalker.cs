@@ -972,6 +972,7 @@ public class VisualTreeWalker
                         Text = bsi.Title,
                         IsVisible = bsi.IsVisible,
                         IsEnabled = bsi.IsEnabled,
+                        IsSelected = isSelected,
                         IsFocused = isSelected,
                     };
                     // Enrich with route info
@@ -1011,6 +1012,7 @@ public class VisualTreeWalker
                             Text = section.Title,
                             IsVisible = section.IsVisible,
                             IsEnabled = section.IsEnabled,
+                            IsSelected = isSelected,
                             IsFocused = isSelected,
                         };
                         var tabProps = new Dictionary<string, string?>();
@@ -1120,6 +1122,7 @@ public class VisualTreeWalker
                         Text = tabPage.Title,
                         IsVisible = true,
                         IsEnabled = true,
+                        IsSelected = isSelected,
                         IsFocused = isSelected,
                     };
                     if (tabPage.IconImageSource is FileImageSource tpIcon)
@@ -1380,6 +1383,15 @@ public class VisualTreeWalker
             TimePicker tp => tp.Time.ToString(),
             RadioButton rb => rb.IsChecked.ToString(),
             _ => null
+        };
+
+        info.IsSelected = element switch
+        {
+            CheckBox cb => cb.IsChecked,
+            RadioButton rb => rb.IsChecked,
+            Switch sw => sw.IsToggled,
+            Picker pk => pk.SelectedIndex >= 0,
+            _ => info.IsSelected
         };
 
         // Populate gesture recognizer metadata

@@ -38,7 +38,7 @@ public static partial class AndroidCommands
 								 healthCheck.Status == Models.CheckStatus.Warning ? "⚠" : "✗";
 				formatter.WriteInfo($"{statusIcon} {healthCheck.Message}");
 
-				if (healthCheck.Details?.TryGetValue("path", out var path) == true)
+				if (healthCheck.Details?.TryGetPropertyValue("path", out var path) == true)
 					formatter.WriteProgress($"Path: {path}");
 			}
 		});
@@ -72,7 +72,12 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, version = version, path = jdkManager.DetectedJdkPath });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Version = version,
+						Path = jdkManager.DetectedJdkPath
+					});
 				}
 				else
 				{
@@ -82,8 +87,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -99,7 +103,10 @@ public static partial class AndroidCommands
 			if (useJson)
 			{
 				var formatter = Program.GetFormatter(parseResult);
-				formatter.Write(new { versions = versions });
+				formatter.Write(new CliCommandResult
+				{
+					Versions = versions
+				});
 			}
 			else
 			{

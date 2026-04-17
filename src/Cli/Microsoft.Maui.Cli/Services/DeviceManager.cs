@@ -4,7 +4,9 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.Services;
 
@@ -14,10 +16,12 @@ namespace Microsoft.Maui.Cli.Services;
 public class DeviceManager : IDeviceManager
 {
 	readonly IAndroidProvider? _androidProvider;
+	readonly IAppleProvider? _appleProvider;
 
-	public DeviceManager(IAndroidProvider? androidProvider = null)
+	public DeviceManager(IAndroidProvider? androidProvider = null, IAppleProvider? appleProvider = null)
 	{
 		_androidProvider = androidProvider;
+		_appleProvider = appleProvider;
 	}
 
 	public async Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default)
@@ -41,7 +45,7 @@ public class DeviceManager : IDeviceManager
 					d.IsEmulator &&
 					(
 						(d.Details != null &&
-						 d.Details.TryGetValue("avd", out var avdName) &&
+						 d.Details.TryGetPropertyValue("avd", out var avdName) &&
 						 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
 						||
 						string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
@@ -56,9 +60,7 @@ public class DeviceManager : IDeviceManager
 					// Merge AVD metadata into the running emulator device
 					var running = devices[runningIndex];
 					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-					var details = running.Details != null
-						? new Dictionary<string, object>(running.Details)
-						: new Dictionary<string, object>();
+					var details = running.Details?.DeepClone() as JsonObject ?? new JsonObject();
 					details["tag_id"] = tagId ?? "default";
 					details["target"] = avd.Target ?? "unknown";
 
@@ -95,7 +97,7 @@ public class DeviceManager : IDeviceManager
 						PlatformArchitecture = resolvedAbi,
 						RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
 						Idiom = DeviceIdiom.Phone,
-						Details = new Dictionary<string, object>
+						Details = new JsonObject
 						{
 							["avd"] = avd.Name,
 							["target"] = avd.Target ?? "unknown",
@@ -108,7 +110,13 @@ public class DeviceManager : IDeviceManager
 			}
 		}
 
-		// TODO: Get Apple devices when AppleProvider is implemented
+		// Get Apple devices (simulators) when on macOS
+		if (_appleProvider != null)
+		{
+			var appleDevices = _appleProvider.GetDevices();
+			devices.AddRange(appleDevices);
+		}
+
 		// TODO: Get Windows devices when WindowsProvider is implemented
 
 		return devices;

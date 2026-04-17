@@ -1,0 +1,145 @@
+scenarios:
+  - name: "Create slim bindings for a Kotlin library from Maven"
+    setup:
+      files:
+        - path: "MyMauiApp/MyMauiApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      I have a .NET MAUI app in MyMauiApp/. I need to use the Lottie animation
+      library (com.airbnb.android:lottie:6.6.2) but I only need to play animations
+      from JSON files — not the full API surface. Create a slim Android binding
+      project in LottieBinding/ with the Kotlin wrapper, Gradle build files, and
+      C# binding project.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)slim.binding|native.library.interop|NLI|thin.wrapper"
+      - type: "output_matches"
+        pattern: "(?i)gradlew|gradle|build\\.gradle"
+      - type: "output_matches"
+        pattern: "AndroidLibrary|AndroidMavenLibrary"
+      - type: "output_not_matches"
+        pattern: "(?i)Metadata\\.xml.{0,30}(entire|all|full|complete).{0,20}(API|surface|library)"
+      - type: "file_exists"
+        path: "LottieBinding/build.gradle.kts"
+      - type: "file_contains"
+        path: "LottieBinding/build.gradle.kts"
+        value: "com.airbnb.android:lottie"
+    rubric:
+      - "Recommends the slim/NLI approach over traditional full bindings given the user only needs a subset"
+      - "Shows a Java or Kotlin wrapper class with a Dotnet prefix that exposes only animation playback"
+      - "Includes Gradle project structure with the lottie Maven dependency in build.gradle.kts"
+      - "Shows the C# binding project referencing the built AAR via AndroidLibrary"
+      - "Uses simple marshallable types in the wrapper API (no Kotlin coroutines or lambdas)"
+    timeout: 240
+
+  - name: "Resolve XA4241 and XA4242 dependency errors in Android binding"
+    setup:
+      files:
+        - path: "MyBinding/MyBinding.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0-android</TargetFramework>
+              </PropertyGroup>
+              <ItemGroup>
+                <AndroidLibrary Include="lib/firebase-wrapper.aar" />
+              </ItemGroup>
+            </Project>
+    prompt: |
+      My Android slim binding project at MyBinding/ fails to build with these errors:
+
+      ```
+      error XA4241: Java dependency 'androidx.core:core' is not satisfied.
+      error XA4241: Java dependency 'org.jetbrains.kotlin:kotlin-stdlib' is not satisfied.
+      error XA4242: Java dependency 'com.google.firebase:firebase-common:21.0.0' is not satisfied. Suggested fix: Install NuGet package 'Xamarin.Firebase.Common' version '121.0.0' or higher.
+      error XA4241: Java dependency 'javax.inject:javax.inject' is not satisfied.
+      ```
+
+      Fix the MyBinding/MyBinding.csproj to resolve these dependency errors.
+    assertions:
+      - type: "output_contains"
+        value: "Xamarin.AndroidX.Core"
+      - type: "output_contains"
+        value: "Xamarin.Kotlin.StdLib"
+      - type: "output_matches"
+        pattern: "AndroidMavenLibrary|AndroidIgnoredJavaDependency"
+      - type: "output_matches"
+        pattern: "Bind.*false|Bind=\"false\""
+      - type: "file_contains"
+        path: "MyBinding/MyBinding.csproj"
+        value: "Xamarin.AndroidX.Core"
+      - type: "file_contains"
+        path: "MyBinding/MyBinding.csproj"
+        value: "Xamarin.Kotlin.StdLib"
+    rubric:
+      - "For XA4242 with a suggestion (firebase-common), recommends installing the suggested NuGet package"
+      - "For androidx.core:core and kotlin-stdlib, maps to the correct Xamarin.AndroidX/Kotlin NuGet packages"
+      - "For javax.inject (annotation/compile-time only), suggests AndroidIgnoredJavaDependency or AndroidMavenLibrary with Bind=false"
+      - "Explains the decision tree: XA4242 suggestion → NuGet; needed at runtime → AndroidMavenLibrary; compile-time only → AndroidIgnoredJavaDependency"
+    timeout: 240
+
+  - name: "Avoid Kotlin coroutines and lambdas in wrapper"
+    prompt: |
+      I'm creating a Kotlin wrapper for an Android SDK that has async APIs.
+      The native SDK uses Kotlin coroutines (suspend functions) and Flow.
+      Here's my wrapper attempt:
+
+      ```kotlin
+      object DotnetMySDK {
+          suspend fun fetchData(url: String): Result<String> {
+              return MySdk.fetchData(url)
+          }
+
+          fun observeChanges(): Flow<DataUpdate> {
+              return MySdk.changes
+          }
+      }
+      ```
+
+      Will this work with the C# binding? If not, what should I change?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)won.?t work|will not work|not.{0,10}(work|support|marshal|bind)"
+      - type: "output_matches"
+        pattern: "(?i)callback|interface|listener"
+      - type: "output_contains"
+        value: "@JvmStatic"
+    rubric:
+      - "Identifies that suspend functions and Flow cannot be bound to C# through the binding generator"
+      - "Recommends converting to callback interfaces (Java-style listener pattern) instead of coroutines"
+      - "Shows a corrected wrapper using a callback interface with onSuccess/onError methods"
+      - "Adds @JvmStatic annotation on methods for static access from C#"
+      - "Uses simple marshallable types (String, boolean, int) not Kotlin-specific types (Result, Flow)"
+    timeout: 240
+
+  - name: "Find NuGet package for Maven dependency using dotnet CLI"
+    prompt: |
+      I'm resolving Android binding dependencies and need to find NuGet equivalents
+      for these Maven artifacts from my Gradle dependency tree:
+
+      - androidx.fragment:fragment:1.8.5
+      - androidx.lifecycle:lifecycle-common:2.8.7
+      - com.squareup.okhttp3:okhttp:4.12.0
+
+      How do I search for the right NuGet packages? And how do I reference them
+      in my binding .csproj?
+    assertions:
+      - type: "output_contains"
+        value: "dotnet package search"
+      - type: "output_matches"
+        pattern: "Xamarin\\.AndroidX\\.Fragment|Xamarin\\.AndroidX\\.Lifecycle"
+      - type: "output_matches"
+        pattern: "Square\\.OkHttp3|PackageReference"
+    rubric:
+      - "Shows the dotnet package search command with the artifact= filter syntax for NuGet"
+      - "Maps all three Maven artifacts to their correct NuGet package names"
+      - "Shows PackageReference elements for the .csproj file"
+      - "Does not suggest manually downloading JARs or AARs for well-known AndroidX libraries"
+    timeout: 240

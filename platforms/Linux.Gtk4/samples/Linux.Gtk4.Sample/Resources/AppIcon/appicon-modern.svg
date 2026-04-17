@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Platform.Maui.Linux.Gtk4 sample icon">
+  <defs>
+    <linearGradient id="g" x1="64" y1="56" x2="448" y2="456" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7A5CFF"/>
+      <stop offset="1" stop-color="#4A2FC8"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#g)"/>
+  <rect x="36" y="36" width="440" height="440" rx="100" fill="none" stroke="#D7CCFF" stroke-opacity="0.55" stroke-width="10"/>
+
+  <circle cx="256" cy="272" r="146" fill="#FFFFFF"/>
+  <circle cx="256" cy="272" r="132" fill="#EFEAFF"/>
+
+  <path d="M154 348c-11 0-18-12-12-22l56-94c6-10 20-10 26 0l30 51 34-56c6-10 20-10 26 0l62 99c6 10-1 22-12 22H154z" fill="#5235D4"/>
+  <path d="M204 348l42-70 19 32 25-40 46 78z" fill="#7D66EA"/>
+
+  <circle cx="332" cy="188" r="30" fill="#A9F2FF"/>
+  <circle cx="332" cy="188" r="14" fill="#FFFFFF"/>
+</svg>

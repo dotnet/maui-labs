@@ -1,0 +1,518 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "actions.json",
+  "title": "Action Models",
+  "description": "Action request and response models for UI interaction commands.",
+  "$defs": {
+    "IncludeOption": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "screenshot",
+          "tree"
+        ]
+      },
+      "description": "Optional data to include in the action response."
+    },
+    "TapRequest": {
+      "type": "object",
+      "description": "Request to perform a tap/click action on an element or at coordinates.",
+      "properties": {
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Target element identifier. Either elementId or coordinates must be provided."
+        },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "X coordinate for the tap. Used when tapping by position rather than element."
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Y coordinate for the tap. Used when tapping by position rather than element."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "FillRequest": {
+      "type": "object",
+      "description": "Request to fill text into an input element.",
+      "required": [
+        "elementId",
+        "text"
+      ],
+      "properties": {
+        "elementId": {
+          "type": "string",
+          "description": "Target input element identifier."
+        },
+        "text": {
+          "type": "string",
+          "description": "Text content to fill into the element."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "ClearRequest": {
+      "type": "object",
+      "description": "Request to clear the content of an input element.",
+      "required": [
+        "elementId"
+      ],
+      "properties": {
+        "elementId": {
+          "type": "string",
+          "description": "Target input element identifier."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "FocusRequest": {
+      "type": "object",
+      "description": "Request to move input focus to an element.",
+      "required": [
+        "elementId"
+      ],
+      "properties": {
+        "elementId": {
+          "type": "string",
+          "description": "Target element identifier to receive focus."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "ScrollRequest": {
+      "type": "object",
+      "description": "Request to perform a scroll action on a scrollable element.",
+      "properties": {
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Target scrollable element identifier. If null, scrolls the primary scrollable view."
+        },
+        "deltaX": {
+          "type": "number",
+          "description": "Horizontal scroll delta in device-independent pixels."
+        },
+        "deltaY": {
+          "type": "number",
+          "description": "Vertical scroll delta in device-independent pixels."
+        },
+        "animated": {
+          "type": "boolean",
+          "description": "Whether the scroll should be animated.",
+          "default": true
+        },
+        "itemIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Index of the item to scroll to in a list or collection view.",
+          "minimum": 0
+        },
+        "groupIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Index of the group containing the target item.",
+          "minimum": 0
+        },
+        "scrollToPosition": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "makeVisible",
+            "start",
+            "center",
+            "end",
+            null
+          ],
+          "description": "Alignment of the target item within the viewport after scrolling."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "NavigateRequest": {
+      "type": "object",
+      "description": "Request to navigate to a named route or URI within the application.",
+      "required": [
+        "route"
+      ],
+      "properties": {
+        "route": {
+          "type": "string",
+          "description": "Route or URI to navigate to."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "ResizeRequest": {
+      "type": "object",
+      "description": "Request to resize a window or element.",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Target window element identifier. If null, resizes the main application window."
+        },
+        "width": {
+          "type": "integer",
+          "description": "Target width in device-independent pixels.",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "description": "Target height in device-independent pixels.",
+          "minimum": 1
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "BackRequest": {
+      "type": "object",
+      "description": "Request to perform a back navigation action.",
+      "properties": {
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "KeyRequest": {
+      "type": "object",
+      "description": "Request to send a key press event.",
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Key identifier to press (e.g. 'Enter', 'Escape', 'Tab', 'a', 'F1')."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "GestureAction": {
+      "type": "object",
+      "description": "A single action within a gesture sequence.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "pointerMove",
+            "pointerDown",
+            "pointerUp",
+            "pause"
+          ],
+          "description": "The type of gesture action to perform."
+        },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "X coordinate for the action."
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Y coordinate for the action."
+        },
+        "duration": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Duration of this action in milliseconds.",
+          "minimum": 0
+        },
+        "button": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Pointer button index (0 = primary, 1 = middle, 2 = secondary).",
+          "default": 0,
+          "minimum": 0
+        }
+      }
+    },
+    "GestureRequest": {
+      "type": "object",
+      "description": "Request to perform a complex gesture as a sequence of pointer actions.",
+      "required": [
+        "actions"
+      ],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GestureAction"
+          },
+          "description": "Ordered sequence of gesture actions to perform."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "BatchAction": {
+      "type": "object",
+      "description": "A single action within a batch, combining the action type with its parameters.",
+      "required": [
+        "action"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "tap",
+            "fill",
+            "clear",
+            "focus",
+            "scroll",
+            "navigate",
+            "resize",
+            "back",
+            "key",
+            "gesture"
+          ],
+          "description": "The type of action to perform."
+        },
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Target element identifier."
+        },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "X coordinate (for tap and gesture actions)."
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Y coordinate (for tap and gesture actions)."
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Text content (for fill action)."
+        },
+        "deltaX": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Horizontal scroll delta (for scroll action)."
+        },
+        "deltaY": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Vertical scroll delta (for scroll action)."
+        },
+        "animated": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Whether scroll should be animated (for scroll action)."
+        },
+        "itemIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Item index to scroll to (for scroll action).",
+          "minimum": 0
+        },
+        "groupIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Group index for scroll target (for scroll action).",
+          "minimum": 0
+        },
+        "scrollToPosition": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "makeVisible",
+            "start",
+            "center",
+            "end",
+            null
+          ],
+          "description": "Scroll alignment (for scroll action)."
+        },
+        "route": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Route to navigate to (for navigate action)."
+        },
+        "width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Target width (for resize action).",
+          "minimum": 1
+        },
+        "height": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Target height (for resize action).",
+          "minimum": 1
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Key to press (for key action)."
+        },
+        "actions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/GestureAction"
+          },
+          "description": "Gesture action sequence (for gesture action)."
+        }
+      }
+    },
+    "BatchRequest": {
+      "type": "object",
+      "description": "Request to perform multiple actions in sequence as a single batch operation.",
+      "required": [
+        "actions"
+      ],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BatchAction"
+          },
+          "description": "Ordered list of actions to perform."
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeOption",
+          "description": "Optional data to include in the response."
+        },
+        "continueOnError": {
+          "type": "boolean",
+          "description": "Whether to continue executing remaining actions if one fails.",
+          "default": false
+        }
+      }
+    },
+    "ActionResponse": {
+      "type": "object",
+      "description": "Response returned after executing an action, optionally including a screenshot and/or visual tree.",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether the action completed successfully."
+        },
+        "error": {
+          "oneOf": [
+            { "$ref": "common.json#/$defs/ProblemDetails" },
+            { "type": "null" }
+          ],
+          "description": "Error details if the action failed."
+        },
+        "screenshot": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "contentEncoding": "base64",
+          "description": "Base64-encoded screenshot taken after the action, if requested via include."
+        },
+        "tree": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "element-info.json"
+          },
+          "description": "Visual tree snapshot taken after the action, if requested via include."
+        }
+      }
+    }
+  }
+}

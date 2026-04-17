@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Services;
 using Microsoft.Maui.Cli.Utils;
 
@@ -37,6 +38,7 @@ public class Program
 
 	// Convenience accessors for services
 	internal static IAndroidProvider AndroidProvider => Services.GetRequiredService<IAndroidProvider>();
+	internal static IAppleProvider AppleProvider => Services.GetRequiredService<IAppleProvider>();
 	internal static IDoctorService DoctorService => Services.GetRequiredService<IDoctorService>();
 	internal static IDeviceManager DeviceManager => Services.GetRequiredService<IDeviceManager>();
 	internal static IJdkManager JdkManager => Services.GetRequiredService<IJdkManager>();
@@ -59,17 +61,30 @@ public class Program
 		{
 			var formatter = GetFormatter(parseResult);
 			var isCi = parseResult.GetValue(GlobalOptions.CiOption);
+			var exitCode = HandleCommandException(formatter, exception);
 
-			formatter.WriteError(exception);
-
-			// In CI mode, fail fast
 			if (isCi)
 			{
-				Environment.Exit(1);
+				Environment.Exit(exitCode);
 			}
 
-			return 1;
+			return exitCode;
 		}
+	}
+
+	internal static int HandleCommandException(IOutputFormatter formatter, Exception exception)
+	{
+		ArgumentNullException.ThrowIfNull(formatter);
+		ArgumentNullException.ThrowIfNull(exception);
+
+		if (exception is OperationCanceledException)
+		{
+			formatter.WriteInfo("Cancelled.");
+			return 130;
+		}
+
+		formatter.WriteError(exception);
+		return 1;
 	}
 
 	internal static RootCommand BuildRootCommand()
@@ -85,10 +100,12 @@ public class Program
 		// Top-level commands (per spec)
 		rootCommand.Add(DoctorCommand.Create());
 		rootCommand.Add(DeviceCommand.Create());
+		rootCommand.Add(ProfileCommand.Create());
 		rootCommand.Add(VersionCommand.Create());
 
 		// Platform-specific command groups
 		rootCommand.Add(AndroidCommands.Create());
+		rootCommand.Add(AppleCommands.Create());
 
 		// MAUI Go commands (maui go ...)
 		rootCommand.Add(GoCommands.Create());

@@ -19,7 +19,7 @@ and can cause confusion when multiple emulators are running.
 
 **Before creating or starting an emulator, check what's already in use:**
 ```bash
-maui-devflow list                             # shows agents with platform + port
+maui devflow list                             # shows agents with platform + port
 adb devices                                   # shows connected emulators
 ```
 
@@ -85,7 +85,7 @@ adb forward tcp:<port> tcp:<port>            # Agent (lets CLI reach agent)
 ```
 
 The broker reverse is needed so the agent inside the emulator can connect to the host's
-broker daemon. The agent forward uses the port shown in `maui-devflow list` after the agent
+broker daemon. The agent forward uses the port shown in `maui devflow list` after the agent
 registers (range 10223–10899).
 
 If the broker isn't available (fallback mode), forward the port from `.mauidevflow` instead:
@@ -93,7 +93,7 @@ If the broker isn't available (fallback mode), forward the port from `.mauidevfl
 adb reverse tcp:9223 tcp:9223                # Fallback: direct agent port
 ```
 
-Then verify: `maui-devflow MAUI status` and `maui-devflow cdp status`.
+Then verify: `maui devflow ui status` and `maui devflow webview status`.
 
 ### Install APK manually
 ```bash
@@ -157,7 +157,7 @@ adb shell am force-stop <pkg>                 # kill app
 ### Port forwarding (critical for MauiDevFlow)
 ```bash
 adb reverse tcp:19223 tcp:19223              # Broker (agent → host)
-adb forward tcp:<port> tcp:<port>            # Agent (CLI → emulator, get port from `maui-devflow list`)
+adb forward tcp:<port> tcp:<port>            # Agent (CLI → emulator, get port from `maui devflow list`)
 adb reverse --list                            # verify forwarding
 adb forward --list                            # verify forwarding
 adb reverse --remove-all                      # clean up reverse
@@ -206,7 +206,7 @@ export PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
 ## Troubleshooting
 
 - **`adb devices` shows "unauthorized"**: Accept the USB debugging prompt on the device/emulator.
-- **Agent not connecting on emulator**: Forgot `adb reverse tcp:19223 tcp:19223` for the broker. Run port forwarding, then check `maui-devflow list`.
+- **Agent not connecting on emulator**: Forgot `adb reverse tcp:19223 tcp:19223` for the broker. Run port forwarding, then check `maui devflow list`.
 - **Emulator won't start**: Check available system images with `android avd targets`. May need
   to install with `android sdk install --package "system-images;..."`.
 - **Build error "No Android devices found"**: Ensure emulator is booted (`adb devices`).

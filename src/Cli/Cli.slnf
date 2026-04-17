@@ -4,6 +4,7 @@
     "projects": [
       "src\\Cli\\Microsoft.Maui.Cli\\Microsoft.Maui.Cli.csproj",
       "src\\Cli\\Microsoft.Maui.Cli.UnitTests\\Microsoft.Maui.Cli.UnitTests.csproj",
+      "src\\Cli\\Microsoft.Maui.StartupProfiling\\Microsoft.Maui.StartupProfiling.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Driver\\Microsoft.Maui.DevFlow.Driver.csproj"
     ]
   }

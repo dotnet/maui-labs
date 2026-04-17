@@ -47,6 +47,11 @@ public static partial class AndroidCommands
 		if (isCi)
 			return GetDefaultPackages();
 
+		// On a first-time or partial install, the command-line tools are not ready yet.
+		// Fall back to the default MAUI package set instead of querying sdkmanager early.
+		if (!HasSdkManager(androidProvider))
+			return GetDefaultPackages();
+
 		// Try to fetch available packages for interactive selection
 		List<SdkPackage> installed;
 		List<SdkPackage> available;
@@ -170,6 +175,9 @@ public static partial class AndroidCommands
 
 	record PlatformChoice(string PackagePath, string DisplayName, string Description, bool IsInstalled);
 	record InstallScope(string Name, string Description, List<string> Packages);
+
+	static bool HasSdkManager(IAndroidProvider androidProvider) =>
+		androidProvider.GetLicenseAcceptanceCommand() is not null;
 
 	/// <summary>
 	/// Checks if the SDK is in a protected location and attempts elevation if needed.

@@ -1,0 +1,1806 @@
+openapi: 3.1.0
+info:
+  title: DevFlow Agent Protocol
+  version: 1.0.0
+  description: >
+    Protocol for runtime app inspection, interaction, and debugging in
+    DevFlow-enabled applications.
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:{port}
+    description: Agent HTTP server running inside the target application
+    variables:
+      port:
+        default: "9223"
+        description: Port the agent is listening on
+
+tags:
+  - name: agent
+    description: Agent discovery and status
+  - name: ui
+    description: UI tree inspection, element queries, screenshots
+  - name: ui-actions
+    description: UI interaction (tap, fill, scroll, gestures, etc.)
+  - name: webview
+    description: WebView inspection and interaction
+  - name: profiler
+    description: Performance profiling
+  - name: network
+    description: Network request monitoring
+  - name: logs
+    description: Application logs
+  - name: device
+    description: Device info, sensors, permissions, geolocation
+  - name: storage
+    description: Preferences and secure storage
+  - name: extensions
+    description: Third-party extension routes
+
+paths:
+  # ─────────────────────────────── Agent ───────────────────────────────
+  /api/v1/agent/status:
+    get:
+      operationId: getAgentStatus
+      tags: [agent]
+      summary: Get agent status
+      description: >
+        Returns the agent's identity, platform, version, and running state.
+      responses:
+        "200":
+          description: Agent status
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/agent-status.json"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/agent/capabilities:
+    get:
+      operationId: getAgentCapabilities
+      tags: [agent]
+      summary: Get agent capabilities
+      description: >
+        Returns the capabilities and extensions supported by this agent.
+      responses:
+        "200":
+          description: Agent capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/agent-capabilities.json"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────── UI Inspection ───────────────────────────
+  /api/v1/ui/tree:
+    get:
+      operationId: getUiTree
+      tags: [ui]
+      summary: Get visual tree
+      description: >
+        Returns the full visual tree of the application. Windows are root nodes.
+        Use query parameters to limit depth, select a tree layer, or scope to a
+        subtree.
+      parameters:
+        - name: depth
+          in: query
+          description: Maximum depth of the tree to return. Unlimited if omitted.
+          schema:
+            type: integer
+            minimum: 0
+        - name: layer
+          in: query
+          description: Which tree layer to return.
+          schema:
+            type: string
+            enum: [framework, native, render]
+            default: framework
+        - name: rootId
+          in: query
+          description: Element ID to scope the tree to a subtree.
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Additional data to include with each element.
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [properties]
+          style: form
+          explode: false
+      responses:
+        "200":
+          description: Array of root elements (windows) with their children.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/element-info.json"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/elements/{id}:
+    get:
+      operationId: getElement
+      tags: [ui]
+      summary: Get element by ID
+      description: >
+        Returns a single element by its globally unique identifier.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+      responses:
+        "200":
+          description: The requested element.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/element-info.json"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/elements:
+    get:
+      operationId: queryElements
+      tags: [ui]
+      summary: Query elements with locator strategies
+      description: >
+        Searches the visual tree for elements matching the given locator strategy
+        and value.
+      parameters:
+        - name: strategy
+          in: query
+          required: true
+          description: Locator strategy to use.
+          schema:
+            $ref: "./schemas/common.json#/$defs/LocatorStrategy"
+        - name: value
+          in: query
+          required: true
+          description: Locator value.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of results.
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+        - name: include
+          in: query
+          description: Additional data to include with each element.
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [properties, bounds]
+          style: form
+          explode: false
+      responses:
+        "200":
+          description: Matching elements.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/element-info.json"
+        "400":
+          $ref: "#/components/responses/InvalidSelector"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/hit-test:
+    get:
+      operationId: hitTest
+      tags: [ui]
+      summary: Find element at coordinates
+      description: >
+        Returns the elements at the given screen coordinates, ordered deepest
+        first (innermost element first).
+      parameters:
+        - name: x
+          in: query
+          required: true
+          description: X coordinate.
+          schema:
+            type: number
+        - name: y
+          in: query
+          required: true
+          description: Y coordinate.
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Elements at the given coordinates (deepest first).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/element-info.json"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/screenshot:
+    get:
+      operationId: captureScreenshot
+      tags: [ui]
+      summary: Capture screenshot
+      description: >
+        Captures a screenshot of the entire screen or a specific element.
+      parameters:
+        - name: elementId
+          in: query
+          description: Element to screenshot. If omitted, captures the full screen.
+          schema:
+            type: string
+        - name: maxWidth
+          in: query
+          description: Maximum width in pixels. The image is scaled down if wider.
+          schema:
+            type: integer
+            minimum: 1
+        - name: scale
+          in: query
+          description: >
+            Scale mode. `native` returns at device pixel density; `auto`
+            returns a reasonable size for agent consumption.
+          schema:
+            type: string
+            enum: [native, auto]
+            default: auto
+        - name: format
+          in: query
+          description: Image format.
+          schema:
+            type: string
+            enum: [png, jpeg]
+            default: png
+      responses:
+        "200":
+          description: Screenshot image.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────── UI Actions ──────────────────────────────
+  /api/v1/ui/actions/tap:
+    post:
+      operationId: tapElement
+      tags: [ui-actions]
+      summary: Tap element or coordinates
+      description: >
+        Taps on an element (by ID) or at absolute coordinates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/TapRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "400":
+          $ref: "#/components/responses/ElementNotInteractable"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/fill:
+    post:
+      operationId: fillElement
+      tags: [ui-actions]
+      summary: Fill text into element
+      description: >
+        Clears any existing text and fills the element with the given text.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/FillRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "400":
+          $ref: "#/components/responses/ElementNotInteractable"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/clear:
+    post:
+      operationId: clearElement
+      tags: [ui-actions]
+      summary: Clear text from element
+      description: >
+        Clears any text content from the specified element.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/ClearRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "400":
+          $ref: "#/components/responses/ElementNotInteractable"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/focus:
+    post:
+      operationId: focusElement
+      tags: [ui-actions]
+      summary: Focus element
+      description: >
+        Gives keyboard focus to the specified element.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/FocusRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "400":
+          $ref: "#/components/responses/ElementNotInteractable"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/scroll:
+    post:
+      operationId: scrollElement
+      tags: [ui-actions]
+      summary: Scroll element
+      description: >
+        Scrolls an element by delta, to an item index, or to a named position.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/ScrollRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "400":
+          $ref: "#/components/responses/ElementNotInteractable"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/navigate:
+    post:
+      operationId: navigateRoute
+      tags: [ui-actions]
+      summary: Navigate to route
+      description: >
+        Navigates the application to the specified route or page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/NavigateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/resize:
+    post:
+      operationId: resizeWindow
+      tags: [ui-actions]
+      summary: Resize window
+      description: >
+        Resizes a window or element to the given dimensions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/ResizeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/back:
+    post:
+      operationId: goBack
+      tags: [ui-actions]
+      summary: Go back
+      description: >
+        Performs a back navigation gesture in the application.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/BackRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/key:
+    post:
+      operationId: pressKey
+      tags: [ui-actions]
+      summary: Press key
+      description: >
+        Sends a key press event to the focused element or the application.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/KeyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/gesture:
+    post:
+      operationId: performGesture
+      tags: [ui-actions]
+      summary: Perform complex gesture
+      description: >
+        Executes a sequence of pointer actions (move, down, up, pause) to
+        perform complex gestures like swipe, pinch, or drag.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/GestureRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/batch:
+    post:
+      operationId: batchActions
+      tags: [ui-actions]
+      summary: Execute batch actions
+      description: >
+        Executes multiple actions in sequence. Optionally continues on error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/BatchRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ActionSuccess"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ──────────────────────── UI Element Properties ──────────────────────
+  /api/v1/ui/elements/{id}/properties/{name}:
+    get:
+      operationId: getElementProperty
+      tags: [ui]
+      summary: Get element property value
+      description: >
+        Returns the current value of a named property on an element.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+        - name: name
+          in: path
+          required: true
+          description: Property name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Property value.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [value]
+                properties:
+                  value: {}
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: setElementProperty
+      tags: [ui]
+      summary: Set element property value
+      description: >
+        Sets the value of a named property on an element and returns the new
+        value.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+        - name: name
+          in: path
+          required: true
+          description: Property name.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  description: The value to set.
+      responses:
+        "200":
+          description: The new property value after setting.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [value]
+                properties:
+                  value: {}
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ──────────────────────────── WebView ────────────────────────────────
+  /api/v1/webview/contexts:
+    get:
+      operationId: getWebViewContexts
+      tags: [webview]
+      summary: List WebView instances
+      description: >
+        Returns all active WebView contexts in the application.
+      responses:
+        "200":
+          description: Array of WebView contexts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/webview.json#/$defs/WebViewContext"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/evaluate:
+    post:
+      operationId: evaluateJavaScript
+      tags: [webview]
+      summary: Execute JavaScript in WebView
+      description: >
+        Evaluates a JavaScript expression inside a WebView context and returns
+        the result.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/webview.json#/$defs/EvaluateRequest"
+      responses:
+        "200":
+          description: Evaluation result.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/webview.json#/$defs/EvaluateResponse"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/dom:
+    get:
+      operationId: getWebViewDom
+      tags: [webview]
+      summary: Get DOM snapshot
+      description: >
+        Returns a simplified snapshot of the DOM tree in the WebView.
+      parameters:
+        - name: contextId
+          in: query
+          description: WebView context ID. Uses the default context if omitted.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Simplified DOM tree.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Simplified DOM tree representation.
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/dom/query:
+    post:
+      operationId: queryWebViewDom
+      tags: [webview]
+      summary: CSS query in DOM
+      description: >
+        Executes a CSS selector query against the WebView DOM and returns
+        matching nodes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/webview.json#/$defs/DomQueryRequest"
+      responses:
+        "200":
+          description: Matching DOM nodes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Simplified DOM node.
+        "400":
+          $ref: "#/components/responses/InvalidSelector"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/source:
+    get:
+      operationId: getWebViewSource
+      tags: [webview]
+      summary: Get page source
+      description: >
+        Returns the HTML source of the WebView page.
+      parameters:
+        - name: contextId
+          in: query
+          description: WebView context ID. Uses the default context if omitted.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Page HTML source.
+          content:
+            text/html:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/navigate:
+    post:
+      operationId: navigateWebView
+      tags: [webview]
+      summary: Navigate WebView
+      description: >
+        Navigates the WebView to the specified URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/webview.json#/$defs/WebViewNavigateRequest"
+      responses:
+        "200":
+          description: Navigation initiated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/input/click:
+    post:
+      operationId: clickInWebView
+      tags: [webview]
+      summary: Click element in WebView
+      description: >
+        Clicks a DOM element matching the given CSS selector inside the WebView.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/webview.json#/$defs/WebViewInputClickRequest"
+      responses:
+        "200":
+          description: Click performed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/InvalidSelector"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/input/fill:
+    post:
+      operationId: fillInWebView
+      tags: [webview]
+      summary: Fill field in WebView
+      description: >
+        Clears and fills a DOM input element matching the given CSS selector.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/webview.json#/$defs/WebViewInputFillRequest"
+      responses:
+        "200":
+          description: Fill performed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/InvalidSelector"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/input/text:
+    post:
+      operationId: insertTextInWebView
+      tags: [webview]
+      summary: Insert text in WebView
+      description: >
+        Inserts text into the currently focused element in the WebView without
+        clearing existing content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/webview.json#/$defs/WebViewInputTextRequest"
+      responses:
+        "200":
+          description: Text inserted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/screenshot:
+    get:
+      operationId: captureWebViewScreenshot
+      tags: [webview]
+      summary: Capture WebView screenshot
+      description: >
+        Captures a screenshot of the WebView content.
+      parameters:
+        - name: contextId
+          in: query
+          description: WebView context ID. Uses the default context if omitted.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Screenshot image.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ──────────────────────────── Profiler ───────────────────────────────
+  /api/v1/profiler/capabilities:
+    get:
+      operationId: getProfilerCapabilities
+      tags: [profiler]
+      summary: Get profiling capabilities
+      description: >
+        Returns which profiling features are supported on the current platform.
+      responses:
+        "200":
+          description: Profiler capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/profiler.json#/$defs/ProfilerCapabilities"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/profiler/sessions:
+    post:
+      operationId: startProfilerSession
+      tags: [profiler]
+      summary: Start profiler session
+      description: >
+        Starts a new profiling session with the given sample interval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sampleIntervalMs:
+                  type: integer
+                  minimum: 1
+                  description: Sampling interval in milliseconds.
+      responses:
+        "200":
+          description: Session started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/profiler/sessions/{id}:
+    delete:
+      operationId: stopProfilerSession
+      tags: [profiler]
+      summary: Stop profiler session
+      description: >
+        Stops an active profiling session.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Profiler session ID.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session stopped.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/profiler/sessions/{id}/samples:
+    get:
+      operationId: getProfilerSamples
+      tags: [profiler]
+      summary: Get profiler samples
+      description: >
+        Returns profiling samples, markers, and spans collected since the given
+        cursors. Use cursor values from the previous response to poll for new
+        data.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Profiler session ID.
+          schema:
+            type: string
+        - name: sampleCursor
+          in: query
+          description: Cursor for samples. Start at 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: markerCursor
+          in: query
+          description: Cursor for markers. Start at 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: spanCursor
+          in: query
+          description: Cursor for spans. Start at 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          description: Maximum number of items to return per category.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Profiler batch of samples, markers, and spans.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/profiler.json#/$defs/ProfilerBatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/profiler/markers:
+    post:
+      operationId: publishProfilerMarker
+      tags: [profiler]
+      summary: Publish profiler marker
+      description: >
+        Publishes a timestamped marker event into the active profiling session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/profiler.json#/$defs/ProfilerMarker"
+      responses:
+        "200":
+          description: Marker published.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/profiler/spans:
+    post:
+      operationId: publishProfilerSpan
+      tags: [profiler]
+      summary: Publish profiler span
+      description: >
+        Publishes a completed span into the active profiling session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/profiler.json#/$defs/ProfilerSpan"
+      responses:
+        "200":
+          description: Span published.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/profiler/hotspots:
+    get:
+      operationId: getProfilerHotspots
+      tags: [profiler]
+      summary: Get performance hotspots
+      description: >
+        Returns aggregated performance hotspots from the profiling session.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of hotspots to return.
+          schema:
+            type: integer
+            minimum: 1
+        - name: minDurationMs
+          in: query
+          description: Minimum average duration in milliseconds.
+          schema:
+            type: number
+            minimum: 0
+        - name: kind
+          in: query
+          description: Filter by hotspot kind.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of hotspots.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/profiler.json#/$defs/ProfilerHotspot"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ──────────────────────────── Network ────────────────────────────────
+  /api/v1/network/requests:
+    get:
+      operationId: getNetworkRequests
+      tags: [network]
+      summary: List captured network requests
+      description: >
+        Returns captured HTTP requests, optionally filtered by host, method, or
+        status code.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of requests to return.
+          schema:
+            type: integer
+            minimum: 1
+        - name: host
+          in: query
+          description: Filter by host name.
+          schema:
+            type: string
+        - name: method
+          in: query
+          description: Filter by HTTP method.
+          schema:
+            type: string
+        - name: statusCode
+          in: query
+          description: Filter by status code.
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 599
+      responses:
+        "200":
+          description: Array of network request summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/network.json#/$defs/NetworkRequestSummary"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: clearNetworkRequests
+      tags: [network]
+      summary: Clear captured requests
+      description: >
+        Clears all captured network requests from the buffer.
+      responses:
+        "204":
+          description: Requests cleared.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/network/requests/{id}:
+    get:
+      operationId: getNetworkRequestDetail
+      tags: [network]
+      summary: Get network request detail
+      description: >
+        Returns full details for a captured network request, including headers
+        and body content.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Network request ID.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Full network request detail.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/network.json#/$defs/NetworkRequestDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ────────────────────────────── Logs ─────────────────────────────────
+  /api/v1/logs:
+    get:
+      operationId: getLogs
+      tags: [logs]
+      summary: Query application logs
+      description: >
+        Returns application log entries, optionally filtered by source and level.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of log entries.
+          schema:
+            type: integer
+            minimum: 1
+        - name: skip
+          in: query
+          description: Number of entries to skip (for pagination).
+          schema:
+            type: integer
+            minimum: 0
+        - name: source
+          in: query
+          description: Filter by log source.
+          schema:
+            type: string
+            enum: [native, webview, framework]
+        - name: level
+          in: query
+          description: Minimum log level.
+          schema:
+            type: string
+            enum: [trace, debug, info, warning, error, critical]
+      responses:
+        "200":
+          description: Array of log entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/logs.json#/$defs/LogEntry"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ────────────────────────────── Device ───────────────────────────────
+  /api/v1/device/info:
+    get:
+      operationId: getDeviceInfo
+      tags: [device]
+      summary: Get device info
+      description: >
+        Returns hardware and OS information about the device.
+      responses:
+        "200":
+          description: Device information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/DeviceInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/display:
+    get:
+      operationId: getDisplayInfo
+      tags: [device]
+      summary: Get display info
+      description: >
+        Returns display dimensions, density, and orientation.
+      responses:
+        "200":
+          description: Display information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/DisplayInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/battery:
+    get:
+      operationId: getBatteryInfo
+      tags: [device]
+      summary: Get battery info
+      description: >
+        Returns battery level, state, and power source.
+      responses:
+        "200":
+          description: Battery information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/BatteryInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/connectivity:
+    get:
+      operationId: getConnectivityInfo
+      tags: [device]
+      summary: Get connectivity info
+      description: >
+        Returns network connectivity status and connection profiles.
+      responses:
+        "200":
+          description: Connectivity information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/ConnectivityInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/app:
+    get:
+      operationId: getAppInfo
+      tags: [device]
+      summary: Get app info
+      description: >
+        Returns application name, version, build number, and package ID.
+      responses:
+        "200":
+          description: Application information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/AppInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/sensors:
+    get:
+      operationId: listSensors
+      tags: [device]
+      summary: List available sensors
+      description: >
+        Returns the list of sensors and their availability/active status.
+      responses:
+        "200":
+          description: Array of sensor info.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/device.json#/$defs/SensorInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/sensors/{name}/start:
+    post:
+      operationId: startSensor
+      tags: [device]
+      summary: Start sensor
+      description: >
+        Starts collecting data from the named sensor. Readings are delivered via
+        the WebSocket sensor channel.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Sensor name (e.g. accelerometer, gyroscope, compass).
+          schema:
+            type: string
+        - name: speed
+          in: query
+          description: >
+            Sensor update speed. Framework-dependent (e.g. "fastest",
+            "game", "ui", "default").
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sensor started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/SensorInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/UnsupportedCapability"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/sensors/{name}/stop:
+    post:
+      operationId: stopSensor
+      tags: [device]
+      summary: Stop sensor
+      description: >
+        Stops collecting data from the named sensor.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Sensor name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sensor stopped.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/SensorInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/permissions:
+    get:
+      operationId: listPermissions
+      tags: [device]
+      summary: List permissions
+      description: >
+        Returns the status of all known permissions.
+      responses:
+        "200":
+          description: Array of permission info.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/device.json#/$defs/PermissionInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/permissions/{name}:
+    get:
+      operationId: checkPermission
+      tags: [device]
+      summary: Check permission status
+      description: >
+        Returns the current status of a specific permission.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Permission name (e.g. camera, location, microphone).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission status.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/PermissionInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/geolocation:
+    get:
+      operationId: getGeolocation
+      tags: [device]
+      summary: Get current location
+      description: >
+        Returns the device's current geographic location.
+      parameters:
+        - name: accuracy
+          in: query
+          description: Desired accuracy level.
+          schema:
+            type: string
+        - name: timeout
+          in: query
+          description: Timeout in milliseconds for the location request.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Current location.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/GeolocationResult"
+        "408":
+          $ref: "#/components/responses/Timeout"
+        "501":
+          $ref: "#/components/responses/UnsupportedCapability"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────── Storage ─────────────────────────────────
+  /api/v1/storage/preferences:
+    get:
+      operationId: listPreferences
+      tags: [storage]
+      summary: List preferences
+      description: >
+        Returns all preference entries, optionally scoped to a shared container.
+      parameters:
+        - name: sharedName
+          in: query
+          description: Shared preference container name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of preference entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: clearPreferences
+      tags: [storage]
+      summary: Clear all preferences
+      description: >
+        Deletes all preferences, optionally scoped to a shared container.
+      parameters:
+        - name: sharedName
+          in: query
+          description: Shared preference container name.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Preferences cleared.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/preferences/{key}:
+    get:
+      operationId: getPreference
+      tags: [storage]
+      summary: Get preference value
+      description: >
+        Returns the value of a specific preference key.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Preference key.
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Expected value type for deserialization.
+          schema:
+            $ref: "./schemas/storage.json#/$defs/PreferenceValueType"
+        - name: sharedName
+          in: query
+          description: Shared preference container name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Preference entry.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: setPreference
+      tags: [storage]
+      summary: Set preference value
+      description: >
+        Creates or updates a preference entry.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Preference key.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/storage.json#/$defs/PreferenceSetRequest"
+      responses:
+        "200":
+          description: Preference set.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: deletePreference
+      tags: [storage]
+      summary: Delete preference
+      description: >
+        Deletes a specific preference by key.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Preference key.
+          schema:
+            type: string
+        - name: sharedName
+          in: query
+          description: Shared preference container name.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Preference deleted.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/secure:
+    delete:
+      operationId: clearSecureStorage
+      tags: [storage]
+      summary: Clear all secure storage
+      description: >
+        Deletes all values from secure storage.
+      responses:
+        "204":
+          description: Secure storage cleared.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/secure/{key}:
+    get:
+      operationId: getSecureValue
+      tags: [storage]
+      summary: Get secure storage value
+      description: >
+        Returns the value stored under the given key in secure storage.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Secure storage key.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Secure value.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [value]
+                properties:
+                  value:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: setSecureValue
+      tags: [storage]
+      summary: Set secure storage value
+      description: >
+        Stores a value in secure storage under the given key.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Secure storage key.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/storage.json#/$defs/SecureStorageSetRequest"
+      responses:
+        "200":
+          description: Value stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: deleteSecureValue
+      tags: [storage]
+      summary: Delete secure storage value
+      description: >
+        Deletes a specific value from secure storage.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Secure storage key.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Value deleted.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+# ═══════════════════════════ Components ═══════════════════════════════
+components:
+  parameters:
+    ElementIdPath:
+      name: id
+      in: path
+      required: true
+      description: Globally unique element identifier.
+      schema:
+        $ref: "./schemas/common.json#/$defs/ElementId"
+
+  responses:
+    ActionSuccess:
+      description: Action completed.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/actions.json#/$defs/ActionResponse"
+
+    ElementNotFound:
+      description: Element not found.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:element-not-found"
+            title: Element not found
+            status: 404
+            errorCode: element-not-found
+
+    ElementNotInteractable:
+      description: Element is not interactable.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:element-not-interactable"
+            title: Element not interactable
+            status: 400
+            errorCode: element-not-interactable
+
+    InvalidSelector:
+      description: Invalid selector or locator.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:invalid-selector"
+            title: Invalid selector
+            status: 400
+            errorCode: invalid-selector
+
+    Timeout:
+      description: Operation timed out.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:timeout"
+            title: Timeout
+            status: 408
+            errorCode: timeout
+
+    UnsupportedCapability:
+      description: Capability not supported on this platform.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:unsupported-capability"
+            title: Unsupported capability
+            status: 501
+            errorCode: unsupported-capability
+
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:element-not-found"
+            title: Not found
+            status: 404
+
+    InternalError:
+      description: Internal server error.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:internal-error"
+            title: Internal error
+            status: 500
+            errorCode: internal-error

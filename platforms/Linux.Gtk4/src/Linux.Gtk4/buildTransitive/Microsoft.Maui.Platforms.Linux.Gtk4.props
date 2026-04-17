@@ -1,0 +1,24 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup>
+    <AvailableItemName Include="MauiAsset" />
+    <AvailableItemName Include="MauiImage" />
+    <AvailableItemName Include="MauiIcon" />
+    <AvailableItemName Include="MauiFont" />
+    <AvailableItemName Include="MauiSplashScreen" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);LINUX;LINUX_GTK</DefineConstants>
+    <EnableDefaultMauiResourceItems Condition="'$(EnableDefaultMauiResourceItems)' == ''">true</EnableDefaultMauiResourceItems>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableDefaultMauiResourceItems)' == 'true'">
+    <MauiImage Include="Resources\Images\**\*" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+    <MauiFont Include="Resources\Fonts\**\*" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+    <MauiAsset Include="Resources\Raw\**\*" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)">
+      <LogicalName>%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </MauiAsset>
+  </ItemGroup>
+
+</Project>

@@ -94,7 +94,7 @@ public static partial class AndroidCommands
 
 						// Step 2: SDK command-line tools
 						var sdkTask = ctx.AddTask("Installing SDK Tools");
-						if (!androidProvider.IsSdkInstalled)
+						if (!HasSdkManager(androidProvider))
 						{
 							var targetSdkPath = sdkPath ?? PlatformDetector.Paths.DefaultAndroidSdkPath;
 							await androidProvider.InstallSdkToolsAsync(targetSdkPath,
@@ -179,8 +179,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 

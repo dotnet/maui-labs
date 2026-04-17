@@ -1,0 +1,13 @@
+{
+  "name": "dotnet-maui-labs",
+  "owner": {
+    "name": ".NET MAUI Team"
+  },
+  "plugins": [
+    {
+      "name": "dotnet-maui",
+      "source": "./plugins/dotnet-maui",
+      "description": "Skills for .NET MAUI development: DevFlow automation, profiling, accessibility, platform bindings, and diagnostics."
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Services;
@@ -34,6 +35,70 @@ public class DeviceManagerTests
 	}
 
 	[Fact]
+	public async Task GetAllDevicesAsync_ReturnsAppleSimulators()
+	{
+		// Arrange
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "sim-udid-1234",
+					Name = "iPhone 15 Pro",
+					Platforms = new[] { "ios" },
+					Type = DeviceType.Simulator,
+					State = DeviceState.Booted,
+					IsEmulator = true,
+					IsRunning = true,
+					EmulatorId = "sim-udid-1234",
+					Version = "18.0"
+				}
+			}
+		};
+
+		var manager = new DeviceManager(appleProvider: fakeApple);
+
+		// Act
+		var devices = await manager.GetAllDevicesAsync();
+
+		// Assert
+		Assert.Single(devices);
+		Assert.Contains(devices, d => d.Platforms.Contains("ios"));
+		Assert.Equal(DeviceType.Simulator, devices[0].Type);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_ReturnsBothAndroidAndApple()
+	{
+		// Arrange
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = new[] { "android" }, Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "sim-udid", Name = "iPhone 15", Platforms = new[] { "ios" }, Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		// Act
+		var devices = await manager.GetAllDevicesAsync();
+
+		// Assert
+		Assert.Equal(2, devices.Count);
+		Assert.Contains(devices, d => d.Platforms.Contains("android"));
+		Assert.Contains(devices, d => d.Platforms.Contains("ios"));
+	}
+
+	[Fact]
 	public async Task GetDevicesByPlatformAsync_FiltersCorrectly()
 	{
 		// Arrange
@@ -53,6 +118,35 @@ public class DeviceManagerTests
 		// Assert
 		Assert.Single(androidOnly);
 		Assert.All(androidOnly, d => Assert.Contains("android", d.Platforms));
+	}
+
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_FiltersIosDevices()
+	{
+		// Arrange
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = new[] { "android" }, Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+		var fakeApple = new FakeAppleProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device { Id = "sim-udid", Name = "iPhone 15", Platforms = new[] { "ios" }, Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		// Act
+		var iosOnly = await manager.GetDevicesByPlatformAsync("ios");
+
+		// Assert
+		Assert.Single(iosOnly);
+		Assert.All(iosOnly, d => Assert.Contains("ios", d.Platforms));
 	}
 
 	[Fact]
@@ -135,7 +229,7 @@ public class DeviceManagerTests
 					IsEmulator = true,
 					IsRunning = true,
 					EmulatorId = "Pixel_6_API_35",
-					Details = new Dictionary<string, object> { ["avd"] = "Pixel_6_API_35" }
+					Details = new JsonObject { ["avd"] = "Pixel_6_API_35" }
 				}
 			},
 			Avds = new List<AvdInfo>
@@ -174,7 +268,7 @@ public class DeviceManagerTests
 					IsEmulator = true,
 					IsRunning = true,
 					EmulatorId = "Pixel_6_API_35",
-					Details = new Dictionary<string, object>()
+					Details = new JsonObject()
 				}
 			},
 			Avds = new List<AvdInfo>

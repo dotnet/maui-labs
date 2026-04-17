@@ -26,11 +26,13 @@
   <Folder Name="/src/Cli/">
     <Project Path="src/Cli/Microsoft.Maui.Cli.UnitTests/Microsoft.Maui.Cli.UnitTests.csproj" />
     <Project Path="src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj" />
+    <Project Path="src/Cli/Microsoft.Maui.StartupProfiling/Microsoft.Maui.StartupProfiling.csproj" />
   </Folder>
   <Folder Name="/src/DevFlow/">
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk/Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor.Gtk/Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor/Microsoft.Maui.DevFlow.Blazor.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Driver/Microsoft.Maui.DevFlow.Driver.csproj" />

@@ -1,0 +1,145 @@
+scenarios:
+  - name: "Create iOS slim binding with CocoaPods dependency"
+    setup:
+      files:
+        - path: "MyMauiApp/MyMauiApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      I have a .NET MAUI app in MyMauiApp/. I want to use the Lottie iOS animation
+      library (distributed via CocoaPods as 'lottie-ios') and I only need to play
+      animations from JSON files. Create a slim iOS binding project in LottieBinding/
+      with the XcodeGen project.yml, Podfile, Swift wrapper, and C# binding project.
+    assertions:
+      - type: "output_contains"
+        value: "XcodeGen"
+      - type: "output_matches"
+        pattern: "use_frameworks.*static|:linkage.*:static"
+      - type: "output_matches"
+        pattern: "@objc|NSObject"
+      - type: "output_matches"
+        pattern: "ApiDefinition\\.cs|BaseType"
+      - type: "file_exists"
+        path: "LottieBinding/project.yml"
+      - type: "file_exists"
+        path: "LottieBinding/Podfile"
+      - type: "file_contains"
+        path: "LottieBinding/Podfile"
+        value: "lottie-ios"
+    rubric:
+      - "Uses XcodeGen (project.yml) to generate the Xcode project rather than manual Xcode project creation"
+      - "Configures CocoaPods with use_frameworks! :linkage => :static for static linking"
+      - "Shows a Swift wrapper class inheriting from NSObject with @objc annotations on class and methods"
+      - "References the Xcode project from the C# binding .csproj using XcodeProject MSBuild item with SchemeName"
+      - "Sets BUILD_LIBRARY_FOR_DISTRIBUTION to YES for ABI stability across Swift versions"
+    timeout: 240
+
+  - name: "Fix unrecognized selector runtime crash in iOS binding"
+    setup:
+      files:
+        - path: "MyBinding/swift/DotnetMyBinding.swift"
+          content: |
+            import Foundation
+
+            @objc(DotnetMyBinding)
+            public class DotnetMyBinding: NSObject {
+                @objc
+                public func initialize(apiKey: String) -> Bool {
+                    return true
+                }
+            }
+        - path: "MyBinding/ApiDefinition.cs"
+          content: |
+            using Foundation;
+            using ObjCRuntime;
+
+            namespace MyBinding;
+
+            [BaseType(typeof(NSObject))]
+            interface DotnetMyBinding {
+                [Export("initializeWithApiKey:")]
+                bool Initialize(string apiKey);
+            }
+    prompt: |
+      My iOS slim binding project at MyBinding/ builds successfully but crashes at runtime with:
+
+      ```
+      Objective-C exception thrown. Name: NSInvalidArgumentException
+      Reason: -[DotnetMyBinding initializeWithApiKey:]: unrecognized selector sent to instance
+      ```
+
+      The Swift wrapper is at MyBinding/swift/DotnetMyBinding.swift and the binding
+      definition is at MyBinding/ApiDefinition.cs. Fix the code to resolve this
+      selector mismatch.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)selector.*mismatch|mismatch.*selector|Export.*doesn.t match|@objc.*selector"
+      - type: "output_matches"
+        pattern: "initializeWithApiKey:"
+      - type: "output_matches"
+        pattern: "@objc\\(.*initializeWithApiKey"
+      - type: "file_contains"
+        path: "MyBinding/swift/DotnetMyBinding.swift"
+        value: "initializeWithApiKey"
+    rubric:
+      - "Identifies that the @objc annotation is missing an explicit selector, so Swift generated a different one"
+      - "Explains that Swift auto-generates the selector as initializeWithApiKey: but the @objc without explicit selector may produce initializeApiKey: or similar"
+      - "Shows the fix: add @objc(initializeWithApiKey:) to explicitly match the [Export] attribute"
+      - "Emphasizes that @objc(selector:) in Swift must exactly match [Export(\"selector:\")] in ApiDefinition.cs"
+    timeout: 240
+
+  - name: "Design Swift wrapper for async APIs with completion handlers"
+    prompt: |
+      The iOS SDK I'm wrapping has async/await Swift APIs:
+
+      ```swift
+      class NativeSDK {
+          func fetchUser(id: String) async throws -> User
+          func uploadImage(_ data: Data) async throws -> URL
+      }
+      ```
+
+      How do I wrap these for use in a .NET MAUI iOS binding? I need the
+      C# side to be awaitable too.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)completion.?handler|callback|closure"
+      - type: "output_matches"
+        pattern: "NSError"
+      - type: "output_matches"
+        pattern: "\\[Async\\]"
+      - type: "output_not_matches"
+        pattern: "(?i)async.*throws.*->.*in the wrapper|Task<|ValueTask"
+    rubric:
+      - "Converts async/await Swift methods to completion handler pattern in the wrapper"
+      - "Shows completion handler signature with (Result?, NSError?) -> Void or similar nullable error pattern"
+      - "Uses @objc annotation on the completion handler methods with correct selector names"
+      - "Shows [Async] attribute in ApiDefinition.cs to auto-generate C# async/await wrappers"
+      - "Does not suggest exposing Swift async/await directly through the binding"
+    timeout: 240
+
+  - name: "Generate ApiDefinition.cs with Objective Sharpie"
+    prompt: |
+      I've built my iOS slim binding's Swift wrapper and the xcframework is
+      generated. Now I need to create the ApiDefinition.cs. I heard I should
+      use Objective Sharpie. How do I find the generated Swift header and run
+      Sharpie? What cleanup do I need to do on the output?
+    assertions:
+      - type: "output_matches"
+        pattern: "sharpie bind"
+      - type: "output_matches"
+        pattern: "(?i)Swift.*header|MyBinding-Swift\\.h"
+      - type: "output_matches"
+        pattern: "\\[Verify\\]|NullAllowed|\\[Async\\]"
+    rubric:
+      - "Shows how to locate the generated -Swift.h header file in the build output"
+      - "Provides the correct sharpie bind command with --sdk, --namespace, and --scope flags"
+      - "Lists required cleanup steps: remove [Verify] attributes after review, add [NullAllowed], add [Async]"
+      - "Mentions removing InitWithCoder constructors that are auto-generated but not needed"
+    timeout: 240

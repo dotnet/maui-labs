@@ -8,10 +8,10 @@
 
 ## Connection Refused / Cannot Connect
 
-If `maui-devflow MAUI status` fails with connection refused:
+If `maui devflow ui status` fails with connection refused:
 
 1. **App not running?** Verify the app launched: check the build output for errors.
-2. **Check the broker:** Run `maui-devflow list` to see if the agent registered. If the list
+2. **Check the broker:** Run `maui devflow list` to see if the agent registered. If the list
    is empty, the app may not have connected to the broker yet (wait a few seconds and retry).
 3. **Wrong port?** If using `.mauidevflow`, ensure the port matches between build and CLI.
    Run CLI from the project directory so it auto-detects the config file.
@@ -26,7 +26,7 @@ If `maui-devflow MAUI status` fails with connection refused:
 7. **macOS (AppKit)?** Ensure `AddMacOSEssentials()` is called and the app window appeared.
    See [references/macos.md](macos.md) for troubleshooting.
 8. **Linux/GTK?** No special network setup needed — runs directly on localhost. Check if the app started successfully.
-9. **Broker issues?** `maui-devflow broker status` to check. `maui-devflow broker stop` then
+9. **Broker issues?** `maui devflow broker status` to check. `maui devflow broker stop` then
    retry (CLI will auto-restart it).
 
 ## Build Failures
@@ -60,11 +60,11 @@ profiles via `apple appstoreconnect profiles list`.
 
 ## CDP Not Connecting (Blazor Hybrid)
 
-If `maui-devflow cdp status` fails but `MAUI status` works:
+If `maui devflow webview status` fails but `ui status` works:
 
 1. **Chobitsu not loading?** Check logs for `[BlazorDevFlow]` messages. If auto-injection failed, add `<script src="chobitsu.js"></script>` manually to `wwwroot/index.html`
 2. **Blazor not initialized?** Navigate to a Blazor page first, then retry
-3. Check app logs: `maui-devflow MAUI logs --limit 20` — look for `[BlazorDevFlow]` errors
+3. Check app logs: `maui devflow logs --limit 20` — look for `[BlazorDevFlow]` errors
 
 ## Mac Catalyst: Repeated Permission Dialogs on Rebuild
 

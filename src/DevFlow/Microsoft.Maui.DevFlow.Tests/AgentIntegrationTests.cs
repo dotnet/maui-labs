@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Agent.Core;
 
 namespace Microsoft.Maui.DevFlow.Tests;
@@ -39,9 +40,9 @@ public class AgentHttpServerTests : IDisposable
             var read = await stream.ReadAsync(buffer);
             var request = Encoding.UTF8.GetString(buffer, 0, read);
 
-            Assert.Contains("GET /api/status", request);
+            Assert.Contains("GET /api/v1/agent/status", request);
 
-            var body = """{"agent":"test","version":"1.0","running":true}""";
+            var body = """{"agent":{"name":"test","version":"1.0"},"device":{"platform":"Test"},"app":{"name":"Sample"},"running":true}""";
             var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
             client.Close();
@@ -51,7 +52,7 @@ public class AgentHttpServerTests : IDisposable
         var status = await agentClient.GetStatusAsync();
 
         Assert.NotNull(status);
-        Assert.Equal("test", status.Agent);
+        Assert.Equal("test", status.Agent?.Name);
         Assert.True(status.Running);
 
         listener.Stop();
@@ -105,7 +106,7 @@ public class AgentHttpServerTests : IDisposable
             var read = await stream.ReadAsync(buffer);
             var request = Encoding.UTF8.GetString(buffer, 0, read);
 
-            Assert.Contains("POST /api/action/tap", request);
+            Assert.Contains("POST /api/v1/ui/actions/tap", request);
             Assert.Contains("elementId", request);
 
             var body = """{"success":true,"message":"Tapped"}""";
@@ -135,7 +136,7 @@ public class AgentHttpServerTests : IDisposable
             var read = await stream.ReadAsync(buffer);
             var request = Encoding.UTF8.GetString(buffer, 0, read);
 
-            Assert.Contains("POST /api/action/fill", request);
+            Assert.Contains("POST /api/v1/ui/actions/fill", request);
             Assert.Contains("hello world", request);
 
             var body = """{"success":true,"message":"Text set"}""";
@@ -148,6 +149,210 @@ public class AgentHttpServerTests : IDisposable
         var result = await agentClient.FillAsync("entry1", "hello world");
         Assert.True(result);
 
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task WebViewNavigateEndpoint_SendsPostWithUrl()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/webview/navigate", request);
+            Assert.Contains("https://example.com", request);
+            Assert.Contains("BlazorMain", request);
+
+            var body = """{"success":true}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.NavigateWebViewAsync("https://example.com", "BlazorMain");
+
+        Assert.True(result);
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task WebViewClickEndpoint_SendsSelector()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/webview/input/click", request);
+            Assert.Contains("#submit", request);
+
+            var body = """{"success":true}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.ClickWebViewAsync("#submit");
+
+        Assert.True(result);
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task WebViewFillEndpoint_SendsSelectorAndText()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/webview/input/fill", request);
+            Assert.Contains("#email", request);
+            Assert.Contains("user@example.com", request);
+
+            var body = """{"success":true}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.FillWebViewAsync("#email", "user@example.com");
+
+        Assert.True(result);
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task WebViewTextEndpoint_SendsText()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/webview/input/text", request);
+            Assert.Contains("hello from tests", request);
+
+            var body = """{"success":true}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.InsertWebViewTextAsync("hello from tests");
+
+        Assert.True(result);
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task CapabilitiesEndpoint_ReturnsStructuredCapabilities()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("GET /api/v1/agent/capabilities", request);
+
+            var body = """
+            {
+              "ui": { "supported": true, "features": ["tree", "tap", "batch"] },
+              "webview": { "supported": true, "features": ["contexts", "evaluate"] },
+              "network": { "supported": true, "features": ["list", "clear"] }
+            }
+            """;
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var capabilities = await agentClient.GetCapabilitiesAsync();
+
+        Assert.True(capabilities.GetProperty("ui").GetProperty("supported").GetBoolean());
+        Assert.Contains("batch", capabilities.GetProperty("ui").GetProperty("features").EnumerateArray().Select(x => x.GetString()));
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task BatchEndpoint_SendsV1BatchPayload()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/ui/actions/batch", request);
+            Assert.Contains("\"continueOnError\":true", request);
+            Assert.Contains("\"type\":\"tap\"", request);
+            Assert.Contains("\"elementId\":\"btn1\"", request);
+
+            var body = """{"success":true,"results":[{"success":true}]}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.BatchAsync(
+            [
+                new JsonObject
+                {
+                    ["type"] = "tap",
+                    ["elementId"] = "btn1"
+                }
+            ],
+            continueOnError: true);
+
+        Assert.True(result.GetProperty("success").GetBoolean());
+
+        await acceptTask;
         listener.Stop();
     }
 
@@ -239,7 +444,7 @@ public class AgentHttpServerTests : IDisposable
             var read = await stream.ReadAsync(buffer);
             var request = Encoding.UTF8.GetString(buffer, 0, read);
 
-            Assert.Contains("GET /api/platform/battery", request);
+            Assert.Contains("GET /api/v1/device/battery", request);
 
             var body = """
             {

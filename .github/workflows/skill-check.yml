@@ -1,0 +1,62 @@
+name: skill-check
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - 'tests/**'
+      - 'eng/allowed-external-deps.txt'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+      - 'tests/**'
+      - 'eng/allowed-external-deps.txt'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Download skill-validator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download skill-validator-nightly \
+            --repo dotnet/skills \
+            --pattern "skill-validator-linux-x64.tar.gz" \
+            --pattern "checksums.sha256" \
+            --dir /tmp/skill-validator
+
+          # Verify checksum before extracting
+          cd /tmp/skill-validator
+          if [ -f checksums.sha256 ]; then
+            grep "skill-validator-linux-x64.tar.gz" checksums.sha256 | sha256sum --check --strict
+          else
+            echo "::warning::No checksums.sha256 in release — verify dotnet/skills publishes checksums"
+          fi
+
+          mkdir -p bin
+          tar -xzf skill-validator-linux-x64.tar.gz -C bin
+          chmod +x bin/skill-validator
+
+      - name: Run skill-validator check
+        run: |
+          plugin_args=()
+          for d in plugins/*/; do
+            plugin_args+=(--plugin "$d")
+          done
+          /tmp/skill-validator/bin/skill-validator check \
+            "${plugin_args[@]}" \
+            --allowed-external-deps eng/allowed-external-deps.txt

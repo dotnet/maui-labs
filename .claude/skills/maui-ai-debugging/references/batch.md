@@ -7,16 +7,16 @@ responses (one JSON object per line) to stdout — ideal for AI agents and scrip
 
 ```bash
 # Pipe multiple commands (semicolons or newlines as separators)
-echo "MAUI fill textUsername user; MAUI fill textPassword pwd123; MAUI tap buttonLogin" | maui-devflow batch
+echo "MAUI fill textUsername user; MAUI fill textPassword pwd123; MAUI tap buttonLogin" | maui devflow batch
 
 # Multi-line input
-printf "MAUI status\nMAUI tree\nMAUI screenshot --output screen.png" | maui-devflow batch
+printf "MAUI status\nMAUI tree\nMAUI screenshot --output screen.png" | maui devflow batch
 
 # With options
-echo "MAUI status; MAUI tree" | maui-devflow batch --delay 500 --continue-on-error --agent-port 10224
+echo "MAUI status; MAUI tree" | maui devflow batch --delay 500 --continue-on-error --agent-port 10224
 
 # Human-readable output instead of JSONL
-echo "MAUI status; MAUI tree" | maui-devflow batch --human
+echo "MAUI status; MAUI tree" | maui devflow batch --human
 ```
 
 ## Options

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "logs.json",
+  "title": "Log Models",
+  "description": "Log models for capturing and streaming application log entries.",
+  "$defs": {
+    "LogEntry": {
+      "type": "object",
+      "description": "A single log entry from the application.",
+      "required": [
+        "timestamp",
+        "level",
+        "category",
+        "message",
+        "source"
+      ],
+      "properties": {
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC timestamp when the log entry was recorded."
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "critical"
+          ],
+          "description": "Severity level of the log entry."
+        },
+        "category": {
+          "type": "string",
+          "description": "Log category or logger name (e.g. 'Microsoft.Maui.Controls', 'HttpClient', 'App')."
+        },
+        "message": {
+          "type": "string",
+          "description": "The log message text."
+        },
+        "exception": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Exception details if the log entry is associated with an error."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "native",
+            "webview",
+            "framework"
+          ],
+          "description": "Origin of the log entry."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "txt_email",
+    "parentId": "layout_root",
+    "type": "Entry",
+    "fullType": "Microsoft.Maui.Controls.Entry",
+    "framework": "maui",
+    "automationId": "txt_email",
+    "text": "Email",
+    "value": "",
+    "role": "textbox",
+    "traits": ["interactive", "focusable"],
+    "state": {
+      "displayed": true,
+      "enabled": true,
+      "selected": false,
+      "focused": false,
+      "opacity": 1.0
+    },
+    "bounds": { "x": 40, "y": 172, "width": 400, "height": 44 }
+  },
+  {
+    "id": "txt_password",
+    "parentId": "layout_root",
+    "type": "Entry",
+    "fullType": "Microsoft.Maui.Controls.Entry",
+    "framework": "maui",
+    "automationId": "txt_password",
+    "text": "Password",
+    "value": "",
+    "role": "textbox",
+    "traits": ["interactive", "focusable"],
+    "state": {
+      "displayed": true,
+      "enabled": true,
+      "selected": false,
+      "focused": false,
+      "opacity": 1.0
+    },
+    "bounds": { "x": 40, "y": 232, "width": 400, "height": 44 }
+  }
+]

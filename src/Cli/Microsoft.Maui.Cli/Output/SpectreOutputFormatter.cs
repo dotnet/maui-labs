@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics;
 using Microsoft.Maui.Cli.Models;
 using Spectre.Console;
 
@@ -11,6 +12,7 @@ namespace Microsoft.Maui.Cli.Output;
 /// </summary>
 public class SpectreOutputFormatter : IOutputFormatter
 {
+	static readonly TimeSpan s_statusRefreshInterval = TimeSpan.FromMilliseconds(200);
 	readonly IAnsiConsole _console;
 	readonly bool _verbose;
 
@@ -151,6 +153,11 @@ public class SpectreOutputFormatter : IOutputFormatter
 	{
 		_console.MarkupLine($"[red]Error [[{Markup.Escape(error.Code)}]]:[/] {Markup.Escape(error.Message)}");
 
+		if (!string.IsNullOrWhiteSpace(error.NativeError))
+		{
+			_console.MarkupLine($"  [grey]{Markup.Escape(error.NativeError.Trim())}[/]");
+		}
+
 		if (error.Remediation != null)
 		{
 			if (error.Remediation.Command != null)
@@ -236,17 +243,53 @@ public class SpectreOutputFormatter : IOutputFormatter
 	/// <summary>
 	/// Runs an async operation with a spinner indicator.
 	/// </summary>
+	public async Task<T> StatusAsync<T>(string message, Func<StatusContext, Task<T>> operation)
+	{
+		return await RunTimedStatusAsync(message, (_, ctx) => operation(ctx));
+	}
+
+	/// <summary>
+	/// Runs an async operation with a spinner indicator and a callback for updating the displayed status text.
+	/// </summary>
+	public async Task<T> StatusAsync<T>(string message, Func<Action<string>, Task<T>> operation)
+	{
+		return await RunTimedStatusAsync(message, (updateStatus, _) => operation(updateStatus));
+	}
+
+	/// <summary>
+	/// Runs an async operation with a spinner indicator.
+	/// </summary>
 	public async Task<T> StatusAsync<T>(string message, Func<Task<T>> operation)
 	{
-		T result = default!;
-		await _console.Status()
-			.Spinner(Spinner.Known.Dots)
-			.SpinnerStyle(Style.Parse("cyan"))
-			.StartAsync(message, async _ =>
+		return await RunTimedStatusAsync(message, (_, _) => operation());
+	}
+
+	/// <summary>
+	/// Runs an async operation with a spinner indicator.
+	/// </summary>
+	public async Task StatusAsync(string message, Func<StatusContext, Task> operation)
+	{
+		await RunTimedStatusAsync(
+			message,
+			async (_, ctx) =>
 			{
-				result = await operation();
+				await operation(ctx);
+				return true;
 			});
-		return result;
+	}
+
+	/// <summary>
+	/// Runs an async operation with a spinner indicator and a callback for updating the displayed status text.
+	/// </summary>
+	public async Task StatusAsync(string message, Func<Action<string>, Task> operation)
+	{
+		await RunTimedStatusAsync(
+			message,
+			async (updateStatus, _) =>
+			{
+				await operation(updateStatus);
+				return true;
+			});
 	}
 
 	/// <summary>
@@ -254,13 +297,109 @@ public class SpectreOutputFormatter : IOutputFormatter
 	/// </summary>
 	public async Task StatusAsync(string message, Func<Task> operation)
 	{
+		await RunTimedStatusAsync(
+			message,
+			async (_, _) =>
+			{
+				await operation();
+				return true;
+			});
+	}
+
+	async Task<T> RunTimedStatusAsync<T>(string message, Func<Action<string>, StatusContext, Task<T>> operation)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+		var stopwatch = Stopwatch.StartNew();
+		var currentMarkup = Markup.Escape(message);
+		T result = default!;
+
 		await _console.Status()
 			.Spinner(Spinner.Known.Dots)
 			.SpinnerStyle(Style.Parse("cyan"))
-			.StartAsync(message, async _ =>
+			.StartAsync(FormatTimedStatusMarkup(currentMarkup, stopwatch.Elapsed), async ctx =>
 			{
-				await operation();
+				using var refreshCts = new CancellationTokenSource();
+				var refreshTask = RefreshStatusAsync(ctx, () => currentMarkup, stopwatch, refreshCts.Token);
+
+				void UpdateStatus(string updatedMarkup)
+				{
+					if (string.IsNullOrWhiteSpace(updatedMarkup))
+						return;
+
+					currentMarkup = updatedMarkup;
+					ctx.Status(FormatTimedStatusMarkup(currentMarkup, stopwatch.Elapsed));
+				}
+
+				try
+				{
+					result = await operation(UpdateStatus, ctx);
+					UpdateStatus(currentMarkup);
+				}
+				finally
+				{
+					refreshCts.Cancel();
+					try
+					{
+						await refreshTask;
+					}
+					catch (OperationCanceledException)
+					{
+					}
+				}
 			});
+
+		WriteInfo(FormatCompletedStatusMessage(message, stopwatch.Elapsed));
+		return result;
+	}
+
+	static async Task RefreshStatusAsync(
+		StatusContext context,
+		Func<string> getCurrentMarkup,
+		Stopwatch stopwatch,
+		CancellationToken cancellationToken)
+	{
+		while (!cancellationToken.IsCancellationRequested)
+		{
+			await Task.Delay(s_statusRefreshInterval, cancellationToken);
+			context.Status(FormatTimedStatusMarkup(getCurrentMarkup(), stopwatch.Elapsed));
+		}
+	}
+
+	internal static string FormatElapsed(TimeSpan elapsed)
+	{
+		if (elapsed.TotalMinutes >= 1)
+		{
+			var totalMinutes = (int)elapsed.TotalMinutes;
+			var tenths = elapsed.Milliseconds / 100;
+			return $"{totalMinutes}:{elapsed.Seconds:00}.{tenths:0}s";
+		}
+
+		return $"{elapsed.TotalSeconds:0.0}s";
+	}
+
+	internal static string FormatTimedStatusMarkup(string statusMarkup, TimeSpan elapsed)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(statusMarkup);
+
+		var suffix = $" [grey]({FormatElapsed(elapsed)})[/]";
+		var lineBreakIndex = statusMarkup.IndexOfAny(['\r', '\n']);
+		return lineBreakIndex >= 0
+			? statusMarkup.Insert(lineBreakIndex, suffix)
+			: statusMarkup + suffix;
+	}
+
+	internal static string FormatCompletedStatusMessage(string message, TimeSpan elapsed) =>
+		$"{TrimCompletedStatusLabel(message)} ({FormatElapsed(elapsed)})";
+
+	internal static string TrimCompletedStatusLabel(string message)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+		var trimmed = message.Trim();
+		return trimmed.EndsWith("...", StringComparison.Ordinal)
+			? trimmed[..^3].TrimEnd()
+			: trimmed.TrimEnd('.');
 	}
 
 	/// <summary>

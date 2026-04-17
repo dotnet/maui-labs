@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MauiLinuxApp</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationId>com.companyname.mauilinuxapp</ApplicationId>
+    <ApplicationTitle>MauiLinuxApp</ApplicationTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4" Version="0.6.0-*" />
+<!--#if (essentials) -->
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.6.0-*" />
+<!--#endif -->
+<!--#if (blazor) -->
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView" Version="0.6.0-*" />
+<!--#endif -->
+  </ItemGroup>
+
+</Project>

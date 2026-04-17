@@ -23,12 +23,22 @@ on:
         type: boolean
         default: true
         description: 'Install MAUI workloads and Android SDK (not needed for net10.0-only projects)'
+      os:
+        required: false
+        type: string
+        default: '["macos-latest", "windows-latest"]'
+        description: 'JSON array of runner OS labels'
+      native-deps:
+        required: false
+        type: string
+        default: ''
+        description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
 
 jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        os: ${{ fromJson(inputs.os) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -37,6 +47,10 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+
+      - name: Install native dependencies
+        if: inputs.native-deps != ''
+        run: ${{ inputs.native-deps }}
 
       - name: Install workloads
         if: inputs.install-workloads
@@ -62,6 +76,14 @@ jobs:
 
       - name: Build and Test (macOS)
         if: matrix.os == 'macos-latest'
+        run: >
+          ./eng/common/cibuild.sh
+          --configuration Release
+          --prepareMachine
+          --projects $(pwd)/${{ inputs.project-path }}
+
+      - name: Build and Test (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
         run: >
           ./eng/common/cibuild.sh
           --configuration Release
@@ -129,7 +151,7 @@ jobs:
           path: artifacts/TestResults/**/*.xml
 
       - name: Upload packages
-        if: inputs.pack && matrix.os == 'windows-latest'
+        if: inputs.pack && (matrix.os == 'windows-latest' || !contains(fromJson(inputs.os), 'windows-latest'))
         uses: actions/upload-artifact@v7
         with:
           name: packages-${{ inputs.project-name }}

@@ -17,7 +17,7 @@ will replace each other — only the last-deployed app survives.
 
 **Before creating or booting a simulator, check what's already in use:**
 ```bash
-maui-devflow list                             # shows agents with platform + port
+maui devflow list                             # shows agents with platform + port
 xcrun simctl list devices booted              # shows all booted simulators
 ```
 
@@ -71,12 +71,12 @@ apple simulator screenshot <UDID> --output output.png
 
 ### Screenshots (Mac Catalyst)
 
-**Use `maui-devflow MAUI screenshot`** for Mac Catalyst apps — it captures the UI in-process
+**Use `maui devflow ui screenshot`** for Mac Catalyst apps — it captures the UI in-process
 and does NOT require the app to be in the foreground. Never use `osascript` to bring the window
 to the front or `screencapture` for Mac Catalyst screenshots; they are unnecessary and unreliable.
 
 ```bash
-maui-devflow MAUI screenshot --output screen.png
+maui devflow ui screenshot --output screen.png
 ```
 
 ### Delete / erase
@@ -142,7 +142,7 @@ dotnet build -f net10.0-ios -t:Run -p:_DeviceName=:v2:udid=$UDID
 ```
 
 The `-t:Run` target keeps the process alive while the app runs — it **blocks until the app exits**.
-Always run in an async/background shell, then poll `maui-devflow MAUI status` to detect when the
+Always run in an async/background shell, then poll `maui devflow ui status` to detect when the
 app is ready. Do NOT wait for the process to finish.
 
 ### Determining the correct TFM
@@ -206,15 +206,14 @@ Key subcommands beyond the basics:
   ```bash
   rm -rf ~/Library/Saved\ Application\ State/<bundle-id>.savedState
   ```
-  Or detect and dismiss via AppleScript:
-  ```bash
-  osascript -e 'tell application "System Events" to tell process "AppName" to click button "Reopen" of window 1'
-  ```
+  If the "Reopen windows?" dialog is already on screen, ask the user to dismiss it manually,
+  then relaunch. Do not use AppleScript here by default — it steals focus from the user's
+  desktop session.
 - **"Unable to lookup in current state: Shutdown"**: Simulator not booted. Run `xcrun simctl boot <UDID>`.
 - **Build error NETSDK1005 "Assets file doesn't have a target"**: Wrong TFM. Check
   `<TargetFrameworks>` in .csproj and use matching version (e.g. `net10.0-ios` not `net9.0-ios`).
 - **Agent not connecting after deploy**: The app may still be launching. Poll
-  `maui-devflow MAUI status` every few seconds. If it hasn't connected after ~60-90s, read the
+  `maui devflow ui status` every few seconds. If it hasn't connected after ~60-90s, read the
   async shell output from `dotnet build -t:Run` for build/launch errors.
 - **Mac Catalyst app name vs binary name**: The `.app` bundle name may differ from the project
   name (e.g. `MauiTodo.app` vs `SampleMauiApp`). Check the `ApplicationTitle` in .csproj.
@@ -306,18 +305,20 @@ Use these to test and validate dialog detection and dismissal workflows.
 
 ### Toggle dark mode
 ```bash
-# macOS (affects Mac Catalyst apps)
-osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true'
-osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false'
-
-# iOS Simulator
+# Preferred when available: use an in-app theme toggle so the host desktop is unaffected.
+#
+# iOS Simulator (safe: affects the simulator only)
 xcrun simctl ui <UDID> appearance dark
 xcrun simctl ui <UDID> appearance light
 ```
 
+For **Mac Catalyst**, changing system appearance affects the user's entire macOS desktop. Only do
+that with explicit user approval; otherwise prefer app-level theme controls and verify via
+`maui devflow ui property` / WebView inspection.
+
 ### Verify dark mode via inspection
-Use `maui-devflow` to verify colors without relying on screenshots:
+Use `maui devflow` to verify colors without relying on screenshots:
 ```bash
-maui-devflow MAUI property <elementId> BackgroundColor   # check MAUI element colors
-maui-devflow cdp Runtime evaluate "window.matchMedia('(prefers-color-scheme: dark)').matches"  # Blazor
+maui devflow ui property <elementId> BackgroundColor   # check MAUI element colors
+maui devflow webview Runtime evaluate "window.matchMedia('(prefers-color-scheme: dark)').matches"  # Blazor
 ```

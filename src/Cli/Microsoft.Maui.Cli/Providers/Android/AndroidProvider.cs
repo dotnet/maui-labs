@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
 
@@ -35,6 +36,7 @@ public class AndroidProvider : IAndroidProvider
 	public bool IsSdkInstalled => !string.IsNullOrEmpty(SdkPath) && Directory.Exists(SdkPath);
 	public bool IsJdkInstalled => !string.IsNullOrEmpty(JdkPath) && Directory.Exists(JdkPath);
 	public bool SdkPathRequiresElevation => _sdkManager.SdkPathRequiresElevation();
+	bool IsSdkManagerInstalled => _sdkManager.IsAvailable;
 
 	public AndroidProvider(IJdkManager jdkManager, SdkManager? sdkManager = null, Adb? adb = null, AvdManager? avdManager = null)
 	{
@@ -84,7 +86,7 @@ public class AndroidProvider : IAndroidProvider
 			Category = "android",
 			Name = "Android SDK",
 			Status = CheckStatus.Ok,
-			Details = new Dictionary<string, object> { ["path"] = SdkPath! }
+			Details = new JsonObject { ["path"] = SdkPath! }
 		});
 
 		// Check SDK Manager
@@ -239,7 +241,20 @@ public class AndroidProvider : IAndroidProvider
 
 	public async Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default)
 	{
+		// Capture the emulator's child process IDs before stopping so that any
+		// survivors (e.g. crashpad_handler) can be cleaned up afterwards.
+		// Without this, repeated start/stop cycles leave orphaned processes that
+		// accumulate and consume memory.
+		var emulatorPid = EmulatorProcessHelper.FindEmulatorProcessId(deviceSerial);
+		IReadOnlyList<int> childPids = emulatorPid.HasValue
+			? EmulatorProcessHelper.GetChildProcessIds(emulatorPid.Value)
+			: Array.Empty<int>();
+
 		await _adb.StopEmulatorAsync(deviceSerial, cancellationToken);
+
+		// Kill any child processes that were not cleaned up by the emulator shutdown.
+		if (childPids.Count > 0)
+			EmulatorProcessHelper.KillProcessIds(childPids);
 	}
 
 	public async Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default)
@@ -350,7 +365,7 @@ public class AndroidProvider : IAndroidProvider
 		}
 
 		// Step 2: Install Android SDK if not present
-		if (!IsSdkInstalled)
+		if (!IsSdkManagerInstalled)
 		{
 			progress?.Report("Step 2/4: Installing Android SDK command-line tools...");
 			var targetSdkPath = sdkPath ?? PlatformDetector.Paths.DefaultAndroidSdkPath;
@@ -361,7 +376,7 @@ public class AndroidProvider : IAndroidProvider
 		}
 		else
 		{
-			progress?.Report("Step 2/4: Android SDK already installed ✓");
+			progress?.Report("Step 2/4: Android SDK command-line tools already installed ✓");
 		}
 
 		// Step 3: Accept licenses (only if --accept-licenses was passed)

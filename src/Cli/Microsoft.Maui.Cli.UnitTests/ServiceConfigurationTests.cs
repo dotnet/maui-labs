@@ -4,6 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Services;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
@@ -21,6 +22,7 @@ public class ServiceConfigurationTests
 		// Assert
 		Assert.NotNull(provider.GetService<IJdkManager>());
 		Assert.NotNull(provider.GetService<IAndroidProvider>());
+		Assert.NotNull(provider.GetService<IAppleProvider>());
 		Assert.NotNull(provider.GetService<IDoctorService>());
 		Assert.NotNull(provider.GetService<IDeviceManager>());
 		Assert.NotNull(provider.GetService<IDevFlowOutputWriter>());
@@ -33,9 +35,12 @@ public class ServiceConfigurationTests
 		var provider = ServiceConfiguration.CreateServiceProvider();
 		var android1 = provider.GetService<IAndroidProvider>();
 		var android2 = provider.GetService<IAndroidProvider>();
+		var apple1 = provider.GetService<IAppleProvider>();
+		var apple2 = provider.GetService<IAppleProvider>();
 
 		// Assert
 		Assert.Same(android1, android2);
+		Assert.Same(apple1, apple2);
 	}
 
 	[Fact]
@@ -43,13 +48,16 @@ public class ServiceConfigurationTests
 	{
 		// Arrange
 		var fakeAndroid = new FakeAndroidProvider();
+		var fakeApple = new FakeAppleProvider();
 
 		// Act
 		var provider = ServiceConfiguration.CreateTestServiceProvider(
-			androidProvider: fakeAndroid);
+			androidProvider: fakeAndroid,
+			appleProvider: fakeApple);
 
 		// Assert
 		Assert.Same(fakeAndroid, provider.GetService<IAndroidProvider>());
+		Assert.Same(fakeApple, provider.GetService<IAppleProvider>());
 	}
 
 	[Fact]
@@ -64,6 +72,7 @@ public class ServiceConfigurationTests
 
 		// Assert - should create real services for everything else
 		Assert.Same(fakeAndroid, provider.GetService<IAndroidProvider>());
+		Assert.NotNull(provider.GetService<IAppleProvider>());
 		Assert.NotNull(provider.GetService<IDoctorService>());
 	}
 
@@ -74,14 +83,17 @@ public class ServiceConfigurationTests
 		{
 			// Arrange
 			var fakeAndroid = new FakeAndroidProvider();
+			var fakeApple = new FakeAppleProvider();
 			var testProvider = ServiceConfiguration.CreateTestServiceProvider(
-				androidProvider: fakeAndroid);
+				androidProvider: fakeAndroid,
+				appleProvider: fakeApple);
 
 			// Act
 			Program.Services = testProvider;
 
 			// Assert
 			Assert.Same(fakeAndroid, Program.AndroidProvider);
+			Assert.Same(fakeApple, Program.AppleProvider);
 		}
 		finally
 		{

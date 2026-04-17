@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
 
@@ -116,7 +117,7 @@ public class JdkManager : IJdkManager
 					Name = "JDK",
 					Status = CheckStatus.Error,
 					Message = $"JDK {DetectedJdkVersion} is too old (minimum: {MinJdkVersion})",
-					Details = new Dictionary<string, object>
+					Details = new JsonObject
 					{
 						["path"] = DetectedJdkPath!,
 						["version"] = DetectedJdkVersion.Value
@@ -137,7 +138,7 @@ public class JdkManager : IJdkManager
 				Name = "JDK",
 				Status = CheckStatus.Ok,
 				Message = $"JDK {DetectedJdkVersion}",
-				Details = new Dictionary<string, object>
+				Details = new JsonObject
 				{
 					["path"] = DetectedJdkPath!,
 					["version"] = DetectedJdkVersion.Value
@@ -151,7 +152,7 @@ public class JdkManager : IJdkManager
 			Name = "JDK",
 			Status = CheckStatus.Warning,
 			Message = "JDK found but version unknown",
-			Details = new Dictionary<string, object>
+			Details = new JsonObject
 			{
 				["path"] = DetectedJdkPath!
 			}

@@ -52,7 +52,7 @@ public static class NetworkMonitorTui
 {
     public static async Task RunAsync(string host, int port, string? filterHost, string? filterMethod)
     {
-        var wsUrl = $"ws://{host}:{port}/ws/network";
+        var wsUrl = $"ws://{host}:{port}/ws/v1/network";
         var status = new State<string?>("Connecting...");
         var detailText = new State<string?>("Select a request to view details.");
         var headerText = new State<string?>($"🌐 Network Monitor — {host}:{port}  [0 requests]");

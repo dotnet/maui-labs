@@ -1,0 +1,43 @@
+name: CI - Linux GTK4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platforms/Linux.Gtk4/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'platforms/Linux.Gtk4/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Linux.Gtk4/Linux.Gtk4.slnx
+      project-name: linux-gtk4
+      os: '["ubuntu-24.04"]'
+      install-workloads: false
+      native-deps: >-
+        sudo apt-get update && sudo apt-get install -y
+        libgtk-4-dev
+        libwebkitgtk-6.0-dev
+        gobject-introspection
+        libgirepository1.0-dev
+        gir1.2-gtk-4.0
+        gir1.2-webkit-6.0
+        pkg-config
+      run-tests: false
+      pack: true

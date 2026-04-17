@@ -6,7 +6,7 @@
     <PatchVersion>0</PatchVersion>
     <VersionPrefix>$(MajorVersion).$(MinorVersion).$(PatchVersion)</VersionPrefix>
     <PreReleaseVersionLabel>preview</PreReleaseVersionLabel>
-    <PreReleaseVersionIteration>4</PreReleaseVersionIteration>
+    <PreReleaseVersionIteration>5</PreReleaseVersionIteration>
     <StabilizePackageVersion>false</StabilizePackageVersion>
     <!-- Arcade features -->
     <UsingToolXliff>false</UsingToolXliff>
@@ -43,6 +43,10 @@
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
     <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.8</XamarinAndroidToolsAndroidSdkVersion>
+  </PropertyGroup>
+  <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
+  <PropertyGroup Label="Apple Tools">
+    <XamarinAppleToolsMaciOSVersion>1.0.0-preview.1.26201.1</XamarinAppleToolsMaciOSVersion>
   </PropertyGroup>
   <PropertyGroup Label="Platform Extensions">
     <PlatformMauiMacOSVersion>0.3.0</PlatformMauiMacOSVersion>

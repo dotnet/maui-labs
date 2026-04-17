@@ -1,6 +1,6 @@
-# Azure DevOps official build pipeline for DevFlow and Cli
+# Azure DevOps official build pipeline for DevFlow, Cli, and Linux GTK4.
 # Uses Arcade build system with 1ES Pipeline Templates for security compliance.
-# Both products build in parallel; each can be published to NuGet.org independently.
+# All products build in parallel; each can be published to NuGet.org independently.
 
 trigger:
   batch: true
@@ -18,6 +18,10 @@ parameters:
   default: false
 - name: publishCliNuget
   displayName: 'Publish Cli packages to NuGet.org'
+  type: boolean
+  default: false
+- name: publishLinuxGtk4Nuget
+  displayName: 'Publish Linux GTK4 packages to NuGet.org'
   type: boolean
   default: false
 
@@ -48,6 +52,14 @@ extends:
     settings:
       networkIsolationPolicy: Permissive
 
+    # TODO: Linux GTK4 build disabled until a dotnet-buildtools-prereqs image
+    # with GTK4/WebKitGTK dev packages is available. CFS network isolation
+    # blocks apt-get in containers on the internal pool.
+    # See: https://github.com/dotnet/dotnet-buildtools-prereqs-docker
+    # containers:
+    #   ubuntu2404:
+    #     image: mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-24.04
+
     stages:
     - stage: build
       displayName: Build
@@ -74,13 +86,11 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                useGlobalJson: true
-            - script: dotnet workload install maui macos maui-tizen
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
               displayName: Install MAUI workloads
-            - script: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -113,6 +123,45 @@ extends:
                 -projects $(Build.SourcesDirectory)\src\Cli\Cli.slnf
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
+
+          # TODO: Re-enable when dotnet-buildtools-prereqs image with GTK4 deps is available
+          # - job: LinuxGtk4
+          #   displayName: Linux GTK4 - Ubuntu
+          #   container: ubuntu2404
+          #   pool:
+          #     name: NetCore1ESPool-Internal
+          #     image: build.azurelinux.3.amd64
+          #     os: linux
+          #   strategy:
+          #     matrix:
+          #       Release:
+          #         _BuildConfig: Release
+          #         _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+          #           /p:TeamName=$(_TeamName)
+          #           /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+          #   steps:
+          #   - task: UseDotNet@2
+          #     displayName: Install .NET SDK
+          #     inputs:
+          #       useGlobalJson: true
+          #   - script: |
+          #       sudo apt-get update
+          #       sudo apt-get install -y \
+          #         libgtk-4-dev \
+          #         libwebkitgtk-6.0-dev \
+          #         gobject-introspection \
+          #         libgirepository1.0-dev \
+          #         gir1.2-gtk-4.0 \
+          #         gir1.2-webkit-6.0 \
+          #         pkg-config
+          #     displayName: Install GTK4 dependencies
+          #   - script: |
+          #       ./eng/common/cibuild.sh \
+          #         --configuration $(_BuildConfig) \
+          #         --prepareMachine \
+          #         --projects $(Build.SourcesDirectory)/platforms/Linux.Gtk4/Linux.Gtk4.slnx \
+          #         $(_OfficialBuildArgs)
+          #     displayName: Build and Pack Linux GTK4
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
@@ -227,5 +276,60 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/CliPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/CliPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish Linux GTK4 packages to NuGet.org
+    - ${{ if eq(parameters.publishLinuxGtk4Nuget, true) }}:
+      - stage: publish_linux_gtk4_nuget
+        displayName: 'Publish Linux GTK4 to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare Linux GTK4 Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish Linux GTK4 Packages
+              targetPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
+              artifactName: LinuxGtk4PackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/LinuxGtk4Packages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg' '$(Pipeline.Workspace)/LinuxGtk4Packages/' -Verbose
+            displayName: Filter Linux GTK4 packages
+
+        - job: PublishNuGet
+          displayName: 'Push Linux GTK4 to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: LinuxGtk4PackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push Linux GTK4 to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/LinuxGtk4Packages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'

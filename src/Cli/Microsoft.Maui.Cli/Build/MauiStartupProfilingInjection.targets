@@ -1,0 +1,131 @@
+<Project>
+  <UsingTask TaskName="SetMauiStartupProfilingAndroidDebuggable"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ManifestPath ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.Xml" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+if (!System.IO.File.Exists(ManifestPath))
+    return true;
+
+var document = new XmlDocument { PreserveWhitespace = true };
+document.Load(ManifestPath);
+
+var application = document.SelectSingleNode("/manifest/application") as XmlElement;
+if (application is null)
+    return true;
+
+application.SetAttribute("debuggable", "http://schemas.android.com/apk/res/android", "true");
+document.Save(ManifestPath);
+
+return true;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <PropertyGroup Condition="'$(MauiStartupProfilingInject)' == 'true' and '$(UseMaui)' == 'true'">
+    <_MauiStartupProfilingAssemblyPath>$(MauiStartupProfilingAssemblyPath)</_MauiStartupProfilingAssemblyPath>
+    <_MauiStartupProfilingAssemblyPath Condition="'$(_MauiStartupProfilingAssemblyPath)' == ''">$(MSBuildThisFileDirectory)Microsoft.Maui.StartupProfiling.dll</_MauiStartupProfilingAssemblyPath>
+    <_MauiStartupProfilingSourcePath>$(MSBuildThisFileDirectory)MauiStartupProfiling.AutoInitialize.cs</_MauiStartupProfilingSourcePath>
+    <_MauiStartupProfilingEnvironmentFile>$(IntermediateOutputPath)MauiStartupProfiling.env</_MauiStartupProfilingEnvironmentFile>
+    <MauiStartupProfilingEnableRuntimePgo Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == ''">false</MauiStartupProfilingEnableRuntimePgo>
+    <MauiStartupProfilingEventPipeConfig Condition="'$(MauiStartupProfilingEventPipeConfig)' == ''">Microsoft-Windows-DotNETRuntime:0x1F000080018:5</MauiStartupProfilingEventPipeConfig>
+  </PropertyGroup>
+
+  <Target Name="ValidateMauiStartupProfilingInjection"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(MauiStartupProfilingInject)' == 'true'
+            and '$(UseMaui)' == 'true'
+            and '$(MauiStartupProfilingInjectBootstrap)' != 'false'">
+    <Error Condition="!Exists('$(_MauiStartupProfilingAssemblyPath)')"
+           Text="The injected startup profiling helper assembly was not found at '$(_MauiStartupProfilingAssemblyPath)'." />
+    <Error Condition="!Exists('$(_MauiStartupProfilingSourcePath)')"
+           Text="The injected startup profiling source file was not found at '$(_MauiStartupProfilingSourcePath)'." />
+  </Target>
+
+  <ItemGroup Condition="'$(MauiStartupProfilingInject)' == 'true'
+    and '$(UseMaui)' == 'true'
+    and '$(MauiStartupProfilingInjectBootstrap)' != 'false'">
+    <Reference Include="Microsoft.Maui.StartupProfiling">
+      <HintPath>$(_MauiStartupProfilingAssemblyPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+
+    <Compile Include="$(_MauiStartupProfilingSourcePath)"
+             Link="obj\MauiStartupProfiling.AutoInitialize.cs"
+             Visible="false" />
+  </ItemGroup>
+
+  <Target Name="GenerateMauiStartupProfilingEnvironment"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(MauiStartupProfilingInject)' == 'true'
+            and '$(UseMaui)' == 'true'
+            and '$(TargetFramework)' != ''
+            and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))">
+    <Error Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true' and '$(UseMonoRuntime)' == 'true'"
+           Text="Android startup profiling with --format nettrace currently requires CoreCLR. Mono runtime projects are not supported for this mode; use CoreCLR or choose --format speedscope." />
+
+    <ItemGroup>
+      <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING=1" />
+      <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING_EXIT_HOST=$(MauiStartupProfilingExitHost)"
+                                             Condition="'$(MauiStartupProfilingExitHost)' != ''" />
+      <_MauiStartupProfilingEnvironmentLines Include="MAUI_STARTUP_PROFILING_EXIT_PORT=$(MauiStartupProfilingExitPort)"
+                                             Condition="'$(MauiStartupProfilingExitPort)' != ''" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EnableEventPipe=1"
+                                             Condition="'$(MauiStartupProfilingEventPipeOutputPath)' != ''" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EventPipeConfig=$(MauiStartupProfilingEventPipeConfig)"
+                                             Condition="'$(MauiStartupProfilingEventPipeOutputPath)' != ''" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_EventPipeOutputPath=$(MauiStartupProfilingEventPipeOutputPath)"
+                                             Condition="'$(MauiStartupProfilingEventPipeOutputPath)' != ''" />
+      <!-- Align Android startup-profile runs with the known-good dotnet-optimization IBC configuration. -->
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_TieredPGO=1"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_TieredPGO_InstrumentOnlyHotCode=0"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_TC_QuickJitForLoops=1"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_TC_CallCountThreshold=10000"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_ReadyToRun=0"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_JitMinimalJitProfiling=1"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_JitProfileCasts=1"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_JitDelegateProfiling=0"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+      <_MauiStartupProfilingEnvironmentLines Include="DOTNET_MULTILEVEL_LOOKUP=0"
+                                             Condition="'$(MauiStartupProfilingEnableRuntimePgo)' == 'true'" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(_MauiStartupProfilingEnvironmentFile)"
+                      Lines="@(_MauiStartupProfilingEnvironmentLines)"
+                      Overwrite="true" />
+
+    <ItemGroup>
+      <AndroidEnvironment Include="$(_MauiStartupProfilingEnvironmentFile)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="EnableMauiStartupProfilingAndroidDebuggable"
+          AfterTargets="_GenerateJavaStubs"
+          Condition="'$(MauiStartupProfilingInject)' == 'true'
+            and '$(UseMaui)' == 'true'
+            and '$(TargetFramework)' != ''
+            and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))
+            and '$(MauiStartupProfilingEnableRuntimePgo)' == 'true'">
+    <ItemGroup>
+      <_MauiStartupProfilingManifest Include="$(IntermediateOutputPath)AndroidManifest.xml"
+                                     Condition="Exists('$(IntermediateOutputPath)AndroidManifest.xml')" />
+      <_MauiStartupProfilingManifest Include="$(IntermediateOutputPath)android\AndroidManifest.xml"
+                                     Condition="Exists('$(IntermediateOutputPath)android\AndroidManifest.xml')" />
+      <_MauiStartupProfilingManifest Include="$(IntermediateOutputPath)android\manifest\AndroidManifest.xml"
+                                     Condition="Exists('$(IntermediateOutputPath)android\manifest\AndroidManifest.xml')" />
+    </ItemGroup>
+
+    <SetMauiStartupProfilingAndroidDebuggable ManifestPath="%(_MauiStartupProfilingManifest.Identity)" />
+  </Target>
+</Project>

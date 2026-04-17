@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Microsoft.Maui.Platforms.Linux.Gtk4.Sample.Pages.ImagePage"
+             Title="Images">
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="12">
+            <Label Text="🖼️ Image Showcase"
+                   FontSize="28"
+                   FontAttributes="Bold" />
+            <Label Text="This page demonstrates URI, file, font, stream, opacity, and animated image sources on the GTK4 backend."
+                   FontSize="14"
+                   TextColor="Gray" />
+
+            <Label Text="UriSource"
+                   FontAttributes="Bold" />
+            <Border Stroke="LightGray"
+                    Padding="12">
+                <Image Source="https://aka.ms/campus.jpg"
+                       HeightRequest="180"
+                       Aspect="AspectFit" />
+            </Border>
+
+            <Label Text="FileSource (PNG)"
+                   FontAttributes="Bold" />
+            <Border Stroke="LightGray"
+                    Padding="12"
+                    BackgroundColor="#F4F0FF">
+                <Image Source="dotnet_bot.png"
+                       HeightRequest="140"
+                       Aspect="AspectFit" />
+            </Border>
+
+            <Label Text="FileSource (SVG)"
+                   FontAttributes="Bold" />
+            <Border Stroke="LightGray"
+                    Padding="12"
+                    BackgroundColor="#EEF8FF">
+                <Image Source="dotnet_bot.svg"
+                       HeightRequest="140"
+                       Aspect="AspectFit" />
+            </Border>
+
+            <Label Text="FontImageSource"
+                   FontAttributes="Bold" />
+            <HorizontalStackLayout Spacing="16">
+                <Border Stroke="LightGray"
+                        Padding="12"
+                        BackgroundColor="#F7FFF4">
+                    <Image HeightRequest="80"
+                           WidthRequest="80">
+                        <Image.Source>
+                            <FontImageSource Glyph="★"
+                                             Size="72"
+                                             Color="Goldenrod" />
+                        </Image.Source>
+                    </Image>
+                </Border>
+                <Border Stroke="LightGray"
+                        Padding="12"
+                        BackgroundColor="#FFF6EE">
+                    <Image HeightRequest="80"
+                           WidthRequest="80">
+                        <Image.Source>
+                            <FontImageSource Glyph="⚙"
+                                             Size="72"
+                                             Color="DodgerBlue" />
+                        </Image.Source>
+                    </Image>
+                </Border>
+            </HorizontalStackLayout>
+
+            <Label Text="Stream Source"
+                   FontAttributes="Bold" />
+            <Border Stroke="LightGray"
+                    Padding="12"
+                    BackgroundColor="#FFF0F6">
+                <Image x:Name="StreamSourceImage"
+                       HeightRequest="140"
+                       Aspect="AspectFit"
+                       IsVisible="False" />
+            </Border>
+
+            <Label Text="Opacity (0.5)"
+                   FontAttributes="Bold" />
+            <Border Stroke="LightGray"
+                    Padding="12"
+                    BackgroundColor="Black">
+                <Image Source="dotnet_bot.png"
+                       HeightRequest="140"
+                       Aspect="AspectFit"
+                       Opacity="0.5" />
+            </Border>
+
+            <Label Text="Animated GIF"
+                   FontAttributes="Bold" />
+            <Switch x:Name="AnimationSwitch"
+                    IsToggled="True"
+                    Toggled="AnimationSwitch_Toggled" />
+            <Image x:Name="AnimatedGifImage"
+                   Source="animated_heart.gif"
+                   WidthRequest="200"
+                   HeightRequest="200"
+                   HorizontalOptions="Center"
+                    IsAnimationPlaying="True" />
+
+            <HorizontalStackLayout Spacing="12">
+                <Button Text="Start / Stop"
+                        Clicked="AnimationStartStop_Clicked" />
+                <Button Text="Load GIF via URI"
+                        Clicked="UseUriSource_Clicked" />
+            </HorizontalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

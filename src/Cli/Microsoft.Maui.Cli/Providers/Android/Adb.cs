@@ -4,6 +4,7 @@
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
+using System.Text.Json.Nodes;
 using Xamarin.Android.Tools;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
@@ -65,7 +66,7 @@ public class Adb
 		var state = MapDeviceState(info.Status);
 		var isRunning = state == DeviceState.Connected || state == DeviceState.Booted;
 
-		var details = new Dictionary<string, object>();
+		var details = new JsonObject();
 		if (!string.IsNullOrEmpty(info.AvdName))
 			details["avd"] = info.AvdName;
 

@@ -201,5 +201,5 @@ MacOSShell.SetUseNativeSidebar(this, true);
 
 ### Agent Not Connecting
 1. Ensure the app launched successfully (window appeared)
-2. Check `maui-devflow list` — agent should register within a few seconds
+2. Check `maui devflow list` — agent should register within a few seconds
 3. If using an older build, clean and rebuild to pick up latest agent code

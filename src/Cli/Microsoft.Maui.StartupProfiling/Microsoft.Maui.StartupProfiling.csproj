@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Target net9.0 and net10.0 — this is a pure .NET library with no platform
+         dependencies. MAUI apps on Android/iOS/Mac Catalyst can reference it via the
+         standard TFM compatibility fallback. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <RootNamespace>Microsoft.Maui.StartupProfiling</RootNamespace>
+    <PackageId>Microsoft.Maui.StartupProfiling</PackageId>
+    <Description>A lightweight helper for .NET MAUI startup profiling. Add this package to your app, call StartupProfilingMarker.Complete() when startup is logically done, and maui profile will stop the trace automatically via dotnet-trace --stopping-event-* integration.</Description>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- No dependencies on MAUI or any other runtime packages -->
+    <!-- NU5118: suppress duplicate README warning — eng/Common.props adds the repo-root README
+         at "/README.md"; we override it with this package's own README below. -->
+    <NoWarn>$(NoWarn);CS1572;CS1573;CA2255;NU5118</NoWarn>
+  </PropertyGroup>
+
+  <!-- Use this package's own README instead of the repo-root one. -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

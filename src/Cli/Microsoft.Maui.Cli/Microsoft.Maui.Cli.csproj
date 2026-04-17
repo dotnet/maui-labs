@@ -11,6 +11,7 @@
     <Description>CLI for .NET MAUI development environment setup and device management</Description>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
+    <IsAotCompatible>true</IsAotCompatible>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
@@ -27,6 +28,7 @@
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
+    <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
     <PackageReference Include="XenoAtom.Terminal.UI" />
   </ItemGroup>
 
@@ -44,6 +46,7 @@
   </Target>
 
   <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.StartupProfiling\Microsoft.Maui.StartupProfiling.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
     <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" />
   </ItemGroup>
@@ -51,6 +54,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Cli.UnitTests" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Build\MauiStartupProfiling.AutoInitialize.cs" />
+    <Content Include="Build\MauiStartupProfilingInjection.targets" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Build\MauiStartupProfiling.AutoInitialize.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

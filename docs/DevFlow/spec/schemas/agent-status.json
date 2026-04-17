@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-status.json",
+  "title": "AgentStatus",
+  "description": "Agent status response providing runtime information about the agent, device, and application.",
+  "type": "object",
+  "required": [
+    "agent",
+    "platform",
+    "device",
+    "app",
+    "running",
+    "uptime"
+  ],
+  "properties": {
+    "agent": {
+      "type": "object",
+      "description": "Information about the DevFlow agent itself.",
+      "required": [
+        "name",
+        "version",
+        "framework",
+        "frameworkVersion"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the DevFlow agent implementation."
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version of the agent."
+        },
+        "framework": {
+          "type": "string",
+          "description": "The UI layer the agent is instrumented for (for example 'maui' or 'native')."
+        },
+        "frameworkVersion": {
+          "type": "string",
+          "description": "Version of the UI framework."
+        }
+      }
+    },
+    "platform": {
+      "type": "string",
+      "enum": [
+        "ios",
+        "android",
+        "maccatalyst",
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "description": "The target platform the agent is running on."
+    },
+    "device": {
+      "type": "object",
+      "description": "Information about the device or emulator/simulator.",
+      "required": [
+        "model",
+        "manufacturer",
+        "osVersion",
+        "idiom"
+      ],
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Device model name (e.g. 'iPhone 15 Pro', 'Pixel 8')."
+        },
+        "manufacturer": {
+          "type": "string",
+          "description": "Device manufacturer (e.g. 'Apple', 'Google')."
+        },
+        "osVersion": {
+          "type": "string",
+          "description": "Operating system version string."
+        },
+        "idiom": {
+          "type": "string",
+          "enum": [
+            "phone",
+            "tablet",
+            "desktop",
+            "tv",
+            "watch"
+          ],
+          "description": "Device form factor idiom."
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "description": "Information about the instrumented application.",
+      "required": [
+        "name",
+        "version",
+        "packageId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the application."
+        },
+        "version": {
+          "type": "string",
+          "description": "Application version string."
+        },
+        "packageId": {
+          "type": "string",
+          "description": "Application package identifier (e.g. 'com.example.myapp')."
+        }
+      }
+    },
+    "running": {
+      "type": "boolean",
+      "description": "Whether the application is currently running and responsive."
+    },
+    "uptime": {
+      "type": "string",
+      "description": "Agent uptime as an ISO 8601 duration (e.g. 'PT1H30M15S').",
+      "pattern": "^P"
+    }
+  }
+}

@@ -1,0 +1,289 @@
+# Skill evaluation workflow for PRs that modify skills.
+#
+# Triggers:
+#   - On PR open/sync: posts a commit status (success if no skills changed, pending if changed)
+#   - When a maintainer posts "/evaluate" on the PR: runs full LLM evaluation
+#
+# Security: workflow YAML always runs from the default branch (enforced by issue_comment trigger).
+# For fork PRs, only users with write+ permission can trigger evaluation.
+# NOTE: /evaluate runs untrusted PR content (skill definitions + eval.yaml) with the
+# COPILOT_GITHUB_TOKEN secret. This is acceptable because:
+#   1. Only write+ collaborators can trigger it (permission gate)
+#   2. skill-validator is the only consumer of the token (no arbitrary code execution)
+#   3. persist-credentials: false prevents token reuse after checkout
+# The COPILOT_GITHUB_TOKEN is used by skill-validator to authenticate LLM API calls
+# for pairwise evaluation (with-skill vs without-skill comparison).
+name: skill-evaluation
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/**/skills/**'
+      - 'tests/**'
+
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{
+      github.event_name == 'issue_comment'
+        && startsWith(github.event.comment.body, '/evaluate')
+        && format('eval-{0}', github.event.issue.number)
+      || github.event_name == 'pull_request'
+        && format('eval-status-{0}', github.event.pull_request.number)
+      || github.run_id
+    }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+  issues: write
+
+jobs:
+  # Post initial commit status so required check is never stuck as "Expected"
+  pr-status:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Discover changes requiring evaluation
+        id: discover
+        shell: bash
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          MERGE_BASE=$(git merge-base "$BASE" "$HEAD")
+
+          HAS_SKILL_CHANGES=$(git diff --name-only --diff-filter=ACMR "$MERGE_BASE" "$HEAD" | \
+            grep -E '^(plugins/[^/]+/skills|tests/[^/]+)/[^/]+/' | head -1 || true)
+
+          if [ -n "$HAS_SKILL_CHANGES" ]; then
+            echo "needs_eval=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_eval=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post evaluation commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.discover.outputs.needs_eval }}" = "true" ]; then
+            STATE="pending"
+            DESC="Post /evaluate to trigger evaluation"
+          else
+            STATE="success"
+            DESC="No skills to evaluate"
+          fi
+
+          gh api "repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state="$STATE" \
+            -f context="evaluation-status" \
+            -f description="$DESC" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  # Gate: validate /evaluate command and permissions
+  gate:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/evaluate')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      pr_number: ${{ github.event.issue.number }}
+      pr_head_sha: ${{ steps.pr-info.outputs.head_sha }}
+      pr_head_repo: ${{ steps.pr-info.outputs.head_repo }}
+      is_fork: ${{ steps.pr-info.outputs.is_fork }}
+    steps:
+      - name: Check permissions
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+
+          if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "maintain" || "$PERMISSION" == "write" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/reactions" \
+              -X POST -f content="+1" --silent || true
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+              -X POST -f body="⚠️ Only collaborators with write access can trigger evaluation." --silent || true
+          fi
+
+      - name: Get PR info
+        if: steps.check.outputs.should_run == 'true'
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}" \
+            --jq '{head_sha: .head.sha, head_repo: .head.repo.full_name, base_repo: .base.repo.full_name}')
+          echo "head_sha=$(echo "$PR_JSON" | jq -r '.head_sha')" >> "$GITHUB_OUTPUT"
+          echo "head_repo=$(echo "$PR_JSON" | jq -r '.head_repo')" >> "$GITHUB_OUTPUT"
+          echo "is_fork=$([ "$(echo "$PR_JSON" | jq -r '.head_repo')" != "$(echo "$PR_JSON" | jq -r '.base_repo')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  # Run evaluation
+  evaluate:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+      issues: write
+    timeout-minutes: 120
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.gate.outputs.pr_head_repo }}
+          ref: ${{ needs.gate.outputs.pr_head_sha }}
+          persist-credentials: false
+
+      - name: Download skill-validator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download skill-validator-nightly \
+            --repo dotnet/skills \
+            --pattern "skill-validator-linux-x64.tar.gz" \
+            --pattern "checksums.sha256" \
+            --dir /tmp/skill-validator
+
+          # Verify checksum before extracting
+          cd /tmp/skill-validator
+          if [ -f checksums.sha256 ]; then
+            grep "skill-validator-linux-x64.tar.gz" checksums.sha256 | sha256sum --check --strict
+          else
+            echo "::warning::No checksums.sha256 in release — verify dotnet/skills publishes checksums"
+          fi
+
+          mkdir -p bin
+          tar -xzf skill-validator-linux-x64.tar.gz -C bin
+          chmod +x bin/skill-validator
+
+      - name: Discover skills to evaluate
+        id: discover
+        run: |
+          # Find all plugins with both skills and tests (one entry per plugin)
+          ENTRIES="[]"
+          for plugin_dir in plugins/*/; do
+            plugin_name=$(basename "$plugin_dir")
+            skills_path="$plugin_dir/skills"
+            tests_dir="tests/$plugin_name"
+
+            if [ -d "$skills_path" ] && [ -d "$tests_dir" ] && \
+               find "$tests_dir" -name 'eval.yaml' -print -quit | grep -q .; then
+              ENTRIES=$(echo "$ENTRIES" | jq --arg plugin "$plugin_name" \
+                --arg skills_path "$skills_path" \
+                '. + [{"plugin": $plugin, "skills_path": $skills_path}]')
+            fi
+          done
+
+          echo "entries=$(echo "$ENTRIES" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "Found $(echo "$ENTRIES" | jq length) skill(s) to evaluate"
+
+      - name: Run evaluation
+        if: fromJson(steps.discover.outputs.entries)[0] != null
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          ENTRIES: ${{ steps.discover.outputs.entries }}
+        run: |
+          RESULTS_DIR="artifacts/eval-results"
+          mkdir -p "$RESULTS_DIR"
+
+          EVAL_FAILED=0
+          while read -r entry; do
+            [ -z "$entry" ] && continue
+            plugin=$(echo "$entry" | jq -r '.plugin')
+            skills_path=$(echo "$entry" | jq -r '.skills_path')
+
+            echo "=== Evaluating plugin: $plugin ==="
+            if ! /tmp/skill-validator/bin/skill-validator evaluate \
+              --verdict-warn-only \
+              --results-dir "$RESULTS_DIR/$plugin" \
+              --reporter console --reporter json --reporter markdown \
+              --runs 3 \
+              --tests-dir "./tests/$plugin" \
+              "./$skills_path"; then
+              echo "::warning::Evaluation failed for $plugin"
+              EVAL_FAILED=1
+            fi
+          done < <(echo "$ENTRIES" | jq -c '.[]')
+          exit $EVAL_FAILED
+
+      - name: Post results to PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ needs.gate.outputs.pr_number }}
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Consolidate results if any exist
+          mapfile -t JSON_FILES < <(find artifacts/eval-results -name results.json 2>/dev/null || true)
+          if [ "${#JSON_FILES[@]}" -gt 0 ]; then
+            {
+              echo "## Skill Evaluation Results"
+              echo ""
+              for f in "${JSON_FILES[@]}"; do
+                skill=$(basename "$(dirname "$f")")
+                echo "### $skill"
+                cat "$(dirname "$f")/results.md" 2>/dev/null || echo "_No markdown report_"
+                echo ""
+              done
+              echo "[Full results]($RUN_URL)"
+            } > comment-body.md
+          else
+            echo "ℹ️ No skills with eval.yaml found to evaluate. [View run]($RUN_URL)" > comment-body.md
+          fi
+
+          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            -X POST -F "body=@comment-body.md"
+
+      - name: Update commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            STATE="success"
+            DESC="Evaluation completed"
+          else
+            STATE="failure"
+            DESC="Evaluation failed"
+          fi
+
+          gh api "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.pr_head_sha }}" \
+            -f state="$STATE" \
+            -f context="evaluation-status" \
+            -f description="$DESC" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: skill-evaluation-results
+          path: artifacts/eval-results/
+          retention-days: 30
+          if-no-files-found: ignore

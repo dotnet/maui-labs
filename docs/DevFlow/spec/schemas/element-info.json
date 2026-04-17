@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "element-info.json",
+  "title": "ElementInfo",
+  "description": "Core visual tree element model representing a single node in the UI hierarchy.",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "fullType",
+    "framework",
+    "state",
+    "bounds"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "common.json#/$defs/ElementId",
+      "description": "Globally unique identifier for this element."
+    },
+    "parentId": {
+      "oneOf": [
+        { "$ref": "common.json#/$defs/ElementId" },
+        { "type": "null" }
+      ],
+      "description": "Identifier of the parent element, or null for root elements."
+    },
+    "type": {
+      "type": "string",
+      "description": "Short type name of the element (e.g. 'Button')."
+    },
+    "fullType": {
+      "type": "string",
+      "description": "Fully qualified type name (e.g. 'Microsoft.Maui.Controls.Button')."
+    },
+    "framework": {
+      "type": "string",
+      "description": "The UI framework that owns this element.",
+      "examples": [
+        "maui",
+        "native",
+        "android",
+        "ios",
+        "windows"
+      ]
+    },
+    "automationId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Automation identifier set by the developer for testing purposes."
+    },
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Visible text content of the element."
+    },
+    "value": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Current value for input elements (e.g. text field content, slider value)."
+    },
+    "role": {
+      "type": "string",
+      "description": "Semantic role of the element for accessibility and interaction purposes.",
+      "examples": [
+        "button",
+        "textbox",
+        "checkbox",
+        "image",
+        "list",
+        "listitem",
+        "link",
+        "heading",
+        "window"
+      ]
+    },
+    "traits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Semantic traits describing the element's capabilities and behavior.",
+      "examples": [
+        [
+          "interactive",
+          "focusable",
+          "scrollable",
+          "adjustable",
+          "header",
+          "summary"
+        ]
+      ]
+    },
+    "state": {
+      "type": "object",
+      "description": "Current interactive and visual state of the element.",
+      "required": [
+        "displayed",
+        "enabled",
+        "selected",
+        "focused",
+        "opacity"
+      ],
+      "properties": {
+        "displayed": {
+          "type": "boolean",
+          "description": "Whether the element is currently visible on screen."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the element is enabled for user interaction."
+        },
+        "selected": {
+          "type": "boolean",
+          "description": "Whether the element is currently selected."
+        },
+        "focused": {
+          "type": "boolean",
+          "description": "Whether the element currently has input focus."
+        },
+        "opacity": {
+          "type": "number",
+          "description": "Opacity of the element from fully transparent (0) to fully opaque (1).",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "bounds": {
+      "$ref": "bounds-info.json",
+      "description": "Bounding rectangle of the element."
+    },
+    "gestures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Gesture types recognized by this element.",
+      "examples": [
+        [
+          "tap",
+          "doubleTap",
+          "longPress",
+          "swipe",
+          "pinch"
+        ]
+      ]
+    },
+    "style": {
+      "type": "object",
+      "description": "Style information for the element.",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "CSS or style classes applied to this element."
+        }
+      }
+    },
+    "nativeView": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Information about the underlying native platform view.",
+      "properties": {
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Native platform type name (e.g. 'UIButton', 'android.widget.Button')."
+        },
+        "properties": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true,
+          "description": "Key-value pairs of native view properties."
+        }
+      }
+    },
+    "frameworkProperties": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true,
+      "description": "Framework-specific key-value pairs not captured by standard fields."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "$ref": "#",
+        "description": "Child element in the visual tree."
+      },
+      "description": "Child elements forming the subtree under this element."
+    }
+  }
+}

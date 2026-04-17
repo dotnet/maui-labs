@@ -81,14 +81,17 @@ directly to `http://localhost:<port>`. No port forwarding (unlike Android) or en
 
 ## Key Simulation
 
-The `LinuxAppDriver` uses `xdotool` for key simulation. Install it if needed:
+The `LinuxAppDriver` may use `xdotool` as a backend for **driver-mediated** key simulation.
+This is an implementation detail for Linux automation support, **not** a recommendation for an
+AI agent to invoke `xdotool` directly from the shell. Install it if the driver needs it:
 
 ```bash
 sudo apt install xdotool
 ```
 
-For Wayland-only environments, `ydotool` may be needed instead. Key simulation is used
-by the CLI for alert dismissal and keyboard input.
+For Wayland-only environments, `ydotool` may be needed instead. Prefer `maui devflow ui fill`,
+`maui devflow ui tap`, and `maui devflow batch` for normal interaction; only the driver backend
+should reach for `xdotool`.
 
 ## Platform Differences
 
@@ -101,7 +104,7 @@ by the CLI for alert dismissal and keyboard input.
 | Network | Varies by platform | Direct localhost |
 | Screenshots | `VisualDiagnostics` | GTK `WidgetPaintable` → `Texture.SaveToPng()` |
 | Native tap | Platform gesture system | `Gtk.Widget.Activate()` |
-| Key simulation | Platform-specific | `xdotool` |
+| Key simulation | Driver-mediated backend | `xdotool` |
 | Blazor WebView | WKWebView / WebView2 / Chrome | WebKitGTK 6.0 |
 
 ## Troubleshooting
@@ -115,7 +118,9 @@ by the CLI for alert dismissal and keyboard input.
 ### xdotool Not Working
 
 - On Wayland, `xdotool` may not work. Try `ydotool` instead
-- Ensure the app window has focus for key events
+- Prefer DevFlow commands over direct key injection wherever possible
+- If driver-mediated key input still fails, ensure the app window has focus manually (or with
+  explicit user approval for a disruptive workaround)
 
 ### WebKitGTK CDP Issues
 

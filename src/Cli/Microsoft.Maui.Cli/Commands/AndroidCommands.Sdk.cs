@@ -41,7 +41,7 @@ public static partial class AndroidCommands
 									 sdkCheck.Status == Models.CheckStatus.Warning ? "⚠" : "✗";
 					formatter.WriteInfo($"{statusIcon} {sdkCheck.Message ?? "Android SDK"}");
 
-					if (sdkCheck.Details?.TryGetValue("path", out var path) == true)
+					if (sdkCheck.Details?.TryGetPropertyValue("path", out var path) == true)
 						formatter.WriteProgress($"Path: {path}");
 				}
 			}
@@ -195,7 +195,12 @@ public static partial class AndroidCommands
 				if (TryRequestElevation(androidProvider, formatter, useJson))
 				{
 					if (useJson)
-						formatter.Write(new { success = true, installed = packages, elevated = true });
+						formatter.Write(new CliCommandResult
+						{
+							Success = true,
+							Installed = packages,
+							Elevated = true
+						});
 					else
 						formatter.WriteSuccess("Packages installed successfully (elevated)");
 					return 0;
@@ -232,7 +237,11 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, installed = packages });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Installed = packages
+					});
 				}
 				else
 				{
@@ -242,8 +251,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -365,8 +373,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -387,11 +394,11 @@ public static partial class AndroidCommands
 				{
 					if (useJson)
 					{
-						formatter.Write(new
+						formatter.Write(new CliCommandResult
 						{
-							success = true,
-							status = "already_accepted",
-							message = "SDK licenses are already accepted"
+							Success = true,
+							Status = "already_accepted",
+							Message = "SDK licenses are already accepted"
 						});
 					}
 					else
@@ -407,11 +414,11 @@ public static partial class AndroidCommands
 				{
 					if (useJson)
 					{
-						formatter.Write(new
+						formatter.Write(new CliCommandResult
 						{
-							success = false,
-							status = "sdk_not_found",
-							message = "Android SDK not found. Run 'maui android install' first."
+							Success = false,
+							Status = "sdk_not_found",
+							Message = "Android SDK not found. Run 'maui android install' first."
 						});
 					}
 					else
@@ -424,14 +431,14 @@ public static partial class AndroidCommands
 				if (useJson)
 				{
 					// For IDE integration: return the command to run in a terminal
-					formatter.Write(new
+					formatter.Write(new CliCommandResult
 					{
-						success = true,
-						status = "requires_interaction",
-						message = "Run the following command in a terminal to accept licenses interactively",
-						command = licenseCommand.Value.Command,
-						arguments = licenseCommand.Value.Arguments,
-						full_command = $"{licenseCommand.Value.Command} {licenseCommand.Value.Arguments}"
+						Success = true,
+						Status = "requires_interaction",
+						Message = "Run the following command in a terminal to accept licenses interactively",
+						Command = licenseCommand.Value.Command,
+						Arguments = licenseCommand.Value.Arguments,
+						FullCommand = $"{licenseCommand.Value.Command} {licenseCommand.Value.Arguments}"
 					});
 				}
 				else
@@ -474,8 +481,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 
@@ -517,7 +523,11 @@ public static partial class AndroidCommands
 
 				if (useJson)
 				{
-					formatter.Write(new { success = true, uninstalled = packages });
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Uninstalled = packages
+					});
 				}
 				else
 				{
@@ -527,8 +537,7 @@ public static partial class AndroidCommands
 			}
 			catch (Exception ex)
 			{
-				formatter.WriteError(ex);
-				return 1;
+				return Program.HandleCommandException(formatter, ex);
 			}
 		});
 

@@ -29,6 +29,16 @@ public class CommandConstructionTests
 		AssertNoWhitespaceAliases(devflowCommand);
 	}
 
+	[Fact]
+	public void DevFlowCommand_UsesMcpAsPrimaryCommandName()
+	{
+		var jsonOption = new Option<bool>("--json");
+		var devflowCommand = DevFlowCommands.CreateDevFlowCommand(jsonOption);
+
+		var mcpCommand = Assert.Single(devflowCommand.Subcommands, c => c.Name == "mcp");
+		Assert.Contains("mcp-serve", mcpCommand.Aliases);
+	}
+
 	private static void AssertNoWhitespaceAliases(Command command)
 	{
 		foreach (var option in command.Options)

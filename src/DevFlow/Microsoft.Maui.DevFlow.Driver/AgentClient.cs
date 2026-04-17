@@ -9,6 +9,14 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// </summary>
 public class AgentClient : IDisposable
 {
+    private const string ApiV1 = "/api/v1";
+    private const string AgentApi = $"{ApiV1}/agent";
+    private const string UiApi = $"{ApiV1}/ui";
+    private const string WebViewApi = $"{ApiV1}/webview";
+    private const string ProfilerApi = $"{ApiV1}/profiler";
+    private const string StorageApi = $"{ApiV1}/storage";
+    private const string DeviceApi = $"{ApiV1}/device";
+    private const string NetworkApi = $"{ApiV1}/network";
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private bool _disposed;
@@ -26,10 +34,13 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<AgentStatus?> GetStatusAsync(int? window = null)
     {
-        var url = window != null ? $"/api/status?window={window}" : "/api/status";
+        var url = window != null ? $"{AgentApi}/status?window={window}" : $"{AgentApi}/status";
         var response = await GetAsync<AgentStatus>(url);
         return response;
     }
+
+    public Task<JsonElement> GetCapabilitiesAsync()
+        => GetJsonAsync($"{AgentApi}/capabilities");
 
     /// <summary>
     /// Get the visual tree from the running app.
@@ -39,7 +50,7 @@ public class AgentClient : IDisposable
         var parts = new List<string>();
         if (maxDepth > 0) parts.Add($"depth={maxDepth}");
         if (window != null) parts.Add($"window={window}");
-        var url = parts.Count > 0 ? $"/api/tree?{string.Join("&", parts)}" : "/api/tree";
+        var url = parts.Count > 0 ? $"{UiApi}/tree?{string.Join("&", parts)}" : $"{UiApi}/tree";
         return await GetAsync<List<ElementInfo>>(url) ?? new();
     }
 
@@ -48,7 +59,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<ElementInfo?> GetElementAsync(string id)
     {
-        return await GetAsync<ElementInfo>($"/api/element/{id}");
+        return await GetAsync<ElementInfo>($"{UiApi}/elements/{id}");
     }
 
     /// <summary>
@@ -61,7 +72,9 @@ public class AgentClient : IDisposable
         if (automationId != null) queryParts.Add($"automationId={Uri.EscapeDataString(automationId)}");
         if (text != null) queryParts.Add($"text={Uri.EscapeDataString(text)}");
 
-        var url = $"/api/query?{string.Join("&", queryParts)}";
+        var url = queryParts.Count > 0
+            ? $"{UiApi}/elements?{string.Join("&", queryParts)}"
+            : $"{UiApi}/elements";
         return await GetAsync<List<ElementInfo>>(url) ?? new();
     }
 
@@ -70,7 +83,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<List<ElementInfo>> QueryCssAsync(string selector)
     {
-        var url = $"{_baseUrl}/api/query?selector={Uri.EscapeDataString(selector)}";
+        var url = $"{_baseUrl}{UiApi}/elements?selector={Uri.EscapeDataString(selector)}";
         var response = await _http.GetAsync(url);
         var body = await response.Content.ReadAsStringAsync();
         var json = DriverJson.ParseElement(body);
@@ -88,7 +101,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> TapAsync(string elementId)
     {
-        return await PostActionAsync("/api/action/tap", new JsonObject
+        return await PostActionAsync($"{UiApi}/actions/tap", new JsonObject
         {
             ["elementId"] = elementId
         });
@@ -99,7 +112,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> FillAsync(string elementId, string text)
     {
-        return await PostActionAsync("/api/action/fill", new JsonObject
+        return await PostActionAsync($"{UiApi}/actions/fill", new JsonObject
         {
             ["elementId"] = elementId,
             ["text"] = text
@@ -111,7 +124,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> ClearAsync(string elementId)
     {
-        return await PostActionAsync("/api/action/clear", new JsonObject
+        return await PostActionAsync($"{UiApi}/actions/clear", new JsonObject
         {
             ["elementId"] = elementId
         });
@@ -122,7 +135,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> FocusAsync(string elementId)
     {
-        return await PostActionAsync("/api/action/focus", new JsonObject
+        return await PostActionAsync($"{UiApi}/actions/focus", new JsonObject
         {
             ["elementId"] = elementId
         });
@@ -133,10 +146,55 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> NavigateAsync(string route)
     {
-        return await PostActionAsync("/api/action/navigate", new JsonObject
+        return await PostActionAsync($"{UiApi}/actions/navigate", new JsonObject
         {
             ["route"] = route
         });
+    }
+
+    public async Task<bool> BackAsync()
+    {
+        return await PostActionAsync($"{UiApi}/actions/back", new JsonObject());
+    }
+
+    public async Task<bool> KeyAsync(string key, string? elementId = null, string? text = null)
+    {
+        return await PostActionAsync($"{UiApi}/actions/key", new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["key"] = key,
+            ["text"] = text
+        });
+    }
+
+    public async Task<bool> GestureAsync(string type, string? elementId = null, string? direction = null, double? distance = null, int? durationMs = null)
+    {
+        return await PostActionAsync($"{UiApi}/actions/gesture", new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["type"] = type,
+            ["direction"] = direction,
+            ["distance"] = distance,
+            ["durationMs"] = durationMs
+        });
+    }
+
+    public async Task<JsonElement> BatchAsync(IEnumerable<JsonObject> actions, bool continueOnError = false)
+    {
+        var items = new JsonArray();
+        foreach (var action in actions)
+            items.Add((JsonNode?)action.DeepClone());
+
+        var body = new JsonObject
+        {
+            ["continueOnError"] = continueOnError,
+            ["actions"] = items
+        };
+
+        using var content = DriverJson.CreateJsonContent(body);
+        var response = await _http.PostAsync($"{_baseUrl}{UiApi}/actions/batch", content);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        return DriverJson.ParseElement(responseBody);
     }
 
     /// <summary>
@@ -144,7 +202,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> ScrollAsync(string? elementId = null, double deltaX = 0, double deltaY = 0, bool animated = true, int? window = null, int? itemIndex = null, int? groupIndex = null, string? scrollToPosition = null)
     {
-        var url = "/api/action/scroll";
+        var url = $"{UiApi}/actions/scroll";
         if (window != null) url += $"?window={window}";
         return await PostActionAsync(url, new JsonObject
         {
@@ -163,7 +221,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<bool> ResizeAsync(int width, int height, int? window = null)
     {
-        var url = "/api/action/resize";
+        var url = $"{UiApi}/actions/resize";
         if (window != null) url += $"?window={window}";
         return await PostActionAsync(url, new JsonObject
         {
@@ -182,14 +240,14 @@ public class AgentClient : IDisposable
         {
             var queryParams = new List<string>();
             if (window != null) queryParams.Add($"window={window}");
-            if (elementId != null) queryParams.Add($"id={Uri.EscapeDataString(elementId)}");
+            if (elementId != null) queryParams.Add($"elementId={Uri.EscapeDataString(elementId)}");
             if (selector != null) queryParams.Add($"selector={Uri.EscapeDataString(selector)}");
             if (maxWidth != null) queryParams.Add($"maxWidth={maxWidth}");
             if (scale != null) queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
 
             var url = queryParams.Count > 0
-                ? $"{_baseUrl}/api/screenshot?{string.Join("&", queryParams)}"
-                : $"{_baseUrl}/api/screenshot";
+                ? $"{_baseUrl}{UiApi}/screenshot?{string.Join("&", queryParams)}"
+                : $"{_baseUrl}{UiApi}/screenshot";
 
             var response = await _http.GetAsync(url);
             if (!response.IsSuccessStatusCode) return null;
@@ -203,7 +261,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<string?> GetPropertyAsync(string elementId, string propertyName)
     {
-        var result = await GetJsonAsync($"/api/property/{elementId}/{propertyName}");
+        var result = await GetJsonAsync($"{UiApi}/elements/{elementId}/properties/{propertyName}");
         if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("value", out var val))
             return val.GetString();
         return null;
@@ -220,7 +278,7 @@ public class AgentClient : IDisposable
             {
                 ["value"] = value
             });
-            var response = await _http.PostAsync($"{_baseUrl}/api/property/{elementId}/{propertyName}", content);
+            var response = await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
             return response.IsSuccessStatusCode;
         }
         catch { return false; }
@@ -231,7 +289,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<string> GetLogsAsync(int limit = 100, int skip = 0, string? source = null)
     {
-        var path = $"/api/logs?limit={limit}&skip={skip}";
+        var path = $"{ApiV1}/logs?limit={limit}&skip={skip}";
         if (!string.IsNullOrEmpty(source) && source != "all")
             path += $"&source={Uri.EscapeDataString(source)}";
         return await _http.GetStringAsync($"{_baseUrl}{path}");
@@ -242,7 +300,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<JsonElement> SendCdpCommandAsync(string method, JsonNode? @params = null, string? webviewId = null)
     {
-        var path = "/api/cdp";
+        var path = $"{WebViewApi}/evaluate";
         if (!string.IsNullOrEmpty(webviewId))
             path += $"?webview={Uri.EscapeDataString(webviewId)}";
 
@@ -251,7 +309,7 @@ public class AgentClient : IDisposable
             ["method"] = method
         };
         if (@params != null)
-            body["params"] = @params;
+            body["params"] = @params.DeepClone();
 
         using var content = DriverJson.CreateJsonContent(body);
         var response = await _http.PostAsync($"{_baseUrl}{path}", content);
@@ -264,20 +322,73 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<JsonElement> GetCdpWebViewsAsync()
     {
-        return await GetJsonAsync("/api/cdp/webviews");
+        return await GetJsonAsync($"{WebViewApi}/contexts");
     }
 
     public async Task<string> GetCdpSourceAsync(string? webviewId = null)
     {
-        var path = "/api/cdp/source";
+        var path = $"{WebViewApi}/source";
         if (!string.IsNullOrEmpty(webviewId))
             path += $"?webview={Uri.EscapeDataString(webviewId)}";
         return await _http.GetStringAsync($"{_baseUrl}{path}");
     }
 
+    public async Task<bool> NavigateWebViewAsync(string url, string? contextId = null)
+    {
+        var payload = new JsonObject
+        {
+            ["url"] = url
+        };
+
+        if (!string.IsNullOrWhiteSpace(contextId))
+            payload["contextId"] = contextId;
+
+        return await PostActionAsync($"{WebViewApi}/navigate", payload);
+    }
+
+    public async Task<bool> ClickWebViewAsync(string selector, string? contextId = null)
+    {
+        var payload = new JsonObject
+        {
+            ["selector"] = selector
+        };
+
+        if (!string.IsNullOrWhiteSpace(contextId))
+            payload["contextId"] = contextId;
+
+        return await PostActionAsync($"{WebViewApi}/input/click", payload);
+    }
+
+    public async Task<bool> FillWebViewAsync(string selector, string text, string? contextId = null)
+    {
+        var payload = new JsonObject
+        {
+            ["selector"] = selector,
+            ["text"] = text
+        };
+
+        if (!string.IsNullOrWhiteSpace(contextId))
+            payload["contextId"] = contextId;
+
+        return await PostActionAsync($"{WebViewApi}/input/fill", payload);
+    }
+
+    public async Task<bool> InsertWebViewTextAsync(string text, string? contextId = null)
+    {
+        var payload = new JsonObject
+        {
+            ["text"] = text
+        };
+
+        if (!string.IsNullOrWhiteSpace(contextId))
+            payload["contextId"] = contextId;
+
+        return await PostActionAsync($"{WebViewApi}/input/text", payload);
+    }
+
     public async Task<string> HitTestAsync(double x, double y, int? window = null)
     {
-        var path = $"/api/hittest?x={x}&y={y}";
+        var path = $"{UiApi}/hit-test?x={x}&y={y}";
         if (window.HasValue)
             path += $"&window={window.Value}";
         return await _http.GetStringAsync($"{_baseUrl}{path}");
@@ -285,7 +396,7 @@ public class AgentClient : IDisposable
 
     public async Task<ProfilerCapabilities?> GetProfilerCapabilitiesAsync()
     {
-        return await GetAsync<ProfilerCapabilities>("/api/profiler/capabilities");
+        return await GetAsync<ProfilerCapabilities>($"{ProfilerApi}/capabilities");
     }
 
     public async Task<ProfilerSessionInfo?> StartProfilerAsync(int? sampleIntervalMs = null)
@@ -294,13 +405,13 @@ public class AgentClient : IDisposable
         if (sampleIntervalMs.HasValue)
             payload["sampleIntervalMs"] = sampleIntervalMs.Value;
 
-        var response = await PostJsonAsync<ProfilerSessionEnvelope>("/api/profiler/start", payload);
+        var response = await PostJsonAsync<ProfilerSessionEnvelope>($"{ProfilerApi}/sessions", payload);
         return response?.Session;
     }
 
-    public async Task<ProfilerSessionInfo?> StopProfilerAsync()
+    public async Task<ProfilerSessionInfo?> StopProfilerAsync(string? sessionId = null)
     {
-        var response = await PostJsonAsync<ProfilerSessionEnvelope>("/api/profiler/stop", new JsonObject());
+        var response = await DeleteJsonAsync<ProfilerSessionEnvelope>($"{ProfilerApi}/sessions/{Uri.EscapeDataString(sessionId ?? "current")}");
         return response?.Session;
     }
 
@@ -309,8 +420,17 @@ public class AgentClient : IDisposable
         long markerCursor = 0,
         long spanCursor = 0,
         int limit = 500)
+        => await GetProfilerSamplesAsync(null, sampleCursor, markerCursor, spanCursor, limit);
+
+    public async Task<ProfilerBatch?> GetProfilerSamplesAsync(
+        string? sessionId,
+        long sampleCursor = 0,
+        long markerCursor = 0,
+        long spanCursor = 0,
+        int limit = 500)
     {
-        var url = $"/api/profiler/samples?sampleCursor={sampleCursor}&markerCursor={markerCursor}&spanCursor={spanCursor}&limit={limit}";
+        var resolvedSessionId = Uri.EscapeDataString(sessionId ?? "current");
+        var url = $"{ProfilerApi}/sessions/{resolvedSessionId}/samples?sampleCursor={sampleCursor}&markerCursor={markerCursor}&spanCursor={spanCursor}&limit={limit}";
         return await GetAsync<ProfilerBatch>(url);
     }
 
@@ -319,7 +439,7 @@ public class AgentClient : IDisposable
         string type = "user.action",
         string? payloadJson = null)
     {
-        return await PostActionAsync("/api/profiler/marker", new JsonObject
+        return await PostActionAsync($"{ProfilerApi}/markers", new JsonObject
         {
             ["name"] = name,
             ["type"] = type,
@@ -335,7 +455,7 @@ public class AgentClient : IDisposable
         limit = Math.Clamp(limit, 1, 200);
         minDurationMs = Math.Clamp(minDurationMs, 0, 60_000);
 
-        var path = $"/api/profiler/hotspots?limit={limit}&minDurationMs={minDurationMs}";
+        var path = $"{ProfilerApi}/hotspots?limit={limit}&minDurationMs={minDurationMs}";
         if (!string.IsNullOrWhiteSpace(kind))
             path += $"&kind={Uri.EscapeDataString(kind)}";
         return await GetAsync<List<ProfilerHotspot>>(path) ?? new();
@@ -397,11 +517,45 @@ public class AgentClient : IDisposable
         }
     }
 
+    private async Task<T?> DeleteJsonAsync<T>(string path) where T : class
+    {
+        try
+        {
+            var response = await _http.DeleteAsync($"{_baseUrl}{path}");
+            if (!response.IsSuccessStatusCode)
+                return null;
+            var responseBody = await response.Content.ReadAsStringAsync();
+            return DriverJson.Deserialize<T>(responseBody);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<bool> DeleteActionAsync(string path)
+    {
+        try
+        {
+            var response = await _http.DeleteAsync($"{_baseUrl}{path}");
+            if (!response.IsSuccessStatusCode)
+                return false;
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var result = DriverJson.Deserialize<ActionResponse>(responseBody);
+            return result?.Success == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // ── Preferences ──
 
     public async Task<JsonElement> GetPreferencesAsync(string? sharedName = null)
     {
-        var path = "/api/preferences";
+        var path = $"{StorageApi}/preferences";
         if (!string.IsNullOrEmpty(sharedName))
             path += $"?sharedName={Uri.EscapeDataString(sharedName)}";
         return await GetJsonAsync(path);
@@ -409,7 +563,7 @@ public class AgentClient : IDisposable
 
     public async Task<JsonElement> GetPreferenceAsync(string key, string? type = null, string? sharedName = null)
     {
-        var path = $"/api/preferences/{Uri.EscapeDataString(key)}";
+        var path = $"{StorageApi}/preferences/{Uri.EscapeDataString(key)}";
         var qs = new List<string>();
         if (!string.IsNullOrEmpty(type)) qs.Add($"type={Uri.EscapeDataString(type)}");
         if (!string.IsNullOrEmpty(sharedName)) qs.Add($"sharedName={Uri.EscapeDataString(sharedName)}");
@@ -427,14 +581,14 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrEmpty(sharedName)) body["sharedName"] = sharedName;
 
         using var content = DriverJson.CreateJsonContent(body);
-        var response = await _http.PostAsync($"{_baseUrl}/api/preferences/{Uri.EscapeDataString(key)}", content);
+        var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/preferences/{Uri.EscapeDataString(key)}", content);
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
 
     public async Task<JsonElement> DeletePreferenceAsync(string key, string? sharedName = null)
     {
-        var path = $"/api/preferences/{Uri.EscapeDataString(key)}";
+        var path = $"{StorageApi}/preferences/{Uri.EscapeDataString(key)}";
         if (!string.IsNullOrEmpty(sharedName))
             path += $"?sharedName={Uri.EscapeDataString(sharedName)}";
         var response = await _http.DeleteAsync($"{_baseUrl}{path}");
@@ -444,17 +598,17 @@ public class AgentClient : IDisposable
 
     public async Task<bool> ClearPreferencesAsync(string? sharedName = null)
     {
-        var path = "/api/preferences/clear";
+        var path = $"{StorageApi}/preferences";
         if (!string.IsNullOrEmpty(sharedName))
             path += $"?sharedName={Uri.EscapeDataString(sharedName)}";
-        return await PostActionAsync(path, new JsonObject());
+        return await DeleteActionAsync(path);
     }
 
     // ── Secure Storage ──
 
     public async Task<JsonElement> GetSecureStorageAsync(string key)
     {
-        return await GetJsonAsync($"/api/secure-storage/{Uri.EscapeDataString(key)}");
+        return await GetJsonAsync($"{StorageApi}/secure/{Uri.EscapeDataString(key)}");
     }
 
     public async Task<JsonElement> SetSecureStorageAsync(string key, string value)
@@ -463,33 +617,40 @@ public class AgentClient : IDisposable
         {
             ["value"] = value
         });
-        var response = await _http.PostAsync($"{_baseUrl}/api/secure-storage/{Uri.EscapeDataString(key)}", content);
+        var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}", content);
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
 
     public async Task<JsonElement> DeleteSecureStorageAsync(string key)
     {
-        var response = await _http.DeleteAsync($"{_baseUrl}/api/secure-storage/{Uri.EscapeDataString(key)}");
+        var response = await _http.DeleteAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}");
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
 
     public async Task<bool> ClearSecureStorageAsync()
     {
-        return await PostActionAsync("/api/secure-storage/clear", new JsonObject());
+        return await DeleteActionAsync($"{StorageApi}/secure");
     }
 
     // ── Platform info ──
 
     public async Task<JsonElement> GetPlatformInfoAsync(string endpoint)
     {
-        return await GetJsonAsync($"/api/platform/{endpoint}");
+        var normalizedEndpoint = endpoint switch
+        {
+            "app-info" => "app",
+            "device-info" => "info",
+            "device-display" => "display",
+            _ => endpoint
+        };
+        return await GetJsonAsync($"{DeviceApi}/{normalizedEndpoint}");
     }
 
     public async Task<JsonElement> GetGeolocationAsync(string? accuracy = null, int? timeoutSeconds = null)
     {
-        var path = "/api/platform/geolocation";
+        var path = $"{DeviceApi}/geolocation";
         var qs = new List<string>();
         if (!string.IsNullOrEmpty(accuracy)) qs.Add($"accuracy={Uri.EscapeDataString(accuracy)}");
         if (timeoutSeconds.HasValue) qs.Add($"timeout={timeoutSeconds.Value}");
@@ -501,12 +662,12 @@ public class AgentClient : IDisposable
 
     public async Task<JsonElement> GetSensorsAsync()
     {
-        return await GetJsonAsync("/api/sensors");
+        return await GetJsonAsync($"{DeviceApi}/sensors");
     }
 
     public async Task<bool> StartSensorAsync(string sensor, string? speed = null)
     {
-        var path = $"/api/sensors/{Uri.EscapeDataString(sensor)}/start";
+        var path = $"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/start";
         if (!string.IsNullOrEmpty(speed))
             path += $"?speed={Uri.EscapeDataString(speed)}";
         return await PostActionAsync(path, new JsonObject());
@@ -514,7 +675,7 @@ public class AgentClient : IDisposable
 
     public async Task<bool> StopSensorAsync(string sensor)
     {
-        return await PostActionAsync($"/api/sensors/{Uri.EscapeDataString(sensor)}/stop", new JsonObject());
+        return await PostActionAsync($"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/stop", new JsonObject());
     }
 
     public void Dispose()
@@ -531,7 +692,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            var url = $"{_baseUrl}/api/network?limit={limit}";
+            var url = $"{_baseUrl}{NetworkApi}/requests?limit={limit}";
             if (!string.IsNullOrEmpty(host)) url += $"&host={Uri.EscapeDataString(host)}";
             if (!string.IsNullOrEmpty(method)) url += $"&method={Uri.EscapeDataString(method)}";
 
@@ -545,7 +706,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            var response = await _http.GetStringAsync($"{_baseUrl}/api/network/{Uri.EscapeDataString(id)}");
+            var response = await _http.GetStringAsync($"{_baseUrl}{NetworkApi}/requests/{Uri.EscapeDataString(id)}");
             return DriverJson.Deserialize<NetworkRequest>(response);
         }
         catch { return null; }
@@ -553,7 +714,7 @@ public class AgentClient : IDisposable
 
     public async Task<bool> ClearNetworkRequestsAsync()
     {
-        return await PostActionAsync("/api/network/clear", new JsonObject());
+        return await DeleteActionAsync($"{NetworkApi}/requests");
     }
 
     /// <summary>
@@ -562,7 +723,7 @@ public class AgentClient : IDisposable
     public string GetNetworkWebSocketUrl()
     {
         var wsBase = _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
-        return $"{wsBase}/ws/network";
+        return $"{wsBase}/ws/v1/network";
     }
 
     internal sealed class ProfilerSessionEnvelope
@@ -581,19 +742,90 @@ public class AgentClient : IDisposable
 public class AgentStatus
 {
     [System.Text.Json.Serialization.JsonPropertyName("agent")]
-    public string? Agent { get; set; }
+    public AgentDescriptor? Agent { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("device")]
+    public DeviceDescriptor? Device { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("app")]
+    public AppDescriptor? App { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("capabilities")]
+    public AgentCapabilities? Capabilities { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+    public string? Timestamp { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("running")]
+    public bool Running { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? Version => Agent?.Version;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? Platform => Device?.Platform;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? DeviceType => Device?.DeviceType;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? Idiom => Device?.Idiom;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? AppName => App?.Name;
+}
+
+public class AgentDescriptor
+{
+    [System.Text.Json.Serialization.JsonPropertyName("name")]
+    public string? Name { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]
     public string? Version { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("framework")]
+    public string? Framework { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("frameworkVersion")]
+    public string? FrameworkVersion { get; set; }
+}
+
+public class DeviceDescriptor
+{
     [System.Text.Json.Serialization.JsonPropertyName("platform")]
     public string? Platform { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("deviceType")]
     public string? DeviceType { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("idiom")]
     public string? Idiom { get; set; }
-    [System.Text.Json.Serialization.JsonPropertyName("appName")]
-    public string? AppName { get; set; }
-    [System.Text.Json.Serialization.JsonPropertyName("running")]
-    public bool Running { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("displayDensity")]
+    public double? DisplayDensity { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("windowWidth")]
+    public double? WindowWidth { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("windowHeight")]
+    public double? WindowHeight { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("windowCount")]
+    public int? WindowCount { get; set; }
+}
+
+public class AppDescriptor
+{
+    [System.Text.Json.Serialization.JsonPropertyName("name")]
+    public string? Name { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("packageId")]
+    public string? PackageId { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("version")]
+    public string? Version { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("build")]
+    public string? Build { get; set; }
+}
+
+public class AgentCapabilities
+{
+    [System.Text.Json.Serialization.JsonPropertyName("ui")]
+    public bool Ui { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("screenshots")]
+    public bool Screenshots { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("webview")]
+    public bool WebView { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("network")]
+    public bool Network { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("logs")]
+    public bool Logs { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("sensors")]
+    public bool Sensors { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("storage")]
+    public bool Storage { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("profiler")]
+    public bool Profiler { get; set; }
 }
 
 public class NetworkRequest

@@ -32,11 +32,15 @@
       <Uri>https://github.com/dotnet/dotnet</Uri>
       <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
     </Dependency>
+    <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26201.1">
+      <Uri>https://github.com/dotnet/macios-devtools</Uri>
+      <Sha>14efcb9735fab369066fa3c99130d076aa0dfdc9</Sha>
+    </Dependency>
   </ProductDependencies>
   <ToolsetDependencies>
-    <Dependency Name="Microsoft.DotNet.Arcade.Sdk" Version="10.0.0-beta.26168.104">
+    <Dependency Name="Microsoft.DotNet.Arcade.Sdk" Version="10.0.0-beta.26203.109">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>6165bd7ac3499cb712ca489f2ce44bb665174a1a</Sha>
     </Dependency>
   </ToolsetDependencies>
 </Dependencies>

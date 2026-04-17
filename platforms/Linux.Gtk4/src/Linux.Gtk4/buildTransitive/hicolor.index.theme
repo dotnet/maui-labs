@@ -1,0 +1,11 @@
+[Icon Theme]
+Name=hicolor
+Comment=MAUI Linux app icon theme
+Directories=scalable/apps
+
+[scalable/apps]
+Size=64
+Type=Scalable
+MinSize=16
+MaxSize=512
+Context=Applications
