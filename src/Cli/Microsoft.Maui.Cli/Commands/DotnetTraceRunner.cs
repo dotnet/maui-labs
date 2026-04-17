@@ -113,9 +113,10 @@ internal static class DotnetTraceRunner
 		}
 
 		var providers = new List<string>();
-		if (requiresExtraRuntimeProviders)
+		if (requiresExtraRuntimeProviders || !string.IsNullOrWhiteSpace(stoppingEventProvider))
 		{
-			// dotnet-pgo create-mibc needs runtime MethodDetails/JIT data in the raw trace.
+			// Keep the runtime provider enabled for event-based stop conditions and MIBC traces
+			// so the raw EventPipe data contains the JIT/profile payload dotnet-pgo expects.
 			providers.Add(ProfileCommand.MibcDotnetRuntimeProvider);
 		}
 
@@ -127,7 +128,7 @@ internal static class DotnetTraceRunner
 		if (providers.Count > 0)
 		{
 			args.Add("--providers");
-			args.Add(BuildProviderList(requiresExtraRuntimeProviders, stoppingEventProvider));
+			args.Add(string.Join(",", providers));
 		}
 
 		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
@@ -150,20 +151,6 @@ internal static class DotnetTraceRunner
 
 		return args;
 	}
-
-	static string BuildProviderList(bool includeRuntimeProvider, string? stoppingEventProvider)
-	{
-		var providers = new List<string>();
-
-		if (includeRuntimeProvider)
-			providers.Add(ProfileCommand.MibcDotnetRuntimeProvider);
-
-		if (!string.IsNullOrWhiteSpace(stoppingEventProvider))
-			providers.Add($"{stoppingEventProvider}:ffffffffffffffff:5");
-
-		return string.Join(",", providers);
-	}
-
 	internal static async Task EnsureStartedAsync(MonitoredProcess traceProcess, CancellationToken cancellationToken)
 	{
 		await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);

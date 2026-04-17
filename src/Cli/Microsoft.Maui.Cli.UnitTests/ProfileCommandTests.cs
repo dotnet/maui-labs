@@ -685,10 +685,12 @@ public class ProfileCommandTests
 	[Fact]
 	public void BuildTraceArguments_Mibc_UsesNetTraceCollectorFormat()
 	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.Mibc,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: null,
 			duration: null,
 			stoppingEventProvider: null,
@@ -711,10 +713,12 @@ public class ProfileCommandTests
 	[Fact]
 	public void BuildTraceArguments_MibcWithUserProfile_KeepsProfileAndAddsRuntimeProvider()
 	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
 			outputPath: "/out.nettrace",
 			outputFormat: TraceOutputFormat.Mibc,
-			dsrouterPid: 12345,
+			transport: transport,
 			traceProfile: "gc-verbose",
 			duration: null,
 			stoppingEventProvider: null,
@@ -739,7 +743,7 @@ public class ProfileCommandTests
 
 		var contents = File.ReadAllText(targetsPath);
 
-		Assert.Contains("MauiStartupProfilingEnableMibcPgo", contents);
+		Assert.Contains("MauiStartupProfilingEnableRuntimePgo", contents);
 		Assert.Contains("DOTNET_TieredPGO=1", contents);
 		Assert.Contains("DOTNET_ReadyToRun=0", contents);
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
