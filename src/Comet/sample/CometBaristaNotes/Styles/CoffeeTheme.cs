@@ -133,15 +133,6 @@ public static class CoffeeTheme
 		var theme = new Theme
 		{
 			Name = "Coffee Light",
-			CurrentTheme = Comet.Styles.AppTheme.Light,
-
-			// Legacy simple colors (for backward compat)
-			PrimaryColor = Color.FromArgb("#86543F"),
-			BackgroundColor = Color.FromArgb("#D2BCA5"),
-			SurfaceColor = Color.FromArgb("#FCEFE1"),
-			TextColor = Color.FromArgb("#352B23"),
-			SecondaryTextColor = Color.FromArgb("#7C7067"),
-			ErrorColor = Color.FromArgb("#EF5350"),
 
 			// Material 3 color token set
 			Colors = new ColorTokenSet
@@ -185,43 +176,6 @@ public static class CoffeeTheme
 				InversePrimary = Color.FromArgb("#D2BCA5"),
 			},
 
-			// Material 3 color scheme (for environment push)
-			ColorScheme = new ThemeColors
-			{
-				Primary = Color.FromArgb("#86543F"),
-				OnPrimary = Color.FromArgb("#F8F6F4"),
-				PrimaryContainer = Color.FromArgb("#ECDAC4"),
-				OnPrimaryContainer = Color.FromArgb("#352B23"),
-
-				Secondary = Color.FromArgb("#7C7067"),
-				OnSecondary = Color.FromArgb("#F8F6F4"),
-				SecondaryContainer = Color.FromArgb("#ECDAC4"),
-				OnSecondaryContainer = Color.FromArgb("#352B23"),
-
-				Tertiary = Color.FromArgb("#A38F7D"),
-				OnTertiary = Color.FromArgb("#F8F6F4"),
-				TertiaryContainer = Color.FromArgb("#FFF7EC"),
-				OnTertiaryContainer = Color.FromArgb("#352B23"),
-
-				Error = Color.FromArgb("#EF5350"),
-				OnError = Color.FromArgb("#F8F6F4"),
-				ErrorContainer = Color.FromArgb("#FDECEA"),
-				OnErrorContainer = Color.FromArgb("#5F2120"),
-
-				Background = Color.FromArgb("#D2BCA5"),
-				OnBackground = Color.FromArgb("#352B23"),
-				Surface = Color.FromArgb("#FCEFE1"),
-				OnSurface = Color.FromArgb("#352B23"),
-				SurfaceVariant = Color.FromArgb("#ECDAC4"),
-				OnSurfaceVariant = Color.FromArgb("#7C7067"),
-
-				Outline = Color.FromArgb("#D7C5B2"),
-				OutlineVariant = Color.FromArgb("#ECDAC4"),
-
-				InverseSurface = Color.FromArgb("#48362E"),
-				InverseOnSurface = Color.FromArgb("#F8F6F4"),
-				InversePrimary = Color.FromArgb("#D2BCA5"),
-			},
 
 			// Typography with Manrope font and app-specific sizes
 			Typography = new TypographyTokenSet
@@ -293,15 +247,6 @@ public static class CoffeeTheme
 		var theme = new Theme
 		{
 			Name = "Coffee Dark",
-			CurrentTheme = Comet.Styles.AppTheme.Dark,
-
-			// Legacy simple colors
-			PrimaryColor = Color.FromArgb("#86543F"),
-			BackgroundColor = Color.FromArgb("#48362E"),
-			SurfaceColor = Color.FromArgb("#48362E"),
-			TextColor = Color.FromArgb("#F8F6F4"),
-			SecondaryTextColor = Color.FromArgb("#C5BFBB"),
-			ErrorColor = Color.FromArgb("#EF5350"),
 
 			// Material 3 color token set
 			Colors = new ColorTokenSet
@@ -345,43 +290,6 @@ public static class CoffeeTheme
 				InversePrimary = Color.FromArgb("#86543F"),
 			},
 
-			// Material 3 color scheme (for environment push)
-			ColorScheme = new ThemeColors
-			{
-				Primary = Color.FromArgb("#86543F"),
-				OnPrimary = Color.FromArgb("#F8F6F4"),
-				PrimaryContainer = Color.FromArgb("#7D5A45"),
-				OnPrimaryContainer = Color.FromArgb("#F8F6F4"),
-
-				Secondary = Color.FromArgb("#C5BFBB"),
-				OnSecondary = Color.FromArgb("#48362E"),
-				SecondaryContainer = Color.FromArgb("#7D5A45"),
-				OnSecondaryContainer = Color.FromArgb("#F8F6F4"),
-
-				Tertiary = Color.FromArgb("#A19085"),
-				OnTertiary = Color.FromArgb("#48362E"),
-				TertiaryContainer = Color.FromArgb("#5A463B"),
-				OnTertiaryContainer = Color.FromArgb("#F8F6F4"),
-
-				Error = Color.FromArgb("#EF5350"),
-				OnError = Color.FromArgb("#F8F6F4"),
-				ErrorContainer = Color.FromArgb("#5F2120"),
-				OnErrorContainer = Color.FromArgb("#FDECEA"),
-
-				Background = Color.FromArgb("#48362E"),
-				OnBackground = Color.FromArgb("#F8F6F4"),
-				Surface = Color.FromArgb("#48362E"),
-				OnSurface = Color.FromArgb("#F8F6F4"),
-				SurfaceVariant = Color.FromArgb("#7D5A45"),
-				OnSurfaceVariant = Color.FromArgb("#C5BFBB"),
-
-				Outline = Color.FromArgb("#5A463B"),
-				OutlineVariant = Color.FromArgb("#7D5A45"),
-
-				InverseSurface = Color.FromArgb("#FCEFE1"),
-				InverseOnSurface = Color.FromArgb("#352B23"),
-				InversePrimary = Color.FromArgb("#86543F"),
-			},
 
 			// Same Manrope typography as light theme
 			Typography = new TypographyTokenSet
