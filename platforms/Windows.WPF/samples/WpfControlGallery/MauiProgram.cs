@@ -23,6 +23,7 @@ public static class MauiProgram
 
 		// Blazor hybrid
 		builder.Services.AddMauiBlazorWebView();
+		builder.Services.AddWpfBlazorWebView();
 
 		return builder.Build();
 	}

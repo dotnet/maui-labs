@@ -38,14 +38,15 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 			if (double.IsInfinity(w)) w = 800;
 			if (double.IsInfinity(h)) h = 600;
 
-			PlatformView.WebView.Measure(new System.Windows.Size(w, h));
+			// PlatformView.WebView is lazily created after Loaded fires; guard against NRE during initial measure.
+			PlatformView?.WebView?.Measure(new System.Windows.Size(w, h));
 			return new Size(w, h);
 		}
 
 		public override void PlatformArrange(Rect rect)
 		{
 			base.PlatformArrange(rect);
-			PlatformView.WebView.Arrange(new global::System.Windows.Rect(rect.X, rect.Y, rect.Width, rect.Height));
+			PlatformView?.WebView?.Arrange(new global::System.Windows.Rect(rect.X, rect.Y, rect.Width, rect.Height));
 		}
 
 		protected override void ConnectHandler(Wpf.BlazorWebView platformView)

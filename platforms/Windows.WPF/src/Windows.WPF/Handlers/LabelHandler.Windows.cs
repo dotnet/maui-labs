@@ -94,7 +94,11 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			if (label.TextDecorations.HasFlag(TextDecorations.Strikethrough))
 			{
-				var decorations = handler.PlatformView.TextDecorations ?? new System.Windows.TextDecorationCollection();
+				// System.Windows.TextDecorations.Underline/Strikethrough are frozen/shared
+				// collections — must copy into a new mutable one before adding.
+				var decorations = handler.PlatformView.TextDecorations != null
+					? new System.Windows.TextDecorationCollection(handler.PlatformView.TextDecorations)
+					: new System.Windows.TextDecorationCollection();
 				foreach (var d in System.Windows.TextDecorations.Strikethrough)
 					decorations.Add(d);
 				handler.PlatformView.TextDecorations = decorations;
@@ -173,7 +177,10 @@ namespace Microsoft.Maui.Handlers.WPF
 
 				if (mauiSpan.TextDecorations.HasFlag(TextDecorations.Strikethrough))
 				{
-					var decorations = run.TextDecorations ?? new System.Windows.TextDecorationCollection();
+					// Copy into a new mutable collection — the static WPF collections are frozen.
+					var decorations = run.TextDecorations != null
+						? new System.Windows.TextDecorationCollection(run.TextDecorations)
+						: new System.Windows.TextDecorationCollection();
 					foreach (var d in System.Windows.TextDecorations.Strikethrough)
 						decorations.Add(d);
 					run.TextDecorations = decorations;

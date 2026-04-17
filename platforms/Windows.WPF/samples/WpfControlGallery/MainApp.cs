@@ -57,7 +57,10 @@ class MainShell : FlyoutPage
 	{
 		Title = "Microsoft.Maui.Platforms.Windows.WPF Demo";
 
-		var menuItems = _pages.Select(p => p.name).ToList();
+		var menuItems = _pages
+			.Select(p => new MenuEntry(p.name, "menu-" + Slug(p.name), p.factory))
+			.ToList();
+
 		var menuList = new CollectionView
 		{
 			ItemsSource = menuItems,
@@ -65,21 +68,30 @@ class MainShell : FlyoutPage
 			SelectedItem = menuItems[0],
 			VerticalOptions = LayoutOptions.Fill,
 			Header = "WPF Demo",
+			AutomationId = "MainMenu",
+			ItemTemplate = new DataTemplate(() =>
+			{
+				var lbl = new Label
+				{
+					Padding = new Thickness(12, 8),
+					FontSize = 14,
+				};
+				lbl.SetBinding(Label.TextProperty, nameof(MenuEntry.Name));
+				lbl.SetBinding(AutomationProperties.NameProperty, nameof(MenuEntry.Name));
+				lbl.SetBinding(Label.AutomationIdProperty, nameof(MenuEntry.AutomationId));
+				return lbl;
+			}),
 		};
 
 		menuList.SelectionChanged += (s, e) =>
 		{
-			if (e.CurrentSelection.FirstOrDefault() is string selected)
+			if (e.CurrentSelection.FirstOrDefault() is MenuEntry selected && selected.Factory != null)
 			{
-				var match = _pages.FirstOrDefault(p => p.name == selected);
-				if (match.factory != null)
-				{
-					var page = match.factory();
-					if (page is ContentPage cp)
-						Detail = new NavigationPage(cp);
-					else
-						Detail = page;
-				}
+				var page = selected.Factory();
+				if (page is ContentPage cp)
+					Detail = new NavigationPage(cp);
+				else
+					Detail = page;
 			}
 		};
 
@@ -91,5 +103,71 @@ class MainShell : FlyoutPage
 
 		Detail = new NavigationPage(new HomePage());
 		IsPresented = true;
+
+		_instance = this;
+		StartAuditServer();
 	}
+
+	static MainShell? _instance;
+	static System.Net.HttpListener? _listener;
+
+	void StartAuditServer()
+	{
+		if (_listener != null) return;
+		try
+		{
+			_listener = new System.Net.HttpListener();
+			_listener.Prefixes.Add("http://localhost:9224/");
+			_listener.Start();
+			_ = System.Threading.Tasks.Task.Run(AuditLoop);
+		}
+		catch { _listener = null; }
+	}
+
+	async System.Threading.Tasks.Task AuditLoop()
+	{
+		while (_listener != null && _listener.IsListening)
+		{
+			var ctx = await _listener.GetContextAsync();
+			string resp = "ok";
+			try
+			{
+				var q = ctx.Request.QueryString;
+				var path = ctx.Request.Url?.AbsolutePath ?? "";
+				if (path == "/pages")
+				{
+					resp = string.Join("\n", _pages.Select((p, i) => $"{i}\t{p.name}"));
+				}
+				else if (path == "/goto" && int.TryParse(q["index"], out var idx) && idx >= 0 && idx < _pages.Length)
+				{
+					string? err = null;
+					await Dispatcher.DispatchAsync(() =>
+					{
+						try
+						{
+							var page = _pages[idx].factory();
+							if (page is ContentPage cp) Detail = new NavigationPage(cp);
+							else Detail = page;
+							IsPresented = false;
+						}
+						catch (Exception ex) { err = ex.GetType().Name + ": " + ex.Message; }
+					});
+					resp = err != null ? "ERR: " + err : Slug(_pages[idx].name);
+				}
+			}
+			catch (Exception ex) { resp = "ERR: " + ex.Message; }
+			var bytes = System.Text.Encoding.UTF8.GetBytes(resp);
+			ctx.Response.ContentLength64 = bytes.Length;
+			ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+			ctx.Response.Close();
+		}
+	}
+
+	static string Slug(string name)
+	{
+		var chars = name.Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray();
+		return new string(chars).Trim().Replace(' ', '-').ToLowerInvariant();
+	}
+
+	sealed record MenuEntry(string Name, string AutomationId, Func<Page> Factory);
 }
