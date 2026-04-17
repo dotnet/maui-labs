@@ -27,7 +27,7 @@ public class VideoApp : CometApp
 			fonts.AddFont("OpenSans-SemiBold.ttf", "OpenSansSemiBold");
 		});
 
-		Theme.Current = Defaults.Dark;
+		ThemeManager.SetTheme(Defaults.Dark);
 
 #if DEBUG
 		builder.EnableSampleRuntimeDebugging();

@@ -32,7 +32,7 @@ namespace CometMauiApp
 
 			// Apply the built-in light theme at startup.
 			// Defaults.Light includes Material 3 color, typography, spacing, and shape tokens.
-			Theme.Current = Defaults.Light;
+			ThemeManager.SetTheme(Defaults.Light);
 
 	#if DEBUG
 			builder.EnableSampleRuntimeDebugging();
