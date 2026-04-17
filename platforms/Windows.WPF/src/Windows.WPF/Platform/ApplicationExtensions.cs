@@ -37,16 +37,17 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			windowHandler.SetMauiContext(mauiContext);
 			windowHandler.SetVirtualView(window);
 
+			// Dispose the per-window DI scope when the window closes so transient
+			// services and any IDisposable scoped registrations are released.
+			winuiWndow.Closed += (_, _) =>
+			{
+				try { windowScope.Dispose(); }
+				catch { }
+			};
+
 			winuiWndow.Show();
 
 			applicationContext.Services.InvokeLifecycleEvents<WPFLifecycle.OnActivated>(del => del(winuiWndow, EventArgs.Empty));
-
-			//void WinuiWndow_Activated(object? sender, System.EventArgs e)
-			//{
-			//	WPFDispatcher.ReplacHack = winuiWndow.Dispatcher;
-			//	winuiWndow.SetWindowHandler(window, mauiContext);
-			//	winuiWndow.Activated -= WinuiWndow_Activated;
-			//}
 		}
 	}
 

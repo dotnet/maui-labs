@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
+    <!-- Use Windows SDK-versioned TFM so the WinRT projections (Microsoft.Windows.SDK.NET) are
+         available. WebView2CompositionControl (used internally by Wpf.BlazorWebView) loads them
+         from its ControlTemplate during the WPF measure pass. -->
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>

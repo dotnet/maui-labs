@@ -120,15 +120,37 @@ class MainShell : FlyoutPage
 			_listener.Prefixes.Add("http://localhost:9224/");
 			_listener.Start();
 			_ = System.Threading.Tasks.Task.Run(AuditLoop);
+
+			// Stop the listener cleanly on app shutdown so the HTTP port is released
+			// and the AuditLoop task can exit.
+			var app = System.Windows.Application.Current;
+			if (app != null)
+			{
+				app.Exit += (_, _) => StopAuditServer();
+			}
 		}
 		catch { _listener = null; }
+	}
+
+	static void StopAuditServer()
+	{
+		var listener = _listener;
+		_listener = null;
+		if (listener == null) return;
+		try { listener.Stop(); } catch { }
+		try { listener.Close(); } catch { }
 	}
 
 	async System.Threading.Tasks.Task AuditLoop()
 	{
 		while (_listener != null && _listener.IsListening)
 		{
-			var ctx = await _listener.GetContextAsync();
+			System.Net.HttpListenerContext ctx;
+			try { ctx = await _listener.GetContextAsync(); }
+			catch (System.Net.HttpListenerException) { break; }
+			catch (ObjectDisposedException) { break; }
+			catch (InvalidOperationException) { break; }
+
 			string resp = "ok";
 			try
 			{
@@ -156,10 +178,14 @@ class MainShell : FlyoutPage
 				}
 			}
 			catch (Exception ex) { resp = "ERR: " + ex.Message; }
-			var bytes = System.Text.Encoding.UTF8.GetBytes(resp);
-			ctx.Response.ContentLength64 = bytes.Length;
-			ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
-			ctx.Response.Close();
+			try
+			{
+				var bytes = System.Text.Encoding.UTF8.GetBytes(resp);
+				ctx.Response.ContentLength64 = bytes.Length;
+				ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+				ctx.Response.Close();
+			}
+			catch { }
 		}
 	}
 

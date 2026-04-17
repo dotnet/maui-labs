@@ -86,8 +86,19 @@ public class WpfAgentService : DevFlowAgentService
 
             if (platformView is ButtonBase buttonBase)
             {
-                var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(buttonBase)
-                    ?? new System.Windows.Automation.Peers.ButtonAutomationPeer((System.Windows.Controls.Button)buttonBase);
+                // Try to get an existing peer (some controls register one during template apply);
+                // otherwise fall back to the generic ButtonBase peer which works for Button,
+                // CheckBox, RadioButton, ToggleButton, RepeatButton, etc. without an unsafe cast.
+                var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(buttonBase)
+                    ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(buttonBase);
+
+                if (peer is null)
+                {
+                    // Last resort: simulate the click directly.
+                    buttonBase.RaiseEvent(new System.Windows.RoutedEventArgs(ButtonBase.ClickEvent, buttonBase));
+                    return true;
+                }
+
                 if (peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke)
                     is System.Windows.Automation.Provider.IInvokeProvider invoke)
                 {
@@ -124,12 +135,12 @@ public class WpfAgentService : DevFlowAgentService
         return false;
     }
 
-    protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
+    protected override async Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
     {
         try
         {
-            var result = VisualDiagnostics.CaptureAsPngAsync(element).GetAwaiter().GetResult();
-            if (result != null) return Task.FromResult<byte[]?>(result);
+            var result = await VisualDiagnostics.CaptureAsPngAsync(element);
+            if (result != null) return result;
         }
         catch { }
 
@@ -138,12 +149,12 @@ public class WpfAgentService : DevFlowAgentService
             if (element.Handler?.PlatformView is FrameworkElement fe)
             {
                 var bytes = CaptureFrameworkElement(fe);
-                if (bytes != null) return Task.FromResult<byte[]?>(bytes);
+                if (bytes != null) return bytes;
             }
         }
         catch { }
 
-        return Task.FromResult<byte[]?>(null);
+        return null;
     }
 
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)

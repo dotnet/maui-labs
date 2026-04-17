@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -124,19 +125,25 @@ public class WpfVisualTreeWalker : VisualTreeWalker
         }
     }
 
+    // Use a ConditionalWeakTable so we never mutate WPF's NameScope (assigning
+    // FrameworkElement.Name throws InvalidOperationException once the element is
+    // sealed, leaks ids into a NameScope dictionary, and can collide with user
+    // names). The table is cleared automatically when the element is collected.
+    private static readonly ConditionalWeakTable<FrameworkElement, string> s_stableIds = new();
+
     protected override string? EnsurePlatformStableId(object platformObj)
     {
         try
         {
             if (platformObj is FrameworkElement fe)
             {
-                var name = fe.Name;
-                if (string.IsNullOrEmpty(name))
-                {
-                    name = "_mauidevflow_" + Guid.NewGuid().ToString("N").Substring(0, 12);
-                    try { fe.Name = name; } catch { /* some elements disallow Name at runtime */ }
-                }
-                return name;
+                // Prefer the developer-assigned XAML Name when present.
+                if (!string.IsNullOrEmpty(fe.Name))
+                    return fe.Name;
+
+                return s_stableIds.GetValue(
+                    fe,
+                    static _ => "_mauidevflow_" + Guid.NewGuid().ToString("N").Substring(0, 12));
             }
         }
         catch { }

@@ -13,21 +13,34 @@ using WWindow = System.Windows.Window;
 namespace Microsoft.Maui.Platforms.Windows.WPF
 {
 	/// <summary>
-	/// Manages modal page presentation for MAUI.
-	/// Modal pages are shown as overlay panels within the WWindow content.
+	/// Manages modal page presentation for MAUI on WPF.
+	/// State is stored per-WWindow via an attached DependencyProperty so multiple
+	/// windows can each maintain their own modal stack independently.
 	/// </summary>
 	public static class ModalNavigationManager
 	{
-		static readonly List<FrameworkElement> _modalStack = new();
-		static WGrid? _modalOverlayHost;
+		sealed class ModalContext
+		{
+			public WGrid OverlayHost { get; }
+			public List<FrameworkElement> Stack { get; } = new();
+			public ModalContext(WGrid overlayHost) => OverlayHost = overlayHost;
+		}
+
+		static readonly DependencyProperty ModalContextProperty = DependencyProperty.RegisterAttached(
+			"ModalContext", typeof(ModalContext), typeof(WWindow),
+			new PropertyMetadata(null));
+
+		static ModalContext? GetContext(WWindow window) => (ModalContext?)window.GetValue(ModalContextProperty);
+		static void SetContext(WWindow window, ModalContext value) => window.SetValue(ModalContextProperty, value);
 
 		/// <summary>
 		/// Ensures the modal overlay host is set up in the WWindow.
-		/// Called during WWindow initialization.
+		/// Idempotent and safe to call multiple times for the same window.
 		/// </summary>
 		public static void EnsureOverlayHost(WWindow window)
 		{
-			if (_modalOverlayHost != null) return;
+			if (window == null) return;
+			if (GetContext(window) != null) return;
 
 			var existingContent = window.Content as UIElement;
 			if (existingContent == null) return;
@@ -37,23 +50,40 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			window.Content = host;
 			host.Children.Add(existingContent);
 
-			_modalOverlayHost = host;
+			SetContext(window, new ModalContext(host));
+		}
+
+		static WWindow? ResolveWindow(WWindow? explicitWindow)
+		{
+			if (explicitWindow != null) return explicitWindow;
+
+			// Prefer the active window so modals appear on the right window in multi-window apps.
+			var app = System.Windows.Application.Current;
+			if (app == null) return null;
+			foreach (var w in app.Windows.OfType<WWindow>())
+			{
+				if (w.IsActive) return w;
+			}
+			return app.MainWindow;
 		}
 
 		/// <summary>
 		/// Push a modal page with optional animation.
 		/// </summary>
 		public static void PushModal(IView page, IMauiContext mauiContext, bool animated = true)
-		{
-			if (_modalOverlayHost == null)
-			{
-				// Try to find the host from the current WWindow
-				var window = System.Windows.Application.Current?.MainWindow;
-				if (window != null)
-					EnsureOverlayHost(window);
-			}
+			=> PushModal(null, page, mauiContext, animated);
 
-			if (_modalOverlayHost == null) return;
+		/// <summary>
+		/// Push a modal page on a specific window.
+		/// </summary>
+		public static void PushModal(WWindow? window, IView page, IMauiContext mauiContext, bool animated = true)
+		{
+			window = ResolveWindow(window);
+			if (window == null) return;
+
+			EnsureOverlayHost(window);
+			var ctx = GetContext(window);
+			if (ctx == null) return;
 
 			try
 			{
@@ -81,8 +111,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				};
 				overlay.Children.Add(contentBorder);
 
-				_modalStack.Add(overlay);
-				_modalOverlayHost.Children.Add(overlay);
+				ctx.Stack.Add(overlay);
+				ctx.OverlayHost.Children.Add(overlay);
 
 				if (animated)
 				{
@@ -105,35 +135,57 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		}
 
 		/// <summary>
-		/// Pop the top modal page with optional animation.
+		/// Pop the top modal page from the active window with optional animation.
 		/// </summary>
-		public static void PopModal(bool animated = true)
-		{
-			if (_modalOverlayHost == null || _modalStack.Count == 0) return;
+		public static void PopModal(bool animated = true) => PopModal(null, animated);
 
-			var overlay = _modalStack[^1];
-			_modalStack.RemoveAt(_modalStack.Count - 1);
+		/// <summary>
+		/// Pop the top modal page from a specific window with optional animation.
+		/// </summary>
+		public static void PopModal(WWindow? window, bool animated = true)
+		{
+			window = ResolveWindow(window);
+			if (window == null) return;
+
+			var ctx = GetContext(window);
+			if (ctx == null || ctx.Stack.Count == 0) return;
+
+			var overlay = ctx.Stack[^1];
+			ctx.Stack.RemoveAt(ctx.Stack.Count - 1);
 
 			if (animated)
 			{
 				var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(200));
-				fadeOut.Completed += (s, e) =>
-				{
-					_modalOverlayHost.Children.Remove(overlay);
-				};
+				fadeOut.Completed += (s, e) => ctx.OverlayHost.Children.Remove(overlay);
 				overlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
 			}
 			else
 			{
-				_modalOverlayHost.Children.Remove(overlay);
+				ctx.OverlayHost.Children.Remove(overlay);
 			}
 		}
 
 		/// <summary>
-		/// Check if any modal pages are currently shown.
+		/// True if any modal pages are currently shown on the active window.
 		/// </summary>
-		public static bool HasModals => _modalStack.Count > 0;
-		public static int ModalCount => _modalStack.Count;
+		public static bool HasModals => HasModalsOn(null);
+
+		/// <summary>
+		/// Number of modals on the active window.
+		/// </summary>
+		public static int ModalCount => ModalCountOn(null);
+
+		public static bool HasModalsOn(WWindow? window)
+		{
+			window = ResolveWindow(window);
+			return window != null && (GetContext(window)?.Stack.Count ?? 0) > 0;
+		}
+
+		public static int ModalCountOn(WWindow? window)
+		{
+			window = ResolveWindow(window);
+			return window == null ? 0 : (GetContext(window)?.Stack.Count ?? 0);
+		}
 	}
 
 	/// <summary>

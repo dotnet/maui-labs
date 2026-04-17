@@ -9,7 +9,7 @@ using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
-using WebView2Control = Microsoft.Web.WebView2.Wpf.WebView2;
+using WebView2Control = Microsoft.Web.WebView2.Wpf.WebView2CompositionControl;
 
 namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 {
@@ -18,8 +18,9 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 	/// </summary>
 	public partial class BlazorWebViewHandler : WPFViewHandler<BlazorWebView, Wpf.BlazorWebView>
 	{
-		//TODO
-		//private WebView2WebViewManager? _webviewManager;
+		// Track the inner WebView2 reference so we can unsubscribe on disconnect even if
+		// PlatformView.WebView has already been torn down.
+		private WebView2Control? _hookedWebView;
 
 		/// <inheritdoc />
 		protected override Wpf.BlazorWebView CreatePlatformView()
@@ -51,8 +52,8 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 
 		protected override void ConnectHandler(Wpf.BlazorWebView platformView)
 		{
-			PlatformView.Loaded += PlatformView_Loaded;
-			PlatformView.Services = MauiContext!.Services!;
+			platformView.Loaded += PlatformView_Loaded;
+			platformView.Services = MauiContext!.Services!;
 			base.ConnectHandler(platformView);
 		}
 
@@ -63,105 +64,51 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 				PlatformView.InvalidateMeasure();
 				PlatformView.InvalidateArrange();
 
-				((System.Windows.UIElement)PlatformView.Parent).InvalidateMeasure();
-				((System.Windows.UIElement)PlatformView.Parent).InvalidateArrange();
+				// Parent may not be a UIElement (e.g. logical-only parent during teardown). Soft-cast.
+				if (PlatformView.Parent is System.Windows.UIElement parent)
+				{
+					parent.InvalidateMeasure();
+					parent.InvalidateArrange();
+				}
 			});
 		}
 
 		void PlatformView_Loaded(object sender, System.Windows.RoutedEventArgs e)
 		{
-			PlatformView.WebView.NavigationCompleted += WebView_NavigationCompleted;
-			//this.InvalidateMeasure(VirtualView);
-			//PlatformView.Parent.InvalidateMeasure(VirtualView);
+			// Track the inner WebView2 reference so DisconnectHandler can detach even if
+			// PlatformView.WebView has been nulled out by the host control.
+			_hookedWebView = PlatformView.WebView;
+			if (_hookedWebView != null)
+				_hookedWebView.NavigationCompleted += WebView_NavigationCompleted;
+
 			StartWebViewCoreIfPossible();
 		}
 
 		/// <inheritdoc />
 		protected override void DisconnectHandler(Wpf.BlazorWebView platformView)
 		{
-			//if (_webviewManager != null)
-			//{
-			//	// Dispose this component's contents and block on completion so that user-written disposal logic and
-			//	// Blazor disposal logic will complete.
-			//	_webviewManager?
-			//		.DisposeAsync()
-			//		.AsTask()
-			//		.GetAwaiter()
-			//		.GetResult();
+			platformView.Loaded -= PlatformView_Loaded;
 
-			//	_webviewManager = null;
-			//}
+			if (_hookedWebView != null)
+			{
+				try { _hookedWebView.NavigationCompleted -= WebView_NavigationCompleted; }
+				catch { }
+				_hookedWebView = null;
+			}
+
+			base.DisconnectHandler(platformView);
 		}
 
 		private bool RequiredStartupPropertiesSet =>
-			//_webview != null &&
 			HostPage != null &&
 			Services != null;
 
 		private void StartWebViewCoreIfPossible()
 		{
-			//if (PlatformView.WebView == null)
-			//	return;
-
-			//if (!RequiredStartupPropertiesSet ||
-			//	_webviewManager != null)
-			//{
-			//	return;
-			//}
-			//if (PlatformView == null)
-			//{
-			//	throw new InvalidOperationException($"Can't start {nameof(BlazorWebView)} without native web view instance.");
-			//}
-
-			//var logger = Services!.GetService<ILogger<BlazorWebViewHandler>>() ?? NullLogger<BlazorWebViewHandler>.Instance;
-
-			//// We assume the host page is always in the root of the content directory, because it's
-			//// unclear there's any other use case. We can add more options later if so.
-			//var contentRootDir = Path.GetDirectoryName(HostPage!) ?? string.Empty;
-			//var hostPageRelativePath = Path.GetRelativePath(contentRootDir, HostPage!);
-
-			//WebView.WPF.Log.CreatingFileProvider(logger, contentRootDir, hostPageRelativePath);
-			//var fileProvider = VirtualView.CreateFileProvider(contentRootDir);
-
-			//_webviewManager = new WebView2WebViewManager(
-			//	PlatformView.WebView,
-			//	Services!,
-			//	new MauiDispatcher(Services!.GetRequiredService<IDispatcher>()),
-			//	fileProvider,
-			//	(VirtualView as IBlazorWebView).JSComponents,
-			//	contentRootDir,
-			//	hostPageRelativePath,
-			//	(loading) =>
-			//	{
-			//	},
-			//	(initializing) =>
-			//	{
-			//	},
-			//	(initialized) =>
-			//	{
-			//	},
-			//	logger);
-
-			////	StaticContentHotReloadManager.AttachToWebViewManagerIfEnabled(_webviewManager);
-
-			//if (RootComponents != null)
-			//{
-			//	foreach (var rootComponent in RootComponents)
-			//	{
-			//		if (rootComponent is null)
-			//		{
-			//			continue;
-			//		}
-
-			//		WebView.WPF.Log.AddingRootComponent(logger, rootComponent.ComponentType?.FullName ?? string.Empty, rootComponent.Selector ?? string.Empty, rootComponent.Parameters?.Count ?? 0);
-
-			//		// Since the page isn't loaded yet, this will always complete synchronously
-			//		_ = rootComponent.AddToWebViewManagerAsync(_webviewManager);
-			//	}
-			//}
-
-			//WebView.WPF.Log.StartingInitialNavigation(logger, VirtualView.StartPath);
-			//_webviewManager.Navigate(VirtualView.StartPath);
+			// Wpf.BlazorWebView owns its WebView2WebViewManager internally and starts it
+			// once Services + HostPage + RootComponents have been mapped from the
+			// virtual view. Nothing to do here — leaving the method as an explicit
+			// extension point for future host-side initialization hooks.
 		}
 
 		internal IFileProvider CreateFileProvider(string contentRootDir)

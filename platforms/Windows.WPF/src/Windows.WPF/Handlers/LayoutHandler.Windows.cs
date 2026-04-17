@@ -15,15 +15,8 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
-			try
-			{
-				var targetIndex = VirtualView.IndexOf(child);
-				PlatformView.Children.Insert(targetIndex, (UIElement)child.ToPlatform(MauiContext));
-			}
-			catch (Exception ex)
-			{
-				System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.Add failed for {child?.GetType().Name}: {ex}");
-			}
+			var targetIndex = VirtualView.IndexOf(child);
+			InsertChildAt(targetIndex, child);
 		}
 
 		public override void SetVirtualView(IView view)
@@ -40,16 +33,12 @@ namespace Microsoft.Maui.Handlers.WPF
 			PlatformView.Children.Clear();
 
 			// Realize each child independently so a failure in one doesn't break the rest of the layout.
+			// We must keep PlatformView.Children index-aligned with VirtualView.Children so that
+			// CrossPlatformArrange targets the right native element. If a child fails to realize,
+			// we insert a transparent placeholder to preserve the index.
 			foreach (var child in VirtualView)
 			{
-				try
-				{
-					PlatformView.Children.Add((UIElement)child.ToPlatform(MauiContext));
-				}
-				catch (Exception ex)
-				{
-					System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.SetVirtualView failed for child {child?.GetType().Name}: {ex}");
-				}
+				PlatformView.Children.Add(RealizeOrPlaceholder(child));
 			}
 		}
 
@@ -75,15 +64,8 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
-			try
-			{
-				var targetIndex = VirtualView.IndexOf(child);
-				PlatformView.Children.Insert(targetIndex, (UIElement)child.ToPlatform(MauiContext));
-			}
-			catch (Exception ex)
-			{
-				System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.Insert failed for {child?.GetType().Name}: {ex}");
-			}
+			var targetIndex = VirtualView.IndexOf(child);
+			InsertChildAt(targetIndex, child);
 		}
 
 		public void Update(int index, IView child)
@@ -92,14 +74,33 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
+			PlatformView.Children[index] = RealizeOrPlaceholder(child);
+			EnsureZIndexOrder(child);
+		}
+
+		// Insert preserving the target index even if realization fails. This keeps
+		// PlatformView.Children parallel to VirtualView.Children so cross-platform
+		// arrange routes layout to the correct native element.
+		void InsertChildAt(int index, IView child)
+		{
+			var element = RealizeOrPlaceholder(child);
+			if (index < 0) index = 0;
+			if (index > PlatformView.Children.Count) index = PlatformView.Children.Count;
+			PlatformView.Children.Insert(index, element);
+		}
+
+		UIElement RealizeOrPlaceholder(IView child)
+		{
 			try
 			{
-				PlatformView.Children[index] = (UIElement)child.ToPlatform(MauiContext);
-				EnsureZIndexOrder(child);
+				return (UIElement)child.ToPlatform(MauiContext!);
 			}
 			catch (Exception ex)
 			{
-				System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.Update failed for {child?.GetType().Name}: {ex}");
+				System.Diagnostics.Trace.WriteLine(
+					$"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler failed to realize child {child?.GetType().FullName}: {ex.Message}");
+				// Transparent placeholder keeps UIElementCollection indices aligned with VirtualView.
+				return new System.Windows.Controls.Border();
 			}
 		}
 
@@ -138,23 +139,25 @@ namespace Microsoft.Maui.Handlers.WPF
 		void EnsureZIndexOrder(IView child)
 		{
 			if (PlatformView.Children.Count == 0)
-			{
 				return;
-			}
 
-			var currentIndex = PlatformView.Children.IndexOf((UIElement)child.ToPlatform(MauiContext!));
+			var nativeChild = (child.Handler?.ContainerView ?? child.Handler?.PlatformView) as UIElement;
+			if (nativeChild is null)
+				return;
 
+			var currentIndex = PlatformView.Children.IndexOf(nativeChild);
 			if (currentIndex == -1)
-			{
 				return;
-			}
 
-			//var targetIndex = VirtualView.IndexOf(child);
+			var targetIndex = VirtualView.IndexOf(child);
+			if (targetIndex < 0 || targetIndex == currentIndex)
+				return;
 
-			//if (currentIndex != targetIndex)
-			//{
-			//	PlatformView.Children.Move((uint)currentIndex, (uint)targetIndex);
-			//}
+			// UIElementCollection has no Move; emulate via Remove + Insert.
+			PlatformView.Children.RemoveAt(currentIndex);
+			if (targetIndex > PlatformView.Children.Count)
+				targetIndex = PlatformView.Children.Count;
+			PlatformView.Children.Insert(targetIndex, nativeChild);
 		}
 
 		static void MapInputTransparent(ILayoutHandler handler, ILayout layout)

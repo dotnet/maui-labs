@@ -9,18 +9,19 @@ public class BlazorPage : ContentPage
 	public BlazorPage()
 	{
 		// The WPF Blazor hybrid path depends on Microsoft.AspNetCore.Components.WebView.Wpf which
-		// pulls in WebView2CompositionControl + Microsoft.Windows.SDK.NET. If those aren't present
-		// at runtime, WPF's measure pipeline throws a FileNotFoundException from ApplyTemplate
-		// (which is too late to catch inside a handler).
-		// Probe at construction time: only instantiate the WebView if the SDK type resolves.
+		// internally hosts a WebView2CompositionControl. Its WPF ControlTemplate references types
+		// from Microsoft.Windows.SDK.NET (the WinRT projection assembly). When the host project
+		// targets plain `net10.0-windows` (no Windows SDK version), that assembly is unresolvable
+		// and WPF throws FileNotFoundException from ApplyTemplate during the measure pass — too
+		// late to catch inside a handler. Probe at construction by attempting to load the assembly
+		// by full identity; if it isn't resolvable, render a fallback explaining the limitation.
 		var sdkAvailable = false;
 		string? probeError = null;
 		try
 		{
-			// Touching this type forces Microsoft.Windows.SDK.NET to load.
-			_ = typeof(Microsoft.AspNetCore.Components.WebView.Wpf.BlazorWebView).Assembly;
-			var asm = System.Reflection.Assembly.Load("Microsoft.Windows.SDK.NET");
-			sdkAvailable = asm is not null;
+			System.Reflection.Assembly.Load(
+				"Microsoft.Windows.SDK.NET, Version=10.0.17763.10, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+			sdkAvailable = true;
 		}
 		catch (System.Exception ex)
 		{

@@ -53,6 +53,10 @@ namespace Microsoft.Maui.Handlers.WPF
 		Action<AppTheme>? _onThemeChanged;
 		SizeChangedEventHandler? _onSizeChanged;
 		EventHandler? _onLocationChanged;
+		EventHandler? _onActivated;
+		EventHandler? _onDeactivated;
+		System.ComponentModel.CancelEventHandler? _onClosing;
+		EventHandler? _onClosed;
 
 		protected override void ConnectHandler(PlatformView platformView)
 		{
@@ -83,6 +87,24 @@ namespace Microsoft.Maui.Handlers.WPF
 			platformView.SizeChanged += _onSizeChanged;
 			platformView.LocationChanged += _onLocationChanged;
 
+			// Forward window lifecycle to IWindow so cross-platform code receives
+			// Activated / Deactivated / Stopped / Destroying as on every other backend.
+			_onActivated = (s, e) => VirtualView?.Activated();
+			_onDeactivated = (s, e) => VirtualView?.Deactivated();
+			_onClosing = (s, e) =>
+			{
+				// IWindow.BackButtonClicked / Stopped semantics: notify Stopped before close.
+				try { VirtualView?.Stopped(); } catch { }
+			};
+			_onClosed = (s, e) =>
+			{
+				try { VirtualView?.Destroying(); } catch { }
+			};
+			platformView.Activated += _onActivated;
+			platformView.Deactivated += _onDeactivated;
+			platformView.Closing += _onClosing;
+			platformView.Closed += _onClosed;
+
 			// Set an initial frame in case the window is already sized.
 			platformView.Dispatcher.BeginInvoke(new Action(() => UpdateVirtualViewFrame(platformView)),
 				System.Windows.Threading.DispatcherPriority.Loaded);
@@ -100,11 +122,14 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			// MAUI's cross-platform layout isn't driven by WPF's layout pass on the root
 			// Content, so pages (FlyoutPage / ContentPage / Shell) never receive a non-zero
-			// Frame. Manually arrange the root content whenever the window resizes so
-			// VisualElement.Bounds are correct for layout, hit-testing, and inspection.
+			// Frame. Manually measure + arrange the root content whenever the window resizes
+			// so VisualElement.Bounds are correct for layout, hit-testing, and inspection.
 			if (VirtualView.Content is IView content)
 			{
+				var size = new Microsoft.Maui.Graphics.Size(w, h);
 				var bounds = new Microsoft.Maui.Graphics.Rect(0, 0, w, h);
+				// Measure must precede Arrange so cross-platform layout has a desired size to work with.
+				content.Measure(w, h);
 				content.Arrange(bounds);
 			}
 		}
@@ -128,6 +153,14 @@ namespace Microsoft.Maui.Handlers.WPF
 				platformView.SizeChanged -= _onSizeChanged;
 			if (_onLocationChanged != null)
 				platformView.LocationChanged -= _onLocationChanged;
+			if (_onActivated != null)
+				platformView.Activated -= _onActivated;
+			if (_onDeactivated != null)
+				platformView.Deactivated -= _onDeactivated;
+			if (_onClosing != null)
+				platformView.Closing -= _onClosing;
+			if (_onClosed != null)
+				platformView.Closed -= _onClosed;
 
 			base.DisconnectHandler(platformView);
 		}
