@@ -22,7 +22,7 @@ internal static class DotnetPgoInstaller
 	const int StatusMaxLineLength = 120;
 	static readonly TimeSpan s_buildTimeout = TimeSpan.FromMinutes(15);
 
-	internal const string DisplayPath = "~/.maui/dotnet-pgo";
+	internal static string DisplayPath => GetDisplayPath();
 
 	internal static async Task<string> EnsureAvailableAsync(
 		IOutputFormatter formatter,
@@ -42,30 +42,47 @@ internal static class DotnetPgoInstaller
 		return await BuildFromSourceAsync(formatter, useJson, verbose, cancellationToken);
 	}
 
-	static string? TryResolvePath()
+	internal static string? TryResolvePath()
 	{
 		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 		if (string.IsNullOrWhiteSpace(userProfile))
 			return null;
 
-		var expectedPath = GetInstallPath(userProfile);
+		var expectedPath = GetExecutablePath(userProfile);
 		if (File.Exists(expectedPath))
 			return expectedPath;
 
-		if (OperatingSystem.IsWindows())
-		{
-			var windowsPath = expectedPath + ".exe";
-			if (File.Exists(windowsPath))
-				return windowsPath;
-		}
+		var legacyPath = GetInstallPath(userProfile);
+		if (!string.Equals(expectedPath, legacyPath, StringComparison.OrdinalIgnoreCase) && File.Exists(legacyPath))
+			return legacyPath;
 
 		return null;
+	}
+
+	internal static string ResolvePathOrThrow()
+	{
+		if (TryResolvePath() is { } installedPath)
+			return installedPath;
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.DiagnosticsToolNotFound,
+			$"MIBC conversion requires dotnet-pgo at '{DisplayPath}'.",
+			[
+				$"Install or copy the dotnet-pgo binary to {DisplayPath}.",
+				"Then rerun 'maui profile startup --format mibc'."
+			]);
 	}
 
 	internal static string GetInstallPath(string userProfile)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(userProfile);
 		return Path.Combine(userProfile, ".maui", "dotnet-pgo");
+	}
+
+	internal static string GetExecutablePath(string userProfile)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(userProfile);
+		return Path.Combine(userProfile, ".maui", GetExecutableFileName());
 	}
 
 	internal static string[] BuildPublishArguments(string runtimeIdentifier, string outputDirectory) =>
@@ -167,7 +184,7 @@ internal static class DotnetPgoInstaller
 				ErrorCodes.DiagnosticsToolNotFound,
 				"Building dotnet-pgo from source requires 'git', but it was not found in PATH.",
 				[
-					"Install git and rerun 'maui profile --format mibc'.",
+					"Install git and rerun 'maui profile startup --format mibc'.",
 					$"Or manually place the dotnet-pgo binary at {DisplayPath}."
 				]);
 		}
@@ -175,7 +192,7 @@ internal static class DotnetPgoInstaller
 		var cloneDirectory = Path.Combine(Path.GetTempPath(), $"dotnet-runtime-{Guid.NewGuid():N}");
 		var dotnetRoot = Path.Combine(cloneDirectory, ".dotnet");
 		var publishDirectory = Path.Combine(cloneDirectory, "artifacts", "dotnet-pgo");
-		var installPath = GetInstallPath(userProfile);
+		var installPath = GetExecutablePath(userProfile);
 		var runtimeBranch = await ResolveSourceBranchAsync(gitPath, formatter, useJson, verbose, cancellationToken);
 
 		try
@@ -258,16 +275,15 @@ internal static class DotnetPgoInstaller
 			}
 
 			Directory.CreateDirectory(Path.GetDirectoryName(installPath) ?? Path.Combine(userProfile, ".maui"));
-			var finalInstallPath = OperatingSystem.IsWindows() ? installPath + ".exe" : installPath;
-			File.Copy(publishedExecutable, finalInstallPath, overwrite: true);
+			File.Copy(publishedExecutable, installPath, overwrite: true);
 
 			if (!OperatingSystem.IsWindows())
-				File.SetUnixFileMode(finalInstallPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+				File.SetUnixFileMode(installPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
 
 			if (!useJson)
 				formatter.WriteInfo($"dotnet-pgo installed to {DisplayPath}.");
 
-			return finalInstallPath;
+			return installPath;
 		}
 		catch (MauiToolException)
 		{
@@ -502,6 +518,17 @@ internal static class DotnetPgoInstaller
 		value.Any(ch => char.IsWhiteSpace(ch) || ch is '"' or '\'')
 			? $"\"{value.Replace("\"", "\\\"")}\""
 			: value;
+
+	static string GetDisplayPath()
+	{
+		var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		return string.IsNullOrWhiteSpace(userProfile)
+			? Path.Combine(".maui", GetExecutableFileName())
+			: GetExecutablePath(userProfile);
+	}
+
+	static string GetExecutableFileName()
+		=> OperatingSystem.IsWindows() ? "dotnet-pgo.exe" : "dotnet-pgo";
 
 	static Exception CreateProcessFailureException(string commandName, ProcessResult result)
 	{

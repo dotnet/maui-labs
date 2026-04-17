@@ -193,7 +193,7 @@ public static class ProcessRunner
 			if (e.Data != null)
 			{
 				stdoutBuilder.AppendLine(e.Data);
-				onOutputData?.Invoke(e.Data);
+				InvokeCallbackSafely(onOutputData, e.Data, "stdout");
 			}
 			else
 				outputTcs.TrySetResult(true);
@@ -204,7 +204,7 @@ public static class ProcessRunner
 			if (e.Data != null)
 			{
 				stderrBuilder.AppendLine(e.Data);
-				onErrorData?.Invoke(e.Data);
+				InvokeCallbackSafely(onErrorData, e.Data, "stderr");
 			}
 			else
 				errorTcs.TrySetResult(true);
@@ -288,6 +288,21 @@ public static class ProcessRunner
 				StandardError = ex.Message,
 				Duration = stopwatch.Elapsed
 			};
+		}
+	}
+
+	static void InvokeCallbackSafely(Action<string>? callback, string data, string streamName)
+	{
+		if (callback is null)
+			return;
+
+		try
+		{
+			callback(data);
+		}
+		catch (Exception ex)
+		{
+			Trace.WriteLine($"Process {streamName} callback failed: {ex.Message}");
 		}
 	}
 
