@@ -15,8 +15,15 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
-			var targetIndex = VirtualView.IndexOf(child);
-			PlatformView.Children.Insert(targetIndex, (UIElement)child.ToPlatform(MauiContext));
+			try
+			{
+				var targetIndex = VirtualView.IndexOf(child);
+				PlatformView.Children.Insert(targetIndex, (UIElement)child.ToPlatform(MauiContext));
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.Add failed for {child?.GetType().Name}: {ex}");
+			}
 		}
 
 		public override void SetVirtualView(IView view)
@@ -32,9 +39,17 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			PlatformView.Children.Clear();
 
+			// Realize each child independently so a failure in one doesn't break the rest of the layout.
 			foreach (var child in VirtualView)
 			{
-				PlatformView.Children.Add((UIElement)child.ToPlatform(MauiContext));
+				try
+				{
+					PlatformView.Children.Add((UIElement)child.ToPlatform(MauiContext));
+				}
+				catch (Exception ex)
+				{
+					System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.SetVirtualView failed for child {child?.GetType().Name}: {ex}");
+				}
 			}
 		}
 
@@ -60,8 +75,15 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
-			var targetIndex = VirtualView.IndexOf(child);
-			PlatformView.Children.Insert(targetIndex, (UIElement)child.ToPlatform(MauiContext));
+			try
+			{
+				var targetIndex = VirtualView.IndexOf(child);
+				PlatformView.Children.Insert(targetIndex, (UIElement)child.ToPlatform(MauiContext));
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.Insert failed for {child?.GetType().Name}: {ex}");
+			}
 		}
 
 		public void Update(int index, IView child)
@@ -70,8 +92,15 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
-			PlatformView.Children[index] = (UIElement)child.ToPlatform(MauiContext);
-			EnsureZIndexOrder(child);
+			try
+			{
+				PlatformView.Children[index] = (UIElement)child.ToPlatform(MauiContext);
+				EnsureZIndexOrder(child);
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] LayoutHandler.Update failed for {child?.GetType().Name}: {ex}");
+			}
 		}
 
 		public void UpdateZIndex(IView child)

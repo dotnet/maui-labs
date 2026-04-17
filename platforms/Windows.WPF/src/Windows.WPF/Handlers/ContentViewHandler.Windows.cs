@@ -27,7 +27,16 @@ namespace Microsoft.Maui.Handlers.WPF
 			handler.PlatformView.Children.Clear();
 
 			if (handler.VirtualView.PresentedContent is IView view)
-				handler.PlatformView.Children.Add((UIElement)view.ToPlatform(handler.MauiContext));
+			{
+				try
+				{
+					handler.PlatformView.Children.Add((UIElement)view.ToPlatform(handler.MauiContext));
+				}
+				catch (Exception ex)
+				{
+					System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.Platforms.Windows.WPF] ContentViewHandler.UpdateContent failed for {view?.GetType().Name}: {ex}");
+				}
+			}
 		}
 
 		protected override ContentPanel CreatePlatformView()
