@@ -1,4 +1,3 @@
-using System;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using MauiColors = Microsoft.Maui.Graphics.Colors;
@@ -6,37 +5,27 @@ using MauiColors = Microsoft.Maui.Graphics.Colors;
 namespace Comet.Styles
 {
 	/// <summary>
-	/// Built-in light and dark themes with Material 3 token values.
+	/// Built-in light and dark themes using Material 3 token values.
 	/// </summary>
 	public static class Defaults
 	{
-		public static Theme Light
+		public static Theme Light { get; } = new Theme
 		{
-			get
-			{
-				var theme = Theme.Light;
-				theme.Name = "Light";
-				theme.Colors = LightColors;
-				theme.Typography = TypographyDefaults.Material3;
-				theme.Spacing = SpacingDefaults.Standard;
-				theme.Shapes = ShapeDefaults.Rounded;
-				return theme;
-			}
-		}
+			Name = "Light",
+			Colors = LightColors,
+			Typography = TypographyDefaults.Material3,
+			Spacing = SpacingDefaults.Standard,
+			Shapes = ShapeDefaults.Rounded,
+		};
 
-		public static Theme Dark
+		public static Theme Dark { get; } = new Theme
 		{
-			get
-			{
-				var theme = Theme.Dark;
-				theme.Name = "Dark";
-				theme.Colors = DarkColors;
-				theme.Typography = TypographyDefaults.Material3;
-				theme.Spacing = SpacingDefaults.Standard;
-				theme.Shapes = ShapeDefaults.Rounded;
-				return theme;
-			}
-		}
+			Name = "Dark",
+			Colors = DarkColors,
+			Typography = TypographyDefaults.Material3,
+			Spacing = SpacingDefaults.Standard,
+			Shapes = ShapeDefaults.Rounded,
+		};
 
 		static readonly ColorTokenSet LightColors = new ColorTokenSet
 		{

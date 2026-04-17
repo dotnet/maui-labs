@@ -66,7 +66,7 @@ namespace Comet
 			if (style is null)
 			{
 				var theme = ThemeManager.Current(button);
-				style = theme.GetNewControlStyle<Button>() as IControlStyle<Button, ButtonConfiguration>;
+				style = theme.GetControlStyle<Button, ButtonConfiguration>();
 			}
 
 			if (style is null)
@@ -86,7 +86,7 @@ namespace Comet
 			if (style is null)
 			{
 				var theme = ThemeManager.Current(toggle);
-				style = theme.GetNewControlStyle<Toggle>() as IControlStyle<Toggle, ToggleConfiguration>;
+				style = theme.GetControlStyle<Toggle, ToggleConfiguration>();
 			}
 
 			if (style is null)
@@ -106,7 +106,7 @@ namespace Comet
 			if (style is null)
 			{
 				var theme = ThemeManager.Current(textField);
-				style = theme.GetNewControlStyle<TextField>() as IControlStyle<TextField, TextFieldConfiguration>;
+				style = theme.GetControlStyle<TextField, TextFieldConfiguration>();
 			}
 
 			if (style is null)
@@ -126,7 +126,7 @@ namespace Comet
 			if (style is null)
 			{
 				var theme = ThemeManager.Current(slider);
-				style = theme.GetNewControlStyle<Slider>() as IControlStyle<Slider, SliderConfiguration>;
+				style = theme.GetControlStyle<Slider, SliderConfiguration>();
 			}
 
 			if (style is null)

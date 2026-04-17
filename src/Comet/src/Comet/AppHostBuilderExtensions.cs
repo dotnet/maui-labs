@@ -104,7 +104,11 @@ namespace Comet
 			// Initialize the token-based theme system with Material 3 defaults.
 			// This must happen after legacy style.Apply() so the old environment
 			// keys are set first, then the new ThemeManager overlays token values.
-			var defaultTheme = Defaults.Light;
+			// Fork the shared Defaults.Light via `with { }` so the framework's
+			// ButtonStyles.Filled registration doesn't mutate the shared singleton
+			// (records copy the _controlStyles ImmutableDictionary on `with`, so
+			// subsequent SetControlStyle calls affect only this derived theme).
+			var defaultTheme = Defaults.Light with { };
 			defaultTheme.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Filled);
 			ThemeManager.SetTheme(defaultTheme);
 
@@ -1178,9 +1182,11 @@ namespace Comet
 		/// <summary>
 		/// Registers handler mapper entries for IControlStyle resolution on Button,
 		/// Toggle, TextField, and Slider. These resolve the active control style
-		/// from the environment (scoped or theme-level) and apply it as fallback
-		/// values via the type-scoped global environment, which has lower priority
-		/// than explicit properties set on the view itself.
+		/// from the environment (scoped or theme-level) and apply it as per-instance
+		/// defaults via the target view's cascading context. Explicit fluent
+		/// properties (written to LocalContext with cascades:false) take priority
+		/// over style-resolved values, preserving user intent without leaking one
+		/// view's state (pressed/hovered/etc.) onto every control of the same type.
 		/// </summary>
 		static void RegisterStyleResolutionMappers()
 		{
@@ -1200,7 +1206,7 @@ namespace Comet
 				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
-				ApplyModifierAsTypeScopedDefaults(button, typeof(Button), resolved);
+				ApplyModifierAsInstanceDefaults(button, resolved);
 			});
 
 			// Toggle style resolution
@@ -1219,7 +1225,7 @@ namespace Comet
 				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
-				ApplyModifierAsTypeScopedDefaults(toggle, typeof(Toggle), resolved);
+				ApplyModifierAsInstanceDefaults(toggle, resolved);
 			});
 
 			// TextField style resolution
@@ -1238,7 +1244,7 @@ namespace Comet
 				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
-				ApplyModifierAsTypeScopedDefaults(textField, typeof(TextField), resolved);
+				ApplyModifierAsInstanceDefaults(textField, resolved);
 			});
 
 			// Slider style resolution
@@ -1259,60 +1265,59 @@ namespace Comet
 				if (resolved is null || resolved == ViewModifier.Empty)
 					return;
 
-				ApplyModifierAsTypeScopedDefaults(slider, typeof(Slider), resolved);
+				ApplyModifierAsInstanceDefaults(slider, resolved);
 			});
 		}
 
 		/// <summary>
-		/// Applies a resolved ViewModifier's values as type-scoped global environment
-		/// defaults. This ensures explicit user properties (local scope) win over
-		/// style-resolved properties (global type-scoped scope).
+		/// Applies a resolved <see cref="ViewModifier"/>'s property writes as
+		/// per-instance defaults on <paramref name="view"/>. State-dependent values
+		/// (IsPressed / IsHovered / IsFocused colors) must stay scoped to the
+		/// instance that owns the state — writing them to a global type-scoped
+		/// environment would leak one view's pressed appearance onto every other
+		/// view of the same type.
 		///
-		/// Works by applying the modifier to a scratch view, then extracting the
-		/// environment values it set and pushing them to the global type-scoped store.
+		/// Values are written to the view's cascading context (cascades: true),
+		/// which sits below the view's LocalContext in the lookup chain. Explicit
+		/// fluent setters like <c>.Background(Colors.Red)</c> use cascades:false
+		/// and therefore win over style-resolved defaults. See STYLE_THEME_SPEC.md
+		/// §4.8, §10.3.
 		/// </summary>
-		static void ApplyModifierAsTypeScopedDefaults(View realView, Type controlType, ViewModifier modifier)
+		static void ApplyModifierAsInstanceDefaults(View view, ViewModifier modifier)
 		{
-			// Apply the modifier directly to the view. The modifier calls fluent
-			// methods which call SetEnvironment with cascades=true, writing to
-			// the view's Context dictionary.
-			//
-			// To preserve priority (explicit > style), we instead push values to
-			// the type-scoped global environment which sits below local values
-			// in the lookup chain (see ContextualObject.GetValue).
-			//
-			// Strategy: snapshot the view's context keys before applying, apply
-			// the modifier, detect new keys, move new values to global type-scoped,
-			// and revert changes on the view's context.
-			var contextBefore = new Dictionary<string, object>();
-			if (realView._context is not null)
-			{
-				foreach (var kvp in realView._context.dictionary)
-					contextBefore[kvp.Key] = kvp.Value;
-			}
-
-			// Use MonitorChanges to capture what the modifier would write without
-			// actually persisting to the view's environment. This avoids firing
-			// property-changed notifications for style-default values.
+			// Snapshot what the modifier would write (without mutating the view)
+			// so we can replay each write to the view's cascading context at the
+			// right priority.
 			ContextualObject.MonitorChanges();
 			try
 			{
-				modifier.Apply(realView);
+				modifier.Apply(view);
 			}
 			finally
 			{
 				var changes = ContextualObject.StopMonitoringChanges();
-				// Push each changed property to the type-scoped global environment
-				// as a fallback. The view's own values (explicit user properties)
-				// take priority in the lookup chain.
+				if (changes is null)
+					return;
+
 				foreach (var entry in changes)
 				{
+					// Only replay writes that targeted this specific view — the
+					// modifier may set properties on child/composed views it
+					// created internally, and those should reach their own
+					// contexts untouched.
+					if (!ReferenceEquals(entry.Key.view, view))
+						continue;
+
 					var key = entry.Key.property;
 					var newValue = entry.Value.newValue;
-					if (newValue is not null)
-					{
-						View.SetGlobalEnvironment(controlType, key, newValue);
-					}
+					if (newValue is null)
+						continue;
+
+					// cascades: true routes to the view's Context slot, which is
+					// below LocalContext (explicit fluent) but above the parent /
+					// global environment. Exactly the precedence a style default
+					// should have, and scoped to this instance only.
+					view.SetEnvironment(key, newValue, cascades: true);
 				}
 			}
 		}

@@ -53,12 +53,12 @@ namespace Comet
 
 		void IApplication.ThemeChanged()
 		{
-			var appInfo = AppInfo.Current;
-			var theme = appInfo.RequestedTheme;
-			if (theme == AppTheme.Dark)
-				Styles.Theme.Current = Styles.Theme.Dark;
-			else
-				Styles.Theme.Current = Styles.Theme.Light;
+			// System theme changes are observed here but the framework no longer
+			// forcibly swaps the active Comet theme. Apps that want to follow the
+			// platform light/dark setting should subscribe to
+			// Microsoft.Maui.ApplicationModel.AppInfo.Current.RequestedThemeChanged
+			// (or override this method) and call ThemeManager.SetTheme(...) with
+			// their own Theme instance. See STYLE_THEME_SPEC.md §6.5.
 		}
 
 		IMauiContext IMauiContextHolder.MauiContext { get; set; }

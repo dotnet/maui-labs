@@ -6,19 +6,31 @@ using Microsoft.Maui.Graphics;
 namespace Comet.Styles
 {
 	/// <summary>
-	/// Manages the active theme reference via the environment system.
-	/// Supports both global and scoped (per-subtree) theme overrides.
+	/// Owns the active theme reference and exposes it via the environment system.
+	/// Supports a global theme plus scoped (per-subtree) theme overrides.
 	/// </summary>
+	/// <remarks>
+	/// Spec: docs/architecture/STYLE_THEME_SPEC.md §6, §7.
+	/// </remarks>
 	public static class ThemeManager
 	{
 		/// <summary>
-		/// Environment key for the active theme reference.
+		/// Environment key for the active theme reference. Internal —
+		/// consumers should go through <see cref="Current()"/> / <see cref="SetTheme"/>
+		/// or <see cref="UseTheme{T}"/>.
 		/// </summary>
-		internal static readonly string ActiveThemeKey = "Comet.Theme.Active";
+		internal const string ActiveThemeKey = "Comet.Theme.Active";
+
+		/// <summary>
+		/// Fallback theme returned when no theme has been set. Set internally by
+		/// the framework startup (see <c>AppHostBuilderExtensions.UseCometHandlers</c>).
+		/// </summary>
+		static Theme _defaultTheme;
 
 		/// <summary>
 		/// Gets the current theme from the nearest environment scope for a view.
-		/// Walks the parent chain to find scoped .Theme() overrides.
+		/// Walks the parent chain to find scoped <see cref="UseTheme{T}"/> overrides,
+		/// then falls back to the global theme.
 		/// </summary>
 		public static Theme Current(View view)
 		{
@@ -30,34 +42,32 @@ namespace Comet.Styles
 		}
 
 		/// <summary>
-		/// Gets the current theme from the global environment.
+		/// Gets the current theme from the global environment, or the registered
+		/// default theme if none has been set.
 		/// </summary>
 		public static Theme Current()
 		{
 			var theme = View.GetGlobalEnvironment<Theme>(ActiveThemeKey);
-			if (theme is not null)
-				return theme;
-
-			// Fall back to the legacy Theme.Current if no new-style theme is set
-			return Theme.Current ?? Defaults.Light;
+			return theme ?? _defaultTheme;
 		}
 
 		/// <summary>
 		/// Sets the active theme globally. Reactive — views that read tokens update.
-		/// Also syncs MAUI's Application.Current.UserAppTheme so platform chrome
-		/// (navigation bar, status bar, page backgrounds) follows the theme.
 		/// </summary>
 		public static void SetTheme(Theme theme)
 		{
+			if (theme is null)
+				throw new ArgumentNullException(nameof(theme));
+
+			// Remember the latest applied theme as the default fallback so early
+			// reads (before the environment is populated) still see a value.
+			_defaultTheme = theme;
+
 			View.SetGlobalEnvironment(ActiveThemeKey, theme);
 
-			// Sync with MAUI's theme system so native chrome respects the theme
-			SyncMauiAppTheme(theme);
-
-			// Mark all views with a render body dirty so they re-render with new theme
-			// colors. This includes Component<T> (IComponentWithState) and CometApp
-			// subclasses that use Body = func. CoffeeColors properties resolve from
-			// ThemeManager.Current() so a full re-render picks up new values.
+			// Mark all views with a render body dirty so they re-render with new
+			// theme values. Token reads resolve from ThemeManager.Current() so
+			// a full re-render picks up the change.
 			ThreadHelper.RunOnMainThread(() =>
 			{
 				List<View> views;
@@ -69,40 +79,6 @@ namespace Comet.Styles
 						Reactive.ReactiveScheduler.MarkViewDirty(v);
 				}
 			});
-		}
-
-		/// <summary>
-		/// Maps the Comet theme's CurrentTheme to MAUI's UserAppTheme property
-		/// so navigation bars, status bars and other platform chrome follow along.
-		/// </summary>
-		static void SyncMauiAppTheme(Theme theme)
-		{
-			if (theme is null)
-				return;
-
-			try
-			{
-				var app = Microsoft.Maui.Controls.Application.Current;
-				if (app is null)
-					return;
-
-				switch (theme.CurrentTheme)
-				{
-					case AppTheme.Dark:
-						app.UserAppTheme = Microsoft.Maui.ApplicationModel.AppTheme.Dark;
-						break;
-					case AppTheme.Light:
-						app.UserAppTheme = Microsoft.Maui.ApplicationModel.AppTheme.Light;
-						break;
-					default:
-						app.UserAppTheme = Microsoft.Maui.ApplicationModel.AppTheme.Unspecified;
-						break;
-				}
-			}
-			catch
-			{
-				// Application.Current may not be available during startup or tests
-			}
 		}
 
 		/// <summary>
@@ -120,42 +96,26 @@ namespace Comet.Styles
 		/// When the theme changes, the func re-evaluates.
 		/// </summary>
 		public static Func<Color> TokenBinding(Token<Color> token)
-			=> () =>
-			{
-				var theme = Current();
-				return token.Resolve(theme);
-			};
+			=> () => token.Resolve(Current());
 
 		/// <summary>
 		/// Returns a func that lazily resolves a color token from the nearest
 		/// scoped theme for a specific view.
 		/// </summary>
 		public static Func<Color> TokenBinding(View view, Token<Color> token)
-			=> () =>
-			{
-				var theme = Current(view);
-				return token.Resolve(theme);
-			};
+			=> () => token.Resolve(Current(view));
 
 		/// <summary>
 		/// Returns a func that lazily resolves a double token from the global theme.
 		/// </summary>
 		public static Func<double> TokenBinding(Token<double> token)
-			=> () =>
-			{
-				var theme = Current();
-				return token.Resolve(theme);
-			};
+			=> () => token.Resolve(Current());
 
 		/// <summary>
 		/// Returns a func that lazily resolves a FontSpec token from the global theme.
 		/// </summary>
 		public static Func<FontSpec> TokenBinding(Token<FontSpec> token)
-			=> () =>
-			{
-				var theme = Current();
-				return token.Resolve(theme);
-			};
+			=> () => token.Resolve(Current());
 	}
 
 	/// <summary>
