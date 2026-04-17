@@ -101,15 +101,13 @@ namespace CometControlsGallery.Pages
 					HStack(8,
 						Button("Light Theme", () =>
 						{
-							var t = Defaults.Light;
-							t.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
+							var t = Defaults.Light.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
 							ThemeManager.SetTheme(t);
 							SetState(s => s.CometThemeName = "Light");
 						}),
 						Button("Dark Theme", () =>
 						{
-							var t = Defaults.Dark;
-							t.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
+							var t = Defaults.Dark.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
 							ThemeManager.SetTheme(t);
 							SetState(s => s.CometThemeName = "Dark");
 						})

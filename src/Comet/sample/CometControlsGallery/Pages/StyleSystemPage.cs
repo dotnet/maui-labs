@@ -364,7 +364,7 @@ namespace CometControlsGallery.Pages
 			lines.AppendLine($"Spacing.Large: {SpacingTokens.Large.Resolve(theme)}");
 			lines.AppendLine($"Shape.Medium: {ShapeTokens.Medium.Resolve(theme)}");
 			lines.AppendLine($"Typography.BodyLarge: size={TypographyTokens.BodyLarge.Resolve(theme).Size}");
-			lines.AppendLine($"Has Button style: {theme.GetNewControlStyle<Button>() != null}");
+			lines.AppendLine($"Has Button style: {theme.GetControlStyle<Button, ButtonConfiguration>() != null}");
 
 			SetState(s => s.TokenLog = lines.ToString());
 		}
@@ -380,7 +380,7 @@ namespace CometControlsGallery.Pages
 				"Elevated" => ButtonStyles.Elevated,
 				_ => ButtonStyles.Text,
 			};
-			theme.SetControlStyle<Button, ButtonConfiguration>(btnStyle);
+			theme = theme.SetControlStyle<Button, ButtonConfiguration>(btnStyle);
 			ThemeManager.SetTheme(theme);
 
 			SetState(s =>
@@ -393,7 +393,7 @@ namespace CometControlsGallery.Pages
 		void SwitchGlobalButtonStyle(string name, IControlStyle<Button, ButtonConfiguration> style)
 		{
 			var theme = ThemeManager.Current();
-			theme.SetControlStyle<Button, ButtonConfiguration>(style);
+			theme = theme.SetControlStyle<Button, ButtonConfiguration>(style);
 			ThemeManager.SetTheme(theme);
 
 			SetState(s => s.ActiveButtonStyleName = name);

@@ -58,7 +58,8 @@
 		<UseHardenedRuntime>true</UseHardenedRuntime>
 	</PropertyGroup>
 
-	<Import Project="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets" />
+	<Import Project="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets"
+	        Condition="$(TargetFramework.Contains('-macos')) and Exists('..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets')" />
 
 	<!-- net11.0-macos is not a recognized MAUI single-project platform.
 	     _MauiRemovePlatformCompileItems strips all Platforms/ files for

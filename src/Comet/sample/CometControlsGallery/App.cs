@@ -162,8 +162,8 @@ namespace CometControlsGallery
 #endif
 
 			// Override default button style to match MAUI's native Mac Catalyst look
-			var theme = ThemeManager.Current();
-			theme.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
+			var theme = ThemeManager.Current()
+				.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
 			ThemeManager.SetTheme(theme);
 
 #if DEBUG && !__MACOS__
