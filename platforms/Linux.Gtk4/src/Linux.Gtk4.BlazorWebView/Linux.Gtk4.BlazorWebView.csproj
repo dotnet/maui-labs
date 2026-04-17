@@ -9,6 +9,7 @@
     <Description>Blazor Hybrid support for Microsoft.Maui.Platforms.Linux.Gtk4 — host Blazor components in a native GTK4 window using WebKitGTK.</Description>
     <PackageTags>maui;linux;blazor;webview;gtk;gtk4;webkit;webkitgtk;hybrid</PackageTags>
     <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
   </PropertyGroup>
 
   <ItemGroup>

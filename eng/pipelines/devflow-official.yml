@@ -124,44 +124,76 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
 
-          # TODO: Re-enable when dotnet-buildtools-prereqs image with GTK4 deps is available
-          # - job: LinuxGtk4
-          #   displayName: Linux GTK4 - Ubuntu
-          #   container: ubuntu2404
-          #   pool:
-          #     name: NetCore1ESPool-Internal
-          #     image: build.azurelinux.3.amd64
-          #     os: linux
-          #   strategy:
-          #     matrix:
-          #       Release:
-          #         _BuildConfig: Release
-          #         _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
-          #           /p:TeamName=$(_TeamName)
-          #           /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
-          #   steps:
-          #   - task: UseDotNet@2
-          #     displayName: Install .NET SDK
-          #     inputs:
-          #       useGlobalJson: true
-          #   - script: |
-          #       sudo apt-get update
-          #       sudo apt-get install -y \
-          #         libgtk-4-dev \
-          #         libwebkitgtk-6.0-dev \
-          #         gobject-introspection \
-          #         libgirepository1.0-dev \
-          #         gir1.2-gtk-4.0 \
-          #         gir1.2-webkit-6.0 \
-          #         pkg-config
-          #     displayName: Install GTK4 dependencies
-          #   - script: |
-          #       ./eng/common/cibuild.sh \
-          #         --configuration $(_BuildConfig) \
-          #         --prepareMachine \
-          #         --projects $(Build.SourcesDirectory)/platforms/Linux.Gtk4/Linux.Gtk4.slnx \
-          #         $(_OfficialBuildArgs)
-          #     displayName: Build and Pack Linux GTK4
+          # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
+          # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
+          # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
+          # signing does not execute on Linux agents.
+          - job: LinuxGtk4
+            displayName: Linux GTK4 - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\platforms\Linux.Gtk4\Linux.Gtk4.slnx
+                $(_OfficialBuildArgs)
+              displayName: Build and Pack Linux GTK4
+
+          # Verification-only build on real Linux to catch any platform-specific
+          # build breaks. This job does NOT pack or publish artifacts — the
+          # shipping NuGet packages come from the Windows LinuxGtk4 job above
+          # so that MicroBuild/ESRP can sign the DLLs.
+          - job: LinuxGtk4_LinuxVerify
+            displayName: Linux GTK4 - Ubuntu (verify)
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals build.ubuntu.2204.amd64
+              os: linux
+            templateContext:
+              outputs: []
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: |
+                sudo apt-get update
+                sudo apt-get install -y \
+                  libgtk-4-dev \
+                  libwebkitgtk-6.0-dev \
+                  gobject-introspection \
+                  libgirepository1.0-dev \
+                  gir1.2-gtk-4.0 \
+                  gir1.2-webkit-6.0 \
+                  pkg-config
+              displayName: Install GTK4 dependencies
+            - script: |
+                ./eng/common/build.sh \
+                  --configuration $(_BuildConfig) \
+                  --restore \
+                  --build \
+                  --prepareMachine \
+                  --ci \
+                  --projects $(Build.SourcesDirectory)/platforms/Linux.Gtk4/Linux.Gtk4.slnx \
+                  /p:OfficialBuild=false
+              displayName: Build Linux GTK4 (no pack)
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:

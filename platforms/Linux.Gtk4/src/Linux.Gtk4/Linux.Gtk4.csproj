@@ -9,6 +9,7 @@
     <Description>A .NET MAUI backend for Linux using GTK4. Run your MAUI apps natively on Linux desktops with real GTK4 widgets via GirCore bindings.</Description>
     <PackageTags>maui;linux;gtk;gtk4;desktop;dotnet;cross-platform;gircore</PackageTags>
     <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
   </PropertyGroup>
 
   <ItemGroup>
