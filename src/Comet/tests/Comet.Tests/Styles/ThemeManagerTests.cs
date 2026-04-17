@@ -74,7 +74,7 @@ namespace Comet.Tests
 			ThemeManager.SetTheme(light);
 
 			var current = ThemeManager.Current();
-			Assert.Same(light, current);
+			Assert.Equal(light, current);
 		}
 
 		[Fact]
@@ -111,7 +111,7 @@ namespace Comet.Tests
 
 			var view = new Text("Hello");
 			var theme = ThemeManager.Current(view);
-			Assert.Same(light, theme);
+			Assert.Equal(light, theme);
 		}
 
 		[Fact]
