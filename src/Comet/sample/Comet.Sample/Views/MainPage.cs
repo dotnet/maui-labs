@@ -19,7 +19,6 @@ namespace Comet.Samples
 			new MenuItem("VGrid Number Pad", ()=> new VGridNumberPad()),
 			new MenuItem("Shape View Sample", ()=> new ShapeViewSample()),
 			new MenuItem("Graphics Finger Paint Sample",()=> new SkiaSample1()),
-			new MenuItem("Material Design",()=> new MaterialStylePicker()),
 			new MenuItem("AuditReportPage",()=> new AuditReportPage()),
 			new MenuItem("VStackSample",()=> new VStackSample()),
 			new MenuItem("Demo Credit Card",()=> new DemoCreditCardView()),
