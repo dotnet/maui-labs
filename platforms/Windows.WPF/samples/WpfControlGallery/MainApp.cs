@@ -77,7 +77,7 @@ class MainShell : FlyoutPage
 					FontSize = 14,
 				};
 				lbl.SetBinding(Label.TextProperty, nameof(MenuEntry.Name));
-				lbl.SetBinding(AutomationProperties.NameProperty, nameof(MenuEntry.Name));
+				lbl.SetBinding(SemanticProperties.DescriptionProperty, nameof(MenuEntry.Name));
 				lbl.SetBinding(Label.AutomationIdProperty, nameof(MenuEntry.AutomationId));
 				return lbl;
 			}),
