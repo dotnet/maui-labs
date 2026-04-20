@@ -118,19 +118,57 @@ public static partial class AndroidCommands
 						{
 							sdkTask.Complete("SDK Tools already installed");
 						}
+					});
 
-						// Step 3: Accept licenses (only if --accept-licenses)
+					// Step 3: Ensure licenses are accepted.
+					// - If --accept-licenses was passed, bulk-accept non-interactively.
+					// - Otherwise, if running interactively, hand stdin/stdout to `sdkmanager --licenses`
+					//   so the user can review and accept each license. The Spectre live renderer
+					//   has exited above, so child-process prompts are visible.
+					// - In CI/non-interactive mode without --accept-licenses, fail fast rather than hang.
+					var licensesAccepted = await androidProvider.AreLicensesAcceptedAsync(cancellationToken);
+					if (!licensesAccepted)
+					{
 						if (acceptLicenses)
 						{
-							var licenseTask = ctx.AddTask("Accepting licenses");
-							licenseTask.SetIndeterminate("Checking licenses...");
-							await androidProvider.AcceptLicensesAsync(
-								onProgress: msg => licenseTask.SetIndeterminate(msg),
-								cancellationToken);
-							licenseTask.Complete("Licenses accepted");
+							await spectre.LiveProgressAsync(async (ctx) =>
+							{
+								var licenseTask = ctx.AddTask("Accepting licenses");
+								licenseTask.SetIndeterminate("Checking licenses...");
+								await androidProvider.AcceptLicensesAsync(
+									onProgress: msg => licenseTask.SetIndeterminate(msg),
+									cancellationToken);
+								licenseTask.Complete("Licenses accepted");
+							});
+						}
+						else if (isCi || Console.IsInputRedirected)
+						{
+							formatter.WriteError(new Exception(
+								"Android SDK licenses have not been accepted. " +
+								"Re-run with --accept-licenses, or run 'maui android sdk accept-licenses' interactively."));
+							return 1;
+						}
+						else
+						{
+							formatter.WriteInfo("Android SDK licenses must be accepted to continue.");
+							formatter.WriteInfo("Review each license and type 'y' to accept.\n");
+							var exitCode = await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
+							if (exitCode != 0)
+							{
+								formatter.WriteError(new Exception(
+									$"License acceptance exited with code {exitCode}. Aborting install."));
+								return 1;
+							}
+							formatter.WriteSuccess("Licenses accepted");
 						}
 
-						// Step 4: Install packages
+						// Prevent per-package re-prompting during Step 4.
+						acceptLicenses = true;
+					}
+
+					// Step 4: Install packages
+					await spectre.LiveProgressAsync(async (ctx) =>
+					{
 						var pkgTask = ctx.AddTask($"Installing packages (0/{pkgList.Count})");
 						pkgTask.Update(0, $"Installing packages (0/{pkgList.Count})...");
 						await androidProvider.InstallPackagesAsync(pkgList, acceptLicenses,
@@ -145,6 +183,17 @@ public static partial class AndroidCommands
 				}
 				else
 				{
+					// JSON / non-Spectre path: non-interactive by nature. If licenses aren't
+					// already accepted and the caller didn't pass --accept-licenses, fail fast
+					// rather than letting sdkmanager block on stdin.
+					if (!acceptLicenses && !await androidProvider.AreLicensesAcceptedAsync(cancellationToken))
+					{
+						formatter.WriteError(new Exception(
+							"Android SDK licenses have not been accepted. " +
+							"Re-run with --accept-licenses, or run 'maui android sdk accept-licenses' interactively."));
+						return 1;
+					}
+
 					var progress = new Progress<string>(message =>
 					{
 						formatter.WriteProgress(message);
@@ -184,5 +233,37 @@ public static partial class AndroidCommands
 		});
 
 		return command;
+	}
+
+	/// <summary>
+	/// Spawns <c>sdkmanager --licenses</c> with inherited stdio so the user can review and
+	/// accept each SDK license interactively. Returns the child process exit code.
+	/// </summary>
+	static async Task<int> RunInteractiveLicenseAcceptanceAsync(
+		IAndroidProvider androidProvider,
+		CancellationToken cancellationToken)
+	{
+		var licenseCommand = androidProvider.GetLicenseAcceptanceCommand()
+			?? throw new InvalidOperationException(
+				"Android SDK is not installed (sdkmanager not found). " +
+				"Install the command-line tools first.");
+
+		var psi = new System.Diagnostics.ProcessStartInfo
+		{
+			FileName = licenseCommand.Command,
+			Arguments = licenseCommand.Arguments,
+			UseShellExecute = false,
+			RedirectStandardInput = false,
+			RedirectStandardOutput = false,
+			RedirectStandardError = false
+		};
+
+		foreach (var kvp in AndroidEnvironment.BuildEnvironmentVariables(androidProvider.SdkPath, androidProvider.JdkPath))
+			psi.Environment[kvp.Key] = kvp.Value;
+
+		using var process = System.Diagnostics.Process.Start(psi)
+			?? throw new InvalidOperationException("Failed to start sdkmanager --licenses");
+		await process.WaitForExitAsync(cancellationToken);
+		return process.ExitCode;
 	}
 }
