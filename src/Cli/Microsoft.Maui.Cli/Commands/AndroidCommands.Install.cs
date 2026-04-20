@@ -141,7 +141,7 @@ public static partial class AndroidCommands
 								licenseTask.Complete("Licenses accepted");
 							});
 						}
-						else if (isCi || Console.IsInputRedirected)
+						else if (isCi || Console.IsInputRedirected || Console.IsOutputRedirected)
 						{
 							formatter.WriteError(new Exception(
 								"Android SDK licenses have not been accepted. " +
@@ -161,10 +161,14 @@ public static partial class AndroidCommands
 							}
 							formatter.WriteSuccess("Licenses accepted");
 						}
-
-						// Prevent per-package re-prompting during Step 4.
-						acceptLicenses = true;
 					}
+
+					// By this point licenses are accepted (either already, bulk-accepted, or
+					// interactively accepted). Force acceptLicenses=true into Step 4 so that
+					// if a newly-requested package introduces an as-yet-unaccepted license,
+					// sdkmanager bulk-accepts it rather than blocking on stdin behind the
+					// live progress renderer.
+					acceptLicenses = true;
 
 					// Step 4: Install packages
 					await spectre.LiveProgressAsync(async (ctx) =>
@@ -183,10 +187,14 @@ public static partial class AndroidCommands
 				}
 				else
 				{
-					// JSON / non-Spectre path: non-interactive by nature. If licenses aren't
-					// already accepted and the caller didn't pass --accept-licenses, fail fast
-					// rather than letting sdkmanager block on stdin.
-					if (!acceptLicenses && !await androidProvider.AreLicensesAcceptedAsync(cancellationToken))
+					// JSON / non-Spectre path: non-interactive by nature. If the SDK is already
+					// installed and licenses aren't yet accepted, fail fast rather than letting
+					// sdkmanager block on stdin. If the SDK isn't installed yet, there's nothing
+					// to hang on — InstallAsync will bootstrap tools and (when acceptLicenses
+					// is true) accept licenses non-interactively.
+					if (!acceptLicenses
+						&& androidProvider.IsSdkInstalled
+						&& !await androidProvider.AreLicensesAcceptedAsync(cancellationToken))
 					{
 						formatter.WriteError(new Exception(
 							"Android SDK licenses have not been accepted. " +

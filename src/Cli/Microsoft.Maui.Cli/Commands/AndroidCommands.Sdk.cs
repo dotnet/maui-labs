@@ -458,11 +458,11 @@ public static partial class AndroidCommands
 					if (exitCode == 0)
 					{
 						formatter.WriteSuccess("License acceptance completed");
+						return 0;
 					}
-					else
-					{
-						formatter.WriteWarning($"License acceptance exited with code {exitCode}");
-					}
+
+					formatter.WriteWarning($"License acceptance exited with code {exitCode}");
+					return exitCode;
 				}
 				return 0;
 			}
