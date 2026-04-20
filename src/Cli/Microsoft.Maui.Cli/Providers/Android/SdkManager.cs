@@ -320,18 +320,28 @@ public class SdkManager : IDisposable
 	}
 
 	/// <summary>
-	/// Attempts to create and immediately delete a probe file inside <paramref name="path"/> to
-	/// determine whether the current process has write access to that directory.
-	/// Returns <see langword="true"/> if the write succeeds, <see langword="false"/> if an
-	/// <see cref="UnauthorizedAccessException"/> is thrown.
+	/// Attempts to create a probe file inside <paramref name="path"/> to determine whether the
+	/// current process has write access to that directory. The probe file is opened with
+	/// <see cref="FileOptions.DeleteOnClose"/> so it is always removed, even if the process
+	/// crashes or an AV scanner holds a handle.
+	/// Returns <see langword="true"/> if the probe succeeds. Returns <see langword="false"/>
+	/// when access is denied or the directory no longer exists
+	/// (<see cref="UnauthorizedAccessException"/> or <see cref="DirectoryNotFoundException"/>).
+	/// Returns <see langword="true"/> for other <see cref="IOException"/>s so transient I/O
+	/// failures (e.g., on network shares) are not treated as evidence that elevation is required.
 	/// </summary>
 	internal static bool CanWriteToDirectory(string path)
 	{
 		var probe = Path.Combine(path, Path.GetRandomFileName());
 		try
 		{
-			File.WriteAllText(probe, string.Empty);
-			File.Delete(probe);
+			using var fs = new FileStream(
+				probe,
+				FileMode.CreateNew,
+				FileAccess.Write,
+				FileShare.None,
+				bufferSize: 1,
+				FileOptions.DeleteOnClose);
 			return true;
 		}
 		catch (UnauthorizedAccessException)

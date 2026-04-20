@@ -18,20 +18,23 @@ public class SdkManagerElevationTests : IDisposable
 {
 	readonly string _tempDir;
 	readonly string? _savedAndroidHome;
+	readonly string? _savedAndroidSdkRoot;
 
 	public SdkManagerElevationTests()
 	{
 		_tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 		Directory.CreateDirectory(_tempDir);
 
-		// Save the existing ANDROID_HOME so we can restore it after each test.
+		// Save the existing env vars so we can restore them after each test.
 		_savedAndroidHome = Environment.GetEnvironmentVariable("ANDROID_HOME");
+		_savedAndroidSdkRoot = Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT");
 	}
 
 	public void Dispose()
 	{
-		// Restore ANDROID_HOME to avoid leaking state to other tests.
+		// Restore env vars to avoid leaking state to other tests.
 		Environment.SetEnvironmentVariable("ANDROID_HOME", _savedAndroidHome);
+		Environment.SetEnvironmentVariable("ANDROID_SDK_ROOT", _savedAndroidSdkRoot);
 
 		if (Directory.Exists(_tempDir))
 			Directory.Delete(_tempDir, recursive: true);
@@ -155,20 +158,27 @@ public class SdkManagerElevationTests : IDisposable
 	[Fact]
 	public async Task CheckHealthAsync_IncludesRequiresElevation_WhenSdkIsNotFound()
 	{
-		// Arrange: point ANDROID_HOME to a directory that exists but has no cmdline-tools,
-		// making IsSdkInstalled = false regardless of what is installed in the environment.
-		var noSdkDir = Path.Combine(_tempDir, "no-sdk");
-		Directory.CreateDirectory(noSdkDir);
-		Environment.SetEnvironmentVariable("ANDROID_HOME", noSdkDir);
+		// Arrange: clear both Android env vars so SdkPath resolution cannot pick them up,
+		// and point ANDROID_HOME at a directory that does not exist. GetAndroidSdkPath
+		// will reject the non-existent path and — on a host without a real SDK installed
+		// at a default location — return null, forcing IsSdkInstalled = false.
+		var nonExistent = Path.Combine(_tempDir, "does-not-exist");
+		Environment.SetEnvironmentVariable("ANDROID_HOME", nonExistent);
+		Environment.SetEnvironmentVariable("ANDROID_SDK_ROOT", null);
 
 		var jdkManager = new FakeJdkManager { IsInstalled = true };
 		var provider = new AndroidProvider(jdkManager);
+
+		// If the test host has an SDK installed at a default Android Studio / Visual Studio
+		// location, we can't deterministically exercise the "not installed" branch — skip.
+		if (provider.IsSdkInstalled)
+			return;
 
 		// Act
 		var checks = await provider.CheckHealthAsync();
 		var sdkCheck = checks.FirstOrDefault(c => c.Name == "Android SDK");
 
-		// Assert: requiresElevation must still be present in the error check details.
+		// Assert: requiresElevation must be present in the error check details too.
 		Assert.NotNull(sdkCheck);
 		Assert.Equal(CheckStatus.Error, sdkCheck.Status);
 		Assert.NotNull(sdkCheck.Details);
