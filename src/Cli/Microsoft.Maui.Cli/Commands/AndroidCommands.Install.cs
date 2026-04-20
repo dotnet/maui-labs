@@ -175,7 +175,7 @@ public static partial class AndroidCommands
 							onProgress: (pkg, idx, total) =>
 							{
 								var pct = (double)idx / total * 100;
-								pkgTask.Update(pct, $"Installing {pkg} ({idx + 1}/{total})");
+								pkgTask.Update(pct, $"Installing {pkg} ({idx}/{total})");
 							},
 							cancellationToken);
 						pkgTask.Complete($"{pkgList.Count} packages installed");
@@ -190,7 +190,7 @@ public static partial class AndroidCommands
 					{
 						formatter.WriteError(new Exception(
 							"Android SDK licenses have not been accepted. " +
-							"Re-run with --accept-licenses, or run 'maui android sdk accept-licenses' interactively."));
+							"Re-run this install command with --accept-licenses to bootstrap SDK tools and accept licenses non-interactively."));
 						return 1;
 					}
 
@@ -263,7 +263,26 @@ public static partial class AndroidCommands
 
 		using var process = System.Diagnostics.Process.Start(psi)
 			?? throw new InvalidOperationException("Failed to start sdkmanager --licenses");
-		await process.WaitForExitAsync(cancellationToken);
-		return process.ExitCode;
+
+		try
+		{
+			await process.WaitForExitAsync(cancellationToken);
+			return process.ExitCode;
+		}
+		catch (OperationCanceledException)
+		{
+			// Kill the child process tree so Ctrl+C doesn't leave an orphaned sdkmanager
+			// blocked on stdin.
+			if (!process.HasExited)
+			{
+				try { process.Kill(entireProcessTree: true); }
+				catch { /* Best-effort: process may have already exited. */ }
+
+				try { await process.WaitForExitAsync(CancellationToken.None); }
+				catch { /* Ignore cleanup failures; preserve original cancellation. */ }
+			}
+
+			throw;
+		}
 	}
 }
