@@ -59,6 +59,26 @@ public class WebViewTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Contexts_WebViewIsReady()
+    {
+        await EnsureOnBlazorPageAsync();
+        await WaitForCdpReadyAsync();
+
+        var json = await Client.GetCdpWebViewsAsync();
+
+        Assert.True(json.ValueKind == JsonValueKind.Object || json.ValueKind == JsonValueKind.Array);
+
+        if (json.ValueKind == JsonValueKind.Array)
+        {
+            Assert.True(json.GetArrayLength() > 0, "Expected at least one WebView context");
+        }
+        else if (json.TryGetProperty("webviews", out var webviewsProp) && webviewsProp.ValueKind == JsonValueKind.Array)
+        {
+            Assert.True(webviewsProp.GetArrayLength() > 0, "Expected at least one WebView context");
+        }
+    }
+
+    [Fact]
     public async Task Evaluate_DocumentTitle_ReturnsResult()
     {
         await EnsureOnBlazorPageAsync();

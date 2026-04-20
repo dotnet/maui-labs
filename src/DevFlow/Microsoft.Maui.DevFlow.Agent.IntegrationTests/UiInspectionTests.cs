@@ -134,6 +134,22 @@ public class UiInspectionTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Query_MultipleTypes_ReturnsAppropriateResults()
+    {
+        await NavigateToMainPageAsync();
+
+        var labels = await Client.QueryAsync(type: "Label");
+        var entries = await Client.QueryAsync(type: "Entry");
+
+        Assert.NotEmpty(labels);
+        Assert.NotEmpty(entries);
+
+        var labelIds = labels.Select(e => e.Id).ToHashSet();
+        var entryIds = entries.Select(e => e.Id).ToHashSet();
+        Assert.Empty(labelIds.Intersect(entryIds));
+    }
+
+    [Fact]
     public async Task Element_ById_ReturnsElement()
     {
         await NavigateToMainPageAsync();
