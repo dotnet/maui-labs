@@ -42,7 +42,7 @@
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
-    <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.8</XamarinAndroidToolsAndroidSdkVersion>
+    <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.10</XamarinAndroidToolsAndroidSdkVersion>
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">

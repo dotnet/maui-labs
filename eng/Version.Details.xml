@@ -2,9 +2,9 @@
 <Dependencies>
   <ProductDependencies>
     <!-- dotnet/android-tools: Android SDK tooling (SdkManager, AdbRunner, JdkInstaller, etc.) -->
-    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="1.0.143-preview.8">
+    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="1.0.143-preview.10">
       <Uri>https://github.com/dotnet/android-tools</Uri>
-      <Sha>ec5040ad5158f240a67d887133dd56cfa5eb74ba</Sha>
+      <Sha>d222cfe45c30c4158211760b0f6df31c064165f5</Sha>
     </Dependency>
     <!-- dotnet/maui -->
     <Dependency Name="Microsoft.Maui.Controls" Version="10.0.41">
