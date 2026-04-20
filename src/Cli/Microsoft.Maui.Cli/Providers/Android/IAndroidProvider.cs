@@ -123,14 +123,16 @@ public interface IAndroidProvider : IDisposable
 	(string Command, string Arguments)? GetLicenseAcceptanceCommand();
 
 	/// <summary>
-	/// Installs JDK if not present.
+	/// Installs JDK if not present. When <paramref name="version"/> is null,
+	/// <see cref="JdkManager.DefaultJdkVersion"/> is used.
 	/// </summary>
-	Task InstallJdkAsync(int version = 17, string? installPath = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
+	Task InstallJdkAsync(int? version = null, string? installPath = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
-	/// Installs the Android development environment.
+	/// Installs the Android development environment. When <paramref name="jdkVersion"/> is null,
+	/// <see cref="JdkManager.DefaultJdkVersion"/> is used.
 	/// </summary>
-	Task InstallAsync(string? sdkPath = null, string? jdkPath = null, int jdkVersion = 17, IEnumerable<string>? additionalPackages = null, bool acceptLicenses = false, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
+	Task InstallAsync(string? sdkPath = null, string? jdkPath = null, int? jdkVersion = null, IEnumerable<string>? additionalPackages = null, bool acceptLicenses = false, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Installs Android SDK command-line tools with structured progress reporting.

@@ -65,6 +65,39 @@ public class AndroidCommandsTests
 	}
 
 	[Fact]
+	public void InstallCommand_JdkVersionDefaultsToDefaultJdkVersion()
+	{
+		// Arrange
+		var androidCommand = AndroidCommands.Create();
+		var installCommand = androidCommand.Subcommands.First(c => c.Name == "install");
+		var jdkVersionOption = (Option<int>)installCommand.Options.First(o => o.Name == "--jdk-version");
+
+		// Act — no --jdk-version supplied, so the default value factory should resolve.
+		var parseResult = installCommand.Parse("install");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal(Microsoft.Maui.Cli.Providers.Android.JdkManager.DefaultJdkVersion, parseResult.GetValue(jdkVersionOption));
+	}
+
+	[Fact]
+	public void JdkInstallCommand_VersionDefaultsToDefaultJdkVersion()
+	{
+		// Arrange
+		var androidCommand = AndroidCommands.Create();
+		var jdkCommand = androidCommand.Subcommands.First(c => c.Name == "jdk");
+		var jdkInstallCommand = jdkCommand.Subcommands.First(c => c.Name == "install");
+		var versionOption = (Option<int>)jdkInstallCommand.Options.First(o => o.Name == "--version");
+
+		// Act — no --version supplied, so the default value factory should resolve.
+		var parseResult = jdkInstallCommand.Parse("install");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal(Microsoft.Maui.Cli.Providers.Android.JdkManager.DefaultJdkVersion, parseResult.GetValue(versionOption));
+	}
+
+	[Fact]
 	public void EmulatorCreateCommand_PackageIsOptional()
 	{
 		// Arrange

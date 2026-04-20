@@ -122,13 +122,13 @@ public class AndroidProviderTests
 				Message = "JDK 17"
 			});
 
-		public Task InstallAsync(int version = 17, string? installPath = null, CancellationToken cancellationToken = default) =>
+		public Task InstallAsync(int? version = null, string? installPath = null, CancellationToken cancellationToken = default) =>
 			Task.CompletedTask;
 
-		public Task InstallAsync(int version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default) =>
+		public Task InstallAsync(int? version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default) =>
 			Task.CompletedTask;
 
-		public IEnumerable<int> GetAvailableVersions() => [17, 21];
+		public IEnumerable<int> GetAvailableVersions() => JdkManager.SupportedInstallVersions;
 	}
 
 	[Fact]

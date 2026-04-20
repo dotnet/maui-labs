@@ -47,7 +47,7 @@ public class FakeAndroidProvider : IAndroidProvider
 	/// Optional delegate invoked by <see cref="InstallAsync"/> so tests can simulate
 	/// progress reporting.
 	/// </summary>
-	public Action<string?, string?, int, IEnumerable<string>?, IProgress<string>?, CancellationToken>? InstallCallback { get; set; }
+	public Action<string?, string?, int?, IEnumerable<string>?, IProgress<string>?, CancellationToken>? InstallCallback { get; set; }
 
 	// --- Call tracking ---
 
@@ -58,9 +58,9 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<string> StoppedEmulators { get; } = new();
 	public List<List<string>> UninstalledPackageSets { get; } = new();
 	public int AcceptLicensesCalled { get; private set; }
-	public List<(string? SdkPath, string? JdkPath, int JdkVersion, List<string>? AdditionalPackages)> InstallCalls { get; } = new();
+	public List<(string? SdkPath, string? JdkPath, int? JdkVersion, List<string>? AdditionalPackages)> InstallCalls { get; } = new();
 	public List<string> InstallSdkToolsCalls { get; } = new();
-	public List<int> InstallJdkCalls { get; } = new();
+	public List<int?> InstallJdkCalls { get; } = new();
 	public bool Disposed { get; private set; }
 
 	// --- IAndroidProvider implementation ---
@@ -159,13 +159,13 @@ public class FakeAndroidProvider : IAndroidProvider
 	public (string Command, string Arguments)? GetLicenseAcceptanceCommand()
 		=> LicenseAcceptanceCommand;
 
-	public Task InstallJdkAsync(int version = 17, string? installPath = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
+	public Task InstallJdkAsync(int? version = null, string? installPath = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
 	{
 		InstallJdkCalls.Add(version);
 		return Task.CompletedTask;
 	}
 
-	public Task InstallAsync(string? sdkPath = null, string? jdkPath = null, int jdkVersion = 17, IEnumerable<string>? additionalPackages = null, bool acceptLicenses = false, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
+	public Task InstallAsync(string? sdkPath = null, string? jdkPath = null, int? jdkVersion = null, IEnumerable<string>? additionalPackages = null, bool acceptLicenses = false, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
 	{
 		InstallCalls.Add((sdkPath, jdkPath, jdkVersion, additionalPackages?.ToList()));
 		InstallCallback?.Invoke(sdkPath, jdkPath, jdkVersion, additionalPackages, progress, cancellationToken);

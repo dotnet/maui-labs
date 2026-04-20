@@ -24,11 +24,11 @@ public class FakeJdkManager : IJdkManager
 			Message = IsInstalled ? null : "JDK not found"
 		});
 
-	public Task InstallAsync(int version = 17, string? installPath = null, CancellationToken cancellationToken = default)
+	public Task InstallAsync(int? version = null, string? installPath = null, CancellationToken cancellationToken = default)
 		=> Task.CompletedTask;
 
-	public Task InstallAsync(int version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default)
+	public Task InstallAsync(int? version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default)
 		=> Task.CompletedTask;
 
-	public IEnumerable<int> GetAvailableVersions() => new[] { 17, 21 };
+	public IEnumerable<int> GetAvailableVersions() => JdkManager.SupportedInstallVersions;
 }

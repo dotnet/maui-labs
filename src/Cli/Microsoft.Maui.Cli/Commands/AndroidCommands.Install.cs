@@ -25,7 +25,7 @@ public static partial class AndroidCommands
 		{
 			new Option<string>("--sdk-path") { Description = "Custom SDK installation path" },
 			new Option<string>("--jdk-path") { Description = "Custom JDK installation path" },
-			new Option<int>("--jdk-version") { Description = "JDK version to install (17 or 21)", DefaultValueFactory = _ => 17 },
+			new Option<int>("--jdk-version") { Description = "JDK version to install (17 or 21)", DefaultValueFactory = _ => JdkManager.DefaultJdkVersion },
 			new Option<bool>("--accept-licenses") { Description = "Non-interactively accept all SDK licenses" },
 			packagesOption
 		};

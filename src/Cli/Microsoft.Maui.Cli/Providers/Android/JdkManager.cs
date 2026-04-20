@@ -13,9 +13,25 @@ namespace Microsoft.Maui.Cli.Providers.Android;
 /// </summary>
 public class JdkManager : IJdkManager
 {
-	const int DefaultJdkVersion = 17;
+	/// <summary>
+	/// The default JDK version installed by <c>maui android</c> commands when none is specified.
+	/// This is the single source of truth; all callers (CLI options, interfaces, fakes) should
+	/// reference this constant rather than hard-coding a version number.
+	/// </summary>
+	public const int DefaultJdkVersion = 21;
+
+	/// <summary>
+	/// JDK versions supported for automatic download and installation. Order matters:
+	/// the first entry is the default. Used by <see cref="GetAvailableVersions"/> and
+	/// <see cref="InstallAsync(int?, string?, CancellationToken)"/> validation.
+	/// </summary>
+	public static readonly IReadOnlyList<int> SupportedInstallVersions = new[] { DefaultJdkVersion, 17 };
+
+	/// <summary>
+	/// Minimum JDK major version accepted by health checks and fallback detection.
+	/// Versions older than this are considered unsupported for .NET MAUI Android builds.
+	/// </summary>
 	const int MinJdkVersion = 11;
-	const int MaxJdkVersion = 21;
 	const int DownloadBufferSize = 81920;
 
 	static readonly HttpClient s_httpClient = new() { Timeout = TimeSpan.FromMinutes(10) };
@@ -44,8 +60,12 @@ public class JdkManager : IJdkManager
 		// Searches Program Files, registry, known vendor paths, etc.
 		try
 		{
+			// Detection accepts any JDK >= MinJdkVersion. We deliberately don't cap the
+			// upper bound here: CheckHealthAsync only rejects versions below MinJdkVersion,
+			// so a user who has JDK 22/23/etc. installed should be found and used rather
+			// than ignored. Installation is separately gated by SupportedInstallVersions.
 			var knownJdk = Xamarin.Android.Tools.JdkInfo.GetKnownSystemJdkInfos(logger: (_, _) => { })
-				.Where(j => j.Version != null && j.Version.Major >= MinJdkVersion && j.Version.Major <= MaxJdkVersion)
+				.Where(j => j.Version != null && j.Version.Major >= MinJdkVersion)
 				.OrderByDescending(j => j.Version)
 				.FirstOrDefault();
 
@@ -100,7 +120,7 @@ public class JdkManager : IJdkManager
 				Fix = new FixInfo
 				{
 					IssueId = ErrorCodes.JdkNotFound,
-					Description = "Install OpenJDK 17",
+					Description = $"Install OpenJDK {DefaultJdkVersion}",
 					AutoFixable = true,
 					Command = "maui android jdk install"
 				}
@@ -159,7 +179,7 @@ public class JdkManager : IJdkManager
 		};
 	}
 
-	public async Task InstallAsync(int version = DefaultJdkVersion, string? installPath = null,
+	public async Task InstallAsync(int? version = null, string? installPath = null,
 		CancellationToken cancellationToken = default)
 	{
 		await InstallAsync(version, installPath, onProgress: null, cancellationToken);
@@ -168,21 +188,24 @@ public class JdkManager : IJdkManager
 	/// <summary>
 	/// Installs JDK with structured progress reporting for rich UI rendering.
 	/// </summary>
-	public async Task InstallAsync(int version, string? installPath,
+	public async Task InstallAsync(int? version, string? installPath,
 		Action<double, string>? onProgress, CancellationToken cancellationToken = default)
 	{
-		if (version < MinJdkVersion || version > MaxJdkVersion)
+		var resolvedVersion = version ?? DefaultJdkVersion;
+
+		if (!SupportedInstallVersions.Contains(resolvedVersion))
 		{
 			throw new MauiToolException(
 				ErrorCodes.JdkVersionUnsupported,
-				$"JDK version {version} is not supported. Supported versions: {MinJdkVersion}-{MaxJdkVersion}");
+				$"JDK version {resolvedVersion} is not available for installation. " +
+				$"Supported versions: {string.Join(", ", SupportedInstallVersions)}");
 		}
 
 		var targetPath = installPath ?? PlatformDetector.Paths.DefaultJdkPath;
 		Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
 
-		var downloadUrl = GetDownloadUrl(version);
-		var tempArchivePath = Path.Combine(Path.GetTempPath(), $"openjdk-{version}.tar.gz");
+		var downloadUrl = GetDownloadUrl(resolvedVersion);
+		var tempArchivePath = Path.Combine(Path.GetTempPath(), $"openjdk-{resolvedVersion}.tar.gz");
 
 		try
 		{
@@ -219,7 +242,7 @@ public class JdkManager : IJdkManager
 
 			// Update detected path
 			DetectedJdkPath = targetPath;
-			DetectedJdkVersion = version;
+			DetectedJdkVersion = resolvedVersion;
 		}
 		catch (Exception ex) when (ex is not MauiToolException)
 		{
@@ -332,9 +355,5 @@ public class JdkManager : IJdkManager
 		}
 	}
 
-	public IEnumerable<int> GetAvailableVersions()
-	{
-		yield return 17;
-		yield return 21;
-	}
+	public IEnumerable<int> GetAvailableVersions() => SupportedInstallVersions;
 }
