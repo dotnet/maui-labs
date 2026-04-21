@@ -99,9 +99,13 @@ Before posting inline comments, validate **both**:
    - Methodology note: "3 independent reviewers with adversarial consensus"
    - CI status, test coverage assessment, prior review status
    - Never mention specific model names — use "Reviewer 1/2/3"
-   - `event: "COMMENT"` always — severity is communicated via emoji markers in the body, not the review event type. (Using `REQUEST_CHANGES` causes stale blocking reviews that can't be dismissed — see Known Limitations below.)
+   - You MUST pass `event: "COMMENT"` to `submit_pull_request_review`. The `allowed-events: [COMMENT]` in safe-outputs declares this intent, but the gh-aw compiler does not yet enforce it at runtime (v0.62.2). If you pass `APPROVE` or `REQUEST_CHANGES`, the call will succeed but create serious problems — see Known Limitations below.
    - **Never use APPROVE**
 
 ### Known Limitation: Stale Blocking Reviews
 
 gh-aw does not support `dismiss-pull-request-review` as a safe output, and workflows run with `pull-requests: read` (write is rejected by the compiler). If `REQUEST_CHANGES` were used, a stale blocking review from `github-actions[bot]` would persist even after findings are fixed, requiring manual dismissal. For this reason, all reviews use `COMMENT` event type — severity is expressed via markers in the review body, not the GitHub review state.
+
+### Known Limitation: `allowed-events` Not Enforced at Runtime
+
+The `allowed-events: [COMMENT]` declaration on `submit-pull-request-review` is accepted by the gh-aw compiler (v0.62.2) but produces no runtime enforcement — the compiled `validation.json` still permits `APPROVE` and `REQUEST_CHANGES`. Until this is fixed upstream, the only defense is the prompt-level instruction above. Do not remove the explicit `event: "COMMENT"` instructions.

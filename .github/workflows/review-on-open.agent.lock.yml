@@ -26,11 +26,17 @@
 #   Imports:
 #     - shared/review-shared.md
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"5b9cb994d50bb1eca293c3962ee93390f8c236c0faef13d26adb76e528755a8e","compiler_version":"v0.62.2","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"899c4310b820112507c5d6a8678be18635cd430ad58de5f5101ffebfe868ba07","compiler_version":"v0.62.2","strict":true}
 
 name: "Expert Code Review (auto)"
 "on":
   pull_request:
+    paths-ignore:
+    - "*.md"
+    - docs/**
+    - eng/common/**
+    - LICENSE
+    - THIRD-PARTY-NOTICES.txt
     types:
     - opened
     - ready_for_review

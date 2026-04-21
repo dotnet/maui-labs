@@ -5,6 +5,12 @@ description: "Automatically runs the expert-reviewer agent when a PR is opened o
 on:
   pull_request:
     types: [opened, ready_for_review]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'eng/common/**'
+      - 'LICENSE'
+      - 'THIRD-PARTY-NOTICES.txt'
   roles: [admin, maintainer, write]
 
 permissions:
