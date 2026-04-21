@@ -79,15 +79,19 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 ```
 maui-labs/
 ├── src/
-│   └── DevFlow/                          # DevFlow product
+│   ├── Cli/                              # Maui CLI product
+│   │   ├── Microsoft.Maui.Cli/           # Unified `maui` CLI (includes DevFlow commands)
+│   │   │   └── DevFlow/                  # DevFlow command implementation behind `maui devflow`
+│   │   │       ├── Broker/               # Connection management
+│   │   │       └── Mcp/Tools/            # MCP tool implementations
+│   │   ├── Microsoft.Maui.Cli.UnitTests/ # CLI unit tests
+│   │   └── Cli.slnf                      # Solution filter
+│   └── DevFlow/                          # DevFlow agent product
 │       ├── Microsoft.Maui.DevFlow.Agent.Core/   # Platform-agnostic agent (HTTP server, visual tree)
 │       ├── Microsoft.Maui.DevFlow.Agent/         # Platform-specific overrides (iOS/Android/macOS/Windows)
 │       ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
 │       ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
 │       ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
-│       ├── Microsoft.Maui.DevFlow.CLI/           # DevFlow command implementation behind `maui devflow`
-│       │   ├── Broker/                           # Connection management
-│       │   └── Mcp/Tools/                        # MCP tool implementations
 │       ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
 │       ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
 │       ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
@@ -147,7 +151,7 @@ maui-labs/
 ### NuGet Feed Configuration
 
 NuGet.config uses **internal dnceng proxy feeds only** — no direct nuget.org reference:
-- `dotnet-public`, `dotnet-tools`, `dotnet-eng`, `dotnet10`
+- `dotnet-public`, `dotnet-tools`, `dotnet-eng`, `dotnet10`, `dotnet11`
 
 **Do not** add `nuget.org` as a direct feed source. Package versions flow via Dependency Flow (Maestro/DARC).
 
@@ -161,7 +165,7 @@ NuGet.config uses **internal dnceng proxy feeds only** — no direct nuget.org r
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 49 MCP tools for AI agent integration (in `src/DevFlow/Microsoft.Maui.DevFlow.CLI/Mcp/Tools/`):
+DevFlow exposes 49 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|

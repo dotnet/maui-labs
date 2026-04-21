@@ -1,5 +1,5 @@
 ---
-applyTo: "src/DevFlow/Microsoft.Maui.DevFlow.CLI/Mcp/**"
+applyTo: "src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/**"
 ---
 
 # MCP Tool Development Guide
@@ -8,16 +8,16 @@ applyTo: "src/DevFlow/Microsoft.Maui.DevFlow.CLI/Mcp/**"
 
 ### Step 1: Create the Tool File
 
-Create `src/DevFlow/Microsoft.Maui.DevFlow.CLI/Mcp/Tools/MyNewTool.cs`:
+Create `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/MyNewTool.cs`:
 
 ```csharp
 using System.ComponentModel;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using ModelContextProtocol.Protocol;
-using Microsoft.Maui.DevFlow.CLI.Mcp;
+using Microsoft.Maui.Cli.DevFlow.Mcp;
 
-namespace Microsoft.Maui.DevFlow.CLI.Mcp.Tools;
+namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 
 [McpServerToolType]
 public sealed class MyNewTool
@@ -40,7 +40,7 @@ public sealed class MyNewTool
 
 ### Step 2: Register the Tool
 
-Add to `src/DevFlow/Microsoft.Maui.DevFlow.CLI/Mcp/McpServerHost.cs`:
+Add to `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/McpServerHost.cs`:
 
 ```csharp
 .WithTools<MyNewTool>()
@@ -78,8 +78,8 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `AgentTools.cs` | `maui_list_agents`, `maui_select_agent`, `maui_wait` | Agent discovery |
 | `TreeTool.cs` | `maui_tree` | Visual tree inspection |
 | `QueryTools.cs` | `maui_query`, `maui_query_css` | Element search |
-| `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_scroll`, `maui_focus` | User interactions |
-| `NavigationTools.cs` | `maui_navigate`, `maui_resize` | Navigation & window |
+| `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_scroll` | User interactions |
+| `NavigationTools.cs` | `maui_navigate`, `maui_focus`, `maui_resize` | Navigation & window |
 | `ScreenshotTool.cs` | `maui_screenshot` | Image capture |
 | `AssertTool.cs` | `maui_assert` | Property assertions |
 | `PropertyTools.cs` | `maui_get_property`, `maui_set_property` | Property read/write |
