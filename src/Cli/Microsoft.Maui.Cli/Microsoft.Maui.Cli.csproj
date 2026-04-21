@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Multi-target net9.0 and net10.0 so `dotnet tool install` works on both
+         SDKs. dotnet picks the highest compatible TFM at install time. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <RootNamespace>Microsoft.Maui.Cli</RootNamespace>
     <AssemblyName>maui</AssemblyName>
     <PackAsTool>true</PackAsTool>
@@ -29,7 +31,14 @@
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
     <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
-    <PackageReference Include="XenoAtom.Terminal.UI" />
+    <!-- XenoAtom.Terminal.UI requires .NET 10 (uses C# 14 extension members).
+         On net9.0 we fall back to JSON output for the network monitor. -->
+    <PackageReference Include="XenoAtom.Terminal.UI" Condition="'$(TargetFramework)' == 'net10.0'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <!-- Exclude sources that depend on XenoAtom.Terminal.UI on non-net10 targets. -->
+    <Compile Remove="DevFlow\NetworkMonitorTui.cs" />
   </ItemGroup>
 
   <!-- Exclude native debug symbols (e.g. SkiaSharp PDBs) from the tool package to reduce size.

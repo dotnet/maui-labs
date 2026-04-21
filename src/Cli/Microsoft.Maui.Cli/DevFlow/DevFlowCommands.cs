@@ -781,7 +781,13 @@ public class DevFlowCommands
             if (isJson)
                 await MauiNetworkMonitorAsync(host, port, isJson, limit, filterHost, filterMethod);
             else
+#if NET10_0_OR_GREATER
                 await Microsoft.Maui.Cli.DevFlow.NetworkMonitorTui.RunAsync(host, port, filterHost, filterMethod);
+#else
+                // XenoAtom.Terminal.UI (used by the interactive TUI) requires .NET 10.
+                // On net9.0 fall back to the JSON streaming path.
+                await MauiNetworkMonitorAsync(host, port, json: true, limit, filterHost, filterMethod);
+#endif
         });
 
         var networkListCmd = new Command("list", "List recent network requests (one-shot)");
