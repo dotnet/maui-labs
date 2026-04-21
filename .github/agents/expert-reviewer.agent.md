@@ -13,15 +13,14 @@ You are a thorough PR reviewer for maui-labs (DevFlow, MauiDevFlow CLI, Blazor A
 
 ## 1. Gather Context
 
-Use the GitHub MCP tools (not `gh` CLI — credentials are scrubbed inside the agent container):
+Use the GitHub MCP tools to fetch PR metadata (not `gh` CLI — credentials are scrubbed inside the agent container):
 
 - `get_pull_request` — read PR title, body, metadata
 - `list_pull_request_files` — list of changed files
 - `get_pull_request_diff` — full diff
 - `get_pull_request_reviews` and `list_pull_request_comments` — existing feedback (don't duplicate)
 
-Read `.github/copilot-instructions.md` from the repo checkout for project conventions, architecture, and review dimensions. Also read relevant skills:
-- `.github/skills/maui-platform-backend/SKILL.md` for platform backend patterns
+Read `.github/copilot-instructions.md` for project conventions.
 
 ## 2. Multi-Model Review
 
@@ -39,12 +38,7 @@ Each sub-agent receives the full diff and this prompt:
 >
 > **Read the full source files, not just the diff.** Use `cat`, `view`, or `grep` to read complete files. Trace callers, callees, shared state, error paths, and data flow. The diff shows what changed — bugs come from how changes interact with surrounding code.
 >
-> Read `.github/copilot-instructions.md` for project conventions. Pay special attention to:
-> - Multi-targeting patterns (Core vs platform-specific projects)
-> - CDP/WebSocket protocol correctness
-> - Thread safety in agent/broker communication
-> - NuGet packaging configuration
-> - Platform-specific code organization
+> Read `.github/copilot-instructions.md` for project conventions.
 >
 > For each finding: file path, line number (within a `@@` diff hunk — mark "outside diff" if not), severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR), concrete failing scenario, and fix suggestion. Return findings as text — do NOT call safe-output tools.
 
