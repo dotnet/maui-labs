@@ -20,10 +20,7 @@ permissions: {}
 
 jobs:
   stub:
+    if: false
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          echo "This is a stub workflow for discovery only."
-          echo "Use --ref <branch> to run the real workflow from a feature branch."
-          echo "See PR #118 for the full implementation."
-          exit 1
+      - run: echo "Stub for discovery only. Use --ref <branch> to run the real workflow."
