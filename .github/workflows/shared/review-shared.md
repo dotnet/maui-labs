@@ -46,6 +46,8 @@ Fetch the PR data using the GitHub MCP tools (not `gh` CLI — credentials are s
 - Use `get_pull_request_diff` to read the full diff
 - Use `get_pull_request_reviews` to check existing reviews
 
+**Do NOT read source files yourself.** Pass only the diff and PR description to sub-agents — they will read source files independently in their own context windows. Pre-reading files wastes your token budget.
+
 ### Step 2: Dispatch 3 Parallel Expert Reviewers
 
 Launch **exactly 3 sub-agents in parallel** using the `task` tool. Each calls the `expert-reviewer` agent with a different model. All 3 must be launched — do not skip any.
@@ -77,9 +79,10 @@ Collect findings from all 3 sub-agents and apply consensus:
 
 1. **3/3 agree** on a finding → include immediately
 2. **2/3 agree** → include with median severity
-3. **Only 1/3 flagged** → dispatch 2 follow-up sub-agents (the other 2 models) asking: "Reviewer X found this issue: [finding]. Do you agree or disagree? Explain why."
+3. **Only 1/3 flagged** → dispatch **exactly 2** follow-up sub-agents (the other 2 models that didn't flag it) asking: "Reviewer X found this issue: [finding]. Do you agree or disagree? Explain why." Do NOT dispatch all 3 models — only the 2 that didn't flag it.
    - If 2+ now agree → include
    - If still 1/3 → discard (note as "discarded — single reviewer only")
+   - **Cap at 3 disputed findings** — if more than 3 findings are 1/3, discard the rest without follow-up to preserve token budget for posting.
 
 ### Step 4: Validate Paths and Line Numbers
 
