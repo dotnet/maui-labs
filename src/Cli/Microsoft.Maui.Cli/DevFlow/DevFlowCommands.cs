@@ -786,7 +786,7 @@ public class DevFlowCommands
 #else
                 // XenoAtom.Terminal.UI (used by the interactive TUI) requires .NET 10.
                 // On net9.0 fall back to the JSON streaming path.
-                await MauiNetworkMonitorAsync(host, port, json: true, limit, filterHost, filterMethod);
+                await MauiNetworkMonitorAsync(host, port, true, limit, filterHost, filterMethod);
 #endif
         });
 

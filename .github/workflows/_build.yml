@@ -108,6 +108,7 @@ jobs:
 
           dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
             -c Release \
+            -f net10.0 \
             -r "$rid" \
             -p:PublishAot=true \
             -p:PublishTrimmed=true \
