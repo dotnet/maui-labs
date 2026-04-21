@@ -14,7 +14,6 @@ permissions:
 tools:
   github:
     toolsets: [pull_requests, repos]
-    min-integrity: approved
 
 safe-outputs:
   create-pull-request-review-comment:
