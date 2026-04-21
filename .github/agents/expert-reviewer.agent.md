@@ -50,4 +50,4 @@ If a model is unavailable, proceed with the remaining models.
 
 ## 4. Post Results
 
-Post **one comment** on the PR using `add_comment` with all findings. Include file paths and line numbers in the text, consensus markers, and severity rankings. Do NOT use `create_pull_request_review_comment` or `submit_pull_request_review`.
+Try to post as an inline PR review first (`create_pull_request_review_comment` + `submit_pull_request_review` with `event: "COMMENT"`). If those fail, fall back to `add_comment`. **Never use APPROVE or REQUEST_CHANGES** — only COMMENT. Include file paths, line numbers, consensus markers, and severity rankings.
