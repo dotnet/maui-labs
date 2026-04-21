@@ -16,11 +16,6 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
-  create-pull-request-review-comment:
-    max: 30
-  submit-pull-request-review:
-    max: 1
-    allowed-events: [COMMENT]
   add-comment:
     max: 5
     hide-older-comments: true
@@ -86,19 +81,11 @@ Collect findings from all 3 sub-agents and apply consensus:
 
 ### Step 4: Post Results
 
-Try to post as an **inline PR review** first. If that fails (e.g., `workflow_dispatch` has no PR context), fall back to `add_comment`.
-
-**Primary path — inline review (requires PR context):**
-1. For each finding with a valid file path and diff line, call `create_pull_request_review_comment` with the file, line, and finding text. Include "Flagged by: X/3 reviewers" in each.
-2. Call `submit_pull_request_review` with `event: "COMMENT"` and a summary body containing all findings ranked by severity. **Always use COMMENT — never APPROVE or REQUEST_CHANGES.** REQUEST_CHANGES creates stale blocking reviews that cannot be dismissed by the agent.
-3. If any of these calls fail with "Not in pull request context" or similar errors, immediately switch to the fallback path.
-
-**Fallback path — comment (always works):**
-Post **one comment** using `add_comment` with all findings in a single message. Include file paths and line numbers in the text.
-
-**Both paths must include:**
-- All findings ranked by severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR)
+Post **one comment** on the PR using `add_comment` with all findings in a single, self-contained message. Include:
+- All findings ranked by severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR) with file paths and line numbers in the text
 - Consensus markers (e.g., "3/3 reviewers", "2/3 reviewers") for each finding
 - Methodology note: "3 independent reviewers with adversarial consensus"
 - CI status and test coverage assessment
 - Never mention specific model names — use "Reviewer 1/2/3"
+
+Do NOT use `create_pull_request_review_comment` or `submit_pull_request_review` — use only `add_comment`.
