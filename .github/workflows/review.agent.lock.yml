@@ -1,0 +1,29 @@
+# Stub workflow — enables discovery of review.agent.lock.yml so that
+# `gh workflow run review.agent.lock.yml --ref <branch>` works.
+# The real workflow lives on the feature branch; --ref executes THAT version.
+# This stub is safe to leave on main — it does nothing on its own.
+#
+# Once PR #118 (feat/expert-review-workflow) merges, this stub is replaced
+# by the real compiled workflow and can be removed.
+
+name: "Expert Code Review"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+permissions: {}
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "This is a stub workflow for discovery only."
+          echo "Use --ref <branch> to run the real workflow from a feature branch."
+          echo "See PR #118 for the full implementation."
+          exit 1
