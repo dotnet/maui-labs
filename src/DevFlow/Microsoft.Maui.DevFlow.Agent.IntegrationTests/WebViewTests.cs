@@ -62,7 +62,8 @@ public class WebViewTests : IntegrationTestBase
     public async Task Contexts_WebViewIsReady()
     {
         await EnsureOnBlazorPageAsync();
-        await WaitForCdpReadyAsync();
+        var cdpReady = await WaitForCdpReadyAsync();
+        Assert.True(cdpReady, "Expected CDP to become ready before querying WebView contexts.");
 
         var json = await Client.GetCdpWebViewsAsync();
 
@@ -75,6 +76,10 @@ public class WebViewTests : IntegrationTestBase
         else if (json.TryGetProperty("webviews", out var webviewsProp) && webviewsProp.ValueKind == JsonValueKind.Array)
         {
             Assert.True(webviewsProp.GetArrayLength() > 0, "Expected at least one WebView context");
+        }
+        else
+        {
+            Assert.Fail("Expected CDP web views response to be a non-empty array or an object containing a non-empty 'webviews' array.");
         }
     }
 

@@ -107,23 +107,16 @@ public class UiActionTests : IntegrationTestBase
 
         await Client.TapAsync(addButton.Id);
 
-        var found = false;
-        try
+        await WaitForAsync(async () =>
         {
-            await WaitForAsync(async () =>
-            {
-                var items = await Client.QueryAsync(text: "IntegrationTodo123");
-                return items.Count > 0;
-            }, timeoutMs: 5000, pollIntervalMs: 500);
-            found = true;
-        }
-        catch (TimeoutException)
-        {
-            Output.WriteLine("Todo item not found after tap — fill+tap may not work reliably in full suite.");
-        }
+            var items = await Client.QueryAsync(text: "IntegrationTodo123");
+            return items.Count > 0;
+        }, timeoutMs: 5000, pollIntervalMs: 500);
 
-        if (found)
-            await CleanupAddedTodoAsync("IntegrationTodo123");
+        var addedItems = await Client.QueryAsync(text: "IntegrationTodo123");
+        Assert.NotEmpty(addedItems);
+
+        await CleanupAddedTodoAsync("IntegrationTodo123");
     }
 
     [Fact]
