@@ -16,11 +16,6 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
-  create-pull-request-review-comment:
-    max: 30
-  submit-pull-request-review:
-    max: 1
-    allowed-events: [COMMENT]
   add-comment:
     max: 5
     hide-older-comments: true
@@ -84,30 +79,13 @@ Collect findings from all 3 sub-agents and apply consensus:
    - If still 1/3 → discard (note as "discarded — single reviewer only")
    - **Cap at 3 disputed findings** — if more than 3 findings are 1/3, discard the rest without follow-up to preserve token budget for posting.
 
-### Step 4: Validate Paths and Line Numbers
+### Step 4: Post Results
 
-Before posting inline comments, validate **both**:
-1. **Path**: Use `list_pull_request_files` MCP tool to get the list of files in the diff. Only files in this list can receive inline comments. Comments on other files fail with "Path could not be resolved".
-2. **Line**: Parse `@@ -old,len +new,len @@` from the diff — the line must be in `[new, new+len)`. Lines outside any hunk fail with "Line could not be resolved".
+Post **one comment** on the PR using `add_comment` with all findings in a single, self-contained message. Include:
+- All findings ranked by severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR) with file paths and line numbers in the text
+- Consensus markers (e.g., "3/3 reviewers", "2/3 reviewers") for each finding
+- Methodology note: "3 independent reviewers with adversarial consensus"
+- CI status and test coverage assessment
+- Never mention specific model names — use "Reviewer 1/2/3"
 
-**If either path or line is invalid**, move the finding to `add_comment` (design-level) instead. A single invalid inline comment causes the entire `submit_pull_request_review` to fail and ALL inline comments are lost.
-
-### Step 5: Post Results
-
-1. **Inline comments** — `create_pull_request_review_comment` for findings where BOTH path and line are validated. Include "Flagged by: X/3 reviewers" in each.
-2. **Design-level comment** — `add_comment` for findings outside the diff (one comment, multiple bullets).
-3. **Final verdict** — `submit_pull_request_review` with:
-   - Summary of all findings ranked by severity
-   - Methodology note: "3 independent reviewers with adversarial consensus"
-   - CI status, test coverage assessment, prior review status
-   - Never mention specific model names — use "Reviewer 1/2/3"
-   - You MUST pass `event: "COMMENT"` to `submit_pull_request_review`. The `allowed-events: [COMMENT]` in safe-outputs declares this intent, but the gh-aw compiler does not yet enforce it at runtime (v0.62.2). If you pass `APPROVE` or `REQUEST_CHANGES`, the call will succeed but create serious problems — see Known Limitations below.
-   - **Never use APPROVE**
-
-### Known Limitation: Stale Blocking Reviews
-
-gh-aw does not support `dismiss-pull-request-review` as a safe output, and workflows run with `pull-requests: read` (write is rejected by the compiler). If `REQUEST_CHANGES` were used, a stale blocking review from `github-actions[bot]` would persist even after findings are fixed, requiring manual dismissal. For this reason, all reviews use `COMMENT` event type — severity is expressed via markers in the review body, not the GitHub review state.
-
-### Known Limitation: `allowed-events` Not Enforced at Runtime
-
-The `allowed-events: [COMMENT]` declaration on `submit-pull-request-review` is accepted by the gh-aw compiler (v0.62.2) but produces no runtime enforcement — the compiled `validation.json` still permits `APPROVE` and `REQUEST_CHANGES`. Until this is fixed upstream, the only defense is the prompt-level instruction above. Do not remove the explicit `event: "COMMENT"` instructions.
+Do NOT use `create_pull_request_review_comment` or `submit_pull_request_review` — use only `add_comment`.
