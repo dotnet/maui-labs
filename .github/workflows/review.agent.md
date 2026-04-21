@@ -23,11 +23,6 @@ permissions:
   contents: read
   pull-requests: read
 
-# Intentional: shared group across review workflows so /review cancels in-progress auto-review.
-concurrency:
-  group: "review-${{ github.event.issue.number || inputs.pr_number || github.run_id }}"
-  cancel-in-progress: false
-
 engine:
   id: copilot
   model: claude-opus-4.6

@@ -14,6 +14,7 @@ permissions:
 tools:
   github:
     toolsets: [pull_requests, repos]
+    min-integrity: approved
 
 safe-outputs:
   create-pull-request-review-comment:
@@ -24,6 +25,7 @@ safe-outputs:
   add-comment:
     max: 5
     hide-older-comments: true
+    target: "*"
 ---
 
 # Expert Code Review
@@ -38,13 +40,12 @@ You are the orchestrator. Your job is to dispatch **3 parallel expert-reviewer s
 
 ### Step 1: Gather Context
 
-Fetch the PR diff and save it — you will pass it to each sub-agent:
+Fetch the PR data using the GitHub MCP tools (not `gh` CLI — credentials are scrubbed inside the agent container). The `tools.github` configuration provides `pull_requests` and `repos` toolsets:
 
-```
-gh pr diff <number>
-gh pr view <number> --json title,body
-gh pr checks <number>
-```
+- Use `get_pull_request` to read the PR title, body, and metadata
+- Use `list_pull_request_files` to get the list of changed files
+- Use `get_pull_request_diff` to read the full diff
+- Use `get_pull_request_reviews` to check existing reviews
 
 ### Step 2: Dispatch 3 Parallel Expert Reviewers
 
@@ -84,8 +85,8 @@ Collect findings from all 3 sub-agents and apply consensus:
 ### Step 4: Validate Paths and Line Numbers
 
 Before posting inline comments, validate **both**:
-1. **Path**: Run `gh pr diff <number> --name-only` to get the list of files in the diff. Only files in this list can receive inline comments. Comments on other files fail with "Path could not be resolved".
-2. **Line**: Parse `@@ -old,len +new,len @@` — the line must be in `[new, new+len)`. Lines outside any hunk fail with "Line could not be resolved".
+1. **Path**: Use `list_pull_request_files` MCP tool to get the list of files in the diff. Only files in this list can receive inline comments. Comments on other files fail with "Path could not be resolved".
+2. **Line**: Parse `@@ -old,len +new,len @@` from the diff — the line must be in `[new, new+len)`. Lines outside any hunk fail with "Line could not be resolved".
 
 **If either path or line is invalid**, move the finding to `add_comment` (design-level) instead. A single invalid inline comment causes the entire `submit_pull_request_review` to fail and ALL inline comments are lost.
 
@@ -98,5 +99,9 @@ Before posting inline comments, validate **both**:
    - Methodology note: "3 independent reviewers with adversarial consensus"
    - CI status, test coverage assessment, prior review status
    - Never mention specific model names — use "Reviewer 1/2/3"
-   - Always use `event: "COMMENT"` — the review body communicates severity through findings; blocking `REQUEST_CHANGES` reviews can't be auto-dismissed on re-review and cause stale blocks
-   - **Never use APPROVE or REQUEST_CHANGES**
+   - `event: "COMMENT"` always — severity is communicated via emoji markers in the body, not the review event type. (Using `REQUEST_CHANGES` causes stale blocking reviews that can't be dismissed — see Known Limitations below.)
+   - **Never use APPROVE**
+
+### Known Limitation: Stale Blocking Reviews
+
+gh-aw does not support `dismiss-pull-request-review` as a safe output, and workflows run with `pull-requests: read` (write is rejected by the compiler). If `REQUEST_CHANGES` were used, a stale blocking review from `github-actions[bot]` would persist even after findings are fixed, requiring manual dismissal. For this reason, all reviews use `COMMENT` event type — severity is expressed via markers in the review body, not the GitHub review state.
