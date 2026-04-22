@@ -16,6 +16,11 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
+  create-pull-request-review-comment:
+    max: 30
+  submit-pull-request-review:
+    max: 1
+    allowed-events: [COMMENT]
   add-comment:
     max: 5
     hide-older-comments: true
@@ -82,11 +87,17 @@ Collect findings from all 3 sub-agents and apply consensus:
 
 ### Step 4: Post Results
 
-Post **one comment** on the PR using `add_comment` with all findings in a single, self-contained message. Include:
-- All findings ranked by severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR) with file paths and line numbers in the text
+Post findings as an **inline PR review** using `create_pull_request_review_comment` for each finding on a valid diff line, then `submit_pull_request_review` with `event: "COMMENT"` and a summary body. **Always use COMMENT — never APPROVE or REQUEST_CHANGES.** REQUEST_CHANGES creates stale blocking reviews that cannot be dismissed by the agent.
+
+Before posting inline comments, validate **both**:
+1. **Path**: Use `list_pull_request_files` MCP tool to get valid paths. Comments on files not in the diff fail with "Path could not be resolved".
+2. **Line**: must fall within a `@@` diff hunk. Lines outside any hunk fail with "Line could not be resolved".
+
+**If path or line is invalid**, include the finding in the `submit_pull_request_review` body text instead.
+
+The review body must include:
+- All findings ranked by severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR)
 - Consensus markers (e.g., "3/3 reviewers", "2/3 reviewers") for each finding
 - Methodology note: "3 independent reviewers with adversarial consensus"
 - CI status and test coverage assessment
 - Never mention specific model names — use "Reviewer 1/2/3"
-
-Do NOT use `create_pull_request_review_comment` or `submit_pull_request_review` — use only `add_comment`.
