@@ -14,10 +14,11 @@ on:
         type: number
   roles: [admin, maintainer, write]
 
-# slash_command compiles to issue_comment; workflow_dispatch is always allowed.
+# slash_command compiles to issue_comment; only proceed for PR comments.
+# workflow_dispatch is always allowed.
 if: >-
-  github.event_name == 'issue_comment' ||
-  github.event_name == 'workflow_dispatch'
+  github.event_name == 'workflow_dispatch' ||
+  (github.event_name == 'issue_comment' && github.event.issue.pull_request)
 
 permissions:
   contents: read

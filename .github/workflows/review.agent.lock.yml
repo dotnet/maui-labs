@@ -26,7 +26,7 @@
 #   Imports:
 #     - shared/review-shared.md
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"078b74a1cfb21b7d2318f85bf8b3a59209fc2b344448eba5e45273c72012c0d9","compiler_version":"v0.62.2","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"6bc79ca2caea66e0de40de4c71185d98c30530013676a718bb4b08eafd46ce87","compiler_version":"v0.62.2","strict":true}
 
 name: "Expert Code Review"
 "on":
@@ -56,7 +56,8 @@ jobs:
   activation:
     needs: pre_activation
     if: >
-      (needs.pre_activation.outputs.activated == 'true') && (github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch')
+      (needs.pre_activation.outputs.activated == 'true') && (github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request))
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -890,7 +891,7 @@ jobs:
             await main();
 
   pre_activation:
-    if: github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
     runs-on: ubuntu-slim
     outputs:
       activated: ${{ (steps.check_membership.outputs.is_team_member == 'true') && (steps.check_command_position.outputs.command_position_ok == 'true') }}
