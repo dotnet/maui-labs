@@ -36,10 +36,16 @@ public class DeviceManager : IDeviceManager
 
 			// Also get AVDs (virtual devices that may not be running)
 			var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
+
+			// Track which running emulator entries we've already merged with an
+			// AVD, so we can pair "offline" emulator-NNNN serials (whose AVD name
+			// has not yet been resolved by adb) with locked AVDs as a fallback.
+			var mergedIndices = new HashSet<int>();
+
 			foreach (var avd in avds)
 			{
-				// Check if this AVD is already in the running devices list
-				// Match by AVD name in details dict or by EmulatorId
+				// First pass: match by AVD name (requires adb to have resolved it,
+				// which only happens once the device is fully online).
 				var runningIndex = devices.FindIndex(d =>
 					d.Platforms.Contains("android") &&
 					d.IsEmulator &&
@@ -51,6 +57,34 @@ public class DeviceManager : IDeviceManager
 						string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
 					));
 
+				// Second pass: if this AVD has an active lock file it is currently
+				// starting / booting. Pair it with the first unmerged offline
+				// emulator-* serial that has no resolved AVD name — that is the
+				// device produced by this AVD's qemu instance.
+				if (runningIndex < 0 && avd.IsLocked)
+				{
+					for (var i = 0; i < devices.Count; i++)
+					{
+						if (mergedIndices.Contains(i))
+							continue;
+
+						var d = devices[i];
+						if (!d.Platforms.Contains("android") || !d.IsEmulator)
+							continue;
+
+						var hasAvdName =
+							(d.Details != null &&
+							 d.Details.TryGetPropertyValue("avd", out var existingAvd) &&
+							 !string.IsNullOrEmpty(existingAvd?.ToString())) ||
+							!string.IsNullOrEmpty(d.EmulatorId);
+						if (hasAvdName)
+							continue;
+
+						runningIndex = i;
+						break;
+					}
+				}
+
 				// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
 				var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
 				var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
@@ -61,15 +95,28 @@ public class DeviceManager : IDeviceManager
 					var running = devices[runningIndex];
 					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
 					var details = running.Details?.DeepClone() as JsonObject ?? new JsonObject();
+					details["avd"] = avd.Name;
 					details["tag_id"] = tagId ?? "default";
 					details["target"] = avd.Target ?? "unknown";
 
+					// If the running device didn't have an AVD-resolved name yet
+					// (e.g. still offline/booting), prefer the AVD name as the
+					// display name while keeping the adb serial as the Id so
+					// subsequent adb commands still work.
+					var displayName = string.IsNullOrEmpty(running.EmulatorId) ? avd.Name : running.Name;
+					var state = running.State == DeviceState.Offline && avd.IsLocked
+						? DeviceState.Booting
+						: running.State;
+
 					devices[runningIndex] = running with
 					{
+						Name = displayName,
 						EmulatorId = avd.Name,
 						SubModel = subModel,
+						State = state,
 						Details = details
 					};
+					mergedIndices.Add(runningIndex);
 				}
 				else
 				{

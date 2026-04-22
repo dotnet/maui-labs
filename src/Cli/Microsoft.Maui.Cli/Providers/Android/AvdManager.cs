@@ -157,7 +157,38 @@ public class AvdManager
 			SystemImage = systemImage,
 			Target = target,
 			Path = avd.Path,
+			IsLocked = IsAvdLocked(avd.Path),
 		};
+	}
+
+	/// <summary>
+	/// Returns <c>true</c> when the AVD directory contains a runtime lock file,
+	/// which the Android emulator creates when an instance is starting, booting
+	/// or already running for this AVD. On Windows these are directories
+	/// (e.g. <c>hardware-qemu.ini.lock\</c>); on macOS/Linux they are regular
+	/// files — checking existence works in both cases.
+	/// </summary>
+	static bool IsAvdLocked(string? avdPath)
+	{
+		if (string.IsNullOrEmpty(avdPath))
+			return false;
+
+		try
+		{
+			// The emulator writes several lock markers; hardware-qemu.ini.lock is
+			// the most reliable one — present for the entire lifetime of a running
+			// instance. multiinstance.lock is also checked as a fallback.
+			return Directory.Exists(avdPath) && (
+				File.Exists(System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock")) ||
+				Directory.Exists(System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock")) ||
+				File.Exists(System.IO.Path.Combine(avdPath, "multiinstance.lock")) ||
+				Directory.Exists(System.IO.Path.Combine(avdPath, "multiinstance.lock")));
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Trace.WriteLine($"AVD lock check failed for '{avdPath}': {ex.Message}");
+			return false;
+		}
 	}
 
 	public async Task<AvdInfo> CreateAvdAsync(string name, string deviceProfile, string systemImage,

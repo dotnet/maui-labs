@@ -288,4 +288,121 @@ public class DeviceManagerTests
 		Assert.Equal("Pixel_6_API_35", devices[0].EmulatorId);
 		Assert.True(devices[0].IsRunning);
 	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_MergesOfflineEmulatorWithLockedAvd()
+	{
+		// Regression: while an emulator is booting, adb reports it as "Offline"
+		// with no AVD name populated. Previously this produced two entries
+		// (an unnamed offline serial plus a "Shutdown" AVD). The AVD's lock
+		// file lets us pair them into a single booting device.
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "emulator-5554",
+					Name = "emulator-5554",
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = DeviceState.Offline,
+					IsEmulator = true,
+					IsRunning = false,
+					Details = new JsonObject()
+				}
+			},
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo { Name = "Pixel_6_API_35", Target = "android-35", DeviceProfile = "pixel_6", IsLocked = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		Assert.Single(devices);
+		Assert.Equal("emulator-5554", devices[0].Id);
+		Assert.Equal("Pixel_6_API_35", devices[0].EmulatorId);
+		Assert.Equal("Pixel_6_API_35", devices[0].Name);
+		Assert.Equal(DeviceState.Booting, devices[0].State);
+		Assert.NotNull(devices[0].Details);
+		Assert.Equal("Pixel_6_API_35", devices[0].Details!["avd"]?.ToString());
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_UnlockedAvdDoesNotMergeWithOfflineEmulator()
+	{
+		// If the AVD has no lock file we cannot safely pair it with an unnamed
+		// offline serial (it could belong to a different AVD). Leave both
+		// entries separate.
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "emulator-5554",
+					Name = "emulator-5554",
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = DeviceState.Offline,
+					IsEmulator = true,
+					IsRunning = false,
+					Details = new JsonObject()
+				}
+			},
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo { Name = "Pixel_6_API_35", Target = "android-35", IsLocked = false }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		Assert.Equal(2, devices.Count);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_LockedAvdDoesNotHijackAlreadyNamedEmulator()
+	{
+		// A named running emulator must not be "stolen" by a locked AVD with a
+		// different name. Each locked AVD only pairs with unnamed offline serials.
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "emulator-5554",
+					Name = "Pixel_6_API_35",
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = DeviceState.Booted,
+					IsEmulator = true,
+					IsRunning = true,
+					EmulatorId = "Pixel_6_API_35",
+					Details = new JsonObject { ["avd"] = "Pixel_6_API_35" }
+				}
+			},
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo { Name = "Pixel_6_API_35", Target = "android-35", IsLocked = true },
+				new AvdInfo { Name = "Other_AVD", Target = "android-34", IsLocked = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		// Pixel_6_API_35 merged into running, Other_AVD added as separate Shutdown entry
+		// (the Other_AVD "lock" has no matching offline serial to pair with).
+		Assert.Equal(2, devices.Count);
+		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.IsRunning);
+		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && !d.IsRunning);
+	}
 }
