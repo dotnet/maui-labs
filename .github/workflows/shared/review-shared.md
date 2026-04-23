@@ -89,11 +89,15 @@ Collect findings from all 3 sub-agents and apply consensus:
 
 Post findings as an **inline PR review** using `create_pull_request_review_comment` for each finding on a valid diff line, then `submit_pull_request_review` with `event: "COMMENT"` and a summary body. **Always use COMMENT — never APPROVE or REQUEST_CHANGES.** REQUEST_CHANGES creates stale blocking reviews that cannot be dismissed by the agent.
 
+**Note:** Inline review tools require PR context (`pull_request` or `issue_comment` triggers). From `workflow_dispatch`, these tools will fail silently — use `add_comment` instead.
+
 Before posting inline comments, validate **both**:
 1. **Path**: Use `list_pull_request_files` MCP tool to get valid paths. Comments on files not in the diff fail with "Path could not be resolved".
-2. **Line**: must fall within a `@@` diff hunk. Lines outside any hunk fail with "Line could not be resolved".
+2. **Line**: must fall within a `@@` diff hunk on the **new (right) side** only. Lines outside any hunk or on the deleted side fail with "Line could not be resolved".
 
 **If path or line is invalid**, include the finding in the `submit_pull_request_review` body text instead.
+
+**Cap inline comments at 30** (the safe-output limit). If more than 30 findings, post the 30 most severe inline and include the rest in the review summary body.
 
 The review body must include:
 - All findings ranked by severity (🔴 CRITICAL, 🟡 MODERATE, 🟢 MINOR)
