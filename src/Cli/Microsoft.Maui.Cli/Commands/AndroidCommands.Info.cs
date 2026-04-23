@@ -94,34 +94,29 @@ public static partial class AndroidCommands
 
 	static List<ApiLevelInfo> GroupPackagesByApiLevel(List<SdkPackage> packages)
 	{
-		var apiLevels = new Dictionary<int, ApiLevelInfo>();
+		// Collect raw data per API level using mutable containers
+		var platformApis = new HashSet<int>();
+		var buildToolsByApi = new Dictionary<int, string>();
+		var systemImagesByApi = new Dictionary<int, List<string>>();
 
 		foreach (var pkg in packages)
 		{
 			// Match platforms;android-XX
 			if (pkg.Path.StartsWith("platforms;android-", StringComparison.Ordinal))
 			{
-				var apiStr = pkg.Path.Substring("platforms;android-".Length);
+				var apiStr = pkg.Path["platforms;android-".Length..];
 				if (int.TryParse(apiStr, out var api))
-				{
-					if (!apiLevels.ContainsKey(api))
-						apiLevels[api] = new ApiLevelInfo { Api = api };
-					apiLevels[api].Platform = true;
-				}
+					platformApis.Add(api);
 			}
 			// Match build-tools;XX.Y.Z
 			else if (pkg.Path.StartsWith("build-tools;", StringComparison.Ordinal))
 			{
-				var versionStr = pkg.Path.Substring("build-tools;".Length);
+				var versionStr = pkg.Path["build-tools;".Length..];
 				// Extract major version as API level approximation
 				var dotIndex = versionStr.IndexOf('.');
-				var majorStr = dotIndex > 0 ? versionStr.Substring(0, dotIndex) : versionStr;
+				var majorStr = dotIndex > 0 ? versionStr[..dotIndex] : versionStr;
 				if (int.TryParse(majorStr, out var api))
-				{
-					if (!apiLevels.ContainsKey(api))
-						apiLevels[api] = new ApiLevelInfo { Api = api };
-					apiLevels[api].BuildTools = versionStr;
-				}
+					buildToolsByApi[api] = versionStr;
 			}
 			// Match system-images;android-XX;variant;arch
 			else if (pkg.Path.StartsWith("system-images;android-", StringComparison.Ordinal))
@@ -129,20 +124,34 @@ public static partial class AndroidCommands
 				var parts = pkg.Path.Split(';');
 				if (parts.Length >= 4)
 				{
-					var apiStr = parts[1].Substring("android-".Length);
+					var apiStr = parts[1]["android-".Length..];
 					if (int.TryParse(apiStr, out var api))
 					{
-						if (!apiLevels.ContainsKey(api))
-							apiLevels[api] = new ApiLevelInfo { Api = api };
-						var imageId = $"{parts[2]}/{parts[3]}";
-						apiLevels[api].SystemImages.Add(imageId);
+						if (!systemImagesByApi.TryGetValue(api, out var images))
+						{
+							images = new List<string>();
+							systemImagesByApi[api] = images;
+						}
+						images.Add($"{parts[2]}/{parts[3]}");
 					}
 				}
 			}
 		}
 
-		return apiLevels.Values
-			.OrderByDescending(a => a.Api)
+		// Merge all discovered API levels
+		var allApis = new HashSet<int>(platformApis);
+		foreach (var api in buildToolsByApi.Keys) allApis.Add(api);
+		foreach (var api in systemImagesByApi.Keys) allApis.Add(api);
+
+		return allApis
+			.OrderByDescending(api => api)
+			.Select(api => new ApiLevelInfo
+			{
+				Api = api,
+				Platform = platformApis.Contains(api),
+				BuildTools = buildToolsByApi.GetValueOrDefault(api),
+				SystemImages = systemImagesByApi.GetValueOrDefault(api, new List<string>())
+			})
 			.ToList();
 	}
 
