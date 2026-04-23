@@ -399,10 +399,74 @@ public class DeviceManagerTests
 
 		var devices = await manager.GetAllDevicesAsync();
 
-		// Pixel_6_API_35 merged into running, Other_AVD added as separate Shutdown entry
-		// (the Other_AVD "lock" has no matching offline serial to pair with).
+		// Pixel_6_API_35 merged into the running entry. Other_AVD has a lock
+		// file but no offline serial to pair with, so it surfaces as its own
+		// booting entry (not Shutdown).
 		Assert.Equal(2, devices.Count);
-		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.IsRunning);
-		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && !d.IsRunning);
+		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.IsRunning && d.State == DeviceState.Booted);
+		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && d.State == DeviceState.Booting && d.IsRunning);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_LockedAvdWithoutMatchingSerialReportsBooting()
+	{
+		// Stale lock or early boot window: a locked AVD exists but adb has not
+		// listed any serial for it yet. The entry should surface as Booting so
+		// users don't see a misleading "Shutdown" state.
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>(),
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo { Name = "Pixel_6_API_35", Target = "android-35", IsLocked = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		Assert.Single(devices);
+		Assert.Equal(DeviceState.Booting, devices[0].State);
+		Assert.True(devices[0].IsRunning);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_LockedAvdDoesNotHijackNonOfflineEmulator()
+	{
+		// A Booted/Connected emulator that momentarily lacks an AVD name (e.g.
+		// transient adb gap) must not be paired with a locked AVD. Only Offline
+		// serials are eligible for lock-based fallback pairing.
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "emulator-5554",
+					Name = "emulator-5554",
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = DeviceState.Booted,
+					IsEmulator = true,
+					IsRunning = true,
+					Details = new JsonObject()
+				}
+			},
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo { Name = "Pixel_6_API_35", Target = "android-35", IsLocked = true }
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		// Two separate entries: the booted serial (untouched) and the locked AVD
+		// surfaced as its own Booting entry.
+		Assert.Equal(2, devices.Count);
+		Assert.Contains(devices, d => d.Id == "emulator-5554" && d.State == DeviceState.Booted && string.IsNullOrEmpty(d.EmulatorId));
+		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.State == DeviceState.Booting);
 	}
 }

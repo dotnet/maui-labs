@@ -61,6 +61,12 @@ public class DeviceManager : IDeviceManager
 				// starting / booting. Pair it with the first unmerged offline
 				// emulator-* serial that has no resolved AVD name — that is the
 				// device produced by this AVD's qemu instance.
+				//
+				// Known limitation: when multiple AVDs are booted at exactly the
+				// same moment, pairing happens by iteration order and names can
+				// be swapped across the resulting entries. We accept this rather
+				// than leaving duplicates, and a future improvement could read
+				// the emulator console port from the lock files to disambiguate.
 				if (runningIndex < 0 && avd.IsLocked)
 				{
 					for (var i = 0; i < devices.Count; i++)
@@ -70,6 +76,12 @@ public class DeviceManager : IDeviceManager
 
 						var d = devices[i];
 						if (!d.Platforms.Contains("android") || !d.IsEmulator)
+							continue;
+
+						// Only pair with serials adb currently reports as Offline —
+						// an online/Booted/Connected emulator with a transient empty
+						// AVD name must not be hijacked by a locked AVD.
+						if (d.State != DeviceState.Offline)
 							continue;
 
 						var hasAvdName =
@@ -130,9 +142,9 @@ public class DeviceManager : IDeviceManager
 						Name = avd.Name,
 						Platforms = new[] { "android" },
 						Type = DeviceType.Emulator,
-						State = DeviceState.Shutdown,
+						State = avd.IsLocked ? DeviceState.Booting : DeviceState.Shutdown,
 						IsEmulator = true,
-						IsRunning = false,
+						IsRunning = avd.IsLocked,
 						ConnectionType = Models.ConnectionType.Local,
 						EmulatorId = avd.Name,
 						Model = avd.DeviceProfile,
