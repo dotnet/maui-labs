@@ -120,12 +120,22 @@ public class DeviceManager : IDeviceManager
 						? DeviceState.Booting
 						: running.State;
 
+					// A locked AVD paired with an adb-visible serial means qemu
+					// is alive. Keep IsRunning in sync with the promoted State
+					// so we never surface "Booting + IsRunning=false", which is
+					// internally inconsistent and confuses consumers.
+					var isRunning = running.IsRunning
+						|| state == DeviceState.Booting
+						|| state == DeviceState.Booted
+						|| state == DeviceState.Connected;
+
 					devices[runningIndex] = running with
 					{
 						Name = displayName,
 						EmulatorId = avd.Name,
 						SubModel = subModel,
 						State = state,
+						IsRunning = isRunning,
 						Details = details
 					};
 					mergedIndices.Add(runningIndex);

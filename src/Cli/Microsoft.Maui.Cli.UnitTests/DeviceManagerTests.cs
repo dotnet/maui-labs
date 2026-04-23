@@ -327,6 +327,7 @@ public class DeviceManagerTests
 		Assert.Equal("Pixel_6_API_35", devices[0].EmulatorId);
 		Assert.Equal("Pixel_6_API_35", devices[0].Name);
 		Assert.Equal(DeviceState.Booting, devices[0].State);
+		Assert.True(devices[0].IsRunning, "Booting emulator must report IsRunning=true (qemu is alive)");
 		Assert.NotNull(devices[0].Details);
 		Assert.Equal("Pixel_6_API_35", devices[0].Details!["avd"]?.ToString());
 	}
