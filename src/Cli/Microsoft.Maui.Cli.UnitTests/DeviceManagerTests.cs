@@ -401,18 +401,23 @@ public class DeviceManagerTests
 
 		// Pixel_6_API_35 merged into the running entry. Other_AVD has a lock
 		// file but no offline serial to pair with, so it surfaces as its own
-		// booting entry (not Shutdown).
+		// Booted entry (lock files prove the qemu process is alive but we
+		// have no adb evidence of an in-progress boot).
 		Assert.Equal(2, devices.Count);
 		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.IsRunning && d.State == DeviceState.Booted);
-		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && d.State == DeviceState.Booting && d.IsRunning);
+		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && d.State == DeviceState.Booted && d.IsRunning);
 	}
 
 	[Fact]
-	public async Task GetAllDevicesAsync_LockedAvdWithoutMatchingSerialReportsBooting()
+	public async Task GetAllDevicesAsync_LockedAvdWithoutMatchingSerialReportsBooted()
 	{
-		// Stale lock or early boot window: a locked AVD exists but adb has not
-		// listed any serial for it yet. The entry should surface as Booting so
-		// users don't see a misleading "Shutdown" state.
+		// Stale lock file or adb-blind fully-booted emulator: a locked AVD
+		// exists but adb has not listed any serial for it. Lock files tell us
+		// the qemu process is alive; they cannot tell us boot state. Since the
+		// merge path already surfaces Booting when adb sees the serial as
+		// Offline (the live evidence of an in-progress boot), the else branch
+		// defaulting to Booted matches the far more common cause of this state
+		// (adb blind to a running emulator).
 		var fakeAndroid = new FakeAndroidProvider
 		{
 			Devices = new List<Device>(),
@@ -427,7 +432,7 @@ public class DeviceManagerTests
 		var devices = await manager.GetAllDevicesAsync();
 
 		Assert.Single(devices);
-		Assert.Equal(DeviceState.Booting, devices[0].State);
+		Assert.Equal(DeviceState.Booted, devices[0].State);
 		Assert.True(devices[0].IsRunning);
 	}
 
@@ -464,9 +469,11 @@ public class DeviceManagerTests
 		var devices = await manager.GetAllDevicesAsync();
 
 		// Two separate entries: the booted serial (untouched) and the locked AVD
-		// surfaced as its own Booting entry.
+		// surfaced as its own Booted entry (lock files indicate a live qemu
+		// process; the else branch defaults to Booted since adb has no
+		// evidence of an in-progress boot).
 		Assert.Equal(2, devices.Count);
 		Assert.Contains(devices, d => d.Id == "emulator-5554" && d.State == DeviceState.Booted && string.IsNullOrEmpty(d.EmulatorId));
-		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.State == DeviceState.Booting);
+		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.State == DeviceState.Booted);
 	}
 }
