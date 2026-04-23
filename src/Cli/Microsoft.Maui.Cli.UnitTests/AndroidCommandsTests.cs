@@ -238,6 +238,131 @@ public class AndroidCommandsTests
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "emulator");
 	}
 
+	[Fact]
+	public void AndroidCommand_HasSdkAndJdkOptions()
+	{
+		// Arrange
+		var androidCommand = AndroidCommands.Create();
+
+		// Assert
+		Assert.Contains(androidCommand.Options, o => o.Name == "--sdk");
+		Assert.Contains(androidCommand.Options, o => o.Name == "--jdk");
+	}
+
+	[Fact]
+	public void SdkOption_IsRecursive()
+	{
+		// The --sdk option should be available to all subcommands
+		Assert.True(AndroidCommands.SdkOption.Recursive);
+	}
+
+	[Fact]
+	public void JdkOption_IsRecursive()
+	{
+		// The --jdk option should be available to all subcommands
+		Assert.True(AndroidCommands.JdkOption.Recursive);
+	}
+
+	[Fact]
+	public void SdkOption_ParsesOnSubcommand()
+	{
+		// Arrange
+		var rootCommand = Program.BuildRootCommand();
+
+		// Act — parse --sdk on a nested subcommand
+		var parseResult = rootCommand.Parse("android --sdk /custom/sdk sdk list");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		var sdkValue = parseResult.GetValue(AndroidCommands.SdkOption);
+		Assert.Equal("/custom/sdk", sdkValue);
+	}
+
+	[Fact]
+	public void JdkOption_ParsesOnSubcommand()
+	{
+		// Arrange
+		var rootCommand = Program.BuildRootCommand();
+
+		// Act
+		var parseResult = rootCommand.Parse("android --jdk /custom/jdk jdk check");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		var jdkValue = parseResult.GetValue(AndroidCommands.JdkOption);
+		Assert.Equal("/custom/jdk", jdkValue);
+	}
+
+	[Fact]
+	public void SdkAndJdkOptions_ParseTogether()
+	{
+		// Arrange
+		var rootCommand = Program.BuildRootCommand();
+
+		// Act
+		var parseResult = rootCommand.Parse("android --sdk /my/sdk --jdk /my/jdk emulator list");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal("/my/sdk", parseResult.GetValue(AndroidCommands.SdkOption));
+		Assert.Equal("/my/jdk", parseResult.GetValue(AndroidCommands.JdkOption));
+	}
+
+	[Fact]
+	public async Task SdkOption_OverridesProviderSdkPath()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			IsSdkInstalled = true,
+			SdkPath = "/original/sdk",
+			LicensesAccepted = true
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android --sdk /override/sdk install --json");
+			await parseResult.InvokeAsync();
+
+			// The provider's SdkPath should have been overridden
+			Assert.Equal("/override/sdk", fakeAndroid.SdkPath);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task JdkOption_OverridesProviderJdkPath()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			IsSdkInstalled = true,
+			LicensesAccepted = true
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android --jdk /override/jdk install --json");
+			await parseResult.InvokeAsync();
+
+			// The provider's JdkPath should have been overridden
+			Assert.Equal("/override/jdk", fakeAndroid.JdkPath);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
 	// --- Handler-level tests for the JSON/non-Spectre 'android install' license preflight. ---
 	// These exercise the behavior added in PR #106: fail fast when the SDK is already
 	// installed and licenses aren't accepted, but don't block on a fresh machine where

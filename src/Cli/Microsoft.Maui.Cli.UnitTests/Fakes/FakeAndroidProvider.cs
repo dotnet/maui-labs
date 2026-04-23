@@ -178,6 +178,10 @@ public class FakeAndroidProvider : IAndroidProvider
 		return Task.CompletedTask;
 	}
 
+	public void OverrideSdkPath(string path) => SdkPath = path;
+
+	public void OverrideJdkPath(string path) => JdkPath = path;
+
 	public void Dispose()
 	{
 		Disposed = true;

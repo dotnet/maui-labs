@@ -32,7 +32,7 @@ public static partial class AndroidCommands
 
 		command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);

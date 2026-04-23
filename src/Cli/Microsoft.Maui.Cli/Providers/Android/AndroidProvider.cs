@@ -444,4 +444,8 @@ public class AndroidProvider : IAndroidProvider
 		_sdkPath = targetPath;
 	}
 
+	public void OverrideSdkPath(string path) => _sdkPath = path;
+
+	public void OverrideJdkPath(string path) => _jdkPath = path;
+
 }
