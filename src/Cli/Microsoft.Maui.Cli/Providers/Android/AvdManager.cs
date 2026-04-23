@@ -164,9 +164,9 @@ public class AvdManager
 	/// <summary>
 	/// Returns <c>true</c> when the AVD directory contains a runtime lock file,
 	/// which the Android emulator creates when an instance is starting, booting
-	/// or already running for this AVD. On Windows these are directories
-	/// (e.g. <c>hardware-qemu.ini.lock\</c>); on macOS/Linux they are regular
-	/// files — checking existence works in both cases.
+	/// or already running for this AVD. On Windows the lock is a directory
+	/// (e.g. <c>hardware-qemu.ini.lock\</c>); on macOS/Linux it is a regular
+	/// file — checking existence works in both cases.
 	/// </summary>
 	static bool IsAvdLocked(string? avdPath)
 	{
@@ -175,14 +175,18 @@ public class AvdManager
 
 		try
 		{
-			// The emulator writes several lock markers; hardware-qemu.ini.lock is
-			// the most reliable one — present for the entire lifetime of a running
-			// instance. multiinstance.lock is also checked as a fallback.
-			return Directory.Exists(avdPath) && (
-				File.Exists(System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock")) ||
-				Directory.Exists(System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock")) ||
-				File.Exists(System.IO.Path.Combine(avdPath, "multiinstance.lock")) ||
-				Directory.Exists(System.IO.Path.Combine(avdPath, "multiinstance.lock")));
+			// Only hardware-qemu.ini.lock is a reliable aliveness marker —
+			// the emulator holds it for the entire lifetime of a running
+			// instance and the OS releases it when the process exits
+			// (on Windows it's a directory locked via a sentinel file;
+			// on macOS/Linux it's an fcntl-held file that disappears on
+			// clean shutdown). multiinstance.lock is NOT reliable — it is
+			// a plain empty file that Android's emulator frequently leaves
+			// behind after a crash or ungraceful shutdown, producing
+			// false positives for shutdown AVDs.
+			var qemuLock = System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock");
+			return Directory.Exists(avdPath) &&
+				(File.Exists(qemuLock) || Directory.Exists(qemuLock));
 		}
 		catch (Exception ex)
 		{
