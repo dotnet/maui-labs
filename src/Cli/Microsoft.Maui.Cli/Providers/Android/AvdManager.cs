@@ -175,15 +175,17 @@ public class AvdManager
 
 		try
 		{
-			// Only hardware-qemu.ini.lock is a reliable aliveness marker —
-			// the emulator holds it for the entire lifetime of a running
-			// instance and the OS releases it when the process exits
-			// (on Windows it's a directory locked via a sentinel file;
-			// on macOS/Linux it's an fcntl-held file that disappears on
-			// clean shutdown). multiinstance.lock is NOT reliable — it is
-			// a plain empty file that Android's emulator frequently leaves
-			// behind after a crash or ungraceful shutdown, producing
-			// false positives for shutdown AVDs.
+			// Best-effort heuristic, NOT a guarantee. The emulator creates
+			// hardware-qemu.ini.lock when a qemu instance starts and removes
+			// it during clean shutdown via its own atexit handler. The OS
+			// does NOT remove this file/directory on process exit, so a
+			// SIGKILL/taskkill/power-loss leaves a stale marker on disk
+			// until the AVD is launched again (the emulator cleans stale
+			// markers on startup). multiinstance.lock is worse — it has no
+			// cleanup mechanism at all and is widely known to linger after
+			// any ungraceful shutdown, so we do not use it.
+			// Known follow-up: Android Studio's authoritative signal is
+			// $HOME/.android/avd/running/pid_NNNN.ini + a live ProcessHandle.
 			var qemuLock = System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock");
 			return Directory.Exists(avdPath) &&
 				(File.Exists(qemuLock) || Directory.Exists(qemuLock));

@@ -407,7 +407,7 @@ public class DeviceManagerTests
 		// registers the serial).
 		Assert.Equal(2, devices.Count);
 		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.IsRunning && d.State == DeviceState.Booted);
-		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && d.State == DeviceState.Booting && d.IsRunning);
+		Assert.Contains(devices, d => d.EmulatorId == "Other_AVD" && d.State == DeviceState.Booting && !d.IsRunning);
 	}
 
 	[Fact]
@@ -433,7 +433,10 @@ public class DeviceManagerTests
 
 		Assert.Single(devices);
 		Assert.Equal(DeviceState.Booting, devices[0].State);
-		Assert.True(devices[0].IsRunning);
+		// IsRunning stays false: we have no adb serial, so the entry is not
+		// addressable via `adb -s <id>`. Display shows Booting for UX, but
+		// running-device consumers must not auto-select this target.
+		Assert.False(devices[0].IsRunning);
 	}
 
 	[Fact]

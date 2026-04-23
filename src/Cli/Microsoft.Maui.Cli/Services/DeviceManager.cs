@@ -162,6 +162,13 @@ public class DeviceManager : IDeviceManager
 					// broken adb server (blind to a fully booted device).
 					// That is a user-environment issue (restart adb) rather
 					// than something we can reliably detect from lock files.
+					// IsRunning stays false in this branch even when the AVD
+					// is locked: we have no adb serial, so the entry is NOT
+					// addressable via `adb -s <id>`. Consumers like the
+					// profile command filter on IsRunning and then pass
+					// device.Id to adb — marking this IsRunning=true would
+					// let `maui profile --device <avd_name>` auto-select an
+					// un-addressable target and fail downstream.
 					devices.Add(new Device
 					{
 						Id = avd.Name,
@@ -170,7 +177,7 @@ public class DeviceManager : IDeviceManager
 						Type = DeviceType.Emulator,
 						State = avd.IsLocked ? DeviceState.Booting : DeviceState.Shutdown,
 						IsEmulator = true,
-						IsRunning = avd.IsLocked,
+						IsRunning = false,
 						ConnectionType = Models.ConnectionType.Local,
 						EmulatorId = avd.Name,
 						Model = avd.DeviceProfile,
