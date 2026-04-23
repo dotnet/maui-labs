@@ -125,7 +125,6 @@ public class GtkLayoutPanel : Gtk.Fixed
 					var pt = Graphene.Point.Alloc();
 					pt.Init((float)bounds.X, (float)bounds.Y);
 					transform = Gsk.Transform.New().Translate(pt);
-					pt.Free();
 				}
 				else
 				{
