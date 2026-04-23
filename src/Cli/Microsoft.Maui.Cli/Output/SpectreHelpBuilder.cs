@@ -15,10 +15,13 @@ static class SpectreHelpBuilder
 	/// <summary>
 	/// Writes colorized help for a command to the console.
 	/// </summary>
-	internal static void WriteHelp(Command command)
-	{
-		var console = AnsiConsole.Console;
+	internal static void WriteHelp(Command command) => WriteHelp(command, AnsiConsole.Console);
 
+	/// <summary>
+	/// Writes colorized help for a command to the specified console (testable overload).
+	/// </summary>
+	internal static void WriteHelp(Command command, IAnsiConsole console)
+	{
 		// Description
 		if (!string.IsNullOrEmpty(command.Description))
 		{
@@ -27,7 +30,7 @@ static class SpectreHelpBuilder
 			console.WriteLine();
 		}
 
-		// Usage
+		// Usage — always shows [options] since help is always available
 		console.MarkupLine("[yellow]Usage:[/]");
 		console.MarkupLine($"  {Markup.Escape(BuildUsageLine(command))}");
 		console.WriteLine();
@@ -42,24 +45,24 @@ static class SpectreHelpBuilder
 			console.WriteLine();
 		}
 
-		// Options
+		// Options — build all rows first, including standard help/version,
+		// so the section always appears (every command has at least --help).
 		var options = GetVisibleOptions(command).ToList();
-		if (options.Count > 0)
+		var optionRows = new List<(string, string)>();
+		foreach (var option in options)
+			optionRows.Add((FormatAliases(option), option.Description ?? string.Empty));
+
+		// Standard help option (always available on every command)
+		optionRows.Add(("-?, -h, --help", "Show help and usage information"));
+
+		// Standard version option (root only)
+		if (command is RootCommand)
+			optionRows.Add(("--version", "Show version information"));
+
+		if (optionRows.Count > 0)
 		{
 			console.MarkupLine("[yellow]Options:[/]");
-
-			var rows = new List<(string, string)>();
-			foreach (var option in options)
-				rows.Add((FormatAliases(option), option.Description ?? string.Empty));
-
-			// Standard help option (always available)
-			rows.Add(("-?, -h, --help", "Show help and usage information"));
-
-			// Standard version option (root only)
-			if (command is RootCommand)
-				rows.Add(("--version", "Show version information"));
-
-			WriteTwoColumnTable(console, rows);
+			WriteTwoColumnTable(console, optionRows);
 			console.WriteLine();
 		}
 
@@ -88,10 +91,11 @@ static class SpectreHelpBuilder
 		var maxNameLen = materialized.Max(r => r.Name.Length);
 		foreach (var (name, description) in materialized)
 		{
-			// Pad inside the color segment — Spectre collapses whitespace that appears
-			// immediately after a closing markup tag, which corrupts column alignment.
-			var paddedName = name.PadRight(maxNameLen);
-			console.MarkupLine($"  [green]{Markup.Escape(paddedName)}[/]  {Markup.Escape(description)}");
+			// Pad the name to maxNameLen + 2 (column separator) INSIDE the color segment.
+			// Spectre collapses whitespace immediately after a closing markup tag,
+			// so padding must be inside [green]...[/] to preserve column alignment.
+			var paddedName = name.PadRight(maxNameLen + 2);
+			console.MarkupLine($"  [green]{Markup.Escape(paddedName)}[/]{Markup.Escape(description)}");
 		}
 	}
 
@@ -113,8 +117,8 @@ static class SpectreHelpBuilder
 		if (command.Subcommands.Any(c => !c.Hidden))
 			parts.Add("[command]");
 
-		if (GetVisibleOptions(command).Any())
-			parts.Add("[options]");
+		// Every command has at least --help, so [options] always applies
+		parts.Add("[options]");
 
 		foreach (var arg in command.Arguments.Where(a => !a.Hidden))
 			parts.Add($"<{arg.Name}>");
@@ -126,11 +130,11 @@ static class SpectreHelpBuilder
 	{
 		// Filter out the built-in HelpOption / VersionOption — we render those manually
 		// so their presentation stays consistent across all commands.
-		static bool IsBuiltIn(Option o)
-		{
-			var t = o.GetType().Name;
-			return t == "HelpOption" || t == "VersionOption";
-		}
+		// Match by well-known aliases instead of internal type names, which are fragile
+		// across System.CommandLine beta releases.
+		static bool IsBuiltIn(Option o) =>
+			o.Aliases.Contains("--help") || o.Name == "--help" ||
+			o.Aliases.Contains("--version") || o.Name == "--version";
 
 		var options = command.Options.Where(o => !o.Hidden && !IsBuiltIn(o)).ToList();
 
