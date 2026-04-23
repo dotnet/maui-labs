@@ -645,6 +645,38 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void BuildCompileArguments_IosSimulatorWithBuildInjection_EmbedsBuildInjectionProperties()
+	{
+		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
+		var buildInjection = new ProfilingBuildInjection(
+			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
+			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
+			ExitControlHost: "127.0.0.1",
+			ExitControlPort: 9001,
+			InjectBootstrap: true,
+			EnableRuntimePgo: false,
+			EventPipeOutputPath: null);
+
+		var args = ProfileCommand.BuildCompileArguments(
+			"/fake/MyApp.csproj",
+			"net10.0-ios",
+			"Release",
+			transport,
+			9000,
+			buildInjection);
+
+		Assert.Contains("-p:EnableDiagnostics=true", args);
+		Assert.Contains("-p:DiagnosticSuspend=true", args);
+		Assert.Contains("-p:DiagnosticListenMode=listen", args);
+		Assert.Contains($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}", args);
+		Assert.Contains("-p:MauiStartupProfilingInject=true", args);
+		Assert.Contains($"-p:MauiStartupProfilingExitHost={buildInjection.ExitControlHost}", args);
+		Assert.Contains($"-p:MauiStartupProfilingExitPort={buildInjection.ExitControlPort}", args);
+		Assert.Contains("-p:MauiStartupProfilingInjectBootstrap=true", args);
+	}
+
+	[Fact]
 	public void BuildCompileArguments_WithRuntimeOwnedEventPipe_SkipsDiagnosticArgsAndAddsRuntimePgoProperties()
 	{
 		var device = CreateDevice(Platforms.Android, isEmulator: true);

@@ -47,14 +47,12 @@ internal static class ProfileSessionSetup
 		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
 		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.StartupProfilingPackageId);
-		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
-			? null
-			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
-				context.DiagnosticAddress,
-				context.ReservedPorts!.ExitControlPort,
-				injectBootstrap: !hasStartupProfilingHelper,
-				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection,
-				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
+		context.BuildInjection = ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
+			context.DiagnosticAddress,
+			context.ReservedPorts!.ExitControlPort,
+			injectBootstrap: !hasStartupProfilingHelper,
+			enableRuntimePgo: context.UseRuntimeOwnedTraceCollection,
+			eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
 
 		WriteDiagnosticPortInfo(context);
 		return context;
