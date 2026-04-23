@@ -151,6 +151,14 @@ public record AvdInfo
 	public string? SystemImage { get; init; }
 	public string? Target { get; init; }
 	public string? Path { get; init; }
+
+	/// <summary>
+	/// True when the AVD directory contains a runtime lock file
+	/// (e.g. <c>hardware-qemu.ini.lock</c>), indicating that an
+	/// emulator instance is currently starting, booting, or running
+	/// for this AVD.
+	/// </summary>
+	public bool IsLocked { get; init; }
 }
 
 /// <summary>

@@ -120,6 +120,7 @@ public class SpectreOutputFormatter : IOutputFormatter
 			{
 				DeviceState.Booted => "green",
 				DeviceState.Connected => "green",
+				DeviceState.Booting => "yellow",
 				DeviceState.Shutdown => "grey",
 				DeviceState.Offline => "red",
 				_ => "white"

@@ -157,7 +157,44 @@ public class AvdManager
 			SystemImage = systemImage,
 			Target = target,
 			Path = avd.Path,
+			IsLocked = IsAvdLocked(avd.Path),
 		};
+	}
+
+	/// <summary>
+	/// Returns <c>true</c> when the AVD directory contains a runtime lock file,
+	/// which the Android emulator creates when an instance is starting, booting
+	/// or already running for this AVD. On Windows the lock is a directory
+	/// (e.g. <c>hardware-qemu.ini.lock\</c>); on macOS/Linux it is a regular
+	/// file — checking existence works in both cases.
+	/// </summary>
+	static bool IsAvdLocked(string? avdPath)
+	{
+		if (string.IsNullOrEmpty(avdPath))
+			return false;
+
+		try
+		{
+			// Best-effort heuristic, NOT a guarantee. The emulator creates
+			// hardware-qemu.ini.lock when a qemu instance starts and removes
+			// it during clean shutdown via its own atexit handler. The OS
+			// does NOT remove this file/directory on process exit, so a
+			// SIGKILL/taskkill/power-loss leaves a stale marker on disk
+			// until the AVD is launched again (the emulator cleans stale
+			// markers on startup). multiinstance.lock is worse — it has no
+			// cleanup mechanism at all and is widely known to linger after
+			// any ungraceful shutdown, so we do not use it.
+			// Known follow-up: Android Studio's authoritative signal is
+			// $HOME/.android/avd/running/pid_NNNN.ini + a live ProcessHandle.
+			var qemuLock = System.IO.Path.Combine(avdPath, "hardware-qemu.ini.lock");
+			return Directory.Exists(avdPath) &&
+				(File.Exists(qemuLock) || Directory.Exists(qemuLock));
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Trace.WriteLine($"AVD lock check failed for '{avdPath}': {ex.Message}");
+			return false;
+		}
 	}
 
 	public async Task<AvdInfo> CreateAvdAsync(string name, string deviceProfile, string systemImage,
