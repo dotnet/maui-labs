@@ -137,26 +137,28 @@ public class DeviceManager : IDeviceManager
 					var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
 					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
 
-					// Lock files signal that the emulator qemu process is alive,
-					// but they do not distinguish "still booting" from "fully
-					// booted". The merge path above already surfaces Booting
-					// when adb sees the serial as Offline — the live evidence
-					// of an in-progress boot. When we reach this else branch
-					// adb did not list any serial for this AVD, which in
-					// practice means either the emulator is fully booted but
-					// adb is blind to it (server restart, port conflict,
-					// stale lock file), or we are in the very short <1s
-					// window before adb first registers the serial. Reporting
-					// Booted here matches the far more common case and the
-					// next refresh will naturally correct short-lived early-
-					// boot misreads via the merge path.
+					// Lock files signal that the emulator qemu process is alive.
+					// They cannot distinguish "still booting" from "fully
+					// booted"; only adb can, via the Offline -> Online
+					// transition surfaced by the merge path above. When we
+					// reach this else branch adb listed no serial for this
+					// AVD - almost always because the emulator is in the
+					// early boot window before adb has registered it.
+					// Report Booting so users know it's not yet ready; on
+					// the next refresh the merge path will take over and
+					// surface Booted once adb is online.
+					//
+					// The less common cause is a healthy emulator with a
+					// broken adb server (blind to a fully booted device).
+					// That is a user-environment issue (restart adb) rather
+					// than something we can reliably detect from lock files.
 					devices.Add(new Device
 					{
 						Id = avd.Name,
 						Name = avd.Name,
 						Platforms = new[] { "android" },
 						Type = DeviceType.Emulator,
-						State = avd.IsLocked ? DeviceState.Booted : DeviceState.Shutdown,
+						State = avd.IsLocked ? DeviceState.Booting : DeviceState.Shutdown,
 						IsEmulator = true,
 						IsRunning = avd.IsLocked,
 						ConnectionType = Models.ConnectionType.Local,
