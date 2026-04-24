@@ -22,8 +22,7 @@ public sealed class WindowsFixture : AppFixtureBase
             var psi = new ProcessStartInfo(exePath)
             {
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(exePath) ?? Environment.CurrentDirectory,
             };
 
             psi.Environment["DEVFLOW_TEST_PORT"] = AgentPort.ToString();

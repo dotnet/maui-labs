@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
@@ -24,7 +25,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         {
             var projectPath = GetSampleProjectPath();
             await BuildSampleAsync(projectPath, "net10.0-ios",
-                "-p:_DeviceTarget=simulator -p:RuntimeIdentifier=iossimulator-arm64");
+                $"-p:_DeviceTarget=simulator -p:RuntimeIdentifier={GetSimulatorRuntimeIdentifier()}");
 
             var appBundle = FindSimulatorAppBundle();
             _appBundleId = ReadBundleId(appBundle);
@@ -62,6 +63,8 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
     async Task<(string Udid, bool AlreadyBooted)> FindOrBootSimulatorAsync()
     {
         var versionPattern = Environment.GetEnvironmentVariable("DEVFLOW_TEST_IOS_VERSION");
+        if (string.IsNullOrWhiteSpace(versionPattern))
+            versionPattern = null;
 
         var json = await RunProcessCheckedAsync("xcrun", "simctl list devices --json");
         var doc = JsonDocument.Parse(json);
@@ -104,13 +107,18 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         if (booted.Count > 0)
         {
             var best = SelectBestDevice(booted);
+            await WaitForBootCompletionAsync(best.Udid);
             return (best.Udid, true);
         }
 
         var selected = SelectBestDevice(candidates);
         await RunProcessCheckedAsync("xcrun", $"simctl boot {selected.Udid}", timeoutSeconds: 60);
+        await WaitForBootCompletionAsync(selected.Udid);
         return (selected.Udid, false);
     }
+
+    static Task WaitForBootCompletionAsync(string udid) =>
+        RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 180);
 
     static (string Udid, string Name, string Runtime, string State) SelectBestDevice(
         List<(string Udid, string Name, string Runtime, string State)> devices) =>
@@ -141,9 +149,12 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         return Regex.IsMatch(version, regexPattern, RegexOptions.IgnoreCase);
     }
 
+    static string GetSimulatorRuntimeIdentifier() =>
+        RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "iossimulator-arm64" : "iossimulator-x64";
+
     static string FindSimulatorAppBundle()
     {
-        var binDir = Path.Combine(GetSampleBuildOutputRoot(), "net10.0-ios", "iossimulator-arm64");
+        var binDir = Path.Combine(GetSampleBuildOutputRoot(), "net10.0-ios", GetSimulatorRuntimeIdentifier());
 
         if (!Directory.Exists(binDir))
             throw new InvalidOperationException($"iOS simulator build output not found at: {binDir}");
@@ -171,7 +182,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
     }
 
     Task InstallAppAsync(string appBundlePath) =>
-        RunProcessCheckedAsync("xcrun", $"simctl install {_simulatorUdid} \"{appBundlePath}\"", timeoutSeconds: 60);
+        RunProcessCheckedAsync("xcrun", $"simctl install {_simulatorUdid} \"{appBundlePath}\"", timeoutSeconds: 180);
 
     Task LaunchAppAsync()
     {
@@ -183,6 +194,6 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         return RunProcessCheckedAsync("xcrun",
             $"simctl launch {_simulatorUdid} {_appBundleId}",
             envVars: envVars,
-            timeoutSeconds: 30);
+            timeoutSeconds: 90);
     }
 }

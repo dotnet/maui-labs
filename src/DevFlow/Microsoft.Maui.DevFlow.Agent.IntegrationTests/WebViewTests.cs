@@ -12,41 +12,201 @@ public class WebViewTests : IntegrationTestBase
     public WebViewTests(AppFixture app, ITestOutputHelper output)
         : base(app, output) { }
 
-    async Task EnsureOnBlazorPageAsync()
+    static bool HasWebViewContexts(JsonElement json)
     {
-        await NavigateToPageAsync("//blazor", "BlazorWebView");
-        var cdpReady = await WaitForCdpReadyAsync(timeoutMs: 30000);
-        if (!cdpReady)
-            Output.WriteLine("WARNING: CDP not ready after 30s — WebView tests may fail.");
+        if (json.ValueKind == JsonValueKind.Array)
+            return json.GetArrayLength() > 0;
+
+        if (json.ValueKind == JsonValueKind.Object &&
+            json.TryGetProperty("webviews", out var webviews) &&
+            webviews.ValueKind == JsonValueKind.Array)
+        {
+            return webviews.GetArrayLength() > 0;
+        }
+
+        return false;
     }
 
-    Task<bool> IsCdpReady(int timeoutMs = 10000)
-        => WaitForCdpReadyAsync(timeoutMs: timeoutMs, pollIntervalMs: 500);
-
-    async Task<string> GetCdpSourceWithRetryAsync()
+    static int CountWebViewContexts(JsonElement json)
     {
-        try { return await Client.GetCdpSourceAsync(); }
-        catch (HttpRequestException) when (Platform == "android")
+        if (json.ValueKind == JsonValueKind.Array)
+            return json.GetArrayLength();
+
+        if (json.ValueKind == JsonValueKind.Object &&
+            json.TryGetProperty("webviews", out var webviews) &&
+            webviews.ValueKind == JsonValueKind.Array)
         {
-            Output.WriteLine("Initial CDP source request failed on Android; waiting and retrying once.");
-            await WaitForCdpReadyAsync(timeoutMs: 15000);
-            return await Client.GetCdpSourceAsync();
+            return webviews.GetArrayLength();
+        }
+
+        return 0;
+    }
+
+    static bool AnyReadyContext(JsonElement json)
+    {
+        JsonElement array;
+        if (json.ValueKind == JsonValueKind.Array)
+            array = json;
+        else if (json.ValueKind == JsonValueKind.Object &&
+                 json.TryGetProperty("webviews", out var webviews) &&
+                 webviews.ValueKind == JsonValueKind.Array)
+            array = webviews;
+        else
+            return false;
+
+        foreach (var ctx in array.EnumerateArray())
+        {
+            if (ctx.ValueKind != JsonValueKind.Object) continue;
+            if (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True) return true;
+            if (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True) return true;
+        }
+
+        return false;
+    }
+
+    Task EnsureOnBlazorPageAsync() => App.EnsureBlazorReadyAsync();
+
+    static IEnumerable<JsonElement> EnumerateContexts(JsonElement json)
+    {
+        if (json.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ctx in json.EnumerateArray())
+                yield return ctx;
+            yield break;
+        }
+
+        if (json.ValueKind == JsonValueKind.Object &&
+            json.TryGetProperty("webviews", out var webviews) &&
+            webviews.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ctx in webviews.EnumerateArray())
+                yield return ctx;
         }
     }
 
-    async Task<JsonElement> SendCdpCommandWithRetryAsync(string method, JsonNode? paramsJson = null)
+    static bool IsReadyContext(JsonElement ctx)
+        => (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True)
+           || (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True);
+
+    async Task<string> GetActiveContextIdAsync(int timeoutMs = 15000)
     {
-        var result = await Client.SendCdpCommandAsync(method, paramsJson);
-        if (Platform == "android" &&
-            result.ValueKind == JsonValueKind.Object &&
-            result.TryGetProperty("error", out _))
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        JsonElement? lastJson = null;
+
+        while (DateTime.UtcNow < deadline)
         {
-            Output.WriteLine($"Initial CDP command '{method}' returned an error on Android; waiting and retrying once.");
-            await WaitForCdpReadyAsync(timeoutMs: 15000);
-            result = await Client.SendCdpCommandAsync(method, paramsJson);
+            var json = await Client.GetCdpWebViewsAsync();
+            lastJson = json;
+            var contexts = EnumerateContexts(json).ToList();
+            if (contexts.Count == 0)
+            {
+                await Task.Delay(250);
+                continue;
+            }
+
+            JsonElement? pick =
+                contexts.LastOrDefault(c =>
+                    c.TryGetProperty("automationId", out var automationId) &&
+                    automationId.ValueKind == JsonValueKind.String &&
+                    automationId.GetString() == "BlazorWebView" &&
+                    IsReadyContext(c));
+
+            if (pick == null || pick.Value.ValueKind == JsonValueKind.Undefined)
+                pick = contexts.LastOrDefault(IsReadyContext);
+
+            if (pick == null || pick.Value.ValueKind == JsonValueKind.Undefined)
+                pick = contexts.LastOrDefault(c =>
+                    c.TryGetProperty("automationId", out var automationId) &&
+                    automationId.ValueKind == JsonValueKind.String &&
+                    automationId.GetString() == "BlazorWebView");
+
+            var selected = pick ?? contexts[^1];
+            if (selected.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+                return id.GetString()!;
+            if (selected.TryGetProperty("index", out var index) && index.ValueKind == JsonValueKind.Number)
+                return index.GetInt32().ToString();
+
+            return "0";
         }
 
-        return result;
+        Assert.True(false, $"Expected at least one WebView context within {timeoutMs}ms. Last payload: {lastJson}");
+        return "0";
+    }
+
+    /// <summary>
+    /// Returns true if the response body indicates the CDP bridge is transiently
+    /// not-ready (i.e. chobitsu is re-injecting after a page navigation). Android's
+    /// OnPageFinished can reset the bridge mid-test on internal Blazor router navigations.
+    /// </summary>
+    static bool IsBridgeNotReady(string body)
+        => body.Contains("CDP not ready", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("WebView not ready", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("WebView not initialized", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Executes an HTTP call and retries up to <paramref name="timeoutMs"/> when the
+    /// response body signals the CDP bridge is transiently re-injecting. Any other
+    /// error path (non-bridge 4xx/5xx, exception) returns immediately.
+    /// </summary>
+    async Task<HttpResponseMessage> WithBridgeRetryAsync(
+        Func<Task<HttpResponseMessage>> call,
+        int timeoutMs = 15000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        HttpResponseMessage? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            last?.Dispose();
+            last = await call();
+            if (last.IsSuccessStatusCode) return last;
+
+            var body = await last.Content.ReadAsStringAsync();
+            if (!IsBridgeNotReady(body))
+                return last;
+
+            await Task.Delay(250);
+            // Re-create the response wrapper with the body we already read so callers
+            // can still inspect it if we hit the deadline.
+            if (DateTime.UtcNow >= deadline)
+            {
+                var replay = new HttpResponseMessage(last.StatusCode)
+                {
+                    Content = new StringContent(body),
+                    RequestMessage = last.RequestMessage,
+                };
+                last.Dispose();
+                return replay;
+            }
+        }
+        return last!;
+    }
+
+    Task<HttpResponseMessage> GetWithBridgeRetryAsync(string path, int timeoutMs = 15000)
+        => WithBridgeRetryAsync(() => GetRawAsync(path), timeoutMs);
+
+    Task<HttpResponseMessage> PostWithBridgeRetryAsync(string path, object? body, int timeoutMs = 15000)
+        => WithBridgeRetryAsync(() => PostRawAsync(path, body), timeoutMs);
+
+    /// <summary>
+    /// Asserts the CDP bridge is actually live by sending a trivial Runtime.evaluate probe.
+    /// Retries briefly when the bridge is mid-reinject (Android OnPageFinished racing with
+    /// a test call). Protects against false-positive test passes when chobitsu failed to
+    /// load and the bridge is returning error payloads.
+    /// </summary>
+    async Task AssertCdpResponsiveAsync(int timeoutMs = 15000)
+    {
+        var effectiveTimeoutMs = Platform == "windows"
+            ? Math.Max(timeoutMs, 30000)
+            : timeoutMs;
+        var ok = await App.WaitForCdpResponsiveAsync(effectiveTimeoutMs);
+        if (!ok)
+        {
+            App.InvalidateBlazorReady();
+            await App.EnsureBlazorReadyAsync();
+            ok = await App.WaitForCdpResponsiveAsync(effectiveTimeoutMs);
+        }
+        Assert.True(ok,
+            $"CDP bridge did not become responsive within {effectiveTimeoutMs}ms (expected a live bridge answering Runtime.evaluate).");
     }
 
     [Fact]
@@ -55,32 +215,17 @@ public class WebViewTests : IntegrationTestBase
         await EnsureOnBlazorPageAsync();
         var json = await Client.GetCdpWebViewsAsync();
 
-        Assert.True(json.ValueKind == JsonValueKind.Object || json.ValueKind == JsonValueKind.Array);
+        Assert.True(HasWebViewContexts(json), "Expected at least one WebView context.");
     }
 
     [Fact]
     public async Task Contexts_WebViewIsReady()
     {
         await EnsureOnBlazorPageAsync();
-        var cdpReady = await WaitForCdpReadyAsync();
-        Assert.True(cdpReady, "Expected CDP to become ready before querying WebView contexts.");
-
         var json = await Client.GetCdpWebViewsAsync();
-
-        Assert.True(json.ValueKind == JsonValueKind.Object || json.ValueKind == JsonValueKind.Array);
-
-        if (json.ValueKind == JsonValueKind.Array)
-        {
-            Assert.True(json.GetArrayLength() > 0, "Expected at least one WebView context");
-        }
-        else if (json.TryGetProperty("webviews", out var webviewsProp) && webviewsProp.ValueKind == JsonValueKind.Array)
-        {
-            Assert.True(webviewsProp.GetArrayLength() > 0, "Expected at least one WebView context");
-        }
-        else
-        {
-            Assert.Fail("Expected CDP web views response to be a non-empty array or an object containing a non-empty 'webviews' array.");
-        }
+        Assert.True(HasWebViewContexts(json), "Expected at least one WebView context.");
+        Assert.True(AnyReadyContext(json),
+            $"Expected at least one WebView context with isReady=true. Got: {json}");
     }
 
     [Fact]
@@ -89,38 +234,36 @@ public class WebViewTests : IntegrationTestBase
         await EnsureOnBlazorPageAsync();
 
         var paramsJson = JsonNode.Parse("""{"expression": "document.title"}""");
-        var result = await SendCdpCommandWithRetryAsync("Runtime.evaluate", paramsJson);
+        var result = await Client.SendCdpCommandAsync("Runtime.evaluate", paramsJson);
 
-        Assert.True(result.ValueKind != JsonValueKind.Undefined);
+        var text = result.ToString();
+        Assert.False(text.Contains("\"error\"", StringComparison.OrdinalIgnoreCase),
+            $"Runtime.evaluate returned an error payload: {text}");
+        // Response should be a Runtime.evaluate result object with a result.value (string title).
+        Assert.Contains("\"result\"", text);
+        Assert.Contains("\"value\"", text);
     }
 
     [Fact]
     public async Task Evaluate_SimpleExpression_ReturnsResult()
     {
         await EnsureOnBlazorPageAsync();
-        if (!await IsCdpReady(timeoutMs: 30000))
-        {
-            Output.WriteLine("CDP not ready — skipping.");
-            return;
-        }
 
         var paramsJson = JsonNode.Parse("""{"expression": "1 + 1"}""");
-        var result = await SendCdpCommandWithRetryAsync("Runtime.evaluate", paramsJson);
+        var result = await Client.SendCdpCommandAsync("Runtime.evaluate", paramsJson);
 
-        Assert.Contains("2", result.ToString());
+        var text = result.ToString();
+        Assert.False(text.Contains("\"error\"", StringComparison.OrdinalIgnoreCase),
+            $"Runtime.evaluate returned an error payload: {text}");
+        Assert.Contains("\"value\":2", text);
     }
 
     [Fact]
     public async Task Source_ReturnsHtmlContent()
     {
         await EnsureOnBlazorPageAsync();
-        if (!await IsCdpReady(timeoutMs: 30000))
-        {
-            Output.WriteLine("CDP not ready — skipping.");
-            return;
-        }
 
-        var source = await GetCdpSourceWithRetryAsync();
+        var source = await Client.GetCdpSourceAsync();
         Assert.NotNull(source);
         Assert.NotEmpty(source);
         Assert.Contains("<", source);
@@ -130,14 +273,11 @@ public class WebViewTests : IntegrationTestBase
     public async Task Dom_ReturnsOuterHtml()
     {
         await EnsureOnBlazorPageAsync();
-        if (!await IsCdpReady())
-        {
-            Output.WriteLine("CDP not ready — skipping.");
-            return;
-        }
+        await AssertCdpResponsiveAsync();
 
-        var response = await GetRawAsync("/api/v1/webview/dom");
-        Assert.True(response.IsSuccessStatusCode);
+        var response = await GetWithBridgeRetryAsync("/api/v1/webview/dom");
+        Assert.True(response.IsSuccessStatusCode,
+            $"/api/v1/webview/dom returned {(int)response.StatusCode}");
 
         var html = await response.Content.ReadAsStringAsync();
         Assert.NotEmpty(html);
@@ -148,23 +288,17 @@ public class WebViewTests : IntegrationTestBase
     public async Task DomQuery_ReturnsElements()
     {
         await EnsureOnBlazorPageAsync();
-        if (!await IsCdpReady())
-        {
-            Output.WriteLine("CDP not ready — skipping.");
-            return;
-        }
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
 
-        var response = await PostRawAsync("/api/v1/webview/dom/query", new
+        var response = await PostWithBridgeRetryAsync("/api/v1/webview/dom/query", new
         {
-            selector = "button",
-            contextId = "0",
+            selector = ".add-btn",
+            contextId,
         });
 
-        if (!response.IsSuccessStatusCode)
-        {
-            Output.WriteLine($"DOM query not available on this platform: {(int)response.StatusCode}");
-            return;
-        }
+        Assert.True(response.IsSuccessStatusCode,
+            $"/api/v1/webview/dom/query returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.NotEmpty(body);
@@ -174,101 +308,129 @@ public class WebViewTests : IntegrationTestBase
     public async Task WebViewNavigate_Succeeds()
     {
         await EnsureOnBlazorPageAsync();
-        if (!await IsCdpReady())
-        {
-            Output.WriteLine("CDP not ready — skipping.");
-            return;
-        }
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
 
-        var response = await PostRawAsync("/api/v1/webview/navigate", new
+        var response = await PostWithBridgeRetryAsync("/api/v1/webview/navigate", new
         {
             url = "/counter",
-            contextId = "0",
+            contextId,
         });
 
-        Assert.True(response.IsSuccessStatusCode, $"WebView navigate failed with status {(int)response.StatusCode}");
-        await SettleAsync(1000);
+        Assert.True(response.IsSuccessStatusCode,
+            $"WebView navigate failed with status {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+        // Wait for chobitsu to re-inject after the nav before we navigate back.
+        await App.WaitForCdpResponsiveAsync(15000);
+        contextId = await GetActiveContextIdAsync();
 
-        await PostRawAsync("/api/v1/webview/navigate", new
+        var backResponse = await PostWithBridgeRetryAsync("/api/v1/webview/navigate", new
         {
             url = "/",
-            contextId = "0",
+            contextId,
         });
-        await SettleAsync(1000);
+        Assert.True(backResponse.IsSuccessStatusCode,
+            $"WebView navigate back failed with status {(int)backResponse.StatusCode}: {await backResponse.Content.ReadAsStringAsync()}");
+        await App.WaitForCdpResponsiveAsync(15000);
+        App.InvalidateBlazorReady();
     }
 
     [Fact]
     public async Task InputClick_Button_Succeeds()
     {
         await EnsureOnBlazorPageAsync();
-        if (!await IsCdpReady())
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
+
+        // Use the always-present Add button. On slow renderers (Windows WebView2 on
+        // hosted runners) the component DOM can lag behind the CDP "ready" state, so
+        // poll until the element appears or a generous timeout expires.
+        HttpResponseMessage response = null!;
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (DateTime.UtcNow < deadline)
         {
-            Output.WriteLine("CDP not ready — skipping.");
-            return;
+            response = await PostWithBridgeRetryAsync("/api/v1/webview/input/click", new
+            {
+                selector = ".add-btn",
+                contextId,
+            });
+
+            if (response.IsSuccessStatusCode)
+                break;
+
+            var body = await response.Content.ReadAsStringAsync();
+            if (!body.Contains("No element matches", StringComparison.OrdinalIgnoreCase))
+                break; // Non-selector error, don't retry
+
+            await Task.Delay(1000);
         }
 
-        await PostRawAsync("/api/v1/webview/navigate", new { url = "/counter", contextId = "0" });
-        await SettleAsync(1000);
+        Assert.True(response.IsSuccessStatusCode,
+            $"/api/v1/webview/input/click returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
 
-        var response = await PostRawAsync("/api/v1/webview/input/click", new
-        {
-            selector = "button",
-            contextId = "0",
-        });
-
-        if (!response.IsSuccessStatusCode)
-        {
-            Output.WriteLine($"Input click not available on this platform: {(int)response.StatusCode}");
-            return;
-        }
-
-        await PostRawAsync("/api/v1/webview/navigate", new { url = "/", contextId = "0" });
-        await SettleAsync(500);
     }
 
     [Fact]
     public async Task InputFill_TextInput_Succeeds()
     {
         await EnsureOnBlazorPageAsync();
-        var response = await PostRawAsync("/api/v1/webview/input/fill", new
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
+
+        var response = await PostWithBridgeRetryAsync("/api/v1/webview/input/fill", new
         {
             selector = "input",
             text = "Blazor fill test",
-            contextId = "0",
+            contextId,
         });
 
-        Output.WriteLine($"Input fill status: {(int)response.StatusCode}");
+        // Some platforms may not ship an input element on /counter; a 404 from the selector
+        // is acceptable, but anything above 500 or a bridge error is not.
+        Assert.True(
+            response.IsSuccessStatusCode || (int)response.StatusCode == 404,
+            $"/api/v1/webview/input/fill returned unexpected status {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+
     }
 
     [Fact]
     public async Task InputText_InsertsText()
     {
         await EnsureOnBlazorPageAsync();
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
 
-        var response = await PostRawAsync("/api/v1/webview/input/text", new
+        var response = await PostWithBridgeRetryAsync("/api/v1/webview/input/text", new
         {
             text = "Hello from test",
-            contextId = "0",
+            contextId,
         });
 
-        Output.WriteLine($"Input text status: {(int)response.StatusCode}");
+        Assert.True(response.IsSuccessStatusCode,
+            $"/api/v1/webview/input/text returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
     }
 
     [Fact]
     public async Task Screenshot_WebView_ReturnsImage()
     {
         await EnsureOnBlazorPageAsync();
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
 
-        var response = await GetRawAsync("/api/v1/webview/screenshot?contextId=0");
-        if (response.IsSuccessStatusCode)
+        var response = await GetWithBridgeRetryAsync($"/api/v1/webview/screenshot?contextId={Uri.EscapeDataString(contextId)}");
+
+        // WebView screenshots rely on either CDP Page.captureScreenshot or native
+        // element capture. iOS simulators on CI runners sometimes lack the graphics
+        // surface needed for either path, so accept a 400 there as a known limitation.
+        if (!response.IsSuccessStatusCode && Platform == "ios")
         {
-            var bytes = await response.Content.ReadAsByteArrayAsync();
-            Assert.NotEmpty(bytes);
+            Output.WriteLine("WebView screenshot not supported on this iOS runner (known limitation).");
+            return;
         }
-        else
-        {
-            Output.WriteLine($"WebView screenshot not available: {(int)response.StatusCode}");
-        }
+
+        Assert.True(response.IsSuccessStatusCode,
+            $"/api/v1/webview/screenshot returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.NotEmpty(bytes);
     }
 
     [Fact]
@@ -279,18 +441,53 @@ public class WebViewTests : IntegrationTestBase
         var paramsJson = JsonNode.Parse("""{"expression": "document.querySelectorAll('*').length"}""");
         var result = await Client.SendCdpCommandAsync("Runtime.evaluate", paramsJson);
 
-        Assert.True(result.ValueKind != JsonValueKind.Undefined);
+        var text = result.ToString();
+        Assert.False(text.Contains("\"error\"", StringComparison.OrdinalIgnoreCase),
+            $"Runtime.evaluate returned an error payload: {text}");
+        Assert.Contains("\"result\"", text);
+        Assert.Contains("\"value\"", text);
     }
 
     [Fact]
     public async Task MultiBlazorPage_HasMultipleContexts()
     {
-        await NavigateToPageAsync("//multiblazor", "BlazorLeft");
-        await SettleAsync(2000);
+        // This test intentionally leaves the Blazor single-WebView page.
+        App.InvalidateBlazorReady();
+        try
+        {
+            await NavigateToPageAsync("//multiblazor", "BlazorLeft");
 
-        var json = await Client.GetCdpWebViewsAsync();
-        Assert.True(json.ValueKind != JsonValueKind.Undefined);
+            var timeoutMs = Platform switch
+            {
+                "ios" => 60000,
+                "android" or "windows" => 90000,
+                _ => 45000,
+            };
 
-        await NavigateToMainPageAsync();
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            var contextCount = 0;
+            var anyReady = false;
+            JsonElement lastJson = default;
+
+            while (DateTime.UtcNow < deadline)
+            {
+                lastJson = await Client.GetCdpWebViewsAsync();
+                contextCount = CountWebViewContexts(lastJson);
+                anyReady = AnyReadyContext(lastJson);
+                if (contextCount >= 2 && anyReady)
+                    break;
+                await Task.Delay(500);
+            }
+
+            Assert.True(contextCount >= 2,
+                $"Expected at least 2 WebView contexts on the multi-Blazor page, got {contextCount}. Last response: {lastJson}");
+            Assert.True(anyReady,
+                $"Expected at least one ready WebView context on the multi-Blazor page. Last response: {lastJson}");
+        }
+        finally
+        {
+            await NavigateToMainPageAsync();
+            App.InvalidateBlazorReady();
+        }
     }
 }

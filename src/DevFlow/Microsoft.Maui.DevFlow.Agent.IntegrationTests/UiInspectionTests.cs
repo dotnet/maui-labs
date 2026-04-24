@@ -50,7 +50,7 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task Tree_ElementsHaveBounds()
     {
         await NavigateToMainPageAsync();
-        var tree = await Client.GetTreeAsync(maxDepth: 3);
+        var tree = await Client.GetTreeAsync(maxDepth: 10);
 
         static ElementInfo? FindWithBounds(IEnumerable<ElementInfo> elements)
         {

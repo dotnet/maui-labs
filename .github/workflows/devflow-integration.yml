@@ -1,88 +1,327 @@
 name: DevFlow Integration Tests
 
+# Status: experimental.
+# The DevFlow integration suite builds the sample app, boots a simulator/emulator,
+# installs and launches it, then runs real HTTP round-trips against the agent.
+# A full platform run takes ~20-30 min. To save CI minutes we keep this off the
+# default PR pipeline — it runs on demand via workflow_dispatch or when a PR is
+# labeled `integration-tests`. Additional PR updates can be re-run manually.
+#
+# Entry points per platform fixture:
+#   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
+#   iOS       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/iOSSimulatorFixture.cs
+#   Mac Catalyst -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacCatalystFixture.cs
+#   Windows   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WindowsFixture.cs
+
 on:
   workflow_dispatch:
     inputs:
-      platform:
-        description: Target platform for the real app integration suite
-        required: true
-        default: maccatalyst
+      platforms:
+        description: Platforms to run
+        default: all
         type: choice
         options:
-          - maccatalyst
-          - ios
+          - all
           - android
+          - ios
+          - maccatalyst
           - windows
-      ios-version:
-        description: Optional iOS version filter used by the simulator fixture (for example 18.x)
-        required: false
-        default: ""
-        type: string
       android-api:
-        description: Android API level used by the emulator fixture
-        required: false
+        description: Android API level
         default: "35"
         type: string
+      ios-runtime:
+        description: iOS runtime version filter (e.g. 17.5). Leave blank for newest available.
+        default: ""
+        type: string
+  pull_request:
+    types: [labeled]
+    branches: [main]
+    paths:
+      - 'src/DevFlow/**'
+      - 'samples/DevFlow.Sample/**'
+      - '.github/workflows/devflow-integration.yml'
+
+concurrency:
+  group: devflow-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
-  integration-apple-android:
-    if: ${{ inputs.platform != 'windows' }}
-    runs-on: [self-hosted, macOS]
-    timeout-minutes: 60
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: 1
-      DEVFLOW_TEST_PLATFORM: ${{ inputs.platform }}
-      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-version }}
-      DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api }}
+  # Decide which platforms to run based on the trigger.
+  # For pull_request runs we require the `integration-tests` label.
+  plan:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'integration-tests')
+    runs-on: ubuntu-latest
+    outputs:
+      run-android: ${{ steps.decide.outputs.android }}
+      run-ios: ${{ steps.decide.outputs.ios }}
+      run-maccatalyst: ${{ steps.decide.outputs.maccatalyst }}
+      run-windows: ${{ steps.decide.outputs.windows }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - id: decide
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PLATFORMS: ${{ inputs.platforms }}
+          LABELED: ${{ github.event_name == 'pull_request' && github.event.label.name == 'integration-tests' || 'false' }}
+        run: |
+          set -e
+          should_run() {
+            local p=$1
+            if [[ "$EVENT" == "workflow_dispatch" ]]; then
+              [[ "$PLATFORMS" == "all" || "$PLATFORMS" == "$p" ]] && echo true || echo false
+            elif [[ "$EVENT" == "pull_request" ]]; then
+              [[ "$LABELED" == "true" ]] && echo true || echo false
+            else
+              echo false
+            fi
+          }
+          {
+            echo "android=$(should_run android)"
+            echo "ios=$(should_run ios)"
+            echo "maccatalyst=$(should_run maccatalyst)"
+            echo "windows=$(should_run windows)"
+          } >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: plan
+    if: needs.plan.outputs.run-android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DEVFLOW_TEST_PLATFORM: android
+      DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
+      DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # Android emulator needs KVM on Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
-      - name: Install MAUI workloads
-        run: dotnet workload install maui ios android maccatalyst
+      - name: Install Android MAUI workload
+        run: dotnet workload install maui-android
 
-      - name: Run DevFlow integration tests
-        run: >
-          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
-          --logger "trx;LogFileName=devflow-integration-${{ inputs.platform }}.trx"
-          --logger "console;verbosity=normal"
-          --results-directory ./artifacts/TestResults/devflow-integration/${{ inputs.platform }}
+      - name: Cache AVD
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.DEVFLOW_TEST_ANDROID_API }}-x86_64
+
+      - name: Warm up AVD snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "Generated AVD snapshot."
+
+      - name: Run DevFlow integration tests (android)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: >
+            export DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')";
+            echo "Using Android emulator serial: ${DEVFLOW_TEST_ANDROID_SERIAL:-<none found>}";
+            dotnet test $TEST_PROJECT -c Debug
+            --logger "trx;LogFileName=devflow-integration-android.trx"
+            --logger "console;verbosity=normal"
+            --results-directory ./artifacts/TestResults/devflow-integration/android
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-${{ inputs.platform }}-results
-          path: ./artifacts/TestResults/devflow-integration/${{ inputs.platform }}/
+          name: devflow-integration-android-results
+          path: ./artifacts/TestResults/devflow-integration/android/
           retention-days: 30
 
-  integration-windows:
-    if: ${{ inputs.platform == 'windows' }}
-    runs-on: windows-latest
-    timeout-minutes: 60
+  ios:
+    needs: plan
+    if: needs.plan.outputs.run-ios == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
     env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: 1
-      DEVFLOW_TEST_PLATFORM: windows
+      DEVFLOW_TEST_PLATFORM: ios
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          # .NET 10's Apple workloads currently require Xcode 26.3 on hosted runners.
+          COMPATIBLE="${COMPATIBLE:-}"
+          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+            if [[ -d "$candidate" ]]; then
+              COMPATIBLE="$candidate"
+              break
+            fi
+          done
+          SELECTED="${COMPATIBLE:-$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)}"
+          if [[ -n "$SELECTED" ]]; then
+            echo "Using $SELECTED"
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+            ACTOOL_PATH="$(xcrun --find actool)"
+            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
+            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
+            echo "Resolved developer dir: $DEVELOPER_ROOT"
+            echo "Resolved Xcode app: $XCODE_APP"
+            export DEVELOPER_DIR="$DEVELOPER_ROOT"
+            export MD_APPLE_SDK_ROOT="$XCODE_APP"
+            echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
+            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk macosx --find actool
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Apple MAUI workloads
+        run: dotnet workload install maui ios macos
+
+      - name: List available iOS simulators
+        run: xcrun simctl list devices available
+
+      - name: Run DevFlow integration tests (ios)
+        run: >
+          dotnet test $TEST_PROJECT
+          -c Debug
+          --logger "trx;LogFileName=devflow-integration-ios.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/ios
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-ios-results
+          path: ./artifacts/TestResults/devflow-integration/ios/
+          retention-days: 30
+
+  maccatalyst:
+    needs: plan
+    if: needs.plan.outputs.run-maccatalyst == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: maccatalyst
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          # .NET 10's Apple workloads currently require Xcode 26.3 on hosted runners.
+          COMPATIBLE="${COMPATIBLE:-}"
+          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+            if [[ -d "$candidate" ]]; then
+              COMPATIBLE="$candidate"
+              break
+            fi
+          done
+          SELECTED="${COMPATIBLE:-$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)}"
+          if [[ -n "$SELECTED" ]]; then
+            echo "Using $SELECTED"
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+            ACTOOL_PATH="$(xcrun --find actool)"
+            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
+            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
+            echo "Resolved developer dir: $DEVELOPER_ROOT"
+            echo "Resolved Xcode app: $XCODE_APP"
+            export DEVELOPER_DIR="$DEVELOPER_ROOT"
+            export MD_APPLE_SDK_ROOT="$XCODE_APP"
+            echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
+            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk macosx --find actool
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Apple MAUI workloads
+        run: dotnet workload install maui maccatalyst macos
+
+      - name: Run DevFlow integration tests (maccatalyst)
+        run: >
+          dotnet test $TEST_PROJECT
+          -c Debug
+          --logger "trx;LogFileName=devflow-integration-maccatalyst.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/maccatalyst
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-maccatalyst-results
+          path: ./artifacts/TestResults/devflow-integration/maccatalyst/
+          retention-days: 30
+
+  windows:
+    needs: plan
+    if: needs.plan.outputs.run-windows == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      DEVFLOW_TEST_PLATFORM: windows
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
       - name: Install MAUI workloads
         run: dotnet workload install maui
 
-      - name: Run DevFlow integration tests
+      - name: Run DevFlow integration tests (windows)
+        shell: pwsh
         run: >
-          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
+          dotnet test $env:TEST_PROJECT
+          -c Debug
           --logger "trx;LogFileName=devflow-integration-windows.trx"
           --logger "console;verbosity=normal"
           --results-directory .\artifacts\TestResults\devflow-integration\windows

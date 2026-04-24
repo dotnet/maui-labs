@@ -53,7 +53,7 @@ public class AgentHttpServer : IDisposable
         if (IsRunning) return;
 
         _cts = new CancellationTokenSource();
-        _listener = new TcpListener(IPAddress.Any, _port);
+        _listener = new TcpListener(IPAddress.Loopback, _port);
         _listener.Start();
         _listenTask = AcceptLoop(_cts.Token);
     }

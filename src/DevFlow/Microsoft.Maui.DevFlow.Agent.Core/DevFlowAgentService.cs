@@ -158,6 +158,25 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     public int RegisterCdpWebView(Func<string, Task<string>> commandHandler, Func<bool> readyCheck,
         string? automationId = null, string? elementId = null, string? url = null)
     {
+        // Shell route changes can recreate the same logical BlazorWebView multiple times.
+        // Reuse the existing slot for the same AutomationId/ElementId so callers don't get
+        // stranded on a stale index 0 bridge after navigating away and back.
+        var existing = _cdpWebViews.LastOrDefault(w =>
+            (!string.IsNullOrWhiteSpace(elementId) &&
+             string.Equals(w.ElementId, elementId, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrWhiteSpace(automationId) &&
+             string.Equals(w.AutomationId, automationId, StringComparison.OrdinalIgnoreCase)));
+
+        if (existing != null)
+        {
+            existing.CommandHandler = commandHandler;
+            existing.ReadyCheck = readyCheck;
+            existing.AutomationId = automationId ?? existing.AutomationId;
+            existing.ElementId = elementId ?? existing.ElementId;
+            existing.Url = url ?? existing.Url;
+            return existing.Index;
+        }
+
         var index = _nextWebViewIndex++;
         _cdpWebViews.Add(new CdpWebViewInfo
         {
@@ -190,7 +209,13 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     private CdpWebViewInfo? ResolveCdpWebView(string? webviewId)
     {
         if (_cdpWebViews.Count == 0) return null;
-        if (string.IsNullOrEmpty(webviewId)) return _cdpWebViews[0]; // default to first
+        if (string.IsNullOrEmpty(webviewId))
+        {
+            // Prefer the most recently registered ready bridge, falling back to the newest
+            // bridge overall. This avoids defaulting to a stale, no-longer-visible WebView
+            // after Shell recreates a page.
+            return _cdpWebViews.LastOrDefault(w => w.IsReady) ?? _cdpWebViews.Last();
+        }
 
         // Try index
         if (int.TryParse(webviewId, out var idx))
@@ -200,12 +225,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
 
         // Try AutomationId
-        var byAutomationId = _cdpWebViews.FirstOrDefault(w =>
+        var byAutomationId = _cdpWebViews.LastOrDefault(w =>
             !string.IsNullOrEmpty(w.AutomationId) && w.AutomationId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
         if (byAutomationId != null) return byAutomationId;
 
         // Try ElementId
-        var byElementId = _cdpWebViews.FirstOrDefault(w =>
+        var byElementId = _cdpWebViews.LastOrDefault(w =>
             !string.IsNullOrEmpty(w.ElementId) && w.ElementId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
         if (byElementId != null) return byElementId;
 
@@ -4476,12 +4501,10 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             return false;
         }
 
-        if (!webView.IsReady)
-        {
-            error = HttpResponse.Error($"CDP not ready on WebView {webView.Index} (WebView not initialized)");
-            return false;
-        }
-
+        // Do not hard-block transient "not ready" states here. The underlying
+        // WebView bridge can re-inject chobitsu on demand inside CommandHandler,
+        // so rejecting the request at resolution time prevents the self-heal path
+        // from ever running and leaves callers stuck in a 400 loop.
         error = null;
         return true;
     }
@@ -4502,6 +4525,14 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         };
     }
 
+    private static bool TryGetCdpValue(JsonElement root, out JsonElement value)
+    {
+        value = default;
+        return root.TryGetProperty("result", out var result) &&
+               result.TryGetProperty("result", out var innerResult) &&
+               innerResult.TryGetProperty("value", out value);
+    }
+
     private async Task<JsonElement?> EvaluateWebViewExpressionAsync(CdpWebViewInfo webView, string expression, int id = 99996)
     {
         var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new
@@ -4515,11 +4546,43 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (!string.IsNullOrWhiteSpace(error))
             throw new InvalidOperationException(error);
 
-        if (doc.RootElement.TryGetProperty("result", out var result) &&
-            result.TryGetProperty("result", out var innerResult) &&
-            innerResult.TryGetProperty("value", out var value))
-        {
+        if (TryGetCdpValue(doc.RootElement, out var value))
             return value.Clone();
+
+        // Some bridges (notably Android's Chobitsu-backed path) do not reliably honor
+        // returnByValue for arrays/objects and instead hand back an object reference.
+        // Fall back to JSON.stringify() so callers still get structured data.
+        var fallbackJson = await webView.CommandHandler(BuildCdpCommand(id + 1, "Runtime.evaluate", new
+        {
+            expression = $"JSON.stringify(({expression}))",
+            returnByValue = true
+        }));
+
+        using var fallbackDoc = JsonDocument.Parse(fallbackJson);
+        error = TryGetCdpError(fallbackDoc.RootElement);
+        if (!string.IsNullOrWhiteSpace(error))
+            throw new InvalidOperationException(error);
+
+        if (TryGetCdpValue(fallbackDoc.RootElement, out var fallbackValue))
+        {
+            if (fallbackValue.ValueKind == JsonValueKind.String)
+            {
+                var json = fallbackValue.GetString();
+                if (!string.IsNullOrWhiteSpace(json) && !string.Equals(json, "undefined", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        using var jsonDoc = JsonDocument.Parse(json);
+                        return jsonDoc.RootElement.Clone();
+                    }
+                    catch
+                    {
+                        return JsonSerializer.SerializeToElement(json);
+                    }
+                }
+            }
+
+            return fallbackValue.Clone();
         }
 
         return null;
@@ -4766,36 +4829,25 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         try
         {
             var selectorJson = JsonSerializer.Serialize(body.Selector);
-            var cdpCommand = JsonSerializer.Serialize(new
-            {
-                id = 99998,
-                method = "Runtime.evaluate",
-                @params = new
-                {
-                    expression = $@"(function() {{
-                        return Array.from(document.querySelectorAll({selectorJson})).map((el, index) => ({{
-                            index,
-                            tagName: el.tagName ? el.tagName.toLowerCase() : null,
-                            id: el.id || null,
-                            className: el.className || null,
-                            text: (el.innerText || el.textContent || '').trim(),
-                            html: el.outerHTML
-                        }}));
-                    }})()",
-                    returnByValue = true
-                }
-            });
+            var value = await EvaluateWebViewExpressionAsync(
+                webView!,
+                $@"(function() {{
+                    return Array.from(document.querySelectorAll({selectorJson})).map((el, index) => ({{
+                        index,
+                        tagName: el.tagName ? el.tagName.toLowerCase() : null,
+                        id: el.id || null,
+                        className: el.className || null,
+                        text: (el.innerText || el.textContent || '').trim()
+                    }}));
+                }})()",
+                id: 99998);
 
-            var resultJson = await webView.CommandHandler(cdpCommand);
-            using var doc = JsonDocument.Parse(resultJson);
-            if (doc.RootElement.TryGetProperty("result", out var result) &&
-                result.TryGetProperty("result", out var innerResult) &&
-                innerResult.TryGetProperty("value", out var value))
+            if (value is JsonElement matches)
             {
                 return new HttpResponse
                 {
                     ContentType = "application/json",
-                    Body = value.GetRawText()
+                    Body = matches.GetRawText()
                 };
             }
 
@@ -4824,6 +4876,10 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         try
         {
+            var nativeCapture = await TryCaptureRegisteredWebViewAsync(webView!);
+            if (nativeCapture != null)
+                return nativeCapture;
+
             var cdpCommand = JsonSerializer.Serialize(new
             {
                 id = 99997,
@@ -4840,11 +4896,55 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 return HttpResponse.Png(Convert.FromBase64String(base64));
             }
 
-            return HttpResponse.Error("Failed to capture WebView screenshot");
+            var fallback = await TryCaptureRegisteredWebViewAsync(webView!);
+            return fallback ?? HttpResponse.Error("Failed to capture WebView screenshot");
         }
         catch (Exception ex)
         {
-            return HttpResponse.Error($"WebView screenshot failed: {ex.Message}");
+            var fallback = webView != null
+                ? await TryCaptureRegisteredWebViewAsync(webView)
+                : null;
+            return fallback ?? HttpResponse.Error($"WebView screenshot failed: {ex.Message}");
+        }
+    }
+
+    private async Task<HttpResponse?> TryCaptureRegisteredWebViewAsync(CdpWebViewInfo webView)
+    {
+        if (_app == null)
+            return null;
+
+        try
+        {
+            var element = await DispatchAsync(() =>
+            {
+                if (!string.IsNullOrWhiteSpace(webView.ElementId))
+                {
+                    var byId = _treeWalker.GetElementById(webView.ElementId!, _app) as VisualElement;
+                    if (byId != null)
+                        return byId;
+                }
+
+                if (!string.IsNullOrWhiteSpace(webView.AutomationId))
+                {
+                    var match = _treeWalker.Query(_app, automationId: webView.AutomationId).FirstOrDefault();
+                    if (match?.Id is { Length: > 0 } matchId)
+                        return _treeWalker.GetElementById(matchId, _app) as VisualElement;
+                }
+
+                return null;
+            });
+
+            if (element == null)
+                return null;
+
+            var pngData = await DispatchAsync(() => CaptureElementScreenshotAsync(element));
+            return pngData is { Length: > 0 }
+                ? HttpResponse.Png(pngData)
+                : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
