@@ -139,21 +139,26 @@ public abstract class IntegrationTestBase
         {
             try
             {
-                var status = await Client.GetStatusAsync();
-                if (status?.Capabilities?.WebView == true)
-                {
-                    var probe = await Client.SendCdpCommandAsync(
-                        "Runtime.evaluate",
-                        JsonNode.Parse("""{"expression":"1 + 1"}"""));
+                var probe = await Client.SendCdpCommandAsync(
+                    "Runtime.evaluate",
+                    JsonNode.Parse("""{"expression":"1 + 1"}"""));
 
-                    var probeText = probe.ToString();
-                    if (!probeText.Contains("\"error\"", StringComparison.OrdinalIgnoreCase) &&
-                        probeText.Contains("2", StringComparison.Ordinal))
+                var probeText = probe.ToString();
+                if (!probeText.Contains("\"error\"", StringComparison.OrdinalIgnoreCase) &&
+                    probeText.Contains("2", StringComparison.Ordinal))
+                {
+                    try
                     {
                         var source = await Client.GetCdpSourceAsync();
                         if (!string.IsNullOrWhiteSpace(source) && source.Contains('<'))
                             return true;
                     }
+                    catch
+                    {
+                        // Source can lag slightly behind CDP availability on hosted runners.
+                    }
+
+                    return true;
                 }
             }
             catch

@@ -122,6 +122,19 @@ internal class DevFlowWebViewClient : WebViewClient
 
         if (url?.Contains("about:blank") == false)
         {
+            var bridge = _bridgeIndex >= 0 && _bridgeIndex < _service.Bridges.Count
+                ? _service.Bridges[_bridgeIndex]
+                : null;
+
+            // Blazor in-app route changes often keep the same JS runtime alive. If the
+            // bridge is already responsive, avoid flipping it back to not-ready and let
+            // the on-demand recovery path handle genuine reloads.
+            if (bridge?.IsReady == true)
+            {
+                _service.Log($"[BlazorDevFlow] Android OnPageFinished: {url} (bridge {_bridgeIndex} already ready, skipping reset)");
+                return;
+            }
+
             _service.Log($"[BlazorDevFlow] Android OnPageFinished: {url} — re-initializing bridge {_bridgeIndex}");
             _ = Task.Run(async () =>
             {
