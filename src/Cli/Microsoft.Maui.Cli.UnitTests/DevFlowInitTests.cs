@@ -362,6 +362,168 @@ public static class MauiProgram
         var report = Assert.IsType<DevFlowInitReport>(output.LastResult);
         Assert.Equal(DevFlowInitStatus.AlreadyPresent, report.OverallStatus);
         Assert.Contains(report.Projects, p => p.OverallStatus == DevFlowInitStatus.AlreadyPresent);
+        // Phase 3: already-onboarded projects include verification commands
+        var alreadyProject = report.Projects.First(p => p.OverallStatus == DevFlowInitStatus.AlreadyPresent);
+        Assert.Contains(alreadyProject.VerificationCommands, cmd => cmd.Contains("dotnet build", StringComparison.Ordinal));
+        Assert.Contains(alreadyProject.VerificationCommands, cmd => cmd.Contains("maui devflow wait", StringComparison.Ordinal));
+        // Phase 3: already-onboarded includes suggestion to use --force
+        Assert.Contains(alreadyProject.ManualSteps, step => step.Contains("--force", StringComparison.Ordinal));
+        // Phase 3: NextSteps populated for already-onboarded workspace
+        Assert.NotEmpty(report.NextSteps);
+        Assert.Contains(report.NextSteps, s => s.Contains("already integrated", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_JsonSidecar_WrittenAlongsideMd()
+    {
+        using var workspace = new TempWorkspace();
+        workspace.CreateMauiProject("JsonTest");
+        var output = new TestOutputWriter();
+
+        await s_currentDirectoryGate.WaitAsync();
+        try
+        {
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(workspace.RootPath);
+            try
+            {
+                var success = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true },
+                    output);
+
+                Assert.True(success);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+        }
+        finally
+        {
+            s_currentDirectoryGate.Release();
+        }
+
+        var report = Assert.IsType<DevFlowInitReport>(output.LastResult);
+        // JSON sidecar is written alongside the markdown report
+        Assert.True(File.Exists(report.JsonReportPath), $"JSON sidecar not found at {report.JsonReportPath}");
+        Assert.True(File.Exists(report.ReportPath), $"Markdown report not found at {report.ReportPath}");
+
+        // JSON sidecar is valid JSON containing expected fields
+        var jsonContent = File.ReadAllText(report.JsonReportPath);
+        var doc = JsonDocument.Parse(jsonContent);
+        Assert.Equal(report.WorkspacePath, doc.RootElement.GetProperty("workspacePath").GetString());
+        Assert.Equal(report.OverallStatus, doc.RootElement.GetProperty("overallStatus").GetString());
+        Assert.True(doc.RootElement.TryGetProperty("nextSteps", out var nextSteps));
+        Assert.Equal(JsonValueKind.Array, nextSteps.ValueKind);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Force_ReappliesAlreadyOnboarded()
+    {
+        using var workspace = new TempWorkspace();
+        var projectPath = workspace.CreateMauiProject("ForceApp");
+        var mauiProgramDir = Path.GetDirectoryName(projectPath)!;
+
+        // Simulate already-onboarded with old package version
+        var csproj = File.ReadAllText(projectPath);
+        csproj = csproj.Replace("</Project>", """
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="0.0.1-old" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(projectPath, csproj);
+
+        var mauiProgramText = File.ReadAllText(Path.Combine(mauiProgramDir, "MauiProgram.cs"));
+        mauiProgramText = mauiProgramText.Replace(
+            "return builder.Build();",
+            """
+#if DEBUG
+        builder.AddMauiDevFlowAgent();
+#endif
+
+        return builder.Build();
+""");
+        mauiProgramText = "using Microsoft.Maui.DevFlow.Agent;\n" + mauiProgramText;
+        File.WriteAllText(Path.Combine(mauiProgramDir, "MauiProgram.cs"), mauiProgramText);
+
+        var output = new TestOutputWriter();
+        await s_currentDirectoryGate.WaitAsync();
+        try
+        {
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(workspace.RootPath);
+            try
+            {
+                // Without --force: reports already present
+                var successWithout = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true },
+                    output);
+                Assert.True(successWithout);
+                var reportWithout = Assert.IsType<DevFlowInitReport>(output.LastResult);
+                Assert.Equal(DevFlowInitStatus.AlreadyPresent, reportWithout.OverallStatus);
+
+                // With --force: re-processes the project
+                var successWith = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true, Force = true },
+                    output);
+                Assert.True(successWith);
+                var reportWith = Assert.IsType<DevFlowInitReport>(output.LastResult);
+                // With force, the project should be processed (success or already_present for the operations)
+                Assert.Contains(reportWith.Projects, p =>
+                    p.OverallStatus != DevFlowInitStatus.Skipped);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+        }
+        finally
+        {
+            s_currentDirectoryGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SuccessfulInit_PopulatesNextSteps()
+    {
+        using var workspace = new TempWorkspace();
+        workspace.CreateMauiProject("NextStepsApp");
+        var output = new TestOutputWriter();
+
+        await s_currentDirectoryGate.WaitAsync();
+        try
+        {
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(workspace.RootPath);
+            try
+            {
+                var success = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true },
+                    output);
+
+                Assert.True(success);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+        }
+        finally
+        {
+            s_currentDirectoryGate.Release();
+        }
+
+        var report = Assert.IsType<DevFlowInitReport>(output.LastResult);
+        Assert.Equal(DevFlowInitStatus.Success, report.OverallStatus);
+        Assert.NotEmpty(report.NextSteps);
+        Assert.Contains(report.NextSteps, s => s.Contains("maui devflow wait", StringComparison.Ordinal));
+        Assert.Contains(report.NextSteps, s => s.Contains("maui devflow tree", StringComparison.Ordinal));
+
+        // Per-project verification commands populated for successful projects
+        var project = report.Projects.First(p => p.OverallStatus == DevFlowInitStatus.Success);
+        Assert.NotEmpty(project.VerificationCommands);
+        Assert.Contains(project.VerificationCommands, cmd => cmd.Contains("dotnet build", StringComparison.Ordinal));
     }
 
     [Fact]

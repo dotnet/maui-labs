@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Spectre.Console;
@@ -14,6 +15,7 @@ internal sealed class DevFlowInitOptions
     public bool ForceBlazor { get; init; }
     public bool DisableBlazor { get; init; }
     public bool ForceGtk { get; init; }
+    public bool Force { get; init; }
     public string? NewTemplate { get; init; }
     public string? NewName { get; init; }
     public bool NoAi { get; init; }
@@ -34,6 +36,7 @@ internal static class DevFlowInitCommand
         var manifest = DevFlowInitManifestLoader.Load();
         var workspaceRoot = Directory.GetCurrentDirectory();
         var reportPath = Path.Combine(workspaceRoot, "MAUI-DEVFLOW-INIT-REPORT.md");
+        var jsonReportPath = Path.Combine(workspaceRoot, "MAUI-DEVFLOW-INIT-REPORT.json");
         var json = output.ResolveJsonMode(options.Json, options.NoJson);
         var interactive = !options.Ci && !json && !Console.IsInputRedirected && !Console.IsOutputRedirected;
 
@@ -41,6 +44,7 @@ internal static class DevFlowInitCommand
         {
             WorkspacePath = workspaceRoot,
             ReportPath = reportPath,
+            JsonReportPath = jsonReportPath,
             GeneratedAtUtc = DateTime.UtcNow.ToString("o"),
             CliVersion = typeof(DevFlowCommands).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
@@ -87,7 +91,7 @@ internal static class DevFlowInitCommand
             }
 
             var explicitlySelected = ResolveExplicitProjectSelection(workspaceRoot, options.Project);
-            var eligible = discovered.Where(candidate => candidate.IsSupported && !candidate.IsAlreadyIntegrated).ToList();
+            var eligible = discovered.Where(candidate => candidate.IsSupported && (!candidate.IsAlreadyIntegrated || options.Force)).ToList();
             var selected = ResolveTargets(eligible, explicitlySelected, options.All, interactive);
 
             foreach (var candidate in discovered.Where(candidate => !candidate.IsSupported))
@@ -111,7 +115,7 @@ internal static class DevFlowInitCommand
                 });
             }
 
-            foreach (var candidate in discovered.Where(candidate => candidate.IsAlreadyIntegrated))
+            foreach (var candidate in discovered.Where(candidate => candidate.IsAlreadyIntegrated && !options.Force))
             {
                 report.Projects.Add(new DevFlowInitProjectResult
                 {
@@ -127,7 +131,14 @@ internal static class DevFlowInitCommand
                             Status = DevFlowInitStatus.AlreadyPresent,
                             Detail = "DevFlow is already integrated in this project."
                         }
-                    ]
+                    ],
+                    VerificationCommands =
+                    [
+                        "dotnet build",
+                        "maui devflow wait",
+                        "maui devflow diagnose"
+                    ],
+                    ManualSteps = [$"To re-apply and update package versions, re-run with `--force`."]
                 });
             }
 
@@ -157,6 +168,7 @@ internal static class DevFlowInitCommand
                 options.DryRun);
 
             report.OverallStatus = DetermineOverallStatus(report);
+            PopulateNextSteps(report);
             await WriteReportAsync(report);
             output.WriteResult(report, json, PrintHumanSummary);
             return report.OverallStatus is DevFlowInitStatus.Success or DevFlowInitStatus.AlreadyPresent;
@@ -168,6 +180,7 @@ internal static class DevFlowInitCommand
             if (ex.Remediation?.ManualSteps is { Length: > 0 })
                 report.Notes.AddRange(ex.Remediation.ManualSteps);
 
+            PopulateNextSteps(report);
             await WriteReportAsync(report);
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
@@ -176,6 +189,7 @@ internal static class DevFlowInitCommand
         {
             report.OverallStatus = DevFlowInitStatus.Failed;
             report.Notes.Add(ex.Message);
+            PopulateNextSteps(report);
             await WriteReportAsync(report);
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
@@ -190,6 +204,8 @@ internal static class DevFlowInitCommand
             mode.Add("--project");
         if (options.All)
             mode.Add("--all");
+        if (options.Force)
+            mode.Add("--force");
         if (options.ForceGtk)
             mode.Add("--gtk");
         if (!string.IsNullOrWhiteSpace(options.NewTemplate))
@@ -298,10 +314,67 @@ internal static class DevFlowInitCommand
         return DevFlowInitStatus.Success;
     }
 
+    static void PopulateNextSteps(DevFlowInitReport report)
+    {
+        // Per-project verification commands for successfully onboarded projects
+        foreach (var project in report.Projects)
+        {
+            if (project.VerificationCommands.Count > 0)
+                continue; // Already populated (e.g. already-onboarded)
+
+            if (project.OverallStatus is DevFlowInitStatus.Success)
+            {
+                project.VerificationCommands.Add($"dotnet build {project.RelativePath}");
+                project.VerificationCommands.Add("maui devflow wait");
+                project.VerificationCommands.Add("maui devflow tree");
+            }
+            else if (project.OverallStatus is DevFlowInitStatus.ManualRequired or DevFlowInitStatus.Unsupported)
+            {
+                project.VerificationCommands.Add($"# Review manual steps above, then:");
+                project.VerificationCommands.Add($"dotnet build {project.RelativePath}");
+            }
+        }
+
+        // Top-level next steps based on overall outcome
+        if (report.OverallStatus is DevFlowInitStatus.Success)
+        {
+            report.NextSteps.Add("Build and run your MAUI app with DevFlow enabled.");
+            report.NextSteps.Add("Run `maui devflow wait` to connect DevFlow to your running app.");
+            report.NextSteps.Add("Use `maui devflow tree` to inspect the visual tree.");
+            report.NextSteps.Add("Use `maui devflow diagnose` if connection issues occur.");
+        }
+        else if (report.OverallStatus is DevFlowInitStatus.AlreadyPresent)
+        {
+            report.NextSteps.Add("DevFlow is already integrated in this workspace.");
+            report.NextSteps.Add("Run `maui devflow wait` to connect to your running app.");
+            report.NextSteps.Add("To update package versions, re-run `maui devflow init --force`.");
+        }
+        else if (report.OverallStatus is DevFlowInitStatus.ManualRequired)
+        {
+            report.NextSteps.Add("Some steps require manual intervention — see project details above.");
+            report.NextSteps.Add("After manual fixes, run `dotnet build` to verify.");
+            report.NextSteps.Add("Then run `maui devflow wait` to verify the agent starts.");
+        }
+        else if (report.OverallStatus is DevFlowInitStatus.Failed)
+        {
+            report.NextSteps.Add("Init failed — review the errors in the report above.");
+            report.NextSteps.Add("Re-run `maui devflow init` after addressing the issues.");
+        }
+
+        // AI-related next steps
+        if (report.AiBootstrap.OverallStatus == DevFlowInitStatus.ManualRequired)
+        {
+            report.NextSteps.Add("AI bootstrap requires manual setup — see the AI bootstrap section.");
+        }
+    }
+
     static async Task WriteReportAsync(DevFlowInitReport report)
     {
         var markdown = BuildMarkdown(report);
         await File.WriteAllTextAsync(report.ReportPath, markdown);
+
+        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(report, DevFlowInitReportJsonContext.Default.DevFlowInitReport);
+        await File.WriteAllBytesAsync(report.JsonReportPath, jsonBytes);
     }
 
     static string BuildMarkdown(DevFlowInitReport report)
@@ -361,6 +434,16 @@ internal static class DevFlowInitCommand
                 foreach (var step in project.ManualSteps)
                     builder.AppendLine($"- {step}");
             }
+            if (project.VerificationCommands.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Verification");
+                builder.AppendLine();
+                builder.AppendLine("```bash");
+                foreach (var cmd in project.VerificationCommands)
+                    builder.AppendLine(cmd);
+                builder.AppendLine("```");
+            }
         }
 
         if (report.Notes.Count > 0)
@@ -372,6 +455,15 @@ internal static class DevFlowInitCommand
                 builder.AppendLine($"- {note}");
         }
 
+        if (report.NextSteps.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("## Next steps");
+            builder.AppendLine();
+            foreach (var step in report.NextSteps)
+                builder.AppendLine($"- {step}");
+        }
+
         return builder.ToString();
     }
 
@@ -381,6 +473,7 @@ internal static class DevFlowInitCommand
     {
         Console.WriteLine($"DevFlow init status: {report.OverallStatus}");
         Console.WriteLine($"Report: {report.ReportPath}");
+        Console.WriteLine($"JSON report: {report.JsonReportPath}");
         Console.WriteLine($"Projects: {report.Projects.Count}");
         if (!string.IsNullOrWhiteSpace(report.AiBootstrap.SelectedHostDisplayName))
             Console.WriteLine($"AI host: {report.AiBootstrap.SelectedHostDisplayName} ({report.AiBootstrap.BootstrapMode})");
@@ -389,6 +482,13 @@ internal static class DevFlowInitCommand
             Console.WriteLine();
             foreach (var note in report.Notes)
                 Console.WriteLine($"- {note}");
+        }
+        if (report.NextSteps.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Next steps:");
+            foreach (var step in report.NextSteps)
+                Console.WriteLine($"  - {step}");
         }
     }
 

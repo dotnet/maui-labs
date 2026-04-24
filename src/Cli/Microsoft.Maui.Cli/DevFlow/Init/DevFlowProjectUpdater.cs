@@ -22,9 +22,15 @@ internal static class DevFlowProjectUpdater
                 Name = "Project support",
                 Status = DevFlowInitStatus.ManualRequired,
                 Detail = "This project flavor is not supported by the current init implementation.",
-                ManualSteps = [$"Add DevFlow to {candidate.RelativePath} manually."]
+                ManualSteps =
+                [
+                    $"Add DevFlow to {candidate.RelativePath} manually:",
+                    "1. Add a PackageReference to `Microsoft.Maui.DevFlow.Agent` in the .csproj",
+                    "2. In MauiProgram.cs, add `using Microsoft.Maui.DevFlow.Agent;`",
+                    "3. After `var builder = MauiApp.CreateBuilder();`, add `#if DEBUG\\nbuilder.AddMauiDevFlowAgent();\\n#endif`"
+                ]
             });
-            result.ManualSteps.Add($"Add DevFlow to {candidate.RelativePath} manually.");
+            result.ManualSteps.AddRange(result.Operations[^1].ManualSteps);
             result.OverallStatus = DevFlowInitStatus.ManualRequired;
             return result;
         }
@@ -55,12 +61,18 @@ internal static class DevFlowProjectUpdater
 
         if (candidate.MauiProgramPath == null)
         {
+            var agentNs = isGtk ? "Microsoft.Maui.DevFlow.Agent.Gtk" : "Microsoft.Maui.DevFlow.Agent";
+            var snippet = $"using {agentNs};\n\n// Inside CreateMauiApp(), after var builder = MauiApp.CreateBuilder():\n#if DEBUG\nbuilder.AddMauiDevFlowAgent();\n#endif";
             AddOperation(result, new DevFlowInitOperationResult
             {
                 Name = "Patch MauiProgram.cs",
                 Status = DevFlowInitStatus.ManualRequired,
                 Detail = "Could not find MauiProgram.cs.",
-                ManualSteps = [$"Add DevFlow registration manually in {candidate.RelativePath}."]
+                ManualSteps =
+                [
+                    $"Locate MauiProgram.cs (or equivalent) in {candidate.RelativePath} and add the following:",
+                    $"```csharp\n{snippet}\n```"
+                ]
             });
         }
         else
@@ -173,7 +185,7 @@ internal static class DevFlowProjectUpdater
         {
             if (directoryPackagesPropsPath == null)
             {
-                manualSteps.Add($"Add {package.PackageId} version {package.Version} to Directory.Packages.props.");
+                manualSteps.Add($"Add the following to Directory.Packages.props:\n`<PackageVersion Include=\"{package.PackageId}\" Version=\"{package.Version}\" />`");
             }
             else
             {

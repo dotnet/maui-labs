@@ -1259,10 +1259,12 @@ public class DevFlowCommands
         var initNoAiOption = new Option<bool>("--no-ai") { Description = "Skip AI host bootstrap", DefaultValueFactory = _ => false };
         var initAiHostOption = new Option<string?>("--ai-host") { Description = "Force a specific AI host from the bootstrap manifest", DefaultValueFactory = _ => null };
         var initAiLocalOnlyOption = new Option<bool>("--ai-local-only") { Description = "Use repo-local skill sync only; skip marketplace/plugin automation", DefaultValueFactory = _ => false };
+        var initForceOption = new Option<bool>("--force") { Description = "Re-apply onboarding even for already-integrated projects (useful for updating package versions)", DefaultValueFactory = _ => false };
         var initCmd = new Command("init", "Onboard one or more MAUI projects for DevFlow")
         {
             initProjectOption, initAllOption, initBlazorOption, initNoBlazorOption, initGtkOption,
-            initNewOption, initNewNameOption, initNoAiOption, initAiHostOption, initAiLocalOnlyOption
+            initNewOption, initNewNameOption, initNoAiOption, initAiHostOption, initAiLocalOnlyOption,
+            initForceOption
         };
         initCmd.SetAction(async (ctx, ct) =>
         {
@@ -1274,6 +1276,7 @@ public class DevFlowCommands
                     ForceBlazor = ctx.GetValue(initBlazorOption),
                     DisableBlazor = ctx.GetValue(initNoBlazorOption),
                     ForceGtk = ctx.GetValue(initGtkOption),
+                    Force = ctx.GetValue(initForceOption),
                     NewTemplate = ctx.GetValue(initNewOption),
                     NewName = ctx.GetValue(initNewNameOption),
                     NoAi = ctx.GetValue(initNoAiOption),

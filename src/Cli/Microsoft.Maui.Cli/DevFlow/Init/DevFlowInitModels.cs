@@ -1,5 +1,7 @@
 namespace Microsoft.Maui.Cli.DevFlow.Init;
 
+using System.Text.Json.Serialization;
+
 internal static class DevFlowInitStatus
 {
     public const string Success = "success";
@@ -40,6 +42,7 @@ internal sealed class DevFlowInitProjectResult
     public List<DevFlowInitOperationResult> Operations { get; init; } = [];
     public List<string> FilesChanged { get; init; } = [];
     public List<string> ManualSteps { get; init; } = [];
+    public List<string> VerificationCommands { get; init; } = [];
 }
 
 internal sealed class DevFlowAiBootstrapResult
@@ -57,6 +60,7 @@ internal sealed class DevFlowInitReport
 {
     public string WorkspacePath { get; set; } = "";
     public string ReportPath { get; set; } = "";
+    public string JsonReportPath { get; set; } = "";
     public string GeneratedAtUtc { get; set; } = "";
     public string CliVersion { get; set; } = "";
     public string ManifestVersion { get; set; } = "";
@@ -65,4 +69,12 @@ internal sealed class DevFlowInitReport
     public DevFlowAiBootstrapResult AiBootstrap { get; set; } = new();
     public List<DevFlowInitProjectResult> Projects { get; init; } = [];
     public List<string> Notes { get; init; } = [];
+    public List<string> NextSteps { get; init; } = [];
 }
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    WriteIndented = true,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(DevFlowInitReport))]
+internal sealed partial class DevFlowInitReportJsonContext : JsonSerializerContext;
