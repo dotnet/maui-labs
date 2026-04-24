@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Xml.Linq;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -68,7 +69,7 @@ public abstract class AppFixtureBase : IAppFixture
         Http = new HttpClient
         {
             BaseAddress = new Uri(AgentBaseUrl),
-            Timeout = TimeSpan.FromSeconds(30)
+            Timeout = TimeSpan.FromSeconds(60)
         };
         Client = new AgentClient("localhost", AgentPort);
     }
@@ -236,6 +237,34 @@ public abstract class AppFixtureBase : IAppFixture
             $"Could not locate DevFlow.Sample build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
     }
 
+    protected static string ReadBuiltAndroidApplicationId(string projectPath, string configuration, string targetFramework)
+    {
+        var projectDirectory = Path.GetDirectoryName(projectPath)
+            ?? throw new InvalidOperationException($"Could not determine project directory for '{projectPath}'.");
+        var projectName = Path.GetFileNameWithoutExtension(projectPath);
+        var repoRoot = FindRepoRoot();
+
+        var candidateManifestPaths = new[]
+        {
+            Path.Combine(repoRoot, "artifacts", "obj", projectName, configuration, targetFramework, "AndroidManifest.xml"),
+            Path.Combine(projectDirectory, "obj", configuration, targetFramework, "AndroidManifest.xml"),
+        };
+
+        foreach (var manifestPath in candidateManifestPaths)
+        {
+            if (!File.Exists(manifestPath))
+                continue;
+
+            var manifest = XDocument.Load(manifestPath);
+            var packageName = manifest.Root?.Attribute("package")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(packageName))
+                return packageName;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not resolve the built Android application ID for '{projectPath}'. Checked: {string.Join(", ", candidateManifestPaths)}");
+    }
+
     protected static int FindFreePort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -268,11 +297,29 @@ public abstract class AppFixtureBase : IAppFixture
             ?? throw new InvalidOperationException($"Failed to start: {fileName} {arguments}");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-        var stdout = await process.StandardOutput.ReadToEndAsync(cts.Token);
-        var stderr = await process.StandardError.ReadToEndAsync(cts.Token);
-        await process.WaitForExitAsync(cts.Token);
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+        var stderrTask = process.StandardError.ReadToEndAsync(cts.Token);
 
-        return (stdout, stderr, process.ExitCode);
+        try
+        {
+            await Task.WhenAll(stdoutTask, stderrTask, process.WaitForExitAsync(cts.Token));
+        }
+        catch (OperationCanceledException ex)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+            }
+
+            throw new TimeoutException(
+                $"Process timed out after {timeoutSeconds}s: {fileName} {arguments}", ex);
+        }
+
+        return (stdoutTask.Result, stderrTask.Result, process.ExitCode);
     }
 
     protected static async Task<string> RunProcessCheckedAsync(

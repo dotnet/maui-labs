@@ -62,6 +62,18 @@ public class ProcessRunnerTests
 	{
 		Assert.Equal("", ProcessRunner.SanitizeArg(""));
 	}
+
+	[Fact]
+	public async Task RunAsync_CallbackException_DoesNotFailProcess()
+	{
+		var result = await ProcessRunner.RunAsync(
+			"dotnet",
+			["--version"],
+			onOutputData: _ => throw new InvalidOperationException("boom"));
+
+		Assert.True(result.Success);
+		Assert.NotEmpty(result.StandardOutput);
+	}
 }
 
 public class DoctorServiceParseCommandTests

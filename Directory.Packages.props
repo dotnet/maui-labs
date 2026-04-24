@@ -50,6 +50,7 @@
     <PackageVersion Include="Platform.Maui.Linux.Gtk4" Version="$(PlatformMauiLinuxGtk4Version)" />
     <PackageVersion Include="Platform.Maui.Linux.Gtk4.BlazorWebView" Version="$(PlatformMauiLinuxGtk4BlazorWebViewVersion)" />
     <PackageVersion Include="Platform.Maui.Linux.Gtk4.Essentials" Version="$(PlatformMauiLinuxGtk4EssentialsVersion)" />
+    <PackageVersion Include="GirCore.GdkPixbuf-2.0" Version="0.7.0" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are

@@ -21,7 +21,7 @@ internal static class ProfileTraceLifecycle
 	static readonly Task s_neverCompletes = Task.Delay(Timeout.InfiniteTimeSpan, CancellationToken.None);
 	static readonly TimeSpan s_consoleReadJoinTimeout = TimeSpan.FromMilliseconds(100);
 
-	internal static async Task WaitForCompletionAsync(
+	internal static async Task<bool> WaitForCompletionAsync(
 		MonitoredProcess traceProcess,
 		bool allowManualStop,
 		IOutputFormatter formatter,
@@ -88,7 +88,7 @@ internal static class ProfileTraceLifecycle
 				useJson,
 				verbose,
 				"dotnet-trace exited with SIGINT after the stop request; treating the canceled collector exit as a successful finalized trace.");
-			return;
+			return stopRequested;
 		}
 
 		if (traceProcess.Process.ExitCode != 0)
@@ -98,6 +98,8 @@ internal static class ProfileTraceLifecycle
 				$"dotnet-trace exited with code {traceProcess.Process.ExitCode}.",
 				nativeError: traceProcess.GetCombinedOutput());
 		}
+
+		return stopRequested;
 	}
 
 	internal static async Task WaitForStopSignalAsync(

@@ -3,6 +3,12 @@
     Reads port from .mauidevflow in the project directory, or from -p:MauiDevFlowPort.
     CLI override (-p:MauiDevFlowPort=9225) takes priority over the config file.
     If neither is set, the agent uses its default port (9223).
+
+    Also enables Debug-only app identity isolation by default so DevFlow-enabled builds
+    from separate worktrees can coexist on devices/simulators. Opt out with:
+      -p:MauiDevFlowEnableDebugAppIdentityIsolation=false
+    Or override the suffix with:
+      -p:MauiDevFlowDebugAppIdentitySuffix=yourSuffix
   -->
   <Target Name="_ReadMauiDevFlowConfig" BeforeTargets="_SetMauiDevFlowPort"
           Condition="'$(MauiDevFlowPort)' == '' AND Exists('$(MSBuildProjectDirectory)/.mauidevflow')">
@@ -13,15 +19,35 @@
     </PropertyGroup>
   </Target>
 
-  <Target Name="_SetMauiDevFlowPort" BeforeTargets="CoreCompile">
+  <Target Name="_SetMauiDevFlowPort" BeforeTargets="PrepareForBuild;CoreCompile">
     <PropertyGroup>
       <_MauiDevFlowPortFile>$(IntermediateOutputPath)Microsoft.Maui.DevFlowPort.g.cs</_MauiDevFlowPortFile>
+      <MauiDevFlowEnableDebugAppIdentityIsolation Condition="'$(MauiDevFlowEnableDebugAppIdentityIsolation)' == '' and '$(MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION)' != ''">$(MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION)</MauiDevFlowEnableDebugAppIdentityIsolation>
+      <MauiDevFlowEnableDebugAppIdentityIsolation Condition="'$(MauiDevFlowEnableDebugAppIdentityIsolation)' == '' and '$(Configuration)' == 'Debug'">true</MauiDevFlowEnableDebugAppIdentityIsolation>
+      <MauiDevFlowEnableDebugAppIdentityIsolation Condition="'$(MauiDevFlowEnableDebugAppIdentityIsolation)' == ''">false</MauiDevFlowEnableDebugAppIdentityIsolation>
+      <_MauiDevFlowIsolationEnabled>$([System.String]::Copy('$(MauiDevFlowEnableDebugAppIdentityIsolation)').ToLowerInvariant())</_MauiDevFlowIsolationEnabled>
+      <MauiDevFlowDebugAppIdentitySuffix Condition="'$(MauiDevFlowDebugAppIdentitySuffix)' == ''">$(MAUI_DEVFLOW_DEBUG_APP_IDENTITY_SUFFIX)</MauiDevFlowDebugAppIdentitySuffix>
+      <MauiDevFlowBaseApplicationId Condition="'$(MauiDevFlowBaseApplicationId)' == ''">$(ApplicationId)</MauiDevFlowBaseApplicationId>
+      <_MauiDevFlowRawIdentitySuffix>$(MauiDevFlowDebugAppIdentitySuffix)</_MauiDevFlowRawIdentitySuffix>
+      <_MauiDevFlowRawIdentitySuffix Condition="'$(_MauiDevFlowRawIdentitySuffix)' == '' and '$(_MauiDevFlowIsolationEnabled)' == 'true'">$(MSBuildProjectFullPath)</_MauiDevFlowRawIdentitySuffix>
+      <_MauiDevFlowSanitizedIdentitySuffix>$([System.Text.RegularExpressions.Regex]::Replace($([System.String]::Copy('$(_MauiDevFlowRawIdentitySuffix)').ToLowerInvariant()), '[^a-z0-9]+', ''))</_MauiDevFlowSanitizedIdentitySuffix>
+      <_MauiDevFlowIdentitySuffixTail Condition="'$(_MauiDevFlowSanitizedIdentitySuffix)' != '' and $([System.String]::Copy('$(_MauiDevFlowSanitizedIdentitySuffix)').Length) &gt; 24">$([System.String]::Copy('$(_MauiDevFlowSanitizedIdentitySuffix)').Substring($([MSBuild]::Subtract($([System.String]::Copy('$(_MauiDevFlowSanitizedIdentitySuffix)').Length), 24))))</_MauiDevFlowIdentitySuffixTail>
+      <_MauiDevFlowIdentitySuffixTail Condition="'$(_MauiDevFlowIdentitySuffixTail)' == ''">$(_MauiDevFlowSanitizedIdentitySuffix)</_MauiDevFlowIdentitySuffixTail>
+      <MauiDevFlowResolvedDebugAppIdentitySuffix Condition="'$(_MauiDevFlowIdentitySuffixTail)' != ''">dw$(_MauiDevFlowIdentitySuffixTail)</MauiDevFlowResolvedDebugAppIdentitySuffix>
+      <ApplicationId Condition="'$(_MauiDevFlowIsolationEnabled)' == 'true' and '$(MauiDevFlowBaseApplicationId)' != '' and '$(MauiDevFlowResolvedDebugAppIdentitySuffix)' != ''">$(MauiDevFlowBaseApplicationId).debug.$(MauiDevFlowResolvedDebugAppIdentitySuffix)</ApplicationId>
+      <MauiDevFlowResolvedApplicationId>$(ApplicationId)</MauiDevFlowResolvedApplicationId>
       <_MauiDevFlowMetadata></_MauiDevFlowMetadata>
       <_MauiDevFlowMetadata Condition="'$(MauiDevFlowPort)' != ''">$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowPort", "$(MauiDevFlowPort)")]
 </_MauiDevFlowMetadata>
       <_MauiDevFlowProjectPath>$([MSBuild]::ValueOrDefault('$(MSBuildProjectFullPath)','').Replace('\','\\'))</_MauiDevFlowProjectPath>
       <_MauiDevFlowMetadata>$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowProject", "$(_MauiDevFlowProjectPath)")]
 [assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowTfm", "$(TargetFramework)")]</_MauiDevFlowMetadata>
+      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowBaseApplicationId)' != ''">$(_MauiDevFlowMetadata)
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowBaseApplicationId", "$(MauiDevFlowBaseApplicationId)")]</_MauiDevFlowMetadata>
+      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowResolvedApplicationId)' != ''">$(_MauiDevFlowMetadata)
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowApplicationId", "$(MauiDevFlowResolvedApplicationId)")]</_MauiDevFlowMetadata>
+      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowResolvedDebugAppIdentitySuffix)' != ''">$(_MauiDevFlowMetadata)
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", "$(MauiDevFlowResolvedDebugAppIdentitySuffix)")]</_MauiDevFlowMetadata>
     </PropertyGroup>
     <WriteLinesToFile File="$(_MauiDevFlowPortFile)"
                      Lines="$(_MauiDevFlowMetadata)"

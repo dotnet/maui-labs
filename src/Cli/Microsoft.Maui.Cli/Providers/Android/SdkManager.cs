@@ -289,8 +289,12 @@ public class SdkManager : IDisposable
 	}
 
 	/// <summary>
-	/// Checks whether the current SDK path is in a location that typically requires
-	/// administrator privileges to write to (e.g., Program Files).
+	/// Checks whether the current SDK path requires administrator privileges to write to.
+	/// When the path already exists, the check uses actual filesystem writability so that the
+	/// result matches what callers (e.g., IDE extensions) observe when they probe the directory
+	/// themselves.  When the path does not yet exist (e.g., before the SDK is installed), the
+	/// check falls back to a Program Files prefix heuristic to predict whether creating the
+	/// directory will require elevation.
 	/// </summary>
 	public bool SdkPathRequiresElevation()
 	{
@@ -301,10 +305,60 @@ public class SdkManager : IDisposable
 		if (string.IsNullOrEmpty(sdkPath))
 			return false;
 
+		// If the directory exists, probe it directly rather than guessing from the path.
+		// This makes the CLI's decision consistent with callers that check actual write access.
+		if (Directory.Exists(sdkPath))
+			return !CanWriteToDirectory(sdkPath);
+
+		// Directory does not exist yet — fall back to Program Files prefix heuristic so we can
+		// predict whether creating it will require elevation.
 		var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 		var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
 		return sdkPath.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase)
 			|| sdkPath.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>
+	/// Attempts to create a probe file inside <paramref name="path"/> to determine whether the
+	/// current process has write access to that directory. The probe file is opened with
+	/// <see cref="FileOptions.DeleteOnClose"/> so it is always removed, even if the process
+	/// crashes or an AV scanner holds a handle.
+	/// Returns <see langword="true"/> if the probe succeeds. Returns <see langword="false"/>
+	/// when access is denied or the directory no longer exists
+	/// (<see cref="UnauthorizedAccessException"/> or <see cref="DirectoryNotFoundException"/>).
+	/// Returns <see langword="true"/> for other <see cref="IOException"/>s so transient I/O
+	/// failures (e.g., on network shares) are not treated as evidence that elevation is required.
+	/// </summary>
+	internal static bool CanWriteToDirectory(string path)
+	{
+		var probe = Path.Combine(path, Path.GetRandomFileName());
+		try
+		{
+			using var fs = new FileStream(
+				probe,
+				FileMode.CreateNew,
+				FileAccess.Write,
+				FileShare.None,
+				bufferSize: 1,
+				FileOptions.DeleteOnClose);
+			return true;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return false;
+		}
+		catch (DirectoryNotFoundException)
+		{
+			// Directory was deleted between our Exists check and the probe — treat as
+			// non-writable so the caller doesn't assume it can install here.
+			return false;
+		}
+		catch (IOException)
+		{
+			// Treat transient I/O problems (e.g., network paths) as writable so we do not
+			// report a false "elevation required" when the real issue is unrelated to permissions.
+			return true;
+		}
 	}
 }

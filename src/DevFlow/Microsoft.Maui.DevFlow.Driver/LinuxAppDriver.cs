@@ -93,9 +93,10 @@ public class LinuxAppDriver : AppDriverBase
         if (!fullPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
             fullPath = Path.ChangeExtension(fullPath, ".mp4");
 
-        var display = Environment.GetEnvironmentVariable("DISPLAY") ?? ":0";
+        var captureFormat = LinuxDisplayServer.GetFfmpegCaptureFormat();
+        var captureInput = LinuxDisplayServer.GetDefaultCaptureDisplay();
         var psi = new ProcessStartInfo("ffmpeg",
-            $"-f x11grab -framerate 30 -t {timeoutSeconds} -i {display} -y \"{fullPath}\"")
+            $"-f {captureFormat} -framerate 30 -t {timeoutSeconds} -i {captureInput} -y \"{fullPath}\"")
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -168,6 +169,40 @@ public class LinuxAppDriver : AppDriverBase
                 "ffmpeg is required for screen recording on Linux but was not found on PATH. " +
                 "Install it via your package manager (e.g., 'apt install ffmpeg' or 'dnf install ffmpeg').");
         }
+
+        // Warn if on Wayland and PipeWire may not be available in ffmpeg
+        if (LinuxDisplayServer.IsWayland)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("ffmpeg", "-devices")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+                using var proc = Process.Start(psi);
+                var stdout = proc?.StandardOutput.ReadToEnd() ?? "";
+                var stderr = proc?.StandardError.ReadToEnd() ?? "";
+                proc?.WaitForExit(5000);
+                if (!stdout.Contains("pipewire", StringComparison.OrdinalIgnoreCase) &&
+                    !stderr.Contains("pipewire", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Screen recording on Wayland requires ffmpeg with PipeWire support, but your ffmpeg build " +
+                        "does not include the 'pipewire' device. Install a PipeWire-enabled ffmpeg build, or run " +
+                        "under X11 (GDK_BACKEND=x11) to use x11grab instead.");
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Could not verify PipeWire support — proceed and let ffmpeg fail if needed
+            }
+        }
     }
 
     public override Task BackAsync()
@@ -178,10 +213,24 @@ public class LinuxAppDriver : AppDriverBase
 
     public override Task PressKeyAsync(string key)
     {
-        // Use xdotool for key simulation on Linux
         if (!OperatingSystem.IsLinux())
             return Task.CompletedTask;
 
+        var tool = LinuxDisplayServer.GetPreferredInputTool();
+        switch (tool)
+        {
+            case InputTool.Xdotool:
+                return PressKeyWithXdotool(key);
+            case InputTool.Ydotool:
+                return PressKeyWithYdotool(key);
+            default:
+                // No input tool available — silent no-op (matches previous behavior)
+                return Task.CompletedTask;
+        }
+    }
+
+    private static Task PressKeyWithXdotool(string key)
+    {
         var xdotoolKey = MapToXdotoolKey(key);
         if (xdotoolKey == null) return Task.CompletedTask;
 
@@ -194,11 +243,42 @@ public class LinuxAppDriver : AppDriverBase
                 UseShellExecute = false
             };
             using var proc = Process.Start(psi);
-            proc?.WaitForExit(5000);
+            if (proc != null && !proc.WaitForExit(5000))
+            {
+                try { proc.Kill(); } catch { }
+            }
         }
         catch
         {
             // xdotool may not be installed
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static Task PressKeyWithYdotool(string key)
+    {
+        var keyCode = MapToYdotoolKeyCode(key);
+        if (keyCode == null) return Task.CompletedTask;
+
+        try
+        {
+            // ydotool key syntax: <keycode>:1 <keycode>:0 (press then release)
+            var psi = new ProcessStartInfo("ydotool", $"key {keyCode}:1 {keyCode}:0")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            using var proc = Process.Start(psi);
+            if (proc != null && !proc.WaitForExit(5000))
+            {
+                try { proc.Kill(); } catch { }
+            }
+        }
+        catch
+        {
+            // ydotool may not be installed or ydotoold not running
         }
 
         return Task.CompletedTask;
@@ -301,6 +381,24 @@ public class LinuxAppDriver : AppDriverBase
         "right" => "Right",
         "home" => "Home",
         "end" => "End",
+        _ => null
+    };
+
+    // Linux input event codes from linux/input-event-codes.h
+    private static string? MapToYdotoolKeyCode(string key) => key.ToLowerInvariant() switch
+    {
+        "enter" or "return" => "28",
+        "escape" or "back" => "1",
+        "tab" => "15",
+        "space" => "57",
+        "backspace" => "14",
+        "delete" => "111",
+        "up" => "103",
+        "down" => "108",
+        "left" => "105",
+        "right" => "106",
+        "home" => "102",
+        "end" => "107",
         _ => null
     };
 }

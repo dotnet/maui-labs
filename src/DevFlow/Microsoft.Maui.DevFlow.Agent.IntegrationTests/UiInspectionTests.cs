@@ -50,7 +50,7 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task Tree_ElementsHaveBounds()
     {
         await NavigateToMainPageAsync();
-        var tree = await Client.GetTreeAsync(maxDepth: 3);
+        var tree = await Client.GetTreeAsync(maxDepth: 10);
 
         static ElementInfo? FindWithBounds(IEnumerable<ElementInfo> elements)
         {
@@ -131,6 +131,22 @@ public class UiInspectionTests : IntegrationTestBase
     {
         var elements = await Client.QueryAsync(type: "NonExistentControlType99");
         Assert.Empty(elements);
+    }
+
+    [Fact]
+    public async Task Query_MultipleTypes_ReturnsAppropriateResults()
+    {
+        await NavigateToMainPageAsync();
+
+        var labels = await Client.QueryAsync(type: "Label");
+        var entries = await Client.QueryAsync(type: "Entry");
+
+        Assert.NotEmpty(labels);
+        Assert.NotEmpty(entries);
+
+        var labelIds = labels.Select(e => e.Id).ToHashSet();
+        var entryIds = entries.Select(e => e.Id).ToHashSet();
+        Assert.Empty(labelIds.Intersect(entryIds));
     }
 
     [Fact]

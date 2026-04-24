@@ -15,10 +15,13 @@ static class SpectreHelpBuilder
 	/// <summary>
 	/// Writes colorized help for a command to the console.
 	/// </summary>
-	internal static void WriteHelp(Command command)
-	{
-		var console = AnsiConsole.Console;
+	internal static void WriteHelp(Command command) => WriteHelp(command, AnsiConsole.Console);
 
+	/// <summary>
+	/// Writes colorized help for a command to the specified console (testable overload).
+	/// </summary>
+	internal static void WriteHelp(Command command, IAnsiConsole console)
+	{
 		// Description
 		if (!string.IsNullOrEmpty(command.Description))
 		{
@@ -27,44 +30,39 @@ static class SpectreHelpBuilder
 			console.WriteLine();
 		}
 
-		// Usage
+		// Usage — always shows [options] since help is always available
 		console.MarkupLine("[yellow]Usage:[/]");
 		console.MarkupLine($"  {Markup.Escape(BuildUsageLine(command))}");
 		console.WriteLine();
 
-		// Options
+		// Arguments (render before options, like dotnet CLI convention)
+		var arguments = command.Arguments.Where(a => !a.Hidden).ToList();
+		if (arguments.Count > 0)
+		{
+			console.MarkupLine("[yellow]Arguments:[/]");
+			WriteTwoColumnTable(console, arguments.Select(a =>
+				($"<{a.Name}>", a.Description ?? string.Empty)));
+			console.WriteLine();
+		}
+
+		// Options — build all rows first, including standard help/version,
+		// so the section always appears (every command has at least --help).
 		var options = GetVisibleOptions(command).ToList();
-		if (options.Count > 0)
+		var optionRows = new List<(string, string)>();
+		foreach (var option in options)
+			optionRows.Add((FormatAliases(option), option.Description ?? string.Empty));
+
+		// Standard help option (always available on every command)
+		optionRows.Add(("-?, -h, --help", "Show help and usage information"));
+
+		// Standard version option (root only)
+		if (command is RootCommand)
+			optionRows.Add(("--version", "Show version information"));
+
+		if (optionRows.Count > 0)
 		{
 			console.MarkupLine("[yellow]Options:[/]");
-
-			// Add standard options that are injected by the parser framework
-			var helpEntry = ("-?, -h, --help", "Show help and usage information");
-			var versionEntry = ("--version", "Show version information");
-			var allAliasLengths = options.Select(o => FormatAliases(o).Length)
-				.Append(helpEntry.Item1.Length)
-				.Append(versionEntry.Item1.Length);
-			var maxAliasLen = allAliasLengths.Max();
-
-			foreach (var option in options)
-			{
-				var aliases = FormatAliases(option);
-				var desc = option.Description ?? string.Empty;
-				var padding = new string(' ', Math.Max(1, maxAliasLen - aliases.Length + 2));
-				console.MarkupLine($"  [green]{Markup.Escape(aliases)}[/]{padding}{Markup.Escape(desc)}");
-			}
-
-			// Help option
-			var helpPad = new string(' ', Math.Max(1, maxAliasLen - helpEntry.Item1.Length + 2));
-			console.MarkupLine($"  [green]{Markup.Escape(helpEntry.Item1)}[/]{helpPad}{Markup.Escape(helpEntry.Item2)}");
-
-			// Version option (root command only)
-			if (command is RootCommand)
-			{
-				var verPad = new string(' ', Math.Max(1, maxAliasLen - versionEntry.Item1.Length + 2));
-				console.MarkupLine($"  [green]{Markup.Escape(versionEntry.Item1)}[/]{verPad}{Markup.Escape(versionEntry.Item2)}");
-			}
-
+			WriteTwoColumnTable(console, optionRows);
 			console.WriteLine();
 		}
 
@@ -73,31 +71,31 @@ static class SpectreHelpBuilder
 		if (subcommands.Count > 0)
 		{
 			console.MarkupLine("[yellow]Commands:[/]");
-			var maxNameLen = subcommands.Max(c => c.Name.Length);
-			foreach (var sub in subcommands)
-			{
-				var name = sub.Name;
-				var desc = sub.Description ?? string.Empty;
-				var padding = new string(' ', Math.Max(1, maxNameLen - name.Length + 2));
-				console.MarkupLine($"  [green]{Markup.Escape(name)}[/]{padding}{Markup.Escape(desc)}");
-			}
+			WriteTwoColumnTable(console, subcommands.Select(s =>
+				(s.Name, s.Description ?? string.Empty)));
 			console.WriteLine();
 		}
+	}
 
-		// Arguments
-		var arguments = command.Arguments.Where(a => !a.Hidden).ToList();
-		if (arguments.Count > 0)
+	/// <summary>
+	/// Renders a two-column table (name | description) with consistent alignment.
+	/// Uses explicit padding in a single markup line per row so output stays stable
+	/// whether stdout is a terminal or captured/piped.
+	/// </summary>
+	static void WriteTwoColumnTable(IAnsiConsole console, IEnumerable<(string Name, string Description)> rows)
+	{
+		var materialized = rows.Where(r => !string.IsNullOrEmpty(r.Name)).ToList();
+		if (materialized.Count == 0)
+			return;
+
+		var maxNameLen = materialized.Max(r => r.Name.Length);
+		foreach (var (name, description) in materialized)
 		{
-			console.MarkupLine("[yellow]Arguments:[/]");
-			var maxArgLen = arguments.Max(a => $"<{a.Name}>".Length);
-			foreach (var arg in arguments)
-			{
-				var name = $"<{arg.Name}>";
-				var desc = arg.Description ?? string.Empty;
-				var padding = new string(' ', Math.Max(1, maxArgLen - name.Length + 2));
-				console.MarkupLine($"  [green]{Markup.Escape(name)}[/]{padding}{Markup.Escape(desc)}");
-			}
-			console.WriteLine();
+			// Pad the name to maxNameLen + 2 (column separator) INSIDE the color segment.
+			// Spectre collapses whitespace immediately after a closing markup tag,
+			// so padding must be inside [green]...[/] to preserve column alignment.
+			var paddedName = name.PadRight(maxNameLen + 2);
+			console.MarkupLine($"  [green]{Markup.Escape(paddedName)}[/]{Markup.Escape(description)}");
 		}
 	}
 
@@ -119,8 +117,8 @@ static class SpectreHelpBuilder
 		if (command.Subcommands.Any(c => !c.Hidden))
 			parts.Add("[command]");
 
-		if (GetVisibleOptions(command).Any())
-			parts.Add("[options]");
+		// Every command has at least --help, so [options] always applies
+		parts.Add("[options]");
 
 		foreach (var arg in command.Arguments.Where(a => !a.Hidden))
 			parts.Add($"<{arg.Name}>");
@@ -130,13 +128,20 @@ static class SpectreHelpBuilder
 
 	static IEnumerable<Option> GetVisibleOptions(Command command)
 	{
-		// Include the command's own options and any global options from parents
-		var options = command.Options.Where(o => !o.Hidden).ToList();
+		// Filter out the built-in HelpOption / VersionOption — we render those manually
+		// so their presentation stays consistent across all commands.
+		// Match by well-known aliases instead of internal type names, which are fragile
+		// across System.CommandLine beta releases.
+		static bool IsBuiltIn(Option o) =>
+			o.Aliases.Contains("--help") || o.Name == "--help" ||
+			o.Aliases.Contains("--version") || o.Name == "--version";
+
+		var options = command.Options.Where(o => !o.Hidden && !IsBuiltIn(o)).ToList();
 
 		// Walk all ancestor commands to collect inherited/recursive options
 		foreach (var ancestor in command.Parents.OfType<Command>())
 		{
-			foreach (var globalOpt in ancestor.Options.Where(o => !o.Hidden && o.Recursive))
+			foreach (var globalOpt in ancestor.Options.Where(o => !o.Hidden && !IsBuiltIn(o) && o.Recursive))
 			{
 				if (!options.Any(o => o.Name == globalOpt.Name))
 					options.Add(globalOpt);
@@ -148,7 +153,18 @@ static class SpectreHelpBuilder
 
 	static string FormatAliases(Option option)
 	{
-		var aliases = option.Aliases.OrderBy(a => a.Length).ToList();
-		return string.Join(", ", aliases);
+		// Option.Aliases in System.CommandLine 2.0 beta5+ does NOT include the primary Name,
+		// so we must prepend it explicitly to avoid producing a blank label.
+		var names = new List<string>();
+		if (!string.IsNullOrEmpty(option.Name))
+			names.Add(option.Name);
+		foreach (var alias in option.Aliases)
+		{
+			if (!string.IsNullOrEmpty(alias) && !names.Contains(alias, StringComparer.Ordinal))
+				names.Add(alias);
+		}
+		// Show short aliases (e.g. "-v") before long ones (e.g. "--verbose") for readability.
+		names.Sort((a, b) => a.Length.CompareTo(b.Length));
+		return string.Join(", ", names);
 	}
 }

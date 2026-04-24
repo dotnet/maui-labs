@@ -51,7 +51,7 @@ protected override async Task<byte[]?> CaptureFullScreenAsync() { /* AppKit capt
 
 ## MCP Tool Conventions
 
-MCP tools live in `src/DevFlow/Microsoft.Maui.DevFlow.CLI/Mcp/Tools/`. When creating a new tool:
+MCP tools live in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`. When creating a new tool:
 
 1. Create a new file in the `Tools/` directory
 2. Use `[McpServerToolType]` on the class, `[McpServerTool]` on the method

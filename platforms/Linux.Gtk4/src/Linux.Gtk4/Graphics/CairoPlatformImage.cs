@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.Maui.Graphics;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Graphics;
@@ -16,8 +15,8 @@ internal class CairoPlatformImage : global::Microsoft.Maui.Graphics.IImage
 
 	internal Cairo.ImageSurface Surface { get; }
 
-	public float Width => cairo_image_surface_get_width(Surface.Handle.DangerousGetHandle());
-	public float Height => cairo_image_surface_get_height(Surface.Handle.DangerousGetHandle());
+	public float Width => Surface.Width;
+	public float Height => Surface.Height;
 
 	public global::Microsoft.Maui.Graphics.IImage Downsize(float maxWidthOrHeight, bool disposeOriginal = false)
 	{
@@ -101,17 +100,8 @@ internal class CairoPlatformImage : global::Microsoft.Maui.Graphics.IImage
 
 	public void Save(Stream stream, ImageFormat format = ImageFormat.Png, float quality = 1)
 	{
-		var tmpPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"maui_img_{Guid.NewGuid():N}.png");
-		try
-		{
-			cairo_surface_write_to_png(Surface.Handle.DangerousGetHandle(), tmpPath);
-			using var fs = File.OpenRead(tmpPath);
-			fs.CopyTo(stream);
-		}
-		finally
-		{
-			try { File.Delete(tmpPath); } catch { }
-		}
+		using var pixbuf = Surface.CreatePixbuf();
+		pixbuf.SaveToStream(stream, format);
 	}
 
 	public Task SaveAsync(Stream stream, ImageFormat format = ImageFormat.Png, float quality = 1)
@@ -121,38 +111,21 @@ internal class CairoPlatformImage : global::Microsoft.Maui.Graphics.IImage
 	}
 
 	/// <summary>
-	/// Creates a CairoPlatformImage from a PNG stream.
+	/// Creates a CairoPlatformImage from a stream.
+	/// The format value is validated for GTK support, while GdkPixbuf
+	/// detects the actual decoder from the stream contents.
 	/// </summary>
-	public static CairoPlatformImage? FromStream(Stream stream)
+	public static CairoPlatformImage? FromStream(Stream stream, ImageFormat format = ImageFormat.Png)
 	{
-		var tmpPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"maui_img_{Guid.NewGuid():N}.png");
-		try
-		{
-			using (var fs = File.Create(tmpPath))
-				stream.CopyTo(fs);
+		using var pixbuf = PixbufExtensions.LoadFromStream(stream, format);
+		if (pixbuf is null)
+			return null;
 
-			var surfaceHandle = cairo_image_surface_create_from_png(tmpPath);
-			if (surfaceHandle == nint.Zero)
-				return null;
+		var surface = new Cairo.ImageSurface(Cairo.Format.Argb32, pixbuf.Width, pixbuf.Height);
+		using var cr = new Cairo.Context(surface);
+		cr.PaintPixbuf(pixbuf);
 
-			// Wrap the unmanaged surface handle. We use an ImageSurface that manages its own lifetime.
-			var surface = new Cairo.ImageSurface(Cairo.Format.Argb32,
-				cairo_image_surface_get_width(surfaceHandle),
-				cairo_image_surface_get_height(surfaceHandle));
-
-			// Copy the PNG data onto our managed surface
-			var cr = new Cairo.Context(surface);
-			cairo_set_source_surface(cr.Handle.DangerousGetHandle(), surfaceHandle, 0, 0);
-			Cairo.Internal.Context.Paint(cr.Handle);
-			cr.Dispose();
-			cairo_surface_destroy(surfaceHandle);
-
-			return new CairoPlatformImage(surface);
-		}
-		finally
-		{
-			try { File.Delete(tmpPath); } catch { }
-		}
+		return new CairoPlatformImage(surface);
 	}
 
 	private bool _disposed;
@@ -163,22 +136,4 @@ internal class CairoPlatformImage : global::Microsoft.Maui.Graphics.IImage
 		_disposed = true;
 		Surface?.Dispose();
 	}
-
-	[DllImport("libcairo.so.2")]
-	private static extern int cairo_surface_write_to_png(nint surface, [MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
-
-	[DllImport("libcairo.so.2")]
-	private static extern nint cairo_image_surface_create_from_png([MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
-
-	[DllImport("libcairo.so.2")]
-	private static extern int cairo_image_surface_get_width(nint surface);
-
-	[DllImport("libcairo.so.2")]
-	private static extern int cairo_image_surface_get_height(nint surface);
-
-	[DllImport("libcairo.so.2")]
-	private static extern void cairo_set_source_surface(nint cr, nint surface, double x, double y);
-
-	[DllImport("libcairo.so.2")]
-	private static extern void cairo_surface_destroy(nint surface);
 }

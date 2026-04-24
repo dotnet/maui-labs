@@ -66,6 +66,27 @@ maui devflow ui tap --automationid "MyButton"
 maui devflow mcp
 ```
 
+### Debug app identity isolation
+
+When `Microsoft.Maui.DevFlow.Agent` is referenced, **Debug** builds automatically rewrite
+the app `ApplicationId` to include a DevFlow-specific suffix derived from the project path.
+That lets separate worktrees or agent sessions install distinct debug copies of the same
+app on a device or simulator instead of competing for one installed identity.
+
+You can override or disable the behavior when needed:
+
+```bash
+# Disable Debug identity isolation
+dotnet build -p:MauiDevFlowEnableDebugAppIdentityIsolation=false
+
+# Force a specific Debug identity suffix
+dotnet build -p:MauiDevFlowDebugAppIdentitySuffix=agent42
+```
+
+The same values can also be supplied via environment variables:
+`MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION` and
+`MAUI_DEVFLOW_DEBUG_APP_IDENTITY_SUFFIX`.
+
 ## Features
 
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI

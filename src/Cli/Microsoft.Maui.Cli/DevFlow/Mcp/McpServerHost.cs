@@ -36,7 +36,8 @@ public static class McpServerHost
 			.WithTools<RecordingTools>()
 			.WithTools<PreferencesTools>()
 			.WithTools<PlatformTools>()
-			.WithTools<SensorTools>();
+			.WithTools<SensorTools>()
+			.WithTools<BatchTools>();
 
 		await builder.Build().RunAsync();
 	}

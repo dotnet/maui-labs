@@ -88,15 +88,84 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         Assert.DoesNotContain("\"Microsoft.Maui.DevFlowPort\", \"9225\"", contents);
     }
 
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_RewritesDebugApplicationId_ByDefault(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath, """
+            <ApplicationId>com.example.myapp</ApplicationId>
+            """);
+
+        RunSetMauiDevFlowPortTarget();
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        var expectedSuffix = ComputeExpectedDebugIdentitySuffix(ProjectFilePath);
+        Assert.Contains("\"Microsoft.Maui.DevFlowBaseApplicationId\", \"com.example.myapp\"", contents);
+        Assert.Contains($"\"Microsoft.Maui.DevFlowDebugAppIdentitySuffix\", \"{expectedSuffix}\"", contents);
+        Assert.Contains($"\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp.debug.{expectedSuffix}\"", contents);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_UsesExplicitDebugIdentitySuffix_WhenProvided(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath, """
+            <ApplicationId>com.example.myapp</ApplicationId>
+            """);
+
+        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowDebugAppIdentitySuffix=Agent-42");
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        Assert.Contains("\"Microsoft.Maui.DevFlowDebugAppIdentitySuffix\", \"dwagent42\"", contents);
+        Assert.Contains("\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp.debug.dwagent42\"", contents);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_DoesNotRewriteApplicationId_WhenIsolationDisabled(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath, """
+            <ApplicationId>com.example.myapp</ApplicationId>
+            """);
+
+        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowEnableDebugAppIdentityIsolation=false");
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        Assert.Contains("\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp\"", contents);
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", contents);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_DoesNotRewriteApplicationId_ForReleaseBuilds(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath, """
+            <ApplicationId>com.example.myapp</ApplicationId>
+            """);
+
+        RunSetMauiDevFlowPortTarget("/p:Configuration=Release");
+
+        var contents = File.ReadAllText(GetGeneratedFilePath("Release"));
+        Assert.Contains("\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp\"", contents);
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", contents);
+    }
+
     private string ProjectFilePath => Path.Combine(_projectDirectory, "Test.csproj");
 
     private string ConfigFilePath => Path.Combine(_projectDirectory, ".mauidevflow");
 
-    private string GeneratedFilePath => Path.Combine(_projectDirectory, "obj", "Debug", "net10.0", "Microsoft.Maui.DevFlowPort.g.cs");
+    private string GeneratedFilePath => GetGeneratedFilePath("Debug");
 
     private static DateTime SentinelTimestampUtc { get; } = new(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private void CreateTestProject(string relativeTargetPath)
+    private string GetGeneratedFilePath(string configuration) =>
+        Path.Combine(_projectDirectory, "obj", configuration, "net10.0", "Microsoft.Maui.DevFlowPort.g.cs");
+
+    private void CreateTestProject(string relativeTargetPath, string? additionalProperties = null)
     {
         var targetFilePath = Path.Combine(
             RepoRoot,
@@ -111,10 +180,25 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
                 <TargetFramework>net10.0</TargetFramework>
+            {{additionalProperties}}
               </PropertyGroup>
               <Import Project="{{escapedTargetFilePath}}" />
             </Project>
             """);
+    }
+
+    private static string ComputeExpectedDebugIdentitySuffix(string projectFilePath)
+    {
+        var sanitized = new string(
+            projectFilePath
+                .ToLowerInvariant()
+                .Where(static ch => char.IsAsciiLetterOrDigit(ch))
+                .ToArray());
+
+        if (sanitized.Length > 24)
+            sanitized = sanitized[^24..];
+
+        return $"dw{sanitized}";
     }
 
     private void RunSetMauiDevFlowPortTarget(params string[] properties)

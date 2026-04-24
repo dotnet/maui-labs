@@ -15,6 +15,8 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | Product | Test Project | Target |
 |---------|-------------|--------|
 | DevFlow | `src/DevFlow/Microsoft.Maui.DevFlow.Tests/` | `net10.0` |
+| DevFlow (integration) | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/` | `net10.0` |
+| Cli | `src/Cli/Microsoft.Maui.Cli.UnitTests/` | `net10.0` |
 
 ## Running Tests
 
@@ -24,6 +26,12 @@ dotnet test MauiLabs.sln
 
 # DevFlow tests
 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
+
+# DevFlow integration tests
+dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
+
+# Cli unit tests
+dotnet test src/Cli/Microsoft.Maui.Cli.UnitTests/
 
 # Specific test
 dotnet test --filter "FullyQualifiedName~MyTestClass.MyTestMethod"

@@ -120,6 +120,7 @@ public class SpectreOutputFormatter : IOutputFormatter
 			{
 				DeviceState.Booted => "green",
 				DeviceState.Connected => "green",
+				DeviceState.Booting => "yellow",
 				DeviceState.Shutdown => "grey",
 				DeviceState.Offline => "red",
 				_ => "white"
@@ -255,10 +256,6 @@ public class SpectreOutputFormatter : IOutputFormatter
 	{
 		return await RunTimedStatusAsync(message, (updateStatus, _) => operation(updateStatus));
 	}
-
-	/// <summary>
-	/// Runs an async operation with a spinner indicator.
-	/// </summary>
 	public async Task<T> StatusAsync<T>(string message, Func<Task<T>> operation)
 	{
 		return await RunTimedStatusAsync(message, (_, _) => operation());

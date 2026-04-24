@@ -69,10 +69,44 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
     public abstract void ConfigureHandler();
 
     /// <summary>
-    /// Platform-specific delay in milliseconds to wait for WebView to load before injecting debug scripts.
+    /// Platform-specific maximum delay in milliseconds to wait for WebView to load before injecting debug scripts.
     /// Default is 2000ms. Override in platform subclasses if more time is needed.
+    /// We poll document.readyState === 'complete' inside this budget and return as soon as it completes.
     /// </summary>
     protected virtual int GetWebViewLoadDelayMs() => 2000;
+
+    /// <summary>
+    /// Wait for the WebView's document.readyState to reach 'complete', bounded by GetWebViewLoadDelayMs().
+    /// Falls back to a fixed delay if evaluation isn't available.
+    /// </summary>
+    private async Task WaitForWebViewLoadedAsync(Func<string, Task<string?>> evalJs)
+    {
+        var maxDelayMs = GetWebViewLoadDelayMs();
+        // Minimum settle time before first probe, to let the platform fully attach the WebView.
+        var minSettleMs = Math.Min(200, maxDelayMs);
+        await Task.Delay(minSettleMs);
+
+        var deadline = DateTime.UtcNow.AddMilliseconds(maxDelayMs - minSettleMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                var state = await evalJs("document.readyState");
+                if (state != null)
+                {
+                    var s = state.ToString();
+                    if (s == "complete" || s == "\"complete\"")
+                        return;
+                }
+            }
+            catch
+            {
+                // Evaluator may not be ready yet; keep waiting.
+            }
+
+            await Task.Delay(100);
+        }
+    }
 
     /// <summary>
     /// Register a new WebView bridge. Called by platform subclasses when a WebView is captured.
@@ -95,9 +129,8 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         if (bridgeIndex < 0 || bridgeIndex >= _bridges.Count) return;
         var bridge = _bridges[bridgeIndex];
 
-        var delayMs = GetWebViewLoadDelayMs();
-        Log($"[BlazorDevFlow] Waiting {delayMs}ms for WebView {bridgeIndex} to load...");
-        await Task.Delay(delayMs);
+        Log($"[BlazorDevFlow] Waiting for WebView {bridgeIndex} to load (max {GetWebViewLoadDelayMs()}ms)...");
+        await WaitForWebViewLoadedAsync(bridge.EvalJsProbe);
 
         Log($"[BlazorDevFlow] Injecting debug script into WebView {bridgeIndex}...");
         await bridge.InjectDebugScriptAsync();
@@ -112,9 +145,8 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         if (bridgeIndex < 0 || bridgeIndex >= _bridges.Count) return;
         var bridge = _bridges[bridgeIndex];
 
-        var delayMs = GetWebViewLoadDelayMs();
-        Log($"[BlazorDevFlow] Re-initialization: waiting {delayMs}ms for WebView {bridgeIndex} to settle...");
-        await Task.Delay(delayMs);
+        Log($"[BlazorDevFlow] Re-initialization: waiting for WebView {bridgeIndex} to settle (max {GetWebViewLoadDelayMs()}ms)...");
+        await WaitForWebViewLoadedAsync(bridge.EvalJsProbe);
 
         Log($"[BlazorDevFlow] Re-injecting debug script into WebView {bridgeIndex}...");
         bridge.ResetReadyState();
@@ -175,7 +207,8 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         private readonly Action _reload;
         private readonly Action<string> _navigate;
         private bool _chobitsuLoaded;
-        private bool _injecting;
+        private readonly object _injectGate = new();
+        private Task? _injectTask;
         private int _cdpIdCounter = 1000;
         private CancellationTokenSource? _drainCts;
 
@@ -187,6 +220,9 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
 
         /// <summary>Whether this WebView is ready for CDP commands.</summary>
         public bool IsReady => _chobitsuLoaded;
+
+        /// <summary>Internal: exposes the JS evaluator so the owner can probe the page before injection.</summary>
+        internal Func<string, Task<string?>> EvalJsProbe => _evalJs;
 
         internal WebViewBridge(BlazorWebViewDebugServiceBase owner,
             Func<string, Task<string?>> evalJs, Action reload, Action<string> navigate,
@@ -201,17 +237,21 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
 
         internal async Task InjectDebugScriptAsync()
         {
-            if (_injecting) return;
-            _injecting = true;
+            Task injectTask;
+            lock (_injectGate)
+            {
+                if (_injectTask is { IsCompleted: false })
+                {
+                    injectTask = _injectTask;
+                }
+                else
+                {
+                    injectTask = InjectDebugScriptCoreAsync();
+                    _injectTask = injectTask;
+                }
+            }
 
-            try
-            {
-                await InjectDebugScriptCoreAsync();
-            }
-            finally
-            {
-                _injecting = false;
-            }
+            await injectTask;
         }
 
         /// <summary>
@@ -224,32 +264,71 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
 
         private async Task InjectDebugScriptCoreAsync()
         {
-            // Wait for chobitsu to be available
-            for (int i = 0; i < 30; i++)
+            // Wait for chobitsu to become available. Some apps may provide it via a script tag,
+            // while others rely on the embedded fallback injection below.
+            // We poll briefly before falling back to direct eval injection.
+            var loaded = false;
+            for (int i = 0; i < 10; i++)
             {
                 var check = await _evalJs(
                     "typeof chobitsu !== 'undefined' ? 'loaded' : 'waiting'");
                 if (i == 0 || check?.ToString() == "loaded")
                     _owner.Log($"[BlazorDevFlow] Chobitsu check #{i}: {check}");
-                if (check?.ToString() == "loaded") break;
-
-                if (i == 10)
+                if (check?.ToString() == "loaded")
                 {
-                    var hasTag = await _evalJs(
-                        "document.querySelector('script[src*=\"chobitsu\"]') ? 'found' : 'missing'");
-                    if (hasTag?.ToString() == "missing")
+                    loaded = true;
+                    break;
+                }
+
+                await Task.Delay(500);
+            }
+
+            if (!loaded)
+            {
+                // The script tag may be absent or unavailable in the WebView static asset host.
+                // Fall back to injecting chobitsu.js directly via JS eval from the embedded resource.
+                // IMPORTANT: We must wait for Blazor to finish rendering before injecting chobitsu
+                // because the large eval() can interfere with Blazor's startup on WebView2.
+                _owner.Log("[BlazorDevFlow] Chobitsu not loaded via script tag — waiting for Blazor to render before embedded injection...");
+                try
+                {
+                    // Wait for Blazor to replace "Loading..." with actual content (up to 30s).
+                    for (int w = 0; w < 60; w++)
                     {
-                        _owner.Log("[BlazorDevFlow] ⚠️ No chobitsu script tag found.");
-                        return;
+                        var appContent = await _evalJs(
+                            "document.querySelector('#app')?.innerHTML?.substring(0, 20) || ''");
+                        var content = appContent?.ToString() ?? "";
+                        if (!content.Contains("Loading") && content.Length > 0)
+                        {
+                            _owner.Log($"[BlazorDevFlow] Blazor rendered (content: {content})");
+                            break;
+                        }
+                        await Task.Delay(500);
+                    }
+
+                    _owner.Log("[BlazorDevFlow] Injecting embedded chobitsu.js via eval...");
+                    var embeddedJs = ChobitsuDebugScript.GetEmbeddedChobitsuJs();
+                    await _evalJs(embeddedJs);
+
+                    // Verify it loaded
+                    var verify = await _evalJs("typeof chobitsu !== 'undefined' ? 'loaded' : 'waiting'");
+                    if (verify?.ToString() == "loaded")
+                    {
+                        _owner.Log("[BlazorDevFlow] Chobitsu loaded via embedded fallback.");
+                        loaded = true;
+                    }
+                    else
+                    {
+                        _owner.Log($"[BlazorDevFlow] Embedded chobitsu injection did not define chobitsu global (got: {verify}).");
                     }
                 }
-
-                if (i == 29)
+                catch (Exception ex)
                 {
-                    _owner.Log("[BlazorDevFlow] Chobitsu not loaded after 15s");
-                    return;
+                    _owner.LogError("[BlazorDevFlow] Failed to inject embedded chobitsu.js", ex);
                 }
-                await Task.Delay(500);
+
+                if (!loaded)
+                    return;
             }
 
             var script = ChobitsuDebugScript.GetInjectionScript();
@@ -270,11 +349,11 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
             }
         }
 
-        public async Task<string> SendCdpCommandAsync(string cdpJson)
-        {
-            if (!IsReady)
-                return "{\"error\":\"WebView not ready\"}";
+        public Task<string> SendCdpCommandAsync(string cdpJson)
+            => SendCdpCommandCoreAsync(cdpJson, allowRecovery: true);
 
+        private async Task<string> SendCdpCommandCoreAsync(string cdpJson, bool allowRecovery)
+        {
             try
             {
                 var json = System.Text.Json.JsonDocument.Parse(cdpJson);
@@ -297,6 +376,8 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
                     cdpJson = System.Text.Encoding.UTF8.GetString(ms.ToArray());
                 }
 
+                // These commands already use direct native JS evaluation and should remain
+                // available while the bridge is still warming up or recovering.
                 if (method == "Input.insertText")
                     return await HandleInputInsertTextAsync(cdpJson, id);
                 if (method == "Page.reload")
@@ -306,12 +387,23 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
                 if (method.StartsWith("Browser."))
                     return HandleBrowserMethod(method, id);
 
+                if (!IsReady)
+                {
+                    // The first injection attempt may have raced with DOM parse on slow runners.
+                    // Try one more time before giving up — this is cheap when chobitsu IS loaded
+                    // (single eval returns 'loaded' immediately) and self-heals the common
+                    // "bridge created too early" case without the caller having to do anything.
+                    _owner.Log("[BlazorDevFlow] SendCdpCommand: bridge not ready, retrying injection...");
+                    await InjectDebugScriptAsync();
+
+                    if (!IsReady)
+                        return "{\"error\":\"WebView not ready\"}";
+                }
+
                 var escaped = cdpJson.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\n", "\\n").Replace("\r", "\\r");
                 var sendScript = ScriptResources.Load("cdp-send-receive.js")
                     .Replace("%CDP_MESSAGE%", escaped);
                 var readScript = ScriptResources.Load("cdp-read-response.js");
-
-                _owner.Log($"[BlazorDevFlow] SendCdpCommand: method={method}");
 
                 var sendResult = await _owner.RunOnMainThreadAsync(async () =>
                 {
@@ -331,14 +423,24 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
                     var unescaped = UnescapeEvalResult(result);
                     if (unescaped != null)
                     {
-                        _owner.Log($"[BlazorDevFlow] SendCdpCommand got response after {i + 1} poll(s)");
+                        if (i >= 10)
+                            _owner.Log($"[BlazorDevFlow] SendCdpCommand: method={method} responded after {i + 1} poll(s)");
                         return unescaped;
                     }
 
                     await Task.Delay(50);
                 }
 
-                _owner.Log($"[BlazorDevFlow] SendCdpCommand: no response after polling (10s timeout)");
+                _owner.Log($"[BlazorDevFlow] SendCdpCommand: method={method} no response after polling (10s timeout)");
+                if (allowRecovery)
+                {
+                    _owner.Log("[BlazorDevFlow] CDP timeout; resetting and retrying injection once...");
+                    ResetReadyState();
+                    await InjectDebugScriptAsync();
+                    if (IsReady)
+                        return await SendCdpCommandCoreAsync(cdpJson, allowRecovery: false);
+                }
+
                 return "{\"error\":\"cdp timeout\"}";
             }
             catch (Exception ex)
@@ -389,8 +491,37 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         {
             var json = System.Text.Json.JsonDocument.Parse(cdpJson);
             var url = json.RootElement.GetProperty("params").GetProperty("url").GetString() ?? "";
-            await _owner.RunOnMainThreadAsync(() => { _navigate(url); });
-            await Task.Delay(1500);
+
+            if (Uri.TryCreate(url, UriKind.Absolute, out _))
+            {
+                await _owner.RunOnMainThreadAsync(() => { _navigate(url); });
+            }
+            else
+            {
+                var escapedUrl = EscapeJsString(url);
+                var script = $@"(function() {{
+                    const target = '{escapedUrl}';
+                    try {{
+                        if (window.Blazor && typeof window.Blazor.navigateTo === 'function') {{
+                            window.Blazor.navigateTo(target);
+                            return 'blazor';
+                        }}
+                    }} catch {{}}
+
+                    try {{
+                        history.pushState({{}}, '', target);
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                        return 'history';
+                    }} catch {{}}
+
+                    location.href = target;
+                    return 'location';
+                }})()";
+
+                await _owner.RunOnMainThreadAsync(async () => { await _evalJs(script); });
+            }
+
+            await Task.Delay(500);
             await InjectDebugScriptAsync();
             return $"{{\"id\":{id},\"result\":{{\"frameId\":\"main\"}}}}";
         }

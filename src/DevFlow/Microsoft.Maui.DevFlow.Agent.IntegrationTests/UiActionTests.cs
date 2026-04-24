@@ -90,11 +90,59 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Fill_AndTap_AddsTodo()
+    {
+        await NavigateToMainPageAsync();
+        await SettleAsync(1000);
+
+        var entry = await FindElementAsync("NewTodoEntry");
+        var addButton = await FindElementAsync("AddButton");
+
+        await Client.ClearAsync(entry.Id);
+        await SettleAsync();
+        await Client.FocusAsync(entry.Id);
+        await SettleAsync();
+        await Client.FillAsync(entry.Id, "IntegrationTodo123");
+        await SettleAsync(1000);
+
+        await Client.TapAsync(addButton.Id);
+
+        await WaitForAsync(async () =>
+        {
+            var items = await Client.QueryAsync(text: "IntegrationTodo123");
+            return items.Count > 0;
+        }, timeoutMs: 5000, pollIntervalMs: 500);
+
+        var addedItems = await Client.QueryAsync(text: "IntegrationTodo123");
+        Assert.NotEmpty(addedItems);
+
+        await CleanupAddedTodoAsync("IntegrationTodo123");
+    }
+
+    [Fact]
     public async Task Navigate_ToRoute_ChangesPage()
     {
         await NavigateToPageAsync("//interactions", "StatusLabel");
         var statusLabel = await TryFindElementAsync("StatusLabel");
         Assert.NotNull(statusLabel);
+
+        await NavigateToMainPageAsync();
+    }
+
+    [Fact]
+    public async Task Navigate_ToMultipleRoutes_Works()
+    {
+        await NavigateToPageAsync("//interactions", "StatusLabel");
+        var interactionsEl = await TryFindElementAsync("StatusLabel");
+        Assert.NotNull(interactionsEl);
+
+        await NavigateToPageAsync("//network", "GetPostsButton");
+        var networkEl = await TryFindElementAsync("GetPostsButton");
+        Assert.NotNull(networkEl);
+
+        await NavigateToPageAsync("//dialogs", "DialogStatusLabel");
+        var dialogEl = await TryFindElementAsync("DialogStatusLabel");
+        Assert.NotNull(dialogEl);
 
         await NavigateToMainPageAsync();
     }

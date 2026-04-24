@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Graphics;
 
@@ -106,18 +105,8 @@ internal class CairoBitmapExportContext : global::Microsoft.Maui.Graphics.Bitmap
 	public override void WriteToStream(Stream stream)
 	{
 		Cairo.Internal.Surface.Flush(_surface.Handle);
-
-		var tmpPath = Path.Combine(Path.GetTempPath(), $"maui_export_{Guid.NewGuid():N}.png");
-		try
-		{
-			cairo_surface_write_to_png(_surface.Handle.DangerousGetHandle(), tmpPath);
-			using var fs = File.OpenRead(tmpPath);
-			fs.CopyTo(stream);
-		}
-		finally
-		{
-			try { File.Delete(tmpPath); } catch { }
-		}
+		using var pixbuf = _surface.CreatePixbuf();
+		pixbuf.SaveToStream(stream);
 	}
 
 	public override void Dispose()
@@ -126,13 +115,10 @@ internal class CairoBitmapExportContext : global::Microsoft.Maui.Graphics.Bitmap
 		// Don't dispose _surface here — it may still be referenced via Image
 	}
 
-	[DllImport("libcairo.so.2")]
-	private static extern int cairo_surface_write_to_png(nint surface,
-		[MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
 }
 
 /// <summary>
-/// IImageLoadingService implementation using Cairo PNG loading.
+/// IImageLoadingService implementation using Cairo and GdkPixbuf image loading.
 /// </summary>
 internal class CairoImageLoadingService : global::Microsoft.Maui.Graphics.IImageLoadingService
 {
@@ -140,7 +126,7 @@ internal class CairoImageLoadingService : global::Microsoft.Maui.Graphics.IImage
 	{
 		ArgumentNullException.ThrowIfNull(stream);
 
-		var image = CairoPlatformImage.FromStream(stream);
+		var image = CairoPlatformImage.FromStream(stream, format);
 		if (image == null)
 			throw new ArgumentException("Could not decode image from stream.");
 

@@ -88,6 +88,18 @@ public sealed class AgentTools
         return $"Timeout after {timeout}s — no agent connected" + (app != null ? $" matching '{app}'" : "") + ".";
     }
 
+    [McpServerTool(Name = "maui_capabilities"), Description("Get the capabilities supported by the connected agent. Returns a JSON object describing available features (e.g., profiler, sensors, webview). Use this to check what the agent supports before calling other tools.")]
+    public static async Task<string> Capabilities(
+        McpAgentSession session,
+        [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+    {
+        var agent = await session.GetAgentClientAsync(agentPort);
+        var capabilities = await agent.GetCapabilitiesAsync();
+        if (capabilities.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+            return "Unable to retrieve capabilities. The agent may not be running, or may not support this feature (older version).";
+        return CliJson.SerializeUntyped(capabilities, indented: false);
+    }
+
     [McpServerTool(Name = "maui_select_agent"), Description("Set the default agent for this MCP session. Subsequent tool calls will use this agent automatically without needing agentPort.")]
     public static string SelectAgent(
         McpAgentSession session,

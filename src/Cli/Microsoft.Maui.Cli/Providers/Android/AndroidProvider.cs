@@ -64,12 +64,20 @@ public class AndroidProvider : IAndroidProvider
 		// Check Android SDK
 		if (!IsSdkInstalled)
 		{
+			var notFoundDetails = new JsonObject
+			{
+				["requiresElevation"] = SdkPathRequiresElevation
+			};
+			if (!string.IsNullOrEmpty(SdkPath))
+				notFoundDetails["path"] = SdkPath!;
+
 			checks.Add(new HealthCheck
 			{
 				Category = "android",
 				Name = "Android SDK",
 				Status = CheckStatus.Error,
 				Message = "Android SDK not found",
+				Details = notFoundDetails,
 				Fix = new FixInfo
 				{
 					IssueId = ErrorCodes.AndroidSdkNotFound,
@@ -86,7 +94,11 @@ public class AndroidProvider : IAndroidProvider
 			Category = "android",
 			Name = "Android SDK",
 			Status = CheckStatus.Ok,
-			Details = new JsonObject { ["path"] = SdkPath! }
+			Details = new JsonObject
+			{
+				["path"] = SdkPath!,
+				["requiresElevation"] = SdkPathRequiresElevation
+			}
 		});
 
 		// Check SDK Manager
@@ -341,23 +353,26 @@ public class AndroidProvider : IAndroidProvider
 		return (sdkManagerPath, "--licenses");
 	}
 
-	public async Task InstallJdkAsync(int version = 17, string? installPath = null,
+	public async Task InstallJdkAsync(int? version = null, string? installPath = null,
 		IProgress<string>? progress = null, CancellationToken cancellationToken = default)
 	{
-		progress?.Report($"Installing OpenJDK {version}...");
-		await _jdkManager.InstallAsync(version, installPath, cancellationToken);
+		var resolvedVersion = version ?? JdkManager.DefaultJdkVersion;
+		progress?.Report($"Installing OpenJDK {resolvedVersion}...");
+		await _jdkManager.InstallAsync(resolvedVersion, installPath, cancellationToken);
 		_jdkPath = installPath ?? PlatformDetector.Paths.DefaultJdkPath;
-		progress?.Report($"OpenJDK {version} installed to {_jdkPath}");
+		progress?.Report($"OpenJDK {resolvedVersion} installed to {_jdkPath}");
 	}
 
-	public async Task InstallAsync(string? sdkPath = null, string? jdkPath = null, int jdkVersion = 17,
+	public async Task InstallAsync(string? sdkPath = null, string? jdkPath = null, int? jdkVersion = null,
 		IEnumerable<string>? additionalPackages = null, bool acceptLicenses = false, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
 	{
+		var resolvedJdkVersion = jdkVersion ?? JdkManager.DefaultJdkVersion;
+
 		// Step 1: Install JDK if not present
 		if (!IsJdkInstalled)
 		{
 			progress?.Report("Step 1/4: Installing JDK...");
-			await InstallJdkAsync(jdkVersion, jdkPath, progress, cancellationToken);
+			await InstallJdkAsync(resolvedJdkVersion, jdkPath, progress, cancellationToken);
 		}
 		else
 		{

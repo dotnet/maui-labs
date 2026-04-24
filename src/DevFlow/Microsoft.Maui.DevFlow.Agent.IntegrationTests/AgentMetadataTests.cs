@@ -64,6 +64,15 @@ public class AgentMetadataTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Status_WithWindow_AcceptsParameter()
+    {
+        var status = await Client.GetStatusAsync(window: 0);
+
+        Assert.NotNull(status);
+        Assert.True(status!.Running);
+    }
+
+    [Fact]
     public async Task Capabilities_ReturnsKnownFeatures()
     {
         var json = await Client.GetCapabilitiesAsync();

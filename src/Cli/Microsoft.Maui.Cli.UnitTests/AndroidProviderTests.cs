@@ -105,6 +105,7 @@ public class SdkManagerTests : IDisposable
 	}
 }
 
+[Collection("AndroidEnvironment")]
 public class AndroidProviderTests
 {
 	sealed class StubJdkManager : IJdkManager
@@ -122,13 +123,13 @@ public class AndroidProviderTests
 				Message = "JDK 17"
 			});
 
-		public Task InstallAsync(int version = 17, string? installPath = null, CancellationToken cancellationToken = default) =>
+		public Task InstallAsync(int? version = null, string? installPath = null, CancellationToken cancellationToken = default) =>
 			Task.CompletedTask;
 
-		public Task InstallAsync(int version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default) =>
+		public Task InstallAsync(int? version, string? installPath, Action<double, string>? onProgress, CancellationToken cancellationToken = default) =>
 			Task.CompletedTask;
 
-		public IEnumerable<int> GetAvailableVersions() => [17, 21];
+		public IEnumerable<int> GetAvailableVersions() => JdkManager.SupportedInstallVersions;
 	}
 
 	[Fact]
@@ -139,11 +140,15 @@ public class AndroidProviderTests
 
 		var originalAndroidHome = Environment.GetEnvironmentVariable("ANDROID_HOME");
 		var originalAndroidSdkRoot = Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT");
+		var originalPath = Environment.GetEnvironmentVariable("PATH");
 
 		try
 		{
 			Environment.SetEnvironmentVariable("ANDROID_HOME", tempSdk);
 			Environment.SetEnvironmentVariable("ANDROID_SDK_ROOT", null);
+			// Clear PATH so the fallback SdkManager discovery doesn't find a
+			// system-wide sdkmanager (e.g. from a CI runner's Android SDK).
+			Environment.SetEnvironmentVariable("PATH", "");
 
 			using var provider = new AndroidProvider(new StubJdkManager());
 			var checks = await provider.CheckHealthAsync();
@@ -158,6 +163,7 @@ public class AndroidProviderTests
 		{
 			Environment.SetEnvironmentVariable("ANDROID_HOME", originalAndroidHome);
 			Environment.SetEnvironmentVariable("ANDROID_SDK_ROOT", originalAndroidSdkRoot);
+			Environment.SetEnvironmentVariable("PATH", originalPath);
 
 			if (Directory.Exists(tempSdk))
 				Directory.Delete(tempSdk, recursive: true);

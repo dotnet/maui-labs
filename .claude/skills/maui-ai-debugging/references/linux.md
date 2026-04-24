@@ -81,17 +81,48 @@ directly to `http://localhost:<port>`. No port forwarding (unlike Android) or en
 
 ## Key Simulation
 
-The `LinuxAppDriver` may use `xdotool` as a backend for **driver-mediated** key simulation.
-This is an implementation detail for Linux automation support, **not** a recommendation for an
-AI agent to invoke `xdotool` directly from the shell. Install it if the driver needs it:
+The `LinuxAppDriver` automatically detects the display server and uses the appropriate
+**driver-mediated** key simulation backend. This is an implementation detail for Linux
+automation support, **not** a recommendation for an AI agent to invoke these tools directly
+from the shell. Prefer `maui devflow ui fill`, `maui devflow ui tap`, and `maui devflow batch`
+for normal interaction.
+
+- **X11 sessions**: Uses `xdotool` (human-readable key names, no daemon needed)
+- **Wayland sessions**: Uses `ydotool` (Linux input event keycodes, requires `ydotoold` daemon)
+
+Detection uses `XDG_SESSION_TYPE` and `WAYLAND_DISPLAY` environment variables. If the
+preferred tool isn't installed, it falls back to whichever is available.
+
+### Installing xdotool (X11)
 
 ```bash
-sudo apt install xdotool
+sudo apt install xdotool       # Debian/Ubuntu
+sudo dnf install xdotool       # Fedora
 ```
 
-For Wayland-only environments, `ydotool` may be needed instead. Prefer `maui devflow ui fill`,
-`maui devflow ui tap`, and `maui devflow batch` for normal interaction; only the driver backend
-should reach for `xdotool`.
+### Installing ydotool (Wayland)
+
+```bash
+sudo apt install ydotool       # Debian/Ubuntu
+sudo dnf install ydotool       # Fedora
+```
+
+**Required setup for ydotool** (to run without root):
+
+```bash
+# Add your user to the input group for /dev/uinput access
+sudo usermod -aG input $USER
+
+# Create udev rule for persistent permissions
+echo 'KERNEL=="uinput", GROUP="input", MODE="0660"' | sudo tee /etc/udev/rules.d/99-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# Log out and back in, then start the daemon
+ydotoold &
+```
+
+Key simulation is used by the driver for alert dismissal and keyboard input.
+Only the driver backend should reach for `xdotool` or `ydotool`.
 
 ## Platform Differences
 
@@ -104,7 +135,8 @@ should reach for `xdotool`.
 | Network | Varies by platform | Direct localhost |
 | Screenshots | `VisualDiagnostics` | GTK `WidgetPaintable` → `Texture.SaveToPng()` |
 | Native tap | Platform gesture system | `Gtk.Widget.Activate()` |
-| Key simulation | Driver-mediated backend | `xdotool` |
+| Key simulation | Driver-mediated backend | `xdotool` (X11) / `ydotool` (Wayland) |
+| Screen recording | Platform-specific | `ffmpeg` with `x11grab` (X11) / `pipewire` (Wayland) |
 | Blazor WebView | WKWebView / WebView2 / Chrome | WebKitGTK 6.0 |
 
 ## Troubleshooting
@@ -115,12 +147,23 @@ should reach for `xdotool`.
 2. Check that `Application.Current` is available when `StartDevFlowAgent()` runs
 3. Verify the port isn't in use: `lsof -i :<port>` or `ss -tlnp | grep <port>`
 
-### xdotool Not Working
+### xdotool / ydotool Not Working
 
-- On Wayland, `xdotool` may not work. Try `ydotool` instead
+- On Wayland, `xdotool` does not work — install `ydotool` and start `ydotoold`
+- On X11, `xdotool` is preferred over `ydotool` (simpler, no daemon)
 - Prefer DevFlow commands over direct key injection wherever possible
-- If driver-mediated key input still fails, ensure the app window has focus manually (or with
-  explicit user approval for a disruptive workaround)
+- If `ydotool` fails silently, check that `ydotoold` daemon is running: `pgrep -x ydotoold`
+- If `ydotool` gives permission errors, ensure your user is in the `input` group and `/dev/uinput` is group-writable
+- Ensure the app window has focus for key events
+- Check `XDG_SESSION_TYPE` to verify which display server is active: `echo $XDG_SESSION_TYPE`
+
+### Screen Recording on Wayland
+
+- Wayland screen recording uses `ffmpeg -f pipewire` instead of `x11grab`
+- Requires PipeWire to be installed and running (standard on modern Wayland desktops)
+- Check ffmpeg PipeWire support: `ffmpeg -devices | grep pipewire`
+- If PipeWire is not available, you can force X11 with `GDK_BACKEND=x11` and use `x11grab`
+- The first recording on Wayland may trigger a system permission dialog for screen sharing
 
 ### WebKitGTK CDP Issues
 

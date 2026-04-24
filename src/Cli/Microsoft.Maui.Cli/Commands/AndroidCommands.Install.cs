@@ -25,7 +25,7 @@ public static partial class AndroidCommands
 		{
 			new Option<string>("--sdk-path") { Description = "Custom SDK installation path" },
 			new Option<string>("--jdk-path") { Description = "Custom JDK installation path" },
-			new Option<int>("--jdk-version") { Description = "JDK version to install (17 or 21)", DefaultValueFactory = _ => 17 },
+			new Option<int>("--jdk-version") { Description = "JDK version to install (17 or 21)", DefaultValueFactory = _ => JdkManager.DefaultJdkVersion },
 			new Option<bool>("--accept-licenses") { Description = "Non-interactively accept all SDK licenses" },
 			packagesOption
 		};
@@ -118,26 +118,68 @@ public static partial class AndroidCommands
 						{
 							sdkTask.Complete("SDK Tools already installed");
 						}
+					});
 
-						// Step 3: Accept licenses (only if --accept-licenses)
+					// Step 3: Ensure licenses are accepted.
+					// - If --accept-licenses was passed, bulk-accept non-interactively.
+					// - Otherwise, if running interactively, hand stdin/stdout to `sdkmanager --licenses`
+					//   so the user can review and accept each license. The Spectre live renderer
+					//   has exited above, so child-process prompts are visible.
+					// - In CI/non-interactive mode without --accept-licenses, fail fast rather than hang.
+					var licensesAccepted = await androidProvider.AreLicensesAcceptedAsync(cancellationToken);
+					if (!licensesAccepted)
+					{
 						if (acceptLicenses)
 						{
-							var licenseTask = ctx.AddTask("Accepting licenses");
-							licenseTask.SetIndeterminate("Checking licenses...");
-							await androidProvider.AcceptLicensesAsync(
-								onProgress: msg => licenseTask.SetIndeterminate(msg),
-								cancellationToken);
-							licenseTask.Complete("Licenses accepted");
+							await spectre.LiveProgressAsync(async (ctx) =>
+							{
+								var licenseTask = ctx.AddTask("Accepting licenses");
+								licenseTask.SetIndeterminate("Checking licenses...");
+								await androidProvider.AcceptLicensesAsync(
+									onProgress: msg => licenseTask.SetIndeterminate(msg),
+									cancellationToken);
+								licenseTask.Complete("Licenses accepted");
+							});
 						}
+						else if (isCi || Console.IsInputRedirected || Console.IsOutputRedirected)
+						{
+							formatter.WriteError(new Exception(
+								"Android SDK licenses have not been accepted. " +
+								"Re-run with --accept-licenses, or run 'maui android sdk accept-licenses' interactively."));
+							return 1;
+						}
+						else
+						{
+							formatter.WriteInfo("Android SDK licenses must be accepted to continue.");
+							formatter.WriteInfo("Review each license and type 'y' to accept.\n");
+							var exitCode = await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
+							if (exitCode != 0)
+							{
+								formatter.WriteError(new Exception(
+									$"License acceptance exited with code {exitCode}. Aborting install."));
+								return 1;
+							}
+							formatter.WriteSuccess("Licenses accepted");
+						}
+					}
 
-						// Step 4: Install packages
+					// By this point licenses are accepted (either already, bulk-accepted, or
+					// interactively accepted). Force acceptLicenses=true into Step 4 so that
+					// if a newly-requested package introduces an as-yet-unaccepted license,
+					// sdkmanager bulk-accepts it rather than blocking on stdin behind the
+					// live progress renderer.
+					acceptLicenses = true;
+
+					// Step 4: Install packages
+					await spectre.LiveProgressAsync(async (ctx) =>
+					{
 						var pkgTask = ctx.AddTask($"Installing packages (0/{pkgList.Count})");
 						pkgTask.Update(0, $"Installing packages (0/{pkgList.Count})...");
 						await androidProvider.InstallPackagesAsync(pkgList, acceptLicenses,
 							onProgress: (pkg, idx, total) =>
 							{
 								var pct = (double)idx / total * 100;
-								pkgTask.Update(pct, $"Installing {pkg} ({idx + 1}/{total})");
+								pkgTask.Update(pct, $"Installing {pkg} ({idx}/{total})");
 							},
 							cancellationToken);
 						pkgTask.Complete($"{pkgList.Count} packages installed");
@@ -145,6 +187,21 @@ public static partial class AndroidCommands
 				}
 				else
 				{
+					// JSON / non-Spectre path: non-interactive by nature. If the SDK is already
+					// installed and licenses aren't yet accepted, fail fast rather than letting
+					// sdkmanager block on stdin. If the SDK isn't installed yet, there's nothing
+					// to hang on — InstallAsync will bootstrap tools and (when acceptLicenses
+					// is true) accept licenses non-interactively.
+					if (!acceptLicenses
+						&& androidProvider.IsSdkInstalled
+						&& !await androidProvider.AreLicensesAcceptedAsync(cancellationToken))
+					{
+						formatter.WriteError(new Exception(
+							"Android SDK licenses have not been accepted. " +
+							"Re-run this install command with --accept-licenses to bootstrap SDK tools and accept licenses non-interactively."));
+						return 1;
+					}
+
 					var progress = new Progress<string>(message =>
 					{
 						formatter.WriteProgress(message);
@@ -184,5 +241,56 @@ public static partial class AndroidCommands
 		});
 
 		return command;
+	}
+
+	/// <summary>
+	/// Spawns <c>sdkmanager --licenses</c> with inherited stdio so the user can review and
+	/// accept each SDK license interactively. Returns the child process exit code.
+	/// </summary>
+	static async Task<int> RunInteractiveLicenseAcceptanceAsync(
+		IAndroidProvider androidProvider,
+		CancellationToken cancellationToken)
+	{
+		var licenseCommand = androidProvider.GetLicenseAcceptanceCommand()
+			?? throw new InvalidOperationException(
+				"Android SDK is not installed (sdkmanager not found). " +
+				"Install the command-line tools first.");
+
+		var psi = new System.Diagnostics.ProcessStartInfo
+		{
+			FileName = licenseCommand.Command,
+			Arguments = licenseCommand.Arguments,
+			UseShellExecute = false,
+			RedirectStandardInput = false,
+			RedirectStandardOutput = false,
+			RedirectStandardError = false
+		};
+
+		foreach (var kvp in AndroidEnvironment.BuildEnvironmentVariables(androidProvider.SdkPath, androidProvider.JdkPath))
+			psi.Environment[kvp.Key] = kvp.Value;
+
+		using var process = System.Diagnostics.Process.Start(psi)
+			?? throw new InvalidOperationException("Failed to start sdkmanager --licenses");
+
+		try
+		{
+			await process.WaitForExitAsync(cancellationToken);
+			return process.ExitCode;
+		}
+		catch (OperationCanceledException)
+		{
+			// Kill the child process tree so Ctrl+C doesn't leave an orphaned sdkmanager
+			// blocked on stdin.
+			if (!process.HasExited)
+			{
+				try { process.Kill(entireProcessTree: true); }
+				catch { /* Best-effort: process may have already exited. */ }
+
+				try { await process.WaitForExitAsync(CancellationToken.None); }
+				catch { /* Ignore cleanup failures; preserve original cancellation. */ }
+			}
+
+			throw;
+		}
 	}
 }

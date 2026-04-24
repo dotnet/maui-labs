@@ -43,6 +43,30 @@ public class DeviceTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task DeviceInfo_HasManufacturer()
+    {
+        var json = await Client.GetPlatformInfoAsync("info");
+        var text = json.ToString();
+
+        if (Platform == "android")
+        {
+            Assert.True(
+                text.Contains("manufacturer", StringComparison.OrdinalIgnoreCase),
+                $"Expected manufacturer field in device info, got: {text}");
+        }
+        else if (Platform == "ios" || Platform == "maccatalyst")
+        {
+            Assert.Contains("Apple", text, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            Assert.True(
+                text.Contains("manufacturer", StringComparison.OrdinalIgnoreCase),
+                $"Expected manufacturer field in device info, got: {text}");
+        }
+    }
+
+    [Fact]
     public async Task Display_ReturnsMetrics()
     {
         var json = await Client.GetPlatformInfoAsync("display");

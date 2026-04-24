@@ -8,6 +8,7 @@ using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Services;
+using Microsoft.Maui.Cli.Utils;
 using Spectre.Console;
 
 namespace Microsoft.Maui.Cli.Commands;
@@ -35,6 +36,8 @@ public static class ProfileCommand
 	internal const string StartupProfilingInjectionTargetsFileName = "MauiStartupProfilingInjection.targets";
 	internal const string StartupProfilingInjectionSourceFileName = "MauiStartupProfiling.AutoInitialize.cs";
 	internal const string SpeedscopeExtension = ".speedscope.json";
+	internal const string MibcExtension = ".mibc";
+	internal const string MibcDotnetRuntimeProvider = "Microsoft-Windows-DotNETRuntime:0x1F000080018:5";
 
 	// MSBuild SDK path env vars set by a parent `dotnet run` process that would otherwise
 	// pin the child build to the wrong SDK version (e.g. the CLI's own SDK instead of the
@@ -71,11 +74,11 @@ public static class ProfileCommand
 		};
 		var outputOption = new Option<string?>("--output", "-o")
 		{
-			Description = "Output trace path (default: <project>_<timestamp>.nettrace in the current directory). Speedscope also emits a sibling .speedscope.json file."
+			Description = "Output trace path (default: <project>_<timestamp>.nettrace in the current directory). Speedscope and MIBC also emit sibling derived files while keeping the raw .nettrace."
 		};
 		var formatOption = new Option<string>("--format")
 		{
-			Description = "Output format to generate: nettrace (default) or speedscope.",
+			Description = "Output format to generate: nettrace (default), speedscope, or mibc.",
 			DefaultValueFactory = _ => "nettrace"
 		};
 		var configurationOption = new Option<string>("--configuration", "-c")
@@ -247,6 +250,10 @@ public static class ProfileCommand
 				WasOptionExplicitlySpecified(parseResult, formatOption),
 				isCi || useJson,
 				formatter as SpectreOutputFormatter);
+
+			if (outputFormat == TraceOutputFormat.Mibc)
+				_ = await DotnetPgoInstaller.EnsureAvailableAsync(formatter, useJson, verbose, cancellationToken);
+
 			var configuration = ResolveProfileConfiguration(
 				parseResult.GetValue(configurationOption),
 				WasOptionExplicitlySpecified(parseResult, configurationOption),
@@ -437,6 +444,135 @@ public static class ProfileCommand
 
 	internal static bool IsRetryableTraceStartupFailure(string? details)
 		=> DotnetTraceRunner.IsRetryableStartupFailure(details);
+
+	internal static CancellationToken ResolvePostProcessingCancellationToken(bool stopRequestedByUser, CancellationToken cancellationToken) =>
+		stopRequestedByUser && cancellationToken.IsCancellationRequested
+			? CancellationToken.None
+			: cancellationToken;
+
+	internal static async Task ConvertNetTraceToMibcAsync(
+		ResolvedMauiProject project,
+		string framework,
+		string configuration,
+		string netTracePath,
+		string mibcPath,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		CancellationToken cancellationToken)
+	{
+		if (!File.Exists(netTracePath))
+		{
+			throw new MauiToolException(
+				ErrorCodes.InternalError,
+				$"Raw trace '{netTracePath}' was not created, so MIBC conversion cannot continue.");
+		}
+
+		var dotnetPgoPath = DotnetPgoInstaller.ResolvePathOrThrow();
+		var referenceAssemblies = ResolveMibcReferenceAssemblies(project, framework, configuration);
+		if (referenceAssemblies.Count == 0)
+		{
+			throw MauiToolException.UserActionRequired(
+				ErrorCodes.DiagnosticsToolNotFound,
+				$"MIBC conversion could not find any reference assemblies for '{project.ProjectName}'.",
+				[
+					$"Build the target '{framework}' first so its output assemblies exist.",
+					"Then run 'maui profile startup --format mibc' again."
+				]);
+		}
+
+		if (!useJson)
+			formatter.WriteInfo("Converting the raw trace to MIBC...");
+
+		var args = BuildMibcArguments(netTracePath, mibcPath, referenceAssemblies).ToArray();
+		ProfileCommandProcessHelpers.WriteVerbose(
+			formatter,
+			useJson,
+			verbose,
+			$"dotnet-pgo command: {ProfileCommandProcessHelpers.FormatCommandLine(dotnetPgoPath, args)}");
+
+		var result = await ProcessRunner.RunAsync(
+			dotnetPgoPath,
+			args,
+			project.ProjectDirectory,
+			timeout: s_buildLaunchTimeout,
+			cancellationToken: cancellationToken);
+
+		if (!result.Success)
+			throw ProfileCommandProcessHelpers.CreateProcessFailureException("dotnet-pgo create-mibc", result);
+	}
+
+	internal static IEnumerable<string> BuildMibcArguments(
+		string netTracePath,
+		string mibcPath,
+		IReadOnlyList<string> referenceAssemblies)
+	{
+		var args = new List<string>
+		{
+			"create-mibc",
+			"--trace",
+			netTracePath,
+			"--output",
+			mibcPath
+		};
+
+		foreach (var referenceAssembly in referenceAssemblies)
+		{
+			args.Add("--reference");
+			args.Add(referenceAssembly);
+		}
+
+		return args;
+	}
+
+	static IReadOnlyList<string> ResolveMibcReferenceAssemblies(
+		ResolvedMauiProject project,
+		string framework,
+		string configuration)
+	{
+		var candidateRoots = GetMibcReferenceSearchRoots(project, framework, configuration).ToArray();
+		if (candidateRoots.Length == 0)
+			return [];
+
+		var linkedOrShrunkAssemblies = candidateRoots
+			.SelectMany(root => Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
+			.Where(static path => path.Contains($"{Path.DirectorySeparatorChar}linked{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+				|| path.Contains($"{Path.AltDirectorySeparatorChar}linked{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+				|| path.Contains($"{Path.DirectorySeparatorChar}shrunk{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+				|| path.Contains($"{Path.AltDirectorySeparatorChar}shrunk{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+
+		if (linkedOrShrunkAssemblies.Length > 0)
+			return linkedOrShrunkAssemblies;
+
+		return candidateRoots
+			.SelectMany(root => Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+	}
+
+	static IEnumerable<string> GetMibcReferenceSearchRoots(
+		ResolvedMauiProject project,
+		string framework,
+		string configuration)
+	{
+		var searchRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			Path.Combine(project.ProjectDirectory, "obj", configuration, framework),
+			Path.Combine(project.ProjectDirectory, "bin", configuration, framework)
+		};
+
+		for (var current = new DirectoryInfo(project.ProjectDirectory); current is not null; current = current.Parent)
+		{
+			searchRoots.Add(Path.Combine(current.FullName, "artifacts", "obj", project.ProjectName, configuration, framework));
+			searchRoots.Add(Path.Combine(current.FullName, "artifacts", "bin", project.ProjectName, configuration, framework));
+		}
+
+		return searchRoots.Where(Directory.Exists);
+	}
 
 	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)
 		=> ProfileCommandPortRouter.FindAvailableTcpPort(startingPort, maxPort);

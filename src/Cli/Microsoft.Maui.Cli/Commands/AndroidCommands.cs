@@ -196,6 +196,6 @@ public static partial class AndroidCommands
 			return true;
 
 		throw new UnauthorizedAccessException(
-			$"Administrator access is required for {androidProvider.SdkPath}. Run this command from an administrator terminal, or set ANDROID_HOME to a user-writable location.");
+			$"Administrator access is required for {androidProvider.SdkPath}. Run this command from an administrator terminal, or set ANDROID_HOME or ANDROID_SDK_ROOT to a user-writable location.");
 	}
 }

@@ -3,7 +3,9 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
+using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -60,6 +62,39 @@ public class AndroidCommandsTests
 		Assert.Contains(installCommand.Options, o => o.Name == "--jdk-path");
 		Assert.Contains(installCommand.Options, o => o.Name == "--jdk-version");
 		Assert.Contains(installCommand.Options, o => o.Name == "--packages");
+	}
+
+	[Fact]
+	public void InstallCommand_JdkVersionDefaultsToDefaultJdkVersion()
+	{
+		// Arrange
+		var androidCommand = AndroidCommands.Create();
+		var installCommand = androidCommand.Subcommands.First(c => c.Name == "install");
+		var jdkVersionOption = (Option<int>)installCommand.Options.First(o => o.Name == "--jdk-version");
+
+		// Act — no --jdk-version supplied, so the default value factory should resolve.
+		var parseResult = installCommand.Parse("install");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal(Microsoft.Maui.Cli.Providers.Android.JdkManager.DefaultJdkVersion, parseResult.GetValue(jdkVersionOption));
+	}
+
+	[Fact]
+	public void JdkInstallCommand_VersionDefaultsToDefaultJdkVersion()
+	{
+		// Arrange
+		var androidCommand = AndroidCommands.Create();
+		var jdkCommand = androidCommand.Subcommands.First(c => c.Name == "jdk");
+		var jdkInstallCommand = jdkCommand.Subcommands.First(c => c.Name == "install");
+		var versionOption = (Option<int>)jdkInstallCommand.Options.First(o => o.Name == "--version");
+
+		// Act — no --version supplied, so the default value factory should resolve.
+		var parseResult = jdkInstallCommand.Parse("install");
+
+		// Assert
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal(Microsoft.Maui.Cli.Providers.Android.JdkManager.DefaultJdkVersion, parseResult.GetValue(versionOption));
 	}
 
 	[Fact]
@@ -200,5 +235,94 @@ public class AndroidCommandsTests
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "jdk");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "sdk");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "emulator");
+	}
+
+	// --- Handler-level tests for the JSON/non-Spectre 'android install' license preflight. ---
+	// These exercise the behavior added in PR #106: fail fast when the SDK is already
+	// installed and licenses aren't accepted, but don't block on a fresh machine where
+	// InstallAsync will bootstrap tools non-interactively.
+
+	static async Task<(int ExitCode, FakeAndroidProvider Android)> InvokeAndroidInstallJsonAsync(
+		Action<FakeAndroidProvider> configure,
+		params string[] extraArgs)
+	{
+		var fakeAndroid = new FakeAndroidProvider();
+		configure(fakeAndroid);
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		var originalServices = Program.Services;
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var args = new List<string> { "android", "install", "--json" };
+			args.AddRange(extraArgs);
+			var parseResult = rootCommand.Parse(args.ToArray());
+			var exitCode = await parseResult.InvokeAsync();
+			return (exitCode, fakeAndroid);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task InstallCommand_Json_FailsFast_WhenSdkInstalledAndLicensesNotAccepted()
+	{
+		var (exitCode, fake) = await InvokeAndroidInstallJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.SdkPath = Path.Combine(Path.GetTempPath(), "sdk-test");
+			f.LicensesAccepted = false;
+		});
+
+		Assert.Equal(1, exitCode);
+		Assert.Empty(fake.InstallCalls);
+	}
+
+	[Fact]
+	public async Task InstallCommand_Json_ProceedsOnFreshMachine_WhenSdkNotInstalled()
+	{
+		// Regression: on a fresh machine the preflight should NOT block; InstallAsync
+		// is responsible for bootstrapping the SDK and (with --accept-licenses) accepting
+		// licenses non-interactively.
+		var (exitCode, fake) = await InvokeAndroidInstallJsonAsync(f =>
+		{
+			f.IsSdkInstalled = false;
+			f.LicensesAccepted = false;
+		});
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.InstallCalls);
+	}
+
+	[Fact]
+	public async Task InstallCommand_Json_Proceeds_WhenLicensesAlreadyAccepted()
+	{
+		var (exitCode, fake) = await InvokeAndroidInstallJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.SdkPath = Path.Combine(Path.GetTempPath(), "sdk-test");
+			f.LicensesAccepted = true;
+		});
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.InstallCalls);
+	}
+
+	[Fact]
+	public async Task InstallCommand_Json_Proceeds_WhenAcceptLicensesFlagPassed()
+	{
+		var (exitCode, fake) = await InvokeAndroidInstallJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.SdkPath = Path.Combine(Path.GetTempPath(), "sdk-test");
+			f.LicensesAccepted = false;
+		}, "--accept-licenses");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.InstallCalls);
 	}
 }

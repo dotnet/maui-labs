@@ -95,6 +95,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/ui/tree", () => Results.Content(MockAgentResponses.VisualTree, "application/json"));
         app.MapGet("/api/v1/ui/elements", () => Results.Content(MockAgentResponses.QueryElements, "application/json"));
         app.MapGet("/api/v1/ui/elements/{id}", (string id) => Results.Content(MockAgentResponses.SingleElement(id), "application/json"));
+        app.MapGet("/api/v1/ui/elements/{id}/properties/{name}", (string id, string name) =>
+            Results.Content($$"""{"id":"{{id}}","property":"{{name}}","value":"Hello, World!"}""", "application/json"));
+        app.MapPut("/api/v1/ui/elements/{id}/properties/{name}", () =>
+            Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
         app.MapGet("/api/v1/ui/hit-test", () => Results.Content(MockAgentResponses.HitTestResult, "application/json"));
         app.MapGet("/api/v1/ui/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
 
@@ -110,6 +114,12 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/device/battery", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/connectivity", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/geolocation", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
+        app.MapGet("/api/v1/device/version-tracking", () =>
+            Results.Content("""{"currentVersion":"1.0.0","previousVersion":null,"firstInstalledVersion":"1.0.0"}""", "application/json"));
+        app.MapGet("/api/v1/device/permissions", () =>
+            Results.Content("""{"camera":"granted","location":"granted"}""", "application/json"));
+        app.MapGet("/api/v1/device/permissions/{name}", (string name) =>
+            Results.Content($$"""{"name":"{{name}}","status":"granted"}""", "application/json"));
         app.MapGet("/api/v1/device/sensors", () => Results.Content("""["accelerometer","gyroscope"]""", "application/json"));
         app.MapPost("/api/v1/device/sensors/{sensor}/start", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
         app.MapPost("/api/v1/device/sensors/{sensor}/stop", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));

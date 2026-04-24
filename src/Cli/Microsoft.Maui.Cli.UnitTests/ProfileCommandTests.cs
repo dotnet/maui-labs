@@ -122,6 +122,18 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ResolveTraceOutputFormat_UsesExplicitMibcValue()
+	{
+		var result = ProfileCommand.ResolveTraceOutputFormat(
+			requestedFormat: "mibc",
+			explicitlySpecified: true,
+			nonInteractive: false,
+			spectre: null);
+
+		Assert.Equal(TraceOutputFormat.Mibc, result);
+	}
+
+	[Fact]
 	public void ProfileCommand_DefaultPlatformIsAll()
 	{
 		var command = ProfileCommand.Create();
@@ -244,14 +256,15 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveOutputPath_UsesExplicitPath()
 	{
-		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace.nettrace", TraceOutputFormat.NetTrace);
-		Assert.Equal(Path.GetFullPath("/tmp/my-trace.nettrace"), path);
+		var requestedPath = TestPath("my-trace.nettrace");
+		var path = ProfileCommand.ResolveOutputPath("MyApp", requestedPath, TraceOutputFormat.NetTrace);
+		Assert.Equal(Path.GetFullPath(requestedPath), path);
 	}
 
 	[Fact]
 	public void ResolveOutputPath_AddsNettraceExtensionWhenMissing()
 	{
-		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace", TraceOutputFormat.NetTrace);
+		var path = ProfileCommand.ResolveOutputPath("MyApp", TestPath("my-trace"), TraceOutputFormat.NetTrace);
 		Assert.EndsWith(".nettrace", path, StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -276,15 +289,139 @@ public class ProfileCommandTests
 	[Fact]
 	public void ResolveOutputPath_SpeedscopeStripsRequestedSpeedscopeSuffix()
 	{
-		var path = ProfileCommand.ResolveOutputPath("MyApp", "/tmp/my-trace.speedscope.json", TraceOutputFormat.Speedscope);
-		Assert.Equal(Path.GetFullPath("/tmp/my-trace.nettrace"), path);
+		var requestedPath = TestPath("my-trace.speedscope.json");
+		var path = ProfileCommand.ResolveOutputPath("MyApp", requestedPath, TraceOutputFormat.Speedscope);
+		Assert.Equal(Path.GetFullPath(TestPath("my-trace.nettrace")), path);
 	}
 
 	[Fact]
 	public void GetPrimaryOutputPath_SpeedscopeUsesSidecarJsonFile()
 	{
-		var path = ProfileCommand.GetPrimaryOutputPath("/tmp/my-trace.nettrace", TraceOutputFormat.Speedscope);
-		Assert.Equal("/tmp/my-trace.speedscope.json", path);
+		var sourcePath = TestPath("my-trace.nettrace");
+		var path = ProfileCommand.GetPrimaryOutputPath(sourcePath, TraceOutputFormat.Speedscope);
+		Assert.Equal(TestPath("my-trace.speedscope.json"), path);
+	}
+
+	[Fact]
+	public void ResolveOutputPath_MibcStripsRequestedMibcSuffix()
+	{
+		var requestedPath = TestPath("my-trace.mibc");
+		var path = ProfileCommand.ResolveOutputPath("MyApp", requestedPath, TraceOutputFormat.Mibc);
+		Assert.Equal(Path.GetFullPath(TestPath("my-trace.nettrace")), path);
+	}
+
+	[Fact]
+	public void GetPrimaryOutputPath_MibcUsesSiblingMibcFile()
+	{
+		var sourcePath = TestPath("my-trace.nettrace");
+		var path = ProfileCommand.GetPrimaryOutputPath(sourcePath, TraceOutputFormat.Mibc);
+		Assert.Equal(TestPath("my-trace.mibc"), path);
+	}
+
+	[Fact]
+	public void GetDotnetPgoInstallPath_UsesMauiHomeLocation()
+	{
+		var userProfile = TestPath("users", "tester");
+		var path = DotnetPgoInstaller.GetInstallPath(userProfile);
+		Assert.Equal(Path.Combine(userProfile, ".maui", "dotnet-pgo"), path);
+	}
+
+	[Fact]
+	public void DotnetPgoInstaller_BuildPublishArguments_UsesSingleFileSelfContainedPublish()
+	{
+		var outputDirectory = TestPath("dotnet-pgo-build");
+		var runtimeIdentifier = DotnetPgoInstaller.GetCurrentRuntimeIdentifier();
+		var args = DotnetPgoInstaller.BuildPublishArguments(runtimeIdentifier, outputDirectory);
+
+		Assert.Contains("publish", args);
+		Assert.Contains("src/coreclr/tools/dotnet-pgo/dotnet-pgo.csproj", args);
+		Assert.Contains(runtimeIdentifier, args);
+		Assert.Contains("--self-contained", args);
+		Assert.Contains("-p:UseAppHost=true", args);
+		Assert.Contains("-p:PublishSingleFile=true", args);
+		Assert.Contains("-p:PublishTrimmed=false", args);
+		Assert.Contains(outputDirectory, args);
+	}
+
+	[Fact]
+	public void ParseLatestStableDotnetRuntimeReleaseBranch_PicksHighestRelease()
+	{
+		var lsRemoteOutput = """
+			abc123	refs/heads/release/9.0
+			def456	refs/heads/release/10.0
+			ghi789	refs/heads/release/8.0
+			jkl012	refs/heads/main
+			""";
+
+		var branch = DotnetPgoInstaller.ParseLatestStableReleaseBranch(lsRemoteOutput);
+
+		Assert.Equal("release/10.0", branch);
+	}
+
+	[Fact]
+	public void ParseLatestStableDotnetRuntimeReleaseBranch_ReturnsNullWithoutStableRelease()
+	{
+		var lsRemoteOutput = """
+			abc123	refs/heads/main
+			def456	refs/heads/feature/test
+			""";
+
+		var branch = DotnetPgoInstaller.ParseLatestStableReleaseBranch(lsRemoteOutput);
+
+		Assert.Null(branch);
+	}
+
+	[Fact]
+	public void GetCurrentRuntimeIdentifier_ReturnsSupportedRidFormat()
+	{
+		var rid = DotnetPgoInstaller.GetCurrentRuntimeIdentifier();
+		Assert.Matches("^(osx|linux|win)-(x64|arm64)$", rid);
+	}
+
+	[Fact]
+	public void AppendStatusTailLine_KeepsOnlyTheMostRecentLines()
+	{
+		var lines = new Queue<string>();
+
+		for (var i = 1; i <= 7; i++)
+			DotnetPgoInstaller.AppendStatusTailLine(lines, $"line {i}");
+
+		Assert.Equal(["line 3", "line 4", "line 5", "line 6", "line 7"], lines.ToArray());
+	}
+
+	[Fact]
+	public void FormatStatusMessage_IncludesEscapedRecentOutput()
+	{
+		var message = DotnetPgoInstaller.FormatStatusMessage(
+			"Publishing dotnet-pgo...",
+			["Restored [package]", "Build succeeded"]);
+
+		Assert.Contains("Publishing dotnet-pgo...", message);
+		Assert.Contains("Restored", message);
+		Assert.Contains("[grey]", message);
+		Assert.Contains("Build succeeded", message);
+	}
+
+	[Fact]
+	public void ResolvePostProcessingCancellationToken_PreservesCancellationForNormalCompletion()
+	{
+		using var cts = new CancellationTokenSource();
+		cts.Cancel();
+
+		var token = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser: false, cts.Token);
+
+		Assert.True(token.IsCancellationRequested);
+	}
+
+	[Fact]
+	public void ResolvePostProcessingCancellationToken_IgnoresCtrlCCancellationAfterManualStop()
+	{
+		using var cts = new CancellationTokenSource();
+		cts.Cancel();
+
+		var token = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser: true, cts.Token);
+
+		Assert.False(token.IsCancellationRequested);
 	}
 
 	// ── Tool version parsing ──────────────────────────────────────────────────
@@ -387,8 +524,8 @@ public class ProfileCommandTests
 	static ResolvedMauiProject FakeProject(IReadOnlyList<string> targetFrameworks) =>
 		new()
 		{
-			ProjectPath = "/fake/MyApp.csproj",
-			ProjectDirectory = "/fake",
+			ProjectPath = TestPath("fake", "MyApp.csproj"),
+			ProjectDirectory = TestPath("fake"),
 			ProjectName = "MyApp",
 			TargetFrameworks = targetFrameworks
 		};
@@ -425,7 +562,7 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
-			outputPath: "/out.nettrace",
+			outputPath: TestPath("out.nettrace"),
 			outputFormat: TraceOutputFormat.NetTrace,
 			transport: transport,
 			traceProfile: null,
@@ -453,7 +590,7 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
-			outputPath: "/out.nettrace",
+			outputPath: TestPath("out.nettrace"),
 			outputFormat: TraceOutputFormat.NetTrace,
 			transport: transport,
 			traceProfile: null,
@@ -540,7 +677,7 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var args = ProfileCommand.BuildTraceArguments(
-			outputPath: "/out.nettrace",
+			outputPath: TestPath("out.nettrace"),
 			outputFormat: TraceOutputFormat.Speedscope,
 			transport: transport,
 			traceProfile: null,
@@ -552,6 +689,73 @@ public class ProfileCommandTests
 		var formatIdx = Array.IndexOf(args, "--format");
 		Assert.True(formatIdx >= 0);
 		Assert.Equal("Speedscope", args[formatIdx + 1]);
+	}
+
+	[Fact]
+	public void BuildTraceArguments_Mibc_UsesNetTraceCollectorFormat()
+	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var args = ProfileCommand.BuildTraceArguments(
+			outputPath: TestPath("out.nettrace"),
+			outputFormat: TraceOutputFormat.Mibc,
+			transport: transport,
+			traceProfile: null,
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null).ToArray();
+
+		var formatIdx = Array.IndexOf(args, "--format");
+		Assert.True(formatIdx >= 0);
+		Assert.Equal("NetTrace", args[formatIdx + 1]);
+
+		var profileIdx = Array.IndexOf(args, "--profile");
+		Assert.True(profileIdx >= 0);
+		Assert.Equal("dotnet-common,dotnet-sampled-thread-time", args[profileIdx + 1]);
+
+		var providersIdx = Array.IndexOf(args, "--providers");
+		Assert.True(providersIdx >= 0);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x1F000080018:5", args[providersIdx + 1]);
+	}
+
+	[Fact]
+	public void BuildTraceArguments_MibcWithUserProfile_KeepsProfileAndAddsRuntimeProvider()
+	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var args = ProfileCommand.BuildTraceArguments(
+			outputPath: TestPath("out.nettrace"),
+			outputFormat: TraceOutputFormat.Mibc,
+			transport: transport,
+			traceProfile: "gc-verbose",
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null).ToArray();
+
+		var profileIdx = Array.IndexOf(args, "--profile");
+		Assert.True(profileIdx >= 0);
+		Assert.Equal("gc-verbose", args[profileIdx + 1]);
+
+		var providersIdx = Array.IndexOf(args, "--providers");
+		Assert.True(providersIdx >= 0);
+		Assert.Contains("Microsoft-Windows-DotNETRuntime:0x1F000080018:5", args[providersIdx + 1]);
+	}
+
+	[Fact]
+	public void MauiStartupProfilingInjectionTargets_IncludeDynamicPgoEnvironmentVariables()
+	{
+		var targetsPath = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiStartupProfilingInjection.targets"));
+
+		var contents = File.ReadAllText(targetsPath);
+
+		Assert.Contains("MauiStartupProfilingEnableRuntimePgo", contents);
+		Assert.Contains("DOTNET_TieredPGO=1", contents);
+		Assert.Contains("DOTNET_ReadyToRun=0", contents);
+		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
 	}
 
 
@@ -611,7 +815,7 @@ public class ProfileCommandTests
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
 
 		var args = ProfileCommand.BuildLaunchArguments(
-			"/fake/MyApp.csproj",
+			TestPath("fake", "MyApp.csproj"),
 			"net10.0-ios",
 			"Release",
 			device,
@@ -630,7 +834,7 @@ public class ProfileCommandTests
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
 
 		var args = ProfileCommand.BuildCompileArguments(
-			"/fake/MyApp.csproj",
+			TestPath("fake", "MyApp.csproj"),
 			"net10.0-ios",
 			"Release",
 			transport,
@@ -650,8 +854,8 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var buildInjection = new ProfilingBuildInjection(
-			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
-			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
+			TargetsPath: TestPath("fake", "MauiStartupProfilingInjection.targets"),
+			AssemblyPath: TestPath("fake", "Microsoft.Maui.StartupProfiling.dll"),
 			ExitControlHost: "10.0.2.2",
 			ExitControlPort: 9001,
 			InjectBootstrap: true,
@@ -659,7 +863,7 @@ public class ProfileCommandTests
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
 		var args = ProfileCommand.BuildCompileArguments(
-			"/fake/MyApp.csproj",
+			TestPath("fake", "MyApp.csproj"),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -680,8 +884,8 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var buildInjection = new ProfilingBuildInjection(
-			TargetsPath: "/fake/MauiStartupProfilingInjection.targets",
-			AssemblyPath: "/fake/Microsoft.Maui.StartupProfiling.dll",
+			TargetsPath: TestPath("fake", "MauiStartupProfilingInjection.targets"),
+			AssemblyPath: TestPath("fake", "Microsoft.Maui.StartupProfiling.dll"),
 			ExitControlHost: "10.0.2.2",
 			ExitControlPort: 9001,
 			InjectBootstrap: true,
@@ -689,7 +893,7 @@ public class ProfileCommandTests
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
 		var args = ProfileCommand.BuildLaunchArguments(
-			"/fake/MyApp.csproj",
+			TestPath("fake", "MyApp.csproj"),
 			"net10.0-android",
 			"Release",
 			device,
@@ -735,15 +939,15 @@ public class ProfileCommandTests
 	[Fact]
 	public void CanResolveDiagnosticsTool_ReturnsTrueWhenEitherInstalledOrCached()
 	{
-		Assert.True(ProfileCommand.CanResolveDiagnosticsTool("/Users/test/.dotnet/tools/dotnet-trace", null));
-		Assert.True(ProfileCommand.CanResolveDiagnosticsTool(null, "/Users/test/.nuget/packages/dotnet-trace/tools/net8.0/any/dotnet-trace.dll"));
+		Assert.True(ProfileCommand.CanResolveDiagnosticsTool(TestPath(".dotnet", "tools", "dotnet-trace"), null));
+		Assert.True(ProfileCommand.CanResolveDiagnosticsTool(null, TestPath(".nuget", "packages", "dotnet-trace", "tools", "net8.0", "any", "dotnet-trace.dll")));
 	}
 
 	[Fact]
 	public void CanUseDiagnosticsTooling_MixedInstalledAndCachedTools_ReturnsTrue()
 	{
-		var hasDotnetTrace = ProfileCommand.CanResolveDiagnosticsTool("/Users/test/.dotnet/tools/dotnet-trace", null);
-		var hasDotnetDsrouter = ProfileCommand.CanResolveDiagnosticsTool(null, "/Users/test/.nuget/packages/dotnet-dsrouter/tools/net8.0/any/dotnet-dsrouter.dll");
+		var hasDotnetTrace = ProfileCommand.CanResolveDiagnosticsTool(TestPath(".dotnet", "tools", "dotnet-trace"), null);
+		var hasDotnetDsrouter = ProfileCommand.CanResolveDiagnosticsTool(null, TestPath(".nuget", "packages", "dotnet-dsrouter", "tools", "net8.0", "any", "dotnet-dsrouter.dll"));
 
 		Assert.True(ProfileCommand.CanUseDiagnosticsTooling(
 			hasDnx: false,
@@ -912,6 +1116,14 @@ public class ProfileCommandTests
 		var path = System.IO.Path.Combine(directory, fileName);
 		File.WriteAllBytes(path, []);
 		return new TempFile(path);
+	}
+
+	static string TestPath(params string[] segments)
+	{
+		var allSegments = new string[segments.Length + 1];
+		allSegments[0] = Path.GetTempPath();
+		Array.Copy(segments, 0, allSegments, 1, segments.Length);
+		return Path.Combine(allSegments);
 	}
 
 	sealed class TempFile(string path) : IDisposable
