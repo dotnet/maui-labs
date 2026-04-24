@@ -45,11 +45,12 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Get the visual tree from the running app.
     /// </summary>
-    public async Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, int? window = null)
+    public async Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, int? window = null, bool includeLayout = false)
     {
         var parts = new List<string>();
         if (maxDepth > 0) parts.Add($"depth={maxDepth}");
         if (window != null) parts.Add($"window={window}");
+        if (includeLayout) parts.Add("layout=1");
         var url = parts.Count > 0 ? $"{UiApi}/tree?{string.Join("&", parts)}" : $"{UiApi}/tree";
         return await GetAsync<List<ElementInfo>>(url) ?? new();
     }

@@ -140,6 +140,10 @@ public class ElementInfo
     [JsonPropertyName("children")]
     public List<ElementInfo>? Children { get; set; }
 
+    [JsonPropertyName("layout")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutInfo? Layout { get; set; }
+
     [JsonIgnore]
     public bool IsSelected { get; set; }
 
@@ -236,6 +240,76 @@ public class ElementNativeViewInfo
     [JsonPropertyName("properties")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string?>? Properties { get; set; }
+}
+
+/// <summary>
+/// Yoga layout snapshot for a Comet-driven MAUI Layout. Populated by the agent
+/// when <c>?layout=1</c> is requested on the tree endpoint and the underlying
+/// MAUI Layout's manager implements Comet's IYogaLayoutInspector.
+/// </summary>
+public class LayoutInfo
+{
+    [JsonPropertyName("frame")]
+    public LayoutFrameInfo Frame { get; set; } = new();
+
+    [JsonPropertyName("flexDirection")]
+    public string FlexDirection { get; set; } = "";
+
+    [JsonPropertyName("alignItems")]
+    public string AlignItems { get; set; } = "";
+
+    [JsonPropertyName("justifyContent")]
+    public string JustifyContent { get; set; } = "";
+
+    [JsonPropertyName("alignContent")]
+    public string AlignContent { get; set; } = "";
+
+    [JsonPropertyName("flexWrap")]
+    public string FlexWrap { get; set; } = "";
+
+    [JsonPropertyName("children")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<LayoutChildInfo>? Children { get; set; }
+}
+
+public class LayoutFrameInfo
+{
+    [JsonPropertyName("x")]
+    public float X { get; set; }
+
+    [JsonPropertyName("y")]
+    public float Y { get; set; }
+
+    [JsonPropertyName("width")]
+    public float Width { get; set; }
+
+    [JsonPropertyName("height")]
+    public float Height { get; set; }
+}
+
+public class LayoutChildInfo
+{
+    [JsonPropertyName("viewTypeName")]
+    public string ViewTypeName { get; set; } = "";
+
+    [JsonPropertyName("automationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AutomationId { get; set; }
+
+    [JsonPropertyName("frame")]
+    public LayoutFrameInfo Frame { get; set; } = new();
+
+    [JsonPropertyName("flexGrow")]
+    public float FlexGrow { get; set; }
+
+    [JsonPropertyName("flexShrink")]
+    public float FlexShrink { get; set; }
+
+    [JsonPropertyName("alignSelf")]
+    public string AlignSelf { get; set; } = "";
+
+    [JsonPropertyName("positionType")]
+    public string PositionType { get; set; } = "";
 }
 
 /// <summary>

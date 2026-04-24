@@ -28,8 +28,8 @@ public abstract class AppDriverBase : IAppDriver
     public Task<AgentStatus?> GetStatusAsync()
         => EnsureClient().GetStatusAsync();
 
-    public Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0)
-        => EnsureClient().GetTreeAsync(maxDepth);
+    public Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, bool includeLayout = false)
+        => EnsureClient().GetTreeAsync(maxDepth, null, includeLayout);
 
     public Task<List<ElementInfo>> QueryAsync(string? type = null, string? automationId = null, string? text = null)
         => EnsureClient().QueryAsync(type, automationId, text);

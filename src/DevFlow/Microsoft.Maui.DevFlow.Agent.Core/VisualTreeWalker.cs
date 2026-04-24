@@ -19,6 +19,10 @@ public class VisualTreeWalker
     private readonly Dictionary<Guid, string> _elementIdToExternalId = new();
     private readonly ConcurrentDictionary<string, (BoundsInfo Bounds, object Marker)> _syntheticBounds = new();
 
+    // Set per WalkTree call; controls whether CreateElementInfo populates a Yoga
+    // layout snapshot for Comet-driven layouts. Default false keeps payload size down.
+    private bool _includeLayout;
+
     /// <summary>
     /// Marker object representing the navigation back button in Shell or NavigationPage.
     /// </summary>
@@ -315,14 +319,15 @@ public class VisualTreeWalker
     /// Walks the visual tree starting from the application's windows.
     /// When windowIndex is null, walks all windows. Otherwise walks only the specified window.
     /// </summary>
-    public List<ElementInfo> WalkTree(Application app, int maxDepth = 0, int? windowIndex = null)
-        => WalkTree((IApplication)app, maxDepth, windowIndex);
+    public List<ElementInfo> WalkTree(Application app, int maxDepth = 0, int? windowIndex = null, bool includeLayout = false)
+        => WalkTree((IApplication)app, maxDepth, windowIndex, includeLayout);
 
-    public List<ElementInfo> WalkTree(IApplication app, int maxDepth = 0, int? windowIndex = null)
+    public List<ElementInfo> WalkTree(IApplication app, int maxDepth = 0, int? windowIndex = null, bool includeLayout = false)
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
         _syntheticBounds.Clear();
+        _includeLayout = includeLayout;
         var results = new List<ElementInfo>();
         if (app is not IVisualTreeElement appElement)
             return results;
@@ -1454,7 +1459,54 @@ public class VisualTreeWalker
             // }
         }
 
+        // Yoga layout snapshot (--layout / ?layout=1). Comet's AbstractLayout (and
+        // Microsoft.Maui.Controls.Layout) both expose a LayoutManager property; for
+        // Comet-driven layouts that manager implements IYogaLayoutInspector. Use
+        // reflection so this works against either inheritance path without a hard
+        // reference to Comet.
+        if (_includeLayout)
+        {
+            try
+            {
+                var layoutManager = TryGetLayoutManagerViaReflection(element);
+                var layoutInfo = LayoutInspectorAdapter.TryGetLayoutSnapshot(layoutManager);
+                if (layoutInfo != null)
+                    info.Layout = layoutInfo;
+            }
+            catch
+            {
+                // Layout inspection is best-effort; don't fail the tree walk.
+            }
+        }
+
         return info;
+    }
+
+    // Cache the LayoutManager property per element type (key is the runtime Type) —
+    // most apps have only a handful of distinct layout types so this stays bounded.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> s_layoutManagerProps = new();
+
+    private static object? TryGetLayoutManagerViaReflection(object element)
+    {
+        var t = element.GetType();
+        var prop = s_layoutManagerProps.GetOrAdd(t, static type =>
+        {
+            // Walk up the type chain so we pick up protected/internal LayoutManager
+            // exposed on a base type (e.g. Microsoft.Maui.Controls.Layout).
+            for (var cur = type; cur != null; cur = cur.BaseType)
+            {
+                var p = cur.GetProperty(
+                    "LayoutManager",
+                    System.Reflection.BindingFlags.Public
+                        | System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Instance
+                        | System.Reflection.BindingFlags.DeclaredOnly);
+                if (p != null && p.CanRead)
+                    return p;
+            }
+            return null;
+        });
+        return prop?.GetValue(element);
     }
 
     protected virtual void PopulateNativeInfo(ElementInfo info, VisualElement ve)

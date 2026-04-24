@@ -690,8 +690,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (request.QueryParams.TryGetValue("depth", out var depthStr))
             int.TryParse(depthStr, out maxDepth);
 
+        bool includeLayout = false;
+        if (request.QueryParams.TryGetValue("layout", out var layoutStr))
+            includeLayout = layoutStr == "1" || string.Equals(layoutStr, "true", StringComparison.OrdinalIgnoreCase);
+
         var windowIndex = ParseWindowIndex(request);
-        var tree = await DispatchAsync(() => _treeWalker.WalkTree(BoundApplication, maxDepth, windowIndex));
+        var tree = await DispatchAsync(() => _treeWalker.WalkTree(BoundApplication, maxDepth, windowIndex, includeLayout));
         return HttpResponse.Json(tree);
     }
 

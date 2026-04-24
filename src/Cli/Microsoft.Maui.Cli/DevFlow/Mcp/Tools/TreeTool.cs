@@ -15,10 +15,11 @@ public sealed class TreeTool
 		[Description("Window index for multi-window apps (default: 0)")] int? window = null,
 		[Description("Max tree depth to return (default: 50)")] int depth = 50,
 		[Description("Filter to a specific element type, e.g. 'Label', 'Button', 'Entry'")] string? filter = null,
-		[Description("Return only the subtree rooted at this element ID")] string? elementId = null)
+		[Description("Return only the subtree rooted at this element ID")] string? elementId = null,
+		[Description("Include Yoga layout info for Comet-driven layout nodes (frame + flex props).")] bool layout = false)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var tree = await agent.GetTreeAsync(depth, window);
+		var tree = await agent.GetTreeAsync(depth, window, layout);
 		if (tree == null || tree.Count == 0)
 			return "No visual tree available. Is the agent connected and the app running?";
 
