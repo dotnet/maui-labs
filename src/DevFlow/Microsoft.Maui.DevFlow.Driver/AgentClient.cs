@@ -169,14 +169,17 @@ public class AgentClient : IDisposable
 
     public async Task<bool> GestureAsync(string type, string? elementId = null, string? direction = null, double? distance = null, int? durationMs = null)
     {
-        return await PostActionAsync($"{UiApi}/actions/gesture", new JsonObject
+        var payload = new JsonObject
         {
-            ["elementId"] = elementId,
-            ["type"] = type,
-            ["direction"] = direction,
-            ["distance"] = distance,
-            ["durationMs"] = durationMs
-        });
+            ["type"] = type
+        };
+
+        if (elementId is not null) payload["elementId"] = elementId;
+        if (direction is not null) payload["direction"] = direction;
+        if (distance.HasValue) payload["distance"] = distance.Value;
+        if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+
+        return await PostActionAsync($"{UiApi}/actions/gesture", payload);
     }
 
     public async Task<JsonElement> BatchAsync(IEnumerable<JsonObject> actions, bool continueOnError = false)

@@ -66,8 +66,15 @@ public sealed class BatchTools
 			actions.Add(obj);
 		}
 
-		var agent = await session.GetAgentClientAsync(agentPort);
-		var result = await agent.BatchAsync(actions, continueOnError);
-		return CliJson.SerializeUntyped(result, indented: false);
+		try
+		{
+			var agent = await session.GetAgentClientAsync(agentPort);
+			var result = await agent.BatchAsync(actions, continueOnError);
+			return CliJson.SerializeUntyped(result, indented: false);
+		}
+		catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+		{
+			return $"Batch request failed: {ex.Message}. Is the app running?";
+		}
 	}
 }
