@@ -436,7 +436,7 @@ internal static class DevFlowInitCommand
                 builder.AppendLine("### Manual steps");
                 builder.AppendLine();
                 foreach (var step in project.ManualSteps)
-                    builder.AppendLine($"- {step}");
+                    AppendListItem(builder, step);
             }
             if (project.VerificationCommands.Count > 0)
             {
@@ -456,7 +456,7 @@ internal static class DevFlowInitCommand
             builder.AppendLine("## Notes");
             builder.AppendLine();
             foreach (var note in report.Notes)
-                builder.AppendLine($"- {note}");
+                AppendListItem(builder, note);
         }
 
         if (report.NextSteps.Count > 0)
@@ -465,13 +465,34 @@ internal static class DevFlowInitCommand
             builder.AppendLine("## Next steps");
             builder.AppendLine();
             foreach (var step in report.NextSteps)
-                builder.AppendLine($"- {step}");
+                AppendListItem(builder, step);
         }
 
         return builder.ToString();
     }
 
     static string EscapePipe(string value) => value.Replace("|", "\\|", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Appends a markdown list item, properly indenting continuation lines so that
+    /// multi-line content (including fenced code blocks) renders correctly inside the list.
+    /// </summary>
+    static void AppendListItem(StringBuilder builder, string step)
+    {
+        var lines = step.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        if (lines.Length == 0)
+        {
+            builder.AppendLine("-");
+            return;
+        }
+
+        builder.AppendLine($"- {lines[0]}");
+        for (var i = 1; i < lines.Length; i++)
+            builder.AppendLine(lines[i].Length == 0 ? string.Empty : $"    {lines[i]}");
+    }
 
     static void PrintHumanSummary(DevFlowInitReport report)
     {
