@@ -62,7 +62,7 @@ public static class MauiProgram
 }
 """);
 
-        var result = MauiProgramPatcher.EnsureRegistration(mauiProgramPath, includeBlazor: true, dryRun: false);
+        var result = MauiProgramPatcher.EnsureRegistration(mauiProgramPath, includeBlazor: true, isGtk: false, dryRun: false);
 
         Assert.Equal(DevFlowInitStatus.Success, result.Status);
 
@@ -73,7 +73,7 @@ public static class MauiProgram
         Assert.Contains("builder.AddMauiDevFlowAgent();", updated);
         Assert.Contains("builder.AddMauiBlazorDevFlowTools();", updated);
 
-        var secondPass = MauiProgramPatcher.EnsureRegistration(mauiProgramPath, includeBlazor: true, dryRun: false);
+        var secondPass = MauiProgramPatcher.EnsureRegistration(mauiProgramPath, includeBlazor: true, isGtk: false, dryRun: false);
         Assert.Equal(DevFlowInitStatus.AlreadyPresent, secondPass.Status);
     }
 
@@ -188,6 +188,261 @@ public static class MauiProgram
         Assert.True(File.Exists(reportPath));
     }
 
+    [Fact]
+    public void ManifestLoader_ContainsGtkPackages()
+    {
+        var manifest = DevFlowInitManifestLoader.Load();
+
+        Assert.Equal("Microsoft.Maui.DevFlow.Agent.Gtk", manifest.Packages.AgentGtk.PackageId);
+        Assert.Equal("Microsoft.Maui.DevFlow.Blazor.Gtk", manifest.Packages.BlazorGtk.PackageId);
+        Assert.NotEmpty(manifest.Packages.AgentGtk.Version);
+        Assert.NotEmpty(manifest.Packages.BlazorGtk.Version);
+    }
+
+    [Fact]
+    public void ProjectScanner_DescribeProject_DetectsGtkProject()
+    {
+        using var workspace = new TempWorkspace();
+        var projectPath = workspace.CreateGtkProject("GtkApp");
+
+        var candidate = DevFlowProjectScanner.DescribeProject(workspace.RootPath, projectPath);
+
+        Assert.NotNull(candidate);
+        Assert.Equal("gtk", candidate!.Flavor);
+        Assert.True(candidate.IsSupported);
+        Assert.False(candidate.IsAlreadyIntegrated);
+    }
+
+    [Fact]
+    public void ProjectScanner_DescribeProject_DetectsGtkBlazorProject()
+    {
+        using var workspace = new TempWorkspace();
+        var projectPath = workspace.CreateGtkProject("GtkBlazorApp", blazor: true);
+
+        var candidate = DevFlowProjectScanner.DescribeProject(workspace.RootPath, projectPath);
+
+        Assert.NotNull(candidate);
+        Assert.Equal("gtk-blazor", candidate!.Flavor);
+        Assert.True(candidate.IsSupported);
+        Assert.True(candidate.NeedsBlazor);
+    }
+
+    [Fact]
+    public void ProjectUpdater_Apply_GtkProject_UsesGtkPackages()
+    {
+        using var workspace = new TempWorkspace();
+        var projectPath = workspace.CreateGtkProject("GtkApp");
+        var candidate = DevFlowProjectScanner.DescribeProject(workspace.RootPath, projectPath);
+        Assert.NotNull(candidate);
+
+        var result = DevFlowProjectUpdater.Apply(candidate!, DevFlowInitManifestLoader.Load(), dryRun: false);
+
+        Assert.Equal(DevFlowInitStatus.Success, result.OverallStatus);
+        var projectText = File.ReadAllText(projectPath);
+        Assert.Contains("Microsoft.Maui.DevFlow.Agent.Gtk", projectText, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Microsoft.Maui.DevFlow.Agent\"", projectText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MauiProgramPatcher_GtkProject_UsesGtkNamespaces()
+    {
+        using var workspace = new TempWorkspace();
+        var mauiProgramPath = workspace.WriteFile("MauiProgram.cs", """
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GtkApp;
+
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+
+        return builder.Build();
+    }
+}
+""");
+
+        var result = MauiProgramPatcher.EnsureRegistration(mauiProgramPath, includeBlazor: false, isGtk: true, dryRun: false);
+
+        Assert.Equal(DevFlowInitStatus.Success, result.Status);
+
+        var updated = File.ReadAllText(mauiProgramPath);
+        Assert.Contains("using Microsoft.Maui.DevFlow.Agent.Gtk;", updated);
+        Assert.DoesNotContain("using Microsoft.Maui.DevFlow.Agent;", updated);
+        Assert.Contains("builder.AddMauiDevFlowAgent();", updated);
+    }
+
+    [Fact]
+    public void MauiProgramPatcher_GtkBlazorProject_UsesGtkBlazorNamespaces()
+    {
+        using var workspace = new TempWorkspace();
+        var mauiProgramPath = workspace.WriteFile("MauiProgram.cs", """
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GtkBlazorApp;
+
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+        builder.Services.AddMauiBlazorWebView();
+
+        return builder.Build();
+    }
+}
+""");
+
+        var result = MauiProgramPatcher.EnsureRegistration(mauiProgramPath, includeBlazor: true, isGtk: true, dryRun: false);
+
+        Assert.Equal(DevFlowInitStatus.Success, result.Status);
+
+        var updated = File.ReadAllText(mauiProgramPath);
+        Assert.Contains("using Microsoft.Maui.DevFlow.Agent.Gtk;", updated);
+        Assert.Contains("using Microsoft.Maui.DevFlow.Blazor.Gtk;", updated);
+        Assert.DoesNotContain("using Microsoft.Maui.DevFlow.Agent;", updated);
+        Assert.DoesNotContain("using Microsoft.Maui.DevFlow.Blazor;", updated);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AlreadyOnboarded_ReportsAlreadyPresent()
+    {
+        using var workspace = new TempWorkspace();
+        var projectPath = workspace.CreateMauiProject("AlreadyDone");
+        var mauiProgramDir = Path.GetDirectoryName(projectPath)!;
+
+        // Manually add DevFlow package and registration to simulate already-onboarded state
+        var csproj = File.ReadAllText(projectPath);
+        csproj = csproj.Replace("</Project>", """
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="0.1.0-preview.5" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(projectPath, csproj);
+
+        var mauiProgramText = File.ReadAllText(Path.Combine(mauiProgramDir, "MauiProgram.cs"));
+        mauiProgramText = mauiProgramText.Replace(
+            "return builder.Build();",
+            """
+#if DEBUG
+        builder.AddMauiDevFlowAgent();
+#endif
+
+        return builder.Build();
+""");
+        mauiProgramText = "using Microsoft.Maui.DevFlow.Agent;\n" + mauiProgramText;
+        File.WriteAllText(Path.Combine(mauiProgramDir, "MauiProgram.cs"), mauiProgramText);
+
+        var output = new TestOutputWriter();
+        await s_currentDirectoryGate.WaitAsync();
+        try
+        {
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(workspace.RootPath);
+            try
+            {
+                var success = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true },
+                    output);
+
+                Assert.True(success);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+        }
+        finally
+        {
+            s_currentDirectoryGate.Release();
+        }
+
+        var report = Assert.IsType<DevFlowInitReport>(output.LastResult);
+        Assert.Equal(DevFlowInitStatus.AlreadyPresent, report.OverallStatus);
+        Assert.Contains(report.Projects, p => p.OverallStatus == DevFlowInitStatus.AlreadyPresent);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_BlazorProject_AddsBlazorPackageAndRegistration()
+    {
+        using var workspace = new TempWorkspace();
+        var projectPath = workspace.CreateMauiProject("BlazorE2E", blazor: true);
+        var mauiProgramDir = Path.GetDirectoryName(projectPath)!;
+        var output = new TestOutputWriter();
+
+        await s_currentDirectoryGate.WaitAsync();
+        try
+        {
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(workspace.RootPath);
+            try
+            {
+                var success = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true },
+                    output);
+
+                Assert.True(success);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+        }
+        finally
+        {
+            s_currentDirectoryGate.Release();
+        }
+
+        var report = Assert.IsType<DevFlowInitReport>(output.LastResult);
+        Assert.Equal(DevFlowInitStatus.Success, report.OverallStatus);
+
+        var projectText = File.ReadAllText(projectPath);
+        Assert.Contains("Microsoft.Maui.DevFlow.Agent", projectText, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Maui.DevFlow.Blazor", projectText, StringComparison.Ordinal);
+
+        var mauiProgramText = File.ReadAllText(Path.Combine(mauiProgramDir, "MauiProgram.cs"));
+        Assert.Contains("builder.AddMauiDevFlowAgent();", mauiProgramText);
+        Assert.Contains("builder.AddMauiBlazorDevFlowTools();", mauiProgramText);
+        Assert.Contains("using Microsoft.Maui.DevFlow.Agent;", mauiProgramText);
+        Assert.Contains("using Microsoft.Maui.DevFlow.Blazor;", mauiProgramText);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyWorkspace_ReportsNoProjects()
+    {
+        using var workspace = new TempWorkspace();
+        var output = new TestOutputWriter();
+
+        await s_currentDirectoryGate.WaitAsync();
+        try
+        {
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(workspace.RootPath);
+            try
+            {
+                var success = await DevFlowInitCommand.ExecuteAsync(
+                    new DevFlowInitOptions { NoAi = true },
+                    output);
+
+                Assert.False(success);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+        }
+        finally
+        {
+            s_currentDirectoryGate.Release();
+        }
+
+        var report = Assert.IsType<DevFlowInitReport>(output.LastResult);
+        Assert.Equal(DevFlowInitStatus.ManualRequired, report.OverallStatus);
+        Assert.Contains(report.Notes, n => n.Contains("No MAUI projects", StringComparison.Ordinal));
+    }
+
     sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()
@@ -215,6 +470,46 @@ public static class MauiProgram
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.0-preview.1" />
   </ItemGroup>
 """ : "")}}
+</Project>
+""");
+
+            WriteFile(Path.Combine(name, "MauiProgram.cs"), $$"""
+using Microsoft.Extensions.DependencyInjection;
+
+namespace {{name}};
+
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+{{(blazor ? "        builder.Services.AddMauiBlazorWebView();\n" : "")}}
+        return builder.Build();
+    }
+}
+""");
+
+            return Path.Combine(projectDirectory, $"{name}.csproj");
+        }
+
+        public string CreateGtkProject(string name, bool blazor = false)
+        {
+            var projectDirectory = Path.Combine(RootPath, name);
+            Directory.CreateDirectory(projectDirectory);
+
+            WriteFile(Path.Combine(name, $"{name}.csproj"), $$"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <UseMaui>true</UseMaui>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Maui.Gtk" Version="0.1.0" />
+{{(blazor ? """
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.0-preview.1" />
+""" : "")}}
+  </ItemGroup>
 </Project>
 """);
 

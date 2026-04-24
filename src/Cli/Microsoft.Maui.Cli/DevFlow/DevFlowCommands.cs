@@ -1253,12 +1253,16 @@ public class DevFlowCommands
         var initAllOption = new Option<bool>("--all") { Description = "Onboard all eligible MAUI projects found in the workspace", DefaultValueFactory = _ => false };
         var initBlazorOption = new Option<bool>("--blazor") { Description = "Force Blazor onboarding even if it is not auto-detected", DefaultValueFactory = _ => false };
         var initNoBlazorOption = new Option<bool>("--no-blazor") { Description = "Skip Blazor package/tool registration even if it is auto-detected", DefaultValueFactory = _ => false };
+        var initGtkOption = new Option<bool>("--gtk") { Description = "Force GTK/Linux package selection instead of standard MAUI packages", DefaultValueFactory = _ => false };
+        var initNewOption = new Option<string?>("--new") { Description = "Scaffold a new MAUI project before onboarding (maui or maui-blazor)", DefaultValueFactory = _ => null };
+        var initNewNameOption = new Option<string?>("--name", "-n") { Description = "Name for the scaffolded project (used with --new)", DefaultValueFactory = _ => null };
         var initNoAiOption = new Option<bool>("--no-ai") { Description = "Skip AI host bootstrap", DefaultValueFactory = _ => false };
         var initAiHostOption = new Option<string?>("--ai-host") { Description = "Force a specific AI host from the bootstrap manifest", DefaultValueFactory = _ => null };
         var initAiLocalOnlyOption = new Option<bool>("--ai-local-only") { Description = "Use repo-local skill sync only; skip marketplace/plugin automation", DefaultValueFactory = _ => false };
         var initCmd = new Command("init", "Onboard one or more MAUI projects for DevFlow")
         {
-            initProjectOption, initAllOption, initBlazorOption, initNoBlazorOption, initNoAiOption, initAiHostOption, initAiLocalOnlyOption
+            initProjectOption, initAllOption, initBlazorOption, initNoBlazorOption, initGtkOption,
+            initNewOption, initNewNameOption, initNoAiOption, initAiHostOption, initAiLocalOnlyOption
         };
         initCmd.SetAction(async (ctx, ct) =>
         {
@@ -1269,6 +1273,9 @@ public class DevFlowCommands
                     All = ctx.GetValue(initAllOption),
                     ForceBlazor = ctx.GetValue(initBlazorOption),
                     DisableBlazor = ctx.GetValue(initNoBlazorOption),
+                    ForceGtk = ctx.GetValue(initGtkOption),
+                    NewTemplate = ctx.GetValue(initNewOption),
+                    NewName = ctx.GetValue(initNewNameOption),
                     NoAi = ctx.GetValue(initNoAiOption),
                     AiHost = ctx.GetValue(initAiHostOption),
                     AiLocalOnly = ctx.GetValue(initAiLocalOnlyOption),

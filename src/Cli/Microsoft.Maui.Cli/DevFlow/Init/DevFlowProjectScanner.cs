@@ -124,7 +124,7 @@ internal static class DevFlowProjectScanner
 
         var fullyIntegrated = hasAgentPackage && hasAgentRegistration && (!needsBlazor || (hasBlazorPackage && hasBlazorRegistration));
         var flavor = isGtk
-            ? "gtk"
+            ? (needsBlazor ? "gtk-blazor" : "gtk")
             : needsBlazor
                 ? "standard-maui-blazor"
                 : "standard-maui";
@@ -134,7 +134,7 @@ internal static class DevFlowProjectScanner
             ProjectPath = Path.GetFullPath(projectPath),
             RelativePath = Path.GetRelativePath(workspaceRoot, projectPath),
             Flavor = flavor,
-            IsSupported = !isGtk,
+            IsSupported = true,
             NeedsBlazor = needsBlazor,
             IsAlreadyIntegrated = fullyIntegrated,
             MauiProgramPath = mauiProgramPath

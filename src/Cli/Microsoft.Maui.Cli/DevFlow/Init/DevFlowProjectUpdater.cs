@@ -29,23 +29,26 @@ internal static class DevFlowProjectUpdater
             return result;
         }
 
+        var isGtk = candidate.Flavor.StartsWith("gtk", StringComparison.OrdinalIgnoreCase);
         var usesCpm = DetectCentralPackageManagement(candidate.ProjectPath, out var directoryPackagesPropsPath);
 
+        var agentPkg = isGtk ? manifest.Packages.AgentGtk : manifest.Packages.Agent;
         var agentPackage = EnsurePackageReference(
             candidate.ProjectPath,
             directoryPackagesPropsPath,
             usesCpm,
-            manifest.Packages.Agent,
+            agentPkg,
             dryRun);
         AddOperation(result, agentPackage);
 
         if (candidate.NeedsBlazor)
         {
+            var blazorPkg = isGtk ? manifest.Packages.BlazorGtk : manifest.Packages.Blazor;
             var blazorPackage = EnsurePackageReference(
                 candidate.ProjectPath,
                 directoryPackagesPropsPath,
                 usesCpm,
-                manifest.Packages.Blazor,
+                blazorPkg,
                 dryRun);
             AddOperation(result, blazorPackage);
         }
@@ -62,7 +65,7 @@ internal static class DevFlowProjectUpdater
         }
         else
         {
-            AddOperation(result, MauiProgramPatcher.EnsureRegistration(candidate.MauiProgramPath, candidate.NeedsBlazor, dryRun));
+            AddOperation(result, MauiProgramPatcher.EnsureRegistration(candidate.MauiProgramPath, candidate.NeedsBlazor, isGtk, dryRun));
         }
 
         result.OverallStatus = DetermineOverallStatus(result.Operations);

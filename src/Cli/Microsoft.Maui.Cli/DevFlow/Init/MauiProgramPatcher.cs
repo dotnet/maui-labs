@@ -6,7 +6,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Init;
 
 internal static class MauiProgramPatcher
 {
-    public static DevFlowInitOperationResult EnsureRegistration(string filePath, bool includeBlazor, bool dryRun)
+    public static DevFlowInitOperationResult EnsureRegistration(string filePath, bool includeBlazor, bool isGtk, bool dryRun)
     {
         if (!File.Exists(filePath))
         {
@@ -32,6 +32,9 @@ internal static class MauiProgramPatcher
             };
         }
 
+        var agentNamespace = isGtk ? "Microsoft.Maui.DevFlow.Agent.Gtk" : "Microsoft.Maui.DevFlow.Agent";
+        var blazorNamespace = isGtk ? "Microsoft.Maui.DevFlow.Blazor.Gtk" : "Microsoft.Maui.DevFlow.Blazor";
+
         var tree = CSharpSyntaxTree.ParseText(text);
         var root = tree.GetCompilationUnitRoot();
         var builderName = FindBuilderVariableName(root);
@@ -45,7 +48,7 @@ internal static class MauiProgramPatcher
                 Detail = "Could not confidently locate the MAUI app builder or return statement.",
                 ManualSteps =
                 [
-                    "Add `using Microsoft.Maui.DevFlow.Agent;`.",
+                    $"Add `using {agentNamespace};`.",
                     "Add `builder.AddMauiDevFlowAgent();` inside `#if DEBUG` before `return builder.Build();`."
                 ]
             };
@@ -61,11 +64,11 @@ internal static class MauiProgramPatcher
         var insertion = BuildRegistrationBlock(indent, missingCalls);
         var updated = text.Insert(returnStatement.SpanStart, insertion);
         var updatedRoot = CSharpSyntaxTree.ParseText(updated).GetCompilationUnitRoot();
-        updated = EnsureUsing(updated, updatedRoot, "Microsoft.Maui.DevFlow.Agent");
+        updated = EnsureUsing(updated, updatedRoot, agentNamespace);
         if (includeBlazor)
         {
             updatedRoot = CSharpSyntaxTree.ParseText(updated).GetCompilationUnitRoot();
-            updated = EnsureUsing(updated, updatedRoot, "Microsoft.Maui.DevFlow.Blazor");
+            updated = EnsureUsing(updated, updatedRoot, blazorNamespace);
         }
 
         if (!dryRun)

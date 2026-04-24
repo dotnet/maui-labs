@@ -13,6 +13,9 @@ internal sealed class DevFlowInitOptions
     public bool All { get; init; }
     public bool ForceBlazor { get; init; }
     public bool DisableBlazor { get; init; }
+    public bool ForceGtk { get; init; }
+    public string? NewTemplate { get; init; }
+    public string? NewName { get; init; }
     public bool NoAi { get; init; }
     public string? AiHost { get; init; }
     public bool AiLocalOnly { get; init; }
@@ -47,12 +50,31 @@ internal static class DevFlowInitCommand
 
         try
         {
+            if (!string.IsNullOrWhiteSpace(options.NewTemplate))
+            {
+                var scaffoldResult = await ScaffoldNewProjectAsync(workspaceRoot, options.NewTemplate, options.NewName, options.DryRun);
+                if (scaffoldResult.Status != DevFlowInitStatus.Success)
+                {
+                    report.OverallStatus = scaffoldResult.Status;
+                    report.Notes.Add(scaffoldResult.Detail);
+                    report.AiBootstrap = new DevFlowAiBootstrapResult
+                    {
+                        OverallStatus = options.NoAi ? DevFlowInitStatus.Disabled : DevFlowInitStatus.Skipped,
+                        BootstrapMode = options.NoAi ? "disabled" : "manual"
+                    };
+                    await WriteReportAsync(report);
+                    output.WriteResult(report, json, PrintHumanSummary);
+                    return false;
+                }
+                report.Notes.Add($"Scaffolded new project: {scaffoldResult.Detail}");
+            }
+
             var discovered = DevFlowProjectScanner.Discover(workspaceRoot);
             if (discovered.Count == 0)
             {
                 report.OverallStatus = DevFlowInitStatus.ManualRequired;
                 report.Notes.Add("No MAUI projects were found below the current directory.");
-                report.Notes.Add("Create a project with `dotnet new maui` or rerun init from an existing MAUI workspace.");
+                report.Notes.Add("Create a project with `dotnet new maui` or `dotnet new maui-blazor`, then rerun `maui devflow init`.");
                 report.AiBootstrap = new DevFlowAiBootstrapResult
                 {
                     OverallStatus = options.NoAi ? DevFlowInitStatus.Disabled : DevFlowInitStatus.Skipped,
@@ -168,6 +190,10 @@ internal static class DevFlowInitCommand
             mode.Add("--project");
         if (options.All)
             mode.Add("--all");
+        if (options.ForceGtk)
+            mode.Add("--gtk");
+        if (!string.IsNullOrWhiteSpace(options.NewTemplate))
+            mode.Add($"--new {options.NewTemplate}");
         if (options.DryRun)
             mode.Add("--dry-run");
         return string.Join(", ", mode);
@@ -237,7 +263,13 @@ internal static class DevFlowInitCommand
         if (options.DisableBlazor)
             needsBlazor = false;
 
-        var flavor = needsBlazor ? "standard-maui-blazor" : candidate.Flavor;
+        var isGtk = candidate.Flavor.StartsWith("gtk", StringComparison.OrdinalIgnoreCase) || options.ForceGtk;
+        var flavor = isGtk
+            ? (needsBlazor ? "gtk-blazor" : "gtk")
+            : needsBlazor
+                ? "standard-maui-blazor"
+                : candidate.Flavor;
+
         return new DevFlowProjectCandidate
         {
             ProjectPath = candidate.ProjectPath,
@@ -357,6 +389,78 @@ internal static class DevFlowInitCommand
             Console.WriteLine();
             foreach (var note in report.Notes)
                 Console.WriteLine($"- {note}");
+        }
+    }
+
+    static readonly HashSet<string> s_validTemplates = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "maui", "maui-blazor"
+    };
+
+    static async Task<(string Status, string Detail)> ScaffoldNewProjectAsync(
+        string workspaceRoot,
+        string template,
+        string? name,
+        bool dryRun)
+    {
+        if (!s_validTemplates.Contains(template))
+        {
+            return (DevFlowInitStatus.Failed,
+                $"Unknown template '{template}'. Supported templates: {string.Join(", ", s_validTemplates)}.");
+        }
+
+        var projectName = name ?? "MauiApp1";
+        var outputDir = Path.Combine(workspaceRoot, projectName);
+
+        if (Directory.Exists(outputDir) && Directory.EnumerateFileSystemEntries(outputDir).Any())
+        {
+            return (DevFlowInitStatus.Failed,
+                $"Directory '{projectName}' already exists and is not empty.");
+        }
+
+        if (dryRun)
+        {
+            return (DevFlowInitStatus.Success,
+                $"Would create '{template}' project named '{projectName}' at {outputDir}.");
+        }
+
+        var args = $"new {template} -n {projectName} -o \"{outputDir}\"";
+        try
+        {
+            var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = args,
+                WorkingDirectory = workspaceRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            });
+
+            if (process == null)
+            {
+                return (DevFlowInitStatus.Failed,
+                    $"Failed to start `dotnet {args}`.");
+            }
+
+            var stdout = await process.StandardOutput.ReadToEndAsync();
+            var stderr = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                var detail = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
+                return (DevFlowInitStatus.Failed,
+                    $"`dotnet {args}` exited with code {process.ExitCode}: {detail}");
+            }
+
+            return (DevFlowInitStatus.Success,
+                $"Created '{template}' project '{projectName}' at {outputDir}.");
+        }
+        catch (Exception ex)
+        {
+            return (DevFlowInitStatus.Failed,
+                $"Failed to scaffold project: {ex.Message}");
         }
     }
 }

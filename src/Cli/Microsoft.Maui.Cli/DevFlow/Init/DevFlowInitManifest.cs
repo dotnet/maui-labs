@@ -16,6 +16,8 @@ internal sealed class DevFlowInitPackageSet
 {
     public DevFlowNuGetPackageManifest Agent { get; set; } = new();
     public DevFlowNuGetPackageManifest Blazor { get; set; } = new();
+    public DevFlowNuGetPackageManifest AgentGtk { get; set; } = new();
+    public DevFlowNuGetPackageManifest BlazorGtk { get; set; } = new();
 }
 
 internal sealed class DevFlowNuGetPackageManifest

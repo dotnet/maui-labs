@@ -9,6 +9,14 @@
     "blazor": {
       "packageId": "Microsoft.Maui.DevFlow.Blazor",
       "version": "0.1.0-preview.5"
+    },
+    "agentGtk": {
+      "packageId": "Microsoft.Maui.DevFlow.Agent.Gtk",
+      "version": "0.1.0-preview.5"
+    },
+    "blazorGtk": {
+      "packageId": "Microsoft.Maui.DevFlow.Blazor.Gtk",
+      "version": "0.1.0-preview.5"
     }
   },
   "hosts": [
