@@ -83,6 +83,9 @@ public static class MauiProgram
         using var workspace = new TempWorkspace();
         workspace.WriteFile("Directory.Packages.props", """
 <Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
   <ItemGroup />
 </Project>
 """);

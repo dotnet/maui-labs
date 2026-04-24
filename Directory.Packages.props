@@ -30,10 +30,6 @@
     <PackageVersion Include="System.CommandLine" Version="$(SystemCommandLineStableVersion)" />
     <PackageVersion Include="System.Text.Json" Version="$(SystemTextJsonVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
-    <PackageVersion Include="Microsoft.Build" Version="$(MicrosoftBuildVersion)" />
-    <PackageVersion Include="Microsoft.Build.Framework" Version="$(MicrosoftBuildVersion)" />
-    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="$(MicrosoftBuildVersion)" />
-    <PackageVersion Include="Microsoft.Build.Locator" Version="$(MicrosoftBuildLocatorVersion)" />
     <PackageVersion Include="Websocket.Client" Version="$(WebsocketClientVersion)" />
     <PackageVersion Include="XenoAtom.Terminal.UI" Version="$(XenoAtomTerminalUIVersion)" />
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />

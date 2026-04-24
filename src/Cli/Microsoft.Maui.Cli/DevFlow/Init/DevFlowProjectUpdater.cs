@@ -1,9 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Microsoft.Maui.Cli.DevFlow.Init;
 
-[RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
-[RequiresDynamicCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
 internal static class DevFlowProjectUpdater
 {
     public static DevFlowInitProjectResult Apply(DevFlowProjectCandidate candidate, DevFlowInitManifest manifest, bool dryRun, string? workspaceRoot = null)
@@ -113,7 +109,7 @@ internal static class DevFlowProjectUpdater
     }
 
     /// <summary>
-    /// Detect whether the project uses Central Package Management by asking MSBuild for the
+    /// Detect whether the project uses Central Package Management by asking dotnet msbuild for the
     /// evaluated <c>ManagePackageVersionsCentrally</c> property (which is set by
     /// Directory.Packages.props). Falls back to walking up the directory tree for
     /// Directory.Packages.props if evaluation is unavailable.
@@ -122,13 +118,9 @@ internal static class DevFlowProjectUpdater
     {
         directoryPackagesPropsPath = FindDirectoryPackagesProps(projectPath, workspaceRoot);
 
-        var evaluated = EvaluatedProject.TryLoad(projectPath);
-        if (evaluated != null)
-        {
-            var rawValue = evaluated.GetPropertyValue("ManagePackageVersionsCentrally");
-            if (!string.IsNullOrEmpty(rawValue))
-                return string.Equals(rawValue, "true", StringComparison.OrdinalIgnoreCase);
-        }
+        var rawValue = DotnetCliProjectReader.GetProperty(projectPath, "ManagePackageVersionsCentrally");
+        if (!string.IsNullOrEmpty(rawValue))
+            return string.Equals(rawValue, "true", StringComparison.OrdinalIgnoreCase);
 
         // Fallback: if the file simply exists on disk, assume CPM is in effect
         // (the property defaults to true when Directory.Packages.props is present).
@@ -159,77 +151,9 @@ internal static class DevFlowProjectUpdater
         DevFlowNuGetPackageManifest package,
         bool dryRun)
     {
-        var filesChanged = new List<string>();
-        var manualSteps = new List<string>();
-
-        // Write the PackageReference to the csproj — without a version when CPM is in effect,
-        // with a pinned version otherwise.
-        MsBuildProjectMutator.AddOrUpdateResult projectResult;
-        try
-        {
-            projectResult = MsBuildProjectMutator.EnsurePackageReference(
-                projectPath,
-                package.PackageId,
-                useCentralPackageManagement ? null : package.Version,
-                dryRun);
-        }
-        catch (Exception ex)
-        {
-            return new DevFlowInitOperationResult
-            {
-                Name = $"Ensure {package.PackageId}",
-                Status = DevFlowInitStatus.Failed,
-                Detail = $"Could not update {Path.GetFileName(projectPath)}: {ex.Message}",
-                ManualSteps = [$"Add a <PackageReference Include=\"{package.PackageId}\" /> to {Path.GetFileName(projectPath)}."]
-            };
-        }
-
-        if (projectResult.Changed)
-            filesChanged.Add(projectPath);
-
-        var versionChanged = false;
-        if (useCentralPackageManagement)
-        {
-            if (directoryPackagesPropsPath == null)
-            {
-                manualSteps.Add($"Add the following to Directory.Packages.props:\n`<PackageVersion Include=\"{package.PackageId}\" Version=\"{package.Version}\" />`");
-            }
-            else
-            {
-                try
-                {
-                    var versionResult = MsBuildProjectMutator.EnsurePackageVersion(
-                        directoryPackagesPropsPath,
-                        package.PackageId,
-                        package.Version,
-                        dryRun);
-                    if (versionResult.Changed)
-                    {
-                        filesChanged.Add(directoryPackagesPropsPath);
-                        versionChanged = true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    manualSteps.Add(
-                        $"Add <PackageVersion Include=\"{package.PackageId}\" Version=\"{package.Version}\" /> to {Path.GetFileName(directoryPackagesPropsPath)} ({ex.Message}).");
-                }
-            }
-        }
-
-        if (manualSteps.Count > 0)
-        {
-            return new DevFlowInitOperationResult
-            {
-                Name = $"Ensure {package.PackageId}",
-                Status = DevFlowInitStatus.ManualRequired,
-                Detail = $"Central package management requires a version entry for {package.PackageId}.",
-                FilesChanged = filesChanged,
-                ManualSteps = manualSteps
-            };
-        }
-
-        if (!projectResult.Changed && !versionChanged)
+        // Check if the package is already referenced (using evaluated data from dotnet msbuild).
+        var existingIds = DotnetCliProjectReader.GetPackageReferenceIds(projectPath);
+        if (existingIds.Contains(package.PackageId))
         {
             return new DevFlowInitOperationResult
             {
@@ -239,12 +163,143 @@ internal static class DevFlowProjectUpdater
             };
         }
 
-        return new DevFlowInitOperationResult
+        if (dryRun)
         {
-            Name = $"Ensure {package.PackageId}",
-            Status = DevFlowInitStatus.Success,
-            Detail = $"Configured {package.PackageId}.",
-            FilesChanged = filesChanged
-        };
+            return new DevFlowInitOperationResult
+            {
+                Name = $"Ensure {package.PackageId}",
+                Status = DevFlowInitStatus.Success,
+                Detail = $"Would add {package.PackageId} (dry-run).",
+                FilesChanged = [projectPath]
+            };
+        }
+
+        // Use `dotnet add package --no-restore` to add the reference. This handles both
+        // regular projects (adds version to csproj) and CPM projects (adds PackageReference
+        // to csproj without version, adds PackageVersion to Directory.Packages.props).
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "dotnet",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("add");
+            psi.ArgumentList.Add(projectPath);
+            psi.ArgumentList.Add("package");
+            psi.ArgumentList.Add(package.PackageId);
+            psi.ArgumentList.Add("--version");
+            psi.ArgumentList.Add(package.Version);
+            psi.ArgumentList.Add("--no-restore");
+
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null)
+            {
+                return new DevFlowInitOperationResult
+                {
+                    Name = $"Ensure {package.PackageId}",
+                    Status = DevFlowInitStatus.Failed,
+                    Detail = $"Could not start `dotnet add package`.",
+                    ManualSteps = [$"Run: dotnet add {Path.GetFileName(projectPath)} package {package.PackageId} --version {package.Version}"]
+                };
+            }
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            process.WaitForExit(30_000);
+            var stderr = stderrTask.GetAwaiter().GetResult();
+
+            if (process.ExitCode != 0)
+            {
+                var detail = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : "Unknown error";
+                return new DevFlowInitOperationResult
+                {
+                    Name = $"Ensure {package.PackageId}",
+                    Status = DevFlowInitStatus.Failed,
+                    Detail = $"dotnet add package failed: {detail}",
+                    ManualSteps = [$"Run: dotnet add {Path.GetFileName(projectPath)} package {package.PackageId} --version {package.Version}"]
+                };
+            }
+
+            var filesChanged = new List<string> { projectPath };
+
+            // dotnet add package --no-restore does not handle CPM, so post-process:
+            // strip Version from the PackageReference in the csproj, and add a
+            // PackageVersion entry to Directory.Packages.props.
+            if (useCentralPackageManagement && directoryPackagesPropsPath != null)
+            {
+                PostProcessCpmPackageReference(projectPath, directoryPackagesPropsPath, package.PackageId, package.Version);
+                filesChanged.Add(directoryPackagesPropsPath);
+            }
+
+            return new DevFlowInitOperationResult
+            {
+                Name = $"Ensure {package.PackageId}",
+                Status = DevFlowInitStatus.Success,
+                Detail = $"Configured {package.PackageId}.",
+                FilesChanged = filesChanged
+            };
+        }
+        catch (Exception ex)
+        {
+            return new DevFlowInitOperationResult
+            {
+                Name = $"Ensure {package.PackageId}",
+                Status = DevFlowInitStatus.Failed,
+                Detail = $"Could not add {package.PackageId}: {ex.Message}",
+                ManualSteps = [$"Run: dotnet add {Path.GetFileName(projectPath)} package {package.PackageId} --version {package.Version}"]
+            };
+        }
+    }
+
+    /// <summary>
+    /// After <c>dotnet add package --no-restore</c>, which always writes the Version attribute
+    /// into the csproj PackageReference, fixup for CPM: strip the Version from the csproj and
+    /// add a PackageVersion entry to Directory.Packages.props.
+    /// </summary>
+    static void PostProcessCpmPackageReference(string projectPath, string directoryPackagesPropsPath, string packageId, string version)
+    {
+        // 1. Remove Version attribute from the PackageReference in the csproj
+        var projectDoc = System.Xml.Linq.XDocument.Load(projectPath, System.Xml.Linq.LoadOptions.PreserveWhitespace);
+        var ns = projectDoc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
+        var pkgRef = projectDoc.Root?
+            .Descendants(ns + "PackageReference")
+            .FirstOrDefault(e => string.Equals(e.Attribute("Include")?.Value, packageId, StringComparison.OrdinalIgnoreCase));
+        if (pkgRef != null)
+        {
+            pkgRef.Attribute("Version")?.Remove();
+            using var writer = new System.IO.StreamWriter(projectPath, false, new System.Text.UTF8Encoding(true));
+            projectDoc.Save(writer, System.Xml.Linq.SaveOptions.DisableFormatting);
+        }
+
+        // 2. Add PackageVersion to Directory.Packages.props
+        var propsDoc = System.Xml.Linq.XDocument.Load(directoryPackagesPropsPath, System.Xml.Linq.LoadOptions.PreserveWhitespace);
+        var propsNs = propsDoc.Root?.Name.Namespace ?? System.Xml.Linq.XNamespace.None;
+        var existingPv = propsDoc.Root?
+            .Descendants(propsNs + "PackageVersion")
+            .FirstOrDefault(e => string.Equals(e.Attribute("Include")?.Value, packageId, StringComparison.OrdinalIgnoreCase));
+        if (existingPv == null)
+        {
+            var itemGroup = propsDoc.Root?.Descendants(propsNs + "ItemGroup").LastOrDefault();
+            if (itemGroup == null)
+            {
+                itemGroup = new System.Xml.Linq.XElement(propsNs + "ItemGroup");
+                propsDoc.Root?.Add(itemGroup);
+            }
+            itemGroup.Add(new System.Xml.Linq.XElement(propsNs + "PackageVersion",
+                new System.Xml.Linq.XAttribute("Include", packageId),
+                new System.Xml.Linq.XAttribute("Version", version)));
+            using var writer = new System.IO.StreamWriter(directoryPackagesPropsPath, false, new System.Text.UTF8Encoding(true));
+            propsDoc.Save(writer, System.Xml.Linq.SaveOptions.DisableFormatting);
+        }
+        else
+        {
+            existingPv.SetAttributeValue("Version", version);
+            using var writer = new System.IO.StreamWriter(directoryPackagesPropsPath, false, new System.Text.UTF8Encoding(true));
+            propsDoc.Save(writer, System.Xml.Linq.SaveOptions.DisableFormatting);
+        }
     }
 }

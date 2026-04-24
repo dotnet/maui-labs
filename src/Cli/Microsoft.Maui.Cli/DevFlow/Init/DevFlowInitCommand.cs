@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -29,8 +28,6 @@ internal sealed class DevFlowInitOptions
 
 internal static class DevFlowInitCommand
 {
-    [RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
-    [RequiresDynamicCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
     public static async Task<bool> ExecuteAsync(DevFlowInitOptions options, IDevFlowOutputWriter output, CancellationToken cancellationToken = default)
     {
         var manifest = DevFlowInitManifestLoader.Load();
@@ -231,8 +228,6 @@ internal static class DevFlowInitCommand
         return string.Join(", ", mode);
     }
 
-    [RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
-    [RequiresDynamicCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
     static DevFlowProjectCandidate? ResolveExplicitProjectSelection(string workspaceRoot, string? projectOrDirectory)
     {
         if (string.IsNullOrWhiteSpace(projectOrDirectory))

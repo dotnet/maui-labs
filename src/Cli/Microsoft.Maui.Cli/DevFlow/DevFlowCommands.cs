@@ -27,8 +27,6 @@ public class DevFlowCommands
     /// Creates the "devflow" command with all subcommands for integration into the MAUI CLI.
     /// </summary>
     /// <param name="parentJsonOption">The parent CLI's --json option (recursive/global). Used instead of a local --json to avoid duplicates.</param>
-    [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
-    [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
     public static Command CreateDevFlowCommand(Option<bool> parentJsonOption)
     {
         var output = Program.Services.GetRequiredService<IDevFlowOutputWriter>();

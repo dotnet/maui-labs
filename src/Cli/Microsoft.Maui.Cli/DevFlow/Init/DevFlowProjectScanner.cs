@@ -1,11 +1,8 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
 using Microsoft.Maui.Cli.Commands;
 
 namespace Microsoft.Maui.Cli.DevFlow.Init;
 
-[RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
-[RequiresDynamicCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
 internal static class DevFlowProjectScanner
 {
     static readonly HashSet<string> s_excludedDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -68,14 +65,17 @@ internal static class DevFlowProjectScanner
 
     static DevFlowProjectCandidate? CreateCandidate(string workspaceRoot, string projectPath)
     {
-        // Try MSBuild evaluation first — it composes Directory.Build.props, Directory.Packages.props,
-        // any imported .props/.targets, and resolved properties. Fall back to raw XML if evaluation
-        // fails (missing SDK imports, workload not installed, etc.).
+        // Try dotnet msbuild evaluation first — it fully resolves properties and package
+        // references from Directory.Build.props, Directory.Packages.props, imported
+        // .props/.targets, and composed values. Fall back to raw XML if dotnet CLI
+        // is unavailable or evaluation fails.
         ProjectView? view = null;
-        var evaluated = EvaluatedProject.TryLoad(projectPath);
-        if (evaluated != null)
+        var props = DotnetCliProjectReader.GetProperties(projectPath, "UseMaui", "TargetFramework", "TargetFrameworks");
+        if (props.Count > 0)
         {
-            view = ProjectView.FromEvaluation(evaluated);
+            var cliTfms = DotnetCliProjectReader.GetTargetFrameworks(projectPath);
+            var pkgIds = DotnetCliProjectReader.GetPackageReferenceIds(projectPath);
+            view = ProjectView.FromDotnetCli(props, cliTfms, pkgIds);
         }
         else
         {
@@ -176,17 +176,16 @@ internal static class DevFlowProjectScanner
         public bool GetBooleanProperty(string name) => _getBooleanProperty(name);
         public bool HasPackageReference(string packageId) => _hasPackageReference(packageId);
 
-        public static ProjectView FromEvaluation(EvaluatedProject evaluated)
+        public static ProjectView FromDotnetCli(
+            Dictionary<string, string> properties,
+            IReadOnlyList<string> targetFrameworks,
+            HashSet<string> packageReferenceIds)
         {
-            var tfms = evaluated.TargetFrameworks;
-            var packageIds = new HashSet<string>(
-                evaluated.GetPackageReferences().Select(reference => reference.Id),
-                StringComparer.OrdinalIgnoreCase);
-
             return new ProjectView(
-                tfms,
-                name => evaluated.GetBooleanProperty(name),
-                packageId => packageIds.Contains(packageId));
+                targetFrameworks,
+                name => properties.TryGetValue(name, out var v) &&
+                        string.Equals(v, "true", StringComparison.OrdinalIgnoreCase),
+                packageId => packageReferenceIds.Contains(packageId));
         }
 
         public static ProjectView? FromXml(string projectPath)
