@@ -1,208 +1,192 @@
-using System;
+// Yoga-backed FlexLayout manager. Replaces the hand-rolled FlexLayoutManager with
+// a thin adapter over Comet.Layout.Yoga. The layout object owns a root YogaNode
+// that's rebuilt whenever the child list changes.
+
 using System.Collections.Generic;
 using System.Linq;
-using Comet;
+using Comet.Layout.Yoga;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Layouts;
 
+using YogaNode = Comet.Layout.Yoga.YogaNode;
+using YogaFlexDirection = Comet.Layout.Yoga.FlexDirection;
+
 namespace Comet.Layout
 {
-	public class FlexLayoutManager : ILayoutManager
+	/// <summary>
+	/// ILayoutManager that delegates to Comet's Yoga port. Builds a root YogaNode on
+	/// demand, inserts a leaf for each child via <see cref="YogaMeasureBridge"/>, then
+	/// uses Yoga's computed positions to arrange children. Cached between Measure and
+	/// ArrangeChildren; invalidated when the child count or identity changes.
+	/// </summary>
+	public class YogaFlexLayoutManager : ILayoutManager, IYogaLayoutInspector
 	{
-		private readonly FlexLayout flexLayout;
+		readonly FlexLayout _layout;
 
-		public FlexLayoutManager(FlexLayout layout)
+		YogaNode? _root;
+		List<IView>? _orderedChildren;
+		int _lastChildCount = -1;
+
+		public YogaFlexLayoutManager(FlexLayout layout)
 		{
-			this.flexLayout = layout;
+			_layout = layout;
 		}
 
 		public Size Measure(double widthConstraint, double heightConstraint)
 		{
-			var isRow = flexLayout.Direction == FlexDirection.Row || flexLayout.Direction == FlexDirection.RowReverse;
-			var mainAxisConstraint = isRow ? widthConstraint : heightConstraint;
-			var crossAxisConstraint = isRow ? heightConstraint : widthConstraint;
-
-			double mainAxisSize = 0;
-			double crossAxisSize = 0;
-			double currentLineMainSize = 0;
-			double currentLineCrossSize = 0;
-
-			var lines = GetFlexLines(mainAxisConstraint, crossAxisConstraint);
-
-			foreach (var line in lines)
-			{
-				var lineMainSize = line.Sum(item => item.MainSize);
-				var lineCrossSize = line.Any() ? line.Max(item => item.CrossSize) : 0;
-
-				mainAxisSize = Math.Max(mainAxisSize, lineMainSize);
-				crossAxisSize += lineCrossSize;
-			}
-
-			if (flexLayout.Wrap == FlexWrap.NoWrap)
-				crossAxisSize = currentLineCrossSize;
-
-			return isRow 
-				? new Size(double.IsInfinity(widthConstraint) ? mainAxisSize : widthConstraint,
-				          double.IsInfinity(heightConstraint) ? crossAxisSize : heightConstraint)
-				: new Size(double.IsInfinity(widthConstraint) ? crossAxisSize : widthConstraint,
-				          double.IsInfinity(heightConstraint) ? mainAxisSize : heightConstraint);
+			var root = BuildOrReuseRoot();
+			var w = SanitizeConstraint(widthConstraint);
+			var h = SanitizeConstraint(heightConstraint);
+			root.CalculateLayout(w, h, FlexLayoutDirection.LTR);
+			return new Size(root.LayoutWidth, root.LayoutHeight);
 		}
 
 		public Size ArrangeChildren(Rect bounds)
 		{
-			var isRow = flexLayout.Direction == FlexDirection.Row || flexLayout.Direction == FlexDirection.RowReverse;
-			var isReverse = flexLayout.Direction == FlexDirection.RowReverse || flexLayout.Direction == FlexDirection.ColumnReverse;
-			var mainAxisSize = isRow ? bounds.Width : bounds.Height;
-			var crossAxisSize = isRow ? bounds.Height : bounds.Width;
+			var root = BuildOrReuseRoot();
+			root.CalculateLayout((float)bounds.Width, (float)bounds.Height, FlexLayoutDirection.LTR);
 
-			var lines = GetFlexLines(mainAxisSize, crossAxisSize);
+			if (_orderedChildren is null)
+				return bounds.Size;
 
-			double crossAxisPosition = bounds.Y;
-
-			foreach (var line in lines)
+			for (int i = 0; i < _orderedChildren.Count; i++)
 			{
-				var lineCrossSize = line.Any() ? line.Max(item => item.CrossSize) : 0;
-				var totalMainSize = line.Sum(item => item.MainSize);
-				var totalGrow = line.Sum(item => item.Grow);
-				var freeSpace = mainAxisSize - totalMainSize;
+				var child = _orderedChildren[i];
+				var childNode = root.GetChild(i);
+				YogaMeasureBridge.ArrangeFromNode(child, childNode, bounds.Location);
+			}
 
-				// Distribute free space
-				if (freeSpace > 0 && totalGrow > 0)
+			return new Size(root.LayoutWidth, root.LayoutHeight);
+		}
+
+		YogaNode BuildOrReuseRoot()
+		{
+			// Snapshot current ordered children (respecting FlexOrder).
+			var ordered = ((IEnumerable<View>)_layout)
+				.Select((v, idx) => (view: (IView)v, order: v.GetFlexOrder(), idx))
+				.OrderBy(x => x.order)
+				.ThenBy(x => x.idx)
+				.Select(x => x.view)
+				.ToList();
+
+			bool needsRebuild = _root is null
+				|| _orderedChildren is null
+				|| _orderedChildren.Count != ordered.Count
+				|| _lastChildCount != ordered.Count;
+
+			if (!needsRebuild && _orderedChildren is not null)
+			{
+				for (int i = 0; i < ordered.Count; i++)
 				{
-					foreach (var item in line)
+					if (!ReferenceEquals(_orderedChildren[i], ordered[i]))
 					{
-						if (item.Grow > 0)
-							item.MainSize += freeSpace * (item.Grow / totalGrow);
+						needsRebuild = true;
+						break;
 					}
 				}
-
-				// Position items on main axis
-				double mainAxisPosition = CalculateMainAxisStart(freeSpace, line.Count);
-
-				var sortedLine = isReverse ? line.AsEnumerable().Reverse() : line;
-
-				foreach (var item in sortedLine)
-				{
-					var alignSelf = item.AlignSelf != FlexAlignSelf.Auto ? item.AlignSelf : (FlexAlignSelf)(int)flexLayout.AlignItems;
-					var crossPosition = CalculateCrossAxisPosition(alignSelf, item.CrossSize, lineCrossSize);
-
-					var x = isRow ? bounds.X + mainAxisPosition : bounds.X + crossAxisPosition + crossAxisPosition;
-					var y = isRow ? crossAxisPosition + crossAxisPosition : bounds.Y + mainAxisPosition;
-					var width = isRow ? item.MainSize : item.CrossSize;
-					var height = isRow ? item.CrossSize : item.MainSize;
-
-					var finalBounds = new Rect(x, y, width, height);
-
-					if (item.View is View cv)
-						cv.LayoutSubviews(finalBounds);
-					else
-						item.View.Arrange(finalBounds);
-
-					mainAxisPosition += item.MainSize + CalculateItemSpacing(freeSpace, line.Count);
-				}
-
-				crossAxisPosition += lineCrossSize;
 			}
 
-			return bounds.Size;
-		}
-
-		private List<List<FlexItem>> GetFlexLines(double mainAxisConstraint, double crossAxisConstraint)
-		{
-			var lines = new List<List<FlexItem>>();
-			var currentLine = new List<FlexItem>();
-			double currentLineMainSize = 0;
-
-			var isRow = flexLayout.Direction == FlexDirection.Row || flexLayout.Direction == FlexDirection.RowReverse;
-
-			foreach (var view in flexLayout)
+			if (needsRebuild)
 			{
-				if (view is not View cometView)
-					continue;
+				_root = new YogaNode();
+				_orderedChildren = ordered;
+				_lastChildCount = ordered.Count;
 
-				var measured = view.Measure(mainAxisConstraint, crossAxisConstraint);
-				var basis = cometView.GetFlexBasis();
-				var grow = cometView.GetFlexGrow();
-				var shrink = cometView.GetFlexShrink();
-				var alignSelf = cometView.GetFlexAlignSelf();
+				ApplyRootStyle(_root);
 
-				var mainSize = basis >= 0 ? basis : (isRow ? measured.Width : measured.Height);
-				var crossSize = isRow ? measured.Height : measured.Width;
-
-				var item = new FlexItem
+				for (int i = 0; i < ordered.Count; i++)
 				{
-					View = view,
-					MainSize = mainSize,
-					CrossSize = crossSize,
-					Grow = grow,
-					Shrink = shrink,
-					AlignSelf = alignSelf
-				};
-
-				if (flexLayout.Wrap != FlexWrap.NoWrap && currentLineMainSize + mainSize > mainAxisConstraint && currentLine.Count > 0)
-				{
-					lines.Add(currentLine);
-					currentLine = new List<FlexItem> { item };
-					currentLineMainSize = mainSize;
+					var child = ordered[i];
+					var childNode = YogaMeasureBridge.CreateLeafNode(child, _layout.Direction);
+					_root.InsertChild(childNode, i);
 				}
-				else
+			}
+			else
+			{
+				// Refresh root style + per-child style so that env/property changes take effect
+				// without losing the MeasureFunc-bearing child nodes.
+				ApplyRootStyle(_root!);
+				for (int i = 0; i < ordered.Count; i++)
 				{
-					currentLine.Add(item);
-					currentLineMainSize += mainSize;
+					YogaMeasureBridge.ApplyStyle(_root!.GetChild(i), ordered[i], _layout.Direction);
 				}
 			}
 
-			if (currentLine.Count > 0)
-				lines.Add(currentLine);
-
-			return lines;
+			return _root!;
 		}
 
-		private double CalculateMainAxisStart(double freeSpace, int itemCount)
+		void ApplyRootStyle(YogaNode root)
 		{
-			return flexLayout.JustifyContent switch
+			root.FlexDirection = _layout.Direction;
+			root.FlexWrap = _layout.Wrap;
+			root.JustifyContent = _layout.JustifyContent;
+			root.AlignItems = _layout.AlignItems;
+			root.AlignContent = _layout.AlignContent;
+
+			// Padding from the container view.
+			var padding = _layout.GetPadding();
+			root.SetPadding(YogaEdge.Left, YogaValue.Point((float)padding.Left));
+			root.SetPadding(YogaEdge.Top, YogaValue.Point((float)padding.Top));
+			root.SetPadding(YogaEdge.Right, YogaValue.Point((float)padding.Right));
+			root.SetPadding(YogaEdge.Bottom, YogaValue.Point((float)padding.Bottom));
+
+			// Gap: default applies to all; row/column can override.
+			if (_layout.Gap >= 0)
+				root.SetGap(YogaGutter.All, (float)_layout.Gap);
+			if (_layout.RowGap >= 0)
+				root.SetGap(YogaGutter.Row, (float)_layout.RowGap);
+			if (_layout.ColumnGap >= 0)
+				root.SetGap(YogaGutter.Column, (float)_layout.ColumnGap);
+		}
+
+		static float SanitizeConstraint(double v)
+		{
+			if (double.IsNaN(v) || double.IsInfinity(v))
+				return float.NaN; // Yoga treats NaN as "undefined"
+			return (float)v;
+		}
+
+		// ── Inspector (IYogaLayoutInspector) ──
+
+		public YogaLayoutSnapshot? GetLayoutSnapshot()
+		{
+			var root = _root;
+			var ordered = _orderedChildren;
+			if (root is null || ordered is null)
+				return null;
+
+			var children = new List<YogaLayoutChildSnapshot>(ordered.Count);
+			for (int i = 0; i < ordered.Count; i++)
 			{
-				FlexJustify.Center => freeSpace / 2,
-				FlexJustify.End => freeSpace,
-				FlexJustify.SpaceAround => freeSpace / (itemCount * 2),
-				FlexJustify.SpaceEvenly => freeSpace / (itemCount + 1),
-				_ => 0
-			};
-		}
+				var child = ordered[i];
+				var node = root.GetChild(i);
+				var typeName = child.GetType().Name;
+				string? automationId = (child as View)?.AutomationId;
+				if (string.IsNullOrEmpty(automationId)) automationId = null;
 
-		private double CalculateItemSpacing(double freeSpace, int itemCount)
-		{
-			if (itemCount <= 1)
-				return 0;
+				children.Add(new YogaLayoutChildSnapshot
+				{
+					ViewTypeName = typeName,
+					AutomationId = automationId,
+					Frame = (node.LayoutX, node.LayoutY, node.LayoutWidth, node.LayoutHeight),
+					FlexGrow = node.FlexGrow,
+					FlexShrink = node.FlexShrink,
+					AlignSelf = node.AlignSelf.ToString(),
+					PositionType = node.PositionType.ToString(),
+				});
+			}
 
-			return flexLayout.JustifyContent switch
+			return new YogaLayoutSnapshot
 			{
-				FlexJustify.SpaceBetween => freeSpace / (itemCount - 1),
-				FlexJustify.SpaceAround => freeSpace / itemCount,
-				FlexJustify.SpaceEvenly => freeSpace / (itemCount + 1),
-				_ => 0
+				Frame = (root.LayoutX, root.LayoutY, root.LayoutWidth, root.LayoutHeight),
+				FlexDirection = root.FlexDirection.ToString(),
+				AlignItems = root.AlignItems.ToString(),
+				JustifyContent = root.JustifyContent.ToString(),
+				AlignContent = root.AlignContent.ToString(),
+				FlexWrap = root.FlexWrap.ToString(),
+				Children = children,
 			};
-		}
-
-		private double CalculateCrossAxisPosition(FlexAlignSelf alignSelf, double itemSize, double lineSize)
-		{
-			return alignSelf switch
-			{
-				FlexAlignSelf.Center => (lineSize - itemSize) / 2,
-				FlexAlignSelf.End => lineSize - itemSize,
-				_ => 0
-			};
-		}
-
-		private class FlexItem
-		{
-			public IView View { get; set; }
-			public double MainSize { get; set; }
-			public double CrossSize { get; set; }
-			public double Grow { get; set; }
-			public double Shrink { get; set; }
-			public FlexAlignSelf AlignSelf { get; set; }
 		}
 	}
 }

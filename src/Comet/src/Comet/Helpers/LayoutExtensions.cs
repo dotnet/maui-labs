@@ -297,7 +297,7 @@ namespace Comet
 			return flags ?? AbsoluteLayoutFlags.None;
 		}
 
-		// FlexLayout extensions
+		// FlexLayout extensions (Yoga vocabulary — see Comet.Layout.Yoga.FlexAlign / FlexPositionType).
 		public static T FlexBasis<T>(this T view, double basis) where T : View
 		{
 			view.SetEnvironment("FlexLayout.Basis", basis, false);
@@ -316,7 +316,7 @@ namespace Comet
 			return view;
 		}
 
-		public static T FlexAlignSelf<T>(this T view, FlexAlignSelf alignSelf) where T : View
+		public static T FlexAlignSelf<T>(this T view, Comet.Layout.Yoga.FlexAlign alignSelf) where T : View
 		{
 			view.SetEnvironment("FlexLayout.AlignSelf", alignSelf, false);
 			return view;
@@ -325,6 +325,41 @@ namespace Comet
 		public static T FlexOrder<T>(this T view, int order) where T : View
 		{
 			view.SetEnvironment("FlexLayout.Order", order, false);
+			return view;
+		}
+
+		/// <summary>Per-child aspect ratio (width / height). Honoured by the Yoga-backed managers.</summary>
+		public static T AspectRatio<T>(this T view, double ratio) where T : View
+		{
+			view.SetEnvironment("FlexLayout.AspectRatio", ratio, false);
+			return view;
+		}
+
+		/// <summary>Yoga position type for this child (Static / Relative / Absolute).</summary>
+		public static T PositionType<T>(this T view, Comet.Layout.Yoga.FlexPositionType positionType) where T : View
+		{
+			view.SetEnvironment("FlexLayout.PositionType", positionType, false);
+			return view;
+		}
+
+		/// <summary>Uniform spacing between children on both axes. Consumed by Yoga-backed layouts.</summary>
+		public static T Gap<T>(this T view, double gap) where T : View
+		{
+			view.SetEnvironment("FlexLayout.Gap", gap, false);
+			return view;
+		}
+
+		/// <summary>Cross-axis spacing between wrapped rows. Overrides <see cref="Gap"/>.</summary>
+		public static T RowGap<T>(this T view, double gap) where T : View
+		{
+			view.SetEnvironment("FlexLayout.RowGap", gap, false);
+			return view;
+		}
+
+		/// <summary>Spacing between columns. Overrides <see cref="Gap"/>.</summary>
+		public static T ColumnGap<T>(this T view, double gap) where T : View
+		{
+			view.SetEnvironment("FlexLayout.ColumnGap", gap, false);
 			return view;
 		}
 
@@ -346,16 +381,46 @@ namespace Comet
 			return shrink ?? 1;
 		}
 
-		public static Comet.FlexAlignSelf GetFlexAlignSelf(this View view)
+		public static Comet.Layout.Yoga.FlexAlign GetFlexAlignSelf(this View view)
 		{
-			var align = view.GetEnvironment<Comet.FlexAlignSelf?>("FlexLayout.AlignSelf");
-			return align ?? Comet.FlexAlignSelf.Auto;
+			var align = view.GetEnvironment<Comet.Layout.Yoga.FlexAlign?>("FlexLayout.AlignSelf");
+			return align ?? Comet.Layout.Yoga.FlexAlign.Auto;
 		}
 
 		public static int GetFlexOrder(this View view)
 		{
 			var order = view.GetEnvironment<int?>("FlexLayout.Order");
 			return order ?? 0;
+		}
+
+		public static double GetAspectRatio(this View view)
+		{
+			var ratio = view.GetEnvironment<double?>("FlexLayout.AspectRatio");
+			return ratio ?? -1;
+		}
+
+		public static Comet.Layout.Yoga.FlexPositionType GetPositionType(this View view)
+		{
+			var pos = view.GetEnvironment<Comet.Layout.Yoga.FlexPositionType?>("FlexLayout.PositionType");
+			return pos ?? Comet.Layout.Yoga.FlexPositionType.Relative;
+		}
+
+		public static double GetGap(this View view)
+		{
+			var gap = view.GetEnvironment<double?>("FlexLayout.Gap");
+			return gap ?? -1;
+		}
+
+		public static double GetRowGap(this View view)
+		{
+			var gap = view.GetEnvironment<double?>("FlexLayout.RowGap");
+			return gap ?? -1;
+		}
+
+		public static double GetColumnGap(this View view)
+		{
+			var gap = view.GetEnvironment<double?>("FlexLayout.ColumnGap");
+			return gap ?? -1;
 		}
 
 		public static T Margin<T>(this T view, Thickness margin, bool cascades = false) where T : View

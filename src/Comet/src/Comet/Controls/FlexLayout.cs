@@ -1,88 +1,54 @@
 using Comet.Layout;
 using Microsoft.Maui.Layouts;
 
+// Expose Yoga's richer flex vocabulary directly. Comet no longer defines its own
+// FlexDirection/FlexWrap/FlexJustify/FlexAlignItems/FlexAlignContent/FlexAlignSelf enums;
+// use Comet.Layout.Yoga.* (FlexDirection, FlexWrap, FlexJustify, FlexAlign, FlexPositionType)
+// instead. Breaking change — acceptable in this preview.
+using YogaFlexDirection = Comet.Layout.Yoga.FlexDirection;
+using YogaFlexWrap = Comet.Layout.Yoga.FlexWrap;
+using YogaFlexJustify = Comet.Layout.Yoga.FlexJustify;
+using YogaFlexAlign = Comet.Layout.Yoga.FlexAlign;
+
 namespace Comet
 {
 	public class FlexLayout : AbstractLayout
 	{
-		private readonly FlexDirection direction;
-		private readonly FlexWrap wrap;
-		private readonly FlexJustify justifyContent;
-		private readonly FlexAlignItems alignItems;
-		private readonly FlexAlignContent alignContent;
-
 		public FlexLayout(
-			FlexDirection direction = FlexDirection.Row,
-			FlexWrap wrap = FlexWrap.NoWrap,
-			FlexJustify justifyContent = FlexJustify.Start,
-			FlexAlignItems alignItems = FlexAlignItems.Stretch,
-			FlexAlignContent alignContent = FlexAlignContent.Stretch)
+			YogaFlexDirection direction = YogaFlexDirection.Row,
+			YogaFlexWrap wrap = YogaFlexWrap.NoWrap,
+			YogaFlexJustify justifyContent = YogaFlexJustify.FlexStart,
+			YogaFlexAlign alignItems = YogaFlexAlign.Stretch,
+			YogaFlexAlign alignContent = YogaFlexAlign.Stretch,
+			double gap = 0,
+			double rowGap = -1,
+			double columnGap = -1)
 		{
-			this.direction = direction;
-			this.wrap = wrap;
-			this.justifyContent = justifyContent;
-			this.alignItems = alignItems;
-			this.alignContent = alignContent;
+			Direction = direction;
+			Wrap = wrap;
+			JustifyContent = justifyContent;
+			AlignItems = alignItems;
+			AlignContent = alignContent;
+			Gap = gap;
+			RowGap = rowGap;
+			ColumnGap = columnGap;
 		}
 
-		public FlexDirection Direction => direction;
-		public FlexWrap Wrap => wrap;
-		public FlexJustify JustifyContent => justifyContent;
-		public FlexAlignItems AlignItems => alignItems;
-		public FlexAlignContent AlignContent => alignContent;
+		public YogaFlexDirection Direction { get; }
+		public YogaFlexWrap Wrap { get; }
+		public YogaFlexJustify JustifyContent { get; }
+		public YogaFlexAlign AlignItems { get; }
+		public YogaFlexAlign AlignContent { get; }
 
-		protected override ILayoutManager CreateLayoutManager() => new Layout.FlexLayoutManager(this);
-	}
+		/// <summary>Default gap applied on both axes. Negative values are ignored.</summary>
+		public double Gap { get; }
 
-	public enum FlexDirection
-	{
-		Row,
-		Column,
-		RowReverse,
-		ColumnReverse
-	}
+		/// <summary>Row gap override (cross-axis spacing between wrapped rows). When &lt; 0, falls back to <see cref="Gap"/>.</summary>
+		public double RowGap { get; }
 
-	public enum FlexWrap
-	{
-		NoWrap,
-		Wrap,
-		Reverse
-	}
+		/// <summary>Column gap override (main-axis spacing in a row layout, or cross-axis in a column layout). When &lt; 0, falls back to <see cref="Gap"/>.</summary>
+		public double ColumnGap { get; }
 
-	public enum FlexJustify
-	{
-		Start,
-		Center,
-		End,
-		SpaceBetween,
-		SpaceAround,
-		SpaceEvenly
-	}
-
-	public enum FlexAlignItems
-	{
-		Start,
-		Center,
-		End,
-		Stretch
-	}
-
-	public enum FlexAlignContent
-	{
-		Start,
-		Center,
-		End,
-		Stretch,
-		SpaceBetween,
-		SpaceAround
-	}
-
-	public enum FlexAlignSelf
-	{
-		Auto,
-		Start,
-		Center,
-		End,
-		Stretch
+		protected override ILayoutManager CreateLayoutManager() => new YogaFlexLayoutManager(this);
 	}
 }

@@ -13,6 +13,37 @@ namespace Comet.Reflection
 		static readonly Dictionary<(Type, string), MemberInfo> _setMemberCache
 			= new Dictionary<(Type, string), MemberInfo>();
 
+		const BindingFlags InstanceBindingFlags =
+			BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance;
+
+		// Walks the type hierarchy using DeclaredOnly so that a `new` (shadowing)
+		// property with a different return type doesn't raise AmbiguousMatchException.
+		// The most-derived declaration wins, matching C# member-lookup semantics.
+		internal static PropertyInfo GetPropertySafe(this Type type, string name,
+			BindingFlags flags = InstanceBindingFlags)
+		{
+			var declaredFlags = flags | BindingFlags.DeclaredOnly;
+			for (var t = type; t is not null; t = t.BaseType)
+			{
+				try
+				{
+					var info = t.GetProperty(name, declaredFlags);
+					if (info is not null)
+						return info;
+				}
+				catch (AmbiguousMatchException)
+				{
+					// Two declarations at the same level with the same name —
+					// pick the one whose declaring type is this level.
+					var match = t.GetProperties(declaredFlags)
+						.FirstOrDefault(p => p.Name == name && p.DeclaringType == t);
+					if (match is not null)
+						return match;
+				}
+			}
+			return null;
+		}
+
 		public static bool SetPropertyValue<T>(this object obj, string name, T value)
 		{
 			var type = obj.GetType();
@@ -51,7 +82,7 @@ namespace Comet.Reflection
 
 		static Action<object, T> CreateSetter<T>(Type type, string name)
 		{
-			var property = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+			var property = type.GetPropertySafe(name);
 			if (property is not null && property.CanWrite)
 			{
 				if (property.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
@@ -143,7 +174,7 @@ namespace Comet.Reflection
 			if (!_setMemberCache.TryGetValue(cacheKey, out var member))
 			{
 				// First call for this (Type, name) — resolve and cache
-				var info = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+				var info = type.GetPropertySafe(name);
 				if (info is not null && info.CanWrite)
 				{
 					if (info.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
@@ -179,7 +210,7 @@ namespace Comet.Reflection
 		{
 			try
 			{
-				var property = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+				var property = type.GetPropertySafe(name);
 				if (property is not null && property.CanWrite)
 				{
 					if (property.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
@@ -297,10 +328,7 @@ namespace Comet.Reflection
 
 		public static PropertyInfo GetDeepProperty(this Type type, string name)
 		{
-			var prop = type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-			if (prop is null && type.BaseType is not null)
-				prop = GetDeepProperty(type.BaseType, name);
-			return prop;
+			return type.GetPropertySafe(name);
 		}
 		public static List<PropertyInfo> GetDeepProperties(this Type type, BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
 		{
@@ -332,7 +360,7 @@ namespace Comet.Reflection
 				if (obj is null)
 					return null;
 				var type = obj.GetType();
-				var info = type.GetProperty(part, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+				var info = type.GetPropertySafe(part);
 				if (info is not null)
 				{
 					obj = info.GetValue(obj, null);
