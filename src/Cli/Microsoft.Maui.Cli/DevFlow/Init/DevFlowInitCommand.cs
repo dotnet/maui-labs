@@ -305,16 +305,22 @@ internal static class DevFlowInitCommand
     static string DetermineOverallStatus(DevFlowInitReport report)
     {
         var statuses = report.Projects.Select(project => project.OverallStatus).ToList();
-        if (report.AiBootstrap.OverallStatus == DevFlowInitStatus.Failed || statuses.Contains(DevFlowInitStatus.Failed, StringComparer.Ordinal))
+
+        // Project-level failures take priority
+        if (statuses.Contains(DevFlowInitStatus.Failed, StringComparer.Ordinal))
             return DevFlowInitStatus.Failed;
-        if (report.AiBootstrap.OverallStatus == DevFlowInitStatus.ManualRequired ||
-            statuses.Contains(DevFlowInitStatus.ManualRequired, StringComparer.Ordinal) ||
+        if (statuses.Contains(DevFlowInitStatus.ManualRequired, StringComparer.Ordinal) ||
             statuses.Contains(DevFlowInitStatus.Unsupported, StringComparer.Ordinal))
             return DevFlowInitStatus.ManualRequired;
+
         if (statuses.Count == 0 && report.AiBootstrap.OverallStatus == DevFlowInitStatus.Disabled)
             return DevFlowInitStatus.Skipped;
+
+        // AI bootstrap issues are surfaced in next steps, not the overall status —
+        // project onboarding success should not be downgraded by AI sync failures.
         if (statuses.Count > 0 && statuses.All(status => status == DevFlowInitStatus.AlreadyPresent))
             return DevFlowInitStatus.AlreadyPresent;
+
         return DevFlowInitStatus.Success;
     }
 

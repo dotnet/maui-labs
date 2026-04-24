@@ -3822,16 +3822,21 @@ public class DevFlowCommands
     {
         try
         {
-            var port = Broker.BrokerClient.ResolveAgentPortForProjectAsync().GetAwaiter().GetResult();
-            if (port.HasValue) return port.Value;
-
-            // No single match — check config file fallback
+            // Only check existing broker/config state — don't auto-start the broker.
+            // Commands that need the broker call EnsureBrokerRunningAsync themselves.
             var configPort = Broker.BrokerClient.ReadConfigPort();
             if (configPort.HasValue) return configPort.Value;
 
+            var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic() ?? Broker.BrokerServer.DefaultPort;
+
+            if (!Broker.BrokerClient.IsBrokerAliveAsync(brokerPort).GetAwaiter().GetResult())
+                return configPort ?? 9223;
+
+            var port = Broker.BrokerClient.ResolveAgentPortAsync(brokerPort).GetAwaiter().GetResult();
+            if (port.HasValue) return port.Value;
+
             // Multiple agents, can't disambiguate — show them so the caller
             // (human or AI agent) can re-run with --agent-port
-            var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic() ?? Broker.BrokerServer.DefaultPort;
             var agents = Broker.BrokerClient.ListAgentsAsync(brokerPort).GetAwaiter().GetResult();
             if (agents != null && agents.Length > 1)
             {

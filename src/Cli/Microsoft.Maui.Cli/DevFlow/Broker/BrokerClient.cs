@@ -106,7 +106,7 @@ public static class BrokerClient
         }
     }
 
-    private static async Task<bool> IsBrokerAliveAsync(int port)
+    internal static async Task<bool> IsBrokerAliveAsync(int port)
     {
         try
         {
