@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "manifestVersion": "2026-04-23.1",
+  "packages": {
+    "agent": {
+      "packageId": "Microsoft.Maui.DevFlow.Agent",
+      "version": "0.1.0-preview.5"
+    },
+    "blazor": {
+      "packageId": "Microsoft.Maui.DevFlow.Blazor",
+      "version": "0.1.0-preview.5"
+    }
+  },
+  "hosts": [
+    {
+      "id": "claude",
+      "displayName": "Claude Code",
+      "detect": {
+        "executables": [ "claude" ],
+        "repoMarkers": [ ".claude", "CLAUDE.md" ],
+        "configMarkers": []
+      },
+      "marketplaceInstalls": [],
+      "repoLocalFallbacks": [
+        {
+          "sourceRepo": "dotnet/maui-labs",
+          "sourceRepoUrl": "https://github.com/dotnet/maui-labs",
+          "sourcePath": "plugins/dotnet-maui/skills/devflow-onboard",
+          "desiredRef": "main",
+          "targetPathTemplate": ".claude/skills/devflow-onboard",
+          "syncMetadataFileName": ".skill-version"
+        }
+      ],
+      "verify": {
+        "manualSteps": [
+          "Open the synced skill under .claude/skills/devflow-onboard if you want to inspect what was installed."
+        ]
+      }
+    },
+    {
+      "id": "copilot",
+      "displayName": "GitHub Copilot",
+      "detect": {
+        "executables": [ "copilot" ],
+        "repoMarkers": [ ".github", ".github/skills" ],
+        "configMarkers": []
+      },
+      "marketplaceInstalls": [
+        {
+          "marketplaceId": "dotnet/maui-labs",
+          "pluginId": "dotnet-maui",
+          "desiredVersion": "0.1.0",
+          "installStrategy": "manual",
+          "updatePolicy": "manual",
+          "manualSteps": [
+            "/plugin marketplace add dotnet/maui-labs",
+            "/plugin install dotnet-maui@dotnet-maui-labs"
+          ]
+        }
+      ],
+      "repoLocalFallbacks": [
+        {
+          "sourceRepo": "dotnet/maui-labs",
+          "sourceRepoUrl": "https://github.com/dotnet/maui-labs",
+          "sourcePath": "plugins/dotnet-maui/skills/devflow-onboard",
+          "desiredRef": "main",
+          "targetPathTemplate": ".github/skills/devflow-onboard",
+          "syncMetadataFileName": ".skill-version"
+        }
+      ],
+      "verify": {
+        "manualSteps": [
+          "If the host does not pick up repo-local skills automatically, use the marketplace/plugin commands above."
+        ]
+      }
+    }
+  ]
+}

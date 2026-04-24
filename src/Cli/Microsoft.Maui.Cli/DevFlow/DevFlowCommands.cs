@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Cli.DevFlow.Init;
 using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.DevFlow;
@@ -26,6 +27,8 @@ public class DevFlowCommands
     /// Creates the "devflow" command with all subcommands for integration into the MAUI CLI.
     /// </summary>
     /// <param name="parentJsonOption">The parent CLI's --json option (recursive/global). Used instead of a local --json to avoid duplicates.</param>
+    [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
+    [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
     public static Command CreateDevFlowCommand(Option<bool> parentJsonOption)
     {
         var output = Program.Services.GetRequiredService<IDevFlowOutputWriter>();
@@ -1245,6 +1248,42 @@ public class DevFlowCommands
         });
         devflowCommand.Add(listCmd);
 
+        // ===== init command (workspace onboarding) =====
+        var initProjectOption = new Option<string?>("--project") { Description = "Path to a specific app .csproj or directory containing it", DefaultValueFactory = _ => null };
+        var initAllOption = new Option<bool>("--all") { Description = "Onboard all eligible MAUI projects found in the workspace", DefaultValueFactory = _ => false };
+        var initBlazorOption = new Option<bool>("--blazor") { Description = "Force Blazor onboarding even if it is not auto-detected", DefaultValueFactory = _ => false };
+        var initNoBlazorOption = new Option<bool>("--no-blazor") { Description = "Skip Blazor package/tool registration even if it is auto-detected", DefaultValueFactory = _ => false };
+        var initNoAiOption = new Option<bool>("--no-ai") { Description = "Skip AI host bootstrap", DefaultValueFactory = _ => false };
+        var initAiHostOption = new Option<string?>("--ai-host") { Description = "Force a specific AI host from the bootstrap manifest", DefaultValueFactory = _ => null };
+        var initAiLocalOnlyOption = new Option<bool>("--ai-local-only") { Description = "Use repo-local skill sync only; skip marketplace/plugin automation", DefaultValueFactory = _ => false };
+        var initCmd = new Command("init", "Onboard one or more MAUI projects for DevFlow")
+        {
+            initProjectOption, initAllOption, initBlazorOption, initNoBlazorOption, initNoAiOption, initAiHostOption, initAiLocalOnlyOption
+        };
+        initCmd.SetAction(async (ctx, ct) =>
+        {
+            var success = await DevFlowInitCommand.ExecuteAsync(
+                new DevFlowInitOptions
+                {
+                    Project = ctx.GetValue(initProjectOption),
+                    All = ctx.GetValue(initAllOption),
+                    ForceBlazor = ctx.GetValue(initBlazorOption),
+                    DisableBlazor = ctx.GetValue(initNoBlazorOption),
+                    NoAi = ctx.GetValue(initNoAiOption),
+                    AiHost = ctx.GetValue(initAiHostOption),
+                    AiLocalOnly = ctx.GetValue(initAiLocalOnlyOption),
+                    Json = ctx.GetValue(jsonOption),
+                    NoJson = ctx.GetValue(noJsonOption),
+                    DryRun = ctx.GetValue(GlobalOptions.DryRunOption),
+                    Ci = ctx.GetValue(GlobalOptions.CiOption)
+                },
+                output);
+
+            if (!success)
+                _errorOccurred = true;
+        });
+        devflowCommand.Add(initCmd);
+
         // ===== diagnose command (end-to-end diagnostics) =====
         var diagnoseCmd = new Command("diagnose", "Check DevFlow health: broker, agents, and project integration");
         diagnoseCmd.SetAction(async (ctx, ct) =>
@@ -2049,6 +2088,7 @@ public class DevFlowCommands
 
     private static List<CommandDescription> GetCommandDescriptions() => new()
     {
+        new("init", "Onboard one or more MAUI projects for DevFlow", true),
         new("ui status", "Check agent connection and app info", false),
         new("ui tree", "Dump visual element tree", false),
         new("ui query", "Find elements by type, automationId, text, or CSS selector", false),

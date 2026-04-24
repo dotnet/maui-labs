@@ -1,0 +1,42 @@
+scenarios:
+  - name: "Onboard existing MAUI app"
+    prompt: |
+      I just installed the dotnet-maui plugin. I have an existing .NET MAUI app in this repo and I want DevFlow set up for it.
+    assertions:
+      - type: "output_contains"
+        value: "maui devflow init"
+      - type: "output_contains"
+        value: "MAUI-DEVFLOW-INIT-REPORT.md"
+    rubric:
+      - "Agent uses maui devflow init as the primary onboarding action"
+      - "Agent treats MAUI-DEVFLOW-INIT-REPORT.md as the follow-up source of truth"
+      - "Agent does not jump straight to connection troubleshooting"
+    timeout: 120
+
+  - name: "Multiple projects in a workspace"
+    prompt: |
+      My workspace has several MAUI apps and I only want to onboard some of them for DevFlow. What should I do?
+    assertions:
+      - type: "output_contains"
+        value: "maui devflow init"
+      - type: "output_matches"
+        pattern: "--project|--all|select"
+    rubric:
+      - "Agent explains that init can target one or more projects in a workspace"
+      - "Agent mentions either interactive selection or the --project/--all controls"
+      - "Agent keeps the workflow centered on the init command"
+    timeout: 120
+
+  - name: "Resume from init report"
+    prompt: |
+      I already ran maui devflow init and it produced MAUI-DEVFLOW-INIT-REPORT.md. What should the agent look at next?
+    assertions:
+      - type: "output_contains"
+        value: "MAUI-DEVFLOW-INIT-REPORT.md"
+      - type: "output_matches"
+        pattern: "report|manual|diagnose|wait"
+    rubric:
+      - "Agent reads the init report before guessing about setup state"
+      - "Agent uses the report to decide whether to continue with verification or manual follow-up"
+      - "Agent reserves devflow-connect for post-setup connectivity problems"
+    timeout: 120

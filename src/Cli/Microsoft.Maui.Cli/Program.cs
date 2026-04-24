@@ -45,7 +45,9 @@ public class Program
 
 	public static async Task<int> Main(string[] args)
 	{
+#pragma warning disable IL2026, IL3050 // DevFlow init is a dev-time command; MSBuild is not used at app runtime.
 		var rootCommand = BuildRootCommand();
+#pragma warning restore IL2026, IL3050
 
 		// Handle help rendering with Spectre.Console before the parser runs
 		if (TryShowSpectreHelp(args, rootCommand))
@@ -87,6 +89,8 @@ public class Program
 		return 1;
 	}
 
+	[System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
+	[System.Diagnostics.CodeAnalysis.RequiresDynamicCode("DevFlow init uses MSBuild evaluation which relies on reflection-heavy code paths.")]
 	internal static RootCommand BuildRootCommand()
 	{
 		var rootCommand = new RootCommand("MAUI Development Tools - Device management and environment setup");

@@ -92,8 +92,8 @@ using Microsoft.Maui.Platform.MacOS;
 using Microsoft.Maui.Platform.MacOS.Controls;
 
 #if DEBUG
-using MauiDevFlow.Agent;
-using MauiDevFlow.Blazor;
+using Microsoft.Maui.DevFlow.Agent;
+using Microsoft.Maui.DevFlow.Blazor;
 #endif
 
 public static class MauiProgram

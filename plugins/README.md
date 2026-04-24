@@ -6,7 +6,8 @@ Distributable agent skills for .NET MAUI development. Installable via the Copilo
 
 | Plugin | Skill | Description |
 |--------|-------|-------------|
-| [dotnet-maui](dotnet-maui/) | [devflow-connect](dotnet-maui/skills/devflow-connect/) | DevFlow automation — agent connectivity, visual tree inspection, screenshots, app interactions. Requires the `maui` CLI. |
+| [dotnet-maui](dotnet-maui/) | [devflow-onboard](dotnet-maui/skills/devflow-onboard/) | DevFlow onboarding — workspace setup, MAUI project selection, AI bootstrap, and report-driven follow-up. Requires the `maui` CLI. |
+| | [devflow-connect](dotnet-maui/skills/devflow-connect/) | DevFlow automation — agent connectivity, visual tree inspection, screenshots, app interactions. Requires the `maui` CLI. |
 | | [android-slim-bindings](dotnet-maui/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |
 | | [ios-slim-bindings](dotnet-maui/skills/ios-slim-bindings/) | Create iOS slim bindings using the Native Library Interop approach. |
 | | [dotnet-workload-info](dotnet-maui/skills/dotnet-workload-info/) | Discover installed .NET workloads, SDK versions, and dependency requirements. |
@@ -19,6 +20,9 @@ Distributable agent skills for .NET MAUI development. Installable via the Copilo
 
 # Install the plugin
 /plugin install dotnet-maui@dotnet-maui-labs
+
+# Then say:
+# "Set up DevFlow in this project"
 ```
 
 ## Adding Skills

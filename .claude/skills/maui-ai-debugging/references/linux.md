@@ -31,8 +31,8 @@ standard MAUI platforms (iOS, Android, macCatalyst, Windows).
 ### MauiProgram.cs
 
 ```csharp
-using MauiDevFlow.Agent.Gtk;
-using MauiDevFlow.Blazor.Gtk;  // Blazor Hybrid only
+using Microsoft.Maui.DevFlow.Agent.Gtk;
+using Microsoft.Maui.DevFlow.Blazor.Gtk;  // Blazor Hybrid only
 
 var builder = MauiApp.CreateBuilder();
 // ... your existing setup ...

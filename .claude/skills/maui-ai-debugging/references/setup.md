@@ -75,8 +75,8 @@ Linux/GTK apps (using Maui.Gtk) use separate packages:
 ## 3. Register in MauiProgram.cs
 
 ```csharp
-using MauiDevFlow.Agent;
-using MauiDevFlow.Blazor;  // Blazor Hybrid only
+using Microsoft.Maui.DevFlow.Agent;
+using Microsoft.Maui.DevFlow.Blazor;  // Blazor Hybrid only
 
 var builder = MauiApp.CreateBuilder();
 // ... your existing setup ...
@@ -93,8 +93,8 @@ builder.AddMauiBlazorDevFlowTools(); // Blazor Hybrid only
 For Linux/GTK apps, use the GTK-specific namespaces and add the agent startup call:
 
 ```csharp
-using MauiDevFlow.Agent.Gtk;
-using MauiDevFlow.Blazor.Gtk;  // Blazor Hybrid only
+using Microsoft.Maui.DevFlow.Agent.Gtk;
+using Microsoft.Maui.DevFlow.Blazor.Gtk;  // Blazor Hybrid only
 
 var builder = MauiApp.CreateBuilder();
 // ... your existing setup ...

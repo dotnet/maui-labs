@@ -1,10 +1,13 @@
 using System.CommandLine;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.DevFlow;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
 
+[RequiresUnreferencedCode("DevFlow command construction uses MSBuild-evaluation-annotated methods.")]
+[RequiresDynamicCode("DevFlow command construction uses MSBuild-evaluation-annotated methods.")]
 public class CommandConstructionTests
 {
 	[Fact]
@@ -37,6 +40,15 @@ public class CommandConstructionTests
 
 		var mcpCommand = Assert.Single(devflowCommand.Subcommands, c => c.Name == "mcp");
 		Assert.Contains("mcp-serve", mcpCommand.Aliases);
+	}
+
+	[Fact]
+	public void DevFlowCommand_ContainsInitCommand()
+	{
+		var jsonOption = new Option<bool>("--json");
+		var devflowCommand = DevFlowCommands.CreateDevFlowCommand(jsonOption);
+
+		Assert.Contains(devflowCommand.Subcommands, command => command.Name == "init");
 	}
 
 	private static void AssertNoWhitespaceAliases(Command command)

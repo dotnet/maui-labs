@@ -19,6 +19,13 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI applica
 
 ## Quick Start
 
+### Recommended onboarding
+
+```bash
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
+maui devflow init
+```
+
 ### 1. Install the NuGet packages
 
 ```xml

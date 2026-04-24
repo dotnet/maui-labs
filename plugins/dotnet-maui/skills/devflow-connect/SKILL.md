@@ -47,7 +47,7 @@ grep -r "Microsoft.Maui.DevFlow.Agent" *.csproj
 The agent must be initialized in `MauiProgram.cs`:
 
 ```csharp
-builder.Services.AddMauiDevFlowAgent();
+builder.AddMauiDevFlowAgent();
 ```
 
 ### 2. Check Broker Status
