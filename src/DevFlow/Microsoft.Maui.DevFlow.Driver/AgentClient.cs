@@ -169,14 +169,17 @@ public class AgentClient : IDisposable
 
     public async Task<bool> GestureAsync(string type, string? elementId = null, string? direction = null, double? distance = null, int? durationMs = null)
     {
-        return await PostActionAsync($"{UiApi}/actions/gesture", new JsonObject
+        var payload = new JsonObject
         {
-            ["elementId"] = elementId,
-            ["type"] = type,
-            ["direction"] = direction,
-            ["distance"] = distance,
-            ["durationMs"] = durationMs
-        });
+            ["type"] = type
+        };
+
+        if (elementId is not null) payload["elementId"] = elementId;
+        if (direction is not null) payload["direction"] = direction;
+        if (distance.HasValue) payload["distance"] = distance.Value;
+        if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+
+        return await PostActionAsync($"{UiApi}/actions/gesture", payload);
     }
 
     public async Task<JsonElement> BatchAsync(IEnumerable<JsonObject> actions, bool continueOnError = false)
@@ -204,16 +207,20 @@ public class AgentClient : IDisposable
     {
         var url = $"{UiApi}/actions/scroll";
         if (window != null) url += $"?window={window}";
-        return await PostActionAsync(url, new JsonObject
+
+        var payload = new JsonObject
         {
-            ["elementId"] = elementId,
             ["deltaX"] = deltaX,
             ["deltaY"] = deltaY,
-            ["animated"] = animated,
-            ["itemIndex"] = itemIndex,
-            ["groupIndex"] = groupIndex,
-            ["scrollToPosition"] = scrollToPosition
-        });
+            ["animated"] = animated
+        };
+
+        if (elementId is not null) payload["elementId"] = elementId;
+        if (itemIndex.HasValue) payload["itemIndex"] = itemIndex.Value;
+        if (groupIndex.HasValue) payload["groupIndex"] = groupIndex.Value;
+        if (scrollToPosition is not null) payload["scrollToPosition"] = scrollToPosition;
+
+        return await PostActionAsync(url, payload);
     }
 
     /// <summary>

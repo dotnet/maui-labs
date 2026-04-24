@@ -21,6 +21,9 @@ The current experience is:
 - the CLI can prompt for the target framework, device, and trace format
 - the app is built and launched in **Release**
 - by default, tracing is **manual stop**: wait for the app to reach the screen you care about, then press **Enter** or **Ctrl+C**
+- `--format nettrace`, `--format speedscope`, and `--format mibc` are supported; the derived formats keep the raw `.nettrace` companion
+
+For `--format mibc`, the CLI uses the `dotnet-pgo` binary from the current user's `.maui` directory (for example `%USERPROFILE%\.maui\dotnet-pgo.exe` on Windows or `$HOME/.maui/dotnet-pgo` on Unix). If it is missing, the CLI can build it from `dotnet/runtime` source automatically on first use, defaulting to the latest stable release branch. During MIBC collection, the CLI also enables the TieredPGO / ReadyToRun settings needed for full dynamic PGO data instead of a metadata-only MIBC shell.
 
 If you want automatic stop behavior, provide an explicit condition such as:
 

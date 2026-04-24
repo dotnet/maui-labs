@@ -47,6 +47,61 @@ public sealed class InteractionTools
 			: $"Failed to clear element '{elementId}'.";
 	}
 
+	[McpServerTool(Name = "maui_key"), Description("Send a key press to an element. Supported keys for Entry/Editor/SearchBar: 'enter' (submit or newline), 'backspace' (delete last character). Use 'text' parameter to type characters. For reliable behavior, provide an element ID; omitting it may have no effect depending on the agent/platform implementation.")]
+	public static async Task<string> Key(
+		McpAgentSession session,
+		[Description("Key to press: 'enter', 'return', 'backspace', 'delete'")] string key,
+		[Description("Target element ID. Optional, but omitting it may result in no action; provide an element ID for reliable behavior.")] string? elementId = null,
+		[Description("Text to type character by character into the element")] string? text = null,
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+	{
+		var agent = await session.GetAgentClientAsync(agentPort);
+		var success = await agent.KeyAsync(key, elementId, text);
+		return success
+			? elementId is not null
+				? $"Sent key '{key}' to element '{elementId}'."
+				: $"Sent key '{key}' without a target element; it may have had no effect."
+			: $"Failed to send key '{key}'. The target element may not support keyboard input, or no target element was provided.";
+	}
+
+	[McpServerTool(Name = "maui_gesture"), Description("Perform a touch gesture on the app. Supported gesture types: 'swipe' (requires direction), 'tap', 'longpress', and 'long-press'. Use maui_tap for simple taps — this tool is for advanced gestures like swiping.")]
+	public static async Task<string> Gesture(
+		McpAgentSession session,
+		[Description("Gesture type: 'swipe', 'tap', 'longpress', or 'long-press'")] string type,
+		[Description("Target element ID (optional)")] string? elementId = null,
+		[Description("Swipe direction: 'up', 'down', 'left', or 'right' (required for swipe)")] string? direction = null,
+		[Description("Swipe distance in pixels (optional, uses default if omitted)")] double? distance = null,
+		[Description("Gesture duration in milliseconds (optional)")] int? durationMs = null,
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+	{
+		var normalizedType = (type ?? string.Empty).Trim().ToLowerInvariant();
+		if (normalizedType == "long-press")
+			normalizedType = "longpress";
+
+		var validTypes = new[] { "swipe", "tap", "longpress" };
+		if (Array.IndexOf(validTypes, normalizedType) < 0)
+			return $"Unsupported gesture type '{type}'. Supported types: swipe, tap, longpress, long-press.";
+
+		string? normalizedDirection = null;
+		if (normalizedType == "swipe")
+		{
+			normalizedDirection = direction?.Trim().ToLowerInvariant();
+			var validDirections = new[] { "up", "down", "left", "right" };
+
+			if (string.IsNullOrEmpty(normalizedDirection))
+				return "Swipe gesture requires a 'direction' parameter ('up', 'down', 'left', 'right').";
+
+			if (Array.IndexOf(validDirections, normalizedDirection) < 0)
+				return $"Unsupported swipe direction '{direction}'. Supported directions: up, down, left, right.";
+		}
+
+		var agent = await session.GetAgentClientAsync(agentPort);
+		var success = await agent.GestureAsync(normalizedType, elementId, normalizedDirection, distance, durationMs);
+		return success
+			? elementId is not null ? $"Performed {normalizedType} gesture on element '{elementId}'." : $"Performed {normalizedType} gesture."
+			: $"Failed to perform {normalizedType} gesture.";
+	}
+
 	[McpServerTool(Name = "maui_scroll"), Description("Scroll a ScrollView, CollectionView, or ListView. Supports delta-based scrolling, scrolling to an item index, or scrolling an element into view.")]
 	public static async Task<string> Scroll(
 		McpAgentSession session,

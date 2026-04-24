@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Xml.Linq;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -234,6 +235,34 @@ public abstract class AppFixtureBase : IAppFixture
 
         throw new InvalidOperationException(
             $"Could not locate DevFlow.Sample build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
+    }
+
+    protected static string ReadBuiltAndroidApplicationId(string projectPath, string configuration, string targetFramework)
+    {
+        var projectDirectory = Path.GetDirectoryName(projectPath)
+            ?? throw new InvalidOperationException($"Could not determine project directory for '{projectPath}'.");
+        var projectName = Path.GetFileNameWithoutExtension(projectPath);
+        var repoRoot = FindRepoRoot();
+
+        var candidateManifestPaths = new[]
+        {
+            Path.Combine(repoRoot, "artifacts", "obj", projectName, configuration, targetFramework, "AndroidManifest.xml"),
+            Path.Combine(projectDirectory, "obj", configuration, targetFramework, "AndroidManifest.xml"),
+        };
+
+        foreach (var manifestPath in candidateManifestPaths)
+        {
+            if (!File.Exists(manifestPath))
+                continue;
+
+            var manifest = XDocument.Load(manifestPath);
+            var packageName = manifest.Root?.Attribute("package")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(packageName))
+                return packageName;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not resolve the built Android application ID for '{projectPath}'. Checked: {string.Join(", ", candidateManifestPaths)}");
     }
 
     protected static int FindFreePort()

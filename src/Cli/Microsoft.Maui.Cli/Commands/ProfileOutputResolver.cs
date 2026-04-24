@@ -35,16 +35,17 @@ internal static class ProfileOutputResolver
 				.Title("[bold]Select the trace output format[/]")
 				.HighlightStyle(new Style(Color.DodgerBlue1))
 				.UseConverter(FormatTraceOutputPromptChoice)
-				.AddChoices([TraceOutputFormat.NetTrace, TraceOutputFormat.Speedscope]));
+				.AddChoices([TraceOutputFormat.NetTrace, TraceOutputFormat.Speedscope, TraceOutputFormat.Mibc]));
 	}
 
 	internal static TraceOutputFormat ResolveTraceOutputFormat(string? requestedFormat) => requestedFormat?.Trim().ToLowerInvariant() switch
 	{
 		null or "" or "nettrace" => TraceOutputFormat.NetTrace,
 		"speedscope" => TraceOutputFormat.Speedscope,
+		"mibc" => TraceOutputFormat.Mibc,
 		_ => throw new MauiToolException(
 			ErrorCodes.InvalidArgument,
-			$"Unsupported output format '{requestedFormat}'. Supported values are: nettrace, speedscope.")
+			$"Unsupported output format '{requestedFormat}'. Supported values are: nettrace, speedscope, mibc.")
 	};
 
 	internal static string ResolveOutputPath(string projectName, string? requestedOutput, TraceOutputFormat outputFormat)
@@ -62,6 +63,11 @@ internal static class ProfileOutputResolver
 		{
 			fullPath = fullPath[..^ProfileCommand.SpeedscopeExtension.Length];
 		}
+		else if (outputFormat == TraceOutputFormat.Mibc &&
+			fullPath.EndsWith(ProfileCommand.MibcExtension, StringComparison.OrdinalIgnoreCase))
+		{
+			fullPath = Path.ChangeExtension(fullPath, "nettrace");
+		}
 
 		if (string.IsNullOrWhiteSpace(Path.GetExtension(fullPath)))
 			fullPath += ".nettrace";
@@ -73,6 +79,7 @@ internal static class ProfileOutputResolver
 		TraceOutputFormat.Speedscope => collectorOutputPath.EndsWith(".nettrace", StringComparison.OrdinalIgnoreCase)
 			? collectorOutputPath[..^".nettrace".Length] + ProfileCommand.SpeedscopeExtension
 			: collectorOutputPath + ProfileCommand.SpeedscopeExtension,
+		TraceOutputFormat.Mibc => Path.ChangeExtension(collectorOutputPath, "mibc"),
 		_ => collectorOutputPath
 	};
 
@@ -80,6 +87,7 @@ internal static class ProfileOutputResolver
 	{
 		TraceOutputFormat.NetTrace => "nettrace",
 		TraceOutputFormat.Speedscope => "speedscope",
+		TraceOutputFormat.Mibc => "mibc",
 		_ => outputFormat.ToString().ToLowerInvariant()
 	};
 
@@ -115,6 +123,7 @@ internal static class ProfileOutputResolver
 	{
 		TraceOutputFormat.NetTrace => "[bold]nettrace[/] [dim](raw EventPipe trace for PerfView / Visual Studio)[/]",
 		TraceOutputFormat.Speedscope => "[bold]speedscope[/] [dim](browser-friendly flame chart; also keeps the raw .nettrace)[/]",
+		TraceOutputFormat.Mibc => "[bold]mibc[/] [dim](creates a reusable PGO profile and keeps the raw .nettrace)[/]",
 		_ => $"[bold]{Markup.Escape(FormatOutputFormat(outputFormat))}[/]"
 	};
 }

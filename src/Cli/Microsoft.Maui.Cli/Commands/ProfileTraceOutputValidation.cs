@@ -14,7 +14,7 @@ internal static class ProfileTraceOutputValidation
 		if (primaryFile.Length > 0)
 			return;
 
-		if (outputFormat == TraceOutputFormat.Speedscope &&
+		if (outputFormat is TraceOutputFormat.Speedscope or TraceOutputFormat.Mibc &&
 			!string.Equals(primaryOutputPath, collectorOutputPath, StringComparison.OrdinalIgnoreCase) &&
 			File.Exists(collectorOutputPath) &&
 			new FileInfo(collectorOutputPath).Length > 0)

@@ -6,5 +6,6 @@ namespace Microsoft.Maui.Cli.Commands;
 internal enum TraceOutputFormat
 {
 	NetTrace,
-	Speedscope
+	Speedscope,
+	Mibc
 }

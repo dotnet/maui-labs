@@ -20,6 +20,18 @@ public sealed class NavigationTools
 			: $"Failed to navigate to '{route}'. Route may not exist in the Shell.";
 	}
 
+	[McpServerTool(Name = "maui_back"), Description("Go back in the app navigation stack. Equivalent to pressing the system back button.")]
+	public static async Task<string> Back(
+		McpAgentSession session,
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+	{
+		var agent = await session.GetAgentClientAsync(agentPort);
+		var success = await agent.BackAsync();
+		return success
+			? "Navigated back successfully."
+			: "Failed to navigate back. Navigation stack may be empty.";
+	}
+
 	[McpServerTool(Name = "maui_focus"), Description("Set focus to a UI element.")]
 	public static async Task<string> Focus(
 		McpAgentSession session,

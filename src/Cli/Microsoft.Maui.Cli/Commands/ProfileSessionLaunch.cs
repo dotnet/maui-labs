@@ -49,27 +49,62 @@ internal static class ProfileSessionLaunch
 		context.ExitControlServer = ExitControlServer.Attach(context.ReservedPorts!.ExitControlReservation, context.Formatter, context.UseJson, context.Verbose);
 		context.ReservedPorts.DiagnosticReservation.Dispose();
 
-		ProfileCommandProcessHelpers.WriteVerbose(context.Formatter, context.UseJson, context.Verbose, $"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort}.");
-		context.TraceProcess = DotnetTraceRunner.StartCollector(
-			context.Project.ProjectDirectory,
-			context.OutputPath,
-			context.OutputFormat,
-			context.Transport,
-			context.Device,
-			context.TraceProfile,
-			context.EffectiveDuration,
-			context.StoppingEventProvider,
-			context.StoppingEventName,
-			context.StoppingEventPayloadFilter,
-			context.Formatter,
-			context.UseJson,
-			context.Verbose,
-			cancellationToken);
+		if (!context.StartTraceAfterLaunch)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				$"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort}.");
+			context.TraceProcess = DotnetTraceRunner.StartCollector(
+				context.Project.ProjectDirectory,
+				context.OutputPath,
+				context.OutputFormat,
+				context.Transport,
+				context.Device,
+				context.TraceProfile,
+				context.EffectiveDuration,
+				context.StoppingEventProvider,
+				context.StoppingEventName,
+				context.StoppingEventPayloadFilter,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
 
-		ProfileCommandProcessHelpers.WriteVerbose(context.Formatter, context.UseJson, context.Verbose, $"Waiting briefly for dotnet-trace (PID {context.TraceProcess.Process.Id}) to initialize.");
-		await DotnetTraceRunner.EnsureStartedAsync(context.TraceProcess, cancellationToken);
+			ProfileCommandProcessHelpers.WriteVerbose(
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				$"Waiting briefly for dotnet-trace (PID {context.TraceProcess.Process.Id}) to initialize.");
+			await DotnetTraceRunner.EnsureStartedAsync(context.TraceProcess, cancellationToken);
+		}
 
 		await LaunchAppAsync(context, cancellationToken);
+
+		if (context.StartTraceAfterLaunch)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				$"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort} after the suspended app launch.");
+			context.TraceProcess = await DotnetTraceRunner.StartWithRetryAsync(
+				context.Project.ProjectDirectory,
+				context.OutputPath,
+				context.OutputFormat,
+				context.Transport,
+				context.Device,
+				context.TraceProfile,
+				context.EffectiveDuration,
+				context.StoppingEventProvider,
+				context.StoppingEventName,
+				context.StoppingEventPayloadFilter,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
+		}
 
 		WriteTraceStatusMessage(context);
 	}
@@ -136,7 +171,7 @@ internal static class ProfileSessionLaunch
 		if (context.TraceProcess is not null && context.TraceProcess.Process.HasExited)
 		{
 			context.Formatter.WriteWarning(
-				"Trace collection completed during app launch before a manual stop request. " +
+				"Trace collection completed before a manual stop request. " +
 				"This usually means the target process disconnected and the trace finalized early.");
 			return;
 		}

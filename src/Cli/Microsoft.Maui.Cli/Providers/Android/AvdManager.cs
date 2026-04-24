@@ -275,12 +275,35 @@ public class AvdManager
 					throw;
 				}
 
-				if (process.HasExited && process.ExitCode != 0)
+				// On Windows, emulator.exe is a launcher that forks qemu-system-*.exe and
+				// then exits itself — often with code 0 — while the actual VM keeps running.
+				// With RedirectStandardOutput + Begin*ReadLine, .NET can also drop the
+				// managed handle after the launcher exits, causing HasExited/ExitCode to
+				// throw InvalidOperationException ("No process is associated with this
+				// object"). Treat both "exited with code 0" and "handle no longer
+				// queryable" as a successful fork; only propagate a non-zero exit code.
+				bool launcherExited = false;
+				int? launcherExitCode = null;
+				try
+				{
+					if (process.HasExited)
+					{
+						launcherExited = true;
+						launcherExitCode = process.ExitCode;
+					}
+				}
+				catch (InvalidOperationException)
+				{
+					// Launcher process was reaped — assume it forked the VM and exited cleanly.
+					launcherExited = true;
+				}
+
+				if (launcherExited && launcherExitCode.GetValueOrDefault() != 0)
 				{
 					process.Dispose();
 					throw new MauiToolException(
 						ErrorCodes.AndroidEmulatorNotFound,
-						$"Emulator exited immediately with code {process.ExitCode}. " +
+						$"Emulator exited immediately with code {launcherExitCode}. " +
 						$"This often means stale lock files exist. " +
 						$"Try stopping all emulators first with: maui android emulator stop");
 				}

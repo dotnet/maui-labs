@@ -147,6 +147,8 @@ public static class ProcessRunner
 		TimeSpan? timeout = null,
 		string? continuousInput = null,
 		IEnumerable<string>? environmentVariablesToRemove = null,
+		Action<string>? onOutputData = null,
+		Action<string>? onErrorData = null,
 		CancellationToken cancellationToken = default)
 	{
 		var stopwatch = Stopwatch.StartNew();
@@ -189,7 +191,10 @@ public static class ProcessRunner
 		process.OutputDataReceived += (_, e) =>
 		{
 			if (e.Data != null)
+			{
 				stdoutBuilder.AppendLine(e.Data);
+				InvokeCallbackSafely(onOutputData, e.Data, "stdout");
+			}
 			else
 				outputTcs.TrySetResult(true);
 		};
@@ -197,7 +202,10 @@ public static class ProcessRunner
 		process.ErrorDataReceived += (_, e) =>
 		{
 			if (e.Data != null)
+			{
 				stderrBuilder.AppendLine(e.Data);
+				InvokeCallbackSafely(onErrorData, e.Data, "stderr");
+			}
 			else
 				errorTcs.TrySetResult(true);
 		};
@@ -280,6 +288,21 @@ public static class ProcessRunner
 				StandardError = ex.Message,
 				Duration = stopwatch.Elapsed
 			};
+		}
+	}
+
+	static void InvokeCallbackSafely(Action<string>? callback, string data, string streamName)
+	{
+		if (callback is null)
+			return;
+
+		try
+		{
+			callback(data);
+		}
+		catch (Exception ex)
+		{
+			Trace.WriteLine($"Process {streamName} callback failed: {ex.Message}");
 		}
 	}
 
