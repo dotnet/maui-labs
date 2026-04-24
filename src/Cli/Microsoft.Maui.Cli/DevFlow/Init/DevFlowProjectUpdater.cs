@@ -123,10 +123,15 @@ internal static class DevFlowProjectUpdater
         directoryPackagesPropsPath = FindDirectoryPackagesProps(projectPath, workspaceRoot);
 
         var evaluated = EvaluatedProject.TryLoad(projectPath);
-        if (evaluated != null && evaluated.GetBooleanProperty("ManagePackageVersionsCentrally"))
-            return true;
+        if (evaluated != null)
+        {
+            var rawValue = evaluated.GetPropertyValue("ManagePackageVersionsCentrally");
+            if (!string.IsNullOrEmpty(rawValue))
+                return string.Equals(rawValue, "true", StringComparison.OrdinalIgnoreCase);
+        }
 
-        // Fallback: if the file simply exists on disk, assume CPM is in effect.
+        // Fallback: if the file simply exists on disk, assume CPM is in effect
+        // (the property defaults to true when Directory.Packages.props is present).
         return directoryPackagesPropsPath != null;
     }
 

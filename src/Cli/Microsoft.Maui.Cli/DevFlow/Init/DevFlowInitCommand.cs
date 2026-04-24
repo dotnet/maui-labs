@@ -185,7 +185,7 @@ internal static class DevFlowInitCommand
                 report.Notes.AddRange(ex.Remediation.ManualSteps);
 
             PopulateNextSteps(report);
-            await WriteReportAsync(report, options.DryRun, cancellationToken);
+            try { await WriteReportAsync(report, options.DryRun, cancellationToken); } catch { /* best-effort */ }
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
         }
@@ -194,7 +194,7 @@ internal static class DevFlowInitCommand
             report.OverallStatus = DevFlowInitStatus.Failed;
             report.Notes.Add(ex.Message);
             PopulateNextSteps(report);
-            await WriteReportAsync(report, options.DryRun, cancellationToken);
+            try { await WriteReportAsync(report, options.DryRun, cancellationToken); } catch { /* best-effort */ }
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
         }
@@ -591,9 +591,14 @@ internal static class DevFlowInitCommand
                     $"Failed to start `dotnet {argsDisplay}`.");
             }
 
-            var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+            // Read stdout and stderr concurrently to avoid deadlock when OS pipe
+            // buffers fill (the process blocks writing to one while we sequentially
+            // drain the other).
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
 
             if (process.ExitCode != 0)
             {

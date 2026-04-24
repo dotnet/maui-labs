@@ -37,9 +37,15 @@ internal static class GitHubDirectorySync
 {
     public static HttpClient CreateHttpClient()
     {
-        var http = new HttpClient();
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Microsoft.Maui.DevFlow-CLI", "1.0"));
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+        var ghToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN")
+                   ?? Environment.GetEnvironmentVariable("GH_TOKEN");
+        if (!string.IsNullOrWhiteSpace(ghToken))
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ghToken);
+
         return http;
     }
 
