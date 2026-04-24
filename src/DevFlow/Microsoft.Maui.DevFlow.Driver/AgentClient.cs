@@ -207,16 +207,20 @@ public class AgentClient : IDisposable
     {
         var url = $"{UiApi}/actions/scroll";
         if (window != null) url += $"?window={window}";
-        return await PostActionAsync(url, new JsonObject
+
+        var payload = new JsonObject
         {
-            ["elementId"] = elementId,
             ["deltaX"] = deltaX,
             ["deltaY"] = deltaY,
-            ["animated"] = animated,
-            ["itemIndex"] = itemIndex,
-            ["groupIndex"] = groupIndex,
-            ["scrollToPosition"] = scrollToPosition
-        });
+            ["animated"] = animated
+        };
+
+        if (elementId is not null) payload["elementId"] = elementId;
+        if (itemIndex.HasValue) payload["itemIndex"] = itemIndex.Value;
+        if (groupIndex.HasValue) payload["groupIndex"] = groupIndex.Value;
+        if (scrollToPosition is not null) payload["scrollToPosition"] = scrollToPosition;
+
+        return await PostActionAsync(url, payload);
     }
 
     /// <summary>
