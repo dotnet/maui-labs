@@ -5,6 +5,11 @@ using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Xunit;
 
+using YogaFlexDirection = Comet.Layout.Yoga.FlexDirection;
+using YogaFlexWrap = Comet.Layout.Yoga.FlexWrap;
+using YogaFlexJustify = Comet.Layout.Yoga.FlexJustify;
+using YogaFlexAlign = Comet.Layout.Yoga.FlexAlign;
+
 namespace Comet.Tests
 {
 	public class LayoutTests2 : TestBase
@@ -46,9 +51,9 @@ namespace Comet.Tests
 		[Fact]
 		public void FlexLayoutCreation()
 		{
-			var layout = new FlexLayout(direction: FlexDirection.Row, justifyContent: FlexJustify.SpaceBetween, alignItems: FlexAlignItems.Center);
-			Assert.Equal(FlexDirection.Row, layout.Direction);
-			Assert.Equal(FlexJustify.SpaceBetween, layout.JustifyContent);
+			var layout = new FlexLayout(direction: YogaFlexDirection.Row, justifyContent: YogaFlexJustify.SpaceBetween, alignItems: YogaFlexAlign.Center);
+			Assert.Equal(YogaFlexDirection.Row, layout.Direction);
+			Assert.Equal(YogaFlexJustify.SpaceBetween, layout.JustifyContent);
 		}
 
 		[Fact]
@@ -79,10 +84,11 @@ namespace Comet.Tests
 		[Fact]
 		public void FlexLayoutEnums()
 		{
-			Assert.Equal(0, (int)FlexDirection.Row);
-			Assert.Equal(0, (int)FlexWrap.NoWrap);
-			Assert.Equal(0, (int)FlexJustify.Start);
-			Assert.Equal(3, (int)FlexAlignItems.Stretch);
+			// Yoga enum values (upstream Meta Yoga encoding).
+			Assert.Equal(2, (int)YogaFlexDirection.Row);
+			Assert.Equal(0, (int)YogaFlexWrap.NoWrap);
+			Assert.Equal(1, (int)YogaFlexJustify.FlexStart);
+			Assert.Equal(4, (int)YogaFlexAlign.Stretch);
 		}
 	}
 }
