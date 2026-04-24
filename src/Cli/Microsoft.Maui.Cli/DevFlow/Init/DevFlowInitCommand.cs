@@ -34,7 +34,19 @@ internal static class DevFlowInitCommand
     public static async Task<bool> ExecuteAsync(DevFlowInitOptions options, IDevFlowOutputWriter output, CancellationToken cancellationToken = default)
     {
         var manifest = DevFlowInitManifestLoader.Load();
-        var workspaceRoot = Directory.GetCurrentDirectory();
+
+        string workspaceRoot;
+        try
+        {
+            workspaceRoot = Directory.GetCurrentDirectory();
+        }
+        catch (Exception)
+        {
+            Console.Error.WriteLine("Error: Cannot determine the current directory. " +
+                "If you deleted and recreated the folder, run `cd .` or re-enter the directory to refresh the shell.");
+            return false;
+        }
+
         var reportPath = Path.Combine(workspaceRoot, "MAUI-DEVFLOW-INIT-REPORT.md");
         var jsonReportPath = Path.Combine(workspaceRoot, "MAUI-DEVFLOW-INIT-REPORT.json");
         var json = output.ResolveJsonMode(options.Json, options.NoJson);
