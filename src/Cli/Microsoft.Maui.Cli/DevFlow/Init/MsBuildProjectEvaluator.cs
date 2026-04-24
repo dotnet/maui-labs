@@ -220,6 +220,11 @@ internal static class MsBuildProjectMutator
             {
                 changed = SetVersion(existing, version);
             }
+            else if (!requireVersion)
+            {
+                // CPM mode: remove any leftover Version metadata so CPM controls the version.
+                changed = RemoveVersion(existing);
+            }
 
             if (changed && !dryRun)
                 root.Save();
@@ -285,6 +290,15 @@ internal static class MsBuildProjectMutator
 
         var metadata = item.AddMetadata("Version", version);
         metadata.ExpressedAsAttribute = true;
+        return true;
+    }
+
+    static bool RemoveVersion(Microsoft.Build.Construction.ProjectItemElement item)
+    {
+        var existing = item.Metadata.FirstOrDefault(m => string.Equals(m.Name, "Version", StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+            return false;
+        item.RemoveChild(existing);
         return true;
     }
 }
