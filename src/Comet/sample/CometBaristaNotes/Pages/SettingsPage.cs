@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 public class SettingsPageState
 {
@@ -50,34 +50,32 @@ public class SettingsPage : Component<SettingsPageState>
 			.Modifier(CoffeeModifiers.SecondaryText);
 
 	View BuildAppearanceButtons() =>
-		Grid(
-			columns: new object[] { "*", "*", "*" },
-			rows: new object[] { "Auto" },
-			BuildThemeButton(Icons.LightMode, "Light", AppThemeMode.Light)
-				.Cell(row: 0, column: 0),
-			BuildThemeButton(Icons.DarkMode, "Dark", AppThemeMode.Dark)
-				.Cell(row: 0, column: 1),
-			BuildThemeButton(Icons.BrightnessAuto, "Auto", AppThemeMode.System)
-				.Cell(row: 0, column: 2)
-		).ColumnSpacing(CoffeeColors.SpacingS);
+		HStack(CoffeeColors.SpacingS,
+			BuildThemeButton(Icons.LightMode, "Light", AppThemeMode.Light),
+			BuildThemeButton(Icons.DarkMode, "Dark", AppThemeMode.Dark),
+			BuildThemeButton(Icons.BrightnessAuto, "Auto", AppThemeMode.System),
+			new Spacer()
+		);
 
 	View BuildThemeButton(string icon, string label, AppThemeMode mode)
 	{
 		var isSelected = State.ThemeMode == mode;
+		var accent = isSelected ? CoffeeColors.Primary : CoffeeColors.TextPrimary;
 		return Border(
-			VStack(4,
+			VStack(CoffeeColors.SpacingS,
 				Text(icon)
-					.Modifier(CoffeeModifiers.IconLarge(isSelected ? CoffeeColors.Primary : CoffeeColors.TextPrimary))
+					.Modifier(CoffeeModifiers.IconXLarge(accent))
 					.HorizontalTextAlignment(TextAlignment.Center),
 				Text(label)
-					.Modifier(CoffeeModifiers.Caption)
-					.Modifier(CoffeeModifiers.TextColor(isSelected ? CoffeeColors.Primary : CoffeeColors.TextPrimary))
+					.Modifier(CoffeeModifiers.Body)
+					.Modifier(CoffeeModifiers.TextColor(accent))
 					.HorizontalTextAlignment(TextAlignment.Center)
 			)
-			.Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
+			.Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingL))
 		)
-		.Modifier(CoffeeModifiers.CornerRadius(8))
-		.Modifier(CoffeeModifiers.Background(isSelected ? CoffeeColors.Primary.WithAlpha(0.15f) : CoffeeColors.SurfaceVariant))
+		.Modifier(CoffeeModifiers.FrameSize(90, 90))
+		.Modifier(CoffeeModifiers.CornerRadius(12))
+		.Modifier(CoffeeModifiers.Background(isSelected ? CoffeeColors.Primary.WithAlpha(0.15f) : CoffeeColors.SurfaceElevated))
 		.Modifier(CoffeeModifiers.StrokeColor(isSelected ? CoffeeColors.Primary : Colors.Transparent))
 		.StrokeThickness(isSelected ? 2 : 0)
 		.OnTap(_ => {

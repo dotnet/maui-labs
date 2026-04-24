@@ -58,8 +58,12 @@ namespace Comet.Handlers
 				if (!string.IsNullOrEmpty(title))
 					vc.Title = title;
 			});
-			// Use inline (compact) title to match the original BaristaNotes design.
-			navigationController.NavigationBar.PrefersLargeTitles = false;
+			// Use inline (compact) title by default; opt in to large titles
+			// when the NavigationView has NavigationPrefersLargeTitles=true.
+			var prefersLargeTitles = nav.GetNavigationPrefersLargeTitles();
+			navigationController.NavigationBar.PrefersLargeTitles = prefersLargeTitles;
+			if (prefersLargeTitles)
+				vc.NavigationItem.LargeTitleDisplayMode = UINavigationItemLargeTitleDisplayMode.Always;
 
 			navigationController.PushViewController(vc, true);
 

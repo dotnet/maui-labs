@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 public class BeanDetailPageState
 {
@@ -115,7 +115,7 @@ public class BeanDetailPage : Component<BeanDetailPageState>
 			FormHelpers.MakeFormEntry("Name *", State.Name, "Bean name (required)", v => SetState(s => s.Name = v)),
 			FormHelpers.MakeFormEntry("Roaster", State.Roaster, "Roaster name", v => SetState(s => s.Roaster = v)),
 			FormHelpers.MakeFormEntry("Origin", State.Origin, "Country or region of origin", v => SetState(s => s.Origin = v)),
-			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100)
+			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 120)
 		);
 
 		if (!string.IsNullOrEmpty(State.Error))

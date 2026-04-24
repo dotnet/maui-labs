@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Comet;
 using Comet.Reactive;
 using Microsoft.Maui;
@@ -125,7 +125,7 @@ namespace CometControlsGallery.Pages
 
 			return content
 				.Padding(new Thickness(4, 6))
-				.HorizontalLayoutAlignment(LayoutAlignment.Start);
+				.FitHorizontal();
 		}
 	}
 }

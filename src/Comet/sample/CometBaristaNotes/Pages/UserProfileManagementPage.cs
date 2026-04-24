@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 public class UserProfileManagementPageState
 {
@@ -59,11 +59,8 @@ public class UserProfileManagementPage : Component<UserProfileManagementPageStat
 		var details = VStack(4,
 			Text(profile.Name)
 				.Modifier(CoffeeModifiers.CardTitle),
-			HStack(6,
-				FormHelpers.MakeIcon(Icons.CalendarToday, CoffeeColors.IconSizeSmall, CoffeeColors.TextMuted),
-				Text($"Member since {profile.CreatedAt:MMM yyyy}")
-					.Modifier(CoffeeModifiers.Caption)
-			)
+			Text($"Created: {profile.CreatedAt:MMM d, yyyy}")
+				.Modifier(CoffeeModifiers.CardSubtitle)
 		);
 
 		var chevron = FormHelpers.MakeIcon(Icons.ChevronRight, 20, CoffeeColors.TextMuted);

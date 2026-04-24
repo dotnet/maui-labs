@@ -1,4 +1,4 @@
-using Comet;
+﻿using Comet;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Primitives;
@@ -15,14 +15,14 @@ namespace CometControlsGallery.Pages
 				.Fill(Colors.DodgerBlue)
 				.Stroke(Colors.Navy, 3))
 				.Frame(width: 160, height: 80)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.SectionHeader("Ellipse"),
 			new ShapeView(new Ellipse()
 				.Fill(Colors.Coral)
 				.Stroke(Colors.DarkRed, 2))
 				.Frame(width: 160, height: 90)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.Separator(),
 
@@ -30,13 +30,13 @@ namespace CometControlsGallery.Pages
 			new ShapeView(new Line(0, 0, 200, 40)
 				.Stroke(Colors.MediumSeaGreen, 3))
 				.Frame(width: 210, height: 50)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.SectionHeader("Line (Dashed)"),
 			new ShapeView(WithDash(new Line(0, 0, 250, 0)
 				.Stroke(Colors.MediumPurple, 3), 4f, 2f))
 				.Frame(width: 260, height: 10)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.Separator(),
 
@@ -47,7 +47,7 @@ namespace CometControlsGallery.Pages
 				new PointF(180, 40))
 				.Stroke(Colors.Orange, 3))
 				.Frame(width: 190, height: 50)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.SectionHeader("Polygon"),
 			new ShapeView(new Polygon(
@@ -57,7 +57,7 @@ namespace CometControlsGallery.Pages
 				.Fill(Color.FromArgb("#882ecc71"))
 				.Stroke(Colors.MediumSeaGreen, 2))
 				.Frame(width: 130, height: 110)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.Separator(),
 
@@ -65,7 +65,7 @@ namespace CometControlsGallery.Pages
 			new ShapeView(new Path(BuildCurvePath())
 				.Stroke(Colors.Crimson, 3))
 				.Frame(width: 360, height: 120)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 
 			GalleryPageHelpers.Separator(),
 
@@ -73,21 +73,21 @@ namespace CometControlsGallery.Pages
 			new ShapeView(WithDash(new Line(0, 0, 300, 0)
 				.Stroke(Colors.SteelBlue, 3), 1f, 1f))
 				.Frame(width: 310, height: 10)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 			Text("Dots: {1, 1}")
 				.FontSize(11)
 				.Color(Colors.Grey),
 			new ShapeView(WithDash(new Line(0, 0, 300, 0)
 				.Stroke(Colors.SteelBlue, 3), 6f, 2f))
 				.Frame(width: 310, height: 10)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 			Text("Dash: {6, 2}")
 				.FontSize(11)
 				.Color(Colors.Grey),
 			new ShapeView(WithDash(new Line(0, 0, 300, 0)
 				.Stroke(Colors.SteelBlue, 3), 6f, 2f, 1f, 2f))
 				.Frame(width: 310, height: 10)
-				.HorizontalLayoutAlignment(LayoutAlignment.Start),
+				.FitHorizontal(),
 			Text("Dash-Dot: {6, 2, 1, 2}")
 				.FontSize(11)
 				.Color(Colors.Grey)

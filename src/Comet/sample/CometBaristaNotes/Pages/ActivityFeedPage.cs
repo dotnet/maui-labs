@@ -1,4 +1,4 @@
-using Microsoft.Maui.ApplicationModel;
+﻿using Microsoft.Maui.ApplicationModel;
 
 namespace CometBaristaNotes.Pages;
 
@@ -176,50 +176,137 @@ public class ActivityFeedPage : Component<ActivityFeedState>
 			(4, "4"),
 		};
 
-		return ZStack(
-			new Comet.BoxView(Colors.Black.WithAlpha(0.45f))
-				.FillHorizontal()
-				.FillVertical()
-				.OnTap(_ => CloseFilterSheet()),
-			VStack(
+		var ratingIcons = new[]
+		{
+			Icons.SentimentVeryDissatisfied,
+			Icons.SentimentDissatisfied,
+			Icons.SentimentNeutral,
+			Icons.SentimentSatisfied,
+			Icons.SentimentVerySatisfied,
+		};
+
+		var content = VStack(CoffeeColors.SpacingL,
+			HStack(
+				Text("Filter Shots")
+					.Modifier(CoffeeModifiers.SubHeadline)
+					.Modifier(CoffeeModifiers.TextColor(Colors.White)),
 				Spacer(),
+				Text(Icons.Close)
+					.Modifier(CoffeeModifiers.IconLarge(Colors.White))
+					.OnTap(_ => CloseFilterSheet())
+			),
+			beans.Count > 0 ? RenderDarkFilterSection("Bean", beans, State.DraftFilters.BeanIds) : null,
+			people.Count > 0 ? RenderDarkFilterSection("Made For", people, State.DraftFilters.MadeForIds) : null,
+			RenderDarkRatingSection(ratingOptions, ratingIcons, State.DraftFilters.Ratings)
+		);
+
+		return ZStack(
+			new Comet.BoxView(CoffeeColors.Primary)
+				.FillHorizontal()
+				.FillVertical(),
+			VStack(
 				ScrollView(
-					Border(
-						VStack(CoffeeColors.SpacingM,
-							HStack(
-								Text("Filter Shots")
-									.Modifier(CoffeeModifiers.SubHeadline),
-								Spacer(),
-								Text(State.DraftFilters.FilterCount == 0 ? "No filters selected" : $"{State.DraftFilters.FilterCount} selected")
-									.Modifier(CoffeeModifiers.Caption)
-							),
-							new Comet.BoxView(CoffeeColors.Outline)
-								.Modifier(CoffeeModifiers.Divider),
-							beans.Count > 0 ? RenderFilterSection("Bean", beans, State.DraftFilters.BeanIds) : null,
-							people.Count > 0 ? RenderFilterSection("Made For", people, State.DraftFilters.MadeForIds) : null,
-							RenderFilterSection("Rating", ratingOptions, State.DraftFilters.Ratings),
-							new Comet.BoxView(CoffeeColors.Outline)
-								.Modifier(CoffeeModifiers.Divider),
-							HStack(CoffeeColors.SpacingS,
-								FormHelpers.MakeSecondaryButton("Clear All", OnFiltersCleared)
-									.FillHorizontal(),
-								FormHelpers.MakePrimaryButton("Apply", () => OnFiltersApplied(State.DraftFilters.Clone()))
-									.FillHorizontal()
-							),
-							Text("Tap outside this card to close")
-								.Modifier(CoffeeModifiers.Caption)
-								.HorizontalTextAlignment(TextAlignment.Center)
-						)
-						.Padding(new Thickness(CoffeeColors.SpacingL))
-					)
-					.Modifier(CoffeeModifiers.SurfaceCard)
+					content.Padding(new Thickness(CoffeeColors.SpacingL, CoffeeColors.SpacingXL, CoffeeColors.SpacingL, CoffeeColors.SpacingL))
+				).FillVertical(),
+				VStack(CoffeeColors.SpacingM,
+					Text("Clear All")
+						.Modifier(CoffeeModifiers.Body)
+						.Modifier(CoffeeModifiers.TextColor(Colors.White.WithAlpha(0.8f)))
+						.HorizontalTextAlignment(TextAlignment.Center)
+						.OnTap(_ => OnFiltersCleared()),
+					Button("Apply", () => OnFiltersApplied(State.DraftFilters.Clone()))
+						.FontFamily(CoffeeColors.FontSemibold)
+						.FontSize(16)
+						.FontWeight(FontWeight.Bold)
+						.Background(CoffeeColors.Primary.WithAlpha(0.6f))
+						.Color(Colors.White)
+						.ClipShape(new RoundedRectangle(CoffeeColors.RadiusPill))
+						.Modifier(CoffeeModifiers.FrameHeight(CoffeeColors.ButtonHeight))
+						.FillHorizontal()
 				)
-				.Padding(new Thickness(CoffeeColors.SpacingM)),
-				Spacer()
+				.Padding(new Thickness(CoffeeColors.SpacingL, CoffeeColors.SpacingS, CoffeeColors.SpacingL, CoffeeColors.SpacingL))
 			)
 		)
 		.IgnoreSafeArea();
 	}
+
+	View RenderDarkFilterSection(string title, IEnumerable<(int Id, string Name)> items, List<int> selectedIds)
+	{
+		var section = VStack(CoffeeColors.SpacingS,
+			Text(title)
+				.Modifier(CoffeeModifiers.BodyStrong)
+				.Modifier(CoffeeModifiers.TextColor(Colors.White)));
+
+		// Two-column grid of pill chips
+		var itemList = items.ToList();
+		for (int i = 0; i < itemList.Count; i += 2)
+		{
+			var left = itemList[i];
+			var leftChip = RenderDarkChip(left.Name, selectedIds.Contains(left.Id), () => ToggleDraftSelection(selectedIds, left.Id));
+			if (i + 1 < itemList.Count)
+			{
+				var right = itemList[i + 1];
+				var rightChip = RenderDarkChip(right.Name, selectedIds.Contains(right.Id), () => ToggleDraftSelection(selectedIds, right.Id));
+				section.Add(HStack(CoffeeColors.SpacingS,
+					leftChip.FillHorizontal(),
+					rightChip.FillHorizontal()
+				));
+			}
+			else
+			{
+				section.Add(HStack(CoffeeColors.SpacingS,
+					leftChip.FillHorizontal(),
+					new Spacer().FillHorizontal()
+				));
+			}
+		}
+
+		return section;
+	}
+
+	View RenderDarkRatingSection(List<(int Id, string Name)> ratings, string[] icons, List<int> selectedIds)
+	{
+		var chips = HStack(CoffeeColors.SpacingS);
+		for (int i = 0; i < ratings.Count; i++)
+		{
+			var id = ratings[i].Id;
+			var icon = icons[i];
+			var isSelected = selectedIds.Contains(id);
+			chips.Add(
+				Border(
+					Text(icon)
+						.Modifier(CoffeeModifiers.IconLarge(Colors.White))
+						.Padding(new Thickness(CoffeeColors.SpacingS))
+				)
+				.Modifier(CoffeeModifiers.Background(isSelected ? Colors.White.WithAlpha(0.25f) : CoffeeColors.Primary.WithAlpha(0.4f)))
+				.Modifier(CoffeeModifiers.CornerRadius(CoffeeColors.RadiusPill))
+				.Modifier(CoffeeModifiers.StrokeColor(isSelected ? Colors.White : Colors.Transparent))
+				.StrokeThickness(isSelected ? 1 : 0)
+				.OnTap(_ => ToggleDraftSelection(selectedIds, id))
+			);
+		}
+
+		return VStack(CoffeeColors.SpacingS,
+			Text("Rating")
+				.Modifier(CoffeeModifiers.BodyStrong)
+				.Modifier(CoffeeModifiers.TextColor(Colors.White)),
+			chips
+		);
+	}
+
+	View RenderDarkChip(string label, bool isSelected, Action toggle) =>
+		Border(
+			Text(label)
+				.Modifier(CoffeeModifiers.Body)
+				.Modifier(CoffeeModifiers.TextColor(Colors.White))
+				.HorizontalTextAlignment(TextAlignment.Center)
+				.Padding(new Thickness(CoffeeColors.SpacingM, CoffeeColors.SpacingS))
+		)
+		.Modifier(CoffeeModifiers.Background(isSelected ? Colors.White.WithAlpha(0.25f) : CoffeeColors.Primary.WithAlpha(0.4f)))
+		.Modifier(CoffeeModifiers.CornerRadius(CoffeeColors.RadiusPill))
+		.Modifier(CoffeeModifiers.StrokeColor(isSelected ? Colors.White : Colors.Transparent))
+		.StrokeThickness(isSelected ? 1 : 0)
+		.OnTap(_ => toggle());
 
 	View RenderFilterSection(string title, IEnumerable<(int Id, string Name)> items, List<int> selectedIds)
 	{
@@ -306,7 +393,7 @@ public class ActivityFeedPage : Component<ActivityFeedState>
 			ViewFor = shot => new ShotRecordCard(shot, () =>
 				Comet.NavigationView.Navigate(this, new ShotLoggingPage(shot.Id)))
 				.Margin(new Thickness(0, 3)),
-			ItemsLayout = Comet.ItemsLayout.Vertical(0),
+			ItemsLayout = Comet.ItemsLayout.Vertical(20),
 			RemainingItemsThreshold = 5,
 			RemainingItemsThresholdReached = () => { if (State.HasMore) LoadMore(); },
 		};

@@ -1,4 +1,4 @@
-using Comet;
+﻿using Comet;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Primitives;
@@ -42,15 +42,15 @@ namespace CometControlsGallery.Pages
 				VStack(8,
 					HStack(8,
 						ColorBlock("Top-Left", Colors.Salmon)
-							.HorizontalLayoutAlignment(LayoutAlignment.Fill),
+							.FillHorizontal(),
 						ColorBlock("Top-Right", Colors.SkyBlue)
-							.HorizontalLayoutAlignment(LayoutAlignment.Fill)
+							.FillHorizontal()
 					),
 					HStack(8,
 						ColorBlock("Bottom-Left", Colors.PaleGreen)
-							.HorizontalLayoutAlignment(LayoutAlignment.Fill),
+							.FillHorizontal(),
 						ColorBlock("Bottom-Right", Colors.Plum)
-							.HorizontalLayoutAlignment(LayoutAlignment.Fill)
+							.FillHorizontal()
 					)
 				)
 			)

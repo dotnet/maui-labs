@@ -1,4 +1,4 @@
-using CometBaristaNotes.Pages;
+﻿using CometBaristaNotes.Pages;
 using TabView = Comet.TabView;
 
 namespace CometBaristaNotes;
@@ -34,6 +34,7 @@ public class BaristaApp : CometApp
 		var nav = NavigationView(page);
 		nav.SetEnvironment("NavigationBackgroundColor", CoffeeColors.Background);
 		nav.SetEnvironment("NavigationTextColor", CoffeeColors.TextPrimary);
+		nav.NavigationPrefersLargeTitles(true);
 		nav.SetAutomationId($"barista-{title.Replace(" ", string.Empty).ToLowerInvariant()}-tab-root");
 		nav.TabText(title);
 		nav.TabIcon(icon);

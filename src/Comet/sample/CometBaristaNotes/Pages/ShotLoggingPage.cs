@@ -1,4 +1,4 @@
-using Comet.Reactive;
+﻿using Comet.Reactive;
 using CometBaristaNotes.Services.DTOs;
 using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
 
@@ -66,6 +66,7 @@ public class ShotLoggingPageState
 
 	// Voice overlay state
 	public bool IsVoiceSheetOpen { get; set; }
+	public bool IsVoiceMinimized { get; set; }
 	public bool IsRecording { get; set; }
 	public string VoiceTranscript { get; set; } = "";
 	public string VoiceState { get; set; } = "Tap to speak";
@@ -226,8 +227,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 			_yieldOut.Value = (double)(shot.ActualOutput ?? shot.ExpectedOutput);
 			_time.Value = (double)(shot.ActualTime ?? 40);
 
-			SetState(s =>
-			{
+			SetState(s => {
 				s.AvailableBags = bags;
 				s.AvailableBeans = beans;
 				s.AvailableEquipment = equipment;
@@ -264,8 +264,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		}
 		else
 		{
-			SetState(s =>
-			{
+			SetState(s => {
 				s.AvailableBags = bags;
 				s.AvailableBeans = beans;
 				s.AvailableEquipment = equipment;
@@ -344,8 +343,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 			_savedShotId = created.Id;
 		}
 
-		SetState(s =>
-		{
+		SetState(s => {
 			s.ErrorMessage = null;
 			s.ShowAdviceSection = IsEditMode;
 		});
@@ -359,8 +357,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 			_doseIn.Value = 18.0;
 			_yieldOut.Value = 36.0;
 			_time.Value = 40.0;
-			SetState(s =>
-			{
+			SetState(s => {
 				s.ActualTime = null;
 				s.ActualOutput = null;
 				s.PreinfusionTime = null;
@@ -385,8 +382,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		_adviceCts?.Cancel();
 		_adviceCts = new CancellationTokenSource();
 
-		SetState(s =>
-		{
+		SetState(s => {
 			s.IsLoadingAdvice = true;
 			s.AdviceResponse = null;
 			s.AdviceError = null;
@@ -396,8 +392,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		try
 		{
 			var response = await _aiService.GetAdviceForShotAsync(shotId, _adviceCts.Token);
-			SetState(s =>
-			{
+			SetState(s => {
 				s.IsLoadingAdvice = false;
 				s.AdviceResponse = response;
 				s.AdviceError = response.Success ? null : response.ErrorMessage;
@@ -406,8 +401,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		catch (OperationCanceledException) { }
 		catch (Exception ex)
 		{
-			SetState(s =>
-			{
+			SetState(s => {
 				s.IsLoadingAdvice = false;
 				s.AdviceError = ex.Message;
 			});
@@ -420,9 +414,9 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 	{
 		ResolveServices();
 		_voiceService?.ClearConversationHistory();
-		SetState(s =>
-		{
+		SetState(s => {
 			s.IsVoiceSheetOpen = true;
+			s.IsVoiceMinimized = false;
 			s.VoiceState = "Tap to speak";
 			s.VoiceTranscript = "";
 			s.VoiceChatHistory = new List<VoiceChatMessage>();
@@ -432,11 +426,21 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 	void CloseVoiceSheet()
 	{
 		_speechCts?.Cancel();
-		SetState(s =>
-		{
+		SetState(s => {
 			s.IsVoiceSheetOpen = false;
+			s.IsVoiceMinimized = false;
 			s.IsRecording = false;
 		});
+	}
+
+	void MinimizeVoiceSheet()
+	{
+		SetState(s => s.IsVoiceMinimized = true);
+	}
+
+	void RestoreVoiceSheet()
+	{
+		SetState(s => s.IsVoiceMinimized = false);
 	}
 
 	async void ToggleRecording()
@@ -478,8 +482,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		catch (OperationCanceledException) { }
 		catch (Exception ex)
 		{
-			SetState(s =>
-			{
+			SetState(s => {
 				s.IsRecording = false;
 				s.VoiceState = $"Error: {ex.Message}";
 			});
@@ -500,8 +503,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 
 			var toolResult = await _voiceService.ProcessCommandAsync(request);
 
-			SetState(s =>
-			{
+			SetState(s => {
 				s.VoiceChatHistory.Add(new VoiceChatMessage
 				{
 					Text = toolResult.Message,
@@ -518,8 +520,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		}
 		catch (Exception ex)
 		{
-			SetState(s =>
-			{
+			SetState(s => {
 				s.VoiceChatHistory.Add(new VoiceChatMessage
 				{
 					Text = $"Error: {ex.Message}",
@@ -540,12 +541,12 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		return ZStack
 		(
 			RenderFormContent(),
-			RenderVoiceFAB(),
-			State.IsVoiceSheetOpen ? RenderVoiceOverlay() : null
+			(State.IsVoiceSheetOpen && State.IsVoiceMinimized) ? RenderVoiceFAB() : null,
+			(State.IsVoiceSheetOpen && !State.IsVoiceMinimized) ? RenderVoiceOverlay() : null
 		)
 			.Modifier(CoffeeModifiers.PageContainer)
 			.ToolbarItems(
-				new Comet.ToolbarItem { IconGlyph = "mic.fill", OnClicked = () => { /* toggle voice */ } },
+				new Comet.ToolbarItem { IconGlyph = "mic.fill", OnClicked = () => OpenVoiceSheet() },
 				new Comet.ToolbarItem { IconGlyph = "camera.fill", OnClicked = () => { /* open camera */ } })
 			.Title(IsEditMode ? "Edit Shot" : "New Shot");
 	}
@@ -655,8 +656,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		{
 			formChildren.Add(
 			FormHelpers.MakeFormPicker("Bag", bagPickerIndex, bagNames,
-			idx => SetState(s =>
-			{
+			idx => SetState(s => {
 				s.SelectedBagIndex = idx;
 				s.SelectedBagId = idx >= 0 && idx < s.AvailableBags.Count
 	? s.AvailableBags[idx].Id : null;
@@ -688,8 +688,7 @@ public class ShotLoggingPage : Component<ShotLoggingPageState>
 		// Drink Type
 		formChildren.Add(
 		FormHelpers.MakeFormPicker("Drink Type", State.SelectedDrinkIndex, DrinkTypes,
-		idx => SetState(s =>
-		{
+		idx => SetState(s => {
 			s.SelectedDrinkIndex = idx;
 			s.DrinkType = idx >= 0 && idx < DrinkTypes.Length ? DrinkTypes[idx] : "Espresso";
 		})));
@@ -823,14 +822,14 @@ Text($"1:{ratio:F1}")
 	View RenderEquipmentButton(int selectedCount)
 	{
 		var children = new List<View>
-{
-		Border(
-		Text(Icons.Machine)
-		.Modifier(CoffeeModifiers.IconFont(28, Icons.CoffeeFontFamily, CoffeeColors.TextSecondary))
-		)
-		.Modifier(CoffeeModifiers.SurfaceVariantField)
-		.Modifier(CoffeeModifiers.FrameSize(44f, 44f))
-		};
+		{
+			Border(
+				Text(Icons.Machine)
+					.Modifier(CoffeeModifiers.IconFont(28, Icons.CoffeeFontFamily, CoffeeColors.TextSecondary))
+			)
+			.Modifier(CoffeeModifiers.SurfaceVariantField)
+			.Modifier(CoffeeModifiers.FrameSize(44f, 44f))
+		};//children
 
 		if (selectedCount > 0)
 		{
@@ -880,8 +879,7 @@ Text($"1:{ratio:F1}")
 		{
 			children.Add(
 			FormHelpers.MakeFormPicker("Machine", machineIdx, machineNames,
-			idx => SetState(s =>
-			{
+			idx => SetState(s => {
 				s.SelectedMachineIndex = idx;
 				s.SelectedMachineId = idx >= 0 && idx < machines.Count ? machines[idx].Id : null;
 			})));
@@ -891,8 +889,7 @@ Text($"1:{ratio:F1}")
 		{
 			children.Add(
 			FormHelpers.MakeFormPicker("Grinder", grinderIdx, grinderNames,
-			idx => SetState(s =>
-			{
+			idx => SetState(s => {
 				s.SelectedGrinderIndex = idx;
 				s.SelectedGrinderId = idx >= 0 && idx < grinders.Count ? grinders[idx].Id : null;
 			})));
@@ -918,29 +915,29 @@ Text($"1:{ratio:F1}")
 	{
 		var timeVal = _time.Value;
 		return new Comet.Grid(
-		columns: new object[] { "*" },
-		rows: new object[] { "Auto", "50" })
-{
-// Row 0: Label
-Text(() => $"Time: {_time.Value:F0}s")
-.Modifier(CoffeeModifiers.FormLabel)
-.Margin(new Thickness(CoffeeColors.SpacingM, 0, 0, 0))
-.Cell(row: 0, column: 0),
+			columns: new object[] { "*" },
+			rows: new object[] { "Auto", "50" })
+			{
+				// Row 0: Label
+				Text(() => $"Time: {_time.Value:F0}s")
+					.Modifier(CoffeeModifiers.FormLabel)
+					.Margin(new Thickness(CoffeeColors.SpacingM, 0, 0, CoffeeColors.SpacingS))
+					.Cell(row: 0, column: 0),
 
-// Row 1: Rounded capsule background
-Border(new Spacer())
-.Modifier(CoffeeModifiers.SurfaceVariantField)
-.Modifier(CoffeeModifiers.FrameHeight(50f))
-.Cell(row: 1, column: 0),
+				// Row 1: Rounded capsule background
+				Border(new Spacer())
+					.Modifier(CoffeeModifiers.SurfaceVariantField)
+					.Modifier(CoffeeModifiers.FrameHeight(50f))
+					.Cell(row: 1, column: 0),
 
-// Row 1: Slider bound directly to signal — no SetState needed
-SignalExtensions.Slider(_time, 0, 60)
-.Modifier(CoffeeModifiers.FormSlider(
-	CoffeeColors.Primary,
-	Colors.Transparent,
-	CoffeeColors.Primary,
-	margin: new Thickness(CoffeeColors.SpacingM, 0)))
-.Cell(row: 1, column: 0)
+				// Row 1: Slider bound directly to signal — no SetState needed
+				SignalExtensions.Slider(_time, 0, 60)
+					.Modifier(CoffeeModifiers.FormSlider(
+						CoffeeColors.Primary,
+						Colors.Transparent,
+						CoffeeColors.Primary,
+						margin: new Thickness(CoffeeColors.SpacingM, 0)))
+					.Cell(row: 1, column: 0)
 };
 	}
 
@@ -1074,15 +1071,13 @@ SignalExtensions.Slider(_time, 0, 60)
 			.Padding(new Thickness(CoffeeColors.SpacingS, CoffeeColors.SpacingXS))
 			)
 			.Modifier(CoffeeModifiers.PillChip(isSelected ? CoffeeColors.Primary : CoffeeColors.SurfaceVariant))
-			.OnTap(_ =>
-			{
-				SetState(s =>
-	{
-		if (s.SelectedAccessoryIds.Contains(id))
-			s.SelectedAccessoryIds.Remove(id);
-		else
-			s.SelectedAccessoryIds.Add(id);
-	});
+			.OnTap(_ => {
+				SetState(s => {
+					if (s.SelectedAccessoryIds.Contains(id))
+						s.SelectedAccessoryIds.Remove(id);
+					else
+						s.SelectedAccessoryIds.Add(id);
+				});
 			})
 			);
 		}
@@ -1232,7 +1227,7 @@ SignalExtensions.Slider(_time, 0, 60)
 		.Modifier(CoffeeModifiers.FloatingActionButton)
 		.Margin(new Thickness(0, 0, CoffeeColors.SpacingM, CoffeeColors.SpacingXL))
 		.Alignment(Alignment.BottomTrailing)
-		.OnTap(_ => OpenVoiceSheet());
+		.OnTap(_ => RestoreVoiceSheet());
 	}
 
 	// ── Voice overlay (bottom sheet) ────────────────────────────────
@@ -1274,9 +1269,18 @@ SignalExtensions.Slider(_time, 0, 60)
 				.Modifier(CoffeeModifiers.FrameSize(40, 4))
 				.Margin(new Thickness(0, CoffeeColors.SpacingS, 0, 0)),
 
-			// Close button row
+			// Close button row (with minimize to its left)
 			HStack(
 				new Spacer(),
+				Border(
+					FormHelpers.MakeIcon(Icons.Remove, 20, CoffeeColors.TextPrimary)
+				)
+				.Modifier(CoffeeModifiers.CornerRadius(CoffeeColors.RadiusCircular))
+				.Modifier(CoffeeModifiers.Background(CoffeeColors.SurfaceVariant))
+				.StrokeThickness(0)
+				.Modifier(CoffeeModifiers.FrameSize(32, 32))
+				.Margin(new Thickness(0, 0, CoffeeColors.SpacingS, 0))
+				.OnTap(_ => MinimizeVoiceSheet()),
 				Border(
 					FormHelpers.MakeIcon(Icons.Close, 20, CoffeeColors.TextPrimary)
 				)

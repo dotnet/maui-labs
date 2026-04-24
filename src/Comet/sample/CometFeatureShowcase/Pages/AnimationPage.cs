@@ -1,4 +1,4 @@
-using Microsoft.Maui.Controls;
+﻿using Microsoft.Maui.Controls;
 using MauiLabel = Microsoft.Maui.Controls.Label;
 using MauiBoxView = Microsoft.Maui.Controls.BoxView;
 
@@ -62,7 +62,7 @@ public class AnimationPage : Component<AnimationPageState>
         fadeInButton.Clicked += async (s, e) =>
         {
             animBox.Opacity = 0;
-            await animBox.FadeTo(1, 800);
+            await animBox.FadeToAsync(1, 800);
         };
         content.Add(fadeInButton);
 
@@ -78,7 +78,7 @@ public class AnimationPage : Component<AnimationPageState>
         };
         fadeOutButton.Clicked += async (s, e) =>
         {
-            await animBox.FadeTo(0, 800);
+            await animBox.FadeToAsync(0, 800);
         };
         content.Add(fadeOutButton);
 
@@ -94,8 +94,8 @@ public class AnimationPage : Component<AnimationPageState>
         };
         scaleButton.Clicked += async (s, e) =>
         {
-            await animBox.ScaleTo(1.5, 400);
-            await animBox.ScaleTo(1, 400);
+            await animBox.ScaleToAsync(1.5, 400);
+            await animBox.ScaleToAsync(1, 400);
         };
         content.Add(scaleButton);
 
@@ -111,7 +111,7 @@ public class AnimationPage : Component<AnimationPageState>
         };
         rotateButton.Clicked += async (s, e) =>
         {
-            await animBox.RotateTo(360, 800);
+            await animBox.RotateToAsync(360, 800);
             animBox.Rotation = 0;
         };
         content.Add(rotateButton);
@@ -129,12 +129,12 @@ public class AnimationPage : Component<AnimationPageState>
         comboButton.Clicked += async (s, e) =>
         {
             await Task.WhenAll(
-                animBox.ScaleTo(1.2, 300),
-                animBox.RotateTo(180, 300)
+                animBox.ScaleToAsync(1.2, 300),
+                animBox.RotateToAsync(180, 300)
             );
             await Task.WhenAll(
-                animBox.ScaleTo(1, 300),
-                animBox.RotateTo(360, 300)
+                animBox.ScaleToAsync(1, 300),
+                animBox.RotateToAsync(360, 300)
             );
             animBox.Rotation = 0;
         };

@@ -154,6 +154,18 @@ namespace Comet
 			return view;
 		}
 
+		public static bool GetNavigationPrefersLargeTitles(this View view, bool defaultValue = false)
+		{
+			var value = view.GetEnvironment<bool?>(EnvironmentKeys.Navigation.PrefersLargeTitles);
+			return value ?? defaultValue;
+		}
+
+		public static T NavigationPrefersLargeTitles<T>(this T view, bool prefersLargeTitles) where T : View
+		{
+			view.SetEnvironment(EnvironmentKeys.Navigation.PrefersLargeTitles, (object)prefersLargeTitles);
+			return view;
+		}
+
 
 		public static T Opacity<T>(this T view, double opacity, bool cascades = false) where T : View 
 			=> view.SetEnvironment(EnvironmentKeys.View.Opacity, (object)opacity, cascades);

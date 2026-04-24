@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 public class EquipmentDetailPageState
 {
@@ -119,7 +119,7 @@ public class EquipmentDetailPage : Component<EquipmentDetailPageState>
 			FormHelpers.MakeSectionHeader(isEdit ? "EDIT EQUIPMENT" : "NEW EQUIPMENT"),
 			FormHelpers.MakeFormEntry("Name *", State.Name, "Equipment name (required)", v => SetState(s => s.Name = v)),
 			FormHelpers.MakeFormPicker("Type", State.SelectedTypeIndex, TypeNames, v => SetState(s => s.SelectedTypeIndex = v)),
-			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 100)
+			FormHelpers.MakeFormEditor("Notes", State.Notes, v => SetState(s => s.Notes = v), height: 120)
 		);
 
 		if (!string.IsNullOrEmpty(State.Error))

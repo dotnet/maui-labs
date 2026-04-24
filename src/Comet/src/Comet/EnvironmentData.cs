@@ -103,6 +103,7 @@ namespace Comet
 		{
 			public const string BackgroundColor = "NavigationBackgroundColor";
 			public const string TextColor = "NavigationTextColor";
+			public const string PrefersLargeTitles = "NavigationPrefersLargeTitles";
 		}
 		public static class Slider
 		{

@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 public class BeanManagementPageState
 {
@@ -70,29 +70,7 @@ public class BeanManagementPage : Component<BeanManagementPageState>
 			));
 		}
 
-		if (bean.Origin != null)
-		{
-			details.Add(HStack(6,
-				FormHelpers.MakeIcon(Icons.Globe, CoffeeColors.IconSizeSmall, CoffeeColors.TextMuted),
-				Text(bean.Origin)
-					.Modifier(CoffeeModifiers.CardSubtitle)
-			));
-		}
-
-		details.Add(HStack(6,
-			FormHelpers.MakeIcon(Icons.CalendarToday, CoffeeColors.IconSizeSmall, CoffeeColors.TextMuted),
-			Text($"Added {bean.CreatedAt:MMM d, yyyy}")
-				.Modifier(CoffeeModifiers.Caption)
-		));
-
-		var chevron = FormHelpers.MakeIcon(Icons.ChevronRight, 20, CoffeeColors.TextMuted);
-
-		var row = HStack(CoffeeColors.SpacingS,
-			details.FillHorizontal(),
-			chevron
-		);
-
-		View card = Border(row)
+		View card = Border(details.FillHorizontal())
 			.Modifier(CoffeeModifiers.Card);
 
 		card = card.OnTap(_ => Comet.NavigationView.Navigate(this, new BeanDetailPage(bean.Id)));
