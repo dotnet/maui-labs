@@ -178,10 +178,10 @@ public static class BrokerClient
     /// </summary>
     public static int? ReadConfigPort()
     {
-        var configPath = Path.Combine(Directory.GetCurrentDirectory(), ".mauidevflow");
-        if (!File.Exists(configPath)) return null;
         try
         {
+            var configPath = Path.Combine(Directory.GetCurrentDirectory(), ".mauidevflow");
+            if (!File.Exists(configPath)) return null;
             var json = CliJson.ParseElement(File.ReadAllText(configPath));
             if (json.TryGetProperty("port", out var portEl) && portEl.TryGetInt32(out var p))
                 return p;

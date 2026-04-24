@@ -3852,7 +3852,7 @@ public class DevFlowCommands
         }
         catch { /* broker unavailable, fall through */ }
 
-        return Broker.BrokerClient.ReadConfigPort() ?? 9223;
+        return 9223;
     }
 
     // ===== Broker Commands =====
