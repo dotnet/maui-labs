@@ -1,4 +1,4 @@
-namespace CometBaristaNotes;
+﻿namespace CometBaristaNotes;
 
 public static class ServiceHelper
 {

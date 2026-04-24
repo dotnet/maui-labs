@@ -1,4 +1,4 @@
-namespace CometTaskApp;
+﻿namespace CometTaskApp;
 
 /// <summary>
 /// Main app using TabView for multi-page navigation.

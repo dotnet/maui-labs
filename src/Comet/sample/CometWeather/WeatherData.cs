@@ -1,4 +1,4 @@
-namespace CometWeather;
+﻿namespace CometWeather;
 
 public static class WeatherData
 {

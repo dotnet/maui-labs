@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Services.DTOs;
+﻿namespace CometBaristaNotes.Services.DTOs;
 
 /// <summary>
 /// Result from speech recognition.

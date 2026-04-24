@@ -1,4 +1,4 @@
-namespace CometTrackizerApp.Models;
+﻿namespace CometTrackizerApp.Models;
 
 public record BudgetByCategory(Category Category, double MonthBills, double MonthBudget);
 

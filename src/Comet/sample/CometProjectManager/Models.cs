@@ -1,4 +1,4 @@
-namespace CometProjectManager.Models;
+﻿namespace CometProjectManager.Models;
 
 public class Category
 {

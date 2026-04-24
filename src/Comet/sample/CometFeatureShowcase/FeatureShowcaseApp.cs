@@ -1,4 +1,4 @@
-using CometFeatureShowcase.Pages;
+﻿using CometFeatureShowcase.Pages;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Hosting;
 using MauiPage = Microsoft.Maui.Controls.ContentPage;

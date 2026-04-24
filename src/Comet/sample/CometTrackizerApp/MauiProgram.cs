@@ -1,4 +1,4 @@
-namespace CometTrackizerApp;
+﻿namespace CometTrackizerApp;
 
 public class TrackizerCometApp : CometApp
 {

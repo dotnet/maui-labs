@@ -1,4 +1,4 @@
-namespace CometWeather;
+﻿namespace CometWeather;
 
 public enum TemperatureUnit { Imperial, Metric, Hybrid }
 public enum ThemeMode { Default, Dark, Light }

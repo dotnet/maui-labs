@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using Microsoft.Maui.ApplicationModel;
 using static Comet.CometControls;
 using Comet.Reactive;

@@ -1,4 +1,4 @@
-namespace CometTrackizerApp.Components;
+﻿namespace CometTrackizerApp.Components;
 
 public class PriceEditor : View
 {

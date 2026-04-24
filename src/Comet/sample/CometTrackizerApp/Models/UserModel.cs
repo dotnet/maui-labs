@@ -1,4 +1,4 @@
-namespace CometTrackizerApp.Models;
+﻿namespace CometTrackizerApp.Models;
 
 public class User
 {

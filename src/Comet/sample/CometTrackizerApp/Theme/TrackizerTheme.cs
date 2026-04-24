@@ -1,4 +1,4 @@
-namespace CometTrackizerApp.Theme;
+﻿namespace CometTrackizerApp.Theme;
 
 public static class TrackizerTheme
 {

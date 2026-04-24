@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Models;
+﻿namespace CometBaristaNotes.Models;
 
 public enum EquipmentType { Machine, Grinder, Tamper, PuckScreen, Other }
 

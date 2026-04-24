@@ -1,4 +1,4 @@
-using Comet;
+﻿using Comet;
 using Comet.Styles;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;

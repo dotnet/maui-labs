@@ -1,4 +1,4 @@
-using System.ClientModel;
+﻿using System.ClientModel;
 using Azure.AI.OpenAI;
 using CometBaristaNotes.Models;
 using CometBaristaNotes.Services.DTOs;

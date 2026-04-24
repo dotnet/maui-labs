@@ -1,4 +1,4 @@
-using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
+﻿using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
 
 namespace CometBaristaNotes.Components;
 

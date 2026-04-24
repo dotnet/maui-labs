@@ -1,4 +1,4 @@
-using Comet;
+﻿using Comet;
 using Comet.Styles;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Hosting;

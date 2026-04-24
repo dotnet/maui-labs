@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Services.DTOs;
+﻿namespace CometBaristaNotes.Services.DTOs;
 
 /// <summary>
 /// Simplified shot data for AI context.

@@ -1,4 +1,4 @@
-using Microsoft.Maui;
+﻿using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
 using MauiCollectionView = Microsoft.Maui.Controls.CollectionView;

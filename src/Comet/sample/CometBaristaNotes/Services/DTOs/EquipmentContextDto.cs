@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Services.DTOs;
+﻿namespace CometBaristaNotes.Services.DTOs;
 
 /// <summary>
 /// Equipment information for AI context.

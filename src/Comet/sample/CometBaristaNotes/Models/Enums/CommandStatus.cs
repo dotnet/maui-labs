@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Models.Enums;
+﻿namespace CometBaristaNotes.Models.Enums;
 
 /// <summary>
 /// Processing status for a voice command.

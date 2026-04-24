@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Comet;
 using Microsoft.Maui;
 using Microsoft.Maui.Devices;

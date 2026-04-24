@@ -1,4 +1,4 @@
-using CometBaristaNotes.Services.DTOs;
+﻿using CometBaristaNotes.Services.DTOs;
 using CommunityToolkit.Maui.Media;
 using Microsoft.Extensions.Logging;
 using System.Globalization;

@@ -1,4 +1,4 @@
-using CometTrackizerApp.Components;
+﻿using CometTrackizerApp.Components;
 using CometTrackizerApp.Models;
 using CometTrackizerApp.Views;
 

@@ -1,4 +1,4 @@
-namespace CometOrderingApp;
+﻿namespace CometOrderingApp;
 
 public class OrderingApp : CometApp
 {

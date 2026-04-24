@@ -1,4 +1,4 @@
-namespace CometVideoApp;
+﻿namespace CometVideoApp;
 
 /// <summary>
 /// A single full-screen video card view — colored placeholder background simulating video,

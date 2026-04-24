@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Services.DTOs;
+﻿namespace CometBaristaNotes.Services.DTOs;
 
 /// <summary>
 /// Context data for AI bean recommendations.

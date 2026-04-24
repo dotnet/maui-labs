@@ -1,4 +1,4 @@
-using Foundation;
+﻿using Foundation;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platform.MacOS.Hosting;
 

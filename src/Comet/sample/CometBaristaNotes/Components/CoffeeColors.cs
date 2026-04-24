@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Components;
+﻿namespace CometBaristaNotes.Components;
 
 /// <summary>
 /// Dynamic color/sizing constants for the coffee palette.

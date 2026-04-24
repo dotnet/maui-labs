@@ -1,4 +1,4 @@
-using static Comet.CometControls;
+﻿using static Comet.CometControls;
 
 ﻿namespace Comet.Samples;
 public class ShapeViewSample : Component

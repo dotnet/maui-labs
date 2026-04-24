@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Models.Enums;
+﻿namespace CometBaristaNotes.Models.Enums;
 
 /// <summary>
 /// Identifies the action type from a voice command.

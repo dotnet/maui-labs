@@ -1,4 +1,4 @@
-using CometTrackizerApp.Models;
+﻿using CometTrackizerApp.Models;
 using CometTrackizerApp.Pages;
 
 namespace CometTrackizerApp;

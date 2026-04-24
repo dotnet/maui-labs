@@ -1,4 +1,4 @@
-namespace CometOrderingApp;
+﻿namespace CometOrderingApp;
 
 static class Theme
 {

@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Components;
+﻿namespace CometBaristaNotes.Components;
 
 /// <summary>
 /// Displays a shot record card matching the original BaristaNotes layout.

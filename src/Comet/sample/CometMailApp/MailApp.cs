@@ -1,4 +1,4 @@
-namespace CometMailApp;
+﻿namespace CometMailApp;
 
 public class MailApp : CometApp
 {

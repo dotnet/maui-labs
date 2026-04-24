@@ -1,4 +1,4 @@
-using CometBaristaNotes.Models.Enums;
+﻿using CometBaristaNotes.Models.Enums;
 
 namespace CometBaristaNotes.Services.DTOs;
 

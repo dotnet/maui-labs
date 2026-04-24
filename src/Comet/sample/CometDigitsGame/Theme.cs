@@ -1,4 +1,4 @@
-namespace CometDigitsGame;
+﻿namespace CometDigitsGame;
 
 static class Theme
 {

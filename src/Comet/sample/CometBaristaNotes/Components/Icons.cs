@@ -1,4 +1,4 @@
-using FontIcon = Comet.FontImageSource;
+﻿using FontIcon = Comet.FontImageSource;
 
 namespace CometBaristaNotes.Components;
 

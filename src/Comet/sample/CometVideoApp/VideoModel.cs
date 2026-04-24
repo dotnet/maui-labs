@@ -1,4 +1,4 @@
-namespace CometVideoApp;
+﻿namespace CometVideoApp;
 
 public class VideoModel
 {

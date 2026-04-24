@@ -1,4 +1,4 @@
-using MauiSwipeView = Microsoft.Maui.Controls.SwipeView;
+﻿using MauiSwipeView = Microsoft.Maui.Controls.SwipeView;
 using MauiSwipeItem = Microsoft.Maui.Controls.SwipeItem;
 using MauiSwipeItems = Microsoft.Maui.Controls.SwipeItems;
 using MauiLabel = Microsoft.Maui.Controls.Label;

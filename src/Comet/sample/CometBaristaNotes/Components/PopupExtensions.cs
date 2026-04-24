@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Components;
+﻿namespace CometBaristaNotes.Components;
 
 /// <summary>
 /// Popup interactions in Barista Notes now render as Comet-native overlays

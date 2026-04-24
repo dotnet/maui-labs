@@ -1,4 +1,4 @@
-using Microsoft.Maui.Dispatching;
+﻿using Microsoft.Maui.Dispatching;
 
 namespace CometStressTest.Pages;
 

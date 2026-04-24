@@ -1,4 +1,4 @@
-using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
+﻿using LayoutAlignment = Microsoft.Maui.Primitives.LayoutAlignment;
 using CometBorder = Comet.Border;
 using CometButton = Comet.Button;
 using CometSlider = Comet.Slider;

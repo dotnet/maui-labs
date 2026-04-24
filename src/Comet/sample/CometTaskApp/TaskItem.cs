@@ -1,4 +1,4 @@
-namespace CometTaskApp;
+﻿namespace CometTaskApp;
 
 public enum TaskPriority
 {

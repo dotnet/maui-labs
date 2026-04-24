@@ -1,4 +1,4 @@
-namespace CometTrackizerApp.Pages;
+﻿namespace CometTrackizerApp.Pages;
 
 public class SigninScreen : View
 {

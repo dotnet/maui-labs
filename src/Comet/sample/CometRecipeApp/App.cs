@@ -1,4 +1,4 @@
-using Comet;
+﻿using Comet;
 using CometRecipeApp.Pages;
 using Microsoft.Maui.Hosting;
 

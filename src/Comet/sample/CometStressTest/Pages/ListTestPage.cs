@@ -1,4 +1,4 @@
-namespace CometStressTest.Pages;
+﻿namespace CometStressTest.Pages;
 
 public class ListTestPageState
 {

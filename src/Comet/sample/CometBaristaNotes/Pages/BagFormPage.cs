@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 public class BagFormPageState
 {

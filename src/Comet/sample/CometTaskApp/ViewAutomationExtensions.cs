@@ -1,4 +1,4 @@
-namespace CometTaskApp;
+﻿namespace CometTaskApp;
 
 public static class ViewAutomationExtensions
 {

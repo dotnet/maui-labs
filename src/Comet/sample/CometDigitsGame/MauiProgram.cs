@@ -1,4 +1,4 @@
-namespace CometDigitsGame;
+﻿namespace CometDigitsGame;
 
 public class DigitsGameApp : CometApp
 {

@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Services;
+﻿namespace CometBaristaNotes.Services;
 
 using Microsoft.EntityFrameworkCore;
 

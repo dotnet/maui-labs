@@ -1,4 +1,4 @@
-using CometProjectManager.Controls;
+﻿using CometProjectManager.Controls;
 using CometProjectManager.Models;
 using Syncfusion.Maui.Toolkit.TextInputLayout;
 

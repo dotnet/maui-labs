@@ -1,4 +1,4 @@
-using Comet.Styles;
+﻿using Comet.Styles;
 
 namespace CometVideoApp;
 

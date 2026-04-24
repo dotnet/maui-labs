@@ -1,4 +1,4 @@
-using Comet.Reactive;
+﻿using Comet.Reactive;
 using CometProjectManager.Models;
 
 namespace CometProjectManager;

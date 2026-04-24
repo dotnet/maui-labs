@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Models;
+﻿namespace CometBaristaNotes.Models;
 
 public class ShotFilterCriteria
 {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Comet.Reactive;
 using static Comet.CometControls;
 

@@ -1,4 +1,4 @@
-using CometProjectManager.Pages;
+﻿using CometProjectManager.Pages;
 using CommunityToolkit.Maui;
 using Microsoft.Maui.ApplicationModel;
 using Syncfusion.Maui.Toolkit.Hosting;

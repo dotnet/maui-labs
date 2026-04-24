@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using CometBaristaNotes.Services.DTOs;
 
 namespace CometBaristaNotes.Services;

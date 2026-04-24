@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Components;
+﻿namespace CometBaristaNotes.Components;
 
 /// <summary>
 /// Displays the rating panel: average rating (large), total shots,

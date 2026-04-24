@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Services;
+﻿namespace CometBaristaNotes.Services;
 
 /// <summary>
 /// Provides access to the active Comet-hosted page for displaying platform alerts

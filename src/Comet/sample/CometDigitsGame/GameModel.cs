@@ -1,4 +1,4 @@
-namespace CometDigitsGame;
+﻿namespace CometDigitsGame;
 
 record GameModel(int TargetValue, GameNumber[] Values)
 {

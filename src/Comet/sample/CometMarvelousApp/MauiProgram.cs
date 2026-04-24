@@ -1,4 +1,4 @@
-using CometMarvelousApp.Pages;
+﻿using CometMarvelousApp.Pages;
 using Microsoft.Maui.Controls.Hosting;
 
 namespace CometMarvelousApp;

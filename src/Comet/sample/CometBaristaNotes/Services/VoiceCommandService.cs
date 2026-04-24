@@ -1,4 +1,4 @@
-using System.ClientModel;
+﻿using System.ClientModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;

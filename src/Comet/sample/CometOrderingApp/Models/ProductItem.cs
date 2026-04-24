@@ -1,4 +1,4 @@
-namespace CometOrderingApp.Models;
+﻿namespace CometOrderingApp.Models;
 
 enum ProductType
 {

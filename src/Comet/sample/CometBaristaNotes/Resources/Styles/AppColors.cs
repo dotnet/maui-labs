@@ -1,4 +1,4 @@
-namespace BaristaNotes.Styles;
+﻿namespace BaristaNotes.Styles;
 
 /// <summary>
 /// Original color definitions from the MauiReactor BaristaNotes app.

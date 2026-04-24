@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Pages;
+﻿namespace CometBaristaNotes.Pages;
 
 /// <summary>
 /// The activity filter UI is now rendered directly by <see cref="ActivityFeedPage"/>

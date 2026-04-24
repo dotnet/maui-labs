@@ -1,4 +1,4 @@
-using Microsoft.Maui.Controls;
+﻿using Microsoft.Maui.Controls;
 using GradientStop = Microsoft.Maui.Controls.GradientStop;
 using LinearGradientBrush = Microsoft.Maui.Controls.LinearGradientBrush;
 using SolidColorBrush = Microsoft.Maui.Controls.SolidColorBrush;

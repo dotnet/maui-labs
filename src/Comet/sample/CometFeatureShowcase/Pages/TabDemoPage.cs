@@ -1,4 +1,4 @@
-using Microsoft.Maui.Controls;
+﻿using Microsoft.Maui.Controls;
 using MauiLabel = Microsoft.Maui.Controls.Label;
 using MauiBorder = Microsoft.Maui.Controls.Border;
 

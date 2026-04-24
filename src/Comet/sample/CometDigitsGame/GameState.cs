@@ -1,4 +1,4 @@
-namespace CometDigitsGame;
+﻿namespace CometDigitsGame;
 
 /// <summary>
 /// Game state managed via Component<TState> pattern.

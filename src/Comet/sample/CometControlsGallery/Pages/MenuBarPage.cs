@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using Comet;
 using Microsoft.Maui;

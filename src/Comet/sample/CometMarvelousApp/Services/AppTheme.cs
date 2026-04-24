@@ -1,4 +1,4 @@
-namespace CometMarvelousApp.Services;
+﻿namespace CometMarvelousApp.Services;
 
 static class AppTheme
 {

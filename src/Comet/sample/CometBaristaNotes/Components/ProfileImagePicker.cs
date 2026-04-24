@@ -1,4 +1,4 @@
-namespace CometBaristaNotes.Components;
+﻿namespace CometBaristaNotes.Components;
 
 /// <summary>
 /// Combines a CircularAvatar with a camera overlay badge.

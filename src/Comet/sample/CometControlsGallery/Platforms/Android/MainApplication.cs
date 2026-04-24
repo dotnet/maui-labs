@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Android.App;
 using Android.Runtime;
 using Microsoft.Maui;

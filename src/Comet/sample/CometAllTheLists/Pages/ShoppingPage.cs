@@ -1,4 +1,4 @@
-namespace CometAllTheLists.Pages;
+﻿namespace CometAllTheLists.Pages;
 
 public class Product
 {

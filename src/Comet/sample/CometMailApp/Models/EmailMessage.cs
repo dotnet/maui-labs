@@ -1,4 +1,4 @@
-namespace CometMailApp.Models;
+﻿namespace CometMailApp.Models;
 
 public class EmailMessage
 {

@@ -1,4 +1,4 @@
-namespace CometMarvelousApp.Models;
+﻿namespace CometMarvelousApp.Models;
 
 public enum NavigatorTabKey
 {

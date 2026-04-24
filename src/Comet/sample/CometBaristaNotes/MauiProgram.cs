@@ -1,4 +1,4 @@
-using BaristaNotes.Styles;
+﻿using BaristaNotes.Styles;
 using CometBaristaNotes.Services;
 using CommunityToolkit.Maui;
 using CommunityToolkit.Maui.Media;
