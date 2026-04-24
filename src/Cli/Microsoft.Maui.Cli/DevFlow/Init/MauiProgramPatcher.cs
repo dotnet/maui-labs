@@ -54,21 +54,22 @@ internal static class MauiProgramPatcher
             };
         }
 
-        var indent = GetLineIndentation(text, returnStatement.SpanStart);
+        var newline = DetectNewline(text);
+        var (lineStart, indent) = GetLineStartAndIndentation(text, returnStatement.SpanStart);
         var missingCalls = new List<string>();
         if (!hasAgentRegistration)
             missingCalls.Add($"{builderName}.AddMauiDevFlowAgent();");
         if (includeBlazor && !hasBlazorRegistration)
             missingCalls.Add($"{builderName}.AddMauiBlazorDevFlowTools();");
 
-        var insertion = BuildRegistrationBlock(indent, missingCalls);
-        var updated = text.Insert(returnStatement.SpanStart, insertion);
+        var insertion = BuildRegistrationBlock(indent, newline, missingCalls);
+        var updated = text.Insert(lineStart, insertion);
         var updatedRoot = CSharpSyntaxTree.ParseText(updated).GetCompilationUnitRoot();
-        updated = EnsureUsing(updated, updatedRoot, agentNamespace);
+        updated = EnsureUsing(updated, updatedRoot, agentNamespace, newline);
         if (includeBlazor)
         {
             updatedRoot = CSharpSyntaxTree.ParseText(updated).GetCompilationUnitRoot();
-            updated = EnsureUsing(updated, updatedRoot, blazorNamespace);
+            updated = EnsureUsing(updated, updatedRoot, blazorNamespace, newline);
         }
 
         if (!dryRun)
@@ -83,19 +84,27 @@ internal static class MauiProgramPatcher
         };
     }
 
-    static string EnsureUsing(string text, CompilationUnitSyntax root, string namespaceName)
+    static string EnsureUsing(string text, CompilationUnitSyntax root, string namespaceName, string newline)
     {
         if (root.Usings.Any(usingDirective => usingDirective.Name?.ToString() == namespaceName))
             return text;
 
         if (root.Usings.Count > 0)
         {
-            var position = root.Usings.Last().FullSpan.End;
-            return text.Insert(position, $"{Environment.NewLine}using {namespaceName};");
+            // Insert after the semicolon of the last using (Span.End, not FullSpan.End)
+            // so that any trailing trivia (blank lines before namespace) is preserved.
+            var position = root.Usings.Last().Span.End;
+            return text.Insert(position, $"{newline}using {namespaceName};");
         }
 
-        return $"using {namespaceName};{Environment.NewLine}{text}";
+        return $"using {namespaceName};{newline}{newline}{text}";
     }
+
+    /// <summary>
+    /// Detects the dominant line ending in <paramref name="text"/>.
+    /// </summary>
+    static string DetectNewline(string text)
+        => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
 
     static string? FindBuilderVariableName(CompilationUnitSyntax root)
     {
@@ -126,27 +135,35 @@ internal static class MauiProgramPatcher
                 memberAccess.Expression.ToString() == builderName);
     }
 
-    static string GetLineIndentation(string text, int position)
+    /// <summary>
+    /// Returns the position of the first character on the line containing <paramref name="position"/>
+    /// and the whitespace indent string.
+    /// </summary>
+    static (int lineStart, string indent) GetLineStartAndIndentation(string text, int position)
     {
         var lineStart = text.LastIndexOf('\n', Math.Max(0, position - 1));
         lineStart = lineStart < 0 ? 0 : lineStart + 1;
+
+        // Skip past a \r that might follow the \n (rare but possible in mixed files)
+        if (lineStart < text.Length && text[lineStart] == '\r')
+            lineStart++;
 
         var end = lineStart;
         while (end < text.Length && (text[end] == ' ' || text[end] == '\t'))
             end++;
 
-        return text[lineStart..end];
+        return (lineStart, text[lineStart..end]);
     }
 
-    static string BuildRegistrationBlock(string indent, IReadOnlyList<string> calls)
+    static string BuildRegistrationBlock(string indent, string newline, IReadOnlyList<string> calls)
     {
         var block = new List<string>
         {
-            $"{indent}#if DEBUG"
+            "#if DEBUG"
         };
         block.AddRange(calls.Select(call => $"{indent}{call}"));
-        block.Add($"{indent}#endif");
+        block.Add("#endif");
         block.Add(string.Empty);
-        return string.Join(Environment.NewLine, block);
+        return string.Join(newline, block);
     }
 }
