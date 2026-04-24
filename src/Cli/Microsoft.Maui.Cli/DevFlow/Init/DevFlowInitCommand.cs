@@ -66,7 +66,7 @@ internal static class DevFlowInitCommand
                         OverallStatus = options.NoAi ? DevFlowInitStatus.Disabled : DevFlowInitStatus.Skipped,
                         BootstrapMode = options.NoAi ? "disabled" : "manual"
                     };
-                    await WriteReportAsync(report, cancellationToken);
+                    await WriteReportAsync(report, options.DryRun, cancellationToken);
                     output.WriteResult(report, json, PrintHumanSummary);
                     return false;
                 }
@@ -85,7 +85,7 @@ internal static class DevFlowInitCommand
                     BootstrapMode = options.NoAi ? "disabled" : "manual"
                 };
 
-                await WriteReportAsync(report, cancellationToken);
+                await WriteReportAsync(report, options.DryRun, cancellationToken);
                 output.WriteResult(report, json, PrintHumanSummary);
                 return false;
             }
@@ -173,7 +173,7 @@ internal static class DevFlowInitCommand
 
             report.OverallStatus = DetermineOverallStatus(report);
             PopulateNextSteps(report);
-            await WriteReportAsync(report, cancellationToken);
+            await WriteReportAsync(report, options.DryRun, cancellationToken);
             output.WriteResult(report, json, PrintHumanSummary);
             return report.OverallStatus is DevFlowInitStatus.Success or DevFlowInitStatus.AlreadyPresent;
         }
@@ -185,7 +185,7 @@ internal static class DevFlowInitCommand
                 report.Notes.AddRange(ex.Remediation.ManualSteps);
 
             PopulateNextSteps(report);
-            await WriteReportAsync(report, cancellationToken);
+            await WriteReportAsync(report, options.DryRun, cancellationToken);
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
         }
@@ -194,7 +194,7 @@ internal static class DevFlowInitCommand
             report.OverallStatus = DevFlowInitStatus.Failed;
             report.Notes.Add(ex.Message);
             PopulateNextSteps(report);
-            await WriteReportAsync(report, cancellationToken);
+            await WriteReportAsync(report, options.DryRun, cancellationToken);
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
         }
@@ -372,8 +372,11 @@ internal static class DevFlowInitCommand
         }
     }
 
-    static async Task WriteReportAsync(DevFlowInitReport report, CancellationToken cancellationToken = default)
+    static async Task WriteReportAsync(DevFlowInitReport report, bool dryRun = false, CancellationToken cancellationToken = default)
     {
+        if (dryRun)
+            return;
+
         var markdown = BuildMarkdown(report);
         await File.WriteAllTextAsync(report.ReportPath, markdown, cancellationToken);
 
