@@ -13,6 +13,7 @@ internal static class MsBuildEnvironment
 {
     // 0 = not attempted, 1 = succeeded, -1 = failed
     static int s_state;
+    private static readonly object s_lock = new();
 
     /// <summary>
     /// Ensures <c>MSBuildLocator.RegisterDefaults()</c> has run exactly once.
@@ -21,22 +22,25 @@ internal static class MsBuildEnvironment
     /// </summary>
     public static void EnsureRegistered()
     {
-        var current = Volatile.Read(ref s_state);
-        if (current == 1)
+        if (Volatile.Read(ref s_state) == 1)
             return;
-        if (current == -1)
-            throw new InvalidOperationException("MSBuild SDK registration previously failed. Ensure a .NET SDK is installed.");
 
-        // First call — try to register.
-        try
+        lock (s_lock)
         {
-            RegisterCore();
-            Volatile.Write(ref s_state, 1);
-        }
-        catch
-        {
-            Volatile.Write(ref s_state, -1);
-            throw;
+            if (s_state == 1) return;
+            if (s_state == -1)
+                throw new InvalidOperationException("MSBuild SDK registration previously failed. Ensure a .NET SDK is installed.");
+
+            try
+            {
+                RegisterCore();
+                s_state = 1;
+            }
+            catch
+            {
+                s_state = -1;
+                throw;
+            }
         }
     }
 

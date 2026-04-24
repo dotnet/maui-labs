@@ -6,7 +6,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Init;
 [RequiresDynamicCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
 internal static class DevFlowProjectUpdater
 {
-    public static DevFlowInitProjectResult Apply(DevFlowProjectCandidate candidate, DevFlowInitManifest manifest, bool dryRun)
+    public static DevFlowInitProjectResult Apply(DevFlowProjectCandidate candidate, DevFlowInitManifest manifest, bool dryRun, string? workspaceRoot = null)
     {
         var result = new DevFlowInitProjectResult
         {
@@ -36,7 +36,7 @@ internal static class DevFlowProjectUpdater
         }
 
         var isGtk = candidate.Flavor.StartsWith("gtk", StringComparison.OrdinalIgnoreCase);
-        var usesCpm = DetectCentralPackageManagement(candidate.ProjectPath, out var directoryPackagesPropsPath);
+        var usesCpm = DetectCentralPackageManagement(candidate.ProjectPath, workspaceRoot ?? Path.GetDirectoryName(candidate.ProjectPath)!, out var directoryPackagesPropsPath);
 
         var agentPkg = isGtk ? manifest.Packages.AgentGtk : manifest.Packages.Agent;
         var agentPackage = EnsurePackageReference(
@@ -118,9 +118,9 @@ internal static class DevFlowProjectUpdater
     /// Directory.Packages.props). Falls back to walking up the directory tree for
     /// Directory.Packages.props if evaluation is unavailable.
     /// </summary>
-    static bool DetectCentralPackageManagement(string projectPath, out string? directoryPackagesPropsPath)
+    static bool DetectCentralPackageManagement(string projectPath, string workspaceRoot, out string? directoryPackagesPropsPath)
     {
-        directoryPackagesPropsPath = FindDirectoryPackagesProps(projectPath);
+        directoryPackagesPropsPath = FindDirectoryPackagesProps(projectPath, workspaceRoot);
 
         var evaluated = EvaluatedProject.TryLoad(projectPath);
         if (evaluated != null && evaluated.GetBooleanProperty("ManagePackageVersionsCentrally"))
@@ -130,10 +130,12 @@ internal static class DevFlowProjectUpdater
         return directoryPackagesPropsPath != null;
     }
 
-    static string? FindDirectoryPackagesProps(string projectPath)
+    static string? FindDirectoryPackagesProps(string projectPath, string workspaceRoot)
     {
         var current = Path.GetDirectoryName(projectPath);
-        while (!string.IsNullOrEmpty(current))
+        var rootFull = Path.GetFullPath(workspaceRoot);
+        while (!string.IsNullOrEmpty(current)
+               && current.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
         {
             var propsPath = Path.Combine(current, "Directory.Packages.props");
             if (File.Exists(propsPath))

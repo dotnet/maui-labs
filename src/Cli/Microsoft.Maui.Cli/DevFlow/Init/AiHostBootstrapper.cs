@@ -11,7 +11,8 @@ internal static class AiHostBootstrapper
         bool noAi,
         bool aiLocalOnly,
         bool interactive,
-        bool dryRun)
+        bool dryRun,
+        CancellationToken cancellationToken = default)
     {
         if (noAi)
         {
@@ -67,7 +68,8 @@ internal static class AiHostBootstrapper
                     MetadataFileName = fallback.SyncMetadataFileName,
                     ManifestVersion = manifest.ManifestVersion,
                     DryRun = dryRun
-                });
+                },
+                cancellationToken);
 
             result.OverallStatus = DevFlowInitStatus.Success;
             result.BootstrapMode = "local-skill-sync";

@@ -90,7 +90,7 @@ public static class MauiProgram
         var candidate = DevFlowProjectScanner.DescribeProject(workspace.RootPath, projectPath);
         Assert.NotNull(candidate);
 
-        var result = DevFlowProjectUpdater.Apply(candidate!, DevFlowInitManifestLoader.Load(), dryRun: false);
+        var result = DevFlowProjectUpdater.Apply(candidate!, DevFlowInitManifestLoader.Load(), dryRun: false, workspaceRoot: workspace.RootPath);
 
         Assert.Equal(DevFlowInitStatus.Success, result.OverallStatus);
 

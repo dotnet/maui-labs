@@ -43,18 +43,18 @@ internal static class GitHubDirectorySync
         return http;
     }
 
-    public static async Task<IReadOnlyList<string>> ListFilesAsync(HttpClient http, string repo, string basePath, string gitRef)
+    public static async Task<IReadOnlyList<string>> ListFilesAsync(HttpClient http, string repo, string basePath, string gitRef, CancellationToken cancellationToken = default)
     {
         var files = new List<string>();
-        await ListGitHubDirectoryAsync(http, repo, basePath, "", files, gitRef);
+        await ListGitHubDirectoryAsync(http, repo, basePath, "", files, gitRef, cancellationToken);
         files.Sort(StringComparer.OrdinalIgnoreCase);
         return files;
     }
 
-    public static async Task<string?> GetLatestCommitShaAsync(HttpClient http, string repo, string basePath, string gitRef)
+    public static async Task<string?> GetLatestCommitShaAsync(HttpClient http, string repo, string basePath, string gitRef, CancellationToken cancellationToken = default)
     {
         var url = $"https://api.github.com/repos/{repo}/commits?path={basePath}&sha={gitRef}&per_page=1";
-        var json = await http.GetStringAsync(url);
+        var json = await http.GetStringAsync(url, cancellationToken);
         var commits = CliJson.ParseElement(json);
         foreach (var commit in commits.EnumerateArray())
             return commit.GetProperty("sha").GetString();
@@ -89,9 +89,9 @@ internal static class GitHubDirectorySync
         }
     }
 
-    public static async Task<GitHubSyncResult> SyncAsync(HttpClient http, GitHubSyncRequest request)
+    public static async Task<GitHubSyncResult> SyncAsync(HttpClient http, GitHubSyncRequest request, CancellationToken cancellationToken = default)
     {
-        var files = await ListFilesAsync(http, request.Repo, request.SourcePath, request.Ref);
+        var files = await ListFilesAsync(http, request.Repo, request.SourcePath, request.Ref, cancellationToken);
         if (files.Count == 0)
             throw new InvalidOperationException($"No files found at {request.Repo}/{request.SourcePath}@{request.Ref}.");
 
@@ -99,18 +99,21 @@ internal static class GitHubDirectorySync
         foreach (var file in files)
         {
             var url = $"https://raw.githubusercontent.com/{request.Repo}/{request.Ref}/{request.SourcePath}/{file}";
-            var destPath = Path.Combine(request.DestinationRoot, file);
+            var destPath = Path.GetFullPath(Path.Combine(request.DestinationRoot, file));
+            var rootFull = Path.GetFullPath(request.DestinationRoot + Path.DirectorySeparatorChar);
+            if (!destPath.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Refusing to write outside destination root: {file}");
             downloaded.Add(destPath);
 
             if (request.DryRun)
                 continue;
 
-            var content = await http.GetStringAsync(url);
+            var content = await http.GetStringAsync(url, cancellationToken);
             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-            await File.WriteAllTextAsync(destPath, content);
+            await File.WriteAllTextAsync(destPath, content, cancellationToken);
         }
 
-        var commitSha = await GetLatestCommitShaAsync(http, request.Repo, request.SourcePath, request.Ref) ?? request.Ref;
+        var commitSha = await GetLatestCommitShaAsync(http, request.Repo, request.SourcePath, request.Ref, cancellationToken) ?? request.Ref;
         var metadataPath = Path.Combine(request.DestinationRoot, request.MetadataFileName);
         if (!request.DryRun)
         {
@@ -125,7 +128,7 @@ internal static class GitHubDirectorySync
                 ["sourcePath"] = request.SourcePath,
                 ["manifestVersion"] = request.ManifestVersion ?? string.Empty
             };
-            await File.WriteAllTextAsync(metadataPath, CliJson.SerializeUntyped(metadata, indented: true));
+            await File.WriteAllTextAsync(metadataPath, CliJson.SerializeUntyped(metadata, indented: true), cancellationToken);
         }
 
         return new GitHubSyncResult
@@ -136,11 +139,11 @@ internal static class GitHubDirectorySync
         };
     }
 
-    static async Task ListGitHubDirectoryAsync(HttpClient http, string repo, string basePath, string relativePath, List<string> files, string gitRef)
+    static async Task ListGitHubDirectoryAsync(HttpClient http, string repo, string basePath, string relativePath, List<string> files, string gitRef, CancellationToken cancellationToken = default)
     {
         var apiPath = string.IsNullOrEmpty(relativePath) ? basePath : $"{basePath}/{relativePath}";
         var url = $"https://api.github.com/repos/{repo}/contents/{apiPath}?ref={gitRef}";
-        var json = await http.GetStringAsync(url);
+        var json = await http.GetStringAsync(url, cancellationToken);
         var items = CliJson.ParseElement(json);
 
         foreach (var item in items.EnumerateArray())
@@ -152,7 +155,7 @@ internal static class GitHubDirectorySync
             if (type == "file")
                 files.Add(itemRelative);
             else if (type == "dir")
-                await ListGitHubDirectoryAsync(http, repo, basePath, itemRelative, files, gitRef);
+                await ListGitHubDirectoryAsync(http, repo, basePath, itemRelative, files, gitRef, cancellationToken);
         }
     }
 }

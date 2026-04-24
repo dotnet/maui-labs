@@ -1287,7 +1287,8 @@ public class DevFlowCommands
                     DryRun = ctx.GetValue(GlobalOptions.DryRunOption),
                     Ci = ctx.GetValue(GlobalOptions.CiOption)
                 },
-                output);
+                output,
+                ct);
 
             if (!success)
                 _errorOccurred = true;

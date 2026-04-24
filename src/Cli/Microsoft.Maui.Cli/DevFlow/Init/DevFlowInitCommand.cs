@@ -31,7 +31,7 @@ internal static class DevFlowInitCommand
 {
     [RequiresUnreferencedCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
     [RequiresDynamicCode("DevFlow init uses MSBuild evaluation/mutation which relies on reflection-heavy code paths.")]
-    public static async Task<bool> ExecuteAsync(DevFlowInitOptions options, IDevFlowOutputWriter output)
+    public static async Task<bool> ExecuteAsync(DevFlowInitOptions options, IDevFlowOutputWriter output, CancellationToken cancellationToken = default)
     {
         var manifest = DevFlowInitManifestLoader.Load();
         var workspaceRoot = Directory.GetCurrentDirectory();
@@ -56,7 +56,7 @@ internal static class DevFlowInitCommand
         {
             if (!string.IsNullOrWhiteSpace(options.NewTemplate))
             {
-                var scaffoldResult = await ScaffoldNewProjectAsync(workspaceRoot, options.NewTemplate, options.NewName, options.DryRun);
+                var scaffoldResult = await ScaffoldNewProjectAsync(workspaceRoot, options.NewTemplate, options.NewName, options.DryRun, cancellationToken);
                 if (scaffoldResult.Status != DevFlowInitStatus.Success)
                 {
                     report.OverallStatus = scaffoldResult.Status;
@@ -66,7 +66,7 @@ internal static class DevFlowInitCommand
                         OverallStatus = options.NoAi ? DevFlowInitStatus.Disabled : DevFlowInitStatus.Skipped,
                         BootstrapMode = options.NoAi ? "disabled" : "manual"
                     };
-                    await WriteReportAsync(report);
+                    await WriteReportAsync(report, cancellationToken);
                     output.WriteResult(report, json, PrintHumanSummary);
                     return false;
                 }
@@ -85,7 +85,7 @@ internal static class DevFlowInitCommand
                     BootstrapMode = options.NoAi ? "disabled" : "manual"
                 };
 
-                await WriteReportAsync(report);
+                await WriteReportAsync(report, cancellationToken);
                 output.WriteResult(report, json, PrintHumanSummary);
                 return false;
             }
@@ -154,8 +154,11 @@ internal static class DevFlowInitCommand
 
             foreach (var candidate in selected)
             {
+                if (report.Projects.Any(p => string.Equals(p.ProjectPath, candidate.ProjectPath, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
                 var effectiveCandidate = ApplyOverrides(candidate, options);
-                report.Projects.Add(DevFlowProjectUpdater.Apply(effectiveCandidate, manifest, options.DryRun));
+                report.Projects.Add(DevFlowProjectUpdater.Apply(effectiveCandidate, manifest, options.DryRun, workspaceRoot));
             }
 
             report.AiBootstrap = await AiHostBootstrapper.RunAsync(
@@ -165,11 +168,12 @@ internal static class DevFlowInitCommand
                 options.NoAi,
                 options.AiLocalOnly,
                 interactive,
-                options.DryRun);
+                options.DryRun,
+                cancellationToken);
 
             report.OverallStatus = DetermineOverallStatus(report);
             PopulateNextSteps(report);
-            await WriteReportAsync(report);
+            await WriteReportAsync(report, cancellationToken);
             output.WriteResult(report, json, PrintHumanSummary);
             return report.OverallStatus is DevFlowInitStatus.Success or DevFlowInitStatus.AlreadyPresent;
         }
@@ -181,7 +185,7 @@ internal static class DevFlowInitCommand
                 report.Notes.AddRange(ex.Remediation.ManualSteps);
 
             PopulateNextSteps(report);
-            await WriteReportAsync(report);
+            await WriteReportAsync(report, cancellationToken);
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
         }
@@ -190,7 +194,7 @@ internal static class DevFlowInitCommand
             report.OverallStatus = DevFlowInitStatus.Failed;
             report.Notes.Add(ex.Message);
             PopulateNextSteps(report);
-            await WriteReportAsync(report);
+            await WriteReportAsync(report, cancellationToken);
             output.WriteResult(report, json, PrintHumanSummary);
             return false;
         }
@@ -368,13 +372,13 @@ internal static class DevFlowInitCommand
         }
     }
 
-    static async Task WriteReportAsync(DevFlowInitReport report)
+    static async Task WriteReportAsync(DevFlowInitReport report, CancellationToken cancellationToken = default)
     {
         var markdown = BuildMarkdown(report);
-        await File.WriteAllTextAsync(report.ReportPath, markdown);
+        await File.WriteAllTextAsync(report.ReportPath, markdown, cancellationToken);
 
         var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(report, DevFlowInitReportJsonContext.Default.DevFlowInitReport);
-        await File.WriteAllBytesAsync(report.JsonReportPath, jsonBytes);
+        await File.WriteAllBytesAsync(report.JsonReportPath, jsonBytes, cancellationToken);
     }
 
     static string BuildMarkdown(DevFlowInitReport report)
@@ -501,7 +505,8 @@ internal static class DevFlowInitCommand
         string workspaceRoot,
         string template,
         string? name,
-        bool dryRun)
+        bool dryRun,
+        CancellationToken cancellationToken = default)
     {
         if (!s_validTemplates.Contains(template))
         {
@@ -510,7 +515,14 @@ internal static class DevFlowInitCommand
         }
 
         var projectName = name ?? "MauiApp1";
-        var outputDir = Path.Combine(workspaceRoot, projectName);
+
+        // Validate project name to prevent path traversal and argument injection
+        if (!System.Text.RegularExpressions.Regex.IsMatch(projectName, @"^[A-Za-z0-9._-]+$"))
+            return (DevFlowInitStatus.Failed, $"Invalid project name: '{projectName}'. Use only letters, digits, dots, hyphens, or underscores.");
+
+        var outputDir = Path.GetFullPath(Path.Combine(workspaceRoot, projectName));
+        if (!outputDir.StartsWith(Path.GetFullPath(workspaceRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return (DevFlowInitStatus.Failed, "Project name would escape workspace root.");
 
         if (Directory.Exists(outputDir) && Directory.EnumerateFileSystemEntries(outputDir).Any())
         {
@@ -524,34 +536,40 @@ internal static class DevFlowInitCommand
                 $"Would create '{template}' project named '{projectName}' at {outputDir}.");
         }
 
-        var args = $"new {template} -n {projectName} -o \"{outputDir}\"";
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = workspaceRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add("new");
+        psi.ArgumentList.Add(template);
+        psi.ArgumentList.Add("-n");
+        psi.ArgumentList.Add(projectName);
+        psi.ArgumentList.Add("-o");
+        psi.ArgumentList.Add(outputDir);
+
+        var argsDisplay = $"new {template} -n {projectName} -o \"{outputDir}\"";
         try
         {
-            var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "dotnet",
-                Arguments = args,
-                WorkingDirectory = workspaceRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            });
+            var process = System.Diagnostics.Process.Start(psi);
 
             if (process == null)
             {
                 return (DevFlowInitStatus.Failed,
-                    $"Failed to start `dotnet {args}`.");
+                    $"Failed to start `dotnet {argsDisplay}`.");
             }
 
-            var stdout = await process.StandardOutput.ReadToEndAsync();
-            var stderr = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
 
             if (process.ExitCode != 0)
             {
                 var detail = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
                 return (DevFlowInitStatus.Failed,
-                    $"`dotnet {args}` exited with code {process.ExitCode}: {detail}");
+                    $"`dotnet {argsDisplay}` exited with code {process.ExitCode}: {detail}");
             }
 
             return (DevFlowInitStatus.Success,
