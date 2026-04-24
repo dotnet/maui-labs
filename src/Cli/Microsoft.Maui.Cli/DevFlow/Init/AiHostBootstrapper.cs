@@ -56,27 +56,40 @@ internal static class AiHostBootstrapper
         {
             using var http = GitHubDirectorySync.CreateHttpClient();
             var destinationRoot = Path.Combine(workspaceRoot, fallback.TargetPathTemplate.Replace('/', Path.DirectorySeparatorChar));
-            var syncResult = await GitHubDirectorySync.SyncAsync(
-                http,
-                new GitHubSyncRequest
-                {
-                    Repo = fallback.SourceRepo,
-                    RepoUrl = fallback.SourceRepoUrl,
-                    SourcePath = fallback.SourcePath,
-                    Ref = fallback.DesiredRef,
-                    DestinationRoot = destinationRoot,
-                    MetadataFileName = fallback.SyncMetadataFileName,
-                    ManifestVersion = manifest.ManifestVersion,
-                    DryRun = dryRun
-                },
-                cancellationToken);
+            try
+            {
+                var syncResult = await GitHubDirectorySync.SyncAsync(
+                    http,
+                    new GitHubSyncRequest
+                    {
+                        Repo = fallback.SourceRepo,
+                        RepoUrl = fallback.SourceRepoUrl,
+                        SourcePath = fallback.SourcePath,
+                        Ref = fallback.DesiredRef,
+                        DestinationRoot = destinationRoot,
+                        MetadataFileName = fallback.SyncMetadataFileName,
+                        ManifestVersion = manifest.ManifestVersion,
+                        DryRun = dryRun
+                    },
+                    cancellationToken);
 
-            result.OverallStatus = DevFlowInitStatus.Success;
-            result.BootstrapMode = "local-skill-sync";
-            result.FilesChanged.AddRange(syncResult.DownloadedFiles);
-            result.FilesChanged.Add(syncResult.MetadataPath);
-            result.ManualSteps.AddRange(selectedHost.Verify.ManualSteps);
-            return result;
+                result.OverallStatus = DevFlowInitStatus.Success;
+                result.BootstrapMode = "local-skill-sync";
+                result.FilesChanged.AddRange(syncResult.DownloadedFiles);
+                result.FilesChanged.Add(syncResult.MetadataPath);
+                result.ManualSteps.AddRange(selectedHost.Verify.ManualSteps);
+                return result;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                result.OverallStatus = DevFlowInitStatus.ManualRequired;
+                result.BootstrapMode = "manual";
+                result.ManualSteps.Add($"Automatic local skill sync for {selectedHost.DisplayName} failed: {ex.Message}");
+                result.ManualSteps.Add("Re-run `maui devflow init` when network access to GitHub is available, or retry with `--ai-host` to target a specific AI host.");
+                result.ManualSteps.Add($"Manually sync the configured AI bootstrap files from `{fallback.SourceRepoUrl}` ({fallback.SourcePath} @ {fallback.DesiredRef}) into `{destinationRoot}`.");
+                result.ManualSteps.AddRange(selectedHost.Verify.ManualSteps);
+                return result;
+            }
         }
 
         result.OverallStatus = DevFlowInitStatus.ManualRequired;
