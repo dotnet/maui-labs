@@ -86,7 +86,9 @@ dotnet build -p:MauiDevFlowSessionId=mysession
 ```
 
 > **Note:** Session IDs are sanitized to lowercase alphanumeric characters only.
-> For example, `My-Session` would become `mysession`.
+> For example, `My-Session` would become `mysession`. Auto-derived IDs (from the
+> project path) are prefixed with `dw` and truncated to 26 characters. Explicit
+> overrides keep the full sanitized value without prefix or truncation.
 
 The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environment variable.
 
