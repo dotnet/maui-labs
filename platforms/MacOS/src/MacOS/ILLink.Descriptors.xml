@@ -1,0 +1,7 @@
+<linker>
+  <!-- Preserve all public API types in the assembly.
+       These types are consumed by app projects via attached properties, XAML, or code-behind
+       and have no internal references within the library itself.
+       Without this descriptor, the trimmer strips them in Release builds. -->
+  <assembly fullname="Microsoft.Maui.Platforms.MacOS" preserve="all" />
+</linker>

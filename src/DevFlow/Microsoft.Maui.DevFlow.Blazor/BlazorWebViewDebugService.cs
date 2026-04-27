@@ -52,7 +52,7 @@ using CoreFoundation;
 using Foundation;
 using Microsoft.Maui.Handlers;
 using WebKit;
-using MacOSBlazorHandler = Microsoft.Maui.Platform.MacOS.Handlers.BlazorWebViewHandler;
+using MacOSBlazorHandler = Microsoft.Maui.Platforms.MacOS.Handlers.BlazorWebViewHandler;
 
 namespace Microsoft.Maui.DevFlow.Blazor;
 

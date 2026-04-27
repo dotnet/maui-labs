@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Platform.MacOS.Hosting;
-using Microsoft.Maui.Essentials.MacOS;
+using Microsoft.Maui.Platforms.MacOS.Hosting;
+using Microsoft.Maui.Platforms.MacOS.Essentials;
 using Microsoft.Maui.DevFlow.Agent;
 using Microsoft.Maui.DevFlow.Blazor;
 

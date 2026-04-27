@@ -1,0 +1,30 @@
+<Project>
+
+  <!--
+    Bridge the Razor SDK's static web assets to macOS BundleResource items.
+    This mirrors what Microsoft.AspNetCore.Components.WebView.Maui does with
+    ConvertStaticWebAssetsToMauiAssets, but targets BundleResource directly
+    since we don't have the MAUI SDK's MauiAsset processing pipeline.
+
+    Requirements:
+    - Consuming app must use Microsoft.NET.Sdk.Razor
+    - Consuming app must reference Microsoft.AspNetCore.Components.WebView.Maui
+  -->
+
+  <Target Name="_IncludeBlazorWebViewBundleResources"
+          BeforeTargets="_CollectBundleResources"
+          DependsOnTargets="ResolveProjectReferences;StaticWebAssetsPrepareForRun">
+
+    <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_BlazorBundleResourceWithTargetPath" />
+    </ComputeStaticWebAssetsTargetPaths>
+
+    <ItemGroup>
+      <BundleResource Include="%(_BlazorBundleResourceWithTargetPath.Identity)"
+                      Condition="'%(_BlazorBundleResourceWithTargetPath.Identity)' != ''"
+                      Link="%(_BlazorBundleResourceWithTargetPath.TargetPath)" />
+    </ItemGroup>
+
+  </Target>
+
+</Project>

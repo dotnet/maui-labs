@@ -49,9 +49,6 @@
     <XamarinAppleToolsMaciOSVersion>1.0.0-preview.1.26201.1</XamarinAppleToolsMaciOSVersion>
   </PropertyGroup>
   <PropertyGroup Label="Platform Extensions">
-    <PlatformMauiMacOSVersion>0.3.0</PlatformMauiMacOSVersion>
-    <PlatformMauiMacOSBlazorWebViewVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSBlazorWebViewVersion>
-    <PlatformMauiMacOSEssentialsVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSEssentialsVersion>
     <PlatformMauiLinuxGtk4Version>0.6.0</PlatformMauiLinuxGtk4Version>
     <PlatformMauiLinuxGtk4BlazorWebViewVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4BlazorWebViewVersion>
     <PlatformMauiLinuxGtk4EssentialsVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4EssentialsVersion>

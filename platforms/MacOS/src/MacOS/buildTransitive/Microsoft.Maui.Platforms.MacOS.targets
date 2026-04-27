@@ -1,0 +1,65 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    macOS AppKit app icon generation from MauiIcon items.
+    Processes MauiIcon SVG/PNG sources into a .icns file using sips + iconutil,
+    then injects CFBundleIconFile via PartialAppManifest.
+  -->
+
+  <Target Name="_MacOSGenerateAppIcon"
+          BeforeTargets="_CompileAppManifest"
+          Condition="'@(MauiIcon)' != ''"
+          Inputs="@(MauiIcon)"
+          Outputs="$(IntermediateOutputPath)appicon\AppIcon.icns">
+
+    <PropertyGroup>
+      <_MacOSIconSource>%(MauiIcon.FullPath)</_MacOSIconSource>
+      <_MacOSIconIntermediatePath>$(IntermediateOutputPath)appicon\</_MacOSIconIntermediatePath>
+      <_MacOSIconSetPath>$(_MacOSIconIntermediatePath)AppIcon.iconset</_MacOSIconSetPath>
+      <_MacOSIconIcnsPath>$(_MacOSIconIntermediatePath)AppIcon.icns</_MacOSIconIcnsPath>
+      <_MacOSIconPlistPath>$(_MacOSIconIntermediatePath)AppIcon.plist</_MacOSIconPlistPath>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(_MacOSIconSetPath)" />
+
+    <!-- Generate all required macOS icon sizes from source -->
+    <Exec Command="sips -s format png -z 16 16 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_16x16.png&quot;" />
+    <Exec Command="sips -s format png -z 32 32 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_16x16@2x.png&quot;" />
+    <Exec Command="sips -s format png -z 32 32 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_32x32.png&quot;" />
+    <Exec Command="sips -s format png -z 64 64 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_32x32@2x.png&quot;" />
+    <Exec Command="sips -s format png -z 128 128 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_128x128.png&quot;" />
+    <Exec Command="sips -s format png -z 256 256 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_128x128@2x.png&quot;" />
+    <Exec Command="sips -s format png -z 256 256 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_256x256.png&quot;" />
+    <Exec Command="sips -s format png -z 512 512 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_256x256@2x.png&quot;" />
+    <Exec Command="sips -s format png -z 512 512 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_512x512.png&quot;" />
+    <Exec Command="sips -s format png -z 1024 1024 &quot;$(_MacOSIconSource)&quot; --out &quot;$(_MacOSIconSetPath)/icon_512x512@2x.png&quot;" />
+
+    <!-- Create .icns from iconset -->
+    <Exec Command="iconutil -c icns &quot;$(_MacOSIconSetPath)&quot; -o &quot;$(_MacOSIconIcnsPath)&quot;" />
+
+    <!-- Generate partial Info.plist for CFBundleIconFile -->
+    <WriteLinesToFile
+      File="$(_MacOSIconPlistPath)"
+      Lines="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;;
+&lt;plist version=&quot;1.0&quot;&gt;;
+&lt;dict&gt;;
+    &lt;key&gt;CFBundleIconFile&lt;/key&gt;;
+    &lt;string&gt;AppIcon&lt;/string&gt;;
+&lt;/dict&gt;;
+&lt;/plist&gt;"
+      Overwrite="true" />
+
+    <!-- Register outputs -->
+    <ItemGroup>
+      <BundleResource Include="$(_MacOSIconIcnsPath)">
+        <LogicalName>AppIcon.icns</LogicalName>
+      </BundleResource>
+      <PartialAppManifest Include="$(_MacOSIconPlistPath)" />
+      <FileWrites Include="$(_MacOSIconIcnsPath);$(_MacOSIconPlistPath)" />
+      <FileWrites Include="$(_MacOSIconSetPath)\*" />
+    </ItemGroup>
+
+  </Target>
+
+</Project>

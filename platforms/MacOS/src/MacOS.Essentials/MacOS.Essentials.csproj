@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <RootNamespace>Microsoft.Maui.Platforms.MacOS.Essentials</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.MacOS.Essentials</AssemblyName>
+    <PackageId>Microsoft.Maui.Platforms.MacOS.Essentials</PackageId>
+    <Description>macOS AppKit implementations of Microsoft.Maui.Essentials APIs (AppInfo, Battery, Geolocation, Preferences, SecureStorage, etc.). Companion to Microsoft.Maui.Platforms.MacOS.</Description>
+    <PackageTags>maui;macos;appkit;essentials;dotnet;cross-platform</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Core" Version="$(MauiVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ILLink.Descriptors.xml">
+      <LogicalName>ILLink.Descriptors.xml</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+</Project>

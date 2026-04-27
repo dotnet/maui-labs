@@ -44,9 +44,6 @@
 
   <!-- Platform extensions (pinned) -->
   <ItemGroup Label="Platform">
-    <PackageVersion Include="Platform.Maui.MacOS" Version="$(PlatformMauiMacOSVersion)" />
-    <PackageVersion Include="Platform.Maui.MacOS.BlazorWebView" Version="$(PlatformMauiMacOSBlazorWebViewVersion)" />
-    <PackageVersion Include="Platform.Maui.MacOS.Essentials" Version="$(PlatformMauiMacOSEssentialsVersion)" />
     <PackageVersion Include="Platform.Maui.Linux.Gtk4" Version="$(PlatformMauiLinuxGtk4Version)" />
     <PackageVersion Include="Platform.Maui.Linux.Gtk4.BlazorWebView" Version="$(PlatformMauiLinuxGtk4BlazorWebViewVersion)" />
     <PackageVersion Include="Platform.Maui.Linux.Gtk4.Essentials" Version="$(PlatformMauiLinuxGtk4EssentialsVersion)" />
