@@ -19,6 +19,7 @@
     <DevFlowMauiMinVersion>10.0.20</DevFlowMauiMinVersion>
     <MicrosoftMauiControlsCompatibilityVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsCompatibilityVersion>
     <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
+    <MicrosoftAspNetCoreComponentsWebViewVersion>10.0.0</MicrosoftAspNetCoreComponentsWebViewVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">

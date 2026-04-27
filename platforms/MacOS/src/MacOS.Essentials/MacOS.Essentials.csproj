@@ -14,8 +14,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
-    <PackageReference Include="Microsoft.Maui.Core" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Essentials" />
+    <PackageReference Include="Microsoft.Maui.Core" />
   </ItemGroup>
 
   <ItemGroup>

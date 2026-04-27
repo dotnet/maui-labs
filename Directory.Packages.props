@@ -9,7 +9,9 @@
   <ItemGroup Label="MAUI">
     <PackageVersion Include="Microsoft.Maui.Controls" Version="$(MicrosoftMauiControlsVersion)" />
     <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="$(MicrosoftMauiControlsCompatibilityVersion)" />
+    <PackageVersion Include="Microsoft.Maui.Core" Version="$(MicrosoftMauiControlsVersion)" />
     <PackageVersion Include="Microsoft.Maui.Essentials" Version="$(MicrosoftMauiEssentialsVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
   </ItemGroup>
 
@@ -33,6 +35,7 @@
     <PackageVersion Include="XenoAtom.Terminal.UI" Version="$(XenoAtomTerminalUIVersion)" />
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="$(InteropUIAutomationClientVersion)" />
+    <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="5.0.0" />
   </ItemGroup>
 
   <!-- MAUI Cli Tool dependencies -->

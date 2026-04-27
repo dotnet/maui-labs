@@ -56,7 +56,7 @@ class SecureStorageImplementation : ISecureStorage
             Service = ServiceName
         };
         using var match = SecKeyChain.QueryAsRecord(record, out var resultCode);
-        if (resultCode == SecStatusCode.Success)
+        if (resultCode == SecStatusCode.Success && match?.ValueData != null)
             return NSString.FromData(match.ValueData, NSStringEncoding.UTF8);
         return null;
     }
@@ -76,6 +76,6 @@ class SecureStorageImplementation : ISecureStorage
         };
         var result = SecKeyChain.Add(newRecord);
         if (result != SecStatusCode.Success)
-            throw new Exception($"Error adding secure storage record: {result}");
+            throw new InvalidOperationException($"Error adding secure storage record: {result}");
     }
 }

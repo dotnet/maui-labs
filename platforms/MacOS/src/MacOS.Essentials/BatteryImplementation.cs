@@ -70,11 +70,21 @@ class BatteryImplementation : IBattery
     {
         if (_listening) return;
         _callbackDelegate = PowerSourceCallback;
-        _powerSourceNotificationRef = IOPSNotificationCreateRunLoopSource(_callbackDelegate, IntPtr.Zero);
-        if (_powerSourceNotificationRef != IntPtr.Zero)
+        var powerSourceNotificationRef = IOPSNotificationCreateRunLoopSource(_callbackDelegate, IntPtr.Zero);
+        if (powerSourceNotificationRef != IntPtr.Zero)
         {
-            CFRunLoopAddSource(CFRunLoopGetMain(), _powerSourceNotificationRef, GetDefaultRunLoopMode());
-            _listening = true;
+            try
+            {
+                CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceNotificationRef, GetDefaultRunLoopMode());
+                _powerSourceNotificationRef = powerSourceNotificationRef;
+                _listening = true;
+            }
+            catch
+            {
+                CFRelease(powerSourceNotificationRef);
+                _callbackDelegate = null;
+                throw;
+            }
         }
     }
 

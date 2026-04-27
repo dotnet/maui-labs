@@ -153,11 +153,16 @@ internal class MacOSModalManager
 		sheetWindow.ContentView = platformView;
 
 		var presentingWindow = GetTopmostModalHost();
-
 		var entry = new ModalEntry(page, platformView, mauiContext, MacOSModalPresentationStyle.Sheet, ModalWindow: sheetWindow, PresentingWindow: presentingWindow);
+		if (presentingWindow == null)
+		{
+			DisposeModalWindow(entry);
+			throw new InvalidOperationException("Cannot present a modal sheet without a host window.");
+		}
+
 		_modalStack.Add(entry);
 
-		presentingWindow?.BeginSheet(sheetWindow, (returnCode) => { });
+		presentingWindow.BeginSheet(sheetWindow, (returnCode) => { });
 	}
 
 	CGSize ComputeSheetSize(Page page)

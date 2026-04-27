@@ -72,28 +72,28 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
     [Export("applicationDidBecomeActive:")]
     public void ApplicationDidBecomeActive(NSNotification notification)
     {
-        foreach (var w in _windows) w.Activated();
+        foreach (var w in _windows.ToArray()) w.Activated();
         FireLifecycleEvents<MacOSLifecycle.DidBecomeActive>(del => del(notification));
     }
 
     [Export("applicationDidResignActive:")]
     public void ApplicationDidResignActive(NSNotification notification)
     {
-        foreach (var w in _windows) w.Deactivated();
+        foreach (var w in _windows.ToArray()) w.Deactivated();
         FireLifecycleEvents<MacOSLifecycle.DidResignActive>(del => del(notification));
     }
 
     [Export("applicationDidHide:")]
     public void ApplicationDidHide(NSNotification notification)
     {
-        foreach (var w in _windows) w.Stopped();
+        foreach (var w in _windows.ToArray()) w.Stopped();
         FireLifecycleEvents<MacOSLifecycle.DidHide>(del => del(notification));
     }
 
     [Export("applicationDidUnhide:")]
     public void ApplicationDidUnhide(NSNotification notification)
     {
-        foreach (var w in _windows) w.Resumed();
+        foreach (var w in _windows.ToArray()) w.Resumed();
         FireLifecycleEvents<MacOSLifecycle.DidUnhide>(del => del(notification));
     }
 
@@ -123,7 +123,8 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
         var virtualWindow = _mauiApp.CreateWindow(activationState);
         AddWindow(virtualWindow);
 
-        var windowContext = applicationContext.MakeWindowScope(new NSWindow());
+        var platformWindow = new NSWindow();
+        var windowContext = applicationContext.MakeWindowScope(platformWindow);
 
         var windowHandler = new WindowHandler();
         windowHandler.SetMauiContext(windowContext);

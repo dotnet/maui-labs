@@ -393,35 +393,41 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
 
         byte[] GetResponseBytes(string? url, out string contentType, out int statusCode)
         {
-            var uri = new Uri(url!);
+            contentType = string.Empty;
+
+            if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                statusCode = 400;
+                return Array.Empty<byte>();
+            }
+
             // Don't fall back to host page for framework/content files
             var allowFallbackOnHostPage = AppOriginUri.IsBaseOf(uri)
                 && !uri.AbsolutePath.StartsWith("/_framework/", StringComparison.Ordinal)
                 && !uri.AbsolutePath.StartsWith("/_content/", StringComparison.Ordinal);
-            var queryIndex = url?.IndexOf('?') ?? -1;
+            var queryIndex = url.IndexOf('?');
             if (queryIndex >= 0)
-                url = url![..queryIndex];
+                url = url[..queryIndex];
 
             var webviewManager = System.Threading.Volatile.Read(ref _handler._webviewManager);
             if (webviewManager == null)
             {
                 statusCode = 503;
-                contentType = string.Empty;
                 return Array.Empty<byte>();
             }
 
-            if (webviewManager.TryGetResponseContentInternal(url!, allowFallbackOnHostPage, out statusCode, out var statusMsg, out var content, out var headers))
+            if (webviewManager.TryGetResponseContentInternal(url, allowFallbackOnHostPage, out statusCode, out var statusMsg, out var content, out var headers))
             {
                 statusCode = 200;
                 using var ms = new MemoryStream();
                 content.CopyTo(ms);
                 content.Dispose();
-                contentType = headers["Content-Type"];
+                if (!headers.TryGetValue("Content-Type", out contentType))
+                    contentType = "application/octet-stream";
                 return ms.ToArray();
             }
 
             statusCode = 404;
-            contentType = string.Empty;
             return Array.Empty<byte>();
         }
 

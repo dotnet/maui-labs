@@ -17,7 +17,7 @@ class GeolocationImplementation : IGeolocation
 
 	public Task<Location?> GetLastKnownLocationAsync()
 	{
-		var manager = new CLLocationManager();
+		using var manager = new CLLocationManager();
 		var clLocation = manager.Location;
 		if (clLocation == null)
 			return Task.FromResult<Location?>(null);
@@ -36,7 +36,7 @@ class GeolocationImplementation : IGeolocation
 		var del = new SingleLocationDelegate(tcs);
 		manager.Delegate = del;
 
-		using var registration = cancelToken.Register(() =>
+		var registration = cancelToken.Register(() =>
 		{
 			manager.StopUpdatingLocation();
 			tcs.TrySetResult(null);
@@ -49,8 +49,10 @@ class GeolocationImplementation : IGeolocation
 		}
 		finally
 		{
+			registration.Dispose();
 			manager.StopUpdatingLocation();
-			manager.Delegate = null!;
+			manager.Delegate = null;
+			manager.Dispose();
 		}
 	}
 
@@ -71,8 +73,14 @@ class GeolocationImplementation : IGeolocation
 
 	public void StopListeningForeground()
 	{
-		_listeningManager?.StopUpdatingLocation();
+		var manager = _listeningManager;
 		_listeningManager = null;
+		if (manager == null)
+			return;
+
+		manager.StopUpdatingLocation();
+		manager.Delegate = null;
+		manager.Dispose();
 	}
 
 	void OnLocationUpdated(CLLocation location)

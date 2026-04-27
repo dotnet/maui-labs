@@ -31,9 +31,9 @@
           Condition="Exists('..\..\src\MacOS.BlazorWebView\buildTransitive\Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets')" />
 
   <ItemGroup>
-    <PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="5.0.0" />
-    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
   </ItemGroup>
 
   <ItemGroup>

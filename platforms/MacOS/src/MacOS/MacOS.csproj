@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
   </ItemGroup>
 
   <!-- Linker descriptor: preserve all public API types for AOT/trimming -->
