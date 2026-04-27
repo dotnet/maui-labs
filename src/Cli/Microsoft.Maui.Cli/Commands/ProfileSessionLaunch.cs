@@ -132,14 +132,7 @@ internal static class ProfileSessionLaunch
 			context.Formatter.WriteInfo("App is running. Press Enter to attach dotnet-trace and start profiling.");
 		}
 
-		await ProfileTraceLifecycle.WaitForStopSignalAsync(
-			duration: null,
-			allowManualStop: true,
-			context.Formatter,
-			context.UseJson,
-			context.Verbose,
-			cancellationToken,
-			completionMessage: null);
+		await ProfileTraceLifecycle.WaitForStdinNewlineOrEofAsync(cancellationToken);
 	}
 
 	static async Task BuildIfNeededAsync(ProfileSessionContext context, CancellationToken cancellationToken)

@@ -113,9 +113,11 @@ internal static class ProfileSessionRunner
 
 		if (!appExitRequested && !context.UseJson)
 		{
-			context.Formatter.WriteWarning(
-				"The app did not connect to the startup profiling exit channel, so it may remain running and not flush PGO data. " +
-				"Ensure it references Microsoft.Maui.ProfilingHelper and loads that assembly during startup.");
+			context.Formatter.WriteWarning(context.ManualStart
+				? "The app did not connect to the profiling exit channel, so it may remain running. " +
+				  "Ensure it references Microsoft.Maui.ProfilingHelper."
+				: "The app did not connect to the startup profiling exit channel, so it may remain running and not flush PGO data. " +
+				  "Ensure it references Microsoft.Maui.ProfilingHelper and loads that assembly during startup.");
 		}
 	}
 

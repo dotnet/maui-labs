@@ -59,7 +59,8 @@ internal static class ProfileTraceLifecycle
 		}
 		else if (stopReason is StopSignalReason.Manual or StopSignalReason.Timed)
 		{
-			formatter.WriteInfo("Stopping trace and finalizing output...");
+			if (!useJson)
+				formatter.WriteInfo("Stopping trace and finalizing output...");
 			stopRequested = true;
 			await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose);
 		}
@@ -124,6 +125,57 @@ internal static class ProfileTraceLifecycle
 			&& !useJson
 			&& !string.IsNullOrEmpty(completionMessage))
 			formatter.WriteInfo(completionMessage);
+	}
+
+	// Stdin-only wait used by the manual-start attach prompt. Unlike WaitForStopSignalAsync,
+	// this does NOT swallow Ctrl+C: cancellation propagates up via cancellationToken so the
+	// command terminates cleanly. The orphaned-ReadLine race in WaitForStopSignalCoreAsync's
+	// CancelKeyPress path therefore can't affect a subsequent stop-phase reader.
+	internal static async Task WaitForStdinNewlineOrEofAsync(CancellationToken cancellationToken)
+	{
+		var newlineSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var readLineTask = Task.Run(() =>
+		{
+			try
+			{
+				Console.ReadLine();
+			}
+			finally
+			{
+				newlineSignal.TrySetResult(true);
+			}
+		}, CancellationToken.None);
+
+		try
+		{
+			await newlineSignal.Task.WaitAsync(cancellationToken);
+		}
+		finally
+		{
+			try
+			{
+				await readLineTask.WaitAsync(s_consoleReadJoinTimeout);
+			}
+			catch (TimeoutException)
+			{
+				// Console.ReadLine() can outlive the wait; ignore.
+			}
+		}
+
+		// Drain any extra buffered keystrokes (e.g. an accidental fast double-Enter)
+		// so the next stdin reader doesn't immediately consume them as a stop signal.
+		if (!Console.IsInputRedirected)
+		{
+			try
+			{
+				while (Console.KeyAvailable)
+					Console.ReadKey(intercept: true);
+			}
+			catch (InvalidOperationException)
+			{
+				// Console.KeyAvailable throws when stdin is redirected to a file; ignore.
+			}
+		}
 	}
 
 	internal static bool ShouldRequestManualStop(Task completedTask, Task processWaitTask, bool processHasExited)
