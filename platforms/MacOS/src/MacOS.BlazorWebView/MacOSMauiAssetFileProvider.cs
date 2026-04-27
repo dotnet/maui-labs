@@ -39,8 +39,9 @@ internal class MacOSMauiAssetFileProvider : IFileProvider
             return new BundleFileInfo(bundlePath);
 
         // Try direct path in bundle resources
-        var directPath = Path.Combine(NSBundle.MainBundle.ResourcePath, _contentRoot, subpath);
-        if (File.Exists(directPath))
+        var directRoot = Path.GetFullPath(Path.Combine(NSBundle.MainBundle.ResourcePath, _contentRoot));
+        var directPath = Path.GetFullPath(Path.Combine(directRoot, subpath));
+        if (IsPathUnderRoot(directPath, directRoot) && File.Exists(directPath))
             return new BundleFileInfo(directPath);
 
         return new NotFoundFileInfo(subpath);
@@ -49,6 +50,15 @@ internal class MacOSMauiAssetFileProvider : IFileProvider
     public IChangeToken Watch(string filter)
     {
         return NullChangeToken.Singleton;
+    }
+
+    static bool IsPathUnderRoot(string path, string root)
+    {
+        var rootWithSeparator = Path.EndsInDirectorySeparator(root)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        return path.StartsWith(rootWithSeparator, StringComparison.Ordinal);
     }
 
     sealed class BundleFileInfo : IFileInfo
