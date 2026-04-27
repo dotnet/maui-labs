@@ -50,7 +50,11 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         })();
     ";
 
+    static readonly NSString WindowKey = new("window");
+
     MacOSWebViewManager? _webviewManager;
+    ContentInsetsWindowObserver? _contentInsetsWindowObserver;
+    TitlebarWindowObserver? _titlebarWindowObserver;
 
     string? HostPage => VirtualView?.HostPage;
     new IServiceProvider? Services => MauiContext?.Services;
@@ -98,6 +102,9 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
 
     protected override void DisconnectHandler(WKWebView platformView)
     {
+        RemoveContentInsetsWindowObserver(platformView);
+        RemoveTitlebarWindowObserver(platformView);
+
         _titlebarDragOverlay?.RemoveFromSuperview();
         _titlebarDragOverlay = null;
 
@@ -183,10 +190,11 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         // If insets are all zero, auto-calculate from toolbar height when the window is available
         if (insets.Top == 0 && insets.Left == 0 && insets.Bottom == 0 && insets.Right == 0)
         {
-            ApplyAutoContentInsets(wkWebView);
+            handler.ApplyAutoContentInsets(wkWebView);
         }
         else
         {
+            handler.RemoveContentInsetsWindowObserver(wkWebView);
             ApplyContentInsets(wkWebView, insets);
         }
 
@@ -199,16 +207,22 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         }
     }
 
-    static void ApplyAutoContentInsets(WKWebView wkWebView)
+    void ApplyAutoContentInsets(WKWebView wkWebView)
     {
         var window = wkWebView.Window;
         if (window == null)
         {
             // View isn't in a window yet — observe until it is
-            wkWebView.AddObserver(new ContentInsetsWindowObserver(wkWebView),
-                new NSString("window"), NSKeyValueObservingOptions.New, IntPtr.Zero);
+            if (_contentInsetsWindowObserver == null)
+            {
+                _contentInsetsWindowObserver = new ContentInsetsWindowObserver(this, wkWebView);
+                wkWebView.AddObserver(_contentInsetsWindowObserver,
+                    WindowKey, NSKeyValueObservingOptions.New, IntPtr.Zero);
+            }
             return;
         }
+
+        RemoveContentInsetsWindowObserver(wkWebView);
 
         if (!window.StyleMask.HasFlag(NSWindowStyle.FullSizeContentView))
             return;
@@ -224,19 +238,32 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
             ApplyScrollPocketVisibility(wkWebView, true));
     }
 
+    void RemoveContentInsetsWindowObserver(WKWebView webView)
+    {
+        if (_contentInsetsWindowObserver == null)
+            return;
+
+        webView.RemoveObserver(_contentInsetsWindowObserver, WindowKey);
+        _contentInsetsWindowObserver = null;
+    }
+
     sealed class ContentInsetsWindowObserver : NSObject
     {
+        readonly BlazorWebViewHandler _handler;
         readonly WKWebView _webView;
 
-        public ContentInsetsWindowObserver(WKWebView webView) => _webView = webView;
+        public ContentInsetsWindowObserver(BlazorWebViewHandler handler, WKWebView webView)
+        {
+            _handler = handler;
+            _webView = webView;
+        }
 
         public override void ObserveValue(NSString keyPath, NSObject ofObject,
             NSDictionary change, IntPtr context)
         {
             if (_webView.Window != null)
             {
-                _webView.RemoveObserver(this, new NSString("window"));
-                ApplyAutoContentInsets(_webView);
+                _handler.ApplyAutoContentInsets(_webView);
             }
         }
     }
@@ -415,10 +442,16 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
             if (window == null)
             {
                 // View isn't in a window yet — observe via viewDidMoveToWindow
-                webView.AddObserver(new TitlebarWindowObserver(this, webView),
-                    new NSString("window"), NSKeyValueObservingOptions.New, IntPtr.Zero);
+                if (_titlebarWindowObserver == null)
+                {
+                    _titlebarWindowObserver = new TitlebarWindowObserver(this, webView);
+                    webView.AddObserver(_titlebarWindowObserver,
+                        WindowKey, NSKeyValueObservingOptions.New, IntPtr.Zero);
+                }
                 return;
             }
+
+            RemoveTitlebarWindowObserver(webView);
 
             if (!window.StyleMask.HasFlag(NSWindowStyle.FullSizeContentView))
                 return;
@@ -454,6 +487,15 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         TryInstall();
     }
 
+    void RemoveTitlebarWindowObserver(WKWebView webView)
+    {
+        if (_titlebarWindowObserver == null)
+            return;
+
+        webView.RemoveObserver(_titlebarWindowObserver, WindowKey);
+        _titlebarWindowObserver = null;
+    }
+
     sealed class TitlebarWindowObserver : NSObject
     {
         readonly BlazorWebViewHandler _handler;
@@ -470,7 +512,6 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         {
             if (_webView.Window != null)
             {
-                _webView.RemoveObserver(this, new NSString("window"));
                 _handler.InstallTitlebarDragOverlay(_webView);
             }
         }
