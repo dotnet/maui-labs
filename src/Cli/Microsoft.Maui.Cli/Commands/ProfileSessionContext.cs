@@ -41,6 +41,8 @@ internal sealed class ProfileSessionContext
 	internal IOutputFormatter Formatter => Request.Formatter;
 	internal bool UseJson => Request.UseJson;
 	internal bool Verbose => Request.Verbose;
+	internal bool ManualStart => Request.ManualStart;
+	internal bool DiagnosticSuspend => !Request.ManualStart;
 
 	internal string PrimaryOutputPath { get; }
 	internal string ProfilePlatform { get; }

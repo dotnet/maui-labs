@@ -84,11 +84,14 @@ internal static class ProfileSessionLaunch
 
 		if (context.StartTraceAfterLaunch)
 		{
+			if (context.ManualStart)
+				await WaitForManualStartSignalAsync(context, cancellationToken);
+
 			ProfileCommandProcessHelpers.WriteVerbose(
 				context.Formatter,
 				context.UseJson,
 				context.Verbose,
-				$"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort} after the suspended app launch.");
+				$"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort} after the {(context.ManualStart ? "non-suspended" : "suspended")} app launch.");
 			context.TraceProcess = await DotnetTraceRunner.StartWithRetryAsync(
 				context.Project.ProjectDirectory,
 				context.OutputPath,
@@ -109,6 +112,34 @@ internal static class ProfileSessionLaunch
 		WriteTraceStatusMessage(context);
 	}
 
+	static async Task WaitForManualStartSignalAsync(ProfileSessionContext context, CancellationToken cancellationToken)
+	{
+		// Both interactive and non-interactive callers wait for an Enter / newline on stdin
+		// before attaching dotnet-trace. Scripted callers can pipe a newline at the right
+		// moment (after navigating the app, finishing setup, etc.). Stdin EOF also unblocks
+		// so a closed pipe attaches gracefully instead of hanging forever.
+		if (context.UseJson)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				"Manual profiling: waiting for a newline on stdin (or stdin close) to attach dotnet-trace.");
+		}
+		else
+		{
+			context.Formatter.WriteInfo("App is running. Press Enter to attach dotnet-trace and start profiling.");
+		}
+
+		await ProfileTraceLifecycle.WaitForStopSignalAsync(
+			duration: null,
+			allowManualStop: true,
+			context.Formatter,
+			context.UseJson,
+			context.Verbose,
+			cancellationToken);
+	}
+
 	static async Task BuildIfNeededAsync(ProfileSessionContext context, CancellationToken cancellationToken)
 	{
 		if (context.NoBuild)
@@ -126,7 +157,8 @@ internal static class ProfileSessionLaunch
 			context.Configuration,
 			context.Transport,
 			context.DiagnosticPort,
-			context.BuildInjection);
+			context.BuildInjection,
+			context.DiagnosticSuspend);
 		ProfileCommandProcessHelpers.WriteVerbose(context.Formatter, context.UseJson, context.Verbose, $"Build command: {ProfileCommandProcessHelpers.FormatCommandLine("dotnet", buildArgs)}");
 		var buildResult = await RunDotnetCommandAsync(context, "Building the app...", buildArgs, cancellationToken);
 
@@ -143,7 +175,8 @@ internal static class ProfileSessionLaunch
 			context.Device,
 			context.Transport,
 			context.DiagnosticPort,
-			context.BuildInjection);
+			context.BuildInjection,
+			context.DiagnosticSuspend);
 		ProfileCommandProcessHelpers.WriteVerbose(context.Formatter, context.UseJson, context.Verbose, $"Launch command: {ProfileCommandProcessHelpers.FormatCommandLine("dotnet", launchArgs)}");
 
 		if (!context.UseJson && context.Formatter is not SpectreOutputFormatter)

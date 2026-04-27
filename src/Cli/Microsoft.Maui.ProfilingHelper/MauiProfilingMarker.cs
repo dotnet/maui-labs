@@ -6,52 +6,52 @@ using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace Microsoft.Maui.StartupProfiling;
+namespace Microsoft.Maui.ProfilingHelper;
 
 /// <summary>
 /// Public API for signalling the end of MAUI startup to an attached dotnet-trace collector.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Add the <c>Microsoft.Maui.StartupProfiling</c> NuGet package to your MAUI app project,
+/// Add the <c>Microsoft.Maui.ProfilingHelper</c> NuGet package to your MAUI app project,
 /// then call <see cref="Complete"/> at the logical end of startup — for example after the
 /// first page is shown or after <c>Application.Current.MainPage</c> is fully constructed.
 /// </para>
 /// <para>
 /// When running under <c>maui profile startup</c> or any dotnet-trace session configured with
-/// <c>--stopping-event-provider-name Microsoft.Maui.StartupProfiling
+/// <c>--stopping-event-provider-name Microsoft.Maui.ProfilingHelper
 /// --stopping-event-event-name StartupComplete</c>), the trace will stop automatically
 /// when this method is called.
 /// </para>
 /// </remarks>
-public static class StartupProfilingMarker
+public static class MauiProfilingMarker
 {
-	internal const string ProfilingEnvironmentVariable = "MAUI_STARTUP_PROFILING";
-	internal const string ExitControlHostEnvironmentVariable = "MAUI_STARTUP_PROFILING_EXIT_HOST";
-	internal const string ExitControlPortEnvironmentVariable = "MAUI_STARTUP_PROFILING_EXIT_PORT";
+	internal const string ProfilingEnvironmentVariable = "MAUI_PROFILING_HELPER";
+	internal const string ExitControlHostEnvironmentVariable = "MAUI_PROFILING_HELPER_EXIT_HOST";
+	internal const string ExitControlPortEnvironmentVariable = "MAUI_PROFILING_HELPER_EXIT_PORT";
 
 	/// <summary>
 	/// The EventSource provider name to use with
 	/// <c>dotnet-trace --stopping-event-provider-name</c>.
 	/// </summary>
-	public const string ProviderName = StartupProfilingEventSource.ProviderName;
+	public const string ProviderName = MauiProfilingEventSource.ProviderName;
 
 	/// <summary>
 	/// The event name to use with <c>dotnet-trace --stopping-event-event-name</c>.
 	/// </summary>
-	public const string EventName = StartupProfilingEventSource.StartupCompleteEventName;
+	public const string EventName = MauiProfilingEventSource.StartupCompleteEventName;
 
 	/// <summary>
 	/// Returns <see langword="true"/> when the app is running under startup profiling.
 	/// </summary>
 	public static bool IsProfilingSession =>
 		IsEnabledEnvironmentVariable(ProfilingEnvironmentVariable)
-		|| StartupProfilingExitChannel.IsConfigured;
+		|| MauiProfilingExitChannel.IsConfigured;
 
 	/// <summary>
 	/// Signals that startup is complete.
 	/// </summary>
-	public static void Complete() => StartupProfilingEventSource.Log.StartupComplete();
+	public static void Complete() => MauiProfilingEventSource.Log.StartupComplete();
 
 	internal static bool IsEnabledEnvironmentVariable(string variableName)
 	{
@@ -62,22 +62,22 @@ public static class StartupProfilingMarker
 }
 
 /// <summary>
-/// Module initializer that eagerly instantiates the <see cref="StartupProfilingEventSource"/>
+/// Module initializer that eagerly instantiates the <see cref="MauiProfilingEventSource"/>
 /// so the provider is visible to dotnet-trace from the very first moment the assembly loads —
 /// before any app code runs. This is important for startup profiling because the collector
 /// must see the provider before it can register the stopping-event filter.
 /// </summary>
-internal static class StartupProfilingInitializer
+internal static class MauiProfilingInitializer
 {
 	[ModuleInitializer]
 	internal static void Initialize()
 	{
-		_ = StartupProfilingEventSource.Log;
-		StartupProfilingExitChannel.TryStart();
+		_ = MauiProfilingEventSource.Log;
+		MauiProfilingExitChannel.TryStart();
 	}
 }
 
-internal static class StartupProfilingExitChannel
+internal static class MauiProfilingExitChannel
 {
 	const int MaxConnectAttempts = 20;
 	static readonly TimeSpan s_retryDelay = TimeSpan.FromMilliseconds(500);
@@ -101,7 +101,7 @@ internal static class StartupProfilingExitChannel
 		host = "127.0.0.1";
 		port = 0;
 
-		var explicitPort = Environment.GetEnvironmentVariable(StartupProfilingMarker.ExitControlPortEnvironmentVariable);
+		var explicitPort = Environment.GetEnvironmentVariable(MauiProfilingMarker.ExitControlPortEnvironmentVariable);
 		if (string.IsNullOrWhiteSpace(explicitPort)
 			|| !int.TryParse(explicitPort, out var parsedPort)
 			|| parsedPort <= 0
@@ -110,7 +110,7 @@ internal static class StartupProfilingExitChannel
 			return false;
 		}
 
-		var explicitHost = Environment.GetEnvironmentVariable(StartupProfilingMarker.ExitControlHostEnvironmentVariable);
+		var explicitHost = Environment.GetEnvironmentVariable(MauiProfilingMarker.ExitControlHostEnvironmentVariable);
 		host = string.IsNullOrWhiteSpace(explicitHost) ? "127.0.0.1" : explicitHost.Trim();
 		port = parsedPort;
 		return true;

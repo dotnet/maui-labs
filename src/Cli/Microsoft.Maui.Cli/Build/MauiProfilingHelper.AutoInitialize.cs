@@ -7,9 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
-using Microsoft.Maui.StartupProfiling;
+using Microsoft.Maui.ProfilingHelper;
 
-internal static class __MauiStartupProfilingInjectedBootstrap
+internal static class __MauiProfilingHelperInjectedBootstrap
 {
     static readonly TimeSpan s_pollInterval = TimeSpan.FromMilliseconds(100);
     static readonly TimeSpan s_maxWait = TimeSpan.FromSeconds(30);
@@ -18,7 +18,7 @@ internal static class __MauiStartupProfilingInjectedBootstrap
     [ModuleInitializer]
     internal static void Initialize()
     {
-        if (!StartupProfilingMarker.IsProfilingSession)
+        if (!MauiProfilingMarker.IsProfilingSession)
             return;
 
         _ = WaitForStartupCompletionAsync();
@@ -83,6 +83,6 @@ internal static class __MauiStartupProfilingInjectedBootstrap
         if (Interlocked.Exchange(ref s_completionSignaled, 1) != 0)
             return;
 
-        StartupProfilingMarker.Complete();
+        MauiProfilingMarker.Complete();
     }
 }

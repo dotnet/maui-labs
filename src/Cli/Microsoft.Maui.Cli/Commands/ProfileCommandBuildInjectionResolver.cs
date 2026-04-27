@@ -12,9 +12,9 @@ internal static class ProfileCommandBuildInjectionResolver
 		bool enableRuntimePgo = false,
 		string? eventPipeOutputPath = null)
 	{
-		var targetsPath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingInjectionTargetsFileName);
-		var assemblyPath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingAssemblyFileName);
-		var sourcePath = TryResolveBuildAssetPath(ProfileCommand.StartupProfilingInjectionSourceFileName);
+		var targetsPath = TryResolveBuildAssetPath(ProfileCommand.ProfilingHelperInjectionTargetsFileName);
+		var assemblyPath = TryResolveBuildAssetPath(ProfileCommand.ProfilingHelperAssemblyFileName);
+		var sourcePath = TryResolveBuildAssetPath(ProfileCommand.ProfilingHelperInjectionSourceFileName);
 
 		if (targetsPath is null || assemblyPath is null || sourcePath is null)
 			return null;

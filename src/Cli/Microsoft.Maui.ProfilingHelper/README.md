@@ -1,12 +1,12 @@
-# Microsoft.Maui.StartupProfiling
+# Microsoft.Maui.ProfilingHelper
 
-`Microsoft.Maui.StartupProfiling` is the helper used by `maui profile startup` for zero-touch startup profiling.
+`Microsoft.Maui.ProfilingHelper` is the helper used by `maui profile` for zero-touch profiling.
 
-In the normal CLI flow, **you do not need to reference this package or change your app code**. The `maui profile startup` command injects the helper into the target MAUI app at build time and uses it to:
+In the normal CLI flow, **you do not need to reference this package or change your app code**. The `maui profile` command injects the helper into the target MAUI app at build time and uses it to:
 
-- register the `Microsoft.Maui.StartupProfiling` `EventSource`
-- report when the first MAUI UI is ready
-- optionally receive a graceful exit request from the CLI
+- register the `Microsoft.Maui.ProfilingHelper` `EventSource`
+- report when the first MAUI UI is ready (used by `maui profile startup`)
+- receive a graceful exit request from the CLI when the trace finishes
 
 ## Normal usage: `maui profile startup`
 
@@ -29,7 +29,7 @@ If you want automatic stop behavior, provide an explicit condition such as:
 
 ```sh
 maui profile startup \
-  --stopping-event-provider-name Microsoft.Maui.StartupProfiling \
+  --stopping-event-provider-name Microsoft.Maui.ProfilingHelper \
   --stopping-event-event-name StartupComplete
 ```
 
@@ -41,10 +41,10 @@ maui profile startup --duration 00:00:15
 
 ## Optional custom/manual integration
 
-If you want to use this helper outside the zero-touch CLI flow, you can reference it directly and call `StartupProfilingMarker.Complete()` yourself when startup is logically finished.
+If you want to use this helper outside the zero-touch CLI flow, you can reference it directly and call `MauiProfilingMarker.Complete()` yourself when startup is logically finished.
 
 ```xml
-<PackageReference Include="Microsoft.Maui.StartupProfiling" Version="*" />
+<PackageReference Include="Microsoft.Maui.ProfilingHelper" Version="*" />
 ```
 
 Example:
@@ -53,7 +53,7 @@ Example:
 protected override void OnAppearing()
 {
     base.OnAppearing();
-    StartupProfilingMarker.Complete();
+    MauiProfilingMarker.Complete();
 }
 ```
 
@@ -61,16 +61,16 @@ protected override void OnAppearing()
 
 | Variable | Values | Effect |
 |---|---|---|
-| `MAUI_STARTUP_PROFILING` | `1` / `true` | Indicates that the app is running in a profiling session. |
-| `MAUI_STARTUP_PROFILING_EXIT_HOST` | host name / IP | Optional explicit host for the CLI exit-control channel. |
-| `MAUI_STARTUP_PROFILING_EXIT_PORT` | TCP port | Optional explicit port for the CLI exit-control channel. |
+| `MAUI_PROFILING_HELPER` | `1` / `true` | Indicates that the app is running in a profiling session. |
+| `MAUI_PROFILING_HELPER_EXIT_HOST` | host name / IP | Optional explicit host for the CLI exit-control channel. |
+| `MAUI_PROFILING_HELPER_EXIT_PORT` | TCP port | Optional explicit port for the CLI exit-control channel. |
 
 ## How it works
 
-- The helper registers an `EventSource` named `Microsoft.Maui.StartupProfiling` via a module initializer.
-- `StartupProfilingMarker.Complete()` emits the `StartupComplete` event on that provider.
+- The helper registers an `EventSource` named `Microsoft.Maui.ProfilingHelper` via a module initializer.
+- `MauiProfilingMarker.Complete()` emits the `StartupComplete` event on that provider.
 - When the CLI injects the bootstrap source, it waits for the first MAUI page handler to exist and then calls `Complete()` from inside the app assembly.
-- During `maui profile startup`, the helper can also connect back to the CLI over a small TCP exit-control channel so the app can terminate cleanly after trace finalization.
+- During `maui profile`, the helper also connects back to the CLI over a small TCP exit-control channel so the app can terminate cleanly after trace finalization.
 
 ### Notes on MIBC generation
 

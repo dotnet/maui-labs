@@ -23,4 +23,5 @@ internal sealed record ProfileSessionRequest(
 	bool AutoSelectedStoppingEvent,
 	IOutputFormatter Formatter,
 	bool UseJson,
-	bool Verbose);
+	bool Verbose,
+	bool ManualStart = false);
