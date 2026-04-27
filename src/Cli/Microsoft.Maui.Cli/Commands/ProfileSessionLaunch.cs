@@ -137,7 +137,8 @@ internal static class ProfileSessionLaunch
 			context.Formatter,
 			context.UseJson,
 			context.Verbose,
-			cancellationToken);
+			cancellationToken,
+			completionMessage: null);
 	}
 
 	static async Task BuildIfNeededAsync(ProfileSessionContext context, CancellationToken cancellationToken)
@@ -218,8 +219,8 @@ internal static class ProfileSessionLaunch
 			else
 			{
 				var runtimeOwnedStatusMessage = context.EffectiveDuration is { } runtimeDuration
-					? $"Startup trace is running. It will stop automatically after {FormatDuration(runtimeDuration)} unless you press Enter sooner."
-					: "Startup trace is running. Press Enter to stop and finalize the trace output.";
+					? $"Trace is running. It will stop automatically after {FormatDuration(runtimeDuration)} unless you press Enter sooner."
+					: "Trace is running. Press Enter to stop and finalize the trace output.";
 				context.Formatter.WriteInfo(runtimeOwnedStatusMessage);
 			}
 			return;
@@ -228,8 +229,8 @@ internal static class ProfileSessionLaunch
 		var traceStatusMessage = !string.IsNullOrWhiteSpace(context.StoppingEventProvider)
 			? "Waiting for the configured stopping event. Press Enter to stop early."
 			: context.EffectiveDuration is { } explicitDuration
-				? $"Startup trace is running. It will stop automatically after {FormatDuration(explicitDuration)} unless you press Enter sooner."
-				: "Startup trace is running. Press Enter to stop and finalize the trace output.";
+				? $"Trace is running. It will stop automatically after {FormatDuration(explicitDuration)} unless you press Enter sooner."
+				: "Trace is running. Press Enter to stop and finalize the trace output.";
 		context.Formatter.WriteInfo(traceStatusMessage);
 	}
 

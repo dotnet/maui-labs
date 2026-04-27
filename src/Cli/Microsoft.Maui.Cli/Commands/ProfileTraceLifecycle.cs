@@ -108,7 +108,8 @@ internal static class ProfileTraceLifecycle
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		string? completionMessage = "Stopping trace and finalizing output...")
 	{
 		var stopReason = await WaitForStopSignalCoreAsync(
 			externalCompletionTask: null,
@@ -119,8 +120,10 @@ internal static class ProfileTraceLifecycle
 			verbose,
 			cancellationToken);
 
-		if (stopReason is StopSignalReason.Manual or StopSignalReason.Timed && !useJson)
-			formatter.WriteInfo("Stopping trace and finalizing output...");
+		if (stopReason is StopSignalReason.Manual or StopSignalReason.Timed
+			&& !useJson
+			&& !string.IsNullOrEmpty(completionMessage))
+			formatter.WriteInfo(completionMessage);
 	}
 
 	internal static bool ShouldRequestManualStop(Task completedTask, Task processWaitTask, bool processHasExited)
