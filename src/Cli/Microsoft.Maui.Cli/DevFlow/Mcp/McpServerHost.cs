@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 
@@ -13,6 +14,12 @@ public static class McpServerHost
 		var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
 		var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings { Args = [] });
+
+		// The MCP server uses stdio transport (stdin/stdout for JSON-RPC).
+		// The default console logger writes to stdout, corrupting the protocol stream.
+		// Redirect all logging to stderr so diagnostics are preserved without pollution.
+		builder.Logging.ClearProviders();
+		builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
 		builder.Services.AddSingleton<McpAgentSession>();
 
