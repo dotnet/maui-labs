@@ -118,7 +118,8 @@ internal static class ProfileSessionLaunch
 		// before attaching dotnet-trace. Scripted callers can pipe a newline at the right
 		// moment (after navigating the app, finishing setup, etc.). Stdin EOF also unblocks
 		// so a closed pipe attaches gracefully instead of hanging forever.
-		if (context.UseJson)
+		var nonInteractive = context.UseJson || Console.IsInputRedirected;
+		if (nonInteractive)
 		{
 			ProfileCommandProcessHelpers.WriteVerbose(
 				context.Formatter,
