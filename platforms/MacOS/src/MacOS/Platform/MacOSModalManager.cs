@@ -219,9 +219,12 @@ internal class MacOSModalManager
 		{
 			var host = entry.PresentingWindow ?? _parentWindow;
 			host?.EndSheet(entry.ModalWindow);
-			entry.ModalWindow.OrderOut(null);
+			DisposeModalWindow(entry);
 		}
-		entry.Page.Handler?.DisconnectHandler();
+		else
+		{
+			entry.Page.Handler?.DisconnectHandler();
+		}
 	}
 
 	#endregion
@@ -292,13 +295,26 @@ internal class MacOSModalManager
 		if (entry.ModalWindow != null)
 		{
 			entry.PresentingWindow?.RemoveChildWindow(entry.ModalWindow);
-			entry.ModalWindow.OrderOut(null);
+			DisposeModalWindow(entry);
+		}
+		else
+		{
+			entry.Page.Handler?.DisconnectHandler();
 		}
 
 		// Re-activate the host window
 		entry.PresentingWindow?.MakeKeyAndOrderFront(null);
+	}
 
+	static void DisposeModalWindow(ModalEntry entry)
+	{
+		if (entry.ModalWindow is not { } modalWindow)
+			return;
+
+		modalWindow.OrderOut(null);
 		entry.Page.Handler?.DisconnectHandler();
+		modalWindow.ContentView = null;
+		modalWindow.Dispose();
 	}
 
 	static CGRect ComputeCenteredFrame(NSWindow? host, CGSize size)
