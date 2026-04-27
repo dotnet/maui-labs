@@ -40,6 +40,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	NSSplitViewItem? _sidebarSplitItem;
 	NSView? _sidebarView;
 	NSView? _contentView;
+	NSObject? _contentFrameChangedObserver;
 	NSView? _currentPageView;
 	Page? _currentPage;
 	Shell? _shell;
@@ -133,7 +134,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		_contentView.WantsLayer = true;
 		_contentView.Layer!.MasksToBounds = false;
 		_contentView.PostsFrameChangedNotifications = true;
-		NSNotificationCenter.DefaultCenter.AddObserver(
+		_contentFrameChangedObserver = NSNotificationCenter.DefaultCenter.AddObserver(
 			NSView.FrameChangedNotification, OnContentFrameChanged, _contentView);
 
 		// Use NSSplitViewController for native inset sidebar appearance
@@ -208,9 +209,11 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			_shell.Navigated -= OnShellNavigated;
 			_shell.PropertyChanged -= OnShellPropertyChanged;
 		}
-		if (_contentView != null)
-			NSNotificationCenter.DefaultCenter.RemoveObserver(
-				_contentView, NSView.FrameChangedNotification, null);
+		if (_contentFrameChangedObserver != null)
+		{
+			NSNotificationCenter.DefaultCenter.RemoveObserver(_contentFrameChangedObserver);
+			_contentFrameChangedObserver = null;
+		}
 		_shell = null;
 		base.DisconnectHandler(platformView);
 	}
