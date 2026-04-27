@@ -103,7 +103,7 @@ class GeolocationImplementation : IGeolocation
 			GeolocationAccuracy.Low => CLLocation.AccuracyKilometer,
 			GeolocationAccuracy.Medium => CLLocation.AccuracyHundredMeters,
 			GeolocationAccuracy.High => CLLocation.AccuracyNearestTenMeters,
-			GeolocationAccuracy.Best => CLLocation.AccurracyBestForNavigation,
+			GeolocationAccuracy.Best => CLLocation.AccuracyBestForNavigation,
 			_ => CLLocation.AccuracyHundredMeters,
 		};
 	}
