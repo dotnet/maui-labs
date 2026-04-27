@@ -17,8 +17,14 @@ dotnet build src/Cli/Microsoft.Maui.Cli/ --configuration Release
 The built executable is at:
 
 ```
+# macOS / Linux
 artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui
+
+# Windows
+artifacts\bin\Microsoft.Maui.Cli\Release\net10.0\maui.exe
 ```
+
+> **Tip:** The project multi-targets `net9.0` and `net10.0`. Both outputs are produced — use the `net10.0` one. You can also run via `dotnet artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui.dll` on any platform.
 
 Verify the MCP command is available:
 
@@ -53,7 +59,7 @@ To fully test tool invocation, you need a MAUI app with the DevFlow agent NuGet 
 
 ```bash
 # Terminal 1: Start the broker
-maui devflow broker
+maui devflow broker start
 
 # Terminal 2: Run your MAUI app (it registers with the broker automatically)
 dotnet run --project path/to/your/MauiApp
@@ -102,6 +108,6 @@ A successful response includes the server name, version, and capabilities.
 |---------|----------|
 | `command not found: maui` | Use the full path to the built binary or install as a global tool |
 | MCP Inspector shows "Disconnected" | Check that the build succeeded and the binary path is correct |
-| `npm EACCES` permission errors | Run `sudo chown -R $(whoami) ~/.npm` to fix npm cache permissions |
-| Tools return connection errors | Start the broker (`maui devflow broker`) and a MAUI app with the DevFlow agent |
+| `npm EACCES` permission errors | See the [npm docs on resolving EACCES permissions](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally). Using [nvm](https://github.com/nvm-sh/nvm) avoids this issue entirely. |
+| Tools return connection errors | Start the broker (`maui devflow broker start`) and a MAUI app with the DevFlow agent |
 | Inspector can't install | Ensure Node.js ≥ 18 is installed and `npx` is available |
