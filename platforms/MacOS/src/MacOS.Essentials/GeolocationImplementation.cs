@@ -6,7 +6,6 @@ namespace Microsoft.Maui.Platforms.MacOS.Essentials;
 
 class GeolocationImplementation : IGeolocation
 {
-	CLLocationManager? _locationManager;
 	CLLocationManager? _listeningManager;
 
 	public bool IsListeningForeground => _listeningManager != null;
@@ -29,26 +28,30 @@ class GeolocationImplementation : IGeolocation
 	public async Task<Location?> GetLocationAsync(GeolocationRequest request, CancellationToken cancelToken)
 	{
 		var tcs = new TaskCompletionSource<Location?>();
-
-		_locationManager = new CLLocationManager();
-		_locationManager.DesiredAccuracy = ToDesiredAccuracy(request.DesiredAccuracy);
+		var manager = new CLLocationManager
+		{
+			DesiredAccuracy = ToDesiredAccuracy(request.DesiredAccuracy),
+		};
 
 		var del = new SingleLocationDelegate(tcs);
-		_locationManager.Delegate = del;
+		manager.Delegate = del;
 
 		using var registration = cancelToken.Register(() =>
 		{
-			_locationManager.StopUpdatingLocation();
+			manager.StopUpdatingLocation();
 			tcs.TrySetResult(null);
 		});
 
-		_locationManager.StartUpdatingLocation();
-
-		var result = await tcs.Task;
-		_locationManager.StopUpdatingLocation();
-		_locationManager = null;
-
-		return result;
+		try
+		{
+			manager.StartUpdatingLocation();
+			return await tcs.Task;
+		}
+		finally
+		{
+			manager.StopUpdatingLocation();
+			manager.Delegate = null!;
+		}
 	}
 
 	public Task<bool> StartListeningForegroundAsync(GeolocationListeningRequest request)
