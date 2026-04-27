@@ -103,17 +103,17 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
 
         platformView.StopLoading();
 
-        if (_webviewManager != null)
+        var webviewManager = System.Threading.Interlocked.Exchange(ref _webviewManager, null);
+        if (webviewManager != null)
         {
             try
             {
-                _webviewManager.DisposeAsync().AsTask().ContinueWith(_ => { });
+                webviewManager.DisposeAsync().AsTask().ContinueWith(_ => { });
             }
             catch
             {
                 // Best-effort cleanup
             }
-            _webviewManager = null;
         }
 
         base.DisconnectHandler(platformView);
@@ -121,27 +121,29 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
 
     void MessageReceived(Uri uri, string message)
     {
-        _webviewManager?.MessageReceivedInternal(uri, message);
+        System.Threading.Volatile.Read(ref _webviewManager)?.MessageReceivedInternal(uri, message);
     }
 
     void StartWebViewCoreIfPossible()
     {
-        if (HostPage == null || Services == null || _webviewManager != null)
+        var hostPage = HostPage;
+        var services = Services;
+        if (hostPage == null || services == null || System.Threading.Volatile.Read(ref _webviewManager) != null)
             return;
 
-        var contentRootDir = Path.GetDirectoryName(HostPage!) ?? string.Empty;
-        var hostPageRelativePath = Path.GetRelativePath(contentRootDir, HostPage!);
+        var contentRootDir = Path.GetDirectoryName(hostPage) ?? string.Empty;
+        var hostPageRelativePath = Path.GetRelativePath(contentRootDir, hostPage);
 
         var fileProvider = new MacOSMauiAssetFileProvider(contentRootDir);
 
-        var dispatcher = Services!.GetService<IDispatcher>()
+        var dispatcher = services.GetService<IDispatcher>()
             ?? new Microsoft.Maui.Platforms.MacOS.Platform.MacOSDispatcher();
 
         var jsComponents = new Microsoft.AspNetCore.Components.Web.JSComponentConfigurationStore();
 
-        _webviewManager = new MacOSWebViewManager(
+        var webviewManager = new MacOSWebViewManager(
             PlatformView,
-            Services!,
+            services,
             new MacOSBlazorDispatcher(dispatcher),
             fileProvider,
             jsComponents,
@@ -155,11 +157,12 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
                 var parameters = rootComponent.Parameters != null
                     ? ParameterView.FromDictionary(rootComponent.Parameters)
                     : ParameterView.Empty;
-                _ = _webviewManager.AddRootComponentAsync(rootComponent.ComponentType, rootComponent.Selector, parameters);
+                _ = webviewManager.AddRootComponentAsync(rootComponent.ComponentType, rootComponent.Selector, parameters);
             }
         }
 
-        _webviewManager.Navigate(VirtualView.StartPath);
+        System.Threading.Volatile.Write(ref _webviewManager, webviewManager);
+        webviewManager.Navigate(VirtualView.StartPath);
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
@@ -372,7 +375,15 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
             if (queryIndex >= 0)
                 url = url![..queryIndex];
 
-            if (_handler._webviewManager!.TryGetResponseContentInternal(url!, allowFallbackOnHostPage, out statusCode, out var statusMsg, out var content, out var headers))
+            var webviewManager = System.Threading.Volatile.Read(ref _handler._webviewManager);
+            if (webviewManager == null)
+            {
+                statusCode = 503;
+                contentType = string.Empty;
+                return Array.Empty<byte>();
+            }
+
+            if (webviewManager.TryGetResponseContentInternal(url!, allowFallbackOnHostPage, out statusCode, out var statusMsg, out var content, out var headers))
             {
                 statusCode = 200;
                 using var ms = new MemoryStream();
