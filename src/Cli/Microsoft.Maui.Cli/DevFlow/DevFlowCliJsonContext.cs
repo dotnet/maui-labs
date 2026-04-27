@@ -22,4 +22,9 @@ namespace Microsoft.Maui.Cli.DevFlow;
 [JsonSerializable(typeof(AgentRegistration[]))]
 [JsonSerializable(typeof(BrokerState))]
 [JsonSerializable(typeof(RegistrationMessage))]
+[JsonSerializable(typeof(ProfilerCapabilities))]
+[JsonSerializable(typeof(ProfilerSessionInfo))]
+[JsonSerializable(typeof(ProfilerBatch))]
+[JsonSerializable(typeof(ProfilerHotspot))]
+[JsonSerializable(typeof(List<ProfilerHotspot>))]
 internal sealed partial class DevFlowCliJsonContext : JsonSerializerContext;
