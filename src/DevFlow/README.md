@@ -66,26 +66,29 @@ maui devflow ui tap --automationid "MyButton"
 maui devflow mcp
 ```
 
-### Debug app identity isolation
+### Session identity
 
-When `Microsoft.Maui.DevFlow.Agent` is referenced, **Debug** builds automatically rewrite
-the app `ApplicationId` to include a DevFlow-specific suffix derived from the project path.
-That lets separate worktrees or agent sessions install distinct debug copies of the same
-app on a device or simulator instead of competing for one installed identity.
+When `Microsoft.Maui.DevFlow.Agent` is referenced, builds are tagged with a **session identity**
+derived from the project path. This metadata-only identifier helps DevFlow distinguish builds
+from different environments (e.g. worktrees, CI agents, dev machines) without modifying
+the app's `ApplicationId` or bundle identifier.
 
-You can override or disable the behavior when needed:
+The session identity is included in:
+- Assembly metadata (`Microsoft.Maui.DevFlowSessionId`)
+- Broker registration (visible via `maui devflow list`)
+- Agent status endpoint (`/api/v1/agent/status`)
+
+You can override the automatically derived identity:
 
 ```bash
-# Disable Debug identity isolation
-dotnet build -p:MauiDevFlowEnableDebugAppIdentityIsolation=false
-
-# Force a specific Debug identity suffix
-dotnet build -p:MauiDevFlowDebugAppIdentitySuffix=agent42
+# Set a specific session identity
+dotnet build -p:MauiDevFlowSessionId=mysession
 ```
 
-The same values can also be supplied via environment variables:
-`MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION` and
-`MAUI_DEVFLOW_DEBUG_APP_IDENTITY_SUFFIX`.
+> **Note:** Session IDs are sanitized to lowercase alphanumeric characters only.
+> For example, `My-Session` would become `mysession`.
+
+The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environment variable.
 
 ## Features
 

@@ -24,6 +24,7 @@ public class BrokerRegistration : IDisposable
     private readonly string _tfm;
     private readonly string _platform;
     private readonly string _appName;
+    private readonly string? _sessionId;
     private int _brokerPort;
     private int? _assignedPort;
     private ILogger? _logger;
@@ -50,12 +51,21 @@ public class BrokerRegistration : IDisposable
     /// </summary>
     public static void SetLogger(ILogger logger) => _staticLogger = logger;
 
+    /// <summary>
+    /// Backward-compatible constructor preserving the old signature for external consumers.
+    /// </summary>
     public BrokerRegistration(string project, string tfm, string platform, string appName, int brokerPort = DefaultBrokerPort, ILogger? logger = null)
+        : this(project, tfm, platform, appName, sessionId: null, brokerPort, logger)
+    {
+    }
+
+    public BrokerRegistration(string project, string tfm, string platform, string appName, string? sessionId, int brokerPort = DefaultBrokerPort, ILogger? logger = null)
     {
         _project = project;
         _tfm = tfm;
         _platform = platform;
         _appName = appName;
+        _sessionId = sessionId;
         _brokerPort = brokerPort;
         _logger = logger;
     }
@@ -229,7 +239,8 @@ public class BrokerRegistration : IDisposable
         appName = _appName,
         currentPort = CurrentPort,
         version = typeof(BrokerRegistration).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+        sessionId = _sessionId
     });
 
     private record RegistrationResponse

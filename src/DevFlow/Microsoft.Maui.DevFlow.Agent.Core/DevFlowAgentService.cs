@@ -29,6 +29,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     private readonly VisualTreeWalker _treeWalker;
     private FileLogProvider? _logProvider;
     private BrokerRegistration? _brokerRegistration;
+    private string? _sessionId;
     protected Application? _app;
     protected IDispatcher? _dispatcher;
     private bool _disposed;
@@ -331,6 +332,13 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         => _brokerRegistration = registration;
 
     /// <summary>
+    /// Sets the DevFlow session identity for this agent, derived from the build environment.
+    /// Included in status responses so clients can identify which environment built the running app.
+    /// </summary>
+    public void SetSessionId(string? sessionId)
+        => _sessionId = sessionId;
+
+    /// <summary>
     /// Writes a log entry originating from the WebView/Blazor console.
     /// Called by the Blazor package via reflection to route JS console output through ILogger.
     /// </summary>
@@ -533,6 +541,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
                     framework = ".NET MAUI",
                     frameworkVersion = Environment.Version.ToString(),
+                    sessionId = _sessionId,
                 },
                 device = new
                 {

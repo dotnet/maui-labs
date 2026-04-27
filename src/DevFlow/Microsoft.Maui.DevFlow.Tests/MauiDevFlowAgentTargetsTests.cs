@@ -91,7 +91,52 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     [Theory]
     [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
     [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
-    public void SetMauiDevFlowPort_RewritesDebugApplicationId_ByDefault(string relativeTargetPath)
+    public void SetMauiDevFlowPort_EmitsSessionId_DerivedFromProjectPath(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget();
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        var expectedSessionId = ComputeExpectedSessionId(ProjectFilePath);
+        Assert.Contains($"\"Microsoft.Maui.DevFlowSessionId\", \"{expectedSessionId}\"", contents);
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowBaseApplicationId", contents);
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowApplicationId", contents);
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", contents);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_UsesExplicitSessionId_WhenProvided(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowSessionId=my-custom-session");
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        // Explicit values are sanitized (lowercase, alphanumeric only) for XML safety
+        Assert.Contains("\"Microsoft.Maui.DevFlowSessionId\", \"mycustomsession\"", contents);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_EmitsSessionId_ForReleaseBuilds(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget("/p:Configuration=Release");
+
+        var contents = File.ReadAllText(GetGeneratedFilePath("Release"));
+        var expectedSessionId = ComputeExpectedSessionId(ProjectFilePath);
+        Assert.Contains($"\"Microsoft.Maui.DevFlowSessionId\", \"{expectedSessionId}\"", contents);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_DoesNotRewriteApplicationId(string relativeTargetPath)
     {
         CreateTestProject(relativeTargetPath, """
             <ApplicationId>com.example.myapp</ApplicationId>
@@ -100,58 +145,11 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         RunSetMauiDevFlowPortTarget();
 
         var contents = File.ReadAllText(GeneratedFilePath);
-        var expectedSuffix = ComputeExpectedDebugIdentitySuffix(ProjectFilePath);
-        Assert.Contains("\"Microsoft.Maui.DevFlowBaseApplicationId\", \"com.example.myapp\"", contents);
-        Assert.Contains($"\"Microsoft.Maui.DevFlowDebugAppIdentitySuffix\", \"{expectedSuffix}\"", contents);
-        Assert.Contains($"\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp.debug.{expectedSuffix}\"", contents);
-    }
-
-    [Theory]
-    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
-    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
-    public void SetMauiDevFlowPort_UsesExplicitDebugIdentitySuffix_WhenProvided(string relativeTargetPath)
-    {
-        CreateTestProject(relativeTargetPath, """
-            <ApplicationId>com.example.myapp</ApplicationId>
-            """);
-
-        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowDebugAppIdentitySuffix=Agent-42");
-
-        var contents = File.ReadAllText(GeneratedFilePath);
-        Assert.Contains("\"Microsoft.Maui.DevFlowDebugAppIdentitySuffix\", \"dwagent42\"", contents);
-        Assert.Contains("\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp.debug.dwagent42\"", contents);
-    }
-
-    [Theory]
-    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
-    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
-    public void SetMauiDevFlowPort_DoesNotRewriteApplicationId_WhenIsolationDisabled(string relativeTargetPath)
-    {
-        CreateTestProject(relativeTargetPath, """
-            <ApplicationId>com.example.myapp</ApplicationId>
-            """);
-
-        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowEnableDebugAppIdentityIsolation=false");
-
-        var contents = File.ReadAllText(GeneratedFilePath);
-        Assert.Contains("\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp\"", contents);
-        Assert.DoesNotContain("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", contents);
-    }
-
-    [Theory]
-    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
-    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
-    public void SetMauiDevFlowPort_DoesNotRewriteApplicationId_ForReleaseBuilds(string relativeTargetPath)
-    {
-        CreateTestProject(relativeTargetPath, """
-            <ApplicationId>com.example.myapp</ApplicationId>
-            """);
-
-        RunSetMauiDevFlowPortTarget("/p:Configuration=Release");
-
-        var contents = File.ReadAllText(GetGeneratedFilePath("Release"));
-        Assert.Contains("\"Microsoft.Maui.DevFlowApplicationId\", \"com.example.myapp\"", contents);
-        Assert.DoesNotContain("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", contents);
+        // Session ID should be present
+        Assert.Contains("Microsoft.Maui.DevFlowSessionId", contents);
+        // ApplicationId must NOT be rewritten — no identity isolation metadata
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowBaseApplicationId", contents);
+        Assert.DoesNotContain("Microsoft.Maui.DevFlowApplicationId", contents);
     }
 
     private string ProjectFilePath => Path.Combine(_projectDirectory, "Test.csproj");
@@ -187,7 +185,7 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
             """);
     }
 
-    private static string ComputeExpectedDebugIdentitySuffix(string projectFilePath)
+    private static string ComputeExpectedSessionId(string projectFilePath)
     {
         var sanitized = new string(
             projectFilePath
