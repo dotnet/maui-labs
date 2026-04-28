@@ -8,6 +8,7 @@
     <IsPackable>false</IsPackable>
     <IsPackable Condition="'$(PackDriverNuGet)' == 'true'">true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 
     <PackageId>Microsoft.Maui.DevFlow.Driver</PackageId>
     <IsShipping>true</IsShipping>

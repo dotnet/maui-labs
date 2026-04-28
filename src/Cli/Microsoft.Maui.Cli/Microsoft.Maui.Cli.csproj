@@ -14,6 +14,9 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <IsAotCompatible>true</IsAotCompatible>
+    <!-- 11.0-preview packages emit hard errors on net9.0; suppress since the
+         code is compatible — dotnet tool install picks the highest TFM. -->
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
@@ -57,7 +60,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.StartupProfiling\Microsoft.Maui.StartupProfiling.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
-    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" />
+    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
   <ItemGroup>

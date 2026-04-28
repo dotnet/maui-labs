@@ -194,7 +194,12 @@ public static class GoCommands
 				return 1;
 			}
 
+#if NET10_0_OR_GREATER
 			return await Go.Server.GoDevServer.RunAsync(projectDir, port, showQr, ct);
+#else
+			Console.Error.WriteLine("Error: 'maui go dev' requires .NET 10 or later.");
+			return 1;
+#endif
 		});
 
 		return command;
