@@ -25,6 +25,15 @@
     <ApplicationId>com.microsoft.maui.ai.devicetests</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- Prevent MSBuild from overriding MaxVersionTested (required for systemAIModels capability) -->
+    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+  </PropertyGroup>
+
+  <!-- Windows: self-contained publish to bundle WinAppSDK experimental runtime -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -40,6 +49,17 @@
     <PackageReference Include="DeviceRunners.VisualRunners.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Maui" />
     <PackageReference Include="DeviceRunners.Testing.Targets" />
+  </ItemGroup>
+
+  <!-- Windows Phi Silica: requires experimental WindowsAppSDK for WinRT AI APIs -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.0.0-experimental6" />
+  </ItemGroup>
+
+  <!-- Windows Phi Silica: link to sample's helper so tests can use it -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <Compile Include="..\..\..\samples\EssentialsAISample\Services\PhiSilicaToolsAndSchemaClient.cs"
+             Link="Services\PhiSilicaToolsAndSchemaClient.cs" />
   </ItemGroup>
 
   <ItemGroup>
