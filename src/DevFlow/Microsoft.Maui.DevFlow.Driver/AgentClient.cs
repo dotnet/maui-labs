@@ -45,12 +45,11 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Get the visual tree from the running app.
     /// </summary>
-    public async Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, int? window = null, bool includeLayout = false)
+    public async Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, int? window = null)
     {
         var parts = new List<string>();
         if (maxDepth > 0) parts.Add($"depth={maxDepth}");
         if (window != null) parts.Add($"window={window}");
-        if (includeLayout) parts.Add("layout=1");
         var url = parts.Count > 0 ? $"{UiApi}/tree?{string.Join("&", parts)}" : $"{UiApi}/tree";
         return await GetAsync<List<ElementInfo>>(url) ?? new();
     }
@@ -764,6 +763,44 @@ public class AgentClient : IDisposable
     private static string BuildRootQuery(string? root)
         => string.IsNullOrEmpty(root) ? string.Empty : $"?root={Uri.EscapeDataString(root)}";
 
+    // ── BLE ──
+
+    public Task<JsonElement> GetBleStatusAsync()
+        => GetJsonAsync($"{DeviceApi}/ble");
+
+    public Task<JsonElement> GetBleEventsAsync(int limit = 100, string? type = null)
+    {
+        var path = $"{DeviceApi}/ble/events?limit={limit}";
+        if (!string.IsNullOrEmpty(type))
+            path += $"&type={Uri.EscapeDataString(type)}";
+        return GetJsonAsync(path);
+    }
+
+    public Task<bool> StartBleScanAsync()
+        => PostActionAsync($"{DeviceApi}/ble/scan/start", new JsonObject());
+
+    public Task<bool> StopBleScanAsync()
+        => PostActionAsync($"{DeviceApi}/ble/scan/stop", new JsonObject());
+
+    public Task<bool> ClearBleEventsAsync()
+        => DeleteActionAsync($"{DeviceApi}/ble/events");
+
+    /// <summary>
+    /// Returns the WebSocket URL for live BLE event streaming.
+    /// </summary>
+    public string GetBleWebSocketUrl(bool scan = false, int replay = 100, string? type = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(replay);
+
+        var query = new List<string> { $"replay={replay}" };
+        if (scan)
+            query.Add("scan=true");
+        if (!string.IsNullOrEmpty(type))
+            query.Add($"type={Uri.EscapeDataString(type)}");
+
+        return $"{GetWebSocketBaseUrl()}/ws/v1/ble?{string.Join("&", query)}";
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -808,9 +845,11 @@ public class AgentClient : IDisposable
     /// </summary>
     public string GetNetworkWebSocketUrl()
     {
-        var wsBase = _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
-        return $"{wsBase}/ws/v1/network";
+        return $"{GetWebSocketBaseUrl()}/ws/v1/network";
     }
+
+    private string GetWebSocketBaseUrl()
+        => _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
 
     internal sealed class ProfilerSessionEnvelope
     {

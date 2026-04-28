@@ -31,15 +31,8 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     private BrokerRegistration? _brokerRegistration;
     private string? _sessionId;
     protected Application? _app;
-    protected IApplication? _iApp;
     protected IDispatcher? _dispatcher;
     private bool _disposed;
-
-    /// <summary>
-    /// Returns the bound application instance, preferring Application (MAUI Controls)
-    /// but falling back to IApplication (Comet/custom hosts).
-    /// </summary>
-    protected IApplication? BoundApplication => (IApplication?)_app ?? _iApp;
 
     /// <summary>
     /// The network request store for capturing HTTP traffic.
@@ -50,6 +43,11 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// Manages sensor subscriptions and broadcasts readings to WebSocket clients.
     /// </summary>
     public SensorManager Sensors { get; }
+
+    /// <summary>
+    /// Monitors BLE scan results, connections, reads, writes, and notifications.
+    /// </summary>
+    public BleMonitor Ble { get; }
 
     private readonly IProfilerCollector _profilerCollector;
     private readonly ProfilerSessionStore _profilerSessions;
@@ -256,6 +254,8 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         _treeWalker = CreateTreeWalker();
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         Sensors = new SensorManager();
+        Ble = CreateBleMonitor();
+        BleMonitor.Instance = Ble;
         _profilerCollector = CreateProfilerCollector();
         _profilerSessions = new ProfilerSessionStore(
             Math.Max(1, _options.MaxProfilerSamples),
@@ -283,11 +283,10 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     private Window? GetWindow(int? index)
     {
-        var app = BoundApplication;
-        if (app == null) return null;
-        if (index == null) return app.Windows.FirstOrDefault() as Window;
-        if (index.Value < 0 || index.Value >= app.Windows.Count) return null;
-        return app.Windows[index.Value] as Window;
+        if (_app == null) return null;
+        if (index == null) return _app.Windows.FirstOrDefault() as Window;
+        if (index.Value < 0 || index.Value >= _app.Windows.Count) return null;
+        return _app.Windows[index.Value] as Window;
     }
 
     /// <summary>
@@ -301,6 +300,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// to provide native frame/CPU integrations.
     /// </summary>
     protected virtual IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
+
+    /// <summary>
+    /// Creates the BLE monitor. Override in platform-specific subclasses
+    /// to provide native scan and connection monitoring.
+    /// </summary>
+    protected virtual BleMonitor CreateBleMonitor() => new BleMonitor();
 
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
     protected virtual string PlatformName => DeviceInfo.Current.Platform.ToString();
@@ -405,10 +410,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// <summary>
     /// Starts the HTTP server without an Application binding.
     /// Use when Application.Current is unavailable (e.g., Comet apps).
-    /// After starting, attempts to resolve IApplication from the DI container
-    /// so that tree/element endpoints work immediately for Comet apps.
-    /// Endpoints requiring the app will return errors until BindApp() / BindIApp()
-    /// is called if DI resolution doesn't succeed.
+    /// Endpoints requiring the app will return errors until BindApp() is called.
     /// </summary>
     public void StartServerOnly(IDispatcher dispatcher)
     {
@@ -417,15 +419,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         try
         {
             _server.Start();
-
-            // Try to resolve the IApplication from the platform service provider.
-            // Comet apps register IApplication (CometApp) but never set Application.Current.
-            TryResolveIApplicationFromDI();
-
-            if (BoundApplication != null)
-                Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port} (resolved IApplication from DI)");
-            else
-                Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port} (app not yet bound)");
+            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port} (app not yet bound)");
         }
         catch (Exception ex)
         {
@@ -455,56 +449,6 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             state = "started",
             timestamp = DateTimeOffset.UtcNow.ToString("O")
         });
-    }
-
-    /// <summary>
-    /// Late-binds an IApplication instance (e.g. CometApp) after the server is already running.
-    /// Use when the app doesn't extend Microsoft.Maui.Controls.Application.
-    /// </summary>
-    public void BindIApp(IApplication app)
-    {
-        if (_disposed || !_options.Enabled) return;
-        if (app is Application controlsApp)
-        {
-            BindApp(controlsApp);
-            return;
-        }
-        _iApp = app;
-        Console.WriteLine("[Microsoft.Maui.DevFlow.Agent] IApplication bound to running agent");
-        PublishUiEvent("lifecycle", new
-        {
-            state = "started",
-            timestamp = DateTimeOffset.UtcNow.ToString("O")
-        });
-    }
-
-    /// <summary>
-    /// Attempts to resolve IApplication from the platform DI container.
-    /// Works for Comet apps that register IApplication via UseCometApp&lt;T&gt;().
-    /// </summary>
-    private void TryResolveIApplicationFromDI()
-    {
-        try
-        {
-            var services = IPlatformApplication.Current?.Services;
-            if (services == null) return;
-
-            var iApp = services.GetService(typeof(IApplication)) as IApplication;
-            if (iApp == null) return;
-
-            if (iApp is Application controlsApp)
-            {
-                _app = controlsApp;
-            }
-            else
-            {
-                _iApp = iApp;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] Failed to resolve IApplication from DI: {ex.Message}");
-        }
     }
 
     public async Task StopAsync()
@@ -586,6 +530,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         _server.MapGet("/api/v1/device/jobs", HandleJobsList);
         _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleJobRun);
+        _server.MapGet("/api/v1/device/ble", HandleBleStatus);
+        _server.MapGet("/api/v1/device/ble/events", HandleBleEvents);
+        _server.MapPost("/api/v1/device/ble/scan/start", HandleBleScanStart);
+        _server.MapPost("/api/v1/device/ble/scan/stop", HandleBleScanStop);
+        _server.MapDelete("/api/v1/device/ble/events", HandleBleClearEvents);
+        _server.MapWebSocket("/ws/v1/ble", HandleBleWebSocket);
 
         _server.MapGet("/api/v1/storage/preferences", HandlePreferencesList);
         _server.MapGet("/api/v1/storage/preferences/{key}", HandlePreferencesGet);
@@ -645,7 +595,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                     deviceType = DeviceTypeName,
                     idiom = IdiomName,
                     displayDensity = GetWindowDisplayDensity(window),
-                    windowCount = BoundApplication?.Windows.Count ?? 0,
+                    windowCount = _app?.Windows.Count ?? 0,
                     windowWidth = double.IsFinite(w) ? w : 0,
                     windowHeight = double.IsFinite(h) ? h : 0,
                 },
@@ -655,7 +605,6 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                     packageId = packageId,
                     version = appVersion,
                     build = appBuild,
-                    assemblyName = BoundApplication?.GetType().Assembly.GetName().Name ?? "unknown",
                 },
                 capabilities = new
                 {
@@ -665,11 +614,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                     network = true,
                     logs = true,
                     sensors = true,
+                    ble = true,
                     storage = true,
                     profiler = IsProfilerFeatureAvailable,
                     jobs = IsJobsSupported,
                 },
-                running = BoundApplication != null,
+                running = _app != null,
                 cdpReady = _cdpWebViews.Any(v => v.IsReady),
                 cdpWebViewCount = _cdpWebViews.Count,
                 profiler = BuildProfilerCapabilitiesPayload(),
@@ -727,6 +677,11 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 supported = true,
                 features = new[] { "list", "start", "stop", "stream" }
             },
+            ble = new
+            {
+                supported = Ble.SupportedFeatures.Count > 0,
+                features = Ble.SupportedFeatures
+            },
             storage = new
             {
                 supported = true,
@@ -753,30 +708,26 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleTree(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         int maxDepth = 0;
         if (request.QueryParams.TryGetValue("depth", out var depthStr))
             int.TryParse(depthStr, out maxDepth);
 
-        bool includeLayout = false;
-        if (request.QueryParams.TryGetValue("layout", out var layoutStr))
-            includeLayout = layoutStr == "1" || string.Equals(layoutStr, "true", StringComparison.OrdinalIgnoreCase);
-
         var windowIndex = ParseWindowIndex(request);
-        var tree = await DispatchAsync(() => _treeWalker.WalkTree(BoundApplication, maxDepth, windowIndex, includeLayout));
+        var tree = await DispatchAsync(() => _treeWalker.WalkTree(_app, maxDepth, windowIndex));
         return HttpResponse.Json(tree);
     }
 
     private async Task<HttpResponse> HandleElement(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
 
         var element = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(id, BoundApplication);
+            var el = _treeWalker.GetElementById(id, _app);
             if (el is IVisualTreeElement vte)
                 return (object?)_treeWalker.WalkElement(vte, null, 1, 2);
 
@@ -792,14 +743,14 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleQuery(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         // CSS selector takes precedence over simple filters
         if (request.QueryParams.TryGetValue("selector", out var selector) && !string.IsNullOrWhiteSpace(selector))
         {
             try
             {
-                var results = await DispatchAsync(() => _treeWalker.QueryCss(BoundApplication, selector));
+                var results = await DispatchAsync(() => _treeWalker.QueryCss(_app, selector));
                 return HttpResponse.Json(results);
             }
             catch (FormatException ex)
@@ -815,13 +766,13 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (type == null && automationId == null && text == null)
             return HttpResponse.Error("At least one query parameter required: type, automationId, text, or selector");
 
-        var simpleResults = await DispatchAsync(() => _treeWalker.Query(BoundApplication, type, automationId, text));
+        var simpleResults = await DispatchAsync(() => _treeWalker.Query(_app, type, automationId, text));
         return HttpResponse.Json(simpleResults);
     }
 
     private async Task<HttpResponse> HandleHitTest(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         if (!request.QueryParams.TryGetValue("x", out var xStr) || !double.TryParse(xStr, out var x))
             return HttpResponse.Error("x coordinate is required");
@@ -836,7 +787,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             if (window == null) return (object?)null;
 
             // Ensure tree is walked so element IDs are assigned and synthetic bounds are populated
-            _treeWalker.WalkTree(BoundApplication!, 0, windowIndex);
+            _treeWalker.WalkTree(_app!, 0, windowIndex);
 
             // Build active Shell context to filter out inactive ShellItem subtrees
             var activeShellItemIds = BuildActiveShellItemIds(window);
@@ -845,7 +796,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
             // Supplement with bounds-based hit testing — some platforms (e.g. macOS AppKit)
             // don't traverse into all containers via GetVisualTreeElements
-            var boundsHits = _treeWalker.HitTestByBounds(x, y, BoundApplication!, windowIndex);
+            var boundsHits = _treeWalker.HitTestByBounds(x, y, _app!, windowIndex);
             var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
             var allHits = new List<IVisualTreeElement>();
             foreach (var h in platformHits)
@@ -995,7 +946,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     protected virtual async Task<HttpResponse> HandleScreenshot(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         int? maxWidth = null;
         if (request.QueryParams.TryGetValue("maxWidth", out var mwStr) && int.TryParse(mwStr, out var mw) && mw > 0)
@@ -1044,7 +995,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             {
                 var element = await DispatchAsync(() =>
                 {
-                    var el = _treeWalker.GetElementById(elementId, BoundApplication);
+                    var el = _treeWalker.GetElementById(elementId, _app);
                     return el as VisualElement;
                 });
 
@@ -1070,7 +1021,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             {
                 var matchId = await DispatchAsync(() =>
                 {
-                    var results = _treeWalker.QueryCss(BoundApplication, selector);
+                    var results = _treeWalker.QueryCss(_app, selector);
                     return results.Count > 0 ? results[0].Id : null;
                 });
 
@@ -1079,7 +1030,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
                 var element = await DispatchAsync(() =>
                 {
-                    var el = _treeWalker.GetElementById(matchId, BoundApplication);
+                    var el = _treeWalker.GetElementById(matchId, _app);
                     return el as VisualElement;
                 });
 
@@ -1226,7 +1177,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleProperty(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
         if (!request.RouteParams.TryGetValue("name", out var propName))
@@ -1234,7 +1185,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         var value = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(id, BoundApplication);
+            var el = _treeWalker.GetElementById(id, _app);
             if (el == null) return (object?)null;
 
             // Support dot-path notation (e.g., "Shadow.Radius")
@@ -1353,7 +1304,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleSetProperty(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
         if (!request.RouteParams.TryGetValue("name", out var propName))
@@ -1366,7 +1317,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         var startedAtUtc = DateTime.UtcNow;
         var result = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(id, BoundApplication);
+            var el = _treeWalker.GetElementById(id, _app);
             if (el == null) return "Element not found";
 
             var type = el.GetType();
@@ -1486,7 +1437,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleTap(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<ActionRequest>();
         if (body?.ElementId == null)
@@ -1495,7 +1446,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         var startedAtUtc = DateTime.UtcNow;
         var result = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, BoundApplication);
+            var el = _treeWalker.GetElementById(body.ElementId, _app);
             if (el == null) return "Element not found";
 
             switch (el)
@@ -1585,10 +1536,8 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                         return "ok";
 
                     return $"No tap handler on {el.GetType().FullName} (gestures:{v.GestureRecognizers.Count}, type:{v.GetType().Name})";
-                // Comet TabView tab switching — must come before generic IView handlers
-                case IView cometTabChild when TrySwitchCometTabImpl(cometTabChild):
-                    return "ok";
-                // Comet views implement IGestureView with Gesture objects
+                // Comet views implement IGestureView with Gesture objects that have Invoke().
+                // Check via reflection to avoid a hard Comet dependency.
                 case IView gestureView when TryInvokeCometGestureTap(gestureView):
                     return "ok";
                 // Comet views implement MAUI interfaces (IButton, ISwitch, etc.)
@@ -1606,47 +1555,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                     iRb.IsChecked = true;
                     return "ok";
                 case IView iView when iView.Handler?.PlatformView != null:
-                    // Comet tab switch for views that weren't caught by the guard above
-                    if ((el.GetType().FullName ?? "").StartsWith("Comet."))
-                    {
-                        var diag = TrySwitchCometTabDiag(iView);
-                        if (diag.Item1) return "ok";
-                        if (TryInvokeCometGestureTap(iView)) return "ok";
-                        if (TryBubbleCometGestureTap(iView)) return "ok";
-                        return $"Comet IView: {el.GetType().FullName} [tab:{diag.Item2}]";
-                    }
                     // Last resort: try native tap via handler's platform view
                     if (TryNativeTapOnHandler(iView))
                         return "ok";
-                    // Bubble up parent chain for Comet gesture views (tap may be on parent container)
-                    if (TryBubbleCometGestureTap(iView))
-                        return "ok";
                     return $"Unhandled IView type: {el.GetType().FullName}";
-                case IView iViewNoHandler:
-                    // No handler but might have parent gesture
-                    if (TryBubbleCometGestureTap(iViewNoHandler))
-                        return "ok";
-                    return $"Unhandled IView (no handler): {el.GetType().FullName}";
                 default:
-                    // Comet views may not match 'case IView' due to framework version
-                    // mismatch (DevFlow targets net10.0/MAUI 10, host app may use MAUI 11).
-                    // Handle Comet-specific interactions by type name via reflection.
-                    var elTypeName = el.GetType().FullName ?? "";
-                    if (elTypeName.StartsWith("Comet."))
-                    {
-                        // Tab switching: walk parent chain to find Comet.TabView
-                        var tabResult = TrySwitchCometTabDiag(el);
-                        if (tabResult.Item1)
-                            return "ok";
-                        // Gesture tap: check IGestureView for tap gestures
-                        if (TryInvokeCometGestureTapByReflection(el))
-                            return "ok";
-                        // Bubble up parent chain for gesture on parent container
-                        if (TryBubbleCometGestureTapByReflection(el))
-                            return "ok";
-                        return $"Comet unhandled: {elTypeName} [tab:{tabResult.Item2}]";
-                    }
-                    return $"DEVFLOW_V2_UNHANDLED: {el.GetType().FullName}";
+                    return $"Unhandled type: {el.GetType().FullName}";
             }
         });
 
@@ -1792,212 +1706,9 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         return false;
     }
 
-    /// <summary>
-    /// Checks if the view is a child of a Comet TabView and switches to it.
-    /// Walks up the parent chain via reflection to find a TabView parent,
-    /// then sets SelectedIndex to the child's position.
-    /// </summary>
-    /// <summary>
-    /// Accepts 'object' because Comet views may not match the DevFlow assembly's IView
-    /// when framework versions differ (e.g. DevFlow compiled against MAUI 10, app uses MAUI 11).
-    /// All access is via reflection.
-    /// </summary>
-    private static bool TrySwitchCometTabImpl(IView view) => TrySwitchCometTabDiag(view).Item1;
-
-    private static (bool, string) TrySwitchCometTabDiag(object view)
-    {
-        try
-        {
-            // Walk up the parent chain to find a Comet TabView
-            object current = view;
-            object tabView = null;
-            var walkLog = new System.Text.StringBuilder();
-
-            for (int i = 0; i < 10; i++)
-            {
-                var parentProp = current.GetType().GetProperty("Parent",
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (parentProp == null) { walkLog.Append($"noProp@{i};"); break; }
-
-                var parent = parentProp.GetValue(current);
-                if (parent == null) { walkLog.Append($"null@{i};"); break; }
-
-                walkLog.Append($"{i}:{parent.GetType().Name};");
-                if (parent.GetType().FullName == "Comet.TabView")
-                {
-                    tabView = parent;
-                    break;
-                }
-
-                current = parent;
-            }
-
-            if (tabView == null) return (false, $"noTabView({walkLog})");
-
-            // Find the child's index using the public Count property and indexer
-            var tabType = tabView.GetType();
-            var countProp = tabType.GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
-            var indexerProp = tabType.GetProperty("Item", BindingFlags.Public | BindingFlags.Instance);
-            if (countProp == null || indexerProp == null) return (false, "noCountOrItem");
-
-            int count = (int)countProp.GetValue(tabView);
-            int childIndex = -1;
-            for (int idx = 0; idx < count; idx++)
-            {
-                var child = indexerProp.GetValue(tabView, new object[] { idx });
-                if (ReferenceEquals(child, view))
-                {
-                    childIndex = idx;
-                    break;
-                }
-            }
-
-            if (childIndex < 0) return (false, $"noRefMatch(count={count})");
-
-            // Set SelectedIndex on the Comet TabView
-            var selectedIndexProp = tabType.GetProperty("SelectedIndex",
-                BindingFlags.Public | BindingFlags.Instance);
-            if (selectedIndexProp == null) return (false, "noSelectedIndex");
-            selectedIndexProp.SetValue(tabView, childIndex);
-
-            // Update the native platform view via reflection
-            // (can't use 'as IView' cast — same framework version issue)
-            var handlerProp = tabType.GetProperty("Handler",
-                BindingFlags.Public | BindingFlags.Instance);
-            var handler = handlerProp?.GetValue(tabView);
-            if (handler != null)
-            {
-                // Use GetPropertySafe to avoid AmbiguousMatchException from generic
-                // ViewHandler<T1,T2>.PlatformView hiding the base class version
-                var platformViewProp = CometViewResolver.GetPropertySafe(handler.GetType(), "PlatformView");
-                var platformView = platformViewProp?.GetValue(handler);
-                if (platformView != null)
-                {
-                    // iOS: CUITabView.ApplySelectedIndex(int)
-                    var applyMethod = platformView.GetType().GetMethod("ApplySelectedIndex",
-                        BindingFlags.Public | BindingFlags.Instance);
-                    if (applyMethod != null)
-                    {
-                        applyMethod.Invoke(platformView, new object[] { childIndex });
-                    }
-                    else
-                    {
-                        var selIdxProp = CometViewResolver.GetPropertySafe(platformView.GetType(), "SelectedIndex");
-                        if (selIdxProp != null && selIdxProp.CanWrite)
-                            selIdxProp.SetValue(platformView, (nint)childIndex);
-                    }
-                }
-            }
-
-            return (true, "ok");
-        }
-        catch (Exception ex)
-        {
-            return (false, $"ex:{ex.GetBaseException().Message}");
-        }
-    }
-
-    /// <summary>
-    /// Invokes a Comet tap gesture via reflection.
-    /// Works when Comet views implement IGestureView with Gesture objects.
-    /// All access via reflection — no IView cast needed.
-    /// </summary>
-    private static bool TryInvokeCometGestureTapByReflection(object view)
-    {
-        try
-        {
-            var viewType = view.GetType();
-            // Comet views implementing IGestureView have a Gestures property
-            var gesturesProp = viewType.GetProperty("Gestures",
-                BindingFlags.Public | BindingFlags.Instance);
-            if (gesturesProp == null) return false;
-
-            var gestures = gesturesProp.GetValue(view) as System.Collections.IEnumerable;
-            if (gestures == null) return false;
-
-            foreach (var gesture in gestures)
-            {
-                if (gesture == null) continue;
-                var gestureType = gesture.GetType();
-                // Look for TapGesture or a type with "Tap" in the name
-                if (gestureType.Name.Contains("Tap") || gestureType.FullName?.Contains("TapGesture") == true)
-                {
-                    var invokeMethod = gestureType.GetMethod("Invoke",
-                        BindingFlags.Public | BindingFlags.Instance);
-                    if (invokeMethod != null)
-                    {
-                        invokeMethod.Invoke(gesture, null);
-                        return true;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[MauiDevFlow] TryInvokeCometGestureTapByReflection failed: {ex.GetBaseException().Message}");
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Walks up the Comet parent chain looking for a gesture tap (all via reflection).
-    /// </summary>
-    private static bool TryBubbleCometGestureTapByReflection(object view)
-    {
-        try
-        {
-            object current = view;
-            for (int i = 0; i < 10; i++)
-            {
-                var parentProp = current.GetType().GetProperty("Parent",
-                    BindingFlags.Public | BindingFlags.Instance);
-                var parent = parentProp?.GetValue(current);
-                if (parent == null) break;
-
-                if (TryInvokeCometGestureTapByReflection(parent))
-                    return true;
-
-                current = parent;
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[MauiDevFlow] TryBubbleCometGestureTapByReflection failed: {ex.GetBaseException().Message}");
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Walks up the Comet parent chain looking for a parent with a tap gesture.
-    /// Comet uses OnTap on container views (HStack, VStack) — child views like Text
-    /// don't have their own gestures, but tapping them should invoke the parent's gesture.
-    /// </summary>
-    private static bool TryBubbleCometGestureTap(IView view)
-    {
-        try
-        {
-            // Walk up the parent chain via reflection (Comet views have a Parent property)
-            var current = view;
-            for (int i = 0; i < 10; i++) // max 10 levels to prevent infinite loops
-            {
-                var parentProp = current.GetType().GetProperty("Parent",
-                    BindingFlags.Public | BindingFlags.Instance);
-                var parent = parentProp?.GetValue(current) as IView;
-                if (parent == null) break;
-
-                if (TryInvokeCometGestureTap(parent))
-                    return true;
-
-                current = parent;
-            }
-        }
-        catch { }
-        return false;
-    }
-
     private async Task<HttpResponse> HandleFill(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<FillRequest>();
         if (body?.ElementId == null || body.Text == null)
@@ -2006,7 +1717,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         var startedAtUtc = DateTime.UtcNow;
         var result = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, BoundApplication);
+            var el = _treeWalker.GetElementById(body.ElementId, _app);
             if (el == null) return "Element not found";
 
             switch (el)
@@ -2053,7 +1764,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleClear(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<ActionRequest>();
         if (body?.ElementId == null)
@@ -2062,7 +1773,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         var startedAtUtc = DateTime.UtcNow;
         var success = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, BoundApplication);
+            var el = _treeWalker.GetElementById(body.ElementId, _app);
             if (el == null) return false;
 
             switch (el)
@@ -2105,7 +1816,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleFocus(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<ActionRequest>();
         if (body?.ElementId == null)
@@ -2114,7 +1825,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         var startedAtUtc = DateTime.UtcNow;
         var success = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, BoundApplication);
+            var el = _treeWalker.GetElementById(body.ElementId, _app);
             if (el is not VisualElement ve) return false;
             ve.Focus();
             return true;
@@ -2132,7 +1843,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleNavigate(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<NavigateRequest>();
         if (string.IsNullOrEmpty(body?.Route))
@@ -2206,7 +1917,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleResize(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<ResizeRequest>();
         if (body == null || body.Width <= 0 || body.Height <= 0)
@@ -2609,7 +2320,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private async Task<HttpResponse> HandleScroll(HttpRequest request)
     {
-        if (BoundApplication == null) return HttpResponse.Error("Agent not bound to app");
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<ScrollRequest>();
         if (body == null)
@@ -2625,7 +2336,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 object? targetObj = null;
                 if (!string.IsNullOrEmpty(body.ElementId))
                 {
-                    targetObj = _treeWalker.GetElementById(body.ElementId, BoundApplication);
+                    targetObj = _treeWalker.GetElementById(body.ElementId, _app);
                     if (targetObj == null) return "Element not found";
                 }
 
@@ -2654,7 +2365,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             // Priority 2: Scroll element into view
             if (!string.IsNullOrEmpty(body.ElementId))
             {
-                var el = _treeWalker.GetElementById(body.ElementId, BoundApplication);
+                var el = _treeWalker.GetElementById(body.ElementId, _app);
                 if (el == null) return "Element not found";
 
                 if (el is VisualElement ve)
@@ -3374,7 +3085,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private void ScanUiTreeForHooks()
     {
-        if (BoundApplication is not IVisualTreeElement appElement)
+        if (_app is not IVisualTreeElement appElement)
             return;
 
         foreach (var child in appElement.GetVisualChildren())
@@ -4314,6 +4025,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
         StopAutoUiHooks();
         Sensors.Dispose();
+        Ble.Dispose();
 
         var cts = _profilerLoopCts;
         var loopTask = _profilerLoopTask;
@@ -6562,6 +6274,170 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error($"Running jobs is not supported on {PlatformName}", 501, "unsupported-capability");
 
         return HttpResponse.Json(result);
+    }
+
+    // ── BLE endpoints ──
+
+    private Task<HttpResponse> HandleBleStatus(HttpRequest request)
+    {
+        return Task.FromResult(HttpResponse.Json(Ble.GetStatus()));
+    }
+
+    private Task<HttpResponse> HandleBleEvents(HttpRequest request)
+    {
+        var limit = 100;
+        if (request.QueryParams.TryGetValue("limit", out var limitStr))
+        {
+            if (!int.TryParse(limitStr, out limit) || limit < 0)
+            {
+                return Task.FromResult(HttpResponse.Error(
+                    "BLE event limit must be a non-negative integer",
+                    400,
+                    "invalid_limit",
+                    new { limit = limitStr }));
+            }
+        }
+
+        var type = request.QueryParams.GetValueOrDefault("type");
+        var events = Ble.GetEvents(limit, type);
+        return Task.FromResult(HttpResponse.Json(new { count = events.Count, events }));
+    }
+
+    private Task<HttpResponse> HandleBleScanStart(HttpRequest request)
+    {
+        var error = Ble.StartScanning();
+        return Task.FromResult(error != null
+            ? HttpResponse.Error(error)
+            : HttpResponse.Ok("BLE scan started"));
+    }
+
+    private Task<HttpResponse> HandleBleScanStop(HttpRequest request)
+    {
+        var error = Ble.StopScanning();
+        return Task.FromResult(error != null
+            ? HttpResponse.Error(error)
+            : HttpResponse.Ok("BLE scan stopped"));
+    }
+
+    private Task<HttpResponse> HandleBleClearEvents(HttpRequest request)
+    {
+        Ble.ClearEvents();
+        return Task.FromResult(HttpResponse.Ok("BLE events cleared"));
+    }
+
+    private async Task HandleBleWebSocket(
+        System.Net.Sockets.TcpClient client,
+        System.Net.Sockets.NetworkStream stream,
+        HttpRequest request,
+        CancellationToken ct)
+    {
+        var autoScan = request.QueryParams.GetValueOrDefault("scan", "false")
+            .Equals("true", StringComparison.OrdinalIgnoreCase);
+
+        var replay = 100;
+        if (request.QueryParams.TryGetValue("replay", out var replayStr) &&
+            (!int.TryParse(replayStr, out replay) || replay < 0))
+        {
+            await AgentHttpServer.WebSocketSendTextAsync(stream,
+                JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    error = "BLE stream replay must be a non-negative integer"
+                }), ct);
+            return;
+        }
+
+        var type = request.QueryParams.GetValueOrDefault("type");
+        List<BleEvent> replayEvents = replay > 0 ? Ble.GetEvents(replay, type) : [];
+        var queue = Ble.Subscribe(type);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var startedScan = false;
+
+        try
+        {
+            if (autoScan)
+            {
+                startedScan = Ble.TryStartScanning(out var error);
+                if (error != null)
+                {
+                    await AgentHttpServer.WebSocketSendTextAsync(stream,
+                        JsonSerializer.Serialize(new
+                        {
+                            type = "error",
+                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                            error
+                        }), ct);
+                    return;
+                }
+            }
+
+            await AgentHttpServer.WebSocketSendTextAsync(stream,
+                JsonSerializer.Serialize(new
+                {
+                    type = "subscribed",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    scanning = Ble.IsScanning,
+                    replay,
+                    eventType = type
+                }), ct);
+
+            if (replay > 0)
+            {
+                await AgentHttpServer.WebSocketSendTextAsync(stream,
+                    JsonSerializer.Serialize(new
+                    {
+                        type = "replay",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        count = replayEvents.Count,
+                        events = replayEvents
+                    }), ct);
+            }
+
+            var readTask = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
+                    if (msg == null) { await cts.CancelAsync(); break; }
+                }
+            }, cts.Token);
+
+            var lastPing = DateTime.UtcNow;
+            while (!cts.Token.IsCancellationRequested)
+            {
+                while (queue.TryDequeue(out var evt))
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendTextAsync(stream, evt, cts.Token);
+                    }
+                    catch { await cts.CancelAsync(); break; }
+                }
+
+                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
+                        lastPing = DateTime.UtcNow;
+                    }
+                    catch { await cts.CancelAsync(); break; }
+                }
+
+                try { await Task.Delay(20, cts.Token); }
+                catch { break; }
+            }
+
+            await readTask;
+        }
+        finally
+        {
+            Ble.Unsubscribe(queue);
+            if (startedScan)
+                Ble.StopScanning();
+        }
     }
 }
 

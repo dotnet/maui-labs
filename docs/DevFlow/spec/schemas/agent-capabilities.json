@@ -143,6 +143,16 @@
             ],
             "supported": true
           },
+          "device.ble": {
+            "version": 1,
+            "features": [
+              "status",
+              "events",
+              "scan",
+              "stream"
+            ],
+            "supported": true
+          },
           "storage.preferences": {
             "version": 1,
             "features": [

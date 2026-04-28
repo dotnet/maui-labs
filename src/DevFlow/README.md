@@ -53,6 +53,9 @@ dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ### 4. Interact with your running app
 
 ```bash
+# Install project-scoped onboarding/troubleshooting skills for AI agents
+maui devflow init
+
 # Visual tree
 maui devflow ui tree
 

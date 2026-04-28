@@ -93,6 +93,8 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui apple simulator stop` | Shut down a simulator |
 | `maui apple simulator delete` | Delete a simulator |
 | **DevFlow** | |
+| `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
+| `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |

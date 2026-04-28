@@ -24,7 +24,7 @@ public interface IAppDriver : IDisposable
     /// <summary>
     /// Get the visual tree.
     /// </summary>
-    Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, bool includeLayout = false);
+    Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0);
 
     /// <summary>
     /// Query elements matching criteria.

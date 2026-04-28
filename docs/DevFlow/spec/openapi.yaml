@@ -33,7 +33,7 @@ tags:
   - name: logs
     description: Application logs
   - name: device
-    description: Device info, sensors, jobs, permissions, geolocation
+    description: Device info, sensors, BLE, jobs, permissions, geolocation
   - name: storage
     description: Preferences, secure storage, and sandboxed app files
   - name: extensions
@@ -1446,6 +1446,164 @@ paths:
                 $ref: "./schemas/device.json#/$defs/JobRunResponse"
         "501":
           $ref: "#/components/responses/UnsupportedCapability"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble:
+    get:
+      operationId: getBleStatus
+      tags: [device]
+      summary: Get BLE monitor status
+      description: >
+        Returns Bluetooth Low Energy monitor status, including whether scanning
+        is active, the buffered event count, subscriber count, and whether native
+        scanning is supported by this agent.
+      responses:
+        "200":
+          description: BLE monitor status.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/BleStatus"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble/events:
+    get:
+      operationId: getBleEvents
+      tags: [device]
+      summary: List BLE events
+      description: >
+        Returns recent BLE events recorded by the agent, optionally filtered by
+        event type. Events include scan results, connection changes,
+        characteristic reads/writes, notifications, service discoveries,
+        descriptor writes, MTU changes, bond state changes, and scan failures.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of events to return. Use 0 to return no events.
+          schema:
+            type: integer
+            minimum: 0
+            default: 100
+        - name: type
+          in: query
+          description: Optional event type filter.
+          schema:
+            $ref: "./schemas/device.json#/$defs/BleEventType"
+      responses:
+        "200":
+          description: Buffered BLE events.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/BleEventsResponse"
+        "400":
+          description: Invalid BLE event query.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: clearBleEvents
+      tags: [device]
+      summary: Clear BLE events
+      description: Clears all buffered BLE events.
+      responses:
+        "200":
+          description: BLE events cleared.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/ActionResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble/scan/start:
+    post:
+      operationId: startBleScan
+      tags: [device]
+      summary: Start BLE scan
+      description: >
+        Starts native BLE scanning when supported by the current platform.
+        Discovered advertisements are buffered as BLE events and streamed to BLE
+        WebSocket subscribers.
+      responses:
+        "200":
+          description: BLE scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/ActionResponse"
+        "400":
+          description: BLE scanning is unavailable or cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble/scan/stop:
+    post:
+      operationId: stopBleScan
+      tags: [device]
+      summary: Stop BLE scan
+      description: Stops an active BLE scan.
+      responses:
+        "200":
+          description: BLE scan stopped.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/ActionResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ws/v1/ble:
+    get:
+      operationId: streamBleEvents
+      tags: [device]
+      summary: Stream BLE events
+      description: >
+        Opens a WebSocket stream for BLE events. The server first sends a
+        `subscribed` message containing the current scanning state and replay
+        settings, optionally sends a `replay` message with buffered events, then
+        sends `ble_event` messages as events are recorded. Streamed events remain
+        in the bounded BLE event buffer until evicted by retention or cleared via
+        the REST API. Set `scan=true` to start a native BLE scan for the lifetime
+        of this WebSocket connection when scanning is supported.
+      parameters:
+        - name: scan
+          in: query
+          description: Start BLE scanning automatically while this WebSocket connection is active.
+          schema:
+            type: boolean
+            default: false
+        - name: replay
+          in: query
+          description: Number of buffered BLE events to replay after subscription. Use 0 for live-only streaming.
+          schema:
+            type: integer
+            minimum: 0
+            default: 100
+        - name: type
+          in: query
+          description: Optional event type filter applied to replayed and live events.
+          schema:
+            $ref: "./schemas/device.json#/$defs/BleEventType"
+      responses:
+        "101":
+          description: WebSocket connection established.
+        "400":
+          description: WebSocket upgrade failed or BLE scanning cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
         "500":
           $ref: "#/components/responses/InternalError"
 
