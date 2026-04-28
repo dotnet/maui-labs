@@ -15,6 +15,8 @@
 
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsLoggingAbstractionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsLoggingAbstractionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsHttpVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsLoggingAbstractionsVersion)" />
@@ -51,6 +53,33 @@
     <PackageVersion Include="Platform.Maui.Linux.Gtk4.BlazorWebView" Version="$(PlatformMauiLinuxGtk4BlazorWebViewVersion)" />
     <PackageVersion Include="Platform.Maui.Linux.Gtk4.Essentials" Version="$(PlatformMauiLinuxGtk4EssentialsVersion)" />
     <PackageVersion Include="GirCore.GdkPixbuf-2.0" Version="0.7.0" />
+  </ItemGroup>
+
+  <!-- EssentialsAI dependencies -->
+  <ItemGroup Label="EssentialsAI">
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)" />
+    <!-- Sample app: Microsoft Agents AI -->
+    <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />
+    <PackageVersion Include="Microsoft.Agents.AI.Hosting" Version="$(MicrosoftAgentsAIHostingVersion)" />
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="$(MicrosoftAgentsAIWorkflowsVersion)" />
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
+    <!-- Sample app: additional packages (pinned) -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageVersion Include="Markdig" Version="0.31.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.0.0-preview.1.25560.10" />
+    <PackageVersion Include="OpenAI" Version="2.6.0" />
+    <!-- Unit tests -->
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <!-- Benchmarks -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.13.10" />
+    <!-- Device test runner (OSS) -->
+    <PackageVersion Include="DeviceRunners.UITesting.Maui" Version="$(DeviceRunnersVersion)" />
+    <PackageVersion Include="DeviceRunners.UITesting.Xunit" Version="$(DeviceRunnersVersion)" />
+    <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
+    <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
+    <PackageVersion Include="DeviceRunners.XHarness.Xunit" Version="$(DeviceRunnersVersion)" />
+    <PackageVersion Include="DeviceRunners.XHarness.Maui" Version="$(DeviceRunnersVersion)" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are

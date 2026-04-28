@@ -1,0 +1,37 @@
+name: CI - EssentialsAI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/AI/**'
+      - 'tests/AI/**'
+      - 'samples/Microsoft.Maui.Essentials.AI.Sample/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'src/AI/**'
+      - 'tests/AI/**'
+      - 'samples/Microsoft.Maui.Essentials.AI.Sample/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/AI/EssentialsAI.slnf
+      project-name: essentialsai
+      run-tests: true
+      pack: true
