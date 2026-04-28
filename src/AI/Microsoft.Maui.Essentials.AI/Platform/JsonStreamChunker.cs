@@ -1537,7 +1537,10 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 					sb.Append("\\t");
 					break;
 				default:
-					sb.Append(c);
+					if (c < 0x20)
+						sb.Append($"\\u{(int)c:x4}");
+					else
+						sb.Append(c);
 					break;
 			}
 		}
