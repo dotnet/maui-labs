@@ -24,6 +24,10 @@ parameters:
   displayName: 'Publish Linux GTK4 packages to NuGet.org'
   type: boolean
   default: false
+- name: publishEssentialsAINuget
+  displayName: 'Publish EssentialsAI packages to NuGet.org'
+  type: boolean
+  default: false
 
 variables:
 - template: /eng/pipelines/common-variables.yml@self
@@ -151,6 +155,32 @@ extends:
                 -projects $(Build.SourcesDirectory)\platforms\Linux.Gtk4\Linux.Gtk4.slnx
                 $(_OfficialBuildArgs)
               displayName: Build and Pack Linux GTK4
+
+          - job: EssentialsAI
+            displayName: EssentialsAI - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
+              displayName: Install MAUI workloads
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
+              displayName: Install Android SDK dependencies
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\AI\EssentialsAI.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test EssentialsAI
 
           # Verification-only build on real Linux to catch any platform-specific
           # build breaks. This job does NOT pack or publish artifacts — the
@@ -363,5 +393,60 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/LinuxGtk4Packages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish EssentialsAI packages to NuGet.org
+    - ${{ if eq(parameters.publishEssentialsAINuget, true) }}:
+      - stage: publish_essentialsai_nuget
+        displayName: 'Publish EssentialsAI to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare EssentialsAI Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish EssentialsAI Packages
+              targetPath: '$(Pipeline.Workspace)/EssentialsAIPackages'
+              artifactName: EssentialsAIPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/EssentialsAIPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Essentials.AI.*.nupkg' '$(Pipeline.Workspace)/EssentialsAIPackages/' -Verbose
+            displayName: Filter EssentialsAI packages
+
+        - job: PublishNuGet
+          displayName: 'Push EssentialsAI to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: EssentialsAIPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/EssentialsAIPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push EssentialsAI to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/EssentialsAIPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/EssentialsAIPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
