@@ -23,7 +23,15 @@
     <ApplicationId>com.microsoft.maui.essentials.ai</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
-    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Prevent MSBuild from overriding MaxVersionTested (required for systemAIModels capability) -->
+    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+  </PropertyGroup>
+
+  <!-- Windows: self-contained publish to bundle WinAppSDK experimental runtime -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -64,11 +72,24 @@
     <PackageReference Include="OpenAI" />
   </ItemGroup>
 
+  <!-- Windows Phi Silica: requires experimental WindowsAppSDK for WinRT AI APIs -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.0.0-experimental6" />
+    <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
   </ItemGroup>
 
-  <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' ">
+  <!-- Exclude Windows-only services from non-Windows TFMs -->
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <Compile Remove="Services\AppContentIndexerSearchService.cs" />
+    <Compile Remove="Services\PhiSilicaToolsAndSchemaClient.cs" />
+  </ItemGroup>
+
+  <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">
     <PropertyGroup>
       <UserSecretsFilePath Condition=" '$(OS)' == 'Windows_NT' ">
         $([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))\AppData\Roaming\Microsoft\UserSecrets\$(UserSecretsId)\secrets.json
