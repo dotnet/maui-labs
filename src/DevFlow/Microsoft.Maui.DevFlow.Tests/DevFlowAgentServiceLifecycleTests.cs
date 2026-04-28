@@ -32,6 +32,55 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(app.GetType().Assembly.GetName().Name, afterBind.AppName);
     }
 
+    [Fact]
+    public async Task BaseAgent_ReportsJobsUnsupportedConsistently()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var status = await WaitForStatusAsync(client);
+        Assert.NotNull(status);
+        Assert.NotNull(status!.Capabilities);
+        Assert.False(status.Capabilities!.Jobs);
+
+        var capabilities = await client.GetCapabilitiesAsync();
+        Assert.False(capabilities.GetProperty("jobs").GetProperty("supported").GetBoolean());
+        Assert.Empty(capabilities.GetProperty("jobs").GetProperty("features").EnumerateArray());
+
+        var jobs = await client.GetJobsAsync();
+        Assert.False(jobs.GetProperty("supported").GetBoolean());
+        Assert.Empty(jobs.GetProperty("jobs").EnumerateArray());
+
+        var run = await client.RunJobAsync("missing-job");
+        Assert.False(run.GetProperty("success").GetBoolean());
+        Assert.Contains("not supported", run.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Capabilities_WhenJobsRunUnsupported_DoesNotAdvertiseRunFeature()
+    {
+        var port = GetFreePort();
+        using var service = new ListOnlyJobsAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var status = await WaitForStatusAsync(client);
+        Assert.NotNull(status);
+        Assert.NotNull(status!.Capabilities);
+        Assert.True(status.Capabilities!.Jobs);
+
+        var capabilities = await client.GetCapabilitiesAsync();
+        var jobsCapabilities = capabilities.GetProperty("jobs");
+        Assert.True(jobsCapabilities.GetProperty("supported").GetBoolean());
+
+        var features = jobsCapabilities.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ToArray();
+        Assert.Equal(new[] { "list" }, features);
+    }
+
     private static async Task<AgentStatus?> WaitForStatusAsync(AgentClient client)
     {
         for (int i = 0; i < 10; i++)
@@ -51,6 +100,13 @@ public class DevFlowAgentServiceLifecycleTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private sealed class ListOnlyJobsAgentService(AgentOptions options) : DevFlowAgentService(options)
+    {
+        protected override bool IsJobsSupported => true;
+
+        protected override bool IsJobRunSupported => false;
     }
 
     private sealed class ImmediateDispatcher : IDispatcher

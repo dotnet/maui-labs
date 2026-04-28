@@ -131,4 +131,19 @@ public class DeviceTests : IntegrationTestBase
             Output.WriteLine($"Geolocation not available: {ex.Message}");
         }
     }
+
+    [Fact]
+    public async Task Jobs_ReturnsSupportedFlagAndJobArray()
+    {
+        var json = await Client.GetJobsAsync();
+
+        Assert.Equal(JsonValueKind.Object, json.ValueKind);
+        Assert.True(json.TryGetProperty("supported", out var supported));
+        Assert.True(supported.ValueKind is JsonValueKind.True or JsonValueKind.False);
+        Assert.True(json.TryGetProperty("jobs", out var jobs));
+        Assert.Equal(JsonValueKind.Array, jobs.ValueKind);
+
+        if (Platform is "android" or "ios" or "maccatalyst")
+            Assert.True(supported.GetBoolean());
+    }
 }

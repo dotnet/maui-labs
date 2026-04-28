@@ -10,6 +10,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class AndroidEmulatorFixture : AppFixtureBase
 {
+    const string PackageId = "com.companyname.mauitodo";
+
     Process? _emulatorProcess;
     CancellationTokenSource? _appMonitorCts;
     Task? _appMonitorTask;
@@ -18,14 +20,10 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     string? _lastKnownPid;
     string? _diagnosticsDir;
     string? _serialNumber;
-    string? _packageId;
     int _apiLevel;
     string _sdkRoot = null!;
 
     public override string Platform => "android";
-
-    string PackageId => _packageId
-        ?? throw new InvalidOperationException("Android package id has not been resolved from the built manifest.");
 
     protected override async Task InitializePlatformAsync()
     {
@@ -51,8 +49,6 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             var projectPath = GetSampleProjectPath();
             await BuildSampleAsync(projectPath, "net10.0-android",
                 $"-p:EmbedAssembliesIntoApk=true -p:MauiDevFlowPort={AgentPort}");
-
-            _packageId = ReadBuiltAndroidApplicationId(projectPath, "Debug", "net10.0-android");
 
             var apkPath = FindApk();
             await InstallApkAsync(apkPath);
@@ -99,11 +95,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
         if (_serialNumber != null)
         {
-            if (_packageId != null)
-            {
-                try { await AdbAsync($"shell am force-stop {_packageId}", timeoutSeconds: 5); } catch { }
-            }
-
+            try { await AdbAsync($"shell am force-stop {PackageId}", timeoutSeconds: 5); } catch { }
             try { await RunProcessAsync(AdbPath(), $"-s {_serialNumber} forward --remove tcp:{AgentPort}", timeoutSeconds: 5); } catch { }
         }
 
@@ -541,11 +533,8 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
     async Task LaunchAppAsync()
     {
-        var packageId = _packageId
-            ?? throw new InvalidOperationException("Android package ID was not resolved from the built manifest.");
-
         var output = await AdbCheckedAsync(
-            $"shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER {packageId}",
+            $"shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER {PackageId}",
             timeoutSeconds: 10);
 
         var activityLine = output
@@ -554,30 +543,30 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
         if (string.IsNullOrEmpty(activityLine))
             throw new InvalidOperationException(
-                $"Could not resolve launcher activity for {packageId}. Output: {output}");
+                $"Could not resolve launcher activity for {PackageId}. Output: {output}");
 
-        await AdbCheckedAsync($"shell am force-stop {packageId}", timeoutSeconds: 10);
+        await AdbCheckedAsync($"shell am force-stop {PackageId}", timeoutSeconds: 10);
         var launchOutput = await AdbCheckedAsync($"shell am start -W -n {activityLine}", timeoutSeconds: 30);
 
         if (launchOutput.Contains("Error:", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Failed to launch {packageId}: {launchOutput}");
+            throw new InvalidOperationException($"Failed to launch {PackageId}: {launchOutput}");
 
-        await WaitForAppProcessAsync(packageId, timeoutSeconds: 30);
+        await WaitForAppProcessAsync(timeoutSeconds: 30);
     }
 
-    async Task WaitForAppProcessAsync(string packageId, int timeoutSeconds)
+    async Task WaitForAppProcessAsync(int timeoutSeconds)
     {
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
 
         while (DateTime.UtcNow < deadline)
         {
-            var (output, _, exitCode) = await AdbAsync($"shell pidof {packageId}", timeoutSeconds: 5);
+            var (output, _, exitCode) = await AdbAsync($"shell pidof {PackageId}", timeoutSeconds: 5);
             if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
                 return;
 
             await Task.Delay(1000);
         }
 
-        throw new TimeoutException($"Android app process '{packageId}' did not appear within {timeoutSeconds}s.");
+        throw new TimeoutException($"Android app process '{PackageId}' did not appear within {timeoutSeconds}s.");
     }
 }

@@ -686,6 +686,84 @@ public class AgentClient : IDisposable
         return await PostActionAsync($"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/stop", new JsonObject());
     }
 
+    // ── Jobs ──
+
+    public async Task<JsonElement> GetJobsAsync()
+    {
+        return await GetJsonAsync($"{DeviceApi}/jobs");
+    }
+
+    public async Task<JsonElement> RunJobAsync(string identifier, string? type = null)
+    {
+        try
+        {
+            var payload = new JsonObject();
+            if (!string.IsNullOrWhiteSpace(type))
+                payload["type"] = type;
+
+            using var content = DriverJson.CreateJsonContent(payload);
+            using var response = await _http.PostAsync($"{_baseUrl}{DeviceApi}/jobs/{Uri.EscapeDataString(identifier)}/run", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return default;
+            return DriverJson.ParseElement(responseBody);
+        }
+        catch { return default; }
+    }
+
+    // ── Files ──
+
+    public async Task<JsonElement> ListStorageRootsAsync()
+    {
+        return await GetJsonAsync($"{StorageApi}/roots");
+    }
+
+    public async Task<JsonElement> ListFilesAsync(string? path = null, string? root = null)
+    {
+        var url = $"{StorageApi}/files";
+        var query = BuildStorageFilesQuery(path, root);
+        if (!string.IsNullOrEmpty(query))
+            url += query;
+
+        return await GetJsonAsync(url);
+    }
+
+    public async Task<JsonElement> DownloadFileAsync(string path, string? root = null)
+    {
+        return await GetJsonAsync($"{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}");
+    }
+
+    public async Task<JsonElement> UploadFileAsync(string path, string contentBase64, string? root = null)
+    {
+        var body = new JsonObject { ["contentBase64"] = contentBase64 };
+        using var content = DriverJson.CreateJsonContent(body);
+        using var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(responseBody))
+            return default;
+
+        return DriverJson.ParseElement(responseBody);
+    }
+
+    public async Task<bool> DeleteFileAsync(string path, string? root = null)
+    {
+        return await DeleteActionAsync($"{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}");
+    }
+
+    private static string BuildStorageFilesQuery(string? path, string? root)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(path))
+            query.Add($"path={Uri.EscapeDataString(path)}");
+        if (!string.IsNullOrEmpty(root))
+            query.Add($"root={Uri.EscapeDataString(root)}");
+
+        return query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
+    }
+
+    private static string BuildRootQuery(string? root)
+        => string.IsNullOrEmpty(root) ? string.Empty : $"?root={Uri.EscapeDataString(root)}";
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -834,6 +912,8 @@ public class AgentCapabilities
     public bool Storage { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("profiler")]
     public bool Profiler { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("jobs")]
+    public bool Jobs { get; set; }
 }
 
 public class NetworkRequest

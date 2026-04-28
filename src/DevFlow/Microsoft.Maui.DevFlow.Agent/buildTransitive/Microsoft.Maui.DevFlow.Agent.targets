@@ -4,11 +4,11 @@
     CLI override (-p:MauiDevFlowPort=9225) takes priority over the config file.
     If neither is set, the agent uses its default port (9223).
 
-    Also enables Debug-only app identity isolation by default so DevFlow-enabled builds
-    from separate worktrees can coexist on devices/simulators. Opt out with:
-      -p:MauiDevFlowEnableDebugAppIdentityIsolation=false
-    Or override the suffix with:
-      -p:MauiDevFlowDebugAppIdentitySuffix=yourSuffix
+    Computes a session identity (MauiDevFlowSessionId) derived from the project path
+    so DevFlow can distinguish builds from different environments (e.g. worktrees,
+    CI agents, dev machines). Override with:
+      -p:MauiDevFlowSessionId=yourId
+    The session identity is metadata-only — it never modifies ApplicationId.
   -->
   <Target Name="_ReadMauiDevFlowConfig" BeforeTargets="_SetMauiDevFlowPort"
           Condition="'$(MauiDevFlowPort)' == '' AND Exists('$(MSBuildProjectDirectory)/.mauidevflow')">
@@ -22,32 +22,27 @@
   <Target Name="_SetMauiDevFlowPort" BeforeTargets="PrepareForBuild;CoreCompile">
     <PropertyGroup>
       <_MauiDevFlowPortFile>$(IntermediateOutputPath)Microsoft.Maui.DevFlowPort.g.cs</_MauiDevFlowPortFile>
-      <MauiDevFlowEnableDebugAppIdentityIsolation Condition="'$(MauiDevFlowEnableDebugAppIdentityIsolation)' == '' and '$(MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION)' != ''">$(MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION)</MauiDevFlowEnableDebugAppIdentityIsolation>
-      <MauiDevFlowEnableDebugAppIdentityIsolation Condition="'$(MauiDevFlowEnableDebugAppIdentityIsolation)' == '' and '$(Configuration)' == 'Debug'">true</MauiDevFlowEnableDebugAppIdentityIsolation>
-      <MauiDevFlowEnableDebugAppIdentityIsolation Condition="'$(MauiDevFlowEnableDebugAppIdentityIsolation)' == ''">false</MauiDevFlowEnableDebugAppIdentityIsolation>
-      <_MauiDevFlowIsolationEnabled>$([System.String]::Copy('$(MauiDevFlowEnableDebugAppIdentityIsolation)').ToLowerInvariant())</_MauiDevFlowIsolationEnabled>
-      <MauiDevFlowDebugAppIdentitySuffix Condition="'$(MauiDevFlowDebugAppIdentitySuffix)' == ''">$(MAUI_DEVFLOW_DEBUG_APP_IDENTITY_SUFFIX)</MauiDevFlowDebugAppIdentitySuffix>
-      <MauiDevFlowBaseApplicationId Condition="'$(MauiDevFlowBaseApplicationId)' == ''">$(ApplicationId)</MauiDevFlowBaseApplicationId>
-      <_MauiDevFlowRawIdentitySuffix>$(MauiDevFlowDebugAppIdentitySuffix)</_MauiDevFlowRawIdentitySuffix>
-      <_MauiDevFlowRawIdentitySuffix Condition="'$(_MauiDevFlowRawIdentitySuffix)' == '' and '$(_MauiDevFlowIsolationEnabled)' == 'true'">$(MSBuildProjectFullPath)</_MauiDevFlowRawIdentitySuffix>
-      <_MauiDevFlowSanitizedIdentitySuffix>$([System.Text.RegularExpressions.Regex]::Replace($([System.String]::Copy('$(_MauiDevFlowRawIdentitySuffix)').ToLowerInvariant()), '[^a-z0-9]+', ''))</_MauiDevFlowSanitizedIdentitySuffix>
-      <_MauiDevFlowIdentitySuffixTail Condition="'$(_MauiDevFlowSanitizedIdentitySuffix)' != '' and $([System.String]::Copy('$(_MauiDevFlowSanitizedIdentitySuffix)').Length) &gt; 24">$([System.String]::Copy('$(_MauiDevFlowSanitizedIdentitySuffix)').Substring($([MSBuild]::Subtract($([System.String]::Copy('$(_MauiDevFlowSanitizedIdentitySuffix)').Length), 24))))</_MauiDevFlowIdentitySuffixTail>
-      <_MauiDevFlowIdentitySuffixTail Condition="'$(_MauiDevFlowIdentitySuffixTail)' == ''">$(_MauiDevFlowSanitizedIdentitySuffix)</_MauiDevFlowIdentitySuffixTail>
-      <MauiDevFlowResolvedDebugAppIdentitySuffix Condition="'$(_MauiDevFlowIdentitySuffixTail)' != ''">dw$(_MauiDevFlowIdentitySuffixTail)</MauiDevFlowResolvedDebugAppIdentitySuffix>
-      <ApplicationId Condition="'$(_MauiDevFlowIsolationEnabled)' == 'true' and '$(MauiDevFlowBaseApplicationId)' != '' and '$(MauiDevFlowResolvedDebugAppIdentitySuffix)' != ''">$(MauiDevFlowBaseApplicationId).debug.$(MauiDevFlowResolvedDebugAppIdentitySuffix)</ApplicationId>
-      <MauiDevFlowResolvedApplicationId>$(ApplicationId)</MauiDevFlowResolvedApplicationId>
+      <!-- Session identity: allow explicit override via property or environment variable -->
+      <MauiDevFlowSessionId Condition="'$(MauiDevFlowSessionId)' == ''">$(MAUI_DEVFLOW_SESSION_ID)</MauiDevFlowSessionId>
+      <!-- Default: derive from project path — lowercase, alphanumeric only, last 24 chars, prefixed with 'dw' -->
+      <_MauiDevFlowRawSessionId Condition="'$(MauiDevFlowSessionId)' != ''">$(MauiDevFlowSessionId)</_MauiDevFlowRawSessionId>
+      <_MauiDevFlowRawSessionId Condition="'$(_MauiDevFlowRawSessionId)' == ''">$(MSBuildProjectFullPath)</_MauiDevFlowRawSessionId>
+      <_MauiDevFlowSanitizedSessionId>$([System.Text.RegularExpressions.Regex]::Replace($([System.String]::Copy('$(_MauiDevFlowRawSessionId)').ToLowerInvariant()), '[^a-z0-9]+', ''))</_MauiDevFlowSanitizedSessionId>
+      <_MauiDevFlowSessionIdTail Condition="'$(_MauiDevFlowSanitizedSessionId)' != '' and $([System.String]::Copy('$(_MauiDevFlowSanitizedSessionId)').Length) &gt; 24">$([System.String]::Copy('$(_MauiDevFlowSanitizedSessionId)').Substring($([MSBuild]::Subtract($([System.String]::Copy('$(_MauiDevFlowSanitizedSessionId)').Length), 24))))</_MauiDevFlowSessionIdTail>
+      <_MauiDevFlowSessionIdTail Condition="'$(_MauiDevFlowSessionIdTail)' == ''">$(_MauiDevFlowSanitizedSessionId)</_MauiDevFlowSessionIdTail>
+      <MauiDevFlowSessionId Condition="'$(MauiDevFlowSessionId)' == '' and '$(_MauiDevFlowSessionIdTail)' != ''">dw$(_MauiDevFlowSessionIdTail)</MauiDevFlowSessionId>
+      <!-- Sanitize session ID for safe XML interpolation (manifest overlay, plist) -->
+      <MauiDevFlowSessionId>$([System.Text.RegularExpressions.Regex]::Replace($([System.String]::Copy('$(MauiDevFlowSessionId)').ToLowerInvariant()), '[^a-z0-9]+', ''))</MauiDevFlowSessionId>
+      <!-- Pre-compute platform identifier for use in downstream target conditions -->
+      <_DevFlowTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_DevFlowTargetPlatform>
       <_MauiDevFlowMetadata></_MauiDevFlowMetadata>
       <_MauiDevFlowMetadata Condition="'$(MauiDevFlowPort)' != ''">$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowPort", "$(MauiDevFlowPort)")]
 </_MauiDevFlowMetadata>
       <_MauiDevFlowProjectPath>$([MSBuild]::ValueOrDefault('$(MSBuildProjectFullPath)','').Replace('\','\\'))</_MauiDevFlowProjectPath>
       <_MauiDevFlowMetadata>$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowProject", "$(_MauiDevFlowProjectPath)")]
 [assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowTfm", "$(TargetFramework)")]</_MauiDevFlowMetadata>
-      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowBaseApplicationId)' != ''">$(_MauiDevFlowMetadata)
-[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowBaseApplicationId", "$(MauiDevFlowBaseApplicationId)")]</_MauiDevFlowMetadata>
-      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowResolvedApplicationId)' != ''">$(_MauiDevFlowMetadata)
-[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowApplicationId", "$(MauiDevFlowResolvedApplicationId)")]</_MauiDevFlowMetadata>
-      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowResolvedDebugAppIdentitySuffix)' != ''">$(_MauiDevFlowMetadata)
-[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowDebugAppIdentitySuffix", "$(MauiDevFlowResolvedDebugAppIdentitySuffix)")]</_MauiDevFlowMetadata>
+      <_MauiDevFlowMetadata Condition="'$(MauiDevFlowSessionId)' != ''">$(_MauiDevFlowMetadata)
+[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowSessionId", "$(MauiDevFlowSessionId)")]</_MauiDevFlowMetadata>
     </PropertyGroup>
     <WriteLinesToFile File="$(_MauiDevFlowPortFile)"
                      Lines="$(_MauiDevFlowMetadata)"
@@ -55,6 +50,53 @@
                      WriteOnlyWhenDifferent="true" />
     <ItemGroup>
       <Compile Include="$(_MauiDevFlowPortFile)" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Android: Inject session identity as <meta-data> in AndroidManifest.xml.
+    Queryable via: adb shell dumpsys package <pkg> | grep devflow.sessionId
+  -->
+  <Target Name="_InjectMauiDevFlowAndroidManifestMetadata"
+          AfterTargets="_SetMauiDevFlowPort"
+          BeforeTargets="_MergeManifest"
+          Condition="'$(_DevFlowTargetPlatform)' == 'android' and '$(MauiDevFlowSessionId)' != ''">
+    <PropertyGroup>
+      <_DevFlowManifestOverlay>$(IntermediateOutputPath)DevFlowManifestOverlay.xml</_DevFlowManifestOverlay>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_DevFlowManifestOverlay)"
+                     Lines='&lt;manifest xmlns:android="http://schemas.android.com/apk/res/android"&gt;&lt;application&gt;&lt;meta-data android:name="com.microsoft.maui.devflow.sessionId" android:value="$(MauiDevFlowSessionId)" /&gt;&lt;/application&gt;&lt;/manifest&gt;'
+                     Overwrite="true"
+                     WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <AndroidManifestOverlay Include="$(_DevFlowManifestOverlay)" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    iOS / Mac Catalyst: Inject session identity into Info.plist.
+    Queryable via: xcrun simctl get_app_container <udid> <bundle_id> app, then plutil -p <path>/Info.plist
+  -->
+  <Target Name="_InjectMauiDevFlowiOSPlistMetadata"
+          AfterTargets="_SetMauiDevFlowPort"
+          BeforeTargets="_DetectAppManifest"
+          Condition="('$(_DevFlowTargetPlatform)' == 'ios' or '$(_DevFlowTargetPlatform)' == 'maccatalyst') and '$(MauiDevFlowSessionId)' != ''">
+    <PropertyGroup>
+      <_DevFlowPartialPlist>$(IntermediateOutputPath)DevFlowInfo.plist</_DevFlowPartialPlist>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_DevFlowPartialPlist)"
+                     Lines='&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
+&lt;plist version="1.0"&gt;
+&lt;dict&gt;
+  &lt;key&gt;MauiDevFlowSessionId&lt;/key&gt;
+  &lt;string&gt;$(MauiDevFlowSessionId)&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;'
+                     Overwrite="true"
+                     WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <PartialAppManifest Include="$(_DevFlowPartialPlist)" />
     </ItemGroup>
   </Target>
 </Project>

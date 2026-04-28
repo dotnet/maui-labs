@@ -2,6 +2,10 @@ using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 using Microsoft.Maui.DevFlow.Agent.Profiling;
+#if IOS || MACCATALYST
+using BackgroundTasks;
+using Foundation;
+#endif
 #if MACOS
 using AppKit;
 using Foundation;
@@ -283,6 +287,213 @@ public class PlatformAgentService : DevFlowAgentService
         return base.CreateProfilerCollector();
 #endif
     }
+
+    protected override bool IsJobsSupported
+    {
+        get
+        {
+#if ANDROID || IOS || MACCATALYST
+            return true;
+#else
+            return base.IsJobsSupported;
+#endif
+        }
+    }
+
+    protected override bool IsJobRunSupported
+    {
+        get
+        {
+#if IOS || MACCATALYST
+            return true;
+#elif ANDROID
+            return false;
+#else
+            return base.IsJobRunSupported;
+#endif
+        }
+    }
+
+    protected override async Task<object?> GetPlatformJobsAsync()
+    {
+#if ANDROID
+        try
+        {
+            var context = global::Android.App.Application.Context;
+            var wmClass = Java.Lang.Class.ForName("androidx.work.WorkManager");
+            var getInstanceMethod = wmClass.GetMethod("getInstance", Java.Lang.Class.FromType(typeof(global::Android.Content.Context)));
+            var wm = getInstanceMethod?.Invoke(null, context);
+            if (wm == null)
+                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "WorkManager not initialized", jobs = Array.Empty<object>() };
+
+            // Build WorkQuery for all states
+            var queryBuilderClass = Java.Lang.Class.ForName("androidx.work.WorkQuery$Builder");
+            var stateClass = Java.Lang.Class.ForName("androidx.work.WorkInfo$State");
+
+            var stateFields = new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" };
+            var stateList = new Java.Util.ArrayList();
+            foreach (var fieldName in stateFields)
+            {
+                var field = stateClass.GetField(fieldName);
+                var state = field?.Get(null);
+                if (state != null)
+                    stateList.Add(state);
+            }
+
+            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", Java.Lang.Class.FromType(typeof(Java.Util.IList)));
+            var builder = fromStatesMethod?.Invoke(null, stateList);
+            if (builder == null)
+                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "Failed to create WorkQuery", jobs = Array.Empty<object>() };
+
+            var buildMethod = builder.Class.GetMethod("build");
+            var query = buildMethod?.Invoke(builder);
+
+            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", Java.Lang.Class.ForName("androidx.work.WorkQuery"));
+            var future = getWorkInfosMethod?.Invoke(wm, query!) as Java.Lang.Object;
+
+            // ListenableFuture.get()
+            var getMethod = future?.Class.GetMethod("get");
+            var result = getMethod?.Invoke(future) as Java.Util.IList;
+
+            var jobs = new List<object>();
+            if (result != null)
+            {
+                var iterator = result.Iterator();
+                while (iterator.HasNext)
+                {
+                    var info = iterator.Next()!;
+                    var infoClass = info.Class;
+
+                    var getId = infoClass.GetMethod("getId");
+                    var getTags = infoClass.GetMethod("getTags");
+                    var getState = infoClass.GetMethod("getState");
+                    var getRunAttemptCount = infoClass.GetMethod("getRunAttemptCount");
+
+                    var identifier = getId?.Invoke(info)?.ToString() ?? "";
+                    var tags = new List<string>();
+                    if (getTags?.Invoke(info) is Java.Util.ICollection tagSet)
+                    {
+                        var tagIter = tagSet.Iterator();
+                        while (tagIter.HasNext)
+                            tags.Add(tagIter.Next()?.ToString() ?? "");
+                    }
+                    var state = getState?.Invoke(info)?.ToString() ?? "";
+                    var runAttemptCount = 0;
+                    if (getRunAttemptCount?.Invoke(info) is Java.Lang.Integer countObj)
+                        runAttemptCount = countObj.IntValue();
+
+                    jobs.Add(new
+                    {
+                        identifier,
+                        tags = tags.ToArray(),
+                        state,
+                        runAttemptCount
+                    });
+                }
+            }
+
+            return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, jobs };
+        }
+        catch (Exception ex)
+        {
+            return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = ex.Message, jobs = Array.Empty<object>() };
+        }
+#elif IOS || MACCATALYST
+        try
+        {
+            var tcs = new TaskCompletionSource<object?>();
+            BGTaskScheduler.Shared.GetPending((requests) =>
+            {
+                var jobs = new List<object>();
+                foreach (var req in requests)
+                {
+                    var type = req is BGProcessingTaskRequest ? "processing" : "refresh";
+                    jobs.Add(new
+                    {
+                        identifier = req.Identifier,
+                        type,
+                        earliestBeginDate = req.EarliestBeginDate?.ToString() ?? ""
+                    });
+                }
+                tcs.TrySetResult(new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, jobs });
+            });
+            return await tcs.Task;
+        }
+        catch (Exception ex)
+        {
+            return new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, error = ex.Message, jobs = Array.Empty<object>() };
+        }
+#else
+        return await base.GetPlatformJobsAsync();
+#endif
+    }
+
+    protected override async Task<object?> RunPlatformJobAsync(string identifier, string? type = null)
+    {
+#if ANDROID
+        return await Task.FromResult<object?>(new
+        {
+            success = false,
+            supported = false,
+            identifier,
+            error = $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+        });
+#elif IOS || MACCATALYST
+        try
+        {
+            var taskType = await ResolveBgTaskRequestTypeAsync(identifier, type);
+            BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
+                ? new BGAppRefreshTaskRequest(identifier)
+                : new BGProcessingTaskRequest(identifier);
+
+            taskRequest.EarliestBeginDate = null;
+
+            BGTaskScheduler.Shared.Submit(taskRequest, out var error);
+            if (error != null)
+                return new { success = false, error = error.LocalizedDescription, identifier };
+
+            return await Task.FromResult<object?>(new
+            {
+                success = true,
+                message = $"BGTask '{identifier}' submitted",
+                identifier,
+                type = taskType
+            });
+        }
+        catch (Exception ex)
+        {
+            return new { success = false, error = ex.Message, identifier };
+        }
+#else
+        return await base.RunPlatformJobAsync(identifier, type);
+#endif
+    }
+
+#if IOS || MACCATALYST
+    private static async Task<string> ResolveBgTaskRequestTypeAsync(string identifier, string? requestedType)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedType))
+        {
+            if (requestedType.Equals("processing", StringComparison.OrdinalIgnoreCase))
+                return "processing";
+            if (requestedType.Equals("refresh", StringComparison.OrdinalIgnoreCase))
+                return "refresh";
+
+            throw new ArgumentException("BGTask type must be 'processing' or 'refresh'.", nameof(requestedType));
+        }
+
+        var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BGTaskScheduler.Shared.GetPending((requests) =>
+        {
+            var pending = requests.FirstOrDefault(r =>
+                string.Equals(r.Identifier, identifier, StringComparison.Ordinal));
+            tcs.TrySetResult(pending is null ? null : pending is BGProcessingTaskRequest ? "processing" : "refresh");
+        });
+
+        return await tcs.Task ?? "processing";
+    }
+#endif
+
     protected override bool TryNativeTap(VisualElement ve)
     {
         try

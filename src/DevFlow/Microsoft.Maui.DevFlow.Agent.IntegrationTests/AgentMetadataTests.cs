@@ -81,4 +81,17 @@ public class AgentMetadataTests : IntegrationTestBase
         Assert.Contains("ui", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("webview", text, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task JobsCapability_MatchesStatus()
+    {
+        var status = await Client.GetStatusAsync();
+        var capabilities = await Client.GetCapabilitiesAsync();
+
+        Assert.NotNull(status);
+        Assert.NotNull(status!.Capabilities);
+        Assert.Equal(
+            status.Capabilities!.Jobs,
+            capabilities.GetProperty("jobs").GetProperty("supported").GetBoolean());
+    }
 }

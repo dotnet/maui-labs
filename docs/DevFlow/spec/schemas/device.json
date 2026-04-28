@@ -258,6 +258,140 @@
         }
       }
     },
+    "PlatformJob": {
+      "type": "object",
+      "description": "A platform background job. Android jobs expose WorkManager fields; iOS and Mac Catalyst jobs expose BGTaskScheduler fields.",
+      "required": [
+        "identifier"
+      ],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "description": "Platform job identifier. Android maps this to the WorkManager UUID; iOS and Mac Catalyst map this to the BGTask identifier."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Android WorkManager tags associated with the work."
+        },
+        "state": {
+          "type": "string",
+          "description": "Android WorkManager state, such as ENQUEUED, RUNNING, SUCCEEDED, FAILED, BLOCKED, or CANCELLED."
+        },
+        "runAttemptCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Android WorkManager run attempt count."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "processing",
+            "refresh"
+          ],
+          "description": "iOS or Mac Catalyst BGTask request type."
+        },
+        "earliestBeginDate": {
+          "type": "string",
+          "description": "Earliest begin date reported by BGTaskScheduler, if present."
+        }
+      },
+      "additionalProperties": true
+    },
+    "JobListResponse": {
+      "type": "object",
+      "description": "Response returned when listing platform background jobs.",
+      "required": [
+        "platform",
+        "supported",
+        "jobs"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Platform name reported by the agent."
+        },
+        "type": {
+          "type": "string",
+          "description": "Platform scheduler implementation, such as WorkManager or BGTaskScheduler."
+        },
+        "supported": {
+          "type": "boolean",
+          "description": "Whether the current platform supports listing jobs."
+        },
+        "runSupported": {
+          "type": "boolean",
+          "description": "Whether listed jobs can be triggered by this agent."
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlatformJob"
+          },
+          "description": "Background jobs reported by the platform."
+        },
+        "error": {
+          "type": "string",
+          "description": "Platform-specific error message if listing failed."
+        }
+      },
+      "additionalProperties": true
+    },
+    "JobRunRequest": {
+      "type": "object",
+      "description": "Optional request body used when triggering a platform background job.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "processing",
+            "refresh"
+          ],
+          "description": "iOS or Mac Catalyst BGTask request type. If omitted, the agent resolves it from pending requests when possible and otherwise defaults to processing."
+        }
+      },
+      "additionalProperties": false
+    },
+    "JobRunResponse": {
+      "type": "object",
+      "description": "Response returned after attempting to trigger a platform background job.",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether the job trigger request was submitted successfully."
+        },
+        "supported": {
+          "type": "boolean",
+          "description": "Whether triggering this job is supported on the current platform."
+        },
+        "identifier": {
+          "type": "string",
+          "description": "Requested platform job identifier."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "processing",
+            "refresh"
+          ],
+          "description": "BGTask request type used on iOS or Mac Catalyst."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable success message."
+        },
+        "error": {
+          "type": "string",
+          "description": "Human-readable error message."
+        }
+      },
+      "additionalProperties": true
+    },
     "GeolocationResult": {
       "type": "object",
       "description": "A geolocation reading.",

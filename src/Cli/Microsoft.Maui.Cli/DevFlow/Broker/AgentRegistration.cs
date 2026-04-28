@@ -31,6 +31,9 @@ public record AgentRegistration
     [JsonPropertyName("version")]
     public string? Version { get; init; }
 
+    [JsonPropertyName("sessionId")]
+    public string? SessionId { get; init; }
+
     [JsonPropertyName("connectedAt")]
     public DateTime ConnectedAt { get; init; } = DateTime.UtcNow;
 
@@ -82,4 +85,7 @@ internal record RegistrationMessage
 
     [JsonPropertyName("version")]
     public string? Version { get; init; }
+
+    [JsonPropertyName("sessionId")]
+    public string? SessionId { get; init; }
 }

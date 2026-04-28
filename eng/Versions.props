@@ -61,6 +61,8 @@
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVisualstudioVersion>3.1.5</XunitRunnerVisualstudioVersion>
     <CoverletCollectorVersion>8.0.0</CoverletCollectorVersion>
+    <MicrosoftOpenApiVersion>3.5.0</MicrosoftOpenApiVersion>
+    <YamlDotNetVersion>16.3.0</YamlDotNetVersion>
   </PropertyGroup>
   <PropertyGroup Label="SourceLink">
     <MicrosoftSourceLinkGitHubVersion>10.0.201</MicrosoftSourceLinkGitHubVersion>

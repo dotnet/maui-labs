@@ -33,9 +33,9 @@ tags:
   - name: logs
     description: Application logs
   - name: device
-    description: Device info, sensors, permissions, geolocation
+    description: Device info, sensors, jobs, permissions, geolocation
   - name: storage
-    description: Preferences and secure storage
+    description: Preferences, secure storage, and sandboxed app files
   - name: extensions
     description: Third-party extension routes
 
@@ -1394,6 +1394,61 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/device/jobs:
+    get:
+      operationId: listDeviceJobs
+      tags: [device]
+      summary: List platform background jobs
+      description: >
+        Returns platform background jobs known to the agent. Android reports
+        WorkManager identifiers, tags, states, and run attempts. iOS and Mac
+        Catalyst report pending BGTaskScheduler requests.
+      responses:
+        "200":
+          description: Platform job list.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/JobListResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/jobs/{identifier}/run:
+    post:
+      operationId: runDeviceJob
+      tags: [device]
+      summary: Trigger a platform background job
+      description: >
+        Attempts to trigger the named platform background job. iOS and Mac
+        Catalyst submit a BGTaskRequest for the identifier; pass `type` when
+        the task is known to be an app refresh task. Android currently reports
+        `success=false` because WorkManager worker types and request inputs
+        cannot be reconstructed safely from the listed identifier or tags.
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          description: Platform job identifier returned by the list endpoint.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/device.json#/$defs/JobRunRequest"
+      responses:
+        "200":
+          description: Job trigger result.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/JobRunResponse"
+        "501":
+          $ref: "#/components/responses/UnsupportedCapability"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/device/permissions:
     get:
       operationId: listPermissions
@@ -1607,6 +1662,169 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/storage/roots:
+    get:
+      operationId: listStorageRoots
+      tags: [storage]
+      summary: List file storage roots
+      description: >
+        Lists logical file storage roots advertised by the agent. The current
+        shared implementation advertises only `appData`; platform agents may
+        advertise additional roots in the future. Absolute on-device paths are
+        not returned.
+      responses:
+        "200":
+          description: Storage roots.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/StorageRootsResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/files:
+    get:
+      operationId: listFiles
+      tags: [storage]
+      summary: List storage files
+      description: >
+        Lists files and directories under an advertised storage root. The
+        optional path is always relative to the selected root; rooted paths, `..`
+        traversal segments, and symlink/reparse-point traversal are rejected.
+        Absolute on-device paths are not returned. Omit `root` to use the
+        default `appData` root.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+        - name: path
+          in: query
+          description: Relative subdirectory path. Omit or pass an empty string for the selected root.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Directory listing.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileListResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/files/{path}:
+    get:
+      operationId: downloadFile
+      tags: [storage]
+      summary: Download a storage file
+      description: >
+        Downloads a file under an advertised storage root and returns base64-encoded
+        content. The path parameter is a single URI-encoded relative path; path
+        separators inside it must be percent-encoded. Omit `root` to use the
+        default `appData` root.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative file path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: File content and metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileDownloadResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: uploadFile
+      tags: [storage]
+      summary: Upload a storage file
+      description: >
+        Creates or overwrites a file under an advertised storage root. Parent
+        directories are created automatically after path sandbox validation.
+        Omit `root` to use the default `appData` root.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative file path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/storage.json#/$defs/FileUploadRequest"
+      responses:
+        "200":
+          description: Uploaded file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileUploadResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: deleteFile
+      tags: [storage]
+      summary: Delete a storage file
+      description: Deletes a file under an advertised storage root. Omit `root` to use the default `appData` root.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative file path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: Deleted file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileDeleteResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/storage/secure:
     delete:
       operationId: clearSecureStorage
@@ -1757,6 +1975,18 @@ components:
             title: Invalid selector
             status: 400
             errorCode: invalid-selector
+
+    InvalidPath:
+      description: Invalid or unsafe storage path or unavailable storage root.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:invalid-path"
+            title: Invalid storage path
+            status: 400
+            errorCode: invalid-path
 
     Timeout:
       description: Operation timed out.

@@ -66,26 +66,29 @@ maui devflow ui tap --automationid "MyButton"
 maui devflow mcp
 ```
 
-### Debug app identity isolation
+### Session identity
 
-When `Microsoft.Maui.DevFlow.Agent` is referenced, **Debug** builds automatically rewrite
-the app `ApplicationId` to include a DevFlow-specific suffix derived from the project path.
-That lets separate worktrees or agent sessions install distinct debug copies of the same
-app on a device or simulator instead of competing for one installed identity.
+When `Microsoft.Maui.DevFlow.Agent` is referenced, builds are tagged with a **session identity**
+derived from the project path. This metadata-only identifier helps DevFlow distinguish builds
+from different environments (e.g. worktrees, CI agents, dev machines) without modifying
+the app's `ApplicationId` or bundle identifier.
 
-You can override or disable the behavior when needed:
+The session identity is included in:
+- Assembly metadata (`Microsoft.Maui.DevFlowSessionId`)
+- Broker registration (visible via `maui devflow list`)
+- Agent status endpoint (`/api/v1/agent/status`)
+
+You can override the automatically derived identity:
 
 ```bash
-# Disable Debug identity isolation
-dotnet build -p:MauiDevFlowEnableDebugAppIdentityIsolation=false
-
-# Force a specific Debug identity suffix
-dotnet build -p:MauiDevFlowDebugAppIdentitySuffix=agent42
+# Set a specific session identity
+dotnet build -p:MauiDevFlowSessionId=mysession
 ```
 
-The same values can also be supplied via environment variables:
-`MAUI_DEVFLOW_ENABLE_DEBUG_APP_IDENTITY_ISOLATION` and
-`MAUI_DEVFLOW_DEBUG_APP_IDENTITY_SUFFIX`.
+> **Note:** Session IDs are sanitized to lowercase alphanumeric characters only.
+> For example, `My-Session` would become `mysession`.
+
+The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environment variable.
 
 ## Features
 
@@ -99,7 +102,7 @@ The same values can also be supplied via environment variables:
 - **MCP Server** — 50+ structured tools for AI agent integration (Claude, etc.)
 - **Logging** — buffered JSONL file logging with WebView JS console capture
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
-- **Storage Access** — read/write app preferences and secure storage remotely
+- **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
 - **Device Introspection** — battery, connectivity, geolocation, display, permissions, and sensor data
 - **Dialog Handling** — detect and dismiss alerts/action sheets programmatically
 - **Batch Operations** — execute command sequences from stdin for scripting
@@ -116,7 +119,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
 | `logs` | Fetch and stream application logs |
 | `network` | Monitor and inspect HTTP requests |
-| `storage` | Read/write app preferences and secure storage |
+| `storage` | Read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `agent` | Discover and inspect connected agents (status, list, wait, diagnose) |
 | `broker` | Manage the agent broker (start, stop, status, log) |
 | `batch` | Execute command sequences from stdin |

@@ -195,6 +195,7 @@ public class BrokerServer : IDisposable
                 AppName = registration.AppName,
                 Port = assignedPort,
                 Version = registration.Version,
+                SessionId = registration.SessionId,
                 ConnectedAt = DateTime.UtcNow
             };
 

@@ -137,6 +137,12 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapPut("/api/v1/storage/secure/{key}", () => Results.Content(MockAgentResponses.SecureStorageValue, "application/json"));
         app.MapDelete("/api/v1/storage/secure/{key}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
         app.MapDelete("/api/v1/storage/secure", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
+
+        app.MapGet("/api/v1/storage/roots", () => Results.Content(MockAgentResponses.StorageRoots, "application/json"));
+        app.MapGet("/api/v1/storage/files", () => Results.Content(MockAgentResponses.FilesList, "application/json"));
+        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileDownload(path), "application/json"));
+        app.MapPut("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileUpload(path), "application/json"));
+        app.MapDelete("/api/v1/storage/files/{path}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
     private static void RegisterWebViewEndpoints(WebApplication app)
