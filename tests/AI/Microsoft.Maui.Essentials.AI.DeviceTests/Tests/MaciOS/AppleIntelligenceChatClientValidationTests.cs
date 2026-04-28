@@ -8,7 +8,6 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 /// Tests for AppleIntelligenceChatClient edge cases in message conversion,
 /// tool validation, and error handling paths.
 /// </summary>
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientValidationTests
 {
 	/// <summary>

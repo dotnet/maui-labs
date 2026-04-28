@@ -11,40 +11,26 @@ public class OpenAIEmbeddingGenerator : DelegatingEmbeddingGenerator<string, Emb
 	{
 	}
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorCancellationTests : EmbeddingGeneratorCancellationTestsBase<OpenAIEmbeddingGenerator>
 {
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorConcurrencyTests : EmbeddingGeneratorConcurrencyTestsBase<OpenAIEmbeddingGenerator>
 {
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTestsBase<OpenAIEmbeddingGenerator>
 {
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorGenerateTests : EmbeddingGeneratorGenerateTestsBase<OpenAIEmbeddingGenerator>
 {
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceTestsBase<OpenAIEmbeddingGenerator>
 {
 	protected override string ExpectedProviderName => "openai";
 	protected override string ExpectedDefaultModelId => "text-embedding-3-small";
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstantiationTestsBase<OpenAIEmbeddingGenerator>
 {
 }
-
-[Category(Traits.OpenAIEmbeddingGenerator)]
 public class OpenAIEmbeddingGeneratorSimilarityTests : EmbeddingGeneratorSimilarityTestsBase<OpenAIEmbeddingGenerator>
 {
 }

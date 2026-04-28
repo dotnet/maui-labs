@@ -3,35 +3,23 @@ using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientCancellationTests : ChatClientCancellationTestsBase<AppleIntelligenceChatClient>
 {
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<AppleIntelligenceChatClient>
 {
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientGetServiceTests : ChatClientGetServiceTestsBase<AppleIntelligenceChatClient>
 {
 	protected override string ExpectedProviderName => "apple";
 	protected override string ExpectedDefaultModelId => "apple-intelligence";
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientInstantiationTests : ChatClientInstantiationTestsBase<AppleIntelligenceChatClient>
 {
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsBase<AppleIntelligenceChatClient>
 {
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBase<AppleIntelligenceChatClient>
 {
 	/// <summary>
@@ -85,18 +73,12 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 		Assert.Contains("JSON schema", exception.Message, StringComparison.OrdinalIgnoreCase);
 	}
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsBase<AppleIntelligenceChatClient>
 {
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
 }
-
-[Category(Traits.AppleIntelligenceChatClient)]
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
 	[Fact(Skip = "Apple Intelligence requires a JSON schema for structured responses, so this test is not applicable.")]

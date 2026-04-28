@@ -5,18 +5,12 @@ using NaturalLanguage;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorCancellationTests : EmbeddingGeneratorCancellationTestsBase<NLEmbeddingGenerator>
 {
 }
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorConcurrencyTests : EmbeddingGeneratorConcurrencyTestsBase<NLEmbeddingGenerator>
 {
 }
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTestsBase<NLEmbeddingGenerator>
 {
 	[Fact]
@@ -54,13 +48,9 @@ public class NLEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTests
 		Assert.IsType<NLEmbeddingGenerator>(generator);
 	}
 }
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorGenerateTests : EmbeddingGeneratorGenerateTestsBase<NLEmbeddingGenerator>
 {
 }
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceTestsBase<NLEmbeddingGenerator>
 {
 	protected override string ExpectedProviderName => "apple";
@@ -75,8 +65,6 @@ public class NLEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceT
 		Assert.NotNull(embedding);
 	}
 }
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstantiationTestsBase<NLEmbeddingGenerator>
 {
 	[Fact]
@@ -102,8 +90,6 @@ public class NLEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstanti
 		Assert.Throws<ArgumentNullException>(() => new NLEmbeddingGenerator((NLEmbedding)null!));
 	}
 }
-
-[Category(Traits.NLEmbeddingGenerator)]
 public class NLEmbeddingGeneratorSimilarityTests : EmbeddingGeneratorSimilarityTestsBase<NLEmbeddingGenerator>
 {
 }
