@@ -34,6 +34,9 @@ on:
         default: ''
         description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
 
+env:
+  CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
+
 jobs:
   build:
     strategy:
@@ -72,6 +75,7 @@ jobs:
           -configuration Release
           -prepareMachine
           -projects %CD%\${{ inputs.project-path }}
+          /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
         shell: cmd
 
       - name: Build and Test (macOS)
@@ -81,6 +85,7 @@ jobs:
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
+          /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
       - name: Build and Test (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -89,6 +94,7 @@ jobs:
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
+          /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
       - name: NativeAOT publish smoke test (macOS)
         if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'

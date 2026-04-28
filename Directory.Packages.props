@@ -58,6 +58,8 @@
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit" Version="$(XunitVersion)" />
     <PackageVersion Include="coverlet.collector" Version="$(CoverletCollectorVersion)" />
+    <PackageVersion Include="Microsoft.OpenApi" Version="$(MicrosoftOpenApiVersion)" />
+    <PackageVersion Include="YamlDotNet" Version="$(YamlDotNetVersion)" />
   </ItemGroup>
 
   <!-- Source Link -->

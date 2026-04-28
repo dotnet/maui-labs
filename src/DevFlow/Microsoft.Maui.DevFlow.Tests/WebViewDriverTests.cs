@@ -19,6 +19,24 @@ public class AgentClientTests
     }
 
     [Fact]
+    public void GetBleWebSocketUrl_IncludesStreamOptions()
+    {
+        using var client = new AgentClient("localhost", 19999);
+
+        var url = client.GetBleWebSocketUrl(scan: true, replay: 0, type: "scan result");
+
+        Assert.Equal("ws://localhost:19999/ws/v1/ble?replay=0&scan=true&type=scan%20result", url);
+    }
+
+    [Fact]
+    public void GetBleWebSocketUrl_NegativeReplay_Throws()
+    {
+        using var client = new AgentClient("localhost", 19999);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => client.GetBleWebSocketUrl(replay: -1));
+    }
+
+    [Fact]
     public async Task GetStatus_WhenAgentNotRunning_ReturnsNull()
     {
         using var client = new AgentClient("localhost", 19999);

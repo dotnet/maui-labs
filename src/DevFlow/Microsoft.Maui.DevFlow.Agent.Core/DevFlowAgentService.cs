@@ -44,6 +44,11 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     public SensorManager Sensors { get; }
 
+    /// <summary>
+    /// Monitors BLE scan results, connections, reads, writes, and notifications.
+    /// </summary>
+    public BleMonitor Ble { get; }
+
     private readonly IProfilerCollector _profilerCollector;
     private readonly ProfilerSessionStore _profilerSessions;
     private readonly SemaphoreSlim _profilerStateGate = new(1, 1);
@@ -249,6 +254,8 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         _treeWalker = CreateTreeWalker();
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         Sensors = new SensorManager();
+        Ble = CreateBleMonitor();
+        BleMonitor.Instance = Ble;
         _profilerCollector = CreateProfilerCollector();
         _profilerSessions = new ProfilerSessionStore(
             Math.Max(1, _options.MaxProfilerSamples),
@@ -294,6 +301,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     protected virtual IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
 
+    /// <summary>
+    /// Creates the BLE monitor. Override in platform-specific subclasses
+    /// to provide native scan and connection monitoring.
+    /// </summary>
+    protected virtual BleMonitor CreateBleMonitor() => new BleMonitor();
+
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
     protected virtual string PlatformName => DeviceInfo.Current.Platform.ToString();
 
@@ -318,6 +331,24 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Gets native window dimensions when MAUI reports 0. Override for platform-specific access.</summary>
     protected virtual (double width, double height) GetNativeWindowSize(IWindow window) => (0, 0);
+
+    /// <summary>Whether platform background jobs can be queried on this agent.</summary>
+    protected virtual bool IsJobsSupported => false;
+
+    /// <summary>Whether platform background jobs can be triggered on this agent.</summary>
+    protected virtual bool IsJobRunSupported => IsJobsSupported;
+
+    /// <summary>
+    /// Gets the list of platform background jobs (Android Workers / iOS BGTasks).
+    /// Override in platform-specific subclasses to query WorkManager or BGTaskScheduler.
+    /// </summary>
+    protected virtual Task<object?> GetPlatformJobsAsync() => Task.FromResult<object?>(null);
+
+    /// <summary>
+    /// Triggers a platform background job by identifier.
+    /// Override in platform-specific subclasses to enqueue via WorkManager or submit via BGTaskScheduler.
+    /// </summary>
+    protected virtual Task<object?> RunPlatformJobAsync(string identifier, string? type = null) => Task.FromResult<object?>(null);
 
     private bool IsProfilerFeatureAvailable => _options.EnableProfiler;
 
@@ -497,6 +528,15 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         _server.MapPost("/api/v1/device/sensors/{sensor}/stop", HandleSensorStop);
         _server.MapWebSocket("/ws/v1/sensors", HandleSensorWebSocket);
 
+        _server.MapGet("/api/v1/device/jobs", HandleJobsList);
+        _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleJobRun);
+        _server.MapGet("/api/v1/device/ble", HandleBleStatus);
+        _server.MapGet("/api/v1/device/ble/events", HandleBleEvents);
+        _server.MapPost("/api/v1/device/ble/scan/start", HandleBleScanStart);
+        _server.MapPost("/api/v1/device/ble/scan/stop", HandleBleScanStop);
+        _server.MapDelete("/api/v1/device/ble/events", HandleBleClearEvents);
+        _server.MapWebSocket("/ws/v1/ble", HandleBleWebSocket);
+
         _server.MapGet("/api/v1/storage/preferences", HandlePreferencesList);
         _server.MapGet("/api/v1/storage/preferences/{key}", HandlePreferencesGet);
         _server.MapPut("/api/v1/storage/preferences/{key}", HandlePreferencesSet);
@@ -506,6 +546,12 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         _server.MapPut("/api/v1/storage/secure/{key}", HandleSecureStorageSet);
         _server.MapDelete("/api/v1/storage/secure/{key}", HandleSecureStorageDelete);
         _server.MapDelete("/api/v1/storage/secure", HandleSecureStorageClear);
+
+        _server.MapGet("/api/v1/storage/roots", HandleStorageRoots);
+        _server.MapGet("/api/v1/storage/files", HandleFilesList);
+        _server.MapGet("/api/v1/storage/files/{path}", HandleFileDownload);
+        _server.MapPut("/api/v1/storage/files/{path}", HandleFileUpload);
+        _server.MapDelete("/api/v1/storage/files/{path}", HandleFileDelete);
     }
 
     private async Task<HttpResponse> HandleStatus(HttpRequest request)
@@ -568,8 +614,10 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                     network = true,
                     logs = true,
                     sensors = true,
+                    ble = true,
                     storage = true,
                     profiler = IsProfilerFeatureAvailable,
+                    jobs = IsJobsSupported,
                 },
                 running = _app != null,
                 cdpReady = _cdpWebViews.Any(v => v.IsReady),
@@ -629,16 +677,28 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
                 supported = true,
                 features = new[] { "list", "start", "stop", "stream" }
             },
+            ble = new
+            {
+                supported = Ble.SupportedFeatures.Count > 0,
+                features = Ble.SupportedFeatures
+            },
             storage = new
             {
                 supported = true,
-                features = new[] { "preferences", "secure-storage" }
+                features = new[] { "preferences", "secure-storage", "roots", "files" }
             },
             profiler = new
             {
                 supported = IsProfilerFeatureAvailable,
                 features = IsProfilerFeatureAvailable
                     ? new[] { "capabilities", "sessions", "samples", "markers", "spans", "hotspots" }
+                    : Array.Empty<string>()
+            },
+            jobs = new
+            {
+                supported = IsJobsSupported,
+                features = IsJobsSupported
+                    ? IsJobRunSupported ? new[] { "list", "run" } : new[] { "list" }
                     : Array.Empty<string>()
             }
         };
@@ -3965,6 +4025,7 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
         StopAutoUiHooks();
         Sensors.Dispose();
+        Ble.Dispose();
 
         var cts = _profilerLoopCts;
         var loopTask = _profilerLoopTask;
@@ -5363,6 +5424,316 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
+    // ── File storage endpoints ──
+
+    private const string DefaultFileStorageRootId = "appData";
+    private const string FileStorageOperationList = "list";
+    private const string FileStorageOperationDownload = "download";
+    private const string FileStorageOperationUpload = "upload";
+    private const string FileStorageOperationDelete = "delete";
+
+    protected sealed class FileStorageRoot
+    {
+        public FileStorageRoot(
+            string id,
+            string displayName,
+            string kind,
+            string basePath,
+            bool isWritable,
+            bool isPersistent,
+            bool isBackedUp,
+            bool mayBeClearedBySystem,
+            bool isUserVisible,
+            params string[] supportedOperations)
+        {
+            Id = id;
+            DisplayName = displayName;
+            Kind = kind;
+            BasePath = basePath;
+            IsWritable = isWritable;
+            IsPersistent = isPersistent;
+            IsBackedUp = isBackedUp;
+            MayBeClearedBySystem = mayBeClearedBySystem;
+            IsUserVisible = isUserVisible;
+            SupportedOperations = supportedOperations;
+        }
+
+        public string Id { get; }
+        public string DisplayName { get; }
+        public string Kind { get; }
+        public string BasePath { get; }
+        public bool IsWritable { get; }
+        public bool IsReadOnly => !IsWritable;
+        public bool IsPersistent { get; }
+        public bool IsBackedUp { get; }
+        public bool MayBeClearedBySystem { get; }
+        public bool IsUserVisible { get; }
+        public IReadOnlyList<string> SupportedOperations { get; }
+
+        public bool SupportsOperation(string operation)
+            => SupportedOperations.Contains(operation, StringComparer.Ordinal);
+    }
+
+    protected virtual string GetAppDataBasePath()
+        => FileSystem.AppDataDirectory;
+
+    protected virtual IReadOnlyList<FileStorageRoot> GetFileStorageRoots()
+    {
+        var appDataPath = GetAppDataBasePath();
+        if (string.IsNullOrWhiteSpace(appDataPath))
+            return Array.Empty<FileStorageRoot>();
+
+        return new[]
+        {
+            new FileStorageRoot(
+                DefaultFileStorageRootId,
+                "App data",
+                "appData",
+                appDataPath,
+                isWritable: true,
+                isPersistent: true,
+                isBackedUp: true,
+                mayBeClearedBySystem: false,
+                isUserVisible: false,
+                FileStorageOperationList,
+                FileStorageOperationDownload,
+                FileStorageOperationUpload,
+                FileStorageOperationDelete)
+        };
+    }
+
+    private Task<HttpResponse> HandleStorageRoots(HttpRequest request)
+    {
+        try
+        {
+            return Task.FromResult(HttpResponse.Json(new
+            {
+                roots = GetFileStorageRoots().Select(ToFileStorageRootDescriptor).ToArray()
+            }));
+        }
+        catch (Exception)
+        {
+            return Task.FromResult(HttpResponse.Error("Failed to list storage roots"));
+        }
+    }
+
+    private static object ToFileStorageRootDescriptor(FileStorageRoot root)
+        => new
+        {
+            id = root.Id,
+            displayName = root.DisplayName,
+            kind = root.Kind,
+            isWritable = root.IsWritable,
+            isReadOnly = root.IsReadOnly,
+            isPersistent = root.IsPersistent,
+            isBackedUp = root.IsBackedUp,
+            mayBeClearedBySystem = root.MayBeClearedBySystem,
+            isUserVisible = root.IsUserVisible,
+            supportedOperations = root.SupportedOperations.ToArray()
+        };
+
+    private FileStorageRoot ResolveFileStorageRoot(HttpRequest request, string operation)
+    {
+        var rootId = request.QueryParams.GetValueOrDefault("root");
+        if (string.IsNullOrWhiteSpace(rootId))
+            rootId = DefaultFileStorageRootId;
+
+        var root = GetFileStorageRoots().FirstOrDefault(
+            r => string.Equals(r.Id, rootId, StringComparison.Ordinal));
+
+        if (root == null)
+            throw new InvalidOperationException($"Storage root '{rootId}' is not available. Use /api/v1/storage/roots to list supported roots.");
+
+        if (!root.SupportsOperation(operation))
+            throw new InvalidOperationException($"Storage root '{root.Id}' does not support '{operation}'.");
+
+        if (string.IsNullOrWhiteSpace(root.BasePath))
+            throw new InvalidOperationException($"Storage root '{root.Id}' is not available.");
+
+        return root;
+    }
+
+    private Task<HttpResponse> HandleFilesList(HttpRequest request)
+    {
+        try
+        {
+            var root = ResolveFileStorageRoot(request, FileStorageOperationList);
+            var subdir = request.QueryParams.GetValueOrDefault("path", "");
+            var resolved = FileStoragePathResolver.Resolve(root.BasePath, subdir, allowRoot: true);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            if (!Directory.Exists(resolved.FullPath))
+                return Task.FromResult(HttpResponse.Json(new
+                {
+                    root = root.Id,
+                    path = resolved.RelativePath,
+                    entries = Array.Empty<object>()
+                }));
+
+            var entries = new List<object>();
+            foreach (var dir in Directory.GetDirectories(resolved.FullPath))
+            {
+                var info = new DirectoryInfo(dir);
+                entries.Add(new
+                {
+                    name = info.Name,
+                    type = "directory",
+                    lastModified = info.LastWriteTimeUtc.ToString("O")
+                });
+            }
+            foreach (var file in Directory.GetFiles(resolved.FullPath))
+            {
+                var info = new FileInfo(file);
+                entries.Add(new
+                {
+                    name = info.Name,
+                    type = "file",
+                    size = info.Length,
+                    lastModified = info.LastWriteTimeUtc.ToString("O")
+                });
+            }
+
+            return Task.FromResult(HttpResponse.Json(new
+            {
+                root = root.Id,
+                path = resolved.RelativePath,
+                entries
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(ex is InvalidOperationException
+                ? HttpResponse.Error(ex.Message)
+                : HttpResponse.Error("Failed to list files"));
+        }
+    }
+
+    private async Task<HttpResponse> HandleFileDownload(HttpRequest request)
+    {
+        try
+        {
+            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
+                return HttpResponse.Error("file path is required");
+
+            var root = ResolveFileStorageRoot(request, FileStorageOperationDownload);
+            relativePath = Uri.UnescapeDataString(relativePath);
+            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            if (!File.Exists(resolved.FullPath))
+                return HttpResponse.NotFound($"File not found: {relativePath}");
+
+            var bytes = await File.ReadAllBytesAsync(resolved.FullPath);
+            var contentBase64 = Convert.ToBase64String(bytes);
+            var info = new FileInfo(resolved.FullPath);
+
+            return HttpResponse.Json(new
+            {
+                root = root.Id,
+                path = resolved.RelativePath,
+                size = info.Length,
+                lastModified = info.LastWriteTimeUtc.ToString("O"),
+                contentBase64
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return HttpResponse.Error(ex.Message);
+        }
+        catch (Exception)
+        {
+            return HttpResponse.Error("Failed to download file");
+        }
+    }
+
+    private async Task<HttpResponse> HandleFileUpload(HttpRequest request)
+    {
+        try
+        {
+            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
+                return HttpResponse.Error("file path is required");
+
+            var root = ResolveFileStorageRoot(request, FileStorageOperationUpload);
+            relativePath = Uri.UnescapeDataString(relativePath);
+            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            var body = request.BodyAs<FileUploadRequest>();
+            if (body == null || string.IsNullOrEmpty(body.ContentBase64))
+                return HttpResponse.Error("Request body must include 'contentBase64'");
+
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(body.ContentBase64);
+            }
+            catch (FormatException)
+            {
+                return HttpResponse.Error("Invalid base64 content");
+            }
+
+            var dir = Path.GetDirectoryName(resolved.FullPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            await File.WriteAllBytesAsync(resolved.FullPath, bytes);
+            var info = new FileInfo(resolved.FullPath);
+
+            return HttpResponse.Json(new
+            {
+                success = true,
+                root = root.Id,
+                path = resolved.RelativePath,
+                size = info.Length,
+                lastModified = info.LastWriteTimeUtc.ToString("O")
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return HttpResponse.Error(ex.Message);
+        }
+        catch (Exception)
+        {
+            return HttpResponse.Error("Failed to upload file");
+        }
+    }
+
+    private Task<HttpResponse> HandleFileDelete(HttpRequest request)
+    {
+        try
+        {
+            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
+                return Task.FromResult(HttpResponse.Error("file path is required"));
+
+            var root = ResolveFileStorageRoot(request, FileStorageOperationDelete);
+            relativePath = Uri.UnescapeDataString(relativePath);
+            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            if (!File.Exists(resolved.FullPath))
+                return Task.FromResult(HttpResponse.NotFound($"File not found: {relativePath}"));
+
+            File.Delete(resolved.FullPath);
+            return Task.FromResult(HttpResponse.Json(new
+            {
+                success = true,
+                root = root.Id,
+                path = resolved.RelativePath,
+                message = $"File deleted: {resolved.RelativePath}"
+            }));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Task.FromResult(HttpResponse.Error(ex.Message));
+        }
+        catch (Exception)
+        {
+            return Task.FromResult(HttpResponse.Error("Failed to delete file"));
+        }
+    }
+
     // ── Platform info endpoints ──
 
     private const string PlatformErrorReasonMissingPermission = "missing_permission";
@@ -5876,6 +6247,198 @@ public class DevFlowAgentService : IDisposable, IMarkerPublisher
             Sensors.Unsubscribe(sensorName, queue);
         }
     }
+
+    // ── Job endpoints ──
+
+    private async Task<HttpResponse> HandleJobsList(HttpRequest request)
+    {
+        var jobs = await GetPlatformJobsAsync();
+        if (jobs == null)
+            return HttpResponse.Json(new { platform = PlatformName, supported = false, jobs = Array.Empty<object>() });
+
+        return HttpResponse.Json(jobs);
+    }
+
+    private async Task<HttpResponse> HandleJobRun(HttpRequest request)
+    {
+        if (!request.RouteParams.TryGetValue("identifier", out var identifier) || string.IsNullOrWhiteSpace(identifier))
+            return HttpResponse.Error("job identifier is required");
+
+        var runRequest = request.BodyAs<JobRunRequest>();
+        var type = runRequest?.Type;
+        if (string.IsNullOrWhiteSpace(type) && request.QueryParams.TryGetValue("type", out var queryType))
+            type = queryType;
+
+        var result = await RunPlatformJobAsync(identifier, type);
+        if (result == null)
+            return HttpResponse.Error($"Running jobs is not supported on {PlatformName}", 501, "unsupported-capability");
+
+        return HttpResponse.Json(result);
+    }
+
+    // ── BLE endpoints ──
+
+    private Task<HttpResponse> HandleBleStatus(HttpRequest request)
+    {
+        return Task.FromResult(HttpResponse.Json(Ble.GetStatus()));
+    }
+
+    private Task<HttpResponse> HandleBleEvents(HttpRequest request)
+    {
+        var limit = 100;
+        if (request.QueryParams.TryGetValue("limit", out var limitStr))
+        {
+            if (!int.TryParse(limitStr, out limit) || limit < 0)
+            {
+                return Task.FromResult(HttpResponse.Error(
+                    "BLE event limit must be a non-negative integer",
+                    400,
+                    "invalid_limit",
+                    new { limit = limitStr }));
+            }
+        }
+
+        var type = request.QueryParams.GetValueOrDefault("type");
+        var events = Ble.GetEvents(limit, type);
+        return Task.FromResult(HttpResponse.Json(new { count = events.Count, events }));
+    }
+
+    private Task<HttpResponse> HandleBleScanStart(HttpRequest request)
+    {
+        var error = Ble.StartScanning();
+        return Task.FromResult(error != null
+            ? HttpResponse.Error(error)
+            : HttpResponse.Ok("BLE scan started"));
+    }
+
+    private Task<HttpResponse> HandleBleScanStop(HttpRequest request)
+    {
+        var error = Ble.StopScanning();
+        return Task.FromResult(error != null
+            ? HttpResponse.Error(error)
+            : HttpResponse.Ok("BLE scan stopped"));
+    }
+
+    private Task<HttpResponse> HandleBleClearEvents(HttpRequest request)
+    {
+        Ble.ClearEvents();
+        return Task.FromResult(HttpResponse.Ok("BLE events cleared"));
+    }
+
+    private async Task HandleBleWebSocket(
+        System.Net.Sockets.TcpClient client,
+        System.Net.Sockets.NetworkStream stream,
+        HttpRequest request,
+        CancellationToken ct)
+    {
+        var autoScan = request.QueryParams.GetValueOrDefault("scan", "false")
+            .Equals("true", StringComparison.OrdinalIgnoreCase);
+
+        var replay = 100;
+        if (request.QueryParams.TryGetValue("replay", out var replayStr) &&
+            (!int.TryParse(replayStr, out replay) || replay < 0))
+        {
+            await AgentHttpServer.WebSocketSendTextAsync(stream,
+                JsonSerializer.Serialize(new
+                {
+                    type = "error",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    error = "BLE stream replay must be a non-negative integer"
+                }), ct);
+            return;
+        }
+
+        var type = request.QueryParams.GetValueOrDefault("type");
+        List<BleEvent> replayEvents = replay > 0 ? Ble.GetEvents(replay, type) : [];
+        var queue = Ble.Subscribe(type);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var startedScan = false;
+
+        try
+        {
+            if (autoScan)
+            {
+                startedScan = Ble.TryStartScanning(out var error);
+                if (error != null)
+                {
+                    await AgentHttpServer.WebSocketSendTextAsync(stream,
+                        JsonSerializer.Serialize(new
+                        {
+                            type = "error",
+                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                            error
+                        }), ct);
+                    return;
+                }
+            }
+
+            await AgentHttpServer.WebSocketSendTextAsync(stream,
+                JsonSerializer.Serialize(new
+                {
+                    type = "subscribed",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    scanning = Ble.IsScanning,
+                    replay,
+                    eventType = type
+                }), ct);
+
+            if (replay > 0)
+            {
+                await AgentHttpServer.WebSocketSendTextAsync(stream,
+                    JsonSerializer.Serialize(new
+                    {
+                        type = "replay",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        count = replayEvents.Count,
+                        events = replayEvents
+                    }), ct);
+            }
+
+            var readTask = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
+                    if (msg == null) { await cts.CancelAsync(); break; }
+                }
+            }, cts.Token);
+
+            var lastPing = DateTime.UtcNow;
+            while (!cts.Token.IsCancellationRequested)
+            {
+                while (queue.TryDequeue(out var evt))
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendTextAsync(stream, evt, cts.Token);
+                    }
+                    catch { await cts.CancelAsync(); break; }
+                }
+
+                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
+                {
+                    try
+                    {
+                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
+                        lastPing = DateTime.UtcNow;
+                    }
+                    catch { await cts.CancelAsync(); break; }
+                }
+
+                try { await Task.Delay(20, cts.Token); }
+                catch { break; }
+            }
+
+            await readTask;
+        }
+        finally
+        {
+            Ble.Unsubscribe(queue);
+            if (startedScan)
+                Ble.StopScanning();
+        }
+    }
 }
 
 // Request DTOs
@@ -5888,6 +6451,11 @@ public class FillRequest
 {
     public string? ElementId { get; set; }
     public string? Text { get; set; }
+}
+
+public class JobRunRequest
+{
+    public string? Type { get; set; }
 }
 
 public class NavigateRequest
@@ -5946,4 +6514,9 @@ public class PreferenceSetRequest
 public class SecureStorageSetRequest
 {
     public string? Value { get; set; }
+}
+
+public class FileUploadRequest
+{
+    public string? ContentBase64 { get; set; }
 }

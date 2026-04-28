@@ -258,6 +258,268 @@
         }
       }
     },
+    "PlatformJob": {
+      "type": "object",
+      "description": "A platform background job. Android jobs expose WorkManager fields; iOS and Mac Catalyst jobs expose BGTaskScheduler fields.",
+      "required": [
+        "identifier"
+      ],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "description": "Platform job identifier. Android maps this to the WorkManager UUID; iOS and Mac Catalyst map this to the BGTask identifier."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Android WorkManager tags associated with the work."
+        },
+        "state": {
+          "type": "string",
+          "description": "Android WorkManager state, such as ENQUEUED, RUNNING, SUCCEEDED, FAILED, BLOCKED, or CANCELLED."
+        },
+        "runAttemptCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Android WorkManager run attempt count."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "processing",
+            "refresh"
+          ],
+          "description": "iOS or Mac Catalyst BGTask request type."
+        },
+        "earliestBeginDate": {
+          "type": "string",
+          "description": "Earliest begin date reported by BGTaskScheduler, if present."
+        }
+      },
+      "additionalProperties": true
+    },
+    "JobListResponse": {
+      "type": "object",
+      "description": "Response returned when listing platform background jobs.",
+      "required": [
+        "platform",
+        "supported",
+        "jobs"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Platform name reported by the agent."
+        },
+        "type": {
+          "type": "string",
+          "description": "Platform scheduler implementation, such as WorkManager or BGTaskScheduler."
+        },
+        "supported": {
+          "type": "boolean",
+          "description": "Whether the current platform supports listing jobs."
+        },
+        "runSupported": {
+          "type": "boolean",
+          "description": "Whether listed jobs can be triggered by this agent."
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlatformJob"
+          },
+          "description": "Background jobs reported by the platform."
+        },
+        "error": {
+          "type": "string",
+          "description": "Platform-specific error message if listing failed."
+        }
+      },
+      "additionalProperties": true
+    },
+    "JobRunRequest": {
+      "type": "object",
+      "description": "Optional request body used when triggering a platform background job.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "processing",
+            "refresh"
+          ],
+          "description": "iOS or Mac Catalyst BGTask request type. If omitted, the agent resolves it from pending requests when possible and otherwise defaults to processing."
+        }
+      },
+      "additionalProperties": false
+    },
+    "JobRunResponse": {
+      "type": "object",
+      "description": "Response returned after attempting to trigger a platform background job.",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether the job trigger request was submitted successfully."
+        },
+        "supported": {
+          "type": "boolean",
+          "description": "Whether triggering this job is supported on the current platform."
+        },
+        "identifier": {
+          "type": "string",
+          "description": "Requested platform job identifier."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "processing",
+            "refresh"
+          ],
+          "description": "BGTask request type used on iOS or Mac Catalyst."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable success message."
+        },
+        "error": {
+          "type": "string",
+          "description": "Human-readable error message."
+        }
+      },
+      "additionalProperties": true
+    },
+    "BleEventType": {
+      "type": "string",
+      "description": "BLE event type recorded by the monitor. The monitor accepts custom app-defined event types; examples list the built-in event types.",
+      "examples": [
+        "scan_result",
+        "connected",
+        "disconnected",
+        "connection_state_changed",
+        "connection_failed",
+        "characteristic_read",
+        "characteristic_write",
+        "characteristic_write_no_response",
+        "notification",
+        "service_discovered",
+        "descriptor_write",
+        "mtu_changed",
+        "bond_state_changed",
+        "adapter_state_changed",
+        "scan_failed"
+      ]
+    },
+    "BleStatus": {
+      "type": "object",
+      "description": "Bluetooth Low Energy monitor status.",
+      "required": [
+        "scanning",
+        "eventCount",
+        "subscribers",
+        "supportsScanning"
+      ],
+      "properties": {
+        "scanning": {
+          "type": "boolean",
+          "description": "Whether a native BLE scan is currently active."
+        },
+        "eventCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of BLE events currently buffered."
+        },
+        "subscribers": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of active BLE event stream subscribers."
+        },
+        "supportsScanning": {
+          "type": "boolean",
+          "description": "Whether this agent implementation supports native BLE scanning."
+        }
+      }
+    },
+    "BleEvent": {
+      "type": "object",
+      "description": "A Bluetooth Low Energy event recorded by the monitor.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/BleEventType",
+          "description": "Event type."
+        },
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC timestamp when the event was recorded."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Platform device identifier, such as a Bluetooth address or UUID."
+        },
+        "deviceName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Device display name, if available."
+        },
+        "rssi": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Received signal strength in dBm for scan results."
+        },
+        "serviceUuid": {
+          "type": "string",
+          "description": "GATT service UUID associated with the event."
+        },
+        "characteristicUuid": {
+          "type": "string",
+          "description": "GATT characteristic UUID associated with the event."
+        },
+        "descriptorUuid": {
+          "type": "string",
+          "description": "GATT descriptor UUID associated with the event."
+        },
+        "data": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Event-specific payload, such as advertisement data, state, error text, or a hex value."
+        }
+      },
+      "additionalProperties": true
+    },
+    "BleEventsResponse": {
+      "type": "object",
+      "description": "Response returned when listing buffered BLE events.",
+      "required": [
+        "count",
+        "events"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of events returned."
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BleEvent"
+          },
+          "description": "Buffered BLE events."
+        }
+      }
+    },
     "GeolocationResult": {
       "type": "object",
       "description": "A geolocation reading.",

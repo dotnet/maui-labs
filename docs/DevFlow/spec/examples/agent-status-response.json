@@ -17,6 +17,17 @@
     "version": "2.1.0",
     "packageId": "com.example.myapp"
   },
+  "capabilities": {
+    "ui": true,
+    "screenshots": true,
+    "webview": true,
+    "network": true,
+    "logs": true,
+    "sensors": true,
+    "storage": true,
+    "profiler": true,
+    "jobs": true
+  },
   "running": true,
   "uptime": "PT5M30S"
 }

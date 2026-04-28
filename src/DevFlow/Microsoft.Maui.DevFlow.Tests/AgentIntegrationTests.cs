@@ -316,6 +316,73 @@ public class AgentHttpServerTests : IDisposable
     }
 
     [Fact]
+    public async Task JobsEndpoints_UseV1PathsAndParseResponses()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            for (var i = 0; i < 2; i++)
+            {
+                using var client = await listener.AcceptTcpClientAsync();
+                using var stream = client.GetStream();
+                var buffer = new byte[8192];
+                var read = await stream.ReadAsync(buffer);
+                var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+                if (request.Contains("GET /api/v1/device/jobs", StringComparison.Ordinal))
+                {
+                    var body = """
+                    {
+                      "platform": "iOS",
+                      "type": "BGTaskScheduler",
+                      "supported": true,
+                      "runSupported": true,
+                      "jobs": [
+                        {
+                          "identifier": "com.example.refresh",
+                          "type": "refresh",
+                          "earliestBeginDate": ""
+                        }
+                      ]
+                    }
+                    """;
+                    var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+                    await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+                    continue;
+                }
+
+                if (request.Contains("POST /api/v1/device/jobs/com.example.refresh/run", StringComparison.Ordinal))
+                {
+                    Assert.Contains("\"type\":\"refresh\"", request);
+
+                    var body = """{"success":true,"identifier":"com.example.refresh","type":"refresh"}""";
+                    var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+                    await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+                    continue;
+                }
+
+                throw new InvalidOperationException($"Unexpected request: {request}");
+            }
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+
+        var jobs = await agentClient.GetJobsAsync();
+        Assert.True(jobs.GetProperty("supported").GetBoolean());
+        Assert.True(jobs.GetProperty("runSupported").GetBoolean());
+        Assert.Equal("com.example.refresh", jobs.GetProperty("jobs")[0].GetProperty("identifier").GetString());
+
+        var result = await agentClient.RunJobAsync("com.example.refresh", "refresh");
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.Equal("refresh", result.GetProperty("type").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
     public async Task BatchEndpoint_SendsV1BatchPayload()
     {
         using var listener = new TcpListener(IPAddress.Loopback, _port);
@@ -469,6 +536,189 @@ public class AgentHttpServerTests : IDisposable
         Assert.Equal("missing_permission", result.GetProperty("reason").GetString());
         Assert.Equal("android.permission.BATTERY_STATS", result.GetProperty("details").GetProperty("permission").GetString());
         Assert.Equal("Android", result.GetProperty("details").GetProperty("platform").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task ListStorageRootsAsync_UsesV1StorageRootsRoute()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("GET /api/v1/storage/roots", request);
+
+            var body = """{"roots":[{"id":"appData","displayName":"App data","kind":"appData","isWritable":true,"isReadOnly":false,"isPersistent":true,"isBackedUp":true,"mayBeClearedBySystem":false,"isUserVisible":false,"supportedOperations":["list","download","upload","delete"]}]}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.ListStorageRootsAsync();
+
+        Assert.Equal("appData", result.GetProperty("roots")[0].GetProperty("id").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task ListFilesAsync_UsesV1StorageFilesRouteAndEscapesPath()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("GET /api/v1/storage/files?path=logs%2Ftoday", request);
+
+            var body = """{"path":"logs/today","entries":[{"name":"app.log","type":"file","size":4,"lastModified":"2026-04-01T12:00:00Z"}]}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.ListFilesAsync("logs/today");
+
+        Assert.Equal("logs/today", result.GetProperty("path").GetString());
+        Assert.Equal("app.log", result.GetProperty("entries")[0].GetProperty("name").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task ListFilesAsync_WithRoot_AppendsRootQuery()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("GET /api/v1/storage/files?path=logs%2Ftoday&root=appData", request);
+
+            var body = """{"root":"appData","path":"logs/today","entries":[]}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.ListFilesAsync("logs/today", "appData");
+
+        Assert.Equal("appData", result.GetProperty("root").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task UploadFileAsync_SendsPutWithBase64Payload()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("PUT /api/v1/storage/files/logs%2Fapp.txt", request);
+            Assert.Contains("\"contentBase64\":\"aGVsbG8=\"", request);
+
+            var body = """{"success":true,"path":"logs/app.txt","size":5,"lastModified":"2026-04-01T12:00:00Z"}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.UploadFileAsync("logs/app.txt", "aGVsbG8=");
+
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.Equal("logs/app.txt", result.GetProperty("path").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task DownloadFileAsync_WithRoot_AppendsRootQuery()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("GET /api/v1/storage/files/logs%2Fapp.txt?root=appData", request);
+
+            var body = """{"root":"appData","path":"logs/app.txt","size":5,"lastModified":"2026-04-01T12:00:00Z","contentBase64":"aGVsbG8="}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.DownloadFileAsync("logs/app.txt", "appData");
+
+        Assert.Equal("appData", result.GetProperty("root").GetString());
+
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task DeleteFileAsync_ReturnsFalseOnNotFound()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("DELETE /api/v1/storage/files/missing.txt", request);
+
+            var body = """{"success":false,"error":"File not found: missing.txt"}""";
+            var response = $"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.DeleteFileAsync("missing.txt");
+
+        Assert.False(result);
 
         await acceptTask;
         listener.Stop();

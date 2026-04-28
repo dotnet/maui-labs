@@ -98,7 +98,7 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
 | `maui devflow logs` | Fetch and stream application logs |
 | `maui devflow network` | Monitor HTTP network requests |
-| `maui devflow storage` | Access app preferences and secure storage |
+| `maui devflow storage` | Access app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `maui devflow agent` | Discover and inspect connected DevFlow agents |
 | `maui devflow broker` | Manage the DevFlow agent broker (start, stop, status, log) |
 | `maui devflow batch` | Execute commands from stdin for scripting |
@@ -108,6 +108,19 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
 
 Run `maui <command> --help` for detailed options on any command.
+
+DevFlow file commands can use local files directly:
+
+```bash
+# Upload local bytes into the selected app storage root
+maui devflow storage files upload logs/app.log --file ./app.log
+
+# Download to a directory, preserving the device file name
+maui devflow storage files download logs/app.log --output ./downloads/
+
+# Download to an explicit local file name
+maui devflow storage files download logs/app.log --output ./downloads/app-copy.log
+```
 
 ## Global Options
 

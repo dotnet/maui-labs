@@ -135,6 +135,24 @@
               "compass"
             ]
           },
+          "device.jobs": {
+            "version": 1,
+            "features": [
+              "list",
+              "run"
+            ],
+            "supported": true
+          },
+          "device.ble": {
+            "version": 1,
+            "features": [
+              "status",
+              "events",
+              "scan",
+              "stream"
+            ],
+            "supported": true
+          },
           "storage.preferences": {
             "version": 1,
             "features": [
@@ -148,6 +166,16 @@
             "features": [
               "get",
               "set",
+              "delete"
+            ]
+          },
+          "storage.files": {
+            "version": 1,
+            "features": [
+              "roots",
+              "list",
+              "download",
+              "upload",
               "delete"
             ]
           }

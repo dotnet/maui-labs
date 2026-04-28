@@ -102,7 +102,7 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 - **MCP Server** — 50+ structured tools for AI agent integration (Claude, etc.)
 - **Logging** — buffered JSONL file logging with WebView JS console capture
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
-- **Storage Access** — read/write app preferences and secure storage remotely
+- **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
 - **Device Introspection** — battery, connectivity, geolocation, display, permissions, and sensor data
 - **Dialog Handling** — detect and dismiss alerts/action sheets programmatically
 - **Batch Operations** — execute command sequences from stdin for scripting
@@ -119,7 +119,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
 | `logs` | Fetch and stream application logs |
 | `network` | Monitor and inspect HTTP requests |
-| `storage` | Read/write app preferences and secure storage |
+| `storage` | Read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `agent` | Discover and inspect connected agents (status, list, wait, diagnose) |
 | `broker` | Manage the agent broker (start, stop, status, log) |
 | `batch` | Execute command sequences from stdin |
