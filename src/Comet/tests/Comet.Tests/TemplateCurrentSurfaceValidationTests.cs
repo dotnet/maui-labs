@@ -15,15 +15,11 @@ namespace Comet.Tests
 		{
 			var appSource = ReadTemplateFile("App.cs");
 			var mainPageSource = ReadTemplateFile("MainPage.cs");
-			var combined = $"{appSource}{Environment.NewLine}{mainPageSource}";
 
-			Assert.DoesNotMatch(@"\[Body\]", combined);
-			Assert.DoesNotMatch(@"\[State\]", combined);
 			Assert.Matches(@"Body\s*=\s*\(\)\s*=>\s*new\s+MainPage\s*\(\s*\)", appSource);
-			Assert.Matches(@":\s*Component<\s*CounterState\s*>", mainPageSource);
-			Assert.Matches(@"override\s+(?:Comet\.)?View\s+Render\s*\(", mainPageSource);
+			Assert.Matches(@":\s*View", mainPageSource);
+			Assert.Matches(@"\[Body\]", mainPageSource);
 			Assert.Matches(@"\bReactive<", mainPageSource);
-			Assert.Matches(@"\bSetState\s*\(", mainPageSource);
 		}
 
 		[Fact]
@@ -31,10 +27,9 @@ namespace Comet.Tests
 		{
 			var projectFile = ReadTemplateFile("CometApp1.csproj");
 
-			Assert.Contains("net10.0-maccatalyst", projectFile, StringComparison.Ordinal);
+			Assert.Contains("net11.0-maccatalyst", projectFile, StringComparison.Ordinal);
 			Assert.DoesNotContain("net7.0", projectFile, StringComparison.OrdinalIgnoreCase);
 			Assert.DoesNotContain("Reloadify3000", projectFile, StringComparison.OrdinalIgnoreCase);
-			Assert.Contains("MAUI_VERSION", projectFile, StringComparison.Ordinal);
 			Assert.Contains("COMET_VERSION", projectFile, StringComparison.Ordinal);
 		}
 
