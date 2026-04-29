@@ -8,6 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsBindingProject>true</IsBindingProject>
+    <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
+         older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
