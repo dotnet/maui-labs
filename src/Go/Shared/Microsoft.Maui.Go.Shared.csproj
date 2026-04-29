@@ -3,5 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.Go</RootNamespace>
     <Description>Shared wire protocol for Comet Go dev server and companion app</Description>
+    <!-- Go projects are dev-time tools, not AOT-published -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
   </PropertyGroup>
 </Project>
