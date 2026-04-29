@@ -1,170 +1,95 @@
 # Comet ☄️
 
-[![dev-build](https://github.com/dotnet/Comet/actions/workflows/dev.yml/badge.svg)](https://github.com/dotnet/Comet/actions/workflows/dev.yml)  [![Microsoft.Maui.Comet on fuget.org](https://www.fuget.org/packages/Microsoft.Maui.Comet/badge.svg)](https://www.fuget.org/packages/Microsoft.Maui.Comet)
+[![dev-build](https://github.com/dotnet/Comet/actions/workflows/dev.yml/badge.svg)](https://github.com/dotnet/Comet/actions/workflows/dev.yml) [![Microsoft.Maui.Comet on fuget.org](https://www.fuget.org/packages/Microsoft.Maui.Comet/badge.svg)](https://www.fuget.org/packages/Microsoft.Maui.Comet)
 
 Comet is an MVU framework for [.NET MAUI](https://learn.microsoft.com/dotnet/maui/what-is-maui). Write your entire UI in C# with a reactive state system that tracks what you read and updates only what changed. No XAML, no view models, no binding markup.
 
-> ⚠️ **Legacy pattern.** New code should use `Component<TState>` with `override View Render()` (shown later in this README). The `[Body]` attribute remains supported for compatibility.
-
 ```csharp
-public class MyApp : View
+using Comet;
+using static Comet.CometControls;
+
+public class MyApp : Component
 {
-    [Body]
-    View body() => new Text("Hello, Comet!");
+    public override View Render() => Text("Hello, Comet!");
 }
 ```
 
-## Reactive State
+## Components and State
 
-One primitive: `Reactive<T>`. Declare it, read `.Value` in a lambda, write `.Value` anywhere. The UI updates automatically.
+The canonical surface is `Component<TState>` paired with `override View Render()`. State is a plain C# object — no base class required. `SetState` batches mutations into a single render pass.
 
 ```csharp
-public class CounterView : View
-{
-    readonly Reactive<int> count = 0;
+using Comet;
+using static Comet.CometControls;
 
-    [Body]
-    View body() => new VStack {
-        new Text(() => $"Count: {count.Value}"),
-        new Button("Increment", () => count.Value++)
-    };
+public class CounterState
+{
+    public int Count { get; set; }
+}
+
+public class CounterView : Component<CounterState>
+{
+    public override View Render() => VStack(
+        Text(() => $"Count: {State.Count}"),
+        Button("Increment", () => SetState(s => s.Count++))
+    );
 }
 ```
 
-When the button increments `count.Value`, only the `Text` control updates — `body()` does not re-execute. Comet tracks the read inside the lambda and performs a fine-grained update at the control level.
+Lambdas (`() => ...`) passed to controls are tracked. When `State.Count` changes, only the `Text` rebuilds — `Render()` does not re-execute.
 
-### Two-Way Binding
+### Reactive Primitives
 
-Bind a `Reactive<T>` to input controls. Typing updates the signal; changing the signal updates the control.
+For lighter-weight reactive values without a state class, use `Reactive<T>` or `Signal<T>` from `Comet.Reactive`:
 
 ```csharp
-public class GreetingView : View
-{
-    readonly Reactive<string> name = "World";
+using Comet;
+using Comet.Reactive;
+using static Comet.CometControls;
 
-    [Body]
-    View body() => new VStack {
-        new Text(() => $"Hello, {name.Value}!"),
-        new TextField(() => name.Value, () => "Enter name")
-            .OnTextChanged(v => name.Value = v ?? "")
-    };
+public class GreetingView : Component
+{
+    readonly Signal<string> name = new("World");
+
+    public override View Render() => VStack(
+        Text(() => $"Hello, {name.Value}!"),
+        TextField(name, "Enter name")
+    );
 }
 ```
 
-### State Updates in Methods
+`TextField(Signal<string>, placeholder)` creates a two-way binding. `Signal<T>.Peek()` reads the value without registering a dependency, even inside a reactive scope.
 
-Writing to `.Value` triggers a UI refresh. The reactive scheduler dispatches a rebuild to the main thread automatically, even from background threads.
+### Async State Updates
+
+The reactive scheduler dispatches rebuilds to the main thread automatically — `.Value` writes from background threads are safe.
 
 ```csharp
-public class ProfileView : View
+public class ProfileState
 {
-	readonly Reactive<string> name = "";
-	readonly Reactive<bool> loading = false;
+    public string Name { get; set; } = "";
+    public bool Loading { get; set; }
+}
 
-	[Body]
-	View body() => new VStack {
-		new Text(() => loading.Value ? "Loading..." : $"Hello, {name.Value}!"),
-		new Button("Load Profile", LoadProfile)
-	};
+public class ProfileView : Component<ProfileState>
+{
+    public override View Render() => VStack(
+        Text(() => State.Loading ? "Loading..." : $"Hello, {State.Name}!"),
+        Button("Load Profile", LoadProfile)
+    );
 
-	async void LoadProfile()
-	{
-		loading.Value = true;                   // triggers rebuild → shows "Loading..."
-		var result = await Api.FetchProfile();
-		name.Value = result.Name;               // triggers rebuild
-		loading.Value = false;                   // triggers rebuild → shows greeting
-	}
+    async void LoadProfile()
+    {
+        SetState(s => s.Loading = true);
+        var result = await Api.FetchProfile();
+        SetState(s => { s.Name = result.Name; s.Loading = false; });
+    }
 }
 ```
 
-### Reading State Without Creating a Binding
+### Batching
 
-Reads inside `() => ...` lambdas passed to controls create reactive bindings. Reads in regular methods are plain value access — no binding, no tracking.
-
-```csharp
-public class DiagnosticsView : View
-{
-	readonly Reactive<int> count = 0;
-
-	[Body]
-	View body() => new VStack {
-		// This read IS tracked — Text updates when count changes
-		new Text(() => $"Count: {count.Value}"),
-		new Button("Increment", () => count.Value++),
-		new Button("Log", LogCount)
-	};
-
-	void LogCount()
-	{
-		// This read is NOT tracked — just retrieves the current value
-		Console.WriteLine($"Current count: {count.Value}");
-	}
-}
-```
-
-`Signal<T>` (in `Comet.Reactive`) provides a `Peek()` method that reads the value without triggering any tracking, even inside a reactive scope:
-
-```csharp
-var signal = new Signal<int>(0);
-int current = signal.Peek();    // no tracking, no PropertyRead event
-```
-
-### Batching Multiple State Updates
-
-Multiple `.Value` writes in the same synchronous block are coalesced into a single UI update. The `ReactiveScheduler` posts one flush to the dispatcher — rapid writes before that flush piggyback on it.
-
-```csharp
-public class SettingsView : View
-{
-	readonly Reactive<bool> darkMode = false;
-	readonly Reactive<bool> notifications = true;
-	readonly Reactive<string> language = "en";
-
-	[Body]
-	View body() => new VStack {
-		new Toggle(() => darkMode.Value).OnToggled(v => darkMode.Value = v),
-		new Toggle(() => notifications.Value).OnToggled(v => notifications.Value = v),
-		new Text(() => $"Language: {language.Value}"),
-		new Button("Reset All", ResetDefaults)
-	};
-
-	void ResetDefaults()
-	{
-		// Three writes, one UI update — the scheduler coalesces them
-		darkMode.Value = false;
-		notifications.Value = true;
-		language.Value = "en";
-	}
-}
-```
-
-For components with typed state, `SetState()` batches mutations explicitly — the entire action runs before a single rebuild is scheduled:
-
-```csharp
-class FormState
-{
-	public string FirstName { get; set; } = "";
-	public string LastName { get; set; } = "";
-	public string Email { get; set; } = "";
-}
-
-public class FormComponent : Component<FormState>
-{
-	public override View Render() => new VStack {
-		new TextField(() => State.FirstName).OnTextChanged(v =>
-			SetState(s => s.FirstName = v ?? "")),
-		new TextField(() => State.LastName).OnTextChanged(v =>
-			SetState(s => s.LastName = v ?? "")),
-		new TextField(() => State.Email).OnTextChanged(v =>
-			SetState(s => s.Email = v ?? "")),
-		new Button("Reset", () => SetState(s => {
-			s.FirstName = "";
-			s.LastName = "";
-			s.Email = "";
-		}))
-	};
-}
-```
+Multiple writes inside a single `SetState` action — or multiple synchronous `.Value` writes on a `Reactive<T>` — coalesce into one UI update. The scheduler posts a single flush to the dispatcher.
 
 ## XAML+MVVM vs Comet
 
@@ -173,17 +98,14 @@ A text field bound to a greeting label — same UI, different approaches.
 **XAML + MVVM** — ViewModel + XAML + code-behind:
 
 ```csharp
-// GreetingViewModel.cs
 public partial class GreetingViewModel : ObservableObject
 {
     [ObservableProperty] string name = "World";
     public string Greeting => $"Hello, {Name}!";
-    partial void OnNameChanged(string value) =>
-        OnPropertyChanged(nameof(Greeting));
+    partial void OnNameChanged(string value) => OnPropertyChanged(nameof(Greeting));
 }
 ```
 ```xml
-<!-- GreetingPage.xaml -->
 <VerticalStackLayout>
     <Label Text="{Binding Greeting}" />
     <Entry Text="{Binding Name, Mode=TwoWay}" />
@@ -193,22 +115,20 @@ public partial class GreetingViewModel : ObservableObject
 **Comet** — one file:
 
 ```csharp
-public class GreetingView : View
+public class GreetingView : Component
 {
-    readonly Reactive<string> name = "World";
+    readonly Signal<string> name = new("World");
 
-    [Body]
-    View body() => new VStack {
-        new Text(() => $"Hello, {name.Value}!"),
-        new TextField(() => name.Value, () => "Enter name")
-            .OnTextChanged(v => name.Value = v ?? "")
-    };
+    public override View Render() => VStack(
+        Text(() => $"Hello, {name.Value}!"),
+        TextField(name, "Enter name")
+    );
 }
 ```
 
 ## Getting Started
 
-Comet requires .NET 11 SDK (preview) with the MAUI workload.
+Comet requires **.NET 11 SDK (preview)** with the MAUI workload.
 
 ```bash
 dotnet workload install maui
@@ -224,16 +144,27 @@ builder.UseCometHandlers();
 return builder.Build();
 ```
 
+Set the Comet root view in your `App` class:
+
+```csharp
+public class MyApp : CometApp
+{
+    public MyApp() => Body = () => new CounterView();
+}
+```
+
 ## Hot Reload
 
-MAUI's built-in hot reload works with Comet. Change a `[Body]` method, save, and the view updates on the running app. State is preserved across reloads.
+MAUI's built-in hot reload works with Comet. Edit `Render()`, save, and the view updates on the running app — state is preserved across reloads.
+
+For an even faster loop on physical devices, see **[Comet Go](../Go/README.md)** — a single-file dev server with a companion app.
 
 ## Styling and Theming
 
 Comet ships a design token and styling system inspired by SwiftUI and Material Design 3. Every visual property is a fluent method call — no XAML styles, no CSS, no resource dictionaries.
 
 ```csharp
-new Text("Welcome")
+Text("Welcome")
     .FontSize(24)
     .FontWeight(FontWeight.Bold)
     .Color(Colors.White)
@@ -250,15 +181,15 @@ Semantic tokens resolve colors, typography, spacing, and shapes from the active 
 ```csharp
 using Comet.Styles;
 
-new Text("Hello")
+Text("Hello")
     .Typography(TypographyTokens.TitleLarge)
-    .Color(ColorTokens.OnSurface),
+    .Color(ColorTokens.OnSurface);
 
-new Button("Action", () => { })
-    .ButtonStyle(ButtonStyles.Filled)
+Button("Action", () => { })
+    .ButtonStyle(ButtonStyles.Filled);
 ```
 
-Token sets follow Material Design 3: `ColorTokens` (Primary, OnPrimary, Surface, Error, etc.), `TypographyTokens` (DisplayLarge through LabelSmall), `SpacingTokens`, and `ShapeTokens`.
+Token sets follow Material Design 3: `ColorTokens` (`Primary`, `OnPrimary`, `Surface`, `Error`, …), `TypographyTokens` (`DisplayLarge` through `LabelSmall`), `SpacingTokens`, and `ShapeTokens`.
 
 ### View Modifiers
 
@@ -270,16 +201,14 @@ public class CardModifier : ViewModifier
     public override View Apply(View view)
     {
         view
-            .Background(new SolidPaint(
-                ColorTokens.Surface.Resolve(ThemeManager.Current())))
+            .Background(new SolidPaint(ColorTokens.Surface.Resolve(ThemeManager.Current())))
             .ClipShape(new RoundedRectangle(16))
             .Padding(new Thickness(20));
         return view;
     }
 }
 
-// Apply to any view
-new VStack { ... }.Modifier(new CardModifier())
+VStack(...).Modifier(new CardModifier());
 
 // Compose modifiers
 var highlighted = new CardModifier().Then(new HighlightModifier());
@@ -290,15 +219,15 @@ var highlighted = new CardModifier().Then(new HighlightModifier());
 Built-in button variants — `Filled`, `Outlined`, `Text`, `Elevated` — adapt to pressed, hovered, and disabled states using design tokens:
 
 ```csharp
-new Button("Save", onSave).ButtonStyle(ButtonStyles.Filled),
-new Button("Cancel", onCancel).ButtonStyle(ButtonStyles.Outlined),
-new Button("Details", onDetails).ButtonStyle(ButtonStyles.Text),
+Button("Save", onSave).ButtonStyle(ButtonStyles.Filled);
+Button("Cancel", onCancel).ButtonStyle(ButtonStyles.Outlined);
+Button("Details", onDetails).ButtonStyle(ButtonStyles.Text);
 ```
 
 Set a default for all buttons in a subtree:
 
 ```csharp
-new VStack { ... }.ButtonStyle(ButtonStyles.Text)
+VStack(...).ButtonStyle(ButtonStyles.Text);
 ```
 
 Or globally via the theme:
@@ -314,24 +243,24 @@ ThemeManager.SetTheme(theme);
 Font properties cascade from containers to children — set once, apply everywhere:
 
 ```csharp
-new VStack {
-    new Text("Title"),
-    new Text("Subtitle"),
-    new Text("Body text")
-}
+VStack(
+    Text("Title"),
+    Text("Subtitle"),
+    Text("Body text")
+)
 .FontSize(18)
-.Color(Colors.DarkSlateGray)
+.Color(Colors.DarkSlateGray);
 ```
 
 Type-targeted overloads apply only to a specific control type:
 
 ```csharp
-new VStack {
-    new Text("Label"),
-    new Button("Action", () => { }),
-}
+VStack(
+    Text("Label"),
+    Button("Action", () => { })
+)
 .Color(typeof(Text), Colors.Navy)
-.Background(typeof(Button), Colors.Orange)
+.Background(typeof(Button), Colors.Orange);
 ```
 
 ### Custom Environment Values
@@ -339,8 +268,7 @@ new VStack {
 The styling system is built on a key-value environment that propagates down the view tree. You can store and retrieve your own values the same way:
 
 ```csharp
-new VStack { ... }
-    .SetEnvironment("App.Accent", Colors.Coral, cascades: true);
+VStack(...).SetEnvironment("App.Accent", Colors.Coral, cascades: true);
 
 // Any descendant view can read it
 var accent = this.GetEnvironment<Color>("App.Accent");
@@ -356,21 +284,36 @@ Navigation.Navigate<DetailPage>(new DetailProps { Id = 42 });
 
 ## MAUI Interop
 
-Embed MAUI views in Comet or Comet views in MAUI:
+Embed MAUI views in Comet, or Comet views in MAUI:
 
-- **`CometHost`** — use a Comet `View` inside a MAUI `ContentPage`
-- **`MauiViewHost`** — use a MAUI `IView` inside a Comet view tree
-- **`NativeHost`** — embed raw platform views (`UIView`, `Android.Views.View`)
+- **`CometHost`** — host a Comet `View` inside a MAUI `ContentPage`
+- **`MauiViewHost`** — host a MAUI `IView` inside a Comet view tree
+- **`NativeHost`** — embed raw platform views (`UIView`, `Android.Views.View`, …)
+
+## Legacy `[Body]` Pattern
+
+Earlier Comet code uses a `[Body]` attribute on a method instead of overriding `Render()`. This pattern remains supported for backward compatibility but should not be used in new code.
+
+```csharp
+// Legacy — kept working for existing apps:
+public class HelloView : View
+{
+    [Body]
+    View body() => Text("Hello, Comet!");
+}
+```
+
+The modern equivalent is `Component` / `Component<TState>` with `override View Render()`, shown throughout this README.
 
 ## Samples
 
 The [`sample/`](sample/) directory contains working apps:
 
 | Sample | What it demonstrates |
-|--------|---------------------|
+|--------|----------------------|
 | [CometControlsGallery](sample/CometControlsGallery) | 30+ controls with sidebar navigation |
 | [Comet.Sample](sample/Comet.Sample) | 50+ component and feature demos |
-| [CometMauiApp](sample/CometMauiApp) | Minimal starter template |
+| [CometMauiApp](sample/CometMauiApp) | Minimal starter template (`Component<TState>`) |
 | [CometTaskApp](sample/CometTaskApp) | TabView navigation pattern |
 | [CometBaristaNotes](sample/CometBaristaNotes) | Real app with Syncfusion gauges |
 | [CometStressTest](sample/CometStressTest) | Performance and stress tests |
@@ -384,7 +327,7 @@ dotnet build src/Comet/Comet.csproj -c Release
 
 # Tests
 dotnet build tests/Comet.Tests/Comet.Tests.csproj -c Release
-dotnet test tests/Comet.Tests/Comet.Tests.csproj --no-build -c Release
+dotnet test  tests/Comet.Tests/Comet.Tests.csproj --no-build -c Release
 ```
 
 ## Platforms
