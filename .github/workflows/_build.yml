@@ -57,7 +57,7 @@ jobs:
 
       - name: Install workloads
         if: inputs.install-workloads
-        run: dotnet workload install maui maccatalyst macos maui-tizen
+        run: dotnet workload install maui ios maccatalyst macos maui-tizen
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && matrix.os == 'windows-latest'
