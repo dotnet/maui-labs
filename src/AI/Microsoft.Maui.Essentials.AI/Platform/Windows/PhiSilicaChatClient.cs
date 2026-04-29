@@ -119,11 +119,18 @@ public sealed class PhiSilicaChatClient : IChatClient
 			}
 		};
 
-		cancellationToken.Register(() => operation.Cancel());
-
-		await foreach (var update in handler.ReadAllAsync(cancellationToken))
+		var registration = cancellationToken.Register(() => operation.Cancel());
+		try
 		{
-			yield return update;
+			await foreach (var update in handler.ReadAllAsync(cancellationToken))
+			{
+				yield return update;
+			}
+		}
+		finally
+		{
+			operation.Cancel();
+			registration.Dispose();
 		}
 	}
 
@@ -155,10 +162,14 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// <inheritdoc />
 	void IDisposable.Dispose()
 	{
-		// If the task completed successfully, dispose the model
-		if (_ownsModel && _modelTask.IsCompletedSuccessfully)
+		if (_ownsModel)
 		{
-			_modelTask.Result.Dispose();
+			if (_modelTask.IsCompletedSuccessfully)
+				_modelTask.Result.Dispose();
+			else
+				_modelTask.ContinueWith(
+					t => { if (t.IsCompletedSuccessfully) t.Result.Dispose(); },
+					TaskContinuationOptions.ExecuteSynchronously);
 		}
 	}
 

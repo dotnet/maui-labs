@@ -66,9 +66,12 @@ public static class MauiProgram
 		builder.Services.AddHttpClient<WeatherService>();
 		builder.Services.AddSingleton<ChatService>();
 
-		// Semantic search — uses whatever IEmbeddingGenerator is registered (Apple NL or OpenAI)
+		// Semantic search — uses whatever IEmbeddingGenerator is registered (Apple NL or OpenAI).
+		// On Windows, AddPhiSilicaServices registers AppContentIndexerSearchService instead.
+#if !WINDOWS
 		builder.Services.AddSingleton<ISemanticSearchService>(sp =>
 			new EmbeddingSearchService(sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>()));
+#endif
 
 		// Configure Logging
 		builder.Services.AddLogging();

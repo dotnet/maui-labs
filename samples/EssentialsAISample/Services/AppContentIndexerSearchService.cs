@@ -1,4 +1,5 @@
 #if WINDOWS
+using System.Collections.Concurrent;
 using Microsoft.Windows.Search.AppContentIndex;
 
 namespace Maui.Controls.Sample.Services;
@@ -12,21 +13,24 @@ public sealed class AppContentIndexerSearchService : ISemanticSearchService, IDi
 {
 	const string IndexPrefix = "maui-ai-sample";
 
+	readonly object _indexersLock = new();
 	readonly Dictionary<string, AppContentIndexer> _indexers = new();
 
 	AppContentIndexer GetOrCreateIndexer(string collection)
 	{
-		if (_indexers.TryGetValue(collection, out var indexer))
-			return indexer;
+		lock (_indexersLock)
+		{
+			if (_indexers.TryGetValue(collection, out var indexer))
+				return indexer;
 
-		var indexName = $"{IndexPrefix}-{collection}";
-		var result = AppContentIndexer.GetOrCreateIndex(indexName);
-		if (!result.Succeeded)
-			throw new InvalidOperationException($"Failed to create index '{indexName}': {result.Status}");
+			var indexName = $"{IndexPrefix}-{collection}";
+			var result = AppContentIndexer.GetOrCreateIndex(indexName);
+			if (!result.Succeeded)
+				throw new InvalidOperationException($"Failed to create index '{indexName}': {result.Status}");
 
-		_indexers[collection] = result.Indexer;
-
-		return result.Indexer;
+			_indexers[collection] = result.Indexer;
+			return result.Indexer;
+		}
 	}
 
 	public Task IndexAsync(string collection, string id, string text, CancellationToken cancellationToken = default)
@@ -66,15 +70,25 @@ public sealed class AppContentIndexerSearchService : ISemanticSearchService, IDi
 
 	public async Task WaitUntilReadyAsync(CancellationToken cancellationToken = default)
 	{
-		foreach (var indexer in _indexers.Values)
+		List<AppContentIndexer> snapshot;
+		lock (_indexersLock)
+			snapshot = [.. _indexers.Values];
+
+		foreach (var indexer in snapshot)
 			await indexer.WaitForIndexingIdleAsync(TimeSpan.FromSeconds(60));
 	}
 
 	public void Dispose()
 	{
-		foreach (var indexer in _indexers.Values)
+		List<AppContentIndexer> snapshot;
+		lock (_indexersLock)
+		{
+			snapshot = [.. _indexers.Values];
+			_indexers.Clear();
+		}
+
+		foreach (var indexer in snapshot)
 			indexer.Dispose();
-		_indexers.Clear();
 	}
 }
 #endif
