@@ -89,17 +89,17 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			_virtualView = null;
 		}
 
-		protected override global::Windows.Foundation.Size ArrangeOverride(global::Windows.Foundation.Size finalSize)
+		protected override global::Microsoft.UI.Xaml.Size ArrangeOverride(global::Microsoft.UI.Xaml.Size finalSize)
 		{
 			if (_contentElement is not null)
 			{
 				_virtualView?.Arrange(new Microsoft.Maui.Graphics.Rect(0, 0, finalSize.Width, finalSize.Height));
-				_contentElement.Arrange(new global::Windows.Foundation.Rect(0, 0, finalSize.Width, finalSize.Height));
+				_contentElement.Arrange(new global::Microsoft.UI.Xaml.Rect(0, 0, finalSize.Width, finalSize.Height));
 			}
 			return base.ArrangeOverride(finalSize);
 		}
 
-		protected override global::Windows.Foundation.Size MeasureOverride(global::Windows.Foundation.Size availableSize)
+		protected override global::Microsoft.UI.Xaml.Size MeasureOverride(global::Microsoft.UI.Xaml.Size availableSize)
 		{
 			if (_contentElement is not null)
 			{

@@ -75,7 +75,7 @@ namespace Comet.Windows
 			}
 		}
 
-		protected override global::Windows.Foundation.Size MeasureOverride(global::Windows.Foundation.Size availableSize)
+		protected override global::Microsoft.UI.Xaml.Size MeasureOverride(global::Microsoft.UI.Xaml.Size availableSize)
 		{
 			if (_view is null)
 				return availableSize;
@@ -84,10 +84,10 @@ namespace Comet.Windows
 			var height = availableSize.Height > 0 ? availableSize.Height : 1000;
 
 			var size = _view.Measure(width, height);
-			return new global::Windows.Foundation.Size(size.Width, size.Height);
+			return new global::Microsoft.UI.Xaml.Size(size.Width, size.Height);
 		}
 
-		protected override global::Windows.Foundation.Size ArrangeOverride(global::Windows.Foundation.Size finalSize)
+		protected override global::Microsoft.UI.Xaml.Size ArrangeOverride(global::Microsoft.UI.Xaml.Size finalSize)
 		{
 			if (_view is null)
 				return finalSize;
@@ -96,7 +96,7 @@ namespace Comet.Windows
 
 			if (currentPlatformView is not null)
 			{
-				currentPlatformView.Arrange(new global::Windows.Foundation.Rect(0, 0, finalSize.Width, finalSize.Height));
+				currentPlatformView.Arrange(new global::Microsoft.UI.Xaml.Rect(0, 0, finalSize.Width, finalSize.Height));
 			}
 
 			return finalSize;
