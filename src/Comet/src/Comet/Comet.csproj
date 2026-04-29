@@ -2,7 +2,8 @@
 
   <PropertyGroup>
 	<TargetFrameworks>net11.0-android;net11.0-ios;net11.0-maccatalyst</TargetFrameworks>
-	<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks>
+	<!-- Windows disabled until WinUI .NET 11 preview stabilizes (MeasureOverride/ArrangeOverride API changed) -->
+	<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks> -->
 	<!-- net11.0-macos workload not yet available in .NET 11 preview; re-enable when shipped -->
 	<!-- <TargetFrameworks>$(TargetFrameworks);net11.0-macos</TargetFrameworks> -->
 	<UseMaui>true</UseMaui>
