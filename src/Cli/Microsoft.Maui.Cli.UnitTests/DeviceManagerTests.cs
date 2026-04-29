@@ -290,6 +290,95 @@ public class DeviceManagerTests
 	}
 
 	[Fact]
+	public async Task GetAllDevicesAsync_RunningEmulator_UsesAvdModelAndManufacturer()
+	{
+		// Regression: running emulators used to report model from adb (e.g.
+		// "sdk_gphone64_x86_64") instead of from the AVD config (e.g. "pixel_6").
+		// After merging, model and manufacturer must reflect the AVD profile.
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "emulator-5554",
+					Name = "MAUI_Emulator_API_36",
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = DeviceState.Booted,
+					IsEmulator = true,
+					IsRunning = true,
+					EmulatorId = "MAUI_Emulator_API_36",
+					Model = "sdk_gphone64_x86_64",
+					Details = new JsonObject { ["avd"] = "MAUI_Emulator_API_36" }
+				}
+			},
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo
+				{
+					Name = "MAUI_Emulator_API_36",
+					DeviceProfile = "pixel_6",
+					Manufacturer = "Google",
+					Target = "android-36"
+				}
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		Assert.Single(devices);
+		Assert.Equal("pixel_6", devices[0].Model);
+		Assert.Equal("Google", devices[0].Manufacturer);
+		Assert.True(devices[0].IsRunning);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_RunningEmulator_FallsBackToGoogleManufacturer_WhenAvdManufacturerUnknown()
+	{
+		// When the AVD has no manufacturer set in config.ini, fall back to "Google"
+		// (same as the stopped-AVD path).
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			Devices = new List<Device>
+			{
+				new Device
+				{
+					Id = "emulator-5554",
+					Name = "Pixel_6_API_35",
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = DeviceState.Booted,
+					IsEmulator = true,
+					IsRunning = true,
+					EmulatorId = "Pixel_6_API_35",
+					Details = new JsonObject { ["avd"] = "Pixel_6_API_35" }
+				}
+			},
+			Avds = new List<AvdInfo>
+			{
+				new AvdInfo
+				{
+					Name = "Pixel_6_API_35",
+					DeviceProfile = "pixel_6",
+					Manufacturer = null,  // not set in config.ini
+					Target = "android-35"
+				}
+			}
+		};
+
+		var manager = new DeviceManager(fakeAndroid);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		Assert.Single(devices);
+		Assert.Equal("pixel_6", devices[0].Model);
+		Assert.Equal("Google", devices[0].Manufacturer);
+	}
+
+	[Fact]
 	public async Task GetAllDevicesAsync_MergesOfflineEmulatorWithLockedAvd()
 	{
 		// Regression: while an emulator is booting, adb reports it as "Offline"

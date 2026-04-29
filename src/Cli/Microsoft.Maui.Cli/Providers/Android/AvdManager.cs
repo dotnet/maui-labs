@@ -110,8 +110,9 @@ public class AvdManager
 	{
 		string? systemImage = null;
 		string? target = null;
+		string? manufacturer = null;
 
-		// Try to read system image from AVD config.ini
+		// Try to read system image and device metadata from AVD config.ini
 		if (!string.IsNullOrEmpty(avd.Path))
 		{
 			var configPath = System.IO.Path.Combine(avd.Path, "config.ini");
@@ -141,6 +142,10 @@ public class AvdManager
 						{
 							target = line.Substring("tag.display=".Length).Trim();
 						}
+						else if (line.StartsWith("hw.device.manufacturer=", StringComparison.Ordinal))
+						{
+							manufacturer = line.Substring("hw.device.manufacturer=".Length).Trim();
+						}
 					}
 				}
 				catch (Exception ex)
@@ -154,6 +159,7 @@ public class AvdManager
 		{
 			Name = avd.Name,
 			DeviceProfile = avd.DeviceProfile,
+			Manufacturer = manufacturer,
 			SystemImage = systemImage,
 			Target = target,
 			Path = avd.Path,
