@@ -1,6 +1,6 @@
 # Microsoft.Maui.TestApp.Build
 
-`Microsoft.Maui.TestApp.Build` lets test projects declare app projects as build-time dependencies and receive a manifest describing the built app artifacts.
+`Microsoft.Maui.TestApp.Build` lets test projects declare app projects as build-time dependencies and consume the built app artifacts as MSBuild items.
 
 The recommended declaration is still a real `ProjectReference`, so tools that infer .NET project graphs from `.csproj` files continue to see the app/test dependency. The package removes marked references from the normal compile-time reference pipeline during the build and invokes them through its own MSBuild targets instead.
 
@@ -25,8 +25,8 @@ The test project build will:
 
 1. Build the referenced app project with the supplied MSBuild properties.
 2. Locate produced app artifacts such as `.apk`, `.aab`, `.app`, `.ipa`, `.msix`, `.exe`, or `.dll`.
-3. Write `maui-test-apps.json` to the test output directory.
-4. Generate an internal `MauiTestApps` class with a `ManifestPath` constant.
+3. Expose the located artifacts as `@(MauiTestAppArtifact)` items with metadata.
+4. Set `$(MauiTestAppArtifacts)` and `$(MauiTestAppArtifactPaths)` for simple target consumption.
 
 ## OutputItemType compatibility
 
@@ -57,36 +57,23 @@ Projects that prefer the `OutputItemType` idiom can use:
 | `OutputRoot` | Per-reference output root. Defaults under `$(BaseIntermediateOutputPath)maui-test-apps`. |
 | `SetPlatformOutputPaths` | Set to `false` to avoid overriding platform output properties. |
 
-## Manifest
+## Consuming built app artifacts
 
-The generated manifest has this shape:
+Downstream targets can consume `@(MauiTestAppArtifact)` after `BuildMauiTestApps` runs:
 
-```json
-{
-  "version": 1,
-  "apps": [
-    {
-      "name": "MyApp",
-      "path": "/absolute/path/to/app.apk",
-      "projectPath": "/absolute/path/to/MyApp.csproj",
-      "targetFramework": "net10.0-android",
-      "targetPlatformIdentifier": "android",
-      "runtimeIdentifier": "android-arm64",
-      "configuration": "Debug",
-      "applicationId": "com.example.myapp",
-      "bundleIdentifier": "com.example.myapp",
-      "packageName": "com.example.myapp",
-      "artifactType": "apk",
-      "installable": true,
-      "launchable": true
-    }
-  ]
-}
+```xml
+<Target Name="UseMauiTestApps" AfterTargets="BuildMauiTestApps">
+  <Message Importance="High"
+           Text="%(MauiTestAppArtifact.ReferenceName): %(MauiTestAppArtifact.Identity) [%(MauiTestAppArtifact.ArtifactType)]" />
+</Target>
 ```
+
+Each artifact item includes metadata such as `ReferenceName`, `ProjectPath`, `TargetFramework`, `TargetPlatformIdentifier`, `RuntimeIdentifier`, `Configuration`, `ApplicationId`, `ArtifactType`, `Installable`, and `Launchable`.
+
+For simple property-based consumers, `$(MauiTestAppArtifactPaths)` contains the resolved artifact paths separated by semicolons.
 
 ## Important defaults
 
-- `MauiTestAppBuildOnBuild=true`: app artifacts are prepared during the test project build. `dotnet test` normally builds first, so the manifest is available to tests.
+- `MauiTestAppBuildOnBuild=true`: app artifacts are prepared during the test project build. `dotnet test` normally builds first, so artifact items are available to later build/test targets.
 - `MauiTestAppSetPlatformOutputPaths=true`: platform output properties are set to deterministic locations under `MauiTestAppOutputRoot`.
 - `MauiTestAppFailIfNoArtifacts=true`: declared app references must produce at least one artifact.
-- `MauiTestAppGenerateSource=true`: the test project receives an internal generated source file with the manifest path.

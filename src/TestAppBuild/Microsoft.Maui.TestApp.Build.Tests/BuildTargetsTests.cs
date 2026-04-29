@@ -1,13 +1,12 @@
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 
 namespace Microsoft.Maui.TestApp.Build.Tests;
 
 public sealed class BuildTargetsTests
 {
     [Fact]
-    public async Task ProjectReferenceMarkedAsMauiTestApp_BuildsAppAndWritesManifest()
+    public async Task ProjectReferenceMarkedAsMauiTestApp_BuildsAppAndExposesArtifactItem()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -23,11 +22,11 @@ public sealed class BuildTargetsTests
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
-        AssertManifest(workspace, expectedName: "App");
+        AssertArtifactItem(workspace, expectedName: "App");
     }
 
     [Fact]
-    public async Task ProjectReferenceWithOutputItemType_BuildsAppAndWritesManifest()
+    public async Task ProjectReferenceWithOutputItemType_BuildsAppAndExposesArtifactItem()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -43,7 +42,7 @@ public sealed class BuildTargetsTests
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
-        AssertManifest(workspace, expectedName: "OutputItemTypeApp");
+        AssertArtifactItem(workspace, expectedName: "OutputItemTypeApp");
     }
 
     private static async Task<ProcessResult> BuildWorkspaceAsync(TestWorkspace workspace, string projectReferenceXml)
@@ -58,24 +57,26 @@ public sealed class BuildTargetsTests
             "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
     }
 
-    private static void AssertManifest(TestWorkspace workspace, string expectedName)
+    private static void AssertArtifactItem(TestWorkspace workspace, string expectedName)
     {
-        var manifestPath = Path.Combine(workspace.TestProjectDirectory, "bin", "Debug", "net10.0", "maui-test-apps.json");
-        Assert.True(File.Exists(manifestPath), "Expected manifest at " + manifestPath);
+        var artifactsPath = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt");
+        Assert.True(File.Exists(artifactsPath), "Expected artifact capture at " + artifactsPath);
 
-        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
-        var apps = document.RootElement.GetProperty("apps");
-        var app = Assert.Single(apps.EnumerateArray());
+        var line = Assert.Single(File.ReadAllLines(artifactsPath));
+        var parts = line.Split('|');
 
-        Assert.Equal(expectedName, app.GetProperty("name").GetString());
-        Assert.Equal("net10.0", app.GetProperty("targetFramework").GetString());
+        Assert.Equal(6, parts.Length);
+        Assert.Equal(expectedName, parts[0]);
+        Assert.True(File.Exists(parts[1]), "Expected app artifact at " + parts[1]);
+        Assert.Equal(Path.GetFullPath(workspace.AppProjectPath), Path.GetFullPath(parts[2]));
+        Assert.Equal("net10.0", parts[3]);
+        Assert.Equal("dll", parts[4]);
+        Assert.Equal("com.example.testapp", parts[5]);
 
-        var artifactPath = app.GetProperty("path").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(artifactPath));
-        Assert.True(File.Exists(artifactPath), "Expected app artifact at " + artifactPath);
+        var artifactPathsFile = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifact-paths.txt");
+        Assert.True(File.Exists(artifactPathsFile), "Expected artifact paths capture at " + artifactPathsFile);
+        Assert.Contains(Path.GetFullPath(parts[1]), File.ReadAllText(artifactPathsFile), StringComparison.Ordinal);
 
-        var projectPath = app.GetProperty("projectPath").GetString();
-        Assert.Equal(Path.GetFullPath(workspace.AppProjectPath), Path.GetFullPath(projectPath!));
     }
 
     private static async Task<ProcessResult> RunDotNetAsync(string workingDirectory, params string[] arguments)
@@ -176,12 +177,22 @@ public sealed class BuildTargetsTests
                   <PropertyGroup>
                     <TargetFramework>net10.0</TargetFramework>
                     <MauiTestAppOutputRoot>{{XmlEscape(outputRoot)}}</MauiTestAppOutputRoot>
-                    <MauiTestAppGeneratedSourceNamespace>TestAppBuild.Generated</MauiTestAppGeneratedSourceNamespace>
                   </PropertyGroup>
 
                   <ItemGroup>
                 {{Indent(projectReferenceXml, 4)}}
                   </ItemGroup>
+
+                  <Target Name="CaptureMauiTestAppArtifacts"
+                          AfterTargets="BuildMauiTestApps"
+                          Condition="'@(MauiTestAppArtifact)' != ''">
+                    <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-artifacts.txt"
+                                      Lines="@(MauiTestAppArtifact->'%(ReferenceName)|%(Identity)|%(ProjectPath)|%(TargetFramework)|%(ArtifactType)|%(ApplicationId)')"
+                                      Overwrite="true" />
+                    <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-artifact-paths.txt"
+                                      Lines="$(MauiTestAppArtifactPaths)"
+                                      Overwrite="true" />
+                  </Target>
 
                   <Import Project="{{XmlEscape(targetsPath)}}" />
                 </Project>

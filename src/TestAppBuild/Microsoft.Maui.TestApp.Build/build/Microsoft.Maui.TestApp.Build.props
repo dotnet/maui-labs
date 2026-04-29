@@ -8,8 +8,6 @@
     <MauiTestAppInnerBuildTarget Condition="'$(MauiTestAppInnerBuildTarget)' == ''">Build</MauiTestAppInnerBuildTarget>
     <MauiTestAppFailIfNoArtifacts Condition="'$(MauiTestAppFailIfNoArtifacts)' == ''">true</MauiTestAppFailIfNoArtifacts>
     <MauiTestAppSetPlatformOutputPaths Condition="'$(MauiTestAppSetPlatformOutputPaths)' == ''">true</MauiTestAppSetPlatformOutputPaths>
-    <MauiTestAppGenerateSource Condition="'$(MauiTestAppGenerateSource)' == ''">true</MauiTestAppGenerateSource>
-    <MauiTestAppGeneratedSourceNamespace Condition="'$(MauiTestAppGeneratedSourceNamespace)' == ''">Microsoft.Maui.TestApp.Build</MauiTestAppGeneratedSourceNamespace>
   </PropertyGroup>
 
 </Project>
