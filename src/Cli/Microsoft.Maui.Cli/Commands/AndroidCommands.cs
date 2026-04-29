@@ -18,13 +18,13 @@ public static partial class AndroidCommands
 {
 	internal static readonly Option<string> SdkOption = new("--sdk")
 	{
-		Description = "Override Android SDK path for this command",
+		Description = "Override Android SDK root path for this command (sets ANDROID_HOME for all SDK tools)",
 		Recursive = true
 	};
 
 	internal static readonly Option<string> JdkOption = new("--jdk")
 	{
-		Description = "Override JDK path for this command",
+		Description = "Override JDK path used by Android SDK tools (sets JAVA_HOME); does not affect 'jdk' subcommands",
 		Recursive = true
 	};
 
@@ -45,16 +45,27 @@ public static partial class AndroidCommands
 
 	/// <summary>
 	/// Resolves the Android provider, applying any --sdk / --jdk path overrides from the parse result.
+	/// NOTE: This mutates the singleton IAndroidProvider. Safe because the CLI runs a single
+	/// command per process; if this assumption changes, switch to a scoped provider pattern.
 	/// </summary>
 	internal static IAndroidProvider GetAndroidProvider(ParseResult parseResult)
 	{
 		var provider = Program.AndroidProvider;
 		var sdk = parseResult.GetValue(SdkOption);
 		var jdk = parseResult.GetValue(JdkOption);
-		if (!string.IsNullOrEmpty(sdk))
+
+		if (!string.IsNullOrWhiteSpace(sdk))
+		{
+			if (!Directory.Exists(sdk))
+				throw new DirectoryNotFoundException($"--sdk path does not exist: {sdk}");
 			provider.OverrideSdkPath(sdk);
-		if (!string.IsNullOrEmpty(jdk))
+		}
+		if (!string.IsNullOrWhiteSpace(jdk))
+		{
+			if (!Directory.Exists(jdk))
+				throw new DirectoryNotFoundException($"--jdk path does not exist: {jdk}");
 			provider.OverrideJdkPath(jdk);
+		}
 		return provider;
 	}
 

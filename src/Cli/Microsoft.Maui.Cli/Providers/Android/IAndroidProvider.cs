@@ -141,12 +141,13 @@ public interface IAndroidProvider : IDisposable
 
 	/// <summary>
 	/// Overrides the Android SDK path for the current session.
-	/// Propagates to all downstream SdkManager, AvdManager, and Adb instances.
+	/// Rebuilds downstream tool wrappers (SdkManager, AvdManager, Adb) to use the new path.
 	/// </summary>
 	void OverrideSdkPath(string path);
 
 	/// <summary>
 	/// Overrides the JDK path for the current session.
+	/// Rebuilds downstream tool wrappers so JAVA_HOME reflects the new path.
 	/// </summary>
 	void OverrideJdkPath(string path);
 
