@@ -284,6 +284,7 @@ extends:
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/CliPackages'
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.StartupProfiling.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
             displayName: Filter Cli packages
 
         - job: PublishNuGet
