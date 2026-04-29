@@ -18,6 +18,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(RecordingState))]
 [JsonSerializable(typeof(AgentClient.ProfilerSessionEnvelope))]
 [JsonSerializable(typeof(AgentClient.ActionResponse))]
+[JsonSerializable(typeof(InvokeResult))]
 internal sealed partial class DevFlowDriverJsonContext : JsonSerializerContext;
 
 internal static class DriverJson

@@ -5,6 +5,9 @@ namespace Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 
 public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 {
+    private const double FallbackRefreshRate = 60d;
+    private const double FallbackFrameTimeMs = 1000d / FallbackRefreshRate;
+
     private readonly Process _process = Process.GetCurrentProcess();
     private readonly INativeFrameStatsProvider? _nativeFrameStatsProvider;
     private readonly ProfilerCapabilities _capabilities;
@@ -13,7 +16,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
     private DateTime _lastSampleTimestampUtc;
     private TimeSpan _lastCpuTime;
     private int _sampleIntervalMs = 500;
-    private double _estimatedFrameTimeMs = 1000d / 60d;
+    private double _estimatedFrameTimeMs = FallbackFrameTimeMs;
     private string _estimatedFrameQuality = "estimated.default-60hz";
 
     public RuntimeProfilerCollector(INativeFrameStatsProvider? nativeFrameStatsProvider = null)
@@ -53,7 +56,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
         if (_nativeFrameStatsProvider?.IsSupported == true)
         {
             // Native providers own frame timing. Keep a safe fallback estimate in case native collection is disabled later.
-            _estimatedFrameTimeMs = 1000d / 60d;
+            _estimatedFrameTimeMs = FallbackFrameTimeMs;
             _estimatedFrameQuality = "estimated.default-60hz";
         }
         else
@@ -175,7 +178,14 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
         var effectiveElapsedMs = Math.Max(_sampleIntervalMs, elapsedMs);
         var lagRatio = effectiveElapsedMs / _sampleIntervalMs;
         var estimatedFrameTimeMs = _estimatedFrameTimeMs * lagRatio;
-        var estimatedFps = estimatedFrameTimeMs > 0 ? 1000d / estimatedFrameTimeMs : (double?)null;
+        var estimatedFrameQuality = _estimatedFrameQuality;
+        if (!IsPositiveFinite(estimatedFrameTimeMs))
+        {
+            estimatedFrameTimeMs = FallbackFrameTimeMs;
+            estimatedFrameQuality = "estimated.default-60hz";
+        }
+
+        var estimatedFps = 1000d / estimatedFrameTimeMs;
 
         return new ProfilerSample
         {
@@ -187,7 +197,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
             JankFrameCount = estimatedFrameTimeMs >= 24d ? 1 : 0,
             UiThreadStallCount = estimatedFrameTimeMs >= 150d ? 1 : 0,
             FrameSource = "managed.estimated",
-            FrameQuality = $"{_estimatedFrameQuality}.sampling-lag"
+            FrameQuality = $"{estimatedFrameQuality}.sampling-lag"
         };
     }
 
@@ -286,13 +296,16 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
 
     private static (double FrameTimeMs, string Quality) ResolveFrameEstimate()
     {
-        const double fallbackRefreshRate = 60d;
         var refreshRate = TryReadDisplayRefreshRate();
 
         if (refreshRate.HasValue)
-            return (1000d / refreshRate.Value, "estimated.display-refresh");
+        {
+            var frameTimeMs = 1000d / refreshRate.Value;
+            if (IsPositiveFinite(frameTimeMs))
+                return (frameTimeMs, "estimated.display-refresh");
+        }
 
-        return (1000d / fallbackRefreshRate, "estimated.default-60hz");
+        return (FallbackFrameTimeMs, "estimated.default-60hz");
     }
 
     private static double? TryReadDisplayRefreshRate()
@@ -300,7 +313,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
         try
         {
             var refreshRate = DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
-            if (double.IsNaN(refreshRate) || double.IsInfinity(refreshRate) || refreshRate <= 1d)
+            if (!IsPositiveFinite(refreshRate) || refreshRate <= 1d)
                 return null;
 
             return refreshRate;
@@ -309,6 +322,13 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
         {
             return null;
         }
+    }
+
+    private static bool IsPositiveFinite(double value)
+    {
+        return !double.IsNaN(value)
+            && !double.IsInfinity(value)
+            && value > 0d;
     }
 
     private static bool IsDisplayInfoAccessException(Exception ex)

@@ -19,8 +19,12 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
-  <!-- Include repo-root README in NuGet package -->
-  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+  <!--
+    Default: pack the repo-root README into NuGet packages.
+    Projects with their own README should add their own <None Include="README.md" Pack="true" PackagePath="/" />
+    and set <PackRepoRootReadme>false</PackRepoRootReadme> to prevent duplicates.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false' and '$(PackRepoRootReadme)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 

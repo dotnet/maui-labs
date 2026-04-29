@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-macos;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <PackageId>Microsoft.Maui.DevFlow.Agent</PackageId>
+    <Description>In-app agent for .NET MAUI automation. Exposes visual tree, element interactions, and screenshots via HTTP/JSON API.</Description>
+    <PackageTags>maui;automation;testing;visual-tree;agent</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(DevFlowMauiMinVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">
+    <PackageReference Include="Platform.Maui.MacOS" />
+  </ItemGroup>
+
+  <Import Project="..\DevFlowPackagePayload.targets" />
+
+</Project>

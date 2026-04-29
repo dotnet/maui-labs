@@ -136,17 +136,22 @@ maui-labs/
 
 ### GitHub Actions (PR validation)
 
-- Workflow: `.github/workflows/ci-devflow.yml` → calls `_build.yml`
-- **Matrix**: macOS + Windows
-- **Path-filtered**: only triggers for changed product paths
+Each product has its own workflow file: `.github/workflows/ci-{product}.yml`, calling the shared `_build.yml` reusable workflow.
+
+- **Matrix**: macOS + Windows (configurable per product via `os` input)
+- **Path-filtered**: only triggers for changed product paths + shared build infrastructure (`eng/**`, `Directory.Build.props`, etc.)
+- **`pull_request.types`**: Must always include `[opened, synchronize, reopened, edited]` — the `edited` type ensures CI re-runs when GitHub auto-retargets a PR after a stacked branch merges
 - Steps: restore → build → test → upload test results + packages
+
+Existing workflows: `ci-cli.yml`, `ci-devflow.yml`, `ci-linux-gtk4.yml`
 
 ### Azure DevOps (official builds)
 
-- Pipeline: `eng/pipelines/devflow-official.yml`
-- Builds, signs, and publishes to internal feeds via Maestro/DARC
+- **Single pipeline**: `eng/pipelines/devflow-official.yml` — all products build in parallel
+- Builds, signs (MicroBuild/ESRP), and publishes to internal feeds via Maestro/DARC
 - **MicroBuild signing** enabled (`enableMicrobuild: true`) — this enforces CFS network isolation
-- NuGet.org publishing: separate pipeline (`eng/pipelines/release-publish-nuget.yml`) with `networkIsolationPolicy: Permissive`
+- NuGet.org publishing: conditional stages per product, gated by boolean parameters (e.g., `publishDevFlowNuget`), using `1ES.PublishNuget@1`
+- Each product has: a parameter, a build job, and a publish stage
 
 ### NuGet Feed Configuration
 
@@ -157,11 +162,21 @@ NuGet.config uses **internal dnceng proxy feeds only** — no direct nuget.org r
 
 ## Adding a New Product
 
+Each product requires source setup **and** CI/CD configuration across two systems.
+
+### Source Setup
+
 1. Create `src/{NewProduct}/` with `Version.props`, project folders, test project, `{NewProduct}.slnf`
-2. Add projects to `MauiLabs.sln`
+2. Add projects to `MauiLabs.slnx`
 3. Add package versions to `Directory.Packages.props`
-4. Add path filter in `.github/workflows/ci.yml`
-5. Add signing entries in `eng/Signing.props` for any new third-party DLLs
+4. Add signing entries in `eng/Signing.props` for any new third-party DLLs
+
+### CI/CD Setup
+
+5. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
+6. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org.
+
+> **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 
 ## DevFlow MCP Tools
 

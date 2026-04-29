@@ -157,8 +157,179 @@ jobs:
           name: test-results-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/TestResults/**/*.xml
 
+      - name: Upload raw packages
+        if: inputs.pack
+        uses: actions/upload-artifact@v7
+        with:
+          name: raw-packages-${{ inputs.project-name }}-${{ matrix.os }}
+          path: artifacts/packages/**/*.nupkg
+
+  package:
+    if: inputs.pack
+    needs: build
+    runs-on: ${{ inputs.project-name == 'devflow' && 'macos-latest' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install workloads for DevFlow packaging
+        if: inputs.project-name == 'devflow'
+        run: dotnet workload install maui macos maui-tizen
+
+      - name: Download raw packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: raw-packages-${{ inputs.project-name }}-*
+          path: artifacts/raw-packages
+
+      - name: Prepare packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          project_name='${{ inputs.project-name }}'
+          raw_packages_root="$(pwd)/artifacts/raw-packages"
+          packages_output="$(pwd)/artifacts/packages"
+
+          find_raw_package_dir() {
+            local os_prefix="$1"
+            local -a matches=()
+            local candidate
+
+            shopt -s nullglob
+            for candidate in "$raw_packages_root/raw-packages-${project_name}-${os_prefix}"*; do
+              if [[ -d "$candidate" ]]; then
+                matches+=("$candidate")
+              fi
+            done
+            shopt -u nullglob
+
+            if [[ "${#matches[@]}" -eq 0 ]]; then
+              return 1
+            fi
+
+            if [[ "${#matches[@]}" -gt 1 ]]; then
+              echo "::error::Found multiple raw package directories for ${os_prefix}." >&2
+              printf '  %s\n' "${matches[@]}" >&2
+              return 2
+            fi
+
+            printf '%s\n' "${matches[0]}"
+          }
+
+          copy_devflow_passthrough_packages() {
+            local raw_package_dir="$1"
+            local copy_mode="$2"
+            local passthrough_packages
+
+            passthrough_packages="$(find "$raw_package_dir" -name '*.nupkg' \
+              ! -name 'Microsoft.Maui.DevFlow.Agent.[0-9]*.nupkg' \
+              ! -name 'Microsoft.Maui.DevFlow.Blazor.[0-9]*.nupkg' \
+              -type f \
+              | sort)"
+
+            if [[ -z "$passthrough_packages" ]]; then
+              return 1
+            fi
+
+            while IFS= read -r package; do
+              if [[ "$copy_mode" == "no-clobber" ]]; then
+                cp -n "$package" "$packages_output/"
+              else
+                cp "$package" "$packages_output/"
+              fi
+            done <<< "$passthrough_packages"
+          }
+
+          rm -rf "$packages_output"
+          mkdir -p "$packages_output"
+
+          if [[ "$project_name" == "devflow" ]]; then
+            if raw_windows="$(find_raw_package_dir "windows")"; then
+              :
+            else
+              status=$?
+              if [[ "$status" -eq 2 ]]; then
+                exit "$status"
+              fi
+              echo "::error::Expected Windows raw package artifact matching '$raw_packages_root/raw-packages-${project_name}-windows-*' was not found."
+              exit 1
+            fi
+
+            if ! copy_devflow_passthrough_packages "$raw_windows" "overwrite"; then
+              echo "::error::No pass-through .nupkg files found in '$raw_windows'."
+              exit 1
+            fi
+
+            if raw_macos="$(find_raw_package_dir "macos")"; then
+              copy_devflow_passthrough_packages "$raw_macos" "no-clobber" || true
+            else
+              status=$?
+              if [[ "$status" -eq 2 ]]; then
+                exit "$status"
+              fi
+            fi
+
+            common_msbuild_args=(
+              /p:RawPackageRoot="$raw_packages_root/"
+              /p:PackageOutputPath="$packages_output"
+              /p:EnableWindowsTargeting=true
+              /p:VersionSuffix="$CI_PACKAGE_VERSION_SUFFIX"
+            )
+
+            dotnet restore eng/Packaging/Microsoft.Maui.DevFlow.Agent.Package/Microsoft.Maui.DevFlow.Agent.Package.csproj "${common_msbuild_args[@]}"
+            dotnet pack eng/Packaging/Microsoft.Maui.DevFlow.Agent.Package/Microsoft.Maui.DevFlow.Agent.Package.csproj --no-restore --no-build -c Release "${common_msbuild_args[@]}"
+
+            dotnet restore eng/Packaging/Microsoft.Maui.DevFlow.Blazor.Package/Microsoft.Maui.DevFlow.Blazor.Package.csproj "${common_msbuild_args[@]}"
+            dotnet pack eng/Packaging/Microsoft.Maui.DevFlow.Blazor.Package/Microsoft.Maui.DevFlow.Blazor.Package.csproj --no-restore --no-build -c Release "${common_msbuild_args[@]}"
+          else
+            if raw_windows="$(find_raw_package_dir "windows")"; then
+              find "$raw_windows" -name '*.nupkg' -exec cp {} "$packages_output/" \;
+
+              if raw_macos="$(find_raw_package_dir "macos")"; then
+                find "$raw_macos" -name '*.nupkg' -exec cp -n {} "$packages_output/" \;
+              else
+                status=$?
+                if [[ "$status" -eq 2 ]]; then
+                  exit "$status"
+                fi
+              fi
+            else
+              status=$?
+              if [[ "$status" -eq 2 ]]; then
+                exit "$status"
+              fi
+              find "$raw_packages_root" -name '*.nupkg' -exec cp {} "$packages_output/" \;
+            fi
+          fi
+
+          produced_packages="$(find "$packages_output" -name '*.nupkg' -type f | sort)"
+          if [[ -z "$produced_packages" ]]; then
+            echo "::error::No .nupkg files produced in packages output."
+            exit 1
+          fi
+
+          if [[ "$project_name" == "devflow" ]]; then
+            expected_package_ids=(
+              Microsoft.Maui.DevFlow.Agent
+              Microsoft.Maui.DevFlow.Blazor
+            )
+
+            for package_id in "${expected_package_ids[@]}"; do
+              if ! find "$packages_output" -maxdepth 1 -name "$package_id.[0-9]*.nupkg" -type f | grep -q .; then
+                echo "::error::Expected package '$package_id' was not produced in packages output."
+                exit 1
+              fi
+            done
+          fi
+
+          printf '%s\n' "$produced_packages"
+
       - name: Upload packages
-        if: inputs.pack && (matrix.os == 'windows-latest' || !contains(fromJson(inputs.os), 'windows-latest'))
         uses: actions/upload-artifact@v7
         with:
           name: packages-${{ inputs.project-name }}
