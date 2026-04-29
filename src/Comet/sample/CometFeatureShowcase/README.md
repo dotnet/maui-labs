@@ -70,7 +70,7 @@ A comprehensive sample application demonstrating all major Comet features with a
 
 ```
 CometFeatureShowcase/
-├── CometFeatureShowcase.csproj      # Project file (targets net9.0-ios and net9.0-maccatalyst)
+├── CometFeatureShowcase.csproj      # Project file (targets net11.0-android, net11.0-ios, net11.0-maccatalyst)
 ├── GlobalUsings.cs                  # Global using statements
 ├── FeatureShowcaseApp.cs            # Shell and MauiApp configuration
 ├── Pages/
@@ -99,13 +99,13 @@ CometFeatureShowcase/
 Build for iOS Simulator (ARM64):
 ```bash
 cd /Users/jfversluis/Documents/GitHub/Comet
-dotnet build sample/CometFeatureShowcase/CometFeatureShowcase.csproj -f net9.0-ios -p:RuntimeIdentifier=iossimulator-arm64
+dotnet build sample/CometFeatureShowcase/CometFeatureShowcase.csproj -f net11.0-ios -p:RuntimeIdentifier=iossimulator-arm64
 ```
 
 Build for macCatalyst:
 ```bash
 cd /Users/jfversluis/Documents/GitHub/Comet
-dotnet build sample/CometFeatureShowcase/CometFeatureShowcase.csproj -f net9.0-maccatalyst
+dotnet build sample/CometFeatureShowcase/CometFeatureShowcase.csproj -f net11.0-maccatalyst
 ```
 
 Build all platforms:
@@ -135,7 +135,7 @@ dotnet build sample/CometFeatureShowcase/CometFeatureShowcase.csproj
 
 ## Technology Stack
 
-- **Framework**: .NET 9.0 with MAUI
+- **Framework**: .NET 11.0 (preview) with MAUI
 - **Language**: C#
 - **UI Framework**: Comet (reactive UI framework)
 - **Platforms**: iOS 16+ and macCatalyst 15+

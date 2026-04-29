@@ -23,7 +23,7 @@ From the repository root:
 ```bash
 dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 dotnet build src/Comet/Comet.csproj -c Release
-dotnet build sample/CometMauiApp/CometMauiApp.csproj -c Release -f net10.0-maccatalyst
+dotnet build sample/CometMauiApp/CometMauiApp.csproj -c Release -f net11.0-maccatalyst
 ```
 
 ## Style system entry points

@@ -6,10 +6,10 @@ build the framework, run tests, and submit changes to the Comet project.
 
 ## Prerequisites
 
-- **.NET 10 SDK** (version 10.0.101 or later with `latestFeature` roll-forward)
+- **.NET 11 SDK (preview)**
 - **MAUI workload** -- install with `dotnet workload install maui`
 - **macOS** is required for running the test suite (tests reference the
-  `net10.0-maccatalyst` build output)
+  `net11.0-maccatalyst` build output)
 - A code editor with C# support (Visual Studio, VS Code with C# Dev Kit, or
   Rider)
 
@@ -46,13 +46,14 @@ Comet/
 **`src/Comet/Comet.csproj`** -- The framework library. A single
 multi-targeted .NET MAUI project:
 
-- Target frameworks: `net10.0-android`, `net10.0-ios`,
-  `net10.0-maccatalyst`, `net10.0-windows10.0.19041.0`
+- Target frameworks: `net11.0-android`, `net11.0-ios`,
+  `net11.0-maccatalyst`, `net11.0-windows10.0.19041.0`
 - MAUI workload: `UseMaui = true`, `SingleProject = true`
 - Implicit usings: disabled (all `using` statements must be explicit)
-- MAUI dependencies: `Microsoft.Maui.Controls` v10.0.1
-- Platform minimums: iOS 15.0, macCatalyst 15.0, Android 21, Windows
-  10.0.17763.0
+- MAUI dependencies: `Microsoft.Maui.Controls` v11.0.0-preview.3.26207.5
+  (centralised in `eng/Versions.props` as `MicrosoftMauiControlsVersion`)
+- Platform minimums (enforced via `src/Comet/sample/Directory.Build.targets`):
+  iOS 17.0, macCatalyst 17.0, Android 23.0, Windows 10.0.17763.0
 
 **`src/Comet.SourceGenerator/Comet.SourceGenerator.csproj`** -- A Roslyn
 source generator that runs at compile time inside the C# compiler. Targets
@@ -60,11 +61,11 @@ source generator that runs at compile time inside the C# compiler. Targets
 v1.9.3 as its Mustache template engine. Language version set to `preview`.
 
 **`tests/Comet.Tests/Comet.Tests.csproj`** -- xUnit test project targeting
-`net10.0`. References the maccatalyst DLL directly:
+`net11.0`. References the maccatalyst DLL directly:
 
 ```xml
 <Reference Include="Comet">
-    <HintPath>..\..\src\Comet\bin\$(Configuration)\net10.0-maccatalyst\Comet.dll</HintPath>
+    <HintPath>..\..\src\Comet\bin\$(Configuration)\net11.0-maccatalyst\Comet.dll</HintPath>
 </Reference>
 ```
 
@@ -106,7 +107,7 @@ To build and run a sample:
 dotnet build sample/Comet.Sample/Comet.Sample.csproj -c Release
 
 # Run on Mac Catalyst
-dotnet build sample/CometMauiApp/CometMauiApp.csproj -t:Run -f net10.0-maccatalyst
+dotnet build sample/CometMauiApp/CometMauiApp.csproj -t:Run -f net11.0-maccatalyst
 ```
 
 

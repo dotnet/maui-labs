@@ -4,6 +4,8 @@
 
 Comet is an MVU framework for [.NET MAUI](https://learn.microsoft.com/dotnet/maui/what-is-maui). Write your entire UI in C# with a reactive state system that tracks what you read and updates only what changed. No XAML, no view models, no binding markup.
 
+> ⚠️ **Legacy pattern.** New code should use `Component<TState>` with `override View Render()` (shown later in this README). The `[Body]` attribute remains supported for compatibility.
+
 ```csharp
 public class MyApp : View
 {
@@ -206,7 +208,7 @@ public class GreetingView : View
 
 ## Getting Started
 
-Comet requires .NET 10 with the MAUI workload.
+Comet requires .NET 11 SDK (preview) with the MAUI workload.
 
 ```bash
 dotnet workload install maui

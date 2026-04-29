@@ -66,3 +66,13 @@ that don't have Comet equivalents.
 | CommunityToolkit.Maui | Toast notifications |
 | Syncfusion.Maui.Toolkit | Charts, effects, shimmer, text input, pull-to-refresh |
 | Comet | State management and navigation |
+
+## Build
+
+From the repository root:
+
+```bash
+dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
+dotnet build src/Comet/Comet.csproj -c Release
+dotnet build sample/CometProjectManager/CometProjectManager.csproj -c Release -f net11.0-maccatalyst
+```

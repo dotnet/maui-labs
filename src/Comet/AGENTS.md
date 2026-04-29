@@ -25,7 +25,11 @@ dotnet build sample/CometMauiApp/CometMauiApp.csproj -t:Run -f net11.0-maccataly
 
 ## Core Patterns
 
-### Pattern 1: Stateless view with [Body]
+### Pattern 1 (Legacy): Stateless view with [Body]
+
+> The canonical surface for new code is **Pattern 4** (`Component<TState>` with
+> `override View Render()`). The `[Body]` attribute is retained for backward
+> compatibility but new components should not use it.
 
 ```csharp
 using Comet;
@@ -464,6 +468,11 @@ image.Aspect(Aspect.AspectFill)
 ```
 
 ## Navigation
+
+> The examples below use the legacy `[Body]` pattern for brevity. Real
+> navigation code should prefer `Component<TState>` with `override View Render()`
+> (Pattern 4) — the navigation primitives (`NavigationView`, `Navigate`, `Pop`)
+> work identically with either pattern.
 
 ### Stack Navigation
 
