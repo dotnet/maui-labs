@@ -6,5 +6,6 @@
     <!-- Go projects are dev-time tools, not AOT-published -->
     <IsAotCompatible>false</IsAotCompatible>
     <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
   </PropertyGroup>
 </Project>
