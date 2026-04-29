@@ -127,7 +127,7 @@ sudo dnf install gtk4-devel webkitgtk6.0-devel \
   gobject-introspection-devel pkg-config
 ```
 
-> `gtk4-devel` and `webkitgtk6.0-devel` typically include the GObject Introspection typelibs on Fedora (no separate `gir1.2-*` packages needed).
+> On Fedora versions where these package names apply, `gtk4-devel` and `webkitgtk6.0-devel` typically include the GObject Introspection typelibs, so separate `gir1.2-*` packages are usually not needed.
 
 ## Quick Start
 
