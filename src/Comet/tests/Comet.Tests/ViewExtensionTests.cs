@@ -85,8 +85,10 @@ namespace Comet.Tests
 		public void FlowDirectionDefault()
 		{
 			var view = new Text("Hello");
-			// Default is LeftToRight (enum value 0) when not set
-			Assert.Equal(FlowDirection.LeftToRight, ((IView)view).FlowDirection);
+			// Default is MatchParent (enum value 0) when not set — IView.FlowDirection
+			// is read from environment via GetEnvironment<FlowDirection>(...) which
+			// returns default(FlowDirection) (= MatchParent) when no value is set.
+			Assert.Equal(FlowDirection.MatchParent, ((IView)view).FlowDirection);
 		}
 
 		[Fact]
