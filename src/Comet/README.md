@@ -135,16 +135,15 @@ dotnet workload install maui
 dotnet add package Microsoft.Maui.Comet
 ```
 
-Register Comet handlers in `MauiProgram.cs`:
+Wire up Comet in `MauiProgram.cs` with `UseCometApp<TApp>()` — it registers the handlers, sets the app type, and adds Comet's lifecycle hooks in one call:
 
 ```csharp
 var builder = MauiApp.CreateBuilder();
-builder.UseMauiApp<MyApp>();
-builder.UseCometHandlers();
+builder.UseCometApp<MyApp>();
 return builder.Build();
 ```
 
-Set the Comet root view in your `App` class:
+Define the root view in your `CometApp`:
 
 ```csharp
 public class MyApp : CometApp
