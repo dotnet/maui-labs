@@ -4,6 +4,8 @@ using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using WinSize = global::Windows.Foundation.Size;
+using WinRect = global::Windows.Foundation.Rect;
 
 namespace Comet.Handlers;
 
@@ -89,17 +91,17 @@ public partial class CometHostHandler : ViewHandler<CometHost, CometHostHandler.
 			_virtualView = null;
 		}
 
-		protected override global::Microsoft.UI.Xaml.Size ArrangeOverride(global::Microsoft.UI.Xaml.Size finalSize)
+		protected override WinSize ArrangeOverride(WinSize finalSize)
 		{
 			if (_contentElement is not null)
 			{
 				_virtualView?.Arrange(new Microsoft.Maui.Graphics.Rect(0, 0, finalSize.Width, finalSize.Height));
-				_contentElement.Arrange(new global::Microsoft.UI.Xaml.Rect(0, 0, finalSize.Width, finalSize.Height));
+				_contentElement.Arrange(new WinRect(0, 0, finalSize.Width, finalSize.Height));
 			}
 			return base.ArrangeOverride(finalSize);
 		}
 
-		protected override global::Microsoft.UI.Xaml.Size MeasureOverride(global::Microsoft.UI.Xaml.Size availableSize)
+		protected override WinSize MeasureOverride(WinSize availableSize)
 		{
 			if (_contentElement is not null)
 			{
