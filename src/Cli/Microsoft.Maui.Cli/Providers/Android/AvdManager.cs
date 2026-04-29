@@ -144,7 +144,10 @@ public class AvdManager
 						}
 						else if (line.StartsWith("hw.device.manufacturer=", StringComparison.Ordinal))
 						{
-							manufacturer = line.Substring("hw.device.manufacturer=".Length).Trim();
+							// Normalize blank values (key present but empty) to null so the
+							// downstream ?? fallbacks in DeviceManager can apply "Google".
+							var val = line.Substring("hw.device.manufacturer=".Length).Trim();
+							manufacturer = string.IsNullOrEmpty(val) ? null : val;
 						}
 					}
 				}

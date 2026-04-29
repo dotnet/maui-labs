@@ -133,8 +133,10 @@ public class DeviceManager : IDeviceManager
 					{
 						Name = displayName,
 						EmulatorId = avd.Name,
-						Model = avd.DeviceProfile ?? running.Model,
-						Manufacturer = avd.Manufacturer ?? running.Manufacturer ?? "Google",
+						Model = string.IsNullOrWhiteSpace(avd.DeviceProfile) ? running.Model : avd.DeviceProfile,
+						Manufacturer = !string.IsNullOrWhiteSpace(avd.Manufacturer)
+							? avd.Manufacturer
+							: (running.Manufacturer ?? "Google"),
 						SubModel = subModel,
 						State = state,
 						IsRunning = isRunning,
