@@ -88,8 +88,9 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
-              displayName: Install MAUI workloads
+            # DevFlow packages are built on Windows, including Apple library TFMs.
+            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen
+              displayName: Install MAUI and Apple workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
