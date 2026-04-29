@@ -2,6 +2,7 @@ using System;
 using Microsoft.Maui;
 using Microsoft.Maui.HotReload;
 using Microsoft.Maui.Graphics;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Comet.Windows
@@ -74,7 +75,7 @@ namespace Comet.Windows
 			}
 		}
 
-		protected override Microsoft.UI.Xaml.Size MeasureOverride(Microsoft.UI.Xaml.Size availableSize)
+		protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
 		{
 			if (_view is null)
 				return availableSize;
@@ -83,10 +84,10 @@ namespace Comet.Windows
 			var height = availableSize.Height > 0 ? availableSize.Height : 1000;
 
 			var size = _view.Measure(width, height);
-			return new Microsoft.UI.Xaml.Size(size.Width, size.Height);
+			return new Windows.Foundation.Size(size.Width, size.Height);
 		}
 
-		protected override Microsoft.UI.Xaml.Size ArrangeOverride(Microsoft.UI.Xaml.Size finalSize)
+		protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize)
 		{
 			if (_view is null)
 				return finalSize;
@@ -95,7 +96,7 @@ namespace Comet.Windows
 
 			if (currentPlatformView is not null)
 			{
-				currentPlatformView.Arrange(new Microsoft.UI.Xaml.Rect(0, 0, finalSize.Width, finalSize.Height));
+				currentPlatformView.Arrange(new Windows.Foundation.Rect(0, 0, finalSize.Width, finalSize.Height));
 			}
 
 			return finalSize;
