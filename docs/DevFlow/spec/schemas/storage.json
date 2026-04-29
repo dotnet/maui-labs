@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "storage.json",
   "title": "Storage Models",
-  "description": "Storage models for application preferences and secure storage operations.",
+  "description": "Storage models for application preferences, secure storage, and sandboxed file storage operations.",
   "$defs": {
     "PreferenceValueType": {
       "type": "string",
@@ -75,6 +75,256 @@
         "value": {
           "type": "string",
           "description": "The string value to store securely."
+        }
+      }
+    },
+    "StorageRoot": {
+      "type": "object",
+      "description": "A logical app storage root advertised by the agent. Absolute device paths are intentionally not exposed.",
+      "required": [
+        "id",
+        "displayName",
+        "kind",
+        "isWritable",
+        "isReadOnly",
+        "isPersistent",
+        "isBackedUp",
+        "mayBeClearedBySystem",
+        "isUserVisible",
+        "supportedOperations"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable root id to pass as the root query parameter. The current shared implementation advertises appData."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Human-readable root name."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Portable root kind, such as appData. Future platform roots may use additional kinds."
+        },
+        "isWritable": {
+          "type": "boolean",
+          "description": "Whether files can be uploaded or deleted in this root."
+        },
+        "isReadOnly": {
+          "type": "boolean",
+          "description": "Whether this root is read-only."
+        },
+        "isPersistent": {
+          "type": "boolean",
+          "description": "Whether data is expected to persist across app restarts."
+        },
+        "isBackedUp": {
+          "type": "boolean",
+          "description": "Whether the platform typically backs up this root."
+        },
+        "mayBeClearedBySystem": {
+          "type": "boolean",
+          "description": "Whether the operating system may purge files in this root."
+        },
+        "isUserVisible": {
+          "type": "boolean",
+          "description": "Whether the root is normally visible to users outside the app."
+        },
+        "supportedOperations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "list",
+              "download",
+              "upload",
+              "delete"
+            ]
+          },
+          "description": "File operations supported by this root."
+        }
+      }
+    },
+    "StorageRootsResponse": {
+      "type": "object",
+      "description": "Logical file storage roots advertised by the agent. The current shared implementation returns only appData.",
+      "required": [
+        "roots"
+      ],
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StorageRoot"
+          }
+        }
+      }
+    },
+    "FileEntry": {
+      "type": "object",
+      "description": "A file or directory under a storage root.",
+      "required": [
+        "name",
+        "type",
+        "lastModified"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Entry name, not including parent directories."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "file",
+            "directory"
+          ],
+          "description": "Entry kind."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes. Present only for file entries."
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the entry was last modified."
+        }
+      }
+    },
+    "FileListResponse": {
+      "type": "object",
+      "description": "Directory listing under a logical storage root. Absolute device paths are never returned.",
+      "required": [
+        "root",
+        "path",
+        "entries"
+      ],
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Logical storage root id used for the listing."
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized relative directory path. Empty string represents the selected storage root."
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileEntry"
+          }
+        }
+      }
+    },
+    "FileDownloadResponse": {
+      "type": "object",
+      "description": "Downloaded file content and metadata.",
+      "required": [
+        "root",
+        "path",
+        "size",
+        "lastModified",
+        "contentBase64"
+      ],
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Logical storage root id used for the download."
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized relative file path."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes."
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the file was last modified."
+        },
+        "contentBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "description": "File content encoded as base64."
+        }
+      }
+    },
+    "FileUploadRequest": {
+      "type": "object",
+      "description": "Request to upload file content under a storage root.",
+      "required": [
+        "contentBase64"
+      ],
+      "properties": {
+        "contentBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "description": "File content encoded as base64."
+        }
+      }
+    },
+    "FileUploadResponse": {
+      "type": "object",
+      "description": "Uploaded file metadata.",
+      "required": [
+        "success",
+        "root",
+        "path",
+        "size",
+        "lastModified"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string",
+          "description": "Logical storage root id used for the upload."
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized relative file path."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes."
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the file was last modified."
+        }
+      }
+    },
+    "FileDeleteResponse": {
+      "type": "object",
+      "description": "Deleted file metadata.",
+      "required": [
+        "success",
+        "root",
+        "path"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string",
+          "description": "Logical storage root id used for the delete."
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized relative file path."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable delete confirmation."
         }
       }
     }

@@ -24,6 +24,8 @@
   <!-- DevFlow dependencies (pinned, third party) -->
   <ItemGroup Label="DevFlow">
     <PackageVersion Include="Fizzler" Version="$(FizzlerVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
     <PackageVersion Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
     <PackageVersion Include="Spectre.Console" Version="$(SpectreConsoleVersion)" />
     <PackageVersion Include="Spectre.Console.Testing" Version="$(SpectreConsoleVersion)" />
@@ -58,6 +60,9 @@
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit" Version="$(XunitVersion)" />
     <PackageVersion Include="coverlet.collector" Version="$(CoverletCollectorVersion)" />
+    <PackageVersion Include="Microsoft.OpenApi" Version="$(MicrosoftOpenApiVersion)" />
+    <PackageVersion Include="YamlDotNet" Version="$(YamlDotNetVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
   </ItemGroup>
 
   <!-- Source Link -->

@@ -93,12 +93,14 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui apple simulator stop` | Shut down a simulator |
 | `maui apple simulator delete` | Delete a simulator |
 | **DevFlow** | |
+| `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
+| `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
 | `maui devflow logs` | Fetch and stream application logs |
 | `maui devflow network` | Monitor HTTP network requests |
-| `maui devflow storage` | Access app preferences and secure storage |
+| `maui devflow storage` | Access app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `maui devflow agent` | Discover and inspect connected DevFlow agents |
 | `maui devflow broker` | Manage the DevFlow agent broker (start, stop, status, log) |
 | `maui devflow batch` | Execute commands from stdin for scripting |
@@ -106,8 +108,23 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow diagnose` | Check DevFlow agent health |
 | `maui devflow wait` | Wait for an agent to connect |
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
+| **Profiling** | |
+| `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
 
 Run `maui <command> --help` for detailed options on any command.
+
+DevFlow file commands can use local files directly:
+
+```bash
+# Upload local bytes into the selected app storage root
+maui devflow storage files upload logs/app.log --file ./app.log
+
+# Download to a directory, preserving the device file name
+maui devflow storage files download logs/app.log --output ./downloads/
+
+# Download to an explicit local file name
+maui devflow storage files download logs/app.log --output ./downloads/app-copy.log
+```
 
 ## Global Options
 
@@ -138,7 +155,7 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 | Platform | Status | Notes |
 |----------|--------|-------|
 | macOS | ✅ | Full support including Apple commands (Xcode, simulators, runtimes) |
-| Windows | ✅ | Android and Windows SDK commands |
+| Windows | ✅ | Android SDK, JDK, and emulator commands |
 | Linux | ✅ | Android commands |
 
 ## Development

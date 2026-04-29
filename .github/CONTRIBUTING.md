@@ -58,15 +58,38 @@ For the full repo, open `MauiLabs.sln`.
 
 ## Adding a New Product
 
+### 1. Source code
+
 1. Create `src/{NewProduct}/` with:
    - `Version.props` (copy from an existing product)
    - Project folders with `.csproj` files
    - Test project
    - `{NewProduct}.slnf` solution filter
-2. Add projects to `MauiLabs.sln`
+2. Add projects to `MauiLabs.slnx`
 3. Add any new package versions to `Directory.Packages.props`
-4. Add path filter entry in `.github/workflows/ci.yml`
-5. Create `.github/workflows/release-{newproduct}.yml`
+
+### 2. GitHub Actions CI workflow
+
+Create `.github/workflows/ci-{newproduct}.yml` that calls the reusable `_build.yml` workflow.
+
+> See the **"CI/CD — New Product Checklist"** section in `.github/copilot-instructions.md` for the complete copy-paste template with all required inputs and decision guidance.
+
+Key points:
+- One workflow file per product, path-filtered to its source folder
+- Always include `types: [opened, synchronize, reopened, edited]` on `pull_request` (the `edited` type ensures CI re-runs when a PR is auto-retargeted after a stacked branch merges)
+
+### 3. Azure DevOps official pipeline
+
+The official build/sign/publish pipeline is `eng/pipelines/devflow-official.yml`. For each new product add:
+1. A **boolean parameter** to gate NuGet.org publishing
+2. A **build job** in the `build` stage (parallel with existing jobs)
+3. A **conditional publish stage** that filters your product's `.nupkg` files and pushes to NuGet.org
+
+> See `.github/copilot-instructions.md` for complete annotated YAML snippets for all three blocks.
+
+### 4. Signing
+
+Add entries in `eng/Signing.props` for any new third-party DLLs (`3PartySHA2`).
 
 ## Versioning
 

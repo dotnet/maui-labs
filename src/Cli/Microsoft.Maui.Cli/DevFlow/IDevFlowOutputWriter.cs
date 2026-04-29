@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Spectre.Console;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
@@ -9,6 +10,7 @@ public interface IDevFlowOutputWriter
 {
 	bool ResolveJsonMode(bool jsonFlag, bool noJsonFlag);
 	void WriteResult<T>(T data, bool json, Action<T>? humanFormatter = null);
+	void WriteResult<T>(T data, bool json, Action<T, IAnsiConsole> humanFormatter);
 	void WriteRawJson(string jsonString);
 	void WriteJsonElement(JsonElement element, bool json);
 	void WriteActionResult(bool success, string action, string? elementId, bool json, string? humanMessage = null);

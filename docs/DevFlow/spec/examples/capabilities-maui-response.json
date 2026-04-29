@@ -44,6 +44,11 @@
       "version": 1,
       "features": ["accelerometer", "gyroscope", "magnetometer"]
     },
+    "device.jobs": {
+      "version": 1,
+      "features": ["list", "run"],
+      "supported": true
+    },
     "storage.preferences": {
       "version": 1,
       "features": ["get", "set", "delete", "clear"]

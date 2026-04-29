@@ -20,6 +20,10 @@ if: >-
   github.event_name == 'workflow_dispatch' ||
   (github.event_name == 'issue_comment' && github.event.issue.pull_request)
 
+concurrency:
+  group: "expert-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.pr_number || github.run_id }}"
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pull-requests: read

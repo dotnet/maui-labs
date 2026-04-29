@@ -34,6 +34,9 @@ on:
         default: ''
         description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
 
+env:
+  CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
+
 jobs:
   build:
     strategy:
@@ -54,7 +57,7 @@ jobs:
 
       - name: Install workloads
         if: inputs.install-workloads
-        run: dotnet workload install maui macos maui-tizen
+        run: dotnet workload install maui ios maccatalyst macos maui-tizen
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && matrix.os == 'windows-latest'
@@ -72,6 +75,7 @@ jobs:
           -configuration Release
           -prepareMachine
           -projects %CD%\${{ inputs.project-path }}
+          /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
         shell: cmd
 
       - name: Build and Test (macOS)
@@ -81,6 +85,7 @@ jobs:
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
+          /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
       - name: Build and Test (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -89,6 +94,7 @@ jobs:
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
+          /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
       - name: NativeAOT publish smoke test (macOS)
         if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'
@@ -151,9 +157,38 @@ jobs:
           name: test-results-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/TestResults/**/*.xml
 
+      - name: Validate packages
+        if: inputs.pack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          produced_packages="$(find artifacts/packages -name '*.nupkg' -type f | sort || true)"
+          if [[ -z "$produced_packages" ]]; then
+            echo "::error::No .nupkg files produced in packages output."
+            exit 1
+          fi
+
+          if [[ '${{ inputs.project-name }}' == 'devflow' ]]; then
+            expected_package_ids=(
+              Microsoft.Maui.DevFlow.Agent
+              Microsoft.Maui.DevFlow.Blazor
+            )
+
+            for package_id in "${expected_package_ids[@]}"; do
+              if ! find artifacts/packages -name "$package_id.[0-9]*.nupkg" -type f | grep -q .; then
+                echo "::error::Expected package '$package_id' was not produced in packages output."
+                exit 1
+              fi
+            done
+          fi
+
+          printf '%s\n' "$produced_packages"
+
       - name: Upload packages
-        if: inputs.pack && (matrix.os == 'windows-latest' || !contains(fromJson(inputs.os), 'windows-latest'))
+        if: inputs.pack
         uses: actions/upload-artifact@v7
         with:
-          name: packages-${{ inputs.project-name }}
+          name: packages-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/packages/**/*.nupkg
+          if-no-files-found: error

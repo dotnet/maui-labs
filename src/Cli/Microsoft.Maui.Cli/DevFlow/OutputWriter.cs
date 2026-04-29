@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Spectre.Console;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
@@ -10,6 +11,18 @@ namespace Microsoft.Maui.Cli.DevFlow;
 /// </summary>
 class DevFlowOutputWriter : IDevFlowOutputWriter
 {
+    readonly IAnsiConsole _console;
+
+    public DevFlowOutputWriter()
+        : this(AnsiConsole.Console)
+    {
+    }
+
+    internal DevFlowOutputWriter(IAnsiConsole console)
+    {
+        _console = console;
+    }
+
     /// <summary>
     /// Resolves whether JSON output mode is active.
     /// Priority: --no-json flag > --json flag > MAUIDEVFLOW_OUTPUT env var > TTY auto-detection.
@@ -46,6 +59,24 @@ class DevFlowOutputWriter : IDevFlowOutputWriter
         else
         {
             Console.WriteLine(CliJson.SerializeUntyped(data, indented: true));
+        }
+    }
+
+    /// <summary>
+    /// Write a successful result to stdout.
+    /// In JSON mode, serializes the data. In human mode, calls the rich humanFormatter.
+    /// </summary>
+    public void WriteResult<T>(T data, bool json, Action<T, IAnsiConsole> humanFormatter)
+    {
+        ArgumentNullException.ThrowIfNull(humanFormatter);
+
+        if (json)
+        {
+            Console.WriteLine(CliJson.SerializeUntyped(data, indented: true));
+        }
+        else
+        {
+            humanFormatter(data, _console);
         }
     }
 

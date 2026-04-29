@@ -20,6 +20,7 @@
   </Folder>
   <Folder Name="/src/DevFlow/">
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Analyzers/Microsoft.Maui.DevFlow.Analyzers.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk/Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj" />

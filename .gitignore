@@ -422,3 +422,7 @@ FodyWeavers.xsd
 *.msp
 .DS_Store
 .dotnet
+
+# Personal / per-machine agent state
+.claude/settings.local.json
+.claude/skills/**/.skill-version

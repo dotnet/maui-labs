@@ -49,7 +49,7 @@ internal static class MockAgentResponses
           "network": { "supported": true, "features": ["list", "detail", "clear"] },
           "logs": { "supported": true, "features": ["list", "stream"] },
           "sensors": { "supported": true, "features": ["list", "start", "stop"] },
-          "storage": { "supported": true, "features": ["preferences", "secure-storage"] },
+          "storage": { "supported": true, "features": ["preferences", "secure-storage", "roots", "files"] },
           "profiler": { "supported": true, "features": ["capabilities", "sessions", "samples"] }
         }
         """;
@@ -138,6 +138,60 @@ internal static class MockAgentResponses
         {
           "key": "token",
           "value": "secret-value"
+        }
+        """;
+
+    public const string StorageRoots = """
+        {
+          "roots": [
+            {
+              "id": "appData",
+              "displayName": "App data",
+              "kind": "appData",
+              "isWritable": true,
+              "isReadOnly": false,
+              "isPersistent": true,
+              "isBackedUp": true,
+              "mayBeClearedBySystem": false,
+              "isUserVisible": false,
+              "supportedOperations": ["list", "download", "upload", "delete"]
+            }
+          ]
+        }
+        """;
+
+    public const string FilesList = """
+        {
+          "root": "appData",
+          "path": "logs",
+          "entries": [
+            {
+              "name": "app.log",
+              "type": "file",
+              "size": 5,
+              "lastModified": "2026-04-01T12:00:00Z"
+            }
+          ]
+        }
+        """;
+
+    public static string FileDownload(string path) => $$"""
+        {
+          "root": "appData",
+          "path": "{{path}}",
+          "size": 5,
+          "lastModified": "2026-04-01T12:00:00Z",
+          "contentBase64": "aGVsbG8="
+        }
+        """;
+
+    public static string FileUpload(string path) => $$"""
+        {
+          "success": true,
+          "root": "appData",
+          "path": "{{path}}",
+          "size": 5,
+          "lastModified": "2026-04-01T12:00:00Z"
         }
         """;
 

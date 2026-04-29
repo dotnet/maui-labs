@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.claude/skills/**'
       - 'src/Cli/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
       - 'eng/**'
@@ -13,8 +14,10 @@ on:
       - 'global.json'
       - 'NuGet.config'
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
+      - '.claude/skills/**'
       - 'src/Cli/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
       - 'eng/**'

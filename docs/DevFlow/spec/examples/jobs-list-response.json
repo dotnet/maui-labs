@@ -1,0 +1,18 @@
+{
+  "platform": "iOS",
+  "type": "BGTaskScheduler",
+  "supported": true,
+  "runSupported": true,
+  "jobs": [
+    {
+      "identifier": "com.example.refresh",
+      "type": "refresh",
+      "earliestBeginDate": ""
+    },
+    {
+      "identifier": "com.example.processing",
+      "type": "processing",
+      "earliestBeginDate": "2026-04-27 13:00:00 +0000"
+    }
+  ]
+}
