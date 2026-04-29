@@ -1,0 +1,4 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)..\build\Microsoft.Maui.TestApp.Build.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\build\Microsoft.Maui.TestApp.Build.targets')" />
+</Project>

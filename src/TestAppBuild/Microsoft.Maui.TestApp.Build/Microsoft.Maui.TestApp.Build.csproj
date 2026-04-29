@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+
+    <PackageId>Microsoft.Maui.TestApp.Build</PackageId>
+    <Description>MSBuild package for declaring app projects as test dependencies and exposing built app artifacts to test projects.</Description>
+    <PackageTags>maui;testing;msbuild;android;ios;maccatalyst;macos;windows</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="/" />
+    <None Include="build\**" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive\" />
+  </ItemGroup>
+
+</Project>

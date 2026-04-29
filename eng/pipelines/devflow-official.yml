@@ -20,6 +20,10 @@ parameters:
   displayName: 'Publish Cli packages to NuGet.org'
   type: boolean
   default: false
+- name: publishTestAppBuildNuget
+  displayName: 'Publish TestAppBuild packages to NuGet.org'
+  type: boolean
+  default: false
 - name: publishLinuxGtk4Nuget
   displayName: 'Publish Linux GTK4 packages to NuGet.org'
   type: boolean
@@ -124,6 +128,30 @@ extends:
                 -projects $(Build.SourcesDirectory)\src\Cli\Cli.slnf
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
+
+          - job: TestAppBuild
+            displayName: TestAppBuild - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\TestAppBuild\TestAppBuild.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test TestAppBuild
 
           # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
@@ -310,6 +338,61 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/CliPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/CliPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish TestAppBuild packages to NuGet.org
+    - ${{ if eq(parameters.publishTestAppBuildNuget, true) }}:
+      - stage: publish_testappbuild_nuget
+        displayName: 'Publish TestAppBuild to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare TestAppBuild Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish TestAppBuild Packages
+              targetPath: '$(Pipeline.Workspace)/TestAppBuildPackages'
+              artifactName: TestAppBuildPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/TestAppBuildPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.TestApp.Build.*.nupkg' '$(Pipeline.Workspace)/TestAppBuildPackages/' -Verbose
+            displayName: Filter TestAppBuild packages
+
+        - job: PublishNuGet
+          displayName: 'Push TestAppBuild to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: TestAppBuildPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/TestAppBuildPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push TestAppBuild to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/TestAppBuildPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/TestAppBuildPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 

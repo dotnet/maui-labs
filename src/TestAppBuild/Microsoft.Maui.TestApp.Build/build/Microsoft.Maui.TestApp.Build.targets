@@ -1,0 +1,294 @@
+<Project>
+
+  <UsingTask TaskName="WriteMauiTestAppManifest"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Artifacts ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <ManifestPath ParameterType="System.String" Required="true" />
+      <SourcePath ParameterType="System.String" Required="false" />
+      <GenerateSource ParameterType="System.Boolean" Required="false" />
+      <SourceNamespace ParameterType="System.String" Required="false" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+string JsonEscape(string value)
+{
+    if (string.IsNullOrEmpty(value))
+        return string.Empty;
+
+    var builder = new StringBuilder(value.Length + 8);
+    foreach (var ch in value)
+    {
+        switch (ch)
+        {
+            case '\\':
+                builder.Append("\\\\");
+                break;
+            case '"':
+                builder.Append("\\\"");
+                break;
+            case '\b':
+                builder.Append("\\b");
+                break;
+            case '\f':
+                builder.Append("\\f");
+                break;
+            case '\n':
+                builder.Append("\\n");
+                break;
+            case '\r':
+                builder.Append("\\r");
+                break;
+            case '\t':
+                builder.Append("\\t");
+                break;
+            default:
+                if (char.IsControl(ch))
+                    builder.Append("\\u").Append(((int)ch).ToString("x4"));
+                else
+                    builder.Append(ch);
+                break;
+        }
+    }
+
+    return builder.ToString();
+}
+
+string CSharpEscape(string value)
+{
+    if (string.IsNullOrEmpty(value))
+        return string.Empty;
+
+    return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+}
+
+string Metadata(Microsoft.Build.Framework.ITaskItem item, string name)
+{
+    var value = item.GetMetadata(name);
+    return value ?? string.Empty;
+}
+
+var manifestDirectory = Path.GetDirectoryName(ManifestPath);
+if (!string.IsNullOrEmpty(manifestDirectory))
+    Directory.CreateDirectory(manifestDirectory);
+
+using (var writer = new StreamWriter(ManifestPath, false, new UTF8Encoding(false)))
+{
+    writer.WriteLine("{");
+    writer.WriteLine("  \"version\": 1,");
+    writer.WriteLine("  \"apps\": [");
+
+    for (var i = 0; i < Artifacts.Length; i++)
+    {
+        var artifact = Artifacts[i];
+        var referenceName = Metadata(artifact, "ReferenceName");
+        if (string.IsNullOrEmpty(referenceName))
+            referenceName = Path.GetFileNameWithoutExtension(Metadata(artifact, "ProjectPath"));
+
+        writer.WriteLine("    {");
+        writer.WriteLine("      \"name\": \"" + JsonEscape(referenceName) + "\",");
+        writer.WriteLine("      \"path\": \"" + JsonEscape(artifact.ItemSpec) + "\",");
+        writer.WriteLine("      \"projectPath\": \"" + JsonEscape(Metadata(artifact, "ProjectPath")) + "\",");
+        writer.WriteLine("      \"targetFramework\": \"" + JsonEscape(Metadata(artifact, "TargetFramework")) + "\",");
+        writer.WriteLine("      \"targetPlatformIdentifier\": \"" + JsonEscape(Metadata(artifact, "TargetPlatformIdentifier")) + "\",");
+        writer.WriteLine("      \"runtimeIdentifier\": \"" + JsonEscape(Metadata(artifact, "RuntimeIdentifier")) + "\",");
+        writer.WriteLine("      \"configuration\": \"" + JsonEscape(Metadata(artifact, "Configuration")) + "\",");
+        writer.WriteLine("      \"applicationId\": \"" + JsonEscape(Metadata(artifact, "ApplicationId")) + "\",");
+        writer.WriteLine("      \"bundleIdentifier\": \"" + JsonEscape(Metadata(artifact, "BundleIdentifier")) + "\",");
+        writer.WriteLine("      \"packageName\": \"" + JsonEscape(Metadata(artifact, "PackageName")) + "\",");
+        writer.WriteLine("      \"artifactType\": \"" + JsonEscape(Metadata(artifact, "ArtifactType")) + "\",");
+        writer.WriteLine("      \"installable\": " + (string.Equals(Metadata(artifact, "Installable"), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false") + ",");
+        writer.WriteLine("      \"launchable\": " + (string.Equals(Metadata(artifact, "Launchable"), "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false"));
+        writer.Write("    }");
+        writer.WriteLine(i == Artifacts.Length - 1 ? string.Empty : ",");
+    }
+
+    writer.WriteLine("  ]");
+    writer.WriteLine("}");
+}
+
+if (GenerateSource && !string.IsNullOrEmpty(SourcePath))
+{
+    var sourceDirectory = Path.GetDirectoryName(SourcePath);
+    if (!string.IsNullOrEmpty(sourceDirectory))
+        Directory.CreateDirectory(sourceDirectory);
+
+    var sourceNamespace = string.IsNullOrWhiteSpace(SourceNamespace) ? "Microsoft.Maui.TestApp.Build" : SourceNamespace;
+    using (var writer = new StreamWriter(SourcePath, false, new UTF8Encoding(false)))
+    {
+        writer.WriteLine("// <auto-generated />");
+        writer.WriteLine("namespace " + sourceNamespace + ";");
+        writer.WriteLine();
+        writer.WriteLine("internal static class MauiTestApps");
+        writer.WriteLine("{");
+        writer.WriteLine("    public const string ManifestPath = \"" + CSharpEscape(ManifestPath) + "\";");
+        writer.WriteLine("}");
+    }
+}
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <PropertyGroup>
+    <MauiTestAppAppTargetsPath Condition="'$(MauiTestAppAppTargetsPath)' == ''">$(MSBuildThisFileDirectory)Microsoft.Maui.TestApp.Build.App.targets</MauiTestAppAppTargetsPath>
+    <MauiTestAppOutputRoot Condition="'$(MauiTestAppOutputRoot)' == ''">$(BaseIntermediateOutputPath)maui-test-apps\</MauiTestAppOutputRoot>
+  </PropertyGroup>
+
+  <Target Name="_CollectMauiTestAppProjectReferences"
+          BeforeTargets="AssignProjectConfiguration;ResolveProjectReferences">
+    <ItemGroup>
+      <MauiTestAppProjectReference Remove="@(MauiTestAppProjectReference)" />
+      <MauiTestAppProjectReference Include="@(ProjectReference)"
+                                   Condition="'%(ProjectReference.MauiTestApp)' == 'true' or '%(ProjectReference.OutputItemType)' == 'MauiTestAppReference'" />
+      <ProjectReference Remove="@(MauiTestAppProjectReference)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MauiTestAppBuildOnBuild"
+          BeforeTargets="$(MauiTestAppBuildBeforeTargets)"
+          DependsOnTargets="BuildMauiTestApps;GenerateMauiTestAppManifest"
+          Condition="'$(MauiTestAppBuildEnabled)' == 'true' and '$(MauiTestAppBuildOnBuild)' == 'true'" />
+
+  <Target Name="_MauiTestAppBuildOnTest"
+          BeforeTargets="VSTest"
+          DependsOnTargets="BuildMauiTestApps;GenerateMauiTestAppManifest"
+          Condition="'$(MauiTestAppBuildEnabled)' == 'true' and '$(MauiTestAppBuildOnTest)' == 'true'" />
+
+  <Target Name="ResolveMauiTestAppReferences"
+          DependsOnTargets="_CollectMauiTestAppProjectReferences">
+    <ItemGroup>
+      <_MauiTestAppProjectReference Include="@(MauiTestAppProjectReference)">
+        <_MauiTestAppUserProperties>%(MauiTestAppProjectReference.Properties)</_MauiTestAppUserProperties>
+        <_MauiTestAppUserAdditionalProperties>%(MauiTestAppProjectReference.AdditionalProperties)</_MauiTestAppUserAdditionalProperties>
+        <Properties></Properties>
+      </_MauiTestAppProjectReference>
+
+      <_ResolvedMauiTestAppReference Include="@(_MauiTestAppProjectReference)">
+        <ReferenceName Condition="'%(_MauiTestAppProjectReference.ReferenceName)' != ''">%(_MauiTestAppProjectReference.ReferenceName)</ReferenceName>
+        <ReferenceName Condition="'%(_MauiTestAppProjectReference.ReferenceName)' == ''">%(_MauiTestAppProjectReference.Filename)</ReferenceName>
+        <ProjectPath>%(_MauiTestAppProjectReference.FullPath)</ProjectPath>
+        <TargetFramework Condition="'%(_MauiTestAppProjectReference.TargetFramework)' != ''">%(_MauiTestAppProjectReference.TargetFramework)</TargetFramework>
+        <TargetFramework Condition="'%(_MauiTestAppProjectReference.TargetFramework)' == '' and '%(_MauiTestAppProjectReference.SetTargetFramework)' != ''">$([System.Text.RegularExpressions.Regex]::Match('%(_MauiTestAppProjectReference.SetTargetFramework)', 'TargetFramework=([^;]+)').Groups[1].Value)</TargetFramework>
+        <Configuration Condition="'%(_MauiTestAppProjectReference.Configuration)' != ''">%(_MauiTestAppProjectReference.Configuration)</Configuration>
+        <Configuration Condition="'%(_MauiTestAppProjectReference.Configuration)' == ''">$(Configuration)</Configuration>
+        <RuntimeIdentifier>%(_MauiTestAppProjectReference.RuntimeIdentifier)</RuntimeIdentifier>
+        <Platform>%(_MauiTestAppProjectReference.Platform)</Platform>
+        <BuildTarget Condition="'%(_MauiTestAppProjectReference.BuildTarget)' != ''">%(_MauiTestAppProjectReference.BuildTarget)</BuildTarget>
+        <BuildTarget Condition="'%(_MauiTestAppProjectReference.BuildTarget)' == ''">$(MauiTestAppInnerBuildTarget)</BuildTarget>
+        <ArtifactName Condition="'%(_MauiTestAppProjectReference.ArtifactName)' != ''">%(_MauiTestAppProjectReference.ArtifactName)</ArtifactName>
+        <ArtifactName Condition="'%(_MauiTestAppProjectReference.ArtifactName)' == ''">%(_MauiTestAppProjectReference.Filename)</ArtifactName>
+        <ExpectedArtifact>%(_MauiTestAppProjectReference.ExpectedArtifact)</ExpectedArtifact>
+        <SetPlatformOutputPaths Condition="'%(_MauiTestAppProjectReference.SetPlatformOutputPaths)' != ''">%(_MauiTestAppProjectReference.SetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <SetPlatformOutputPaths Condition="'%(_MauiTestAppProjectReference.SetPlatformOutputPaths)' == ''">$(MauiTestAppSetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <OutputRoot Condition="'%(_MauiTestAppProjectReference.OutputRoot)' != ''">%(_MauiTestAppProjectReference.OutputRoot)</OutputRoot>
+        <OutputRoot Condition="'%(_MauiTestAppProjectReference.OutputRoot)' == ''">$(MauiTestAppOutputRoot)%(_MauiTestAppProjectReference.Filename)\%(_MauiTestAppProjectReference.TargetFramework)\%(_MauiTestAppProjectReference.RuntimeIdentifier)\</OutputRoot>
+        <_MauiTestAppUserProperties>%(_MauiTestAppProjectReference._MauiTestAppUserProperties)</_MauiTestAppUserProperties>
+        <_MauiTestAppUserAdditionalProperties>%(_MauiTestAppProjectReference._MauiTestAppUserAdditionalProperties)</_MauiTestAppUserAdditionalProperties>
+        <Properties></Properties>
+      </_ResolvedMauiTestAppReference>
+
+      <_ResolvedMauiTestAppReference Include="@(MauiTestAppReference)">
+        <ReferenceName Condition="'%(MauiTestAppReference.ReferenceName)' != ''">%(MauiTestAppReference.ReferenceName)</ReferenceName>
+        <ReferenceName Condition="'%(MauiTestAppReference.ReferenceName)' == ''">%(MauiTestAppReference.Filename)</ReferenceName>
+        <ProjectPath>%(MauiTestAppReference.FullPath)</ProjectPath>
+        <TargetFramework>%(MauiTestAppReference.TargetFramework)</TargetFramework>
+        <Configuration Condition="'%(MauiTestAppReference.Configuration)' != ''">%(MauiTestAppReference.Configuration)</Configuration>
+        <Configuration Condition="'%(MauiTestAppReference.Configuration)' == ''">$(Configuration)</Configuration>
+        <RuntimeIdentifier>%(MauiTestAppReference.RuntimeIdentifier)</RuntimeIdentifier>
+        <Platform>%(MauiTestAppReference.Platform)</Platform>
+        <BuildTarget Condition="'%(MauiTestAppReference.BuildTarget)' != ''">%(MauiTestAppReference.BuildTarget)</BuildTarget>
+        <BuildTarget Condition="'%(MauiTestAppReference.BuildTarget)' == ''">$(MauiTestAppInnerBuildTarget)</BuildTarget>
+        <ArtifactName Condition="'%(MauiTestAppReference.ArtifactName)' != ''">%(MauiTestAppReference.ArtifactName)</ArtifactName>
+        <ArtifactName Condition="'%(MauiTestAppReference.ArtifactName)' == ''">%(MauiTestAppReference.Filename)</ArtifactName>
+        <ExpectedArtifact>%(MauiTestAppReference.ExpectedArtifact)</ExpectedArtifact>
+        <SetPlatformOutputPaths Condition="'%(MauiTestAppReference.SetPlatformOutputPaths)' != ''">%(MauiTestAppReference.SetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <SetPlatformOutputPaths Condition="'%(MauiTestAppReference.SetPlatformOutputPaths)' == ''">$(MauiTestAppSetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <OutputRoot Condition="'%(MauiTestAppReference.OutputRoot)' != ''">%(MauiTestAppReference.OutputRoot)</OutputRoot>
+        <OutputRoot Condition="'%(MauiTestAppReference.OutputRoot)' == ''">$(MauiTestAppOutputRoot)%(MauiTestAppReference.Filename)\%(MauiTestAppReference.TargetFramework)\%(MauiTestAppReference.RuntimeIdentifier)\</OutputRoot>
+        <_MauiTestAppUserProperties>%(MauiTestAppReference.Properties)</_MauiTestAppUserProperties>
+        <_MauiTestAppUserAdditionalProperties>%(MauiTestAppReference.AdditionalProperties)</_MauiTestAppUserAdditionalProperties>
+        <Properties></Properties>
+      </_ResolvedMauiTestAppReference>
+    </ItemGroup>
+
+    <Error Condition="'@(_ResolvedMauiTestAppReference)' != '' and !Exists('$(MauiTestAppAppTargetsPath)')"
+           Text="The MAUI test app child targets file was not found at '$(MauiTestAppAppTargetsPath)'." />
+
+    <ItemGroup>
+      <_ResolvedMauiTestAppReference Update="@(_ResolvedMauiTestAppReference)">
+        <AdditionalProperties>Configuration=%(_ResolvedMauiTestAppReference.Configuration);TargetFramework=%(_ResolvedMauiTestAppReference.TargetFramework);RuntimeIdentifier=%(_ResolvedMauiTestAppReference.RuntimeIdentifier);Platform=%(_ResolvedMauiTestAppReference.Platform);MauiTestAppInnerBuildTarget=%(_ResolvedMauiTestAppReference.BuildTarget);MauiTestAppOutputRoot=%(_ResolvedMauiTestAppReference.OutputRoot);MauiTestAppReferenceName=%(_ResolvedMauiTestAppReference.ReferenceName);MauiTestAppArtifactName=%(_ResolvedMauiTestAppReference.ArtifactName);MauiTestAppExpectedArtifact=%(_ResolvedMauiTestAppReference.ExpectedArtifact);MauiTestAppSetPlatformOutputPaths=%(_ResolvedMauiTestAppReference.SetPlatformOutputPaths);CustomAfterMicrosoftCommonTargets=$(MauiTestAppAppTargetsPath);%(_ResolvedMauiTestAppReference._MauiTestAppUserProperties);%(_ResolvedMauiTestAppReference._MauiTestAppUserAdditionalProperties)</AdditionalProperties>
+      </_ResolvedMauiTestAppReference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ResolvedMauiTestAppReference Update="@(_ResolvedMauiTestAppReference)"
+                                    Condition="'%(_ResolvedMauiTestAppReference.SetPlatformOutputPaths)' == 'true'">
+        <AdditionalProperties Condition="'%(_ResolvedMauiTestAppReference.SetPlatformOutputPaths)' == 'true'">%(_ResolvedMauiTestAppReference.AdditionalProperties);OutputPath=%(_ResolvedMauiTestAppReference.OutputRoot)bin\;AndroidPackageOutputPath=%(_ResolvedMauiTestAppReference.OutputRoot)package\;AndroidBuildApplicationPackage=true;AppBundleDir=%(_ResolvedMauiTestAppReference.OutputRoot)app\%(_ResolvedMauiTestAppReference.ArtifactName).app;IpaPackageDir=%(_ResolvedMauiTestAppReference.OutputRoot)package\;PublishDir=%(_ResolvedMauiTestAppReference.OutputRoot)publish\</AdditionalProperties>
+      </_ResolvedMauiTestAppReference>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="BuildMauiTestApps"
+          DependsOnTargets="ResolveMauiTestAppReferences">
+    <MSBuild Projects="@(_ResolvedMauiTestAppReference)"
+             Targets="_MauiTestAppBuildAndGetArtifacts"
+             BuildInParallel="$(BuildInParallel)"
+             SkipNonexistentProjects="false"
+             SkipNonexistentTargets="false">
+      <Output TaskParameter="TargetOutputs" ItemName="_MauiTestAppBuiltArtifact" />
+    </MSBuild>
+
+    <ItemGroup>
+      <MauiTestAppArtifact Include="@(_MauiTestAppBuiltArtifact)" />
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(MauiTestAppArtifact)"
+                      Condition="'@(MauiTestAppArtifact)' != ''">
+      <Output TaskParameter="Filtered" ItemName="_MauiTestAppDistinctBuiltArtifact" />
+    </RemoveDuplicates>
+
+    <ItemGroup Condition="'@(_MauiTestAppDistinctBuiltArtifact)' != ''">
+      <MauiTestAppArtifact Remove="@(MauiTestAppArtifact)" />
+      <MauiTestAppArtifact Include="@(_MauiTestAppDistinctBuiltArtifact)" />
+    </ItemGroup>
+
+    <Message Importance="High"
+             Condition="'@(MauiTestAppArtifact)' != ''"
+             Text="Resolved MAUI test app artifact: %(MauiTestAppArtifact.Identity) (%(MauiTestAppArtifact.TargetFramework) %(MauiTestAppArtifact.RuntimeIdentifier))" />
+
+    <Error Condition="'@(_ResolvedMauiTestAppReference)' != '' and '$(MauiTestAppFailIfNoArtifacts)' == 'true' and '@(MauiTestAppArtifact)' == ''"
+           Text="No MAUI test app artifacts were produced. Check MauiTestApp ProjectReference metadata, target framework, runtime identifier, and child build properties." />
+  </Target>
+
+  <Target Name="GenerateMauiTestAppManifest"
+          DependsOnTargets="BuildMauiTestApps"
+          Condition="'@(MauiTestAppArtifact)' != ''">
+    <PropertyGroup>
+      <_MauiTestAppManifestFile>$(MauiTestAppManifestFile)</_MauiTestAppManifestFile>
+      <_MauiTestAppManifestFile Condition="'$(_MauiTestAppManifestFile)' == ''">$(TargetDir)maui-test-apps.json</_MauiTestAppManifestFile>
+      <_MauiTestAppGeneratedSourceFile>$(MauiTestAppGeneratedSourceFile)</_MauiTestAppGeneratedSourceFile>
+      <_MauiTestAppGeneratedSourceFile Condition="'$(_MauiTestAppGeneratedSourceFile)' == ''">$(IntermediateOutputPath)MauiTestApps.g.cs</_MauiTestAppGeneratedSourceFile>
+    </PropertyGroup>
+
+    <WriteMauiTestAppManifest Artifacts="@(MauiTestAppArtifact)"
+                              ManifestPath="$(_MauiTestAppManifestFile)"
+                              SourcePath="$(_MauiTestAppGeneratedSourceFile)"
+                              GenerateSource="$(MauiTestAppGenerateSource)"
+                              SourceNamespace="$(MauiTestAppGeneratedSourceNamespace)" />
+
+    <ItemGroup Condition="'$(MauiTestAppGenerateSource)' == 'true'">
+      <Compile Include="$(_MauiTestAppGeneratedSourceFile)"
+               Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CleanMauiTestAppArtifacts"
+          AfterTargets="Clean"
+          Condition="'$(MauiTestAppOutputRoot)' != '' and Exists('$(MauiTestAppOutputRoot)')">
+    <RemoveDir Directories="$(MauiTestAppOutputRoot)" />
+  </Target>
+
+</Project>

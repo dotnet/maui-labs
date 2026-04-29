@@ -1,0 +1,70 @@
+<Project>
+
+  <Target Name="_MauiTestAppBuildAndGetArtifacts"
+          DependsOnTargets="$(MauiTestAppInnerBuildTarget);_MauiTestAppGetArtifacts"
+          Returns="@(MauiTestAppArtifact)" />
+
+  <Target Name="_MauiTestAppGetArtifacts">
+    <PropertyGroup>
+      <_MauiTestAppTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_MauiTestAppTargetPlatform>
+      <_MauiTestAppSearchRoot Condition="'$(MauiTestAppOutputRoot)' != ''">$(MauiTestAppOutputRoot)</_MauiTestAppSearchRoot>
+      <_MauiTestAppSearchRoot Condition="'$(_MauiTestAppSearchRoot)' == ''">$(OutputPath)</_MauiTestAppSearchRoot>
+      <_MauiTestAppReferenceName Condition="'$(MauiTestAppReferenceName)' != ''">$(MauiTestAppReferenceName)</_MauiTestAppReferenceName>
+      <_MauiTestAppReferenceName Condition="'$(_MauiTestAppReferenceName)' == ''">$(MSBuildProjectName)</_MauiTestAppReferenceName>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_MauiTestAppArtifactCandidate Include="$(MauiTestAppExpectedArtifact)"
+                                     Condition="'$(MauiTestAppExpectedArtifact)' != '' and Exists('$(MauiTestAppExpectedArtifact)')" />
+      <_MauiTestAppArtifactCandidate Include="$(AppBundleDir)"
+                                     Condition="'$(AppBundleDir)' != '' and Exists('$(AppBundleDir)')" />
+      <_MauiTestAppArtifactCandidate Include="$(IpaPackageDir)**\*.ipa"
+                                     Condition="'$(IpaPackageDir)' != '' and Exists('$(IpaPackageDir)')" />
+      <_MauiTestAppArtifactCandidate Include="$(AndroidPackageOutputPath)**\*.apk;$(AndroidPackageOutputPath)**\*.aab"
+                                     Condition="'$(AndroidPackageOutputPath)' != '' and Exists('$(AndroidPackageOutputPath)')" />
+      <_MauiTestAppArtifactCandidate Include="$(_MauiTestAppSearchRoot)**\*.apk;$(_MauiTestAppSearchRoot)**\*.aab;$(_MauiTestAppSearchRoot)**\*.ipa;$(_MauiTestAppSearchRoot)**\*.msix;$(_MauiTestAppSearchRoot)**\*.appinstaller"
+                                     Condition="'$(_MauiTestAppSearchRoot)' != '' and Exists('$(_MauiTestAppSearchRoot)')" />
+      <_MauiTestAppArtifactCandidate Include="$(PublishDir)"
+                                     Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)')" />
+      <_MauiTestAppArtifactCandidate Include="$(TargetPath)"
+                                     Condition="'$(TargetPath)' != '' and '$(_MauiTestAppTargetPlatform)' == '' and Exists('$(TargetPath)')" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <MauiTestAppArtifact Include="@(_MauiTestAppArtifactCandidate)"
+                           Condition="Exists('%(_MauiTestAppArtifactCandidate.Identity)')">
+        <ReferenceName>$(_MauiTestAppReferenceName)</ReferenceName>
+        <ProjectPath>$(MSBuildProjectFullPath)</ProjectPath>
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+        <TargetPlatformIdentifier>$(_MauiTestAppTargetPlatform)</TargetPlatformIdentifier>
+        <RuntimeIdentifier>$(RuntimeIdentifier)</RuntimeIdentifier>
+        <Configuration>$(Configuration)</Configuration>
+        <ApplicationId>$(ApplicationId)</ApplicationId>
+        <BundleIdentifier>$(ApplicationId)</BundleIdentifier>
+        <PackageName>$(ApplicationId)</PackageName>
+        <ArtifactType>unknown</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk'">apk</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.aab'">aab</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.app'">app</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.ipa'">ipa</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">msix</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.exe'">exe</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.dll'">dll</ArtifactType>
+        <ArtifactType Condition="'$(PublishDir)' != '' and '%(_MauiTestAppArtifactCandidate.Identity)' == '$(PublishDir)'">publish-directory</ArtifactType>
+        <Installable>false</Installable>
+        <Installable Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.aab' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.app' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.ipa' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">true</Installable>
+        <Launchable>true</Launchable>
+      </MauiTestAppArtifact>
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(MauiTestAppArtifact)">
+      <Output TaskParameter="Filtered" ItemName="_MauiTestAppDistinctArtifact" />
+    </RemoveDuplicates>
+
+    <ItemGroup>
+      <MauiTestAppArtifact Remove="@(MauiTestAppArtifact)" />
+      <MauiTestAppArtifact Include="@(_MauiTestAppDistinctArtifact)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
