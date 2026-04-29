@@ -33,6 +33,11 @@ on:
         type: string
         default: ''
         description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
+      xcode-version:
+        required: false
+        type: string
+        default: ''
+        description: 'Xcode version to select on macOS (e.g. "26.0.1"). Empty uses runner default.'
 
 env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
@@ -45,6 +50,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        if: inputs.xcode-version != '' && runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5

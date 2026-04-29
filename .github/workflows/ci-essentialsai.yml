@@ -35,3 +35,4 @@ jobs:
       project-name: essentialsai
       run-tests: true
       pack: true
+      xcode-version: '26.0.1'
