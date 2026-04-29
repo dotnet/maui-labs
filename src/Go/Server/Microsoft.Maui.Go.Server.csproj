@@ -4,6 +4,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.Go.Server</RootNamespace>
     <Description>Comet Go dev server — file watcher, incremental compiler, WebSocket push</Description>
+    <!-- Dev-time tool, not AOT/single-file published -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>
