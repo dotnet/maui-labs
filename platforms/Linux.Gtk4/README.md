@@ -64,7 +64,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
-- **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window/Shell handlers (not a standalone handler).
+- **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window and NavigationPage handlers via `GtkMenuBarManager` (not a standalone handler).
 - **Tooltips & Context Menus** — `ToolTipProperties.Text` and `ContextFlyout` via `Gtk.PopoverMenu`.
 - **Theming** — Automatic light/dark theme detection via `GtkThemeManager`.
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
@@ -99,7 +99,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 | ControlTemplate | 100% | ContentPresenter, TemplatedView |
 | Base View Properties | 100% | Opacity, visibility, transforms, shadow, clip, automation |
 | FormattedText | 100% | All Span properties via Pango markup |
-| MenuBar | 100% | MenuBarItem, MenuFlyoutItem, popover menus — integrated into Window/Shell handlers |
+| MenuBar | 100% | MenuBarItem, MenuFlyoutItem, popover menus — integrated into Window and NavigationPage handlers |
 | Essentials | 64% | 21 done + 2 partial of 36 total; 13 stubs (sensors/phone N/A on desktop) |
 
 ## Prerequisites
@@ -124,8 +124,10 @@ sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev \
 
 ```bash
 sudo dnf install gtk4-devel webkitgtk6.0-devel \
-  gobject-introspection-devel gir1.2-gtk-4.0 pkg-config
+  gobject-introspection-devel pkg-config
 ```
+
+> `gtk4-devel` and `webkitgtk6.0-devel` typically include the GObject Introspection typelibs on Fedora (no separate `gir1.2-*` packages needed).
 
 ## Quick Start
 
