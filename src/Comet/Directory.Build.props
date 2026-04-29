@@ -6,6 +6,15 @@
     Full Arcade integration (signing, versioning, CI) is a future step.
   -->
 
+  <!-- Pull MAUI version from repo-level eng/Versions.props so Comet stays
+       in sync with the rest of the repo. Used by csprojs that reference
+       Microsoft.Maui.* PackageReferences with Version="$(MauiVersion)". -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\eng\Versions.props" />
+
+  <PropertyGroup>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">$(MicrosoftMauiControlsVersion)</MauiVersion>
+  </PropertyGroup>
+
   <PropertyGroup>
     <!-- Common settings (mirrored from repo root, without Arcade SDK import) -->
     <Nullable>enable</Nullable>
