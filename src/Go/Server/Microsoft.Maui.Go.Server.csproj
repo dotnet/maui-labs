@@ -16,9 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Go.Server needs newer Roslyn APIs (LanguageVersion.Latest, EmitDifference overloads) -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />
-    <!-- AsciiQRCode was added in QRCoder 1.7.0 -->
-    <PackageReference Include="QRCoder" VersionOverride="1.7.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="QRCoder" />
   </ItemGroup>
 </Project>
