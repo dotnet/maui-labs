@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 
 ## Features
 
-### Controls (43 handlers)
+### Controls and handlers
 
 | Category | Controls |
 |----------|----------|
@@ -46,7 +46,9 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 | **Layouts** | StackLayout, Grid, FlexLayout, AbsoluteLayout, ScrollView, ContentView, Border, Frame |
 | **Pages & Navigation** | ContentPage, NavigationPage, TabbedPage, FlyoutPage, Shell (flyout, tabs, route navigation) |
 | **Shapes** | Rectangle, Ellipse, Line, Path, Polygon, Polyline — Cairo-rendered with fill, stroke, dash patterns |
-| **Other** | GraphicsView (Cairo), WebView (WebKitGTK), MenuBar (`Gtk.PopoverMenuBar`) |
+| **Other** | GraphicsView (Cairo), WebView (WebKitGTK) |
+
+> **Layout architecture:** StackLayout, Grid, FlexLayout, and AbsoluteLayout all share a single `LayoutHandler` — the MAUI `Layout` base class is mapped once, and all concrete layout types resolve through it.
 
 ### Platform Features
 
@@ -62,18 +64,19 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
+- **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window/Shell handlers (not a standalone handler).
 - **Tooltips & Context Menus** — `ToolTipProperties.Text` and `ContextFlyout` via `Gtk.PopoverMenu`.
 - **Theming** — Automatic light/dark theme detection via `GtkThemeManager`.
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
 
-### Essentials (20 of 26 services)
+### Essentials (21 of 36 services)
 
 | Status | Services |
 |--------|----------|
-| ✅ **Done** | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker, Preferences (JSON), SecureStorage, Screenshot, SemanticScreenReader (AT-SPI), Share (XDG Portal), TextToSpeech (`espeak-ng`), VersionTracking |
-| ⚠️ **Partial** | Geolocation (GeoClue — basic location only), WebAuthenticator (basic OAuth via system browser) |
-| ❌ **Stub** | Vibration, PhoneDialer, SMS, Contacts — not applicable to desktop Linux |
+| ✅ **Done** (21) | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker, Preferences (JSON), Screenshot, SecureStorage, SemanticScreenReader (AT-SPI), Share (XDG Portal), TextToSpeech (`espeak-ng`), VersionTracking |
+| ⚠️ **Partial** (2) | Geolocation (GeoClue — basic location only), WebAuthenticator (basic OAuth via system browser) |
+| ❌ **Stub** (13) | Accelerometer, Barometer, Compass, Contacts, Flashlight, Geocoding, Gyroscope, HapticFeedback, Magnetometer, OrientationSensor, PhoneDialer, SMS, Vibration — sensors and phone-specific APIs not applicable to desktop Linux |
 
 ### Implementation Parity
 
@@ -96,8 +99,8 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 | ControlTemplate | 100% | ContentPresenter, TemplatedView |
 | Base View Properties | 100% | Opacity, visibility, transforms, shadow, clip, automation |
 | FormattedText | 100% | All Span properties via Pango markup |
-| MenuBar | 100% | MenuBarItem, MenuFlyoutItem, popover menus |
-| Essentials | 81% | 20 done + 2 partial, 4 stubs (desktop N/A) |
+| MenuBar | 100% | MenuBarItem, MenuFlyoutItem, popover menus — integrated into Window/Shell handlers |
+| Essentials | 64% | 21 done + 2 partial of 36 total; 13 stubs (sensors/phone N/A on desktop) |
 
 ## Prerequisites
 
@@ -110,13 +113,18 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 ### Install GTK4 & WebKitGTK (Debian / Ubuntu)
 
 ```bash
-sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev
+sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev \
+  gobject-introspection libgirepository1.0-dev \
+  gir1.2-gtk-4.0 gir1.2-webkit-6.0 pkg-config
 ```
 
 ### Install GTK4 & WebKitGTK (Fedora)
 
+> **Note:** Fedora package names below are unverified. Please open an issue if they need correction.
+
 ```bash
-sudo dnf install gtk4-devel webkitgtk6.0-devel
+sudo dnf install gtk4-devel webkitgtk6.0-devel \
+  gobject-introspection-devel gir1.2-gtk-4.0 pkg-config
 ```
 
 ## Quick Start
@@ -248,6 +256,26 @@ dotnet run --project MyApp.Linux
 The platform-specific TFMs (`net10.0-android`, `net10.0-ios`, etc.) are powered by .NET workloads that Microsoft ships. Creating a custom `net10.0-linux` TFM would require building and distributing a full .NET workload — complex infrastructure that's unnecessary for most use cases.
 
 The separate project approach is the same pattern used by [OpenMaui](https://github.com/open-maui/maui-linux-gtk4) and [MauiAvalonia](https://github.com/wieslawsoltes/MauiAvalonia). It works with standard `dotnet build`/`dotnet run`, is NuGet-distributable, and keeps your existing MAUI project unchanged.
+
+## DevFlow Integration
+
+The GTK4 backend supports [DevFlow](../../src/DevFlow/) for AI-assisted UI inspection, automation, and debugging, including the Blazor CDP bridge. To enable it, set `EnableMauiDevFlow=true` in `Directory.Build.props` (or pass it as an MSBuild property):
+
+```xml
+<!-- Directory.Build.props -->
+<PropertyGroup>
+  <EnableMauiDevFlow>true</EnableMauiDevFlow>
+</PropertyGroup>
+```
+
+When enabled, the sample project (`samples/Linux.Gtk4.Sample`) conditionally references the DevFlow agent and Blazor projects:
+
+```xml
+<ItemGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+  <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Gtk\Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
+  <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor.Gtk\Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
+</ItemGroup>
+```
 
 ## Building from Source
 
