@@ -73,8 +73,118 @@ extends:
           testResultsFormat: xunit
           enableTelemetry: true
           jobs:
-          - job: DevFlow
-            displayName: DevFlow - Windows
+          # DevFlow Agent/Blazor need macOS-built Apple assets and Windows-built
+          # Windows assets. Keep raw packages isolated, then publish only the
+          # merged packages from the final Windows job.
+          - job: DevFlow_MacRawPackages
+            displayName: DevFlow - macOS raw packages
+            pool:
+              name: Azure Pipelines
+              vmImage: macOS-15
+              os: macOS
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            templateContext:
+              outputs:
+              - output: pipelineArtifact
+                displayName: Publish DevFlow macOS raw packages
+                targetPath: '$(Build.ArtifactStagingDirectory)/raw-packages-devflow-macos'
+                artifactName: DevFlowRawPackages_macOS
+                condition: succeeded()
+                sbomEnabled: false
+            steps:
+            - script: ./eng/common/dotnet.sh --info
+              displayName: Provision .NET SDK via Arcade
+            - script: ./.dotnet/dotnet workload install maui macos maui-tizen
+              displayName: Install MAUI workloads
+            - script: ./.dotnet/dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj
+              displayName: Install Android SDK dependencies
+            - script: ./eng/common/build.sh
+                --configuration $(_BuildConfig)
+                --prepareMachine
+                --restore
+                --build
+                --test
+                --pack
+                --ci
+                --projects $(Build.SourcesDirectory)/src/DevFlow/DevFlow.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build, Test and Pack DevFlow raw packages
+            - pwsh: |
+                $rawPackagesDir = '$(Build.ArtifactStagingDirectory)/raw-packages-devflow-macos'
+                New-Item -ItemType Directory -Force -Path $rawPackagesDir | Out-Null
+
+                $packages = @(Get-ChildItem -Path '$(Build.SourcesDirectory)/artifacts/packages' -Recurse -Filter '*.nupkg' -File)
+                if ($packages.Count -eq 0) {
+                  throw "No DevFlow macOS raw packages were produced."
+                }
+
+                $packages | Copy-Item -Destination $rawPackagesDir -Force
+                $packages | ForEach-Object { Write-Host "Staged $($_.FullName)" }
+              displayName: Stage DevFlow macOS raw packages
+
+          - job: DevFlow_WindowsRawPackages
+            displayName: DevFlow - Windows raw packages
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            templateContext:
+              outputs:
+              - output: pipelineArtifact
+                displayName: Publish DevFlow Windows raw packages
+                targetPath: '$(Build.ArtifactStagingDirectory)/raw-packages-devflow-windows'
+                artifactName: DevFlowRawPackages_Windows
+                condition: succeeded()
+                sbomEnabled: false
+            steps:
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
+              displayName: Install MAUI workloads
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+              displayName: Install Android SDK dependencies
+            - script: eng\common\build.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -restore
+                -build
+                -test
+                -pack
+                -ci
+                -projects $(Build.SourcesDirectory)\src\DevFlow\DevFlow.slnf
+                $(_OfficialBuildArgs)
+                /p:PackDriverNuGet=true
+              displayName: Build, Test and Pack DevFlow raw packages
+            - powershell: |
+                $rawPackagesDir = '$(Build.ArtifactStagingDirectory)\raw-packages-devflow-windows'
+                New-Item -ItemType Directory -Force -Path $rawPackagesDir | Out-Null
+
+                $packages = @(Get-ChildItem -Path '$(Build.SourcesDirectory)\artifacts\packages' -Recurse -Filter '*.nupkg' -File)
+                if ($packages.Count -eq 0) {
+                  throw "No DevFlow Windows raw packages were produced."
+                }
+
+                $packages | Copy-Item -Destination $rawPackagesDir -Force
+                $packages | ForEach-Object { Write-Host "Staged $($_.FullName)" }
+              displayName: Stage DevFlow Windows raw packages
+
+          - job: DevFlow_MergedPackages
+            displayName: DevFlow - merged packages
+            dependsOn:
+            - DevFlow_MacRawPackages
+            - DevFlow_WindowsRawPackages
             pool:
               name: NetCore1ESPool-Internal
               demands: ImageOverride -equals windows.vs2026preview.scout.amd64
@@ -92,13 +202,128 @@ extends:
               displayName: Install MAUI workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
-            - script: eng\common\cibuild.cmd
+            - download: current
+              artifact: DevFlowRawPackages_macOS
+              path: '$(Build.SourcesDirectory)\artifacts\raw-packages\raw-packages-devflow-macos-$(Build.BuildId)'
+              displayName: Download DevFlow macOS raw packages
+            - download: current
+              artifact: DevFlowRawPackages_Windows
+              path: '$(Build.SourcesDirectory)\artifacts\raw-packages\raw-packages-devflow-windows-$(Build.BuildId)'
+              displayName: Download DevFlow Windows raw packages
+            - powershell: |
+                $rawRoot = '$(Build.SourcesDirectory)\artifacts\raw-packages'
+                $requiredPackageIds = @(
+                  'Microsoft.Maui.DevFlow.Agent',
+                  'Microsoft.Maui.DevFlow.Blazor'
+                )
+
+                foreach ($platform in @('macos', 'windows')) {
+                  $matches = @(Get-ChildItem -Path $rawRoot -Directory -Filter "raw-packages-devflow-$platform-*")
+                  if ($matches.Count -ne 1) {
+                    throw "Expected exactly one raw package directory for $platform under '$rawRoot', but found $($matches.Count)."
+                  }
+
+                  foreach ($packageId in $requiredPackageIds) {
+                    $packages = @(Get-ChildItem -Path $matches[0].FullName -Recurse -Filter "$packageId.[0-9]*.nupkg" -File)
+                    if ($packages.Count -eq 0) {
+                      throw "Missing '$packageId' raw package in '$($matches[0].FullName)'."
+                    }
+                  }
+                }
+              displayName: Validate DevFlow raw package inputs
+            - script: eng\common\build.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
+                -restore
+                -build
+                -test
+                -pack
+                -ci
                 -projects $(Build.SourcesDirectory)\src\DevFlow\DevFlow.slnf
                 $(_OfficialBuildArgs)
                 /p:PackDriverNuGet=true
-              displayName: Build and Test DevFlow
+                /p:PackDevFlowPlatformNuGets=false
+              displayName: Build, Test and Pack DevFlow pass-through packages
+            - powershell: |
+                $rawPackageRoot = '$(Build.SourcesDirectory)\artifacts\raw-packages\'
+                $packagesOutput = '$(Build.SourcesDirectory)\artifacts\packages\$(_BuildConfig)\Shipping'
+                New-Item -ItemType Directory -Force -Path $packagesOutput | Out-Null
+
+                $projects = @(
+                  'eng\Packaging\Microsoft.Maui.DevFlow.Agent.Package\Microsoft.Maui.DevFlow.Agent.Package.csproj',
+                  'eng\Packaging\Microsoft.Maui.DevFlow.Blazor.Package\Microsoft.Maui.DevFlow.Blazor.Package.csproj'
+                )
+
+                $commonArgs = @(
+                  "/p:RawPackageRoot=$rawPackageRoot",
+                  "/p:PackageOutputPath=$packagesOutput",
+                  "/p:EnableWindowsTargeting=true",
+                  "/p:DotNetSignType=$(_SignType)",
+                  "/p:TeamName=$(_TeamName)",
+                  "/p:OfficialBuildId=$(BUILD.BUILDNUMBER)"
+                )
+
+                foreach ($project in $projects) {
+                  & .\.dotnet\dotnet restore $project @commonArgs
+                  if ($LASTEXITCODE -ne 0) {
+                    exit $LASTEXITCODE
+                  }
+
+                  & .\.dotnet\dotnet pack $project --no-restore --no-build -c "$(_BuildConfig)" @commonArgs
+                  if ($LASTEXITCODE -ne 0) {
+                    exit $LASTEXITCODE
+                  }
+                }
+              displayName: Pack merged DevFlow platform packages
+            - script: eng\common\build.cmd
+                -configuration $(_BuildConfig)
+                -restore
+                -sign
+                -publish
+                -ci
+                $(_OfficialBuildArgs)
+              displayName: Sign and publish DevFlow merged packages
+            - powershell: |
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+                $packageDir = '$(Build.SourcesDirectory)\artifacts\packages\$(_BuildConfig)\Shipping'
+                $requiredPackageIds = @(
+                  'Microsoft.Maui.DevFlow.Agent',
+                  'Microsoft.Maui.DevFlow.Blazor'
+                )
+                $requiredTfms = @(
+                  'net10.0-android',
+                  'net10.0-ios',
+                  'net10.0-maccatalyst',
+                  'net10.0-macos',
+                  'net10.0-windows10.0.19041.0'
+                )
+
+                foreach ($packageId in $requiredPackageIds) {
+                  $package = Get-ChildItem -Path $packageDir -Filter "$packageId.[0-9]*.nupkg" -File |
+                    Sort-Object LastWriteTimeUtc |
+                    Select-Object -Last 1
+
+                  if ($null -eq $package) {
+                    throw "Expected merged package '$packageId' was not produced in '$packageDir'."
+                  }
+
+                  $zip = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
+                  try {
+                    $entries = @($zip.Entries | ForEach-Object { $_.FullName })
+                    foreach ($tfm in $requiredTfms) {
+                      if (-not ($entries | Where-Object { $_ -like "lib/$tfm/*" })) {
+                        throw "Merged package '$($package.Name)' does not contain lib assets for '$tfm'."
+                      }
+                    }
+                  }
+                  finally {
+                    $zip.Dispose()
+                  }
+
+                  Write-Host "Verified merged package $($package.Name)"
+                }
+              displayName: Verify merged DevFlow platform packages
 
           - job: Cli
             displayName: Cli - Windows

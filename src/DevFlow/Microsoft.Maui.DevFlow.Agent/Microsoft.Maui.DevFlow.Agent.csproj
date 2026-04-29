@@ -7,6 +7,7 @@
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <IsPackable>true</IsPackable>
+    <IsPackable Condition="'$(PackDevFlowPlatformNuGets)' == 'false'">false</IsPackable>
 
     <PackageId>Microsoft.Maui.DevFlow.Agent</PackageId>
     <IsShipping>true</IsShipping>

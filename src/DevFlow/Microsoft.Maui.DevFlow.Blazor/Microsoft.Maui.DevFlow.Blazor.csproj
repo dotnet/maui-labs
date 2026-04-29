@@ -7,6 +7,7 @@
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <IsPackable>true</IsPackable>
+    <IsPackable Condition="'$(PackDevFlowPlatformNuGets)' == 'false'">false</IsPackable>
     <IsShipping>true</IsShipping>
 
     <!-- Suppress JS module manifest to avoid conflicting with consuming app's manifest.
