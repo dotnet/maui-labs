@@ -13,7 +13,7 @@
   </PropertyGroup>
   <!-- Dependencies flowing via darc/maestro (match Version.Details.xml) -->
   <PropertyGroup Label="Dotnet MAUI">
-    <MicrosoftMauiControlsVersion>11.0.0-preview.3.26207.5</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsVersion>10.0.41</MicrosoftMauiControlsVersion>
     <!-- Minimum MAUI version required by DevFlow shipping packages.
          Kept low so consumers can use any compatible MAUI 10.0.x release. -->
     <DevFlowMauiMinVersion>10.0.20</DevFlowMauiMinVersion>
@@ -22,12 +22,12 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsDependencyInjectionVersion>
-    <MicrosoftExtensionsHttpVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsHttpVersion>
-    <MicrosoftExtensionsHostingVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsLoggingAbstractionsVersion>
-    <MicrosoftExtensionsLoggingDebugVersion>11.0.0-preview.3.26203.107</MicrosoftExtensionsLoggingDebugVersion>
-    <SystemTextJsonVersion>11.0.0-preview.3.26203.107</SystemTextJsonVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
+    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
   </PropertyGroup>
   <!-- Pinned dependencies (third party, not flowing via maestro) -->
   <PropertyGroup Label="Third Party">
@@ -42,7 +42,7 @@
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
-    <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.10</XamarinAndroidToolsAndroidSdkVersion>
+    <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.8</XamarinAndroidToolsAndroidSdkVersion>
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">
@@ -61,16 +61,8 @@
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVisualstudioVersion>3.1.5</XunitRunnerVisualstudioVersion>
     <CoverletCollectorVersion>8.0.0</CoverletCollectorVersion>
-    <MicrosoftOpenApiVersion>3.5.0</MicrosoftOpenApiVersion>
-    <YamlDotNetVersion>16.3.0</YamlDotNetVersion>
   </PropertyGroup>
   <PropertyGroup Label="SourceLink">
     <MicrosoftSourceLinkGitHubVersion>10.0.201</MicrosoftSourceLinkGitHubVersion>
-  </PropertyGroup>
-  <PropertyGroup Label="MAUI Go">
-    <MicrosoftCodeAnalysisCSharpVersion>4.12.0</MicrosoftCodeAnalysisCSharpVersion>
-    <QRCoderVersion>1.6.0</QRCoderVersion>
-    <ZXingNetMauiVersion>0.7.4</ZXingNetMauiVersion>
-    <ClanceyCometVersion>1.0.0-preview.5</ClanceyCometVersion>
   </PropertyGroup>
 </Project>
