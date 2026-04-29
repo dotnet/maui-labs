@@ -158,7 +158,7 @@ jobs:
           path: artifacts/TestResults/**/*.xml
 
       - name: Validate packages
-        if: inputs.pack && (matrix.os == 'windows-latest' || !contains(fromJson(inputs.os), 'windows-latest'))
+        if: inputs.pack
         shell: bash
         run: |
           set -euo pipefail
@@ -186,9 +186,9 @@ jobs:
           printf '%s\n' "$produced_packages"
 
       - name: Upload packages
-        if: inputs.pack && (matrix.os == 'windows-latest' || !contains(fromJson(inputs.os), 'windows-latest'))
+        if: inputs.pack
         uses: actions/upload-artifact@v7
         with:
-          name: packages-${{ inputs.project-name }}
+          name: packages-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/packages/**/*.nupkg
           if-no-files-found: error
