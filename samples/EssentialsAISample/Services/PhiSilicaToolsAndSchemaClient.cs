@@ -203,7 +203,7 @@ public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
 						if (p.Value.TryGetProperty("enum", out var ev))
 							toolDesc.AppendLine($"  IMPORTANT: {p.Name} must be EXACTLY one of: {string.Join(", ", ev.EnumerateArray().Select(v => v.GetString()))}");
 			}
-			catch { }
+			catch (JsonException) { }
 		}
 
 		// Build schema and prompt based on whether this is first call or follow-up
@@ -268,7 +268,8 @@ public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
 		{
 			// Follow-up schema: tool_call only, no text escape, no more_steps
 			var json = "{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"enum\":[\"tool_call\"]},\"tool_name\":{\"type\":\"string\",\"enum\":[" + string.Join(",", toolNames) + "]},\"arguments\":{\"type\":\"object\"}},\"required\":[\"type\",\"tool_name\"]}";
-			return JsonDocument.Parse(json).RootElement.Clone();
+			using var followUpDoc = JsonDocument.Parse(json);
+			return followUpDoc.RootElement.Clone();
 		}
 
 		// First call schema: tool_call or text/response, with more_steps bool
@@ -290,7 +291,8 @@ public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
 		}
 
 		var jsonStr = $$"""{"type":"object","properties":{"type":{"type":"string","enum":{{typeEnum}}},"tool_name":{"type":"string","enum":[{{string.Join(",", toolNames)}}]},"arguments":{"type":"object"}{{responseField}}{{moreSteps}}},"required":["type"]}""";
-		return JsonDocument.Parse(jsonStr).RootElement.Clone();
+		using var firstCallDoc = JsonDocument.Parse(jsonStr);
+		return firstCallDoc.RootElement.Clone();
 	}
 
 	// ═══════════════════════════════════════════════════════════
