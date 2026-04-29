@@ -108,6 +108,8 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow diagnose` | Check DevFlow agent health |
 | `maui devflow wait` | Wait for an agent to connect |
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
+| **Profiling** | |
+| `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
 
 Run `maui <command> --help` for detailed options on any command.
 
@@ -153,7 +155,7 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 | Platform | Status | Notes |
 |----------|--------|-------|
 | macOS | ✅ | Full support including Apple commands (Xcode, simulators, runtimes) |
-| Windows | ✅ | Android and Windows SDK commands |
+| Windows | ✅ | Android SDK, JDK, and emulator commands |
 | Linux | ✅ | Android commands |
 
 ## Development
