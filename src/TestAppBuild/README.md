@@ -28,6 +28,8 @@ The test project build will:
 3. Expose the located artifacts as `@(MauiTestAppArtifact)` items with metadata.
 4. Set `$(MauiTestAppArtifacts)` and `$(MauiTestAppArtifactPaths)` for simple target consumption.
 
+iOS simulator/device builds commonly produce a `.app` bundle as the build artifact. `.ipa` files are also discovered when the child build is explicitly configured to produce one, such as for distribution packaging.
+
 ## OutputItemType compatibility
 
 Projects that prefer the `OutputItemType` idiom can use:

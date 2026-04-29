@@ -45,6 +45,33 @@ public sealed class BuildTargetsTests
         AssertArtifactItem(workspace, expectedName: "OutputItemTypeApp");
     }
 
+    [Fact]
+    public async Task ProjectReferenceWithAppBundleDirectory_ExposesAppArtifactItem()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0"
+                              ReferenceName="IosStyleApp"
+                              Properties="MauiTestAppSimulateAppBundle=true" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(
+            workspace,
+            expectedName: "IosStyleApp",
+            expectedArtifactType: "app",
+            expectSingleArtifact: false,
+            expectedArtifactIsDirectory: true);
+    }
+
     private static async Task<ProcessResult> BuildWorkspaceAsync(TestWorkspace workspace, string projectReferenceXml)
     {
         workspace.WriteProjects(projectReferenceXml);
@@ -57,20 +84,37 @@ public sealed class BuildTargetsTests
             "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
     }
 
-    private static void AssertArtifactItem(TestWorkspace workspace, string expectedName)
+    private static void AssertArtifactItem(
+        TestWorkspace workspace,
+        string expectedName,
+        string expectedArtifactType = "dll",
+        bool expectSingleArtifact = true,
+        bool expectedArtifactIsDirectory = false)
     {
         var artifactsPath = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt");
         Assert.True(File.Exists(artifactsPath), "Expected artifact capture at " + artifactsPath);
 
-        var line = Assert.Single(File.ReadAllLines(artifactsPath));
+        var lines = File.ReadAllLines(artifactsPath);
+        if (expectSingleArtifact)
+            Assert.Single(lines);
+
+        var line = Assert.Single(lines, line =>
+        {
+            var parts = line.Split('|');
+            return parts.Length == 6 && parts[0] == expectedName && parts[4] == expectedArtifactType;
+        });
         var parts = line.Split('|');
 
         Assert.Equal(6, parts.Length);
         Assert.Equal(expectedName, parts[0]);
-        Assert.True(File.Exists(parts[1]), "Expected app artifact at " + parts[1]);
+        if (expectedArtifactIsDirectory)
+            Assert.True(Directory.Exists(parts[1]), "Expected app artifact directory at " + parts[1]);
+        else
+            Assert.True(File.Exists(parts[1]), "Expected app artifact file at " + parts[1]);
+
         Assert.Equal(Path.GetFullPath(workspace.AppProjectPath), Path.GetFullPath(parts[2]));
         Assert.Equal("net10.0", parts[3]);
-        Assert.Equal("dll", parts[4]);
+        Assert.Equal(expectedArtifactType, parts[4]);
         Assert.Equal("com.example.testapp", parts[5]);
 
         var artifactPathsFile = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifact-paths.txt");
@@ -154,6 +198,15 @@ public sealed class BuildTargetsTests
                     <OutputType>Exe</OutputType>
                     <ApplicationId>com.example.testapp</ApplicationId>
                   </PropertyGroup>
+
+                  <Target Name="CreateFakeAppBundle"
+                          AfterTargets="Build"
+                          Condition="'$(MauiTestAppSimulateAppBundle)' == 'true' and '$(AppBundleDir)' != ''">
+                    <MakeDir Directories="$(AppBundleDir)" />
+                    <WriteLinesToFile File="$([System.IO.Path]::Combine('$(AppBundleDir)', 'Info.plist'))"
+                                      Lines="Fake bundle for tests."
+                                      Overwrite="true" />
+                  </Target>
                 </Project>
                 """);
 

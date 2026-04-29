@@ -9,6 +9,7 @@
       <_MauiTestAppTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_MauiTestAppTargetPlatform>
       <_MauiTestAppSearchRoot Condition="'$(MauiTestAppOutputRoot)' != ''">$(MauiTestAppOutputRoot)</_MauiTestAppSearchRoot>
       <_MauiTestAppSearchRoot Condition="'$(_MauiTestAppSearchRoot)' == ''">$(OutputPath)</_MauiTestAppSearchRoot>
+      <_MauiTestAppSearchAppRoot Condition="'$(_MauiTestAppSearchRoot)' != ''">$([System.IO.Path]::Combine('$(_MauiTestAppSearchRoot)', 'app'))</_MauiTestAppSearchAppRoot>
       <_MauiTestAppReferenceName Condition="'$(MauiTestAppReferenceName)' != ''">$(MauiTestAppReferenceName)</_MauiTestAppReferenceName>
       <_MauiTestAppReferenceName Condition="'$(_MauiTestAppReferenceName)' == ''">$(MSBuildProjectName)</_MauiTestAppReferenceName>
     </PropertyGroup>
@@ -18,6 +19,12 @@
                                      Condition="'$(MauiTestAppExpectedArtifact)' != '' and Exists('$(MauiTestAppExpectedArtifact)')" />
       <_MauiTestAppArtifactCandidate Include="$(AppBundleDir)"
                                      Condition="'$(AppBundleDir)' != '' and Exists('$(AppBundleDir)')" />
+      <_MauiTestAppArtifactCandidate Include="$([System.IO.Directory]::GetDirectories('$(_MauiTestAppSearchRoot)', '*.app'))"
+                                     Condition="'$(_MauiTestAppSearchRoot)' != '' and Exists('$(_MauiTestAppSearchRoot)')" />
+      <_MauiTestAppArtifactCandidate Include="$([System.IO.Directory]::GetDirectories('$(_MauiTestAppSearchAppRoot)', '*.app'))"
+                                     Condition="'$(_MauiTestAppSearchAppRoot)' != '' and Exists('$(_MauiTestAppSearchAppRoot)')" />
+      <_MauiTestAppArtifactCandidate Include="$([System.IO.Directory]::GetDirectories('$(OutputPath)', '*.app'))"
+                                     Condition="'$(OutputPath)' != '' and Exists('$(OutputPath)')" />
       <_MauiTestAppArtifactCandidate Include="$(IpaPackageDir)**\*.ipa"
                                      Condition="'$(IpaPackageDir)' != '' and Exists('$(IpaPackageDir)')" />
       <_MauiTestAppArtifactCandidate Include="$(AndroidPackageOutputPath)**\*.apk;$(AndroidPackageOutputPath)**\*.aab"
