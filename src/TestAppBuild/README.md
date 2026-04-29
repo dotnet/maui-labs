@@ -2,7 +2,7 @@
 
 `Microsoft.Maui.TestApp.Build` lets test projects declare app projects as build-time dependencies and receive a manifest describing the built app artifacts.
 
-The recommended declaration is still a real `ProjectReference`, so tools that infer .NET project graphs from `.csproj` files, including `@nx/dotnet`, continue to see the app/test dependency. The package removes marked references from the normal compile-time reference pipeline during the build and invokes them through its own MSBuild targets instead.
+The recommended declaration is still a real `ProjectReference`, so tools that infer .NET project graphs from `.csproj` files continue to see the app/test dependency. The package removes marked references from the normal compile-time reference pipeline during the build and invokes them through its own MSBuild targets instead.
 
 ## Basic usage
 
@@ -90,4 +90,3 @@ The generated manifest has this shape:
 - `MauiTestAppSetPlatformOutputPaths=true`: platform output properties are set to deterministic locations under `MauiTestAppOutputRoot`.
 - `MauiTestAppFailIfNoArtifacts=true`: declared app references must produce at least one artifact.
 - `MauiTestAppGenerateSource=true`: the test project receives an internal generated source file with the manifest path.
-
