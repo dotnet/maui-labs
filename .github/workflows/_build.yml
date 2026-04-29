@@ -176,7 +176,7 @@ jobs:
             )
 
             for package_id in "${expected_package_ids[@]}"; do
-              if ! find artifacts/packages -maxdepth 1 -name "$package_id.[0-9]*.nupkg" -type f | grep -q .; then
+              if ! find artifacts/packages -name "$package_id.[0-9]*.nupkg" -type f | grep -q .; then
                 echo "::error::Expected package '$package_id' was not produced in packages output."
                 exit 1
               fi
