@@ -312,29 +312,29 @@ packages are up to date. Outdated components can cause confusing failures or mis
 ### Check CLI version
 ```bash
 maui devflow version
-dotnet tool search Microsoft.Maui.DevFlow.CLI | head -5
+dotnet tool search Microsoft.Maui.Cli | head -5
 ```
 
 If a newer version is available:
 ```bash
-dotnet tool update --global Microsoft.Maui.DevFlow.CLI
+dotnet tool update --global Microsoft.Maui.Cli
 ```
 
 ### Update the skill
 ```bash
-# Check if the skill is up to date (compares local commit SHA against remote)
-maui devflow skill-version
+# Check installed skills against the current CLI bundle
+maui devflow skills check
 
-# Download the latest skill files from GitHub
-maui devflow update-skill
+# Install or update bundled skills from the current CLI
+maui devflow skills update
 ```
 
-The `update-skill` command writes a `.skill-version` file tracking the installed commit SHA.
-The `skill-version` command reads this file and compares against the latest remote commit.
+The hidden `update-skill` compatibility command now runs the same bundled update path as
+`maui devflow skills update`. Current CLIs remove legacy skill folders such as
+`.claude/skills/maui-ai-debugging` after installing the replacement DevFlow skills.
 
-**AI agents should check at session start:** If `.claude/skills/maui-ai-debugging/.skill-version`
-exists, run `maui devflow skill-version` to see if an update is available. If the remote SHA
-differs from the installed SHA, ask the user if they'd like to update before proceeding.
+**AI agents should check at session start:** Run `maui devflow skills check`. If it reports
+`update-available-from-current-cli`, ask the user if they'd like to update before proceeding.
 
 ### Check NuGet packages in the project
 ```bash

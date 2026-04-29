@@ -428,3 +428,7 @@ FodyWeavers.xsd
 screenshot_*.png
 .comet_sample_bid
 sim_tap.py
+
+# Personal / per-machine agent state
+.claude/settings.local.json
+.claude/skills/**/.skill-version
