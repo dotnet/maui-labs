@@ -4,8 +4,8 @@ This walkthrough takes you from a fresh checkout to seeing live edits on a devic
 
 ## Prerequisites
 
-- **.NET 11 SDK (preview)** — check `global.json` in the repo root for the exact version
-- The MAUI workload: `dotnet workload install maui`
+- **.NET SDK** matching the repo's `global.json` — currently `10.0.105` with `rollForward: latestMajor` and `allowPrerelease: true`, so a .NET 11 preview SDK works too
+- The MAUI workload: `dotnet workload install maui` (this provides the `net11.0-*` runtime packs the companion app targets)
 - A target you can deploy to:
   - macOS — Mac Catalyst (no extra setup)
   - iOS — Xcode + an iOS Simulator runtime
@@ -144,7 +144,7 @@ The server logs rude edits as warnings; the app keeps running on the previous ve
 
 **`MetadataUpdater.IsSupported` is `false`** → the app was built `Release`, or `DOTNET_MODIFIABLE_ASSEMBLIES` wasn't set early enough. Rebuild `Debug` and confirm the env var is set before `MauiApp.CreateBuilder()`.
 
-**Android emulator can't reach the server** → use the host alias `10.0.2.2` instead of `localhost`. The QR code already encodes the LAN IP, which works from emulators with bridged networking.
+**Android emulator can't reach the server** → the QR code encodes your machine's LAN IP, which works for physical devices and bridged emulators. The default Android emulator's NAT can't route arbitrary LAN IPs, so paste the URL manually and replace the IP with `10.0.2.2` (the host alias).
 
 ## Next steps
 
