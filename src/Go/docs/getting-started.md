@@ -4,7 +4,7 @@ This walkthrough takes you from a fresh checkout to seeing live edits on a devic
 
 ## Prerequisites
 
-- **.NET SDK** matching the repo's `global.json` — currently `10.0.105` with `rollForward: latestMajor` and `allowPrerelease: true`, so a .NET 11 preview SDK works too
+- The **latest .NET 11 SDK preview** — `src/Go/global.json` pins the version with `rollForward: latestPrerelease`
 - The MAUI workload: `dotnet workload install maui` (this provides the `net11.0-*` runtime packs the companion app targets)
 - A target you can deploy to:
   - macOS — Mac Catalyst (no extra setup)

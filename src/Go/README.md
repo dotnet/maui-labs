@@ -55,7 +55,7 @@ Scan the QR code with the companion app, then start editing.
 
 ## Requirements
 
-- **.NET SDK** matching `global.json` at the repo root (currently `10.0.105` with `rollForward: latestMajor` + prereleases enabled, so a .NET 11 preview SDK works too)
+- The **latest .NET 11 SDK preview** — `src/Go/global.json` pins the version with `rollForward: latestPrerelease`, mirroring Comet
 - The MAUI workload — `dotnet workload install maui`. The companion app targets `net11.0-*` and pulls in the .NET 11 runtime packs through the workload.
 - A device or simulator capable of running .NET MAUI apps (iOS Simulator, Android emulator, Mac Catalyst, or Windows)
 - The companion app **must run with `DOTNET_MODIFIABLE_ASSEMBLIES=Debug`** — already wired up in `GoApp.CreateMauiApp`
