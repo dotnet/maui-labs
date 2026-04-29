@@ -229,11 +229,11 @@ Set a default for all buttons in a subtree:
 VStack(...).ButtonStyle(ButtonStyles.Text);
 ```
 
-Or globally via the theme:
+Or globally via the theme. `Theme` is a `record` and `SetControlStyle` returns a derived theme — capture the return value, then activate it:
 
 ```csharp
-var theme = ThemeManager.Current();
-theme.SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
+var theme = ThemeManager.Current()
+    .SetControlStyle<Button, ButtonConfiguration>(ButtonStyles.Text);
 ThemeManager.SetTheme(theme);
 ```
 
@@ -275,10 +275,23 @@ var accent = this.GetEnvironment<Color>("App.Accent");
 
 ## Navigation
 
-Fluent Shell wrapper with typed navigation — no route strings at call sites:
+Typed navigation through `NavigationView` — no route strings at call sites. `Navigation` is an instance property on `View`, so call it from inside a component or any view:
 
 ```csharp
-Navigation.Navigate<DetailPage>(new DetailProps { Id = 42 });
+public class ListView : Component
+{
+    public override View Render() => Button("Open detail",
+        () => Navigation?.Navigate<DetailPage>(new DetailProps { Id = 42 }));
+}
+```
+
+Wrap your root view in a `NavigationView` to enable the navigation stack:
+
+```csharp
+public class App : CometApp
+{
+    public App() => Body = () => new NavigationView { new HomePage() };
+}
 ```
 
 ## MAUI Interop
