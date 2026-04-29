@@ -29,6 +29,24 @@ dotnet tool install -g Microsoft.Maui.Cli --prerelease
 maui doctor
 ```
 
+### Comet
+
+Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, single-file apps via Comet Go.
+
+| Package | Description |
+|---------|-------------|
+| `Comet` | Core MVU framework |
+| `Comet.SourceGenerator` | Roslyn source generators for Comet |
+| `Comet.Layout.Yoga` | Yoga layout integration |
+
+### Go
+
+Single-file Comet apps server + companion app for rapid prototyping (alpha; sister to Comet).
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Go.Server` | Comet Go server for hosting single-file apps |
+
 ### DevFlow
 
 A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
