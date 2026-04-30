@@ -6,6 +6,28 @@
     <MauiAppRefOutputRoot Condition="'$(MauiAppRefOutputRoot)' == ''">$(BaseIntermediateOutputPath)maui-app-refs\</MauiAppRefOutputRoot>
   </PropertyGroup>
 
+  <!--
+    Project a MauiAppProjectReference item into a real ProjectReference so that NuGet
+    restore, project-graph builds, IDE solution explorer, and external project-graph
+    analyzers see a real project edge. The projection lives in the targets file (rather
+    than props) so it can see items declared in the consuming project body, while still
+    being part of pure MSBuild evaluation (visible to NuGet restore).
+
+    User-supplied metadata wins thanks to MSBuild::ValueOrDefault.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="@(MauiAppProjectReference)">
+      <MauiAppProjectReference>true</MauiAppProjectReference>
+      <ReferenceOutputAssembly>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.ReferenceOutputAssembly)', 'false'))</ReferenceOutputAssembly>
+      <BuildReference>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.BuildReference)', 'false'))</BuildReference>
+      <PrivateAssets>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.PrivateAssets)', 'all'))</PrivateAssets>
+      <SkipGetTargetFrameworkProperties>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.SkipGetTargetFrameworkProperties)', 'true'))</SkipGetTargetFrameworkProperties>
+      <IncludeAssets>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.IncludeAssets)', 'none'))</IncludeAssets>
+    </ProjectReference>
+
+    <MauiAppProjectReference Remove="@(MauiAppProjectReference)" />
+  </ItemGroup>
+
   <Target Name="_CollectAppProjectReferences"
           BeforeTargets="AssignProjectConfiguration;ResolveProjectReferences">
     <ItemGroup>

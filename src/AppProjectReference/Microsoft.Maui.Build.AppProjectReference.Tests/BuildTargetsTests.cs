@@ -28,6 +28,63 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
+    public async Task MauiAppProjectReference_OneLine_BuildsAppAndExposesArtifactItem()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "App");
+    }
+
+    [Fact]
+    public async Task MauiAppProjectReference_AppearsInProjectGraphAsProjectReference()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Use a full build (not just evaluation) and assert the App project actually
+        // got referenced/built. NuGet restore creating App's project.assets.json proves
+        // the synthesized ProjectReference edge was visible to the restore graph.
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+
+        var appAssets = Path.Combine(workspace.AppProjectDirectory, "obj", "project.assets.json");
+        Assert.True(File.Exists(appAssets), $"NuGet restore did not produce assets file for App, indicating the synthesized ProjectReference was not visible to the restore graph. Build output:\n{result.Output}");
+    }
+
+    [Fact]
+    public async Task MauiAppProjectReference_UserMetadataOverridesDefaults()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // User overrides the implicit default of PrivateAssets=all with PrivateAssets=none.
+        // Build still has to succeed and the artifact still has to be discovered.
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0"
+                                     PrivateAssets="none"
+                                     ReferenceName="OverrideApp" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "OverrideApp");
+    }
+
+    [Fact]
     public async Task ProjectReferenceWithoutTargetFramework_UsesAppProjectTargetFramework()
     {
         using var workspace = TestWorkspace.Create();
