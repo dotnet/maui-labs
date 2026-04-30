@@ -134,6 +134,53 @@ The repo is at 0.1.0-preview so breaking changes are acceptable, but:
 - **Signing**: configured in `eng/Signing.props`. New third-party DLLs need a `3PartySHA2` entry.
 - **Version**: defined in `eng/Versions.props` (`VersionPrefix` + `VersionSuffix`). Per-product overrides in `src/{Product}/Version.props`.
 
+## Dependency Updates (darc)
+
+Upstream dependencies are managed via [darc/Maestro](https://github.com/dotnet/arcade/blob/main/Documentation/Darc.md). When updating a dependency:
+
+### Updating Xamarin.Apple.Tools.MaciOS
+
+```bash
+darc update-dependencies --channel ".NET 10.0.1xx SDK" --name Xamarin.Apple.Tools.MaciOS
+```
+
+This updates both `eng/Version.Details.xml` (SHA + version) and `eng/Versions.props` (`XamarinAppleToolsMaciOSVersion`).
+
+**After every update**, check the commits between the old and new SHA for changes that affect CLI behavior:
+
+```bash
+# Compare old..new SHA from Version.Details.xml
+gh api repos/dotnet/macios-devtools/compare/{oldSha}...{newSha} --jq '.commits[] | .commit.message | split("\n")[0]'
+```
+
+Look for:
+- New public APIs on `EnvironmentChecker`, `AppleInstaller`, `SimulatorService`, `RuntimeService` that the CLI could leverage
+- Bug fixes to simctl JSON parsing, stdout pollution, or ILMerge compatibility that previously required workarounds in our code
+- Breaking changes to method signatures the CLI calls (would require code updates)
+
+If the upstream fix removes the need for a workaround in our code, simplify the CLI code accordingly in the same PR.
+
+### Post-Update Smoke Tests (macOS only)
+
+After updating `Xamarin.Apple.Tools.MaciOS` or making changes to `src/Cli/.../Providers/Apple/` or `src/Cli/.../Commands/AppleCommands.cs`, **run the Apple CLI smoke tests** on macOS to verify nothing regressed:
+
+```bash
+./eng/smoke-tests/apple-cli-smoke-test.sh
+```
+
+The script builds the CLI and runs these checks:
+1. `maui apple xcode list --json` — detects installed Xcode
+2. `maui apple runtime list --json` — lists simulator runtimes
+3. `maui apple simulator list --json` — lists available simulators
+4. `maui apple simulator start <name> --json` — boots a simulator
+5. `maui apple simulator stop <name> --json` — shuts it down
+6. `maui --dry-run apple install --json` — validates install flow (iOS default)
+7. `maui --dry-run apple install --platform all --json` — validates all-platform install
+
+You can also pass a pre-built binary: `./eng/smoke-tests/apple-cli-smoke-test.sh path/to/maui`
+
+> **Note**: These tests require macOS with Xcode installed. They are skipped automatically on other platforms. If you are not on macOS, skip this step — CI on macOS runners will catch regressions.
+
 ## CI/CD — New Product Checklist
 
 When adding a new product to this repo you **must** set up two CI surfaces: a GitHub Actions workflow for PR validation and a build job + publish stage in the Azure DevOps official pipeline for signing and NuGet.org publishing.
