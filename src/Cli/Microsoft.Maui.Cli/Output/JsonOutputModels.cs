@@ -112,6 +112,10 @@ internal sealed record SimulatorCreateResult
 	public string? Runtime { get; init; }
 }
 
+/// <summary>
+/// Result of a successful simulator erase. The <see cref="Erased"/> field is always <c>true</c>;
+/// failure is reported via a MauiToolException before this model is emitted.
+/// </summary>
 internal sealed record SimulatorEraseResult
 {
 	[JsonPropertyName("target")]

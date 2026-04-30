@@ -381,7 +381,11 @@ public static class AppleCommands
 			if (string.IsNullOrWhiteSpace(customName) && runtime is not null)
 			{
 				var rParts = runtime.Split('.');
-				var rShort = (rParts.Length > 1 ? rParts[rParts.Length - 1] : runtime).Replace('-', ' ');
+				var rLast = rParts.Length > 1 ? rParts[rParts.Length - 1] : runtime;
+				var dashIdx = rLast.IndexOf('-');
+				var rShort = dashIdx >= 0
+					? rLast[..dashIdx] + ' ' + rLast[(dashIdx + 1)..].Replace('-', '.')
+					: rLast;
 				name = $"{shortType} ({rShort})";
 			}
 
