@@ -53,7 +53,9 @@ dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ### 4. Interact with your running app
 
 ```bash
-# Install project-scoped onboarding/troubleshooting skills for AI agents
+# Install DevFlow skills for AI agent integration (auto-detects target directory;
+# defaults to .claude/skills/ — configurable via --target: claude, github, agent, agents, or auto)
+# (configurable via --target: claude, github, agent, agents, or auto)
 maui devflow init
 
 # Visual tree
@@ -77,7 +79,7 @@ from different environments (e.g. worktrees, CI agents, dev machines) without mo
 the app's `ApplicationId` or bundle identifier.
 
 The session identity is included in:
-- Assembly metadata (`Microsoft.Maui.DevFlowSessionId`)
+- Assembly metadata (`Microsoft.Maui.DevFlowSessionId`) — compile-time injected by the `Microsoft.Maui.DevFlow.Agent` MSBuild targets
 - Broker registration (visible via `maui devflow list`)
 - Agent status endpoint (`/api/v1/agent/status`)
 
@@ -102,7 +104,7 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
 - **Blazor CDP Bridge** — Chrome DevTools Protocol for Blazor WebViews (DOM, JS eval, navigation, input)
-- **MCP Server** — 50+ structured tools for AI agent integration (Claude, etc.)
+- **MCP Server** — 69 structured tools for AI agent integration (Claude, etc.)
 - **Logging** — buffered JSONL file logging with WebView JS console capture
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
 - **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
@@ -173,7 +175,7 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 
 ### Real app integration tests
 
-The simulator/emulator-driven suite is kept separate from the fast PR test pass and is intended to be run explicitly:
+The simulator/emulator-driven suite is kept separate from the fast PR test pass and is intended to be run explicitly. Set `DEVFLOW_TEST_PLATFORM` to one of: `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`, `windows`. Defaults to `maccatalyst` on macOS, `windows` on Windows.
 
 ```bash
 # Mac Catalyst
@@ -195,4 +197,4 @@ There is also a manual GitHub Actions workflow at `.github/workflows/devflow-int
 
 ## Version
 
-Current version is managed in [`Version.props`](Version.props).
+Current version is managed in [`eng/Versions.props`](../../eng/Versions.props).

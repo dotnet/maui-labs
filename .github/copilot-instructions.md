@@ -134,6 +134,184 @@ The repo is at 0.1.0-preview so breaking changes are acceptable, but:
 - **Signing**: configured in `eng/Signing.props`. New third-party DLLs need a `3PartySHA2` entry.
 - **Version**: defined in `eng/Versions.props` (`VersionPrefix` + `VersionSuffix`). Per-product overrides in `src/{Product}/Version.props`.
 
+## CI/CD — New Product Checklist
+
+When adding a new product to this repo you **must** set up two CI surfaces: a GitHub Actions workflow for PR validation and a build job + publish stage in the Azure DevOps official pipeline for signing and NuGet.org publishing.
+
+### Step 1: GitHub Actions PR / Push Workflow
+
+Create `.github/workflows/ci-{product}.yml`. Use the template below — replace every `{Product}` (PascalCase) and `{product}` (lowercase) placeholder.
+
+```yaml
+name: CI - {Product}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/{Product}/**'
+      # CUSTOMIZE: add paths for cross-product ProjectReference dependencies, e.g.:
+      # - 'src/OtherProduct/SharedLib/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    # IMPORTANT: 'edited' is required — without it CI does not run when
+    # GitHub auto-retargets a PR after a stacked branch merges.
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'src/{Product}/**'
+      # CUSTOMIZE: add paths for cross-product ProjectReference dependencies, e.g.:
+      # - 'src/OtherProduct/SharedLib/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/{Product}/{Product}.slnf   # CUSTOMIZE: path to solution filter (.slnf or .slnx)
+      project-name: {product}                       # CUSTOMIZE: lowercase, used in artifact names
+      run-tests: true
+      pack: true
+      install-workloads: true                       # CUSTOMIZE: set false for net10.0-only products (no MAUI TFMs)
+      # os: '["macos-latest", "windows-latest"]'    # CUSTOMIZE: default is macOS + Windows
+      # native-deps: 'sudo apt-get install ...'     # CUSTOMIZE: if Linux-only with native libs
+```
+
+#### `_build.yml` inputs reference
+
+| Input | Default | When to change |
+|-------|---------|---------------|
+| `install-workloads` | `true` | Set `false` if the product targets only `net10.0` (no MAUI TFMs) |
+| `os` | `["macos-latest", "windows-latest"]` | Override to `["ubuntu-24.04"]` for Linux-only products |
+| `native-deps` | *(empty)* | Provide an `apt-get install` command if the product needs native libraries (e.g., GTK4) |
+| `pack` | `false` | Set `true` if the product produces NuGet packages |
+| `run-tests` | `true` | Set `false` only if there are no tests yet |
+
+### Step 2: Azure DevOps Official Pipeline
+
+The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Arcade-based builds with MicroBuild/ESRP signing and NuGet.org publishing. For each new product, add **three** blocks:
+
+#### a) Publish parameter (at the top, in the `parameters:` section)
+
+```yaml
+- name: publish{Product}Nuget
+  displayName: 'Publish {Product} packages to NuGet.org'
+  type: boolean
+  default: false
+```
+
+#### b) Build job (in the `build` stage, under `jobs:`, parallel with existing jobs)
+
+```yaml
+          - job: {Product}
+            displayName: {Product} - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            # CUSTOMIZE: If the product needs MAUI workloads, add these steps
+            # before the build (copy from the DevFlow job):
+            #   - Provision .NET SDK via Arcade (eng\common\dotnet.cmd --info)
+            #   - Install MAUI workloads (.dotnet\dotnet workload install maui ...)
+            #   - Install Android SDK dependencies
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\{Product}\{Product}.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test {Product}
+```
+
+#### c) Conditional publish stage (at the bottom, after the other `publish_*_nuget` stages)
+
+This stage filters the product's `.nupkg` files from the shared `PackageArtifacts` artifact, then pushes them to NuGet.org via the `1ES.PublishNuget` task.
+
+```yaml
+    # Publish {Product} packages to NuGet.org
+    - ${{ if eq(parameters.publish{Product}Nuget, true) }}:
+      - stage: publish_{product}_nuget
+        displayName: 'Publish {Product} to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare {Product} Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish {Product} Packages
+              targetPath: '$(Pipeline.Workspace)/{Product}Packages'
+              artifactName: {Product}PackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/{Product}Packages'
+              # CUSTOMIZE: glob must match the package ID prefix for this product
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.{Product}.*.nupkg' '$(Pipeline.Workspace)/{Product}Packages/' -Verbose
+            displayName: Filter {Product} packages
+
+        - job: PublishNuGet
+          displayName: 'Push {Product} to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: {Product}PackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/{Product}Packages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push {Product} to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/{Product}Packages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/{Product}Packages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+```
+
+#### Key conventions
+
+- **Package glob pattern**: example: `Microsoft.Maui.{Product}.*.nupkg` — use the actual `<PackageId>` prefix from your `.csproj` files (e.g., Linux GTK4 uses `Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg`).
+- **`dependsOn: [Validate, publish_using_darc]`**: these stages come from the Arcade post-build template (`eng/common/templates-official/post-build/post-build.yml`) and must always be listed.
+- **Signing**: All shipped NuGet packages must build on Windows so MicroBuild/ESRP can sign the DLLs. If the product is Linux-only, build *and pack* on Windows (signing), then optionally add a separate Linux verification job (see the `LinuxGtk4_LinuxVerify` job for the pattern).
+- **`publishFeedCredentials`**: Always use `'nuget.org (dotnetframework)'` — this is the service connection configured in the Azure DevOps project.
+
 ## Maui.Client Conventions (Future — Not Yet Present)
 
 A Client product (`src/Client/`) is planned but not yet present in this repository. When added, it will use a DI-based architecture with provider interfaces:

@@ -148,6 +148,13 @@ public record AvdInfo
 {
 	public required string Name { get; init; }
 	public string? DeviceProfile { get; init; }
+
+	/// <summary>
+	/// Device manufacturer as configured in the AVD (e.g. "Google", "Samsung").
+	/// Read from <c>hw.device.manufacturer</c> in config.ini.
+	/// </summary>
+	public string? Manufacturer { get; init; }
+
 	public string? SystemImage { get; init; }
 	public string? Target { get; init; }
 	public string? Path { get; init; }

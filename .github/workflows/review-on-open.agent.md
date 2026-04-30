@@ -13,6 +13,10 @@ on:
       - 'THIRD-PARTY-NOTICES.txt'
   roles: [admin, maintainer, write]
 
+concurrency:
+  group: "expert-review-${{ github.event.pull_request.number || github.run_id }}"
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pull-requests: read
