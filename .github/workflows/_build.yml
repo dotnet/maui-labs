@@ -52,6 +52,8 @@ jobs:
     strategy:
       matrix:
         os: ${{ fromJson(inputs.apple-native && '["macos-latest"]' || inputs.os) }}
+        exclude:
+          - os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -73,24 +75,9 @@ jobs:
         if: inputs.install-workloads
         run: dotnet workload install maui macos maui-tizen
 
-      - name: Install Android SDK dependencies (Windows)
-        if: inputs.install-workloads && matrix.os == 'windows-latest'
-        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
-        shell: cmd
-
       - name: Install Android SDK dependencies (macOS)
         if: inputs.install-workloads && matrix.os == 'macos-latest'
         run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj
-
-      - name: Build, Test and Pack (Windows)
-        if: matrix.os == 'windows-latest'
-        run: >
-          eng\common\cibuild.cmd
-          -configuration Release
-          -prepareMachine
-          -projects %CD%\${{ inputs.project-path }}
-          /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
-        shell: cmd
 
       - name: Build and Test (macOS)
         if: matrix.os == 'macos-latest'
@@ -185,12 +172,10 @@ jobs:
           name: native-apple-${{ inputs.project-name }}
           path: artifacts/bin/**/Release/**/*.resources.zip
 
-  # Windows build for products WITH Apple native code (e.g. XcodeProject / Swift).
-  # Runs after the macOS matrix build so native .resources.zip artifacts are available.
-  # AppleBindings.targets includes them during pack.
+  # Windows build. For apple-native products, runs after macOS so native .resources.zip
+  # artifacts are available. For other products, runs with no dependency (parallel).
   build-windows:
-    if: ${{ inputs.apple-native }}
-    needs: build
+    needs: ${{ inputs.apple-native && 'build' || fromJson('[]') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -210,6 +195,7 @@ jobs:
         shell: cmd
 
       - name: Download native Apple artifacts
+        if: inputs.apple-native
         uses: actions/download-artifact@v8
         with:
           name: native-apple-${{ inputs.project-name }}
