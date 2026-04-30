@@ -35,6 +35,12 @@
     <MauiFont Include="Resources\Fonts\*" />
     <MauiImage Include="Resources\Images\*" />
     <MauiIcon Include="Resources\AppIcon\appicon-modern.svg" />
+    <!-- Copy image assets to output so the WPF ImageHandler can resolve them at runtime.
+         The standard Resizetizer pipeline doesn't run for this custom backend TFM. -->
+    <Content Include="Resources\Images\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
