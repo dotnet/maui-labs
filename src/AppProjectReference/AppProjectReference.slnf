@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "src\\AppProjectReference\\Microsoft.Maui.Build.AppProjectReference\\Microsoft.Maui.Build.AppProjectReference.csproj",
+      "src\\AppProjectReference\\Microsoft.Maui.Build.AppProjectReference.Tests\\Microsoft.Maui.Build.AppProjectReference.Tests.csproj"
+    ]
+  }
+}

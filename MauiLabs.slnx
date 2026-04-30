@@ -30,9 +30,9 @@
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Logging/Microsoft.Maui.DevFlow.Logging.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Tests/Microsoft.Maui.DevFlow.Tests.csproj" />
   </Folder>
-  <Folder Name="/src/TestAppBuild/">
-    <Project Path="src/TestAppBuild/Microsoft.Maui.TestApp.Build/Microsoft.Maui.TestApp.Build.csproj" />
-    <Project Path="src/TestAppBuild/Microsoft.Maui.TestApp.Build.Tests/Microsoft.Maui.TestApp.Build.Tests.csproj" />
+  <Folder Name="/src/AppProjectReference/">
+    <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference/Microsoft.Maui.Build.AppProjectReference.csproj" />
+    <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/Microsoft.Maui.Build.AppProjectReference.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/DevFlow/" />

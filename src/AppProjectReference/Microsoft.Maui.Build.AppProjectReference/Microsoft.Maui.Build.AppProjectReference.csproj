@@ -8,9 +8,9 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <PackRepoRootReadme>false</PackRepoRootReadme>
 
-    <PackageId>Microsoft.Maui.TestApp.Build</PackageId>
-    <Description>MSBuild package for declaring app projects as test dependencies and exposing built app artifacts to test projects.</Description>
-    <PackageTags>maui;testing;msbuild;android;ios;maccatalyst;macos;windows</PackageTags>
+    <PackageId>Microsoft.Maui.Build.AppProjectReference</PackageId>
+    <Description>MSBuild package for declaring MAUI/.NET app projects as build references and exposing the built app artifacts (.apk, .aab, .app, .ipa, .msix, .exe, ...) back to the consuming project. Useful for test projects that need to install/launch an app, or any tooling that needs deterministic access to a built app's outputs.</Description>
+    <PackageTags>maui;dotnet;msbuild;android;ios;maccatalyst;macos;windows;testing;build;appreference</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

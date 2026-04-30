@@ -1,4 +1,0 @@
-<Project>
-  <Import Project="$(MSBuildThisFileDirectory)..\build\Microsoft.Maui.TestApp.Build.props"
-          Condition="Exists('$(MSBuildThisFileDirectory)..\build\Microsoft.Maui.TestApp.Build.props')" />
-</Project>

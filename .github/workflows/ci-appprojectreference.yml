@@ -1,10 +1,10 @@
-name: CI - TestAppBuild
+name: CI - AppProjectReference
 
 on:
   push:
     branches: [main]
     paths:
-      - 'src/TestAppBuild/**'
+      - 'src/AppProjectReference/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -15,7 +15,7 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
-      - 'src/TestAppBuild/**'
+      - 'src/AppProjectReference/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -27,8 +27,8 @@ jobs:
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      project-path: src/TestAppBuild/TestAppBuild.slnf
-      project-name: testappbuild
+      project-path: src/AppProjectReference/AppProjectReference.slnf
+      project-name: appprojectreference
       run-tests: true
       pack: true
       install-workloads: false

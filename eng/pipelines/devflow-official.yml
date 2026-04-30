@@ -20,8 +20,8 @@ parameters:
   displayName: 'Publish Cli packages to NuGet.org'
   type: boolean
   default: false
-- name: publishTestAppBuildNuget
-  displayName: 'Publish TestAppBuild packages to NuGet.org'
+- name: publishAppProjectReferenceNuget
+  displayName: 'Publish AppProjectReference packages to NuGet.org'
   type: boolean
   default: false
 - name: publishLinuxGtk4Nuget
@@ -129,8 +129,8 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
 
-          - job: TestAppBuild
-            displayName: TestAppBuild - Windows
+          - job: AppProjectReference
+            displayName: AppProjectReference - Windows
             pool:
               name: NetCore1ESPool-Internal
               demands: ImageOverride -equals windows.vs2026preview.scout.amd64
@@ -149,9 +149,9 @@ extends:
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
-                -projects $(Build.SourcesDirectory)\src\TestAppBuild\TestAppBuild.slnf
+                -projects $(Build.SourcesDirectory)\src\AppProjectReference\AppProjectReference.slnf
                 $(_OfficialBuildArgs)
-              displayName: Build and Test TestAppBuild
+              displayName: Build and Test AppProjectReference
 
           # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
@@ -341,16 +341,16 @@ extends:
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 
-    # Publish TestAppBuild packages to NuGet.org
-    - ${{ if eq(parameters.publishTestAppBuildNuget, true) }}:
+    # Publish AppProjectReference packages to NuGet.org
+    - ${{ if eq(parameters.publishAppProjectReferenceNuget, true) }}:
       - stage: publish_testappbuild_nuget
-        displayName: 'Publish TestAppBuild to NuGet.org'
+        displayName: 'Publish AppProjectReference to NuGet.org'
         dependsOn:
         - Validate
         - publish_using_darc
         jobs:
         - job: PrepareArtifacts
-          displayName: 'Prepare TestAppBuild Artifacts'
+          displayName: 'Prepare AppProjectReference Artifacts'
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
@@ -359,20 +359,20 @@ extends:
           templateContext:
             outputs:
             - output: pipelineArtifact
-              displayName: Publish TestAppBuild Packages
-              targetPath: '$(Pipeline.Workspace)/TestAppBuildPackages'
-              artifactName: TestAppBuildPackagesForNuGet
+              displayName: Publish AppProjectReference Packages
+              targetPath: '$(Pipeline.Workspace)/AppProjectReferencePackages'
+              artifactName: AppProjectReferencePackagesForNuGet
           steps:
           - download: current
             artifact: PackageArtifacts
             displayName: Download PackageArtifacts
           - powershell: |
-              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/TestAppBuildPackages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.TestApp.Build.*.nupkg' '$(Pipeline.Workspace)/TestAppBuildPackages/' -Verbose
-            displayName: Filter TestAppBuild packages
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/AppProjectReferencePackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Build.AppProjectReference.*.nupkg' '$(Pipeline.Workspace)/AppProjectReferencePackages/' -Verbose
+            displayName: Filter AppProjectReference packages
 
         - job: PublishNuGet
-          displayName: 'Push TestAppBuild to NuGet.org'
+          displayName: 'Push AppProjectReference to NuGet.org'
           dependsOn: PrepareArtifacts
           timeoutInMinutes: 30
           pool:
@@ -384,15 +384,15 @@ extends:
             isProduction: true
             inputs:
             - input: pipelineArtifact
-              artifactName: TestAppBuildPackagesForNuGet
-              targetPath: '$(Pipeline.Workspace)/TestAppBuildPackages'
+              artifactName: AppProjectReferencePackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/AppProjectReferencePackages'
           steps:
           - task: 1ES.PublishNuget@1
-            displayName: 'Push TestAppBuild to NuGet.org'
+            displayName: 'Push AppProjectReference to NuGet.org'
             inputs:
               useDotNetTask: false
-              packagesToPush: '$(Pipeline.Workspace)/TestAppBuildPackages/*.nupkg'
-              packageParentPath: '$(Pipeline.Workspace)/TestAppBuildPackages'
+              packagesToPush: '$(Pipeline.Workspace)/AppProjectReferencePackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/AppProjectReferencePackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 

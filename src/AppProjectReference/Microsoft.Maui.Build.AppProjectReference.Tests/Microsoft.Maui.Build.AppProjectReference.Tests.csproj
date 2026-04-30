@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Microsoft.Maui.TestApp.Build\Microsoft.Maui.TestApp.Build.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Microsoft.Maui.Build.AppProjectReference\Microsoft.Maui.Build.AppProjectReference.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

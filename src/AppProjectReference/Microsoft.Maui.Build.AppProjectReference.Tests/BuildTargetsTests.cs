@@ -1,14 +1,14 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Microsoft.Maui.TestApp.Build.Tests;
+namespace Microsoft.Maui.Build.AppProjectReference.Tests;
 
 public sealed class BuildTargetsTests
 {
     private static readonly TimeSpan DotNetCommandTimeout = TimeSpan.FromMinutes(5);
 
     [Fact]
-    public async Task ProjectReferenceMarkedAsMauiTestApp_BuildsAppAndExposesArtifactItem()
+    public async Task ProjectReferenceMarkedAsMauiAppProjectReference_BuildsAppAndExposesArtifactItem()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -19,7 +19,7 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0" />
             """);
 
@@ -39,7 +39,7 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true" />
+                              MauiAppProjectReference="true" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -47,26 +47,6 @@ public sealed class BuildTargetsTests
 
         var artifactsText = File.ReadAllText(Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt"));
         Assert.DoesNotContain($"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}bin", artifactsText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ProjectReferenceWithOutputItemType_BuildsAppAndExposesArtifactItem()
-    {
-        using var workspace = TestWorkspace.Create();
-
-        var result = await BuildWorkspaceAsync(
-            workspace,
-            """
-            <ProjectReference Include="..\App\App.csproj"
-                              ReferenceOutputAssembly="false"
-                              BuildReference="false"
-                              OutputItemType="MauiTestAppReference"
-                              TargetFramework="net10.0"
-                              ReferenceName="OutputItemTypeApp" />
-            """);
-
-        Assert.True(result.ExitCode == 0, result.Output);
-        AssertArtifactItem(workspace, expectedName: "OutputItemTypeApp");
     }
 
     [Fact]
@@ -81,10 +61,10 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0"
                               ReferenceName="IosStyleApp"
-                              Properties="MauiTestAppSimulateAppBundle=true" />
+                              Properties="MauiAppRefSimulateAppBundle=true" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -111,11 +91,11 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0"
                               ReferenceName="TrailingSlashApp"
                               SetPlatformOutputPaths="false"
-                              Properties="MauiTestAppSimulateAppBundle=true;AppBundleDir={{appBundleDir}}" />
+                              Properties="MauiAppRefSimulateAppBundle=true;AppBundleDir={{appBundleDir}}" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -142,7 +122,7 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0"
                               ReferenceName="PublishDirApp"
                               Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}}" />
@@ -179,10 +159,10 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0"
                               ReferenceName="WindowsStyleApp"
-                              Properties="MauiTestAppSimulateAppInstaller=true" />
+                              Properties="MauiAppRefSimulateAppInstaller=true" />
             """);
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -206,9 +186,9 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0"
-                              Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}};MauiTestAppAppTargetsPath=missing.targets" />
+                              Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}};MauiAppRefAppTargetsPath=missing.targets" />
             """,
             customAfterTargetsXml:
             """
@@ -227,7 +207,7 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
-    public async Task CleanMauiTestAppArtifacts_SkipsOutputRootOutsideBaseIntermediatePath()
+    public async Task CleanAppProjectReferenceArtifacts_SkipsOutputRootOutsideBaseIntermediatePath()
     {
         using var workspace = TestWorkspace.Create();
         workspace.WriteProjects(
@@ -236,7 +216,7 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0" />
             """);
 
@@ -250,7 +230,7 @@ public sealed class BuildTargetsTests
             workspace.TestProjectPath,
             "-t:Clean",
             "-v:minimal",
-            "-p:MauiTestAppOutputRoot=" + outsideOutputRoot,
+            "-p:MauiAppRefOutputRoot=" + outsideOutputRoot,
             "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -259,7 +239,7 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
-    public async Task CleanMauiTestAppArtifacts_SkipsDifferentCasedOutputRootOnNonWindows()
+    public async Task CleanAppProjectReferenceArtifacts_SkipsDifferentCasedOutputRootOnNonWindows()
     {
         if (OperatingSystem.IsWindows())
             return;
@@ -271,7 +251,7 @@ public sealed class BuildTargetsTests
                               ReferenceOutputAssembly="false"
                               BuildReference="false"
                               PrivateAssets="all"
-                              MauiTestApp="true"
+                              MauiAppProjectReference="true"
                               TargetFramework="net10.0" />
             """);
 
@@ -287,7 +267,7 @@ public sealed class BuildTargetsTests
             "-t:Clean",
             "-v:minimal",
             "-p:BaseIntermediateOutputPath=" + baseIntermediateOutputPath,
-            "-p:MauiTestAppOutputRoot=" + differentCasedOutputRoot,
+            "-p:MauiAppRefOutputRoot=" + differentCasedOutputRoot,
             "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
 
         Assert.True(result.ExitCode == 0, result.Output);
@@ -468,7 +448,7 @@ public sealed class BuildTargetsTests
 
                   <Target Name="CreateFakeAppBundle"
                           AfterTargets="Build"
-                          Condition="'$(MauiTestAppSimulateAppBundle)' == 'true' and '$(AppBundleDir)' != ''">
+                          Condition="'$(MauiAppRefSimulateAppBundle)' == 'true' and '$(AppBundleDir)' != ''">
                     <MakeDir Directories="$(AppBundleDir)" />
                     <WriteLinesToFile File="$([System.IO.Path]::Combine('$(AppBundleDir)', 'Info.plist'))"
                                       Lines="Fake bundle for tests."
@@ -477,9 +457,9 @@ public sealed class BuildTargetsTests
 
                   <Target Name="CreateFakeAppInstaller"
                           AfterTargets="Build"
-                          Condition="'$(MauiTestAppSimulateAppInstaller)' == 'true' and '$(MauiTestAppOutputRoot)' != ''">
-                    <MakeDir Directories="$(MauiTestAppOutputRoot)" />
-                    <WriteLinesToFile File="$([System.IO.Path]::Combine('$(MauiTestAppOutputRoot)', '$(MSBuildProjectName).appinstaller'))"
+                          Condition="'$(MauiAppRefSimulateAppInstaller)' == 'true' and '$(MauiAppRefOutputRoot)' != ''">
+                    <MakeDir Directories="$(MauiAppRefOutputRoot)" />
+                    <WriteLinesToFile File="$([System.IO.Path]::Combine('$(MauiAppRefOutputRoot)', '$(MSBuildProjectName).appinstaller'))"
                                       Lines="Fake appinstaller for tests."
                                       Overwrite="true" />
                   </Target>
@@ -496,8 +476,8 @@ public sealed class BuildTargetsTests
                 File.WriteAllText(CustomAfterTargetsPath, customAfterTargetsXml);
 
             var repoRoot = FindRepoRoot();
-            var propsPath = Path.Combine(repoRoot, "src", "TestAppBuild", "Microsoft.Maui.TestApp.Build", "build", "Microsoft.Maui.TestApp.Build.props");
-            var targetsPath = Path.Combine(repoRoot, "src", "TestAppBuild", "Microsoft.Maui.TestApp.Build", "build", "Microsoft.Maui.TestApp.Build.targets");
+            var propsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.props");
+            var targetsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.targets");
             var outputRoot = Path.Combine(Root, "test-app-output") + Path.DirectorySeparatorChar;
 
             File.WriteAllText(
@@ -508,21 +488,21 @@ public sealed class BuildTargetsTests
 
                   <PropertyGroup>
                     <TargetFramework>net10.0</TargetFramework>
-                    <MauiTestAppOutputRoot>{{XmlEscape(outputRoot)}}</MauiTestAppOutputRoot>
+                    <MauiAppRefOutputRoot>{{XmlEscape(outputRoot)}}</MauiAppRefOutputRoot>
                   </PropertyGroup>
 
                   <ItemGroup>
                 {{Indent(projectReferenceXml, 4)}}
                   </ItemGroup>
 
-                  <Target Name="CaptureMauiTestAppArtifacts"
-                          AfterTargets="BuildMauiTestApps"
-                          Condition="'@(MauiTestAppArtifact)' != ''">
+                  <Target Name="CaptureMauiAppArtifacts"
+                          AfterTargets="BuildAppProjectReferences"
+                          Condition="'@(MauiAppArtifact)' != ''">
                     <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-artifacts.txt"
-                                      Lines="@(MauiTestAppArtifact->'%(ReferenceName)|%(Identity)|%(ProjectPath)|%(TargetFramework)|%(ArtifactType)|%(ApplicationId)|%(Installable)|%(Launchable)')"
+                                      Lines="@(MauiAppArtifact->'%(ReferenceName)|%(Identity)|%(ProjectPath)|%(TargetFramework)|%(ArtifactType)|%(ApplicationId)|%(Installable)|%(Launchable)')"
                                       Overwrite="true" />
                     <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-artifact-paths.txt"
-                                      Lines="$(MauiTestAppArtifactPaths)"
+                                      Lines="$(MauiAppArtifactPaths)"
                                       Overwrite="true" />
                   </Target>
 
