@@ -154,6 +154,111 @@ maui doctor
 maui doctor --json | jq '.checks[] | select(.status == "failed")'
 ```
 
+### `--json` flag
+
+Most commands accept `--json` for structured output. Successful results emit a top-level JSON object whose shape is command-specific (see per-command `--help` and examples below). When a command **fails**, it always emits the canonical error envelope described in the next section — regardless of which command was run.
+
+Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts.
+
+### Error envelope <a name="error-envelope"></a>
+
+When a `maui` command exits with a non-zero exit code and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`.
+
+```json
+{
+  "code": "E2106",          // stable error code — see `maui errors list` (issue #197)
+  "category": "platform",   // tool | platform | user | network | permission
+  "severity": "error",      // info | warning | error
+  "message": "Android emulator not installed",
+
+  // OPTIONAL — omitted entirely when null (never serialized as JSON null)
+
+  "native_error": "...",    // raw error text from the underlying tool, when available
+  "context": { ... },       // command-specific diagnostics bag
+  "remediation": {
+    "type": "autofixable",              // autofixable | useraction | terminal | unknown
+    "command": "maui android sdk install emulator",  // present when type == autofixable
+    "manual_steps": ["...", "..."]      // present when type == useraction
+  },
+  "docs_url": "https://...",
+  "correlation_id": "..."
+}
+```
+
+**Contract guarantees** (verified line-by-line against `Models/ErrorResult.cs`):
+
+- Property names are `snake_case` — enforced by `[JsonPropertyName]` attributes on `ErrorResult`.
+- `remediation.type` values are **lowercase** strings — serialized via `.ToString().ToLowerInvariant()`.
+- Optional fields (`native_error`, `context`, `remediation`, `docs_url`, `correlation_id`) are **omitted entirely** when null — enforced by `[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]`.
+- There is **no** outer `"error"` wrapper — all fields are top-level.
+- `code`, `category`, `severity`, and `message` are always present.
+- The shape is stable across CLI versions; new optional fields may be added but existing field names and types will not change without a major version bump.
+
+### Error code categories
+
+| Prefix | `category` value | Examples |
+|--------|-----------------|---------|
+| `E1xxx` | `tool` | `E1001` InternalError, `E1004` InvalidArgument, `E1006` DeviceNotFound, `E1007` PlatformNotSupported |
+| `E20xx` | `platform` | `E2001` JdkNotFound, `E2002` JdkVersionUnsupported, `E2003` JdkInstallFailed |
+| `E21xx` | `platform` | `E2101` AndroidSdkNotFound, `E2103` AndroidLicensesNotAccepted, `E2106` AndroidEmulatorNotFound, `E2110` AndroidAdbNotFound |
+| `E22xx` | `platform` | `E2201` AppleXcodeNotFound, `E2204` AppleSimulatorNotFound |
+| `E23xx` | `platform` | `E2301` WindowsSdkNotFound |
+| `E24xx` | `platform` | `E2401` DotNetNotFound, `E2402` MauiWorkloadMissing |
+| `E3xxx` | `user` | User action required (wrong arguments, missing inputs) |
+| `E4xxx` | `network` | Download / connectivity failures |
+| `E5xxx` | `permission` | Privacy / OS permission issues |
+
+Call `maui errors list --json` to get the live catalogue (being added in issue [#197](https://github.com/dotnet/maui-labs/issues/197)).
+
+### Consuming the error envelope
+
+**Bash / jq:**
+
+```bash
+if ! out=$(maui android sdk install emulator --json 2>&1); then
+  rem_type=$(echo "$out" | jq -r '.remediation.type // "unknown"')
+  rem_cmd=$(echo "$out" | jq -r '.remediation.command // empty')
+  if [[ "$rem_type" == "autofixable" && -n "$rem_cmd" ]]; then
+    eval "$rem_cmd"
+  fi
+fi
+```
+
+**PowerShell:**
+
+```powershell
+$json = maui android sdk install emulator --json
+if ($LASTEXITCODE -ne 0) {
+    $err = $json | ConvertFrom-Json
+    if ($err.remediation.type -eq 'autofixable' -and $err.remediation.command) {
+        Invoke-Expression $err.remediation.command
+    }
+}
+```
+
+### Worked example: `E2106` AndroidEmulatorNotFound
+
+`maui android emulator start <name>` emits `E2106` with an `autofixable` remediation when the Android emulator binary is not installed:
+
+```bash
+maui android emulator start Pixel8 --json
+# → { "code": "E2106",
+#     "category": "platform",
+#     "severity": "error",
+#     "message": "Android emulator not installed",
+#     "remediation": { "type": "autofixable",
+#                      "command": "maui android sdk install emulator" } }
+
+# Auto-fix path:
+maui android sdk install emulator --json
+maui android emulator start Pixel8 --json   # retry original
+```
+
+Other `E2106` throw sites (e.g., "no AVD with that name") emit the same code **without** a `remediation` block — surface `message` and stop retrying.
+
+> For agent-facing usage examples and remediation patterns used by AI coding agents, see
+> [`plugins/dotnet-maui/skills/maui-devflow-debug/references/troubleshooting.md`](../../plugins/dotnet-maui/skills/maui-devflow-debug/references/troubleshooting.md).
+
 ## Platform Support
 
 | Platform | Status | Notes |
