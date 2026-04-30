@@ -24,7 +24,7 @@ The recommended declaration is still a real `ProjectReference`, so tools that in
 The test project build will:
 
 1. Build the referenced app project with the supplied MSBuild properties.
-2. Locate produced app artifacts such as `.apk`, `.aab`, `.app`, `.ipa`, `.msix`, `.exe`, or `.dll`.
+2. Locate produced app artifacts such as `.apk`, `.aab`, `.app`, `.ipa`, `.msix`, `.appinstaller`, `.exe`, or `.dll`.
 3. Expose the located artifacts as `@(MauiTestAppArtifact)` items with metadata.
 4. Set `$(MauiTestAppArtifacts)` and `$(MauiTestAppArtifactPaths)` for simple target consumption.
 

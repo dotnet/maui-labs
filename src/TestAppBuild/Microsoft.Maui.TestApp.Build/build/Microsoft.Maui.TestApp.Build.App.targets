@@ -55,6 +55,7 @@
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.app'">app</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.ipa'">ipa</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">msix</ArtifactType>
+        <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.appinstaller'">appinstaller</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.exe'">exe</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.dll'">dll</ArtifactType>
         <ArtifactType Condition="'$(PublishDir)' != '' and '%(_MauiTestAppArtifactCandidate.Identity)' == '$(PublishDir)'">publish-directory</ArtifactType>

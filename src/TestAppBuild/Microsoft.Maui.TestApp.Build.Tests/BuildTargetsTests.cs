@@ -95,6 +95,32 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
+    public async Task ProjectReferenceWithAppInstaller_ExposesAppInstallerArtifactType()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0"
+                              ReferenceName="WindowsStyleApp"
+                              Properties="MauiTestAppSimulateAppInstaller=true" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(
+            workspace,
+            expectedName: "WindowsStyleApp",
+            expectedArtifactType: "appinstaller",
+            expectSingleArtifact: false);
+    }
+
+    [Fact]
     public async Task ProjectReferenceWithCustomAfterTargets_PreservesCustomTargetAndInjectsArtifactTarget()
     {
         using var workspace = TestWorkspace.Create();
@@ -346,6 +372,15 @@ public sealed class BuildTargetsTests
                     <MakeDir Directories="$(AppBundleDir)" />
                     <WriteLinesToFile File="$([System.IO.Path]::Combine('$(AppBundleDir)', 'Info.plist'))"
                                       Lines="Fake bundle for tests."
+                                      Overwrite="true" />
+                  </Target>
+
+                  <Target Name="CreateFakeAppInstaller"
+                          AfterTargets="Build"
+                          Condition="'$(MauiTestAppSimulateAppInstaller)' == 'true' and '$(MauiTestAppOutputRoot)' != ''">
+                    <MakeDir Directories="$(MauiTestAppOutputRoot)" />
+                    <WriteLinesToFile File="$([System.IO.Path]::Combine('$(MauiTestAppOutputRoot)', '$(MSBuildProjectName).appinstaller'))"
+                                      Lines="Fake appinstaller for tests."
                                       Overwrite="true" />
                   </Target>
                 </Project>
