@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Maui.Controls.Sample.Services;
+using EssentialsAISample.Services;
 using Microsoft.Maui.Essentials.AI.UnitTests.TestHelpers;
 using Xunit;
 

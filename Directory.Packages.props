@@ -16,13 +16,13 @@
 
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsConfigurationVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsHttpVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsLoggingAbstractionsVersion)" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(MicrosoftExtensionsLoggingAbstractionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(MicrosoftExtensionsLoggingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="$(MicrosoftExtensionsLoggingDebugVersion)" />
   </ItemGroup>
 

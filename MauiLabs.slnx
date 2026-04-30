@@ -11,7 +11,7 @@
     <Project Path="samples/DevFlow.Sample.Linux/DevFlow.Sample.Linux.csproj" />
     <Project Path="samples/DevFlow.Sample.MacOS/DevFlow.Sample.MacOS.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
-    <Project Path="samples/Microsoft.Maui.Essentials.AI.Sample/Microsoft.Maui.Essentials.AI.Sample.csproj" />
+    <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">

@@ -1,3 +1,3 @@
-namespace Maui.Controls.Sample.Models;
+namespace EssentialsAISample.Models;
 
 public record Location(double Latitude, double Longitude);

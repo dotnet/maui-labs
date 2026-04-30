@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Maui.Controls.Sample.Services;
+using EssentialsAISample.Services;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
 

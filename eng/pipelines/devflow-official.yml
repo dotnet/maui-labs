@@ -177,7 +177,9 @@ extends:
             - script: |
                 eng/common/dotnet.sh --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet/dotnet workload install maui macos maui-tizen
+            - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+              displayName: Select Xcode 26.3
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen
               displayName: Install MAUI workloads
             - script: |
                 ./eng/common/build.sh \

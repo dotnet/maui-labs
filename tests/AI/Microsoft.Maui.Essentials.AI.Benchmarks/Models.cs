@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Maui.Controls.Sample.Models;
+namespace Microsoft.Maui.Essentials.AI.Benchmarks;
 
 public class TravelItinerary
 {

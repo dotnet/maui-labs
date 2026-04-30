@@ -1,4 +1,4 @@
-using Maui.Controls.Sample.Services;
+using EssentialsAISample.Services;
 using Microsoft.Extensions.AI;
 using Xunit;
 

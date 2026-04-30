@@ -24,9 +24,11 @@
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
     <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
     <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
   </PropertyGroup>

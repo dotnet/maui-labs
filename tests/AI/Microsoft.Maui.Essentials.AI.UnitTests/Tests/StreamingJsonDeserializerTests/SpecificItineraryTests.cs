@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Maui.Controls.Sample.Models;
-using Maui.Controls.Sample.Services;
+using EssentialsAISample.Models;
+using EssentialsAISample.Services;
 using Microsoft.Maui.Essentials.AI.UnitTests.TestHelpers;
 using Xunit;
 using Xunit.Abstractions;

@@ -6,7 +6,7 @@ on:
     paths:
       - 'src/AI/**'
       - 'tests/AI/**'
-      - 'samples/Microsoft.Maui.Essentials.AI.Sample/**'
+      - 'samples/EssentialsAISample/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -19,7 +19,7 @@ on:
     paths:
       - 'src/AI/**'
       - 'tests/AI/**'
-      - 'samples/Microsoft.Maui.Essentials.AI.Sample/**'
+      - 'samples/EssentialsAISample/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -39,6 +39,7 @@ jobs:
       run-tests: true
       pack: true
       xcode-version: '26.3'
+      android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   # Step 2: Build on Windows — downloads native .resources.zip from macOS build
   # via pre-build-artifact so AppleBindings.targets includes them during pack.
@@ -52,3 +53,4 @@ jobs:
       run-tests: true
       pack: true
       pre-build-artifact: native-apple-essentialsai
+      android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj

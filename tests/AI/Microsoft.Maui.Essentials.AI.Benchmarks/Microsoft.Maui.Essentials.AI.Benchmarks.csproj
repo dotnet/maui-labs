@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\samples\Microsoft.Maui.Essentials.AI.Sample\Services\StreamingJsonDeserializer.cs" />
+    <Compile Include="..\..\..\samples\EssentialsAISample\Services\StreamingJsonDeserializer.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-using Maui.Controls.Sample.Services;
+using EssentialsAISample.Services;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
