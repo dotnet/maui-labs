@@ -31,3 +31,4 @@ jobs:
       project-name: devflow
       run-tests: true
       pack: true
+      os: '["windows-latest"]'
