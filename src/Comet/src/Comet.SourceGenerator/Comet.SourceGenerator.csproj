@@ -3,6 +3,9 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>preview</LangVersion>
+    <Nullable>disable</Nullable>
+    <!-- RS1024: symbol comparer, RS2008: diagnostic format, CS0649: unassigned fields -->
+    <NoWarn>RS1024;RS1032;RS2008;CS0649;CS0169</NoWarn>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
   <ItemGroup>

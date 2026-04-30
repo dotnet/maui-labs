@@ -5,7 +5,8 @@
     <IsPackable>false</IsPackable>
     <ImplicitUsings>disable</ImplicitUsings>
     <!-- Suppress platform compatibility warnings: tests reference maccatalyst DLL from net11.0 -->
-    <NoWarn>CA1416</NoWarn>
+    <NoWarn>CA1416;CS0219</NoWarn>
+    <Nullable>disable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>

@@ -6,6 +6,9 @@
 	<!-- net11.0-macos workload not yet available in .NET 11 preview; re-enable when shipped -->
 	<!-- <TargetFrameworks>$(TargetFrameworks);net11.0-macos</TargetFrameworks> -->
 	<UseMaui>true</UseMaui>
+	<Nullable>disable</Nullable>
+	<!-- CS0649: unassigned fields, CS0618: obsolete APIs, CS0108: hides inherited member -->
+	<NoWarn>CS0649;CS0618;CS0108;CA1416</NoWarn>
 	<!-- net11.0-macos does not use UseMaui; define MauiVersion explicitly so PackageReference resolves -->
 	<!-- <MauiVersion Condition="$(TargetFramework.Contains('-macos')) AND '$(MauiVersion)' == ''">11.0.0-preview.2.26152.10</MauiVersion> -->
 	<SingleProject>true</SingleProject>
@@ -21,7 +24,6 @@
 
   <ItemGroup>
 	<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-	<PackageReference Include="System.Collections.Immutable" Version="9.0.4" />
   </ItemGroup>
 
   <!-- Platform.Maui.MacOS provides the AppKit handler bridge for net11.0-macos. -->
