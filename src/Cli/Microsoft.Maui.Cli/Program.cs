@@ -107,6 +107,9 @@ public class Program
 		rootCommand.Add(AndroidCommands.Create());
 		rootCommand.Add(AppleCommands.Create());
 
+		// Error code catalogue
+		rootCommand.Add(ErrorsCommands.Create());
+
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));
 
