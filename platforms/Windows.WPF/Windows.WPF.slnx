@@ -6,4 +6,8 @@
   <Folder Name="/samples/">
     <Project Path="samples/WpfControlGallery/WpfControlGallery.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HandlerTests/HandlerTests.csproj" />
+    <Project Path="tests/UITests/UITests.csproj" />
+  </Folder>
 </Solution>
