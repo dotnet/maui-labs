@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
@@ -137,15 +138,10 @@ public static class AppleCommands
 			Description = "Platform(s) to ensure runtimes for (iOS, tvOS, watchOS, visionOS). If omitted, installs all available.",
 			AllowMultipleArgumentsPerToken = true
 		};
-		var dryRunOption = new Option<bool>("--dry-run")
-		{
-			Description = "Show what would be installed without making changes"
-		};
 
 		var installCommand = new Command("install", "Set up Apple development environment (CLT, runtimes)")
 		{
-			platformOption,
-			dryRunOption
+			platformOption
 		};
 
 		installCommand.SetAction(async (ParseResult parseResult, CancellationToken ct) =>
@@ -155,45 +151,57 @@ public static class AppleCommands
 			if (!PlatformDetector.IsMacOS)
 			{
 				formatter.WriteWarning("Apple install is only available on macOS.");
-				return 1;
+				return 0;
 			}
 
 			var appleProvider = Program.AppleProvider;
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var platforms = parseResult.GetValue(platformOption);
-			var dryRun = parseResult.GetValue(dryRunOption);
+			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
 
 			if (dryRun && !useJson)
 				formatter.WriteInfo("Dry run mode — no changes will be made.");
 
-			var result = await appleProvider.InstallEnvironmentAsync(
-				platforms is { Length: > 0 } ? platforms : null,
-				dryRun,
-				ct);
+			try
+			{
+				var result = await appleProvider.InstallEnvironmentAsync(
+					platforms is { Length: > 0 } ? platforms : null,
+					dryRun,
+					ct);
 
-			if (useJson)
-			{
-				formatter.Write(result);
-			}
-			else
-			{
-				if (result.XcodeVersion is not null)
-					formatter.WriteSuccess($"Xcode: {result.XcodeVersion}");
+				if (useJson)
+				{
+					formatter.Write(result);
+				}
 				else
-					formatter.WriteWarning("Xcode: not found");
+				{
+					if (result.XcodeVersion is not null)
+						formatter.WriteSuccess($"Xcode: {result.XcodeVersion}");
+					else
+						formatter.WriteWarning("Xcode: not found");
 
-				formatter.WriteInfo($"Command Line Tools: {(result.CommandLineToolsInstalled ? "installed" : "not installed")}");
+					formatter.WriteInfo($"Command Line Tools: {(result.CommandLineToolsInstalled ? "installed" : "not installed")}");
 
-				if (result.Platforms.Count > 0)
-					formatter.WriteInfo($"Platforms: {string.Join(", ", result.Platforms)}");
+					if (result.Platforms.Count > 0)
+						formatter.WriteInfo($"Platforms: {string.Join(", ", result.Platforms)}");
 
-				if (result.Runtimes.Count > 0)
-					formatter.WriteInfo($"Runtimes: {string.Join(", ", result.Runtimes)}");
+					if (result.Runtimes.Count > 0)
+						formatter.WriteInfo($"Runtimes: {string.Join(", ", result.Runtimes)}");
 
-				formatter.WriteInfo($"Status: {result.Status}");
+					formatter.WriteInfo($"Status: {result.Status}");
+				}
+
+				return result.Status is "ok" or "skipped" ? 0 : 1;
 			}
-
-			return result.Status == "ok" ? 0 : 1;
+			catch (Exception ex) when (ex is not OperationCanceledException)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSetupFailed, "Apple install failed.", ex));
+				return 1;
+			}
+			catch (Exception ex)
+			{
+				return Program.HandleCommandException(formatter, ex);
+			}
 		});
 
 		return installCommand;

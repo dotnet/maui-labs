@@ -188,7 +188,11 @@ public class AppleProvider : IAppleProvider
 
 		checks.Add(MapXcodeCheck(result));
 		checks.Add(MapCommandLineToolsCheck(result));
-		checks.Add(MapXcodeLicenseCheck());
+
+		// License check only meaningful when Xcode is present
+		if (result.Xcode is not null)
+			checks.Add(MapXcodeLicenseCheck());
+
 		checks.Add(MapRuntimesCheck(result));
 
 		if (result.Platforms.Count > 0)
@@ -278,7 +282,7 @@ public class AppleProvider : IAppleProvider
 	{
 		try
 		{
-			if (_environmentChecker!.IsXcodeLicenseAccepted())
+			if (_environmentChecker?.IsXcodeLicenseAccepted() == true)
 			{
 				return new HealthCheck
 				{
@@ -368,7 +372,8 @@ public class AppleProvider : IAppleProvider
 			});
 		}
 
-		// AppleInstaller.Install is synchronous; wrap in Task.Run for cancellation support
+		// AppleInstaller.Install() is synchronous and cannot be interrupted mid-operation.
+		// Task.Run enables thread pool cancellation between the before/after checks.
 		return Task.Run(() =>
 		{
 			cancellationToken.ThrowIfCancellationRequested();
@@ -380,7 +385,7 @@ public class AppleProvider : IAppleProvider
 				Status = result.Status.ToString().ToLowerInvariant(),
 				XcodeVersion = result.Xcode is not null ? $"{result.Xcode.Version} ({result.Xcode.Build})" : null,
 				CommandLineToolsInstalled = result.CommandLineTools.IsInstalled,
-				Platforms = result.Platforms,
+				Platforms = result.Platforms.ToList(),
 				Runtimes = result.Runtimes.Select(r => r.Name).ToList(),
 				DryRun = dryRun
 			};
