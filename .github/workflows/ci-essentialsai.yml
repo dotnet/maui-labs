@@ -51,4 +51,4 @@ jobs:
       os: '["windows-latest"]'
       run-tests: true
       pack: true
-      pre-build-artifact: native-apple-essentialsai
+      pre-build-artifacts: '["native-apple-essentialsai"]'
