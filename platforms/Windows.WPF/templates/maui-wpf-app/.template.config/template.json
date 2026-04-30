@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Microsoft",
+  "classifications": ["MAUI", "Windows", "WPF", "Desktop"],
+  "identity": "Microsoft.Maui.Platforms.Windows.WPF.App",
+  "name": ".NET MAUI Windows App (WPF)",
+  "shortName": "maui-wpf",
+  "description": "A project template for creating a .NET MAUI app that runs on Windows using WPF.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "MauiWpfApp",
+  "preferNameDirectory": true,
+  "symbols": {
+    "Framework": {
+      "type": "parameter",
+      "description": "The target framework for the project.",
+      "datatype": "choice",
+      "choices": [
+        { "choice": "net10.0-windows", "description": ".NET 10" }
+      ],
+      "defaultValue": "net10.0-windows",
+      "replaces": "net10.0-windows"
+    },
+    "blazor": {
+      "type": "parameter",
+      "datatype": "bool",
+      "description": "Include Blazor Hybrid support via WebView2.",
+      "defaultValue": "false"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!blazor)",
+          "exclude": ["Components/**", "wwwroot/**", "_Imports.razor"]
+        }
+      ]
+    }
+  ]
+}

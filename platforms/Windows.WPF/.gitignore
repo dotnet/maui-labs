@@ -1,0 +1,46 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/
+project.nuget.cache
+
+# User/IDE settings
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+launchSettings.json
+
+# Rider
+*.sln.iml
+
+# Build outputs
+*.dll
+*.exe
+*.pdb
+*.mdb
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+msbuild.binlog
+
+# Test results
+TestResults/
+coverage/
+
+# Publish output
+publish/
+.mauidevflow

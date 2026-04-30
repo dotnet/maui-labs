@@ -12,7 +12,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF.Sample</RootNamespace>
-    <AssemblyName>WpfControlGallery</AssemblyName>
+    <AssemblyName>Windows.WPF.Sample</AssemblyName>
     <ApplicationId>com.microsoft.maui.platforms.windows.wpf.sample</ApplicationId>
 
     <!-- No App.xaml — using explicit [STAThread] Main() in Program.cs -->
@@ -54,7 +54,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="WpfControlGallery" />
+    <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="Windows.WPF.Sample" />
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
 

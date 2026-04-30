@@ -4,7 +4,7 @@
     <Project Path="src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/WpfControlGallery/WpfControlGallery.csproj" />
+    <Project Path="samples/Windows.WPF.Sample/Windows.WPF.Sample.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HandlerTests/HandlerTests.csproj" />
