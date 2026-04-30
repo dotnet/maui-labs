@@ -79,6 +79,18 @@ var result = UnixPortInspector.ParseLsofOutput(output, 443);
 
 Assert.Single(result);
 Assert.Equal("ipv6", result[0].Family);
+Assert.Equal("::", result[0].Address);
+}
+
+[Fact]
+public void ParseSsOutput_IPv6Wildcard_ReturnsIpv6Address()
+{
+var output = "LISTEN 0 128 [::]:8080 [::]:* users:((\"dotnet\",pid=1234,fd=5))\n";
+var result = UnixPortInspector.ParseSsOutput(output, 8080);
+
+Assert.Single(result);
+Assert.Equal("ipv6", result[0].Family);
+Assert.Equal("::", result[0].Address);
 }
 
 [Fact]

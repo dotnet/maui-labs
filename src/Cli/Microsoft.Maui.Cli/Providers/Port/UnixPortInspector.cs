@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Net.NetworkInformation;
+using System.Text;
 
 namespace Microsoft.Maui.Cli.Providers.Port;
 
@@ -94,9 +95,10 @@ var addrRaw = namePart[..colonIdx];
 var portRaw = namePart[(colonIdx + 1)..].TrimEnd(')').Trim();
 if (!int.TryParse(portRaw, out var parsedPort) || parsedPort != port) continue;
 
-var addr = addrRaw == "*" ? "0.0.0.0" : addrRaw;
 var typeCol = parts.Length > 4 ? parts[4] : string.Empty;
-var family = typeCol == "IPv6" ? "ipv6" : (addr.Contains(':') ? "ipv6" : "ipv4");
+var isIpv6 = typeCol == "IPv6";
+var addr = addrRaw == "*" ? (isIpv6 ? "::" : "0.0.0.0") : addrRaw;
+var family = isIpv6 || addr.Contains(':') ? "ipv6" : "ipv4";
 
 if (!int.TryParse(parts[1], out var pid)) continue;
 result.Add(new PortListenerInfo(port, pid, parts[0], addr, family));
@@ -117,8 +119,14 @@ if (localAddr is null) continue;
 
 var colonIdx = localAddr.LastIndexOf(':');
 var addrPart = colonIdx >= 0 ? localAddr[..colonIdx] : "0.0.0.0";
-var addr = addrPart is "*" or "" ? "0.0.0.0" : addrPart;
-var family = addr.Contains('[') || (addr.Contains(':') && !addr.StartsWith("::ffff:")) ? "ipv6" : "ipv4";
+// ss prints IPv6 wildcards as "*" or "[::]"; honor those as "::" when bracketed or paired with ipv6 family hint
+var isBracketed = addrPart.StartsWith('[') && addrPart.EndsWith(']');
+var addrCore = isBracketed ? addrPart[1..^1] : addrPart;
+var hasIpv6Hint = isBracketed || (addrCore.Contains(':') && !addrCore.StartsWith("::ffff:"));
+var addr = addrCore is "*" or ""
+? (hasIpv6Hint ? "::" : "0.0.0.0")
+: addrCore;
+var family = hasIpv6Hint ? "ipv6" : "ipv4";
 
 int pid = 0;
 string processName = string.Empty;
@@ -179,12 +187,29 @@ StartInfo = new ProcessStartInfo(executable, arguments)
 RedirectStandardOutput = true,
 RedirectStandardError = true,
 UseShellExecute = false,
-CreateNoWindow = true
+CreateNoWindow = true,
 }
 };
+
+var stdout = new StringBuilder();
+process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdout.AppendLine(e.Data); };
+// Drain stderr to a sink we discard — required to prevent the child from
+// blocking on a full stderr pipe (e.g., lsof permission-denied messages).
+process.ErrorDataReceived += (_, _) => { };
+
 process.Start();
-var output = process.StandardOutput.ReadToEnd();
-process.WaitForExit(5000);
+process.BeginOutputReadLine();
+process.BeginErrorReadLine();
+
+if (!process.WaitForExit(5000))
+{
+try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+return null;
+}
+// Ensure async readers have flushed before we read ExitCode.
+process.WaitForExit();
+
+var output = stdout.ToString();
 return process.ExitCode == 0 || output.Length > 0 ? output : null;
 }
 catch { return null; }

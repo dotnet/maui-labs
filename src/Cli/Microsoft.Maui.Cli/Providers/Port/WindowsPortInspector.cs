@@ -15,7 +15,9 @@ private const int AF_INET6 = 23;
 
 private enum TcpTableClass
 {
-OwnerPidListener = 6,
+// TCP_TABLE_OWNER_PID_LISTENER = 3 (per Win32 IPHLPAPI MIB_TCP_TABLE_CLASS).
+// Value 6 is OWNER_MODULE_LISTENER, which returns a different (~160-byte) row layout.
+OwnerPidListener = 3,
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -62,11 +64,19 @@ uint bufLen = 0;
 GetExtendedTcpTable(IntPtr.Zero, ref bufLen, false, afFamily, TcpTableClass.OwnerPidListener, 0);
 if (bufLen == 0) return result;
 
-var buffer = Marshal.AllocHGlobal((int)bufLen);
+const uint ERROR_INSUFFICIENT_BUFFER = 122;
+IntPtr buffer = IntPtr.Zero;
 try
 {
-if (GetExtendedTcpTable(buffer, ref bufLen, false, afFamily, TcpTableClass.OwnerPidListener, 0) != 0)
-return result;
+for (int attempt = 0; attempt < 4; attempt++)
+{
+if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+buffer = Marshal.AllocHGlobal((int)bufLen);
+var ret = GetExtendedTcpTable(buffer, ref bufLen, false, afFamily, TcpTableClass.OwnerPidListener, 0);
+if (ret == 0) break;
+if (ret != ERROR_INSUFFICIENT_BUFFER) return result;
+bufLen = bufLen == 0 ? 8192 : bufLen * 2;
+}
 
 var count = Marshal.ReadInt32(buffer);
 const int rowOffset = 4;
@@ -100,7 +110,7 @@ result.Add(new PortListenerInfo(port, (int)row.dwOwningPid, processName, addr, "
 }
 finally
 {
-Marshal.FreeHGlobal(buffer);
+if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
 }
 return result;
 }
@@ -110,7 +120,11 @@ internal static int GetPortFromNetworkDword(uint networkDword)
 
 private static string GetProcessName(int pid)
 {
-try { return Process.GetProcessById(pid).ProcessName; }
+try
+{
+using var p = Process.GetProcessById(pid);
+return p.ProcessName;
+}
 catch { return string.Empty; }
 }
 }
