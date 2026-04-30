@@ -1,0 +1,9 @@
+<Project>
+
+  <Import Project="$(MauiTestAppPreviousCustomAfterMicrosoftCommonTargets)"
+          Condition="'$(MauiTestAppPreviousCustomAfterMicrosoftCommonTargets)' != '' and '$(MauiTestAppPreviousCustomAfterMicrosoftCommonTargets)' != '$(MSBuildThisFileFullPath)' and Exists('$(MauiTestAppPreviousCustomAfterMicrosoftCommonTargets)')" />
+
+  <Import Project="$(MauiTestAppAppTargetsPath)"
+          Condition="'$(MauiTestAppAppTargetsPath)' != '' and Exists('$(MauiTestAppAppTargetsPath)')" />
+
+</Project>

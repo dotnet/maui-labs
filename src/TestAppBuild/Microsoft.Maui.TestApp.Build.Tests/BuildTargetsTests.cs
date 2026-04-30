@@ -26,6 +26,28 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
+    public async Task ProjectReferenceWithoutTargetFramework_UsesAppProjectTargetFramework()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "App");
+
+        var artifactsText = File.ReadAllText(Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt"));
+        Assert.DoesNotContain($"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}bin", artifactsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProjectReferenceWithOutputItemType_BuildsAppAndExposesArtifactItem()
     {
         using var workspace = TestWorkspace.Create();
@@ -72,9 +94,80 @@ public sealed class BuildTargetsTests
             expectedArtifactIsDirectory: true);
     }
 
-    private static async Task<ProcessResult> BuildWorkspaceAsync(TestWorkspace workspace, string projectReferenceXml)
+    [Fact]
+    public async Task ProjectReferenceWithCustomAfterTargets_PreservesCustomTargetAndInjectsArtifactTarget()
     {
-        workspace.WriteProjects(projectReferenceXml);
+        using var workspace = TestWorkspace.Create();
+        var customAfterTargetsPath = TestWorkspace.XmlEscape(workspace.CustomAfterTargetsPath);
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            $$"""
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0"
+                              Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}};MauiTestAppAppTargetsPath=missing.targets" />
+            """,
+            customAfterTargetsXml:
+            """
+            <Project>
+              <Target Name="RecordCustomAfterImport" BeforeTargets="Build">
+                <WriteLinesToFile File="$(MSBuildProjectDirectory)\custom-after-imported.txt"
+                                  Lines="imported"
+                                  Overwrite="true" />
+              </Target>
+            </Project>
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "App");
+        Assert.True(File.Exists(Path.Combine(workspace.AppProjectDirectory, "custom-after-imported.txt")), result.Output);
+    }
+
+    [Fact]
+    public async Task CleanMauiTestAppArtifacts_SkipsOutputRootOutsideBaseIntermediatePath()
+    {
+        using var workspace = TestWorkspace.Create();
+        workspace.WriteProjects(
+            """
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0" />
+            """);
+
+        var outsideOutputRoot = Path.Combine(workspace.Root, "outside-output") + Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(outsideOutputRoot);
+        File.WriteAllText(Path.Combine(outsideOutputRoot, "keep.txt"), "keep");
+
+        var result = await RunDotNetAsync(
+            workspace.Root,
+            "msbuild",
+            workspace.TestProjectPath,
+            "-t:Clean",
+            "-v:minimal",
+            "-p:MauiTestAppOutputRoot=" + outsideOutputRoot,
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.True(File.Exists(Path.Combine(outsideOutputRoot, "keep.txt")), result.Output);
+        Assert.Contains("Skipping MAUI test app artifact clean", result.Output, StringComparison.Ordinal);
+    }
+
+    private static async Task<ProcessResult> BuildWorkspaceAsync(TestWorkspace workspace, string projectReferenceXml)
+        => await BuildWorkspaceAsync(workspace, projectReferenceXml, customAfterTargetsXml: null);
+
+    private static async Task<ProcessResult> BuildWorkspaceAsync(
+        TestWorkspace workspace,
+        string projectReferenceXml,
+        string? customAfterTargetsXml)
+    {
+        workspace.WriteProjects(projectReferenceXml, customAfterTargetsXml);
 
         return await RunDotNetAsync(
             workspace.Root,
@@ -126,6 +219,7 @@ public sealed class BuildTargetsTests
     private static async Task<ProcessResult> RunDotNetAsync(string workingDirectory, params string[] arguments)
     {
         var output = new StringBuilder();
+        var outputLock = new object();
         using var process = new Process();
         process.StartInfo.FileName = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
         process.StartInfo.WorkingDirectory = workingDirectory;
@@ -140,12 +234,18 @@ public sealed class BuildTargetsTests
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is not null)
-                output.AppendLine(e.Data);
+            {
+                lock (outputLock)
+                    output.AppendLine(e.Data);
+            }
         };
         process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is not null)
-                output.AppendLine(e.Data);
+            {
+                lock (outputLock)
+                    output.AppendLine(e.Data);
+            }
         };
 
         process.Start();
@@ -153,7 +253,8 @@ public sealed class BuildTargetsTests
         process.BeginErrorReadLine();
         await process.WaitForExitAsync();
 
-        return new ProcessResult(process.ExitCode, output.ToString());
+        lock (outputLock)
+            return new ProcessResult(process.ExitCode, output.ToString());
     }
 
     private sealed class TestWorkspace : IDisposable
@@ -165,6 +266,7 @@ public sealed class BuildTargetsTests
             TestProjectDirectory = Path.Combine(root, "Tests");
             AppProjectPath = Path.Combine(AppProjectDirectory, "App.csproj");
             TestProjectPath = Path.Combine(TestProjectDirectory, "Tests.csproj");
+            CustomAfterTargetsPath = Path.Combine(root, "custom-after.targets");
         }
 
         public string Root { get; }
@@ -177,6 +279,8 @@ public sealed class BuildTargetsTests
 
         public string TestProjectPath { get; }
 
+        public string CustomAfterTargetsPath { get; }
+
         public static TestWorkspace Create()
         {
             var root = Path.Combine(Path.GetTempPath(), "maui-test-app-build-" + Guid.NewGuid().ToString("N"));
@@ -184,7 +288,7 @@ public sealed class BuildTargetsTests
             return new TestWorkspace(root);
         }
 
-        public void WriteProjects(string projectReferenceXml)
+        public void WriteProjects(string projectReferenceXml, string? customAfterTargetsXml = null)
         {
             Directory.CreateDirectory(AppProjectDirectory);
             Directory.CreateDirectory(TestProjectDirectory);
@@ -215,6 +319,9 @@ public sealed class BuildTargetsTests
                 """
                 System.Console.WriteLine("Hello from test app.");
                 """);
+
+            if (customAfterTargetsXml is not null)
+                File.WriteAllText(CustomAfterTargetsPath, customAfterTargetsXml);
 
             var repoRoot = FindRepoRoot();
             var propsPath = Path.Combine(repoRoot, "src", "TestAppBuild", "Microsoft.Maui.TestApp.Build", "build", "Microsoft.Maui.TestApp.Build.props");
@@ -282,7 +389,7 @@ public sealed class BuildTargetsTests
             return string.Join(Environment.NewLine, value.Split(["\r\n", "\n"], StringSplitOptions.None).Select(line => prefix + line));
         }
 
-        private static string XmlEscape(string value)
+        public static string XmlEscape(string value)
         {
             return value
                 .Replace("&", "&amp;", StringComparison.Ordinal)
