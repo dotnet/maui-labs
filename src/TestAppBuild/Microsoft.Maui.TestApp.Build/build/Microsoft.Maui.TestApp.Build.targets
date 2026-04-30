@@ -187,9 +187,11 @@
     <PropertyGroup>
       <_MauiTestAppCleanOutputRoot>$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(MauiTestAppOutputRoot)'))))</_MauiTestAppCleanOutputRoot>
       <_MauiTestAppCleanBaseIntermediateOutputPath>$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)'))))</_MauiTestAppCleanBaseIntermediateOutputPath>
-      <_MauiTestAppCleanOutputRootUpper>$([System.String]::Copy('$(_MauiTestAppCleanOutputRoot)').ToUpperInvariant())</_MauiTestAppCleanOutputRootUpper>
-      <_MauiTestAppCleanBaseIntermediateOutputPathUpper>$([System.String]::Copy('$(_MauiTestAppCleanBaseIntermediateOutputPath)').ToUpperInvariant())</_MauiTestAppCleanBaseIntermediateOutputPathUpper>
-      <_MauiTestAppCleanOutputRootIsSafe Condition="'$(_MauiTestAppCleanOutputRootUpper)' != '$(_MauiTestAppCleanBaseIntermediateOutputPathUpper)' and $([System.String]::Copy('$(_MauiTestAppCleanOutputRootUpper)').StartsWith('$(_MauiTestAppCleanBaseIntermediateOutputPathUpper)'))">true</_MauiTestAppCleanOutputRootIsSafe>
+      <_MauiTestAppCleanOutputRootForComparison Condition="'$(OS)' == 'Windows_NT'">$([System.String]::Copy('$(_MauiTestAppCleanOutputRoot)').ToUpperInvariant())</_MauiTestAppCleanOutputRootForComparison>
+      <_MauiTestAppCleanBaseIntermediateOutputPathForComparison Condition="'$(OS)' == 'Windows_NT'">$([System.String]::Copy('$(_MauiTestAppCleanBaseIntermediateOutputPath)').ToUpperInvariant())</_MauiTestAppCleanBaseIntermediateOutputPathForComparison>
+      <_MauiTestAppCleanOutputRootForComparison Condition="'$(OS)' != 'Windows_NT'">$(_MauiTestAppCleanOutputRoot)</_MauiTestAppCleanOutputRootForComparison>
+      <_MauiTestAppCleanBaseIntermediateOutputPathForComparison Condition="'$(OS)' != 'Windows_NT'">$(_MauiTestAppCleanBaseIntermediateOutputPath)</_MauiTestAppCleanBaseIntermediateOutputPathForComparison>
+      <_MauiTestAppCleanOutputRootIsSafe Condition="'$(_MauiTestAppCleanOutputRootForComparison)' != '$(_MauiTestAppCleanBaseIntermediateOutputPathForComparison)' and $([System.String]::Copy('$(_MauiTestAppCleanOutputRootForComparison)').StartsWith('$(_MauiTestAppCleanBaseIntermediateOutputPathForComparison)'))">true</_MauiTestAppCleanOutputRootIsSafe>
     </PropertyGroup>
 
     <Warning Condition="'$(_MauiTestAppCleanOutputRootIsSafe)' != 'true'"

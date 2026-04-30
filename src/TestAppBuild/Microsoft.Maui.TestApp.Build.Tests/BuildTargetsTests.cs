@@ -159,6 +159,43 @@ public sealed class BuildTargetsTests
         Assert.Contains("Skipping MAUI test app artifact clean", result.Output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task CleanMauiTestAppArtifacts_SkipsDifferentCasedOutputRootOnNonWindows()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        using var workspace = TestWorkspace.Create();
+        workspace.WriteProjects(
+            """
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0" />
+            """);
+
+        var baseIntermediateOutputPath = Path.Combine(workspace.Root, "obj") + Path.DirectorySeparatorChar;
+        var differentCasedOutputRoot = Path.Combine(workspace.Root, "OBJ", "case-output") + Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(differentCasedOutputRoot);
+        File.WriteAllText(Path.Combine(differentCasedOutputRoot, "keep.txt"), "keep");
+
+        var result = await RunDotNetAsync(
+            workspace.Root,
+            "msbuild",
+            workspace.TestProjectPath,
+            "-t:Clean",
+            "-v:minimal",
+            "-p:BaseIntermediateOutputPath=" + baseIntermediateOutputPath,
+            "-p:MauiTestAppOutputRoot=" + differentCasedOutputRoot,
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.True(File.Exists(Path.Combine(differentCasedOutputRoot, "keep.txt")), result.Output);
+        Assert.Contains("Skipping MAUI test app artifact clean", result.Output, StringComparison.Ordinal);
+    }
+
     private static async Task<ProcessResult> BuildWorkspaceAsync(TestWorkspace workspace, string projectReferenceXml)
         => await BuildWorkspaceAsync(workspace, projectReferenceXml, customAfterTargetsXml: null);
 
