@@ -27,9 +27,6 @@ on:
       - 'global.json'
       - 'NuGet.config'
 
-env:
-  CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
-
 jobs:
   # Step 1: Build on macOS — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
@@ -43,62 +40,15 @@ jobs:
       pack: true
       xcode-version: '26.3'
 
-  # Step 2: Build on Windows — downloads native .resources.zip from macOS build,
-  # places them in artifacts/bin/ so AppleBindings.targets includes them during pack.
+  # Step 2: Build on Windows — downloads native .resources.zip from macOS build
+  # via pre-build-artifact so AppleBindings.targets includes them during pack.
   build-windows:
     needs: build-macos
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Install workloads
-        run: dotnet workload install maui ios maccatalyst macos maui-tizen
-
-      - name: Install Android SDK dependencies
-        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
-        shell: cmd
-
-      - name: Download native Apple artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: native-apple-essentialsai
-          path: artifacts/bin
-
-      - name: Build, Test and Pack
-        run: >
-          eng\common\cibuild.cmd
-          -configuration Release
-          -prepareMachine
-          -projects %CD%\src\AI\EssentialsAI.slnf
-          /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
-        shell: cmd
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-essentialsai-windows-latest
-          path: artifacts/TestResults/**/*.xml
-
-      - name: Validate packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          produced_packages="$(find artifacts/packages -name '*.nupkg' -type f | sort || true)"
-          if [[ -z "$produced_packages" ]]; then
-            echo "::error::No .nupkg files produced."
-            exit 1
-          fi
-          printf '%s\n' "$produced_packages"
-
-      - name: Upload packages
-        uses: actions/upload-artifact@v7
-        with:
-          name: packages-essentialsai-windows-latest
-          path: artifacts/packages/**/*.nupkg
-          if-no-files-found: error
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/AI/EssentialsAI.slnf
+      project-name: essentialsai
+      os: '["windows-latest"]'
+      run-tests: true
+      pack: true
+      pre-build-artifact: native-apple-essentialsai

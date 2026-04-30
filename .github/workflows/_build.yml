@@ -38,6 +38,11 @@ on:
         type: string
         default: ''
         description: 'Xcode version to select on macOS (e.g. "26.0.1"). Empty uses runner default.'
+      pre-build-artifact:
+        required: false
+        type: string
+        default: ''
+        description: 'Name of a workflow artifact to download into artifacts/bin/ before building. Used to inject pre-built native artifacts (e.g. Apple .resources.zip) from a prior job.'
 
 env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
@@ -50,6 +55,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download pre-build artifact
+        if: inputs.pre-build-artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.pre-build-artifact }}
+          path: artifacts/bin
 
       - name: Select Xcode
         if: inputs.xcode-version != '' && runner.os == 'macOS'
