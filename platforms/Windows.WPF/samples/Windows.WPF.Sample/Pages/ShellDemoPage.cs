@@ -5,7 +5,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Sample.Pages;
 
 /// <summary>
 /// Demonstrates MAUI Shell navigation with flyout sidebar,
-/// tab-based sections, and URI-based routing on Linux WPF.
+/// tab-based sections, and URI-based routing on Windows WPF.
 /// </summary>
 public class ShellDemoPage : ContentPage
 {
@@ -302,7 +302,7 @@ class ShellAboutPage : ContentPage
 				},
 				new Label
 				{
-					Text = "A community .NET MAUI backend for Linux using WPF.\n" +
+					Text = "A .NET MAUI backend for Windows using WPF.\n" +
 					       "Shell navigation with flyout menu, tabs, and URI routing.",
 					HorizontalTextAlignment = TextAlignment.Center,
 					TextColor = Colors.DimGray,

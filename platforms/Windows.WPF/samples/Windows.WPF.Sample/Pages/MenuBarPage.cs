@@ -4,7 +4,7 @@ using Microsoft.Maui.Graphics;
 namespace Microsoft.Maui.Platforms.Windows.WPF.Sample.Pages;
 
 /// <summary>
-/// Demonstrates MenuBarItem and ToolbarItem support on the Linux WPF backend.
+/// Demonstrates MenuBarItem and ToolbarItem support on the Windows WPF backend.
 /// Menu bar appears at the top of the window; toolbar items in the header bar.
 /// </summary>
 public class MenuBarPage : ContentPage

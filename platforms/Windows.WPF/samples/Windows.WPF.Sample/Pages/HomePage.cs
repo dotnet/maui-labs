@@ -18,14 +18,14 @@ public class HomePage : ContentPage
 				{
 					new Label
 					{
-						Text = "🐧 .NET MAUI on Linux",
+						Text = "🪟 .NET MAUI on WPF",
 						FontSize = 32,
 						HorizontalTextAlignment = TextAlignment.Center,
 						FontAttributes = FontAttributes.Bold,
 					},
 					new Label
 					{
-						Text = "Rendered natively with WPF via GirCore",
+						Text = "Rendered natively with Windows Presentation Foundation",
 						FontSize = 16,
 						HorizontalTextAlignment = TextAlignment.Center,
 						TextColor = Colors.Gray,
@@ -35,7 +35,7 @@ public class HomePage : ContentPage
 					new Label
 					{
 						Text = "This sample app demonstrates the Microsoft.Maui.Platforms.Windows.WPF backend — " +
-							"a standalone .NET MAUI backend for Linux that maps MAUI controls " +
+							"a standalone .NET MAUI backend for Windows that maps MAUI controls " +
 							"to native WPF widgets. No MAUI fork required!",
 						FontSize = 14,
 					},
@@ -52,8 +52,8 @@ public class HomePage : ContentPage
 							{
 								new Label { Text = "Platform Details", FontSize = 18, FontAttributes = FontAttributes.Bold },
 								new Label { Text = "• 33 MAUI control handlers implemented", FontSize = 14 },
-								new Label { Text = "• WPF widgets via GirCore.Gtk-4.0 (v0.7.0)", FontSize = 14 },
-								new Label { Text = "• WebKitGTK 6.0 for BlazorWebView", FontSize = 14 },
+								new Label { Text = "• Native WPF controls and rendering", FontSize = 14 },
+								new Label { Text = "• WebView2 for BlazorWebView", FontSize = 14 },
 								new Label { Text = "• Microsoft.Maui.Graphics.Win2D-backed ICanvas for GraphicsView", FontSize = 14 },
 								new Label { Text = "• .NET 10 / MAUI 10", FontSize = 14 },
 								new Label { Text = $"• Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}", FontSize = 14, TextColor = Colors.Gray },

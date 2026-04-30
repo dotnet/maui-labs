@@ -186,7 +186,7 @@ public class ListViewTableViewPage : ContentPage
 				new TableSection("About")
 				{
 					new TextCell { Text = "Version", Detail = "1.0.0" },
-					new TextCell { Text = "Platform", Detail = "Linux WPF" },
+					new TextCell { Text = "Platform", Detail = "Windows WPF" },
 					new TextCell { Text = "License", Detail = "MIT" },
 				},
 			}

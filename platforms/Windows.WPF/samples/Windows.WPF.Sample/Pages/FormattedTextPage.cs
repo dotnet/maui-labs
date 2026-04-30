@@ -113,7 +113,7 @@ class FormattedTextPage : ContentPage
 				new Span { Text = "is a community backend for " },
 				new Span { Text = ".NET MAUI", FontAttributes = FontAttributes.Bold },
 				new Span { Text = " targeting " },
-				new Span { Text = "Linux", FontAttributes = FontAttributes.Italic, TextColor = Colors.MediumSeaGreen },
+				new Span { Text = "WPF", FontAttributes = FontAttributes.Italic, TextColor = Colors.MediumSeaGreen },
 				new Span { Text = " using " },
 				new Span { Text = "WPF", TextDecorations = TextDecorations.Underline, FontAttributes = FontAttributes.Bold, TextColor = Colors.Orchid },
 				new Span { Text = ". This label demonstrates rich text with " },

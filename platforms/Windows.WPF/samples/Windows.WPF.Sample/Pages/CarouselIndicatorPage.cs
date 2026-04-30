@@ -19,7 +19,7 @@ public class CarouselIndicatorPage : ContentPage
 			new("🌄 Welcome", "Swipe through slides to see the carousel in action.", Colors.LightBlue),
 			new("🎨 Design", "The IndicatorView shows dot indicators synced to position.", Colors.LightGreen),
 			new("⚡ Performance", "CarouselView supports horizontal and vertical layouts.", Colors.LightYellow),
-			new("🚀 Deploy", "Ready for production? Build and ship your Linux app!", Colors.LightPink),
+			new("🚀 Deploy", "Ready for production? Build and ship your Windows app!", Colors.LightPink),
 		};
 
 		var carousel = new CarouselView

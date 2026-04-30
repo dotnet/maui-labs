@@ -41,7 +41,7 @@ public class ClipboardPrefsPage : ContentPage
 
 		// --- Preferences section ---
 		var prefsKey = new Entry { Placeholder = "Key", Text = "demo_key" };
-		var prefsValue = new Entry { Placeholder = "Value", Text = "Hello from Linux!" };
+		var prefsValue = new Entry { Placeholder = "Value", Text = "Hello from WPF!" };
 		var prefsResult = new Label { Text = "(no value)", FontSize = 14, TextColor = Colors.Gray };
 
 		var saveButton = new Button { Text = "💾 Save Preference" };

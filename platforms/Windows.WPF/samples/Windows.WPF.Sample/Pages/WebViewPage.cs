@@ -49,14 +49,14 @@ public class WebViewPage : ContentPage
 				Html = """
 				<html>
 				<body style="font-family: sans-serif; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 90vh;">
-				<h1>🐧 HTML Content in WebView</h1>
+				<h1>🪟 HTML Content in WebView</h1>
 				<p>This HTML was loaded directly into the WebView using <code>HtmlWebViewSource</code>.</p>
-				<p>The WebView is powered by <strong>WebKitGTK 6.0</strong> on Linux.</p>
+				<p>The WebView is powered by <strong>WebView2</strong> on Windows.</p>
 				<button onclick="this.textContent='Clicked! JS works! 🎉'" style="padding: 12px 24px; font-size: 16px; border: none; border-radius: 8px; background: rgba(255,255,255,0.2); color: white; cursor: pointer; backdrop-filter: blur(4px);">
 				    Click me (JavaScript test)
 				</button>
 				<hr style="border-color: rgba(255,255,255,0.3);">
-				<p style="font-size: 12px; opacity: 0.7;">WebKitGTK + GirCore.WebKit-6.0 + .NET MAUI 10</p>
+				<p style="font-size: 12px; opacity: 0.7;">WebView2 + .NET MAUI 10</p>
 				</body>
 				</html>
 				"""

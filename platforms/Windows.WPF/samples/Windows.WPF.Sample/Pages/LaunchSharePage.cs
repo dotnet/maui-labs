@@ -17,7 +17,7 @@ public class LaunchSharePage : ContentPage
 		var statusLabel = new Label { FontSize = 14, TextColor = Colors.Gray };
 
 		// --- Launcher / Browser ---
-		var urlEntry = new Entry { Placeholder = "URL to open", Text = "https://github.com/nickvdyck/maui-linux-WPF" };
+		var urlEntry = new Entry { Placeholder = "URL to open", Text = "https://github.com/dotnet/maui-labs" };
 
 		var openUrlButton = new Button { Text = "🌐 Open in Browser" };
 		openUrlButton.Clicked += async (s, e) =>
@@ -72,7 +72,7 @@ public class LaunchSharePage : ContentPage
 				var msg = new EmailMessage
 				{
 					Subject = "Hello from Microsoft.Maui.Platforms.Windows.WPF!",
-					Body = "This email was composed using MAUI Essentials on Linux.",
+					Body = "This email was composed using MAUI Essentials on WPF.",
 					To = new List<string> { "test@example.com" },
 				};
 				await email.ComposeAsync(msg);
@@ -91,7 +91,7 @@ public class LaunchSharePage : ContentPage
 				await share.RequestAsync(new ShareTextRequest
 				{
 					Title = "Share from MAUI",
-					Text = "Hello from .NET MAUI on Linux! 🐧",
+					Text = "Hello from .NET MAUI on WPF! 🪟",
 				});
 				statusLabel.Text = "Shared!";
 				statusLabel.TextColor = Colors.Green;
