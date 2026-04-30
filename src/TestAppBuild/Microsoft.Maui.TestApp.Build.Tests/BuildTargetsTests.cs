@@ -99,6 +99,75 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
+    public async Task ProjectReferenceWithTrailingSlashAppBundleDirectory_ExposesAppArtifactItem()
+    {
+        using var workspace = TestWorkspace.Create();
+        var appBundleDir = TestWorkspace.XmlEscape(Path.Combine(workspace.Root, "custom-output", "TrailingSlashApp.app") + Path.DirectorySeparatorChar);
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            $$"""
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0"
+                              ReferenceName="TrailingSlashApp"
+                              SetPlatformOutputPaths="false"
+                              Properties="MauiTestAppSimulateAppBundle=true;AppBundleDir={{appBundleDir}}" />
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(
+            workspace,
+            expectedName: "TrailingSlashApp",
+            expectedArtifactType: "app",
+            expectedInstallable: true,
+            expectedLaunchable: true,
+            expectSingleArtifact: false,
+            expectedArtifactIsDirectory: true);
+    }
+
+    [Fact]
+    public async Task ProjectReferenceWithTrailingSlashPublishDirectory_ExposesPublishDirectoryArtifactItem()
+    {
+        using var workspace = TestWorkspace.Create();
+        var customAfterTargetsPath = TestWorkspace.XmlEscape(workspace.CustomAfterTargetsPath);
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            $$"""
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="false"
+                              PrivateAssets="all"
+                              MauiTestApp="true"
+                              TargetFramework="net10.0"
+                              ReferenceName="PublishDirApp"
+                              Properties="CustomAfterMicrosoftCommonTargets={{customAfterTargetsPath}}" />
+            """,
+            customAfterTargetsXml:
+            """
+            <Project>
+              <Target Name="CreateFakePublishDirectory"
+                      AfterTargets="Build"
+                      Condition="'$(PublishDir)' != ''">
+                <MakeDir Directories="$(PublishDir)" />
+              </Target>
+            </Project>
+            """);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(
+            workspace,
+            expectedName: "PublishDirApp",
+            expectedArtifactType: "publish-directory",
+            expectSingleArtifact: false,
+            expectedArtifactIsDirectory: true);
+    }
+
+    [Fact]
     public async Task ProjectReferenceWithAppInstaller_ExposesAppInstallerArtifactType()
     {
         using var workspace = TestWorkspace.Create();

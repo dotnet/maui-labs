@@ -12,6 +12,8 @@
       <_MauiTestAppSearchAppRoot Condition="'$(_MauiTestAppSearchRoot)' != ''">$([System.IO.Path]::Combine('$(_MauiTestAppSearchRoot)', 'app'))</_MauiTestAppSearchAppRoot>
       <_MauiTestAppReferenceName Condition="'$(MauiTestAppReferenceName)' != ''">$(MauiTestAppReferenceName)</_MauiTestAppReferenceName>
       <_MauiTestAppReferenceName Condition="'$(_MauiTestAppReferenceName)' == ''">$(MSBuildProjectName)</_MauiTestAppReferenceName>
+      <_MauiTestAppAppBundleDirFullPath Condition="'$(AppBundleDir)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AppBundleDir)'))))</_MauiTestAppAppBundleDirFullPath>
+      <_MauiTestAppPublishDirFullPath Condition="'$(PublishDir)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(PublishDir)'))))</_MauiTestAppPublishDirFullPath>
     </PropertyGroup>
 
     <ItemGroup>
@@ -35,6 +37,9 @@
                                      Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)')" />
       <_MauiTestAppArtifactCandidate Include="$(TargetPath)"
                                      Condition="'$(TargetPath)' != '' and '$(_MauiTestAppTargetPlatform)' == '' and Exists('$(TargetPath)')" />
+      <_MauiTestAppArtifactCandidate Update="@(_MauiTestAppArtifactCandidate)">
+        <_MauiTestAppFullPathWithTrailingSlash>$([MSBuild]::EnsureTrailingSlash('%(_MauiTestAppArtifactCandidate.FullPath)'))</_MauiTestAppFullPathWithTrailingSlash>
+      </_MauiTestAppArtifactCandidate>
     </ItemGroup>
 
     <ItemGroup>
@@ -53,16 +58,19 @@
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk'">apk</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.aab'">aab</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.app'">app</ArtifactType>
+        <ArtifactType Condition="'$(_MauiTestAppAppBundleDirFullPath)' != '' and '%(_MauiTestAppArtifactCandidate._MauiTestAppFullPathWithTrailingSlash)' == '$(_MauiTestAppAppBundleDirFullPath)'">app</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.ipa'">ipa</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">msix</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.appinstaller'">appinstaller</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.exe'">exe</ArtifactType>
         <ArtifactType Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.dll'">dll</ArtifactType>
-        <ArtifactType Condition="'$(PublishDir)' != '' and '%(_MauiTestAppArtifactCandidate.Identity)' == '$(PublishDir)'">publish-directory</ArtifactType>
+        <ArtifactType Condition="'$(_MauiTestAppPublishDirFullPath)' != '' and '%(_MauiTestAppArtifactCandidate._MauiTestAppFullPathWithTrailingSlash)' == '$(_MauiTestAppPublishDirFullPath)'">publish-directory</ArtifactType>
         <Installable>false</Installable>
         <Installable Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.aab' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.app' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.ipa' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">true</Installable>
+        <Installable Condition="'$(_MauiTestAppAppBundleDirFullPath)' != '' and '%(_MauiTestAppArtifactCandidate._MauiTestAppFullPathWithTrailingSlash)' == '$(_MauiTestAppAppBundleDirFullPath)'">true</Installable>
         <Launchable>false</Launchable>
         <Launchable Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.app' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.exe' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">true</Launchable>
+        <Launchable Condition="'$(_MauiTestAppAppBundleDirFullPath)' != '' and '%(_MauiTestAppArtifactCandidate._MauiTestAppFullPathWithTrailingSlash)' == '$(_MauiTestAppAppBundleDirFullPath)'">true</Launchable>
       </MauiTestAppArtifact>
     </ItemGroup>
 
