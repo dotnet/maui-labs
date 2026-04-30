@@ -5,6 +5,8 @@ namespace Microsoft.Maui.TestApp.Build.Tests;
 
 public sealed class BuildTargetsTests
 {
+    private static readonly TimeSpan DotNetCommandTimeout = TimeSpan.FromMinutes(5);
+
     [Fact]
     public async Task ProjectReferenceMarkedAsMauiTestApp_BuildsAppAndExposesArtifactItem()
     {
@@ -314,7 +316,30 @@ public sealed class BuildTargetsTests
         process.Start();
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        await process.WaitForExitAsync();
+        using var timeout = new CancellationTokenSource(DotNetCommandTimeout);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            lock (outputLock)
+            {
+                output.AppendLine();
+                output.AppendLine($"Command timed out after {DotNetCommandTimeout.TotalMinutes:0} minutes: {process.StartInfo.FileName} {string.Join(" ", arguments)}");
+            }
+
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            await process.WaitForExitAsync();
+        }
 
         lock (outputLock)
             return new ProcessResult(process.ExitCode, output.ToString());
