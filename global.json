@@ -1,8 +1,12 @@
 {
   "sdk": {
     "version": "10.0.105",
-    "rollForward": "latestMajor",
-    "allowPrerelease": true
+    "paths": [
+      ".dotnet",
+      "$host$"
+    ],
+    "rollForward": "latestMinor",
+    "allowPrerelease": false
   },
   "tools": {
     "dotnet": "10.0.105"
