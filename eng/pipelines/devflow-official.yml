@@ -343,7 +343,7 @@ extends:
 
     # Publish AppProjectReference packages to NuGet.org
     - ${{ if eq(parameters.publishAppProjectReferenceNuget, true) }}:
-      - stage: publish_testappbuild_nuget
+      - stage: publish_appprojectreference_nuget
         displayName: 'Publish AppProjectReference to NuGet.org'
         dependsOn:
         - Validate

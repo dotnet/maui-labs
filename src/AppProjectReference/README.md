@@ -2,7 +2,7 @@
 
 `Microsoft.Maui.Build.AppProjectReference` lets a consuming project (a test project, packaging project, etc.) declare a MAUI/.NET app project as a build-time dependency and consume the resulting platform artifacts (`.apk`, `.app`, `.ipa`, `.msix`, `.appinstaller`, `.exe`, `.dll`) as MSBuild items.
 
-The package projects each `<MauiAppProjectReference>` item into a real `<ProjectReference>` so NuGet restore, project-graph builds, IDE solution explorer, and external project-graph analyzers (e.g. `@nx/dotnet`) all see a real project edge - while the reference-stripping plumbing is applied automatically.
+The package projects each `<MauiAppProjectReference>` item into a real `<ProjectReference>` once its build assets are imported, so project-graph builds, IDE solution explorer, and external project-graph analyzers (e.g. `@nx/dotnet`) see a real project edge while the reference-stripping plumbing is applied automatically. The app project is also restored before the package invokes its child build, so clean builds do not require a separate restore of the app project.
 
 ## Basic usage (recommended)
 
