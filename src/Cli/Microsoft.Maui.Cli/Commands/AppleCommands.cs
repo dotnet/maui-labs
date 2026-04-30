@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
@@ -22,6 +23,7 @@ public static class AppleCommands
 		command.Add(CreateXcodeCommand());
 		command.Add(CreateRuntimeCommand());
 		command.Add(CreateSimulatorCommand());
+		command.Add(CreateInstallCommand());
 
 		return command;
 	}
@@ -129,6 +131,88 @@ public static class AppleCommands
 		return runtimeCommand;
 	}
 
+	static Command CreateInstallCommand()
+	{
+		var platformOption = new Option<string[]>("--platform")
+		{
+			Description = "Platform(s) to ensure runtimes for (iOS, tvOS, watchOS, visionOS, all). Defaults to iOS only; use 'all' to install all available runtimes.",
+			AllowMultipleArgumentsPerToken = true,
+			DefaultValueFactory = _ => new[] { "iOS" }
+		};
+
+		var installCommand = new Command("install", "Set up Apple development environment (CLT, runtimes)")
+		{
+			platformOption
+		};
+
+		installCommand.SetAction(async (ParseResult parseResult, CancellationToken ct) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteWarning("Apple install is only available on macOS.");
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			var platforms = parseResult.GetValue(platformOption);
+			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
+
+			if (dryRun && !useJson)
+				formatter.WriteInfo("Dry run mode — no changes will be made.");
+
+			try
+			{
+				// "all" means no filter — install runtimes for every available platform
+				var platformFilter = platforms is { Length: > 0 } && !platforms.Any(p => string.Equals(p, "all", StringComparison.OrdinalIgnoreCase))
+					? platforms
+					: null;
+
+				var result = await appleProvider.InstallEnvironmentAsync(
+					platformFilter,
+					dryRun,
+					ct);
+
+				if (useJson)
+				{
+					formatter.Write(result);
+				}
+				else
+				{
+					if (result.XcodeVersion is not null)
+						formatter.WriteSuccess($"Xcode: {result.XcodeVersion}");
+					else
+						formatter.WriteWarning("Xcode: not found");
+
+					formatter.WriteInfo($"Command Line Tools: {(result.CommandLineToolsInstalled ? "installed" : "not installed")}");
+
+					if (result.Platforms.Count > 0)
+						formatter.WriteInfo($"Platforms: {string.Join(", ", result.Platforms)}");
+
+					if (result.Runtimes.Count > 0)
+						formatter.WriteInfo($"Runtimes: {string.Join(", ", result.Runtimes)}");
+
+					formatter.WriteInfo($"Status: {result.Status}");
+				}
+
+				return result.Status is "ok" or "skipped" ? 0 : 1;
+			}
+			catch (Exception ex) when (ex is not OperationCanceledException)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSetupFailed, "Apple install failed.", ex));
+				return 1;
+			}
+			catch (Exception ex)
+			{
+				return Program.HandleCommandException(formatter, ex);
+			}
+		});
+
+		return installCommand;
+	}
+
 	static Command CreateSimulatorCommand()
 	{
 		var simCommand = new Command("simulator", "Manage iOS simulators");
@@ -174,9 +258,10 @@ public static class AppleCommands
 			return 0;
 		});
 
-		// maui apple simulator start <name-or-udid>
+		// maui apple simulator start <name-or-udid> [--no-open]
 		var startNameArg = new Argument<string>("name-or-udid") { Description = "Simulator name or UDID to boot" };
-		var startCommand = new Command("start", "Boot a simulator") { startNameArg };
+		var noOpenOption = new Option<bool>("--no-open") { Description = "Do not open the Simulator UI window after booting" };
+		var startCommand = new Command("start", "Boot a simulator and open the Simulator UI") { startNameArg, noOpenOption };
 		startCommand.SetAction((ParseResult parseResult) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
@@ -189,12 +274,19 @@ public static class AppleCommands
 
 			var appleProvider = Program.AppleProvider;
 			var target = parseResult.GetValue(startNameArg);
+			var noOpen = parseResult.GetValue(noOpenOption);
 
 			var success = appleProvider.BootSimulator(target!);
 			if (success)
+			{
+				if (!noOpen)
+					appleProvider.OpenSimulatorApp();
 				formatter.WriteSuccess($"Simulator '{target}' booted.");
+			}
 			else
+			{
 				formatter.WriteWarning($"Failed to boot simulator '{target}'.");
+			}
 
 			return success ? 0 : 1;
 		});

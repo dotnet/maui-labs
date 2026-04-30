@@ -32,9 +32,9 @@
       <Uri>https://github.com/dotnet/dotnet</Uri>
       <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
     </Dependency>
-    <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26201.1">
+    <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26230.1">
       <Uri>https://github.com/dotnet/macios-devtools</Uri>
-      <Sha>14efcb9735fab369066fa3c99130d076aa0dfdc9</Sha>
+      <Sha>11fad7fe464a7de7dd809542e4bb352310236052</Sha>
     </Dependency>
   </ProductDependencies>
   <ToolsetDependencies>
