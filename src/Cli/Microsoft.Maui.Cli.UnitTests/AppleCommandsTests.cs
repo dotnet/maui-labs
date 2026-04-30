@@ -102,7 +102,8 @@ public class AppleCommandsTests
 		Assert.Equal(0, exitCode);
 		Assert.Single(fake.InstallCalls);
 		var (platforms, dryRun) = fake.InstallCalls[0];
-		Assert.Null(platforms);
+		Assert.NotNull(platforms);
+		Assert.Contains("iOS", platforms);
 		Assert.False(dryRun);
 	}
 
@@ -118,6 +119,19 @@ public class AppleCommandsTests
 		var (platforms, _) = fake.InstallCalls[0];
 		Assert.NotNull(platforms);
 		Assert.Contains("iOS", platforms);
+	}
+
+	[Fact]
+	public async Task InstallCommand_Json_PlatformAllPassesNullFilter()
+	{
+		var (exitCode, fake) = await InvokeAppleInstallAsync(
+			f => f.InstallResult = new AppleInstallResult { Status = "ok" },
+			"--platform", "all");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.InstallCalls);
+		var (platforms, _) = fake.InstallCalls[0];
+		Assert.Null(platforms); // "all" means no filter
 	}
 
 	[Fact]

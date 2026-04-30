@@ -74,7 +74,7 @@ public interface IAppleProvider
 	/// <param name="platforms">Optional set of platforms to ensure runtimes for (e.g., "iOS", "tvOS").</param>
 	/// <param name="dryRun">When true, reports what would be installed without making changes.</param>
 	/// <param name="cancellationToken">Cancellation token.</param>
-	/// <returns>The environment check result after install completes.</returns>
+	/// <returns>An <see cref="AppleInstallResult"/> describing what was installed (or would be installed in dry-run mode).</returns>
 	Task<AppleInstallResult> InstallEnvironmentAsync(IEnumerable<string>? platforms = null, bool dryRun = false, CancellationToken cancellationToken = default);
 
 	/// <summary>
@@ -91,7 +91,7 @@ public record AppleInstallResult
 	/// <summary>Overall status of the environment after install.</summary>
 	public required string Status { get; init; }
 
-	/// <summary>Xcode version and path, if found.</summary>
+	/// <summary>Xcode version and build number (e.g., "16.0 (16A242d)"), if found.</summary>
 	public string? XcodeVersion { get; init; }
 
 	/// <summary>Whether Command Line Tools are installed.</summary>

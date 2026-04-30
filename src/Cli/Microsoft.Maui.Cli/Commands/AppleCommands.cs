@@ -135,8 +135,9 @@ public static class AppleCommands
 	{
 		var platformOption = new Option<string[]>("--platform")
 		{
-			Description = "Platform(s) to ensure runtimes for (iOS, tvOS, watchOS, visionOS). If omitted, installs all available.",
-			AllowMultipleArgumentsPerToken = true
+			Description = "Platform(s) to ensure runtimes for (iOS, tvOS, watchOS, visionOS, all). Defaults to iOS only; use 'all' to install all available runtimes.",
+			AllowMultipleArgumentsPerToken = true,
+			DefaultValueFactory = _ => new[] { "iOS" }
 		};
 
 		var installCommand = new Command("install", "Set up Apple development environment (CLT, runtimes)")
@@ -151,7 +152,7 @@ public static class AppleCommands
 			if (!PlatformDetector.IsMacOS)
 			{
 				formatter.WriteWarning("Apple install is only available on macOS.");
-				return 0;
+				return 1;
 			}
 
 			var appleProvider = Program.AppleProvider;
@@ -164,8 +165,13 @@ public static class AppleCommands
 
 			try
 			{
+				// "all" means no filter — install runtimes for every available platform
+				var platformFilter = platforms is { Length: > 0 } && !platforms.Any(p => string.Equals(p, "all", StringComparison.OrdinalIgnoreCase))
+					? platforms
+					: null;
+
 				var result = await appleProvider.InstallEnvironmentAsync(
-					platforms is { Length: > 0 } ? platforms : null,
+					platformFilter,
 					dryRun,
 					ct);
 
