@@ -156,8 +156,48 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Pack Linux GTK4
 
+          - job: EssentialsAI_macOS
+            displayName: EssentialsAI - macOS (native build)
+            pool:
+              name: Azure Pipelines
+              vmImage: macos-15
+              os: macOS
+            templateContext:
+              outputs:
+              - output: pipelineArtifact
+                displayName: Publish Mac Native Artifacts
+                targetPath: '$(Agent.TempDirectory)/native-binaries'
+                artifactName: EssentialsAIMacNativeArtifacts
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+            steps:
+            - script: |
+                eng/common/dotnet.sh --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet/dotnet workload install maui macos maui-tizen
+              displayName: Install MAUI workloads
+            - script: |
+                ./eng/common/build.sh \
+                  --configuration $(_BuildConfig) \
+                  --restore \
+                  --build \
+                  --prepareMachine \
+                  --ci \
+                  --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
+              displayName: Build EssentialsAI (macOS)
+            - task: CopyFiles@2
+              displayName: Copy Native Binaries
+              inputs:
+                SourceFolder: '$(Build.SourcesDirectory)/artifacts/bin'
+                Contents: |
+                  */$(_BuildConfig)/*/*.resources.zip
+                TargetFolder: '$(Agent.TempDirectory)/native-binaries'
+
           - job: EssentialsAI
             displayName: EssentialsAI - Windows
+            dependsOn: EssentialsAI_macOS
             pool:
               name: NetCore1ESPool-Internal
               demands: ImageOverride -equals windows.vs2026preview.scout.amd64
@@ -169,6 +209,11 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
+            - task: DownloadPipelineArtifact@2
+              displayName: Download Mac Native Binaries
+              inputs:
+                artifact: EssentialsAIMacNativeArtifacts
+                path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen

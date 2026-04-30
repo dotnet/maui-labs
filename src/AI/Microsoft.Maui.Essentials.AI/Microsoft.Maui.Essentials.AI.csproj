@@ -45,4 +45,5 @@
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
+  <Import Project="..\AppleBindings.targets" />
 </Project>

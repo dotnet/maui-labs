@@ -35,4 +35,5 @@ jobs:
       project-name: essentialsai
       run-tests: true
       pack: true
+      apple-native: true
       xcode-version: '26.3'
