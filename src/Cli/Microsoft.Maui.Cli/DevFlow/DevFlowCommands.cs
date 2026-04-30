@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.DevFlow.Skills;
+using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.DevFlow;
@@ -4011,42 +4012,132 @@ public class DevFlowCommands
     {
         await WriteSkillFreshnessHintAsync(json, cancellationToken);
 
-        var diagnostics = new Dictionary<string, object>();
-        
-        // Get CLI version
         var version = typeof(DevFlowCommands).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-        diagnostics["cli_version"] = version;
-        
-        // Check broker status
+
+        var checks = new List<DiagnoseCheckResult>();
+
+        // Check 1: broker
         var brokerPort = await Broker.BrokerClient.EnsureBrokerRunningAsync();
-        var brokerRunning = brokerPort != null;
-        diagnostics["broker_running"] = brokerRunning;
-        if (brokerRunning)
-            diagnostics["broker_port"] = brokerPort!.Value;
-        
-        // List connected agents
-        var agents = brokerRunning ? await Broker.BrokerClient.ListAgentsAsync(brokerPort!.Value) : null;
+        if (brokerPort != null)
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "broker",
+                Name = "DevFlow broker",
+                Status = DiagnoseCheckStatus.Passed,
+                Message = $"Broker running on port {brokerPort.Value}",
+            });
+        }
+        else
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "broker",
+                Name = "DevFlow broker",
+                Status = DiagnoseCheckStatus.Failed,
+                Message = "Broker is not running",
+                Remediation = new RemediationResult
+                {
+                    Type = "command",
+                    Command = "maui devflow broker start",
+                },
+            });
+        }
+
+        // Check 2: connected agents
+        var agents = brokerPort != null
+            ? await Broker.BrokerClient.ListAgentsAsync(brokerPort.Value)
+            : null;
         var agentCount = agents?.Length ?? 0;
-        diagnostics["agent_count"] = agentCount;
-        diagnostics["agents"] = agents ?? Array.Empty<object>();
-        
-        // Scan for devflow-enabled projects
+
+        if (brokerPort == null)
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "agents",
+                Name = "Connected agents",
+                Status = DiagnoseCheckStatus.Skipped,
+                Message = "Skipped \u2014 broker is not running",
+            });
+        }
+        else if (agentCount == 0)
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "agents",
+                Name = "Connected agents",
+                Status = DiagnoseCheckStatus.Warning,
+                Message = "No agents connected \u2014 run your app in Debug configuration",
+            });
+        }
+        else
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "agents",
+                Name = "Connected agents",
+                Status = DiagnoseCheckStatus.Passed,
+                Message = $"{agentCount} agent(s) connected",
+            });
+        }
+
+        // Check 3: devflow-enabled projects
         var projects = ScanForDevFlowProjects();
-        diagnostics["projects"] = projects;
-        
+        if (projects.Length == 0)
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "devflow-projects",
+                Name = "DevFlow-enabled projects",
+                Status = DiagnoseCheckStatus.Warning,
+                Message = "No DevFlow-enabled projects found in current directory",
+                Remediation = new RemediationResult
+                {
+                    Type = "command",
+                    Command = "maui devflow init",
+                },
+            });
+        }
+        else
+        {
+            checks.Add(new DiagnoseCheckResult
+            {
+                Id = "devflow-projects",
+                Name = "DevFlow-enabled projects",
+                Status = DiagnoseCheckStatus.Passed,
+                Message = $"{projects.Length} DevFlow-enabled project(s) found",
+            });
+        }
+
+        var rollupStatus = DiagnoseResult.ComputeStatus(checks);
+        var rollupMessage = rollupStatus switch
+        {
+            DiagnoseStatus.Passed => "All checks passed",
+            DiagnoseStatus.Warning => "One or more checks require attention",
+            DiagnoseStatus.Failed => "One or more checks failed",
+            _ => throw new System.Diagnostics.UnreachableException($"Unhandled DiagnoseStatus: {rollupStatus}"),
+        };
+
+        var result = new DiagnoseResult
+        {
+            Status = rollupStatus,
+            Message = rollupMessage,
+            Checks = checks,
+        };
+
         if (json)
         {
-            Output.WriteResult(diagnostics, json);
+            Output.WriteResult(result, json);
             return;
         }
-        
+
         // Human-readable output
         Console.WriteLine("DevFlow Diagnostics");
         Console.WriteLine("━━━━━━━━━━━━━━━━━━");
         Console.WriteLine($"✅ CLI version:     {version}");
         
-        if (brokerRunning)
+        if (brokerPort != null)
         {
             Console.WriteLine($"✅ Broker:          Running on port {brokerPort} ({agentCount} agent(s) connected)");
         }
