@@ -13,7 +13,7 @@ Always pass `--json` to any `maui` command an agent will parse, and `--ci` for
 non-interactive failure-fast runs.
 
 The full `--json` error envelope contract (schema, code categories, worked examples, PowerShell and Bash consumers) is documented in
-[`src/Cli/README.md` — Error envelope](../../../../src/Cli/README.md#error-envelope).
+[`src/Cli/README.md` — Error envelope](../../../../../src/Cli/README.md#error-envelope).
 
 **Quick reference** — when a command fails with `--json`, stdout is a top-level JSON object (no `"error"` wrapper):
 

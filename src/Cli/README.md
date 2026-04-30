@@ -156,7 +156,7 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 
 ### `--json` flag
 
-Most commands accept `--json` for structured output. Successful results emit a top-level JSON object whose shape is command-specific (see per-command `--help` and examples below). When a command **fails**, it always emits the canonical error envelope described in the next section — regardless of which command was run.
+Most commands accept `--json` for structured output. Successful results emit a top-level JSON object whose shape is command-specific (see per-command `--help` and examples below). When a command **fails** and the error is a recognized `MauiToolException`, it emits the canonical error envelope described in the next section. Note: unrecognised parse errors (e.g. invalid flags) and DevFlow sub-commands may emit different shapes.
 
 Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts.
 
@@ -166,9 +166,9 @@ When a `maui` command exits with a non-zero exit code and `--json` is active, it
 
 ```json
 {
-  "code": "E2106",          // stable error code — see `maui errors list` (issue #197)
+  "code": "E2106",          // stable error code — see the error code table below
   "category": "platform",   // tool | platform | user | network | permission
-  "severity": "error",      // info | warning | error
+  "severity": "error",      // always "error" today (info | warning reserved for future use)
   "message": "Android emulator not installed",
 
   // OPTIONAL — omitted entirely when null (never serialized as JSON null)
@@ -180,7 +180,7 @@ When a `maui` command exits with a non-zero exit code and `--json` is active, it
     "command": "maui android sdk install emulator",  // present when type == autofixable
     "manual_steps": ["...", "..."]      // present when type == useraction
   },
-  "docs_url": "https://...",
+  "docs_url": "https://...",          // reserved — not yet populated by any command
   "correlation_id": "..."
 }
 ```
@@ -200,15 +200,15 @@ When a `maui` command exits with a non-zero exit code and `--json` is active, it
 |--------|-----------------|---------|
 | `E1xxx` | `tool` | `E1001` InternalError, `E1004` InvalidArgument, `E1006` DeviceNotFound, `E1007` PlatformNotSupported |
 | `E20xx` | `platform` | `E2001` JdkNotFound, `E2002` JdkVersionUnsupported, `E2003` JdkInstallFailed |
-| `E21xx` | `platform` | `E2101` AndroidSdkNotFound, `E2103` AndroidLicensesNotAccepted, `E2106` AndroidEmulatorNotFound, `E2110` AndroidAdbNotFound |
-| `E22xx` | `platform` | `E2201` AppleXcodeNotFound, `E2204` AppleSimulatorNotFound |
+| `E21xx` | `platform` | `E2101` AndroidSdkNotFound, `E2102` AndroidSdkManagerNotFound, `E2103` AndroidLicensesNotAccepted, `E2105` AndroidPackageInstallFailed, `E2106` AndroidEmulatorNotFound, `E2108` AndroidAvdCreateFailed, `E2110` AndroidAdbNotFound, `E2111` AndroidDeviceNotFound, `E2112` AndroidAvdDeleteFailed |
+| `E22xx` | `platform` | `E2201` AppleXcodeNotFound, `E2202` AppleCltNotFound, `E2203` AppleSimctlFailed, `E2204` AppleSimulatorNotFound |
 | `E23xx` | `platform` | `E2301` WindowsSdkNotFound |
-| `E24xx` | `platform` | `E2401` DotNetNotFound, `E2402` MauiWorkloadMissing |
+| `E24xx` | `platform` | `E2401` DotNetNotFound, `E2402` MauiWorkloadMissing, `E2403` DiagnosticsToolNotFound |
 | `E3xxx` | `user` | User action required (wrong arguments, missing inputs) |
 | `E4xxx` | `network` | Download / connectivity failures |
 | `E5xxx` | `permission` | Privacy / OS permission issues |
 
-Call `maui errors list --json` to get the live catalogue (being added in issue [#197](https://github.com/dotnet/maui-labs/issues/197)).
+A `maui errors list` command is planned (issue [#197](https://github.com/dotnet/maui-labs/issues/197)) to expose this catalogue at runtime. The table above is the authoritative list until then.
 
 ### Consuming the error envelope
 
@@ -219,7 +219,8 @@ if ! out=$(maui android sdk install emulator --json 2>&1); then
   rem_type=$(echo "$out" | jq -r '.remediation.type // "unknown"')
   rem_cmd=$(echo "$out" | jq -r '.remediation.command // empty')
   if [[ "$rem_type" == "autofixable" && -n "$rem_cmd" ]]; then
-    eval "$rem_cmd"
+    # Run the remediation command directly (never pass untrusted input to eval)
+    $rem_cmd
   fi
 fi
 ```
@@ -231,7 +232,9 @@ $json = maui android sdk install emulator --json
 if ($LASTEXITCODE -ne 0) {
     $err = $json | ConvertFrom-Json
     if ($err.remediation.type -eq 'autofixable' -and $err.remediation.command) {
-        Invoke-Expression $err.remediation.command
+        # Split and invoke directly (avoid Invoke-Expression with untrusted input)
+        $parts = $err.remediation.command -split ' '
+        & $parts[0] $parts[1..($parts.Length-1)]
     }
 }
 ```
