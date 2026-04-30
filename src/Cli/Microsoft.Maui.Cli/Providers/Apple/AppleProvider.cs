@@ -159,6 +159,11 @@ public class AppleProvider : IAppleProvider
 		return _simulatorService?.Create(name, deviceTypeIdentifier, runtimeIdentifier);
 	}
 
+	public bool EraseSimulator(string udidOrName)
+	{
+		return _simulatorService?.Erase(udidOrName) ?? false;
+	}
+
 	public List<HealthCheck> CheckHealth()
 	{
 		var checks = new List<HealthCheck>();

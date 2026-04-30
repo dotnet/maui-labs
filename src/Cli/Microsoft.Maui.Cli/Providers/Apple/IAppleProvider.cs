@@ -67,6 +67,11 @@ public interface IAppleProvider
 	string? CreateSimulator(string name, string deviceTypeIdentifier, string? runtimeIdentifier = null);
 
 	/// <summary>
+	/// Erases (resets) a simulator device to factory state.
+	/// </summary>
+	bool EraseSimulator(string udidOrName);
+
+	/// <summary>
 	/// Gets the health status of Apple tooling (Xcode, CLT, simulators).
 	/// </summary>
 	List<HealthCheck> CheckHealth();

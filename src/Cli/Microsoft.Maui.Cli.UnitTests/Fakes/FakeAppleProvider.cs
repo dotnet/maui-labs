@@ -29,6 +29,7 @@ public class FakeAppleProvider : IAppleProvider
 	public bool ShutdownSimulatorResult { get; set; } = true;
 	public bool DeleteSimulatorResult { get; set; } = true;
 	public string? CreateSimulatorResult { get; set; } = "new-udid";
+	public bool EraseSimulatorResult { get; set; } = true;
 
 	// --- Call tracking ---
 
@@ -38,6 +39,7 @@ public class FakeAppleProvider : IAppleProvider
 	public List<string> DeletedSimulators { get; } = new();
 	public List<(string Name, string DeviceType, string? Runtime)> CreatedSimulators { get; } = new();
 	public List<(IEnumerable<string>? Platforms, bool DryRun)> InstallCalls { get; } = new();
+	public List<string> ErasedSimulators { get; } = new();
 
 	// --- IAppleProvider implementation ---
 
@@ -92,6 +94,12 @@ public class FakeAppleProvider : IAppleProvider
 	{
 		CreatedSimulators.Add((name, deviceTypeIdentifier, runtimeIdentifier));
 		return CreateSimulatorResult;
+	}
+
+	public bool EraseSimulator(string udidOrName)
+	{
+		ErasedSimulators.Add(udidOrName);
+		return EraseSimulatorResult;
 	}
 
 	public List<HealthCheck> CheckHealth() => HealthChecks;

@@ -2,8 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using Microsoft.Maui.Cli.Errors;
+using System.CommandLine.Parsing;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
@@ -345,6 +345,111 @@ public static class AppleCommands
 		simCommand.Add(startCommand);
 		simCommand.Add(stopCommand);
 		simCommand.Add(deleteCommand);
+		simCommand.Add(CreateSimulatorCreateCommand());
+		simCommand.Add(CreateSimulatorEraseCommand());
 		return simCommand;
+	}
+
+	static Command CreateSimulatorCreateCommand()
+	{
+		var deviceTypeArg = new Argument<string>("device-type") { Description = "Device type identifier (e.g. com.apple.CoreSimulator.SimDeviceType.iPhone-15)" };
+		var nameOption = new Option<string?>("--name") { Description = "Custom name for the new simulator (defaults to a name derived from device-type)" };
+		var runtimeOption = new Option<string?>("--runtime") { Description = "Runtime identifier (e.g. com.apple.CoreSimulator.SimRuntime.iOS-17-2)" };
+
+		var createCommand = new Command("create", "Create a new simulator device") { deviceTypeArg, nameOption, runtimeOption };
+		createCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteWarning("Simulators are only available on macOS.");
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var deviceType = parseResult.GetValue(deviceTypeArg)!;
+			var runtime = parseResult.GetValue(runtimeOption);
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+
+			// Derive a human-readable default name from the device-type identifier
+			var customName = parseResult.GetValue(nameOption);
+			var parts = deviceType.Split('.');
+			var shortType = parts.Length > 1 ? parts[parts.Length - 1].Replace('-', ' ') : deviceType;
+			var name = customName is not null ? customName : shortType;
+			if (customName is null && runtime is not null)
+			{
+				var rParts = runtime.Split('.');
+				var rShort = rParts.Length > 1 ? rParts[rParts.Length - 1] : runtime;
+				name = $"{shortType} ({rShort})";
+			}
+
+			var udid = appleProvider.CreateSimulator(name, deviceType, runtime);
+			if (udid is null)
+			{
+				var ex = new MauiToolException(ErrorCodes.AppleSimulatorCreateFailed, $"Failed to create simulator for device type '{deviceType}'.");
+				if (useJson)
+					formatter.WriteError(ex);
+				else
+					formatter.WriteWarning(ex.Message);
+				return 1;
+			}
+
+			if (useJson)
+			{
+				formatter.Write(new SimulatorCreateResult { Udid = udid, Name = name, DeviceType = deviceType, Runtime = runtime });
+			}
+			else
+			{
+				formatter.WriteSuccess($"Simulator '{name}' created with UDID: {udid}");
+			}
+			return 0;
+		});
+
+		return createCommand;
+	}
+
+	static Command CreateSimulatorEraseCommand()
+	{
+		var nameOrUdidArg = new Argument<string>("name-or-udid") { Description = "Simulator name or UDID to erase" };
+		var eraseCommand = new Command("erase", "Erase (reset) a simulator device to factory state") { nameOrUdidArg };
+		eraseCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteWarning("Simulators are only available on macOS.");
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var target = parseResult.GetValue(nameOrUdidArg)!;
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+
+			var erased = appleProvider.EraseSimulator(target);
+
+			if (!erased)
+			{
+				var ex = new MauiToolException(ErrorCodes.AppleSimulatorEraseFailed, $"Failed to erase simulator '{target}'.");
+				if (useJson)
+					formatter.WriteError(ex);
+				else
+					formatter.WriteWarning(ex.Message);
+				return 1;
+			}
+
+			if (useJson)
+			{
+				formatter.Write(new SimulatorEraseResult { Target = target, Erased = true });
+			}
+			else
+			{
+				formatter.WriteSuccess($"Simulator '{target}' erased.");
+			}
+			return 0;
+		});
+
+		return eraseCommand;
 	}
 }

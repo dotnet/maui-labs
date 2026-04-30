@@ -95,3 +95,28 @@ internal sealed record CliCommandResult
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public List<int>? Versions { get; init; }
 }
+
+internal sealed record SimulatorCreateResult
+{
+	[System.Text.Json.Serialization.JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[System.Text.Json.Serialization.JsonPropertyName("name")]
+	public required string Name { get; init; }
+
+	[System.Text.Json.Serialization.JsonPropertyName("device_type")]
+	public required string DeviceType { get; init; }
+
+	[System.Text.Json.Serialization.JsonPropertyName("runtime")]
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+	public string? Runtime { get; init; }
+}
+
+internal sealed record SimulatorEraseResult
+{
+	[System.Text.Json.Serialization.JsonPropertyName("target")]
+	public required string Target { get; init; }
+
+	[System.Text.Json.Serialization.JsonPropertyName("erased")]
+	public bool Erased { get; init; }
+}
