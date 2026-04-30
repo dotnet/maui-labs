@@ -5,11 +5,12 @@ using Microsoft.Maui.Graphics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinSize = global::Windows.Foundation.Size;
+using WinGrid = Microsoft.UI.Xaml.Controls.Grid;
 using WinRect = global::Windows.Foundation.Rect;
 
 namespace Comet.Windows
 {
-	public class CometView : Grid, IReloadHandler
+	public class CometView : WinGrid, IReloadHandler
 	{
 		IView _view;
 		IViewHandler currentHandler;

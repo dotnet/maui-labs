@@ -1,4 +1,4 @@
-﻿using Microsoft.Maui.Handlers;
+using Microsoft.Maui.Handlers;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 
@@ -95,8 +95,8 @@ public static partial class HandlerExtensions
 				var accepted = dropGesture.DragOver?.Invoke(view, null) ?? true;
 				dropGesture.DragOverCommand?.Execute(null);
 				e.AcceptedOperation = accepted
-					? Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy
-					: Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
+					? global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy
+					: global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
 			};
 			nativeView.DragLeave += (s, e) =>
 			{
@@ -106,7 +106,7 @@ public static partial class HandlerExtensions
 			nativeView.Drop += async (s, e) =>
 			{
 				object data = null;
-				if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+				if (e.DataView.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
 					data = await e.DataView.GetTextAsync();
 				dropGesture.Drop?.Invoke(view, data);
 				dropGesture.DropCommand?.Execute(dropGesture.DropCommandParameter ?? data);

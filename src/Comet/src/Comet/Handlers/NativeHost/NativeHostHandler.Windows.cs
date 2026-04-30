@@ -4,6 +4,7 @@ using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using WinGrid = Microsoft.UI.Xaml.Controls.Grid;
 
 namespace Comet.Handlers
 {
@@ -100,7 +101,7 @@ namespace Comet.Handlers
 			if (hostedNativeView is null)
 				return availableSize;
 
-			hostedNativeView.Measure(new Windows.Foundation.Size(
+			hostedNativeView.Measure(new global::Windows.Foundation.Size(
 				double.IsInfinity(availableSize.Width) ? double.PositiveInfinity : availableSize.Width,
 				double.IsInfinity(availableSize.Height) ? double.PositiveInfinity : availableSize.Height));
 
@@ -116,7 +117,7 @@ namespace Comet.Handlers
 			return size;
 		}
 
-		public class NativeHostContainerView : Grid
+		public class NativeHostContainerView : WinGrid
 		{
 			FrameworkElement hostedView;
 
@@ -129,8 +130,8 @@ namespace Comet.Handlers
 				hostedView = platformView;
 				if (hostedView.Parent is Panel parent)
 					parent.Children.Remove(hostedView);
-				hostedView.HorizontalAlignment = HorizontalAlignment.Stretch;
-				hostedView.VerticalAlignment = VerticalAlignment.Stretch;
+				hostedView.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch;
+				hostedView.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch;
 				Children.Add(hostedView);
 			}
 
