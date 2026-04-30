@@ -22,6 +22,7 @@ public static class AppleCommands
 		command.Add(CreateXcodeCommand());
 		command.Add(CreateRuntimeCommand());
 		command.Add(CreateSimulatorCommand());
+		command.Add(CreateInstallCommand());
 
 		return command;
 	}
@@ -127,6 +128,75 @@ public static class AppleCommands
 
 		runtimeCommand.Add(listCommand);
 		return runtimeCommand;
+	}
+
+	static Command CreateInstallCommand()
+	{
+		var platformOption = new Option<string[]>("--platform")
+		{
+			Description = "Platform(s) to ensure runtimes for (iOS, tvOS, watchOS, visionOS). If omitted, installs all available.",
+			AllowMultipleArgumentsPerToken = true
+		};
+		var dryRunOption = new Option<bool>("--dry-run")
+		{
+			Description = "Show what would be installed without making changes"
+		};
+
+		var installCommand = new Command("install", "Set up Apple development environment (CLT, runtimes)")
+		{
+			platformOption,
+			dryRunOption
+		};
+
+		installCommand.SetAction(async (ParseResult parseResult, CancellationToken ct) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteWarning("Apple install is only available on macOS.");
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			var platforms = parseResult.GetValue(platformOption);
+			var dryRun = parseResult.GetValue(dryRunOption);
+
+			if (dryRun && !useJson)
+				formatter.WriteInfo("Dry run mode — no changes will be made.");
+
+			var result = await appleProvider.InstallEnvironmentAsync(
+				platforms is { Length: > 0 } ? platforms : null,
+				dryRun,
+				ct);
+
+			if (useJson)
+			{
+				formatter.Write(result);
+			}
+			else
+			{
+				if (result.XcodeVersion is not null)
+					formatter.WriteSuccess($"Xcode: {result.XcodeVersion}");
+				else
+					formatter.WriteWarning("Xcode: not found");
+
+				formatter.WriteInfo($"Command Line Tools: {(result.CommandLineToolsInstalled ? "installed" : "not installed")}");
+
+				if (result.Platforms.Count > 0)
+					formatter.WriteInfo($"Platforms: {string.Join(", ", result.Platforms)}");
+
+				if (result.Runtimes.Count > 0)
+					formatter.WriteInfo($"Runtimes: {string.Join(", ", result.Runtimes)}");
+
+				formatter.WriteInfo($"Status: {result.Status}");
+			}
+
+			return result.Status == "ok" ? 0 : 1;
+		});
+
+		return installCommand;
 	}
 
 	static Command CreateSimulatorCommand()

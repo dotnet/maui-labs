@@ -67,9 +67,44 @@ public interface IAppleProvider
 	List<HealthCheck> CheckHealth();
 
 	/// <summary>
+	/// Sets up the Apple development environment by installing missing components.
+	/// Uses <see cref="Xamarin.MacDev.AppleInstaller"/> to orchestrate CLT installation,
+	/// Xcode first-launch, and runtime downloads.
+	/// </summary>
+	/// <param name="platforms">Optional set of platforms to ensure runtimes for (e.g., "iOS", "tvOS").</param>
+	/// <param name="dryRun">When true, reports what would be installed without making changes.</param>
+	/// <param name="cancellationToken">Cancellation token.</param>
+	/// <returns>The environment check result after install completes.</returns>
+	Task<AppleInstallResult> InstallEnvironmentAsync(IEnumerable<string>? platforms = null, bool dryRun = false, CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Lists simulator devices as <see cref="Device"/> models for device manager integration.
 	/// </summary>
 	List<Device> GetDevices();
+}
+
+/// <summary>
+/// Result of the Apple environment install operation.
+/// </summary>
+public record AppleInstallResult
+{
+	/// <summary>Overall status of the environment after install.</summary>
+	public required string Status { get; init; }
+
+	/// <summary>Xcode version and path, if found.</summary>
+	public string? XcodeVersion { get; init; }
+
+	/// <summary>Whether Command Line Tools are installed.</summary>
+	public bool CommandLineToolsInstalled { get; init; }
+
+	/// <summary>Available SDK platforms discovered in Xcode.</summary>
+	public List<string> Platforms { get; init; } = new();
+
+	/// <summary>Available simulator runtimes.</summary>
+	public List<string> Runtimes { get; init; } = new();
+
+	/// <summary>Whether this was a dry run (no changes made).</summary>
+	public bool DryRun { get; init; }
 }
 
 /// <summary>
