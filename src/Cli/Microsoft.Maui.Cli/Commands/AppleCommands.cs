@@ -356,7 +356,9 @@ public static class AppleCommands
 		var nameOption = new Option<string?>("--name") { Description = "Custom name for the new simulator (defaults to a name derived from device-type)" };
 		var runtimeOption = new Option<string?>("--runtime") { Description = "Runtime identifier (e.g. com.apple.CoreSimulator.SimRuntime.iOS-17-2)" };
 
-		var createCommand = new Command("create", "Create a new simulator device") { deviceTypeArg, nameOption, runtimeOption };
+		var ifNotExistsOption = new Option<bool>("--if-not-exists") { Description = "Treat name collision as success: if a simulator with this name already exists, return its UDID instead of failing." };
+
+		var createCommand = new Command("create", "Create a new simulator device") { deviceTypeArg, nameOption, runtimeOption, ifNotExistsOption };
 		createCommand.SetAction((ParseResult parseResult) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
@@ -381,6 +383,31 @@ public static class AppleCommands
 				var rParts = runtime.Split('.');
 				var rShort = (rParts.Length > 1 ? rParts[rParts.Length - 1] : runtime).Replace('-', ' ');
 				name = $"{shortType} ({rShort})";
+			}
+
+			// Idempotency probe: simctl create does not dedupe by name. Without this check
+			// repeated invocations create multiple devices with the same name, which then
+			// makes name-keyed commands (boot/erase/delete) ambiguous.
+			var ifNotExists = parseResult.GetValue(ifNotExistsOption);
+			var existing = appleProvider.GetSimulators().FirstOrDefault(s =>
+				string.Equals(s.Name, name, StringComparison.Ordinal));
+			if (existing is not null)
+			{
+				if (ifNotExists)
+				{
+					var useJson2 = parseResult.GetValue(GlobalOptions.JsonOption);
+					if (useJson2)
+						formatter.Write(new SimulatorCreateResult { Udid = existing.Udid, Name = name, DeviceType = existing.DeviceTypeIdentifier ?? deviceType, Runtime = existing.RuntimeIdentifier ?? runtime });
+					else
+						formatter.WriteSuccess($"Simulator '{name}' already exists with UDID: {existing.Udid}");
+					return 0;
+				}
+
+				var dupEx = new MauiToolException(
+					ErrorCodes.AppleSimulatorCreateFailed,
+					$"A simulator named '{name}' already exists (UDID: {existing.Udid}). Use --name to choose a different name, --if-not-exists to reuse the existing one, or 'maui apple simulator delete {existing.Udid}' first.");
+				formatter.WriteError(dupEx);
+				return 1;
 			}
 
 			var udid = appleProvider.CreateSimulator(name, deviceType, runtime);
@@ -419,11 +446,34 @@ public static class AppleCommands
 			var appleProvider = Program.AppleProvider;
 			var target = parseResult.GetValue(nameOrUdidArg)!;
 
+			// Probe state first so we can distinguish "not found" from "wrong state",
+			// which simctl's bool return value otherwise conflates.
+			var sims = appleProvider.GetSimulators();
+			var match = sims.FirstOrDefault(s =>
+				string.Equals(s.Udid, target, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(s.Name, target, StringComparison.Ordinal));
+			if (match is null)
+			{
+				var notFoundEx = new MauiToolException(
+					ErrorCodes.AppleSimulatorNotFound,
+					$"No simulator found matching '{target}'. List simulators with 'maui apple simulator list'.");
+				formatter.WriteError(notFoundEx);
+				return 1;
+			}
+			if (match.IsBooted)
+			{
+				var bootedEx = new MauiToolException(
+					ErrorCodes.AppleSimulatorEraseFailed,
+					$"Simulator '{match.Name}' (UDID: {match.Udid}) is booted; shut it down first with 'maui apple simulator stop {match.Udid}'.");
+				formatter.WriteError(bootedEx);
+				return 1;
+			}
+
 			var erased = appleProvider.EraseSimulator(target);
 
 			if (!erased)
 			{
-				var ex = new MauiToolException(ErrorCodes.AppleSimulatorEraseFailed, $"Failed to erase simulator '{target}'. Ensure the simulator is shut down first (maui apple simulator stop).");
+				var ex = new MauiToolException(ErrorCodes.AppleSimulatorEraseFailed, $"Failed to erase simulator '{target}' (UDID: {match.Udid}). Check 'xcrun simctl' is available and the simulator state is 'Shutdown'.");
 				formatter.WriteError(ex);
 				return 1;
 			}
