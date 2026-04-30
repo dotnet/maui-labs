@@ -147,12 +147,12 @@ Assert.Empty(result);
 
 [Theory]
 [InlineData(0x5000u, 80)]
-[InlineData(0x1F90u, 8080)]
-[InlineData(0x01BBu, 443)]
+[InlineData(0x901Fu, 8080)]
+[InlineData(0xBB01u, 443)]
 public void GetPortFromNetworkDword_ReturnsCorrectPort(uint networkDword, int expectedPort)
 {
 // The formula: ((dword & 0xFF) << 8) | ((dword >> 8) & 0xFF)
-var actual = WindowsPortInspector.GetPortFromNetworkDword(networkDword);
+var actual = PortInspectorHelpers.GetPortFromNetworkDword(networkDword);
 Assert.Equal(expectedPort, actual);
 }
 }

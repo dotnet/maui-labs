@@ -3,12 +3,9 @@
 
 using System.Diagnostics;
 using System.Net.NetworkInformation;
-using System.Runtime.Versioning;
 
 namespace Microsoft.Maui.Cli.Providers.Port;
 
-[SupportedOSPlatform("macos")]
-[SupportedOSPlatform("linux")]
 internal sealed class UnixPortInspector : IPortInspector
 {
 public IReadOnlyList<PortListenerInfo> GetListeners(int port)
