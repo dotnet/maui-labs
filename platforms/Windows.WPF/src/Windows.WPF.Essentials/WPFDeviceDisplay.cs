@@ -1,4 +1,5 @@
 using Microsoft.Maui.Devices;
+using Microsoft.Win32;
 
 #pragma warning disable CS0067 // Event is never used (required by IDeviceDisplay interface)
 
@@ -6,6 +7,20 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 {
 	public class WPFDeviceDisplay : IDeviceDisplay
 	{
+		double _cachedDpi;
+
+		public WPFDeviceDisplay()
+		{
+			_cachedDpi = GetDpi();
+			SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+		}
+
+		void OnDisplaySettingsChanged(object? sender, EventArgs e)
+		{
+			_cachedDpi = GetDpi();
+			MainDisplayInfoChanged?.Invoke(this, new DisplayInfoChangedEventArgs(MainDisplayInfo));
+		}
+
 		public bool KeepScreenOn { get; set; }
 
 		public DisplayInfo MainDisplayInfo
@@ -14,8 +29,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			{
 				var screen = System.Windows.SystemParameters.PrimaryScreenWidth;
 				var height = System.Windows.SystemParameters.PrimaryScreenHeight;
-				var dpi = GetDpi();
-				var density = dpi / 96.0;
+				var density = _cachedDpi / 96.0;
 				return new DisplayInfo(
 					width: screen * density,
 					height: height * density,

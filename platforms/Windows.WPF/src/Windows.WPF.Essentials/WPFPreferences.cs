@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Microsoft.Maui.Storage;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
@@ -10,27 +11,29 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			AppDomain.CurrentDomain.FriendlyName, "preferences");
 
 		static string GetFilePath(string? sharedName) =>
-			Path.Combine(_prefsDir, (sharedName ?? "default") + ".prefs");
+			Path.Combine(_prefsDir, (sharedName ?? "default") + ".json");
 
 		static Dictionary<string, string> Load(string? sharedName)
 		{
 			var path = GetFilePath(sharedName);
 			if (!File.Exists(path)) return new();
-			var dict = new Dictionary<string, string>();
-			foreach (var line in File.ReadAllLines(path))
+			try
 			{
-				var idx = line.IndexOf('=');
-				if (idx > 0)
-					dict[line[..idx]] = line[(idx + 1)..];
+				var json = File.ReadAllText(path);
+				return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
 			}
-			return dict;
+			catch
+			{
+				return new();
+			}
 		}
 
 		static void Save(string? sharedName, Dictionary<string, string> dict)
 		{
 			Directory.CreateDirectory(_prefsDir);
 			var path = GetFilePath(sharedName);
-			File.WriteAllLines(path, dict.Select(kv => $"{kv.Key}={kv.Value}"));
+			var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+			File.WriteAllText(path, json);
 		}
 
 		public bool ContainsKey(string key, string? sharedName = null) => Load(sharedName).ContainsKey(key);

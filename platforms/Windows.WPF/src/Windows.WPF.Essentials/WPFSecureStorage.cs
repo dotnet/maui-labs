@@ -11,8 +11,13 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
 			AppDomain.CurrentDomain.FriendlyName, "secure_storage");
 
-		static string GetFilePath(string key) =>
-			Path.Combine(_storageDir, Convert.ToBase64String(Encoding.UTF8.GetBytes(key)).Replace('/', '_') + ".dat");
+		static string GetFilePath(string key)
+		{
+			// Use SHA256 hash for filenames — fixed length, irreversible, filesystem-safe
+			var hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
+			var fileName = Convert.ToHexString(hash).ToLowerInvariant() + ".dat";
+			return Path.Combine(_storageDir, fileName);
+		}
 
 		public Task<string?> GetAsync(string key)
 		{

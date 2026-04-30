@@ -16,7 +16,7 @@ using Microsoft.Maui.LifecycleEvents.WPF;
 using Microsoft.Maui.Platforms.Windows.WPF;
 using Window = System.Windows.Window;
 
-namespace Maui.Controls.Sample.WPF
+namespace Microsoft.Maui.Platforms.Windows.WPF
 {
 	/// <summary>
 	/// Interaction logic for MainWindow.xaml

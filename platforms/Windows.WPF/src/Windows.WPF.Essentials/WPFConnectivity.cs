@@ -3,12 +3,15 @@ using Microsoft.Maui.Networking;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 {
-	public class WPFConnectivity : IConnectivity
+	public class WPFConnectivity : IConnectivity, IDisposable
 	{
+		readonly NetworkAvailabilityChangedEventHandler _handler;
+
 		public WPFConnectivity()
 		{
-			NetworkChange.NetworkAvailabilityChanged += (s, e) =>
+			_handler = (s, e) =>
 				ConnectivityChanged?.Invoke(this, new ConnectivityChangedEventArgs(NetworkAccess, ConnectionProfiles));
+			NetworkChange.NetworkAvailabilityChanged += _handler;
 		}
 
 		public NetworkAccess NetworkAccess =>
@@ -37,5 +40,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 		}
 
 		public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged;
+
+		public void Dispose()
+		{
+			NetworkChange.NetworkAvailabilityChanged -= _handler;
+		}
 	}
 }

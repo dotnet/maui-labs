@@ -284,21 +284,29 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 		{
 			if (string.IsNullOrWhiteSpace(text)) return;
 
-			// Use PowerShell's built-in speech synthesis (available on all Windows)
+			// Use System.Speech.Synthesis.SpeechSynthesizer via reflection to avoid
+			// spawning PowerShell (which would be vulnerable to command injection).
+			// System.Speech.dll is available on all Windows desktop installations.
 			await Task.Run(() =>
 			{
 				try
 				{
-					var escaped = text.Replace("'", "''").Replace("\"", "\\\"");
-					var psi = new System.Diagnostics.ProcessStartInfo
+					var speechAssembly = System.Reflection.Assembly.Load("System.Speech, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+					var synthType = speechAssembly.GetType("System.Speech.Synthesis.SpeechSynthesizer");
+					if (synthType == null) return;
+
+					var synth = Activator.CreateInstance(synthType);
+					if (synth == null) return;
+
+					try
 					{
-						FileName = "powershell",
-						Arguments = $"-NoProfile -Command \"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak('{escaped}')\"",
-						CreateNoWindow = true,
-						UseShellExecute = false,
-					};
-					var proc = System.Diagnostics.Process.Start(psi);
-					proc?.WaitForExit(30000);
+						var speakMethod = synthType.GetMethod("Speak", new[] { typeof(string) });
+						speakMethod?.Invoke(synth, new object[] { text });
+					}
+					finally
+					{
+						(synth as IDisposable)?.Dispose();
+					}
 				}
 				catch { }
 			}, cancelToken);

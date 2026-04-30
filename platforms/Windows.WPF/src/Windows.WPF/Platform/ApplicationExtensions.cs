@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Windows;
-using Maui.Controls.Sample.WPF;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.LifecycleEvents;
 using Microsoft.Maui.LifecycleEvents.WPF;

@@ -15,7 +15,16 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 	/// </summary>
 	public static class GestureManager
 	{
-		const string GestureTag = "MauiGesture";
+		/// <summary>
+		/// Attached property storing gesture cleanup handlers. Uses a DependencyProperty
+		/// instead of FrameworkElement.Tag to avoid conflicts with other WPF code.
+		/// </summary>
+		static readonly DependencyProperty GestureCleanupProperty =
+			DependencyProperty.RegisterAttached(
+				"GestureCleanup",
+				typeof(List<GestureCleanup>),
+				typeof(GestureManager),
+				new PropertyMetadata(null));
 
 		public static void SetupGestures(FrameworkElement platformView, IView virtualView)
 		{
@@ -63,7 +72,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static void ClearManagedGestures(FrameworkElement view)
 		{
-			if (view.Tag is List<GestureCleanup> cleanups)
+			if (view.GetValue(GestureCleanupProperty) is List<GestureCleanup> cleanups)
 			{
 				foreach (var cleanup in cleanups)
 					cleanup.Detach();
@@ -73,10 +82,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		static List<GestureCleanup> GetCleanups(FrameworkElement view)
 		{
-			if (view.Tag is not List<GestureCleanup> list)
+			if (view.GetValue(GestureCleanupProperty) is not List<GestureCleanup> list)
 			{
 				list = new List<GestureCleanup>();
-				view.Tag = list;
+				view.SetValue(GestureCleanupProperty, list);
 			}
 			return list;
 		}

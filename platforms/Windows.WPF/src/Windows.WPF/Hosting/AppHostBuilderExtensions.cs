@@ -28,7 +28,7 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 		public static MauiAppBuilder UseMauiAppWPF<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TApp>(this MauiAppBuilder builder, Func<IServiceProvider, TApp> implementationFactory)
 			where TApp : class, IApplication
 		{
-			builder.UseMauiApp<TApp>();
+			builder.Services.TryAddSingleton<IApplication>(implementationFactory);
 			builder.SetupDefaults();
 			return builder;
 		}

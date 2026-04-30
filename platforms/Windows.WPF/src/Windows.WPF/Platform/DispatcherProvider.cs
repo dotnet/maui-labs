@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Threading;
 using Microsoft.Maui.Dispatching;
 
@@ -15,16 +11,24 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		static IDispatcher? s_dispatcherInstance;
 
 		/// <inheritdoc/>
-		public IDispatcher? GetForCurrentThread() =>
-			s_dispatcherInstance ??= new WPFDispatcher(System.Windows.Threading.Dispatcher.CurrentDispatcher);
+		public IDispatcher? GetForCurrentThread()
+		{
+			// Only return a dispatcher for threads that already have one pumping messages.
+			// Dispatcher.CurrentDispatcher creates a new one for any thread — avoid that.
+			var dispatcher = System.Windows.Threading.Dispatcher.FromThread(Thread.CurrentThread);
+			if (dispatcher == null)
+				return null;
+
+			return s_dispatcherInstance ??= new WPFDispatcher(dispatcher);
+		}
 	}
 
 	public partial class WPFDispatcher : IDispatcher
 	{
-		public static System.Windows.Threading.Dispatcher? ReplacHack { get; set; }
+		internal static System.Windows.Threading.Dispatcher? DispatcherOverride { get; set; }
 
 		readonly System.Windows.Threading.Dispatcher _dispatcherQueue;
-		public System.Windows.Threading.Dispatcher Dispatcher => ReplacHack ?? _dispatcherQueue;
+		public System.Windows.Threading.Dispatcher Dispatcher => DispatcherOverride ?? _dispatcherQueue;
 
 		internal WPFDispatcher(System.Windows.Threading.Dispatcher dispatcherQueue)
 		{
@@ -48,7 +52,17 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 		public bool DispatchDelayed(TimeSpan delay, Action action)
 		{
-			throw new NotImplementedException();
+			var timer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+			{
+				Interval = delay
+			};
+			timer.Tick += (s, e) =>
+			{
+				timer.Stop();
+				action();
+			};
+			timer.Start();
+			return true;
 		}
 
 		public IDispatcherTimer CreateTimer()
@@ -59,7 +73,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 
 	public class WPFDispatchTimer : IDispatcherTimer
 	{
-		DispatcherTimer _dispatchTimer;
+		readonly DispatcherTimer _dispatchTimer;
+		bool _isRunning;
 
 		public WPFDispatchTimer(WPFDispatcher wPFDispatcher)
 		{
@@ -70,6 +85,9 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		void OnTick(object? sender, EventArgs e)
 		{
 			Tick?.Invoke(this, EventArgs.Empty);
+
+			if (!IsRepeating)
+				Stop();
 		}
 
 		public TimeSpan Interval
@@ -77,23 +95,22 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			get => _dispatchTimer.Interval;
 			set => _dispatchTimer.Interval = value;
 		}
-		public bool IsRepeating
-		{
-			get;
-			set;
-		}
 
-		public bool IsRunning => throw new NotImplementedException();
+		public bool IsRepeating { get; set; }
+
+		public bool IsRunning => _isRunning;
 
 		public event EventHandler? Tick;
 
 		public void Start()
 		{
+			_isRunning = true;
 			_dispatchTimer.Start();
 		}
 
 		public void Stop()
 		{
+			_isRunning = false;
 			_dispatchTimer.Stop();
 		}
 	}
