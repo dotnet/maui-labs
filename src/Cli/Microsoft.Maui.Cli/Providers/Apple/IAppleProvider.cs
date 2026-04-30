@@ -69,7 +69,7 @@ public interface IAppleProvider
 	/// <summary>
 	/// Erases (resets) a simulator device to factory state.
 	/// </summary>
-	bool EraseSimulator(string udidOrName);
+	bool EraseSimulator(string udidOrName) => false;
 
 	/// <summary>
 	/// Gets the health status of Apple tooling (Xcode, CLT, simulators).

@@ -363,24 +363,23 @@ public static class AppleCommands
 
 			if (!PlatformDetector.IsMacOS)
 			{
-				formatter.WriteWarning("Simulators are only available on macOS.");
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
 				return 1;
 			}
 
 			var appleProvider = Program.AppleProvider;
 			var deviceType = parseResult.GetValue(deviceTypeArg)!;
 			var runtime = parseResult.GetValue(runtimeOption);
-			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 
 			// Derive a human-readable default name from the device-type identifier
 			var customName = parseResult.GetValue(nameOption);
 			var parts = deviceType.Split('.');
 			var shortType = parts.Length > 1 ? parts[parts.Length - 1].Replace('-', ' ') : deviceType;
-			var name = customName is not null ? customName : shortType;
-			if (customName is null && runtime is not null)
+			var name = !string.IsNullOrWhiteSpace(customName) ? customName : shortType;
+			if (string.IsNullOrWhiteSpace(customName) && runtime is not null)
 			{
 				var rParts = runtime.Split('.');
-				var rShort = rParts.Length > 1 ? rParts[rParts.Length - 1] : runtime;
+				var rShort = (rParts.Length > 1 ? rParts[rParts.Length - 1] : runtime).Replace('-', ' ');
 				name = $"{shortType} ({rShort})";
 			}
 
@@ -388,21 +387,15 @@ public static class AppleCommands
 			if (udid is null)
 			{
 				var ex = new MauiToolException(ErrorCodes.AppleSimulatorCreateFailed, $"Failed to create simulator for device type '{deviceType}'.");
-				if (useJson)
-					formatter.WriteError(ex);
-				else
-					formatter.WriteWarning(ex.Message);
+				formatter.WriteError(ex);
 				return 1;
 			}
 
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			if (useJson)
-			{
 				formatter.Write(new SimulatorCreateResult { Udid = udid, Name = name, DeviceType = deviceType, Runtime = runtime });
-			}
 			else
-			{
 				formatter.WriteSuccess($"Simulator '{name}' created with UDID: {udid}");
-			}
 			return 0;
 		});
 
@@ -419,34 +412,27 @@ public static class AppleCommands
 
 			if (!PlatformDetector.IsMacOS)
 			{
-				formatter.WriteWarning("Simulators are only available on macOS.");
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
 				return 1;
 			}
 
 			var appleProvider = Program.AppleProvider;
 			var target = parseResult.GetValue(nameOrUdidArg)!;
-			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 
 			var erased = appleProvider.EraseSimulator(target);
 
 			if (!erased)
 			{
-				var ex = new MauiToolException(ErrorCodes.AppleSimulatorEraseFailed, $"Failed to erase simulator '{target}'.");
-				if (useJson)
-					formatter.WriteError(ex);
-				else
-					formatter.WriteWarning(ex.Message);
+				var ex = new MauiToolException(ErrorCodes.AppleSimulatorEraseFailed, $"Failed to erase simulator '{target}'. Ensure the simulator is shut down first (maui apple simulator stop).");
+				formatter.WriteError(ex);
 				return 1;
 			}
 
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			if (useJson)
-			{
 				formatter.Write(new SimulatorEraseResult { Target = target, Erased = true });
-			}
 			else
-			{
 				formatter.WriteSuccess($"Simulator '{target}' erased.");
-			}
 			return 0;
 		});
 
