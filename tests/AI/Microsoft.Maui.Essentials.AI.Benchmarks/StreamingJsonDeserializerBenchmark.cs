@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Text.Json;
 using BenchmarkDotNet.Attributes;
-using EssentialsAISample.Models;
 using EssentialsAISample.Services;
 
 namespace Microsoft.Maui.Essentials.AI.Benchmarks;
