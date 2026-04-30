@@ -25,36 +25,11 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Install workloads
-        run: dotnet workload install maui
-
-      - name: Build, Test, and Pack
-        run: >
-          eng\common\cibuild.cmd
-          -configuration Release
-          -prepareMachine
-          -projects %CD%\platforms\Windows.WPF\Windows.WPF.slnx
-        shell: cmd
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-wpf
-          path: artifacts/TestResults/**/*.xml
-
-      - name: Upload packages
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: packages-wpf
-          path: artifacts/packages/**/*.nupkg
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Windows.WPF/Windows.WPF.slnx
+      project-name: wpf
+      os: '["windows-latest"]'
+      install-workloads: true
+      run-tests: true
+      pack: true
