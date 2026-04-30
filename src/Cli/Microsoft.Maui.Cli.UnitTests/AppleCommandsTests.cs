@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Runtime.InteropServices;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
@@ -86,6 +87,9 @@ public class AppleCommandsTests
 	[Fact]
 	public async Task InstallCommand_Json_CallsInstallEnvironmentAsync()
 	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // Install handler requires macOS
+
 		var (exitCode, fake) = await InvokeAppleInstallAsync(f =>
 		{
 			f.InstallResult = new AppleInstallResult
@@ -110,6 +114,9 @@ public class AppleCommandsTests
 	[Fact]
 	public async Task InstallCommand_Json_PassesPlatformFilter()
 	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // Install handler requires macOS
+
 		var (exitCode, fake) = await InvokeAppleInstallAsync(
 			f => f.InstallResult = new AppleInstallResult { Status = "ok" },
 			"--platform", "iOS");
@@ -124,6 +131,9 @@ public class AppleCommandsTests
 	[Fact]
 	public async Task InstallCommand_Json_PlatformAllPassesNullFilter()
 	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // Install handler requires macOS
+
 		var (exitCode, fake) = await InvokeAppleInstallAsync(
 			f => f.InstallResult = new AppleInstallResult { Status = "ok" },
 			"--platform", "all");
@@ -137,6 +147,9 @@ public class AppleCommandsTests
 	[Fact]
 	public async Task InstallCommand_Json_PassesDryRunFromGlobalOption()
 	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // Install handler requires macOS
+
 		var fakeApple = new FakeAppleProvider
 		{
 			InstallResult = new AppleInstallResult { Status = "ok", DryRun = true }
@@ -166,6 +179,9 @@ public class AppleCommandsTests
 	[Fact]
 	public async Task InstallCommand_Json_ReturnsZeroForSkippedStatus()
 	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // Install handler requires macOS
+
 		// On non-macOS (or when installer is null), status is "skipped" — should not be a failure
 		var (exitCode, _) = await InvokeAppleInstallAsync(f =>
 		{
@@ -178,6 +194,9 @@ public class AppleCommandsTests
 	[Fact]
 	public async Task InstallCommand_Json_ReturnsOneForFailedStatus()
 	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // Install handler requires macOS
+
 		var (exitCode, _) = await InvokeAppleInstallAsync(f =>
 		{
 			f.InstallResult = new AppleInstallResult { Status = "failed" };
