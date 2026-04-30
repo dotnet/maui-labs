@@ -138,6 +138,12 @@ public class AppleProvider : IAppleProvider
 		return _simulatorService?.Boot(udidOrName) ?? false;
 	}
 
+	public void OpenSimulatorApp()
+	{
+		using var process = System.Diagnostics.Process.Start("open", ["-a", "Simulator"]);
+		process?.WaitForExit(5000);
+	}
+
 	public bool ShutdownSimulator(string udidOrName)
 	{
 		return _simulatorService?.Shutdown(udidOrName) ?? false;

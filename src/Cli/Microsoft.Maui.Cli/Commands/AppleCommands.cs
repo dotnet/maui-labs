@@ -258,9 +258,10 @@ public static class AppleCommands
 			return 0;
 		});
 
-		// maui apple simulator start <name-or-udid>
+		// maui apple simulator start <name-or-udid> [--no-open]
 		var startNameArg = new Argument<string>("name-or-udid") { Description = "Simulator name or UDID to boot" };
-		var startCommand = new Command("start", "Boot a simulator") { startNameArg };
+		var noOpenOption = new Option<bool>("--no-open") { Description = "Do not open the Simulator UI window after booting" };
+		var startCommand = new Command("start", "Boot a simulator and open the Simulator UI") { startNameArg, noOpenOption };
 		startCommand.SetAction((ParseResult parseResult) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
@@ -273,12 +274,19 @@ public static class AppleCommands
 
 			var appleProvider = Program.AppleProvider;
 			var target = parseResult.GetValue(startNameArg);
+			var noOpen = parseResult.GetValue(noOpenOption);
 
 			var success = appleProvider.BootSimulator(target!);
 			if (success)
+			{
+				if (!noOpen)
+					appleProvider.OpenSimulatorApp();
 				formatter.WriteSuccess($"Simulator '{target}' booted.");
+			}
 			else
+			{
 				formatter.WriteWarning($"Failed to boot simulator '{target}'.");
+			}
 
 			return success ? 0 : 1;
 		});

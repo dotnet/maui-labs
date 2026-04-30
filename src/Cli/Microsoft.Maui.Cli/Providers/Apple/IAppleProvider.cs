@@ -47,6 +47,11 @@ public interface IAppleProvider
 	bool BootSimulator(string udidOrName);
 
 	/// <summary>
+	/// Opens the Simulator.app UI window.
+	/// </summary>
+	void OpenSimulatorApp();
+
+	/// <summary>
 	/// Shuts down a simulator device. Pass "all" to shut down all.
 	/// </summary>
 	bool ShutdownSimulator(string udidOrName);

@@ -74,6 +74,8 @@ public class FakeAppleProvider : IAppleProvider
 		return BootSimulatorResult;
 	}
 
+	public void OpenSimulatorApp() { }
+
 	public bool ShutdownSimulator(string udidOrName)
 	{
 		ShutdownSimulators.Add(udidOrName);
