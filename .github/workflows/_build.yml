@@ -48,12 +48,10 @@ env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
 
 jobs:
-  # Standard parallel matrix build (for products WITHOUT Apple native code)
   build:
-    if: ${{ !inputs.apple-native }}
     strategy:
       matrix:
-        os: ${{ fromJson(inputs.os) }}
+        os: ${{ fromJson(inputs.apple-native && '["macos-latest"]' || inputs.os) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -180,65 +178,19 @@ jobs:
           name: raw-packages-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/packages/**/*.nupkg
 
-  # Sequential macOS build for products WITH Apple native code (e.g. XcodeProject / Swift).
-  # Runs first so native .resources.zip artifacts are available for the Windows build.
-  build-macos:
-    if: ${{ inputs.apple-native }}
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Select Xcode
-        if: inputs.xcode-version != ''
-        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Install workloads
-        if: inputs.install-workloads
-        run: dotnet workload install maui macos maui-tizen
-
-      - name: Install Android SDK dependencies
-        if: inputs.install-workloads
-        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj
-
-      - name: Build and Test (macOS)
-        run: >
-          ./eng/common/cibuild.sh
-          --configuration Release
-          --prepareMachine
-          --projects $(pwd)/${{ inputs.project-path }}
-          /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
-
-      - name: Upload test results
-        if: inputs.run-tests && always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-${{ inputs.project-name }}-macos-latest
-          path: artifacts/TestResults/**/*.xml
-
-      - name: Upload raw packages
-        if: inputs.pack
-        uses: actions/upload-artifact@v7
-        with:
-          name: raw-packages-${{ inputs.project-name }}-macos-latest
-          path: artifacts/packages/**/*.nupkg
-
       - name: Upload native Apple artifacts
+        if: inputs.apple-native && matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v7
         with:
           name: native-apple-${{ inputs.project-name }}
           path: artifacts/bin/**/Release/**/*.resources.zip
 
-  # Sequential Windows build for products WITH Apple native code.
-  # Downloads native .resources.zip from the macOS build into artifacts/bin/ so
+  # Windows build for products WITH Apple native code (e.g. XcodeProject / Swift).
+  # Runs after the macOS matrix build so native .resources.zip artifacts are available.
   # AppleBindings.targets includes them during pack.
   build-windows:
     if: ${{ inputs.apple-native }}
-    needs: build-macos
+    needs: build
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -288,7 +240,7 @@ jobs:
 
   package:
     if: ${{ inputs.pack && !failure() && !cancelled() }}
-    needs: [build, build-macos, build-windows]
+    needs: [build, build-windows]
     runs-on: ${{ inputs.project-name == 'devflow' && 'macos-latest' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
