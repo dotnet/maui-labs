@@ -33,16 +33,6 @@ on:
         type: string
         default: ''
         description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
-      xcode-version:
-        required: false
-        type: string
-        default: ''
-        description: 'Xcode version to select on macOS (e.g. "26.0.1"). Empty uses runner default.'
-      apple-native:
-        required: false
-        type: boolean
-        default: false
-        description: 'When true, macOS builds first to produce native Apple artifacts (.resources.zip), then Windows downloads them before building. Required for projects with XcodeProject items.'
 
 env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
@@ -51,16 +41,10 @@ jobs:
   build:
     strategy:
       matrix:
-        os: ${{ fromJson(inputs.apple-native && '["macos-latest"]' || inputs.os) }}
-        exclude:
-          - os: windows-latest
+        os: ${{ fromJson(inputs.os) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: Select Xcode
-        if: inputs.xcode-version != '' && runner.os == 'macOS'
-        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -75,9 +59,24 @@ jobs:
         if: inputs.install-workloads
         run: dotnet workload install maui ios maccatalyst macos maui-tizen
 
+      - name: Install Android SDK dependencies (Windows)
+        if: inputs.install-workloads && matrix.os == 'windows-latest'
+        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+        shell: cmd
+
       - name: Install Android SDK dependencies (macOS)
         if: inputs.install-workloads && matrix.os == 'macos-latest'
         run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj
+
+      - name: Build, Test and Pack (Windows)
+        if: matrix.os == 'windows-latest'
+        run: >
+          eng\common\cibuild.cmd
+          -configuration Release
+          -prepareMachine
+          -projects %CD%\${{ inputs.project-path }}
+          /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
+        shell: cmd
 
       - name: Build and Test (macOS)
         if: matrix.os == 'macos-latest'
@@ -170,80 +169,6 @@ jobs:
             exit 1
           fi
 
-          printf '%s\n' "$produced_packages"
-
-      - name: Upload packages
-        if: inputs.pack
-        uses: actions/upload-artifact@v7
-        with:
-          name: packages-${{ inputs.project-name }}-${{ matrix.os }}
-          path: artifacts/packages/**/*.nupkg
-          if-no-files-found: error
-
-      - name: Upload native Apple artifacts
-        if: inputs.apple-native && matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v7
-        with:
-          name: native-apple-${{ inputs.project-name }}
-          path: artifacts/bin/**/Release/**/*.resources.zip
-
-  # Windows build. For apple-native products, runs after macOS so native .resources.zip
-  # artifacts are available. For other products, runs with no dependency (parallel).
-  build-windows:
-    needs: ${{ inputs.apple-native && 'build' || fromJson('[]') }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Install workloads
-        if: inputs.install-workloads
-        run: dotnet workload install maui ios maccatalyst macos maui-tizen
-
-      - name: Install Android SDK dependencies
-        if: inputs.install-workloads
-        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
-        shell: cmd
-
-      - name: Download native Apple artifacts
-        if: inputs.apple-native
-        uses: actions/download-artifact@v8
-        with:
-          name: native-apple-${{ inputs.project-name }}
-          path: artifacts/bin
-
-      - name: Build, Test and Pack (Windows)
-        run: >
-          eng\common\cibuild.cmd
-          -configuration Release
-          -prepareMachine
-          -projects %CD%\${{ inputs.project-path }}
-          /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
-        shell: cmd
-
-      - name: Upload test results
-        if: inputs.run-tests && always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-${{ inputs.project-name }}-windows-latest
-          path: artifacts/TestResults/**/*.xml
-
-      - name: Validate packages
-        if: inputs.pack
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          produced_packages="$(find artifacts/packages -name '*.nupkg' -type f | sort || true)"
-          if [[ -z "$produced_packages" ]]; then
-            echo "::error::No .nupkg files produced in packages output."
-            exit 1
-          fi
-
           if [[ '${{ inputs.project-name }}' == 'devflow' ]]; then
             expected_package_ids=(
               Microsoft.Maui.DevFlow.Agent
@@ -264,6 +189,6 @@ jobs:
         if: inputs.pack
         uses: actions/upload-artifact@v7
         with:
-          name: packages-${{ inputs.project-name }}-windows-latest
+          name: packages-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/packages/**/*.nupkg
           if-no-files-found: error
