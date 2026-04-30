@@ -92,6 +92,8 @@ public sealed class BuildTargetsTests
             workspace,
             expectedName: "IosStyleApp",
             expectedArtifactType: "app",
+            expectedInstallable: true,
+            expectedLaunchable: true,
             expectSingleArtifact: false,
             expectedArtifactIsDirectory: true);
     }
@@ -246,6 +248,8 @@ public sealed class BuildTargetsTests
         TestWorkspace workspace,
         string expectedName,
         string expectedArtifactType = "dll",
+        bool expectedInstallable = false,
+        bool expectedLaunchable = false,
         bool expectSingleArtifact = true,
         bool expectedArtifactIsDirectory = false)
     {
@@ -259,11 +263,11 @@ public sealed class BuildTargetsTests
         var line = Assert.Single(lines, line =>
         {
             var parts = line.Split('|');
-            return parts.Length == 6 && parts[0] == expectedName && parts[4] == expectedArtifactType;
+            return parts.Length == 8 && parts[0] == expectedName && parts[4] == expectedArtifactType;
         });
         var parts = line.Split('|');
 
-        Assert.Equal(6, parts.Length);
+        Assert.Equal(8, parts.Length);
         Assert.Equal(expectedName, parts[0]);
         if (expectedArtifactIsDirectory)
             Assert.True(Directory.Exists(parts[1]), "Expected app artifact directory at " + parts[1]);
@@ -274,6 +278,8 @@ public sealed class BuildTargetsTests
         Assert.Equal("net10.0", parts[3]);
         Assert.Equal(expectedArtifactType, parts[4]);
         Assert.Equal("com.example.testapp", parts[5]);
+        Assert.Equal(expectedInstallable.ToString().ToLowerInvariant(), parts[6]);
+        Assert.Equal(expectedLaunchable.ToString().ToLowerInvariant(), parts[7]);
 
         var artifactPathsFile = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifact-paths.txt");
         Assert.True(File.Exists(artifactPathsFile), "Expected artifact paths capture at " + artifactPathsFile);
@@ -444,7 +450,7 @@ public sealed class BuildTargetsTests
                           AfterTargets="BuildMauiTestApps"
                           Condition="'@(MauiTestAppArtifact)' != ''">
                     <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-artifacts.txt"
-                                      Lines="@(MauiTestAppArtifact->'%(ReferenceName)|%(Identity)|%(ProjectPath)|%(TargetFramework)|%(ArtifactType)|%(ApplicationId)')"
+                                      Lines="@(MauiTestAppArtifact->'%(ReferenceName)|%(Identity)|%(ProjectPath)|%(TargetFramework)|%(ArtifactType)|%(ApplicationId)|%(Installable)|%(Launchable)')"
                                       Overwrite="true" />
                     <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-artifact-paths.txt"
                                       Lines="$(MauiTestAppArtifactPaths)"

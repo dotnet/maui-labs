@@ -61,7 +61,8 @@
         <ArtifactType Condition="'$(PublishDir)' != '' and '%(_MauiTestAppArtifactCandidate.Identity)' == '$(PublishDir)'">publish-directory</ArtifactType>
         <Installable>false</Installable>
         <Installable Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.aab' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.app' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.ipa' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">true</Installable>
-        <Launchable>true</Launchable>
+        <Launchable>false</Launchable>
+        <Launchable Condition="'%(_MauiTestAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.app' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.exe' or '%(_MauiTestAppArtifactCandidate.Extension)' == '.msix'">true</Launchable>
       </MauiTestAppArtifact>
     </ItemGroup>
 

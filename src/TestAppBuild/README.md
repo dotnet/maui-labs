@@ -59,6 +59,8 @@ Projects that prefer the `OutputItemType` idiom can use:
 | `OutputRoot` | Per-reference output root. Defaults under `$(BaseIntermediateOutputPath)maui-test-apps`. |
 | `SetPlatformOutputPaths` | Set to `false` to avoid overriding platform output properties. |
 
+`Properties` and `AdditionalProperties` are forwarded before package-managed child build properties. If a duplicate key is also set from metadata or defaults, such as `Configuration` or `MauiTestAppOutputRoot`, the package-managed value is appended later and wins. Use the dedicated metadata above to change those values.
+
 ## Consuming built app artifacts
 
 Downstream targets can consume `@(MauiTestAppArtifact)` after `BuildMauiTestApps` runs:
