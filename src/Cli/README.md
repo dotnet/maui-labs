@@ -156,13 +156,13 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 
 ### `--json` flag
 
-Most commands accept `--json` for structured output. Successful results emit a top-level JSON object whose shape is command-specific (see per-command `--help` and examples below). When a command **fails** and the error is a recognized `MauiToolException`, it emits the canonical error envelope described in the next section. Note: unrecognised parse errors (e.g. invalid flags) and DevFlow sub-commands may emit different shapes.
+Most commands accept `--json` for structured output. Some commands may emit multiple JSON objects to stdout (JSONL / newline-delimited JSON) — for example, progress or status records before the final result. The final JSON object is the command result, whose shape is command-specific (see per-command `--help` and examples below). When a non-DevFlow command **fails** and the error is a recognized `MauiToolException`, it emits the canonical error envelope described in the next section. Note: unrecognized parse errors (e.g. invalid flags) do not use this envelope, and `maui devflow ...` uses a different JSON contract and writes structured errors to stderr rather than stdout.
 
-Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts.
+Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts. Parse the output as a stream of JSON objects rather than assuming a single top-level document.
 
 ### Error envelope <a name="error-envelope"></a>
 
-When a `maui` command exits with a non-zero exit code and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`.
+For non-DevFlow `maui` commands, when a command exits with a non-zero exit code and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`. This section does not apply to `maui devflow ...`, which uses a different JSON error shape and writes structured errors to stderr.
 
 ```json
 {
@@ -192,7 +192,7 @@ When a `maui` command exits with a non-zero exit code and `--json` is active, it
 - Optional fields (`native_error`, `context`, `remediation`, `docs_url`, `correlation_id`) are **omitted entirely** when null — enforced by `[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]`.
 - There is **no** outer `"error"` wrapper — all fields are top-level.
 - `code`, `category`, `severity`, and `message` are always present.
-- The shape is stable across CLI versions; new optional fields may be added but existing field names and types will not change without a major version bump.
+- The CLI intends to keep this envelope shape consistent; future changes are expected to be additive (e.g. new optional fields) rather than changing existing field names or types.
 
 ### Error code categories
 
@@ -216,8 +216,10 @@ A `maui errors list` command is planned (issue [#197](https://github.com/dotnet/
 
 ```bash
 if ! out=$(maui android sdk install emulator --json 2>&1); then
-  rem_type=$(echo "$out" | jq -r '.remediation.type // "unknown"')
-  rem_cmd=$(echo "$out" | jq -r '.remediation.command // empty')
+  # Output may contain multiple JSONL lines; extract the error envelope (has a "code" field)
+  err=$(echo "$out" | jq -s '[.[] | select(.code)] | last')
+  rem_type=$(echo "$err" | jq -r '.remediation.type // "unknown"')
+  rem_cmd=$(echo "$err" | jq -r '.remediation.command // empty')
   if [[ "$rem_type" == "autofixable" && -n "$rem_cmd" ]]; then
     # Run the remediation command directly (never pass untrusted input to eval)
     $rem_cmd
@@ -228,9 +230,11 @@ fi
 **PowerShell:**
 
 ```powershell
-$json = maui android sdk install emulator --json
+$lines = maui android sdk install emulator --json
 if ($LASTEXITCODE -ne 0) {
-    $err = $json | ConvertFrom-Json
+    # Output may contain multiple JSONL lines; pick the error envelope (has a "code" property)
+    $err = $lines | ForEach-Object { $_ | ConvertFrom-Json } |
+           Where-Object { $_.code } | Select-Object -Last 1
     if ($err.remediation.type -eq 'autofixable' -and $err.remediation.command) {
         # Split and invoke directly (avoid Invoke-Expression with untrusted input)
         $parts = $err.remediation.command -split ' '
