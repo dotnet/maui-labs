@@ -1,8 +1,8 @@
 # Comet ☄️
 
-[![dev-build](https://github.com/dotnet/Comet/actions/workflows/dev.yml/badge.svg)](https://github.com/dotnet/Comet/actions/workflows/dev.yml) [![Microsoft.Maui.Comet on fuget.org](https://www.fuget.org/packages/Microsoft.Maui.Comet/badge.svg)](https://www.fuget.org/packages/Microsoft.Maui.Comet)
-
 Comet is an MVU framework for [.NET MAUI](https://learn.microsoft.com/dotnet/maui/what-is-maui). Write your entire UI in C# with a reactive state system that tracks what you read and updates only what changed. No XAML, no view models, no binding markup.
+
+> **Status:** Comet is **experimental** and part of [dotnet/maui-labs](https://github.com/dotnet/maui-labs) — the home for pre-release .NET MAUI tooling. APIs may change between releases.
 
 ```csharp
 using Comet;
@@ -332,20 +332,29 @@ The [`sample/`](sample/) directory contains working apps:
 
 ## Build
 
+> **Requires:** .NET 11 SDK (preview) with the MAUI workload. Comet has its own [`global.json`](global.json) that targets .NET 11.
+
+From the `src/Comet/` directory:
+
 ```bash
 # Source generator first, then the framework
 dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 dotnet build src/Comet/Comet.csproj -c Release
 
 # Tests
-dotnet build tests/Comet.Tests/Comet.Tests.csproj -c Release
-dotnet test  tests/Comet.Tests/Comet.Tests.csproj --no-build -c Release
+dotnet test tests/Comet.Tests/Comet.Tests.csproj -c Release
+```
+
+Or from the repo root:
+
+```bash
+dotnet build src/Comet/src/Comet/Comet.csproj -c Release
 ```
 
 ## Platforms
 
 Comet targets every platform .NET MAUI supports: **Android**, **iOS**, **macOS (Catalyst)**, and **Windows**.
 
-## Status
+## Contributing
 
-Comet is **experimental** and lives in [maui-labs](https://github.com/dotnet/maui-labs) — the home for pre-release .NET MAUI tooling. APIs may change between releases. Community contributions and feedback are welcome.
+See the [maui-labs contributing guide](../../CONTRIBUTING.md) for build prerequisites, PR guidelines, and CI details.
