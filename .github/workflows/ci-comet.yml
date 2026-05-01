@@ -18,6 +18,9 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src/Comet
     steps:
       - uses: actions/checkout@v6
 
@@ -31,13 +34,13 @@ jobs:
         run: dotnet workload install maui
 
       - name: Build Comet
-        run: dotnet build src/Comet/src/Comet/Comet.csproj -c Release
+        run: dotnet build src/Comet/Comet.csproj -c Release
 
       - name: Build Source Generator
-        run: dotnet build src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
+        run: dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 
       - name: Run tests
-        run: dotnet test src/Comet/tests/Comet.Tests/Comet.Tests.csproj -c Release --logger "trx;LogFileName=results.trx"
+        run: dotnet test tests/Comet.Tests/Comet.Tests.csproj -c Release --logger "trx;LogFileName=results.trx"
 
       - name: Upload test results
         if: always()
@@ -49,6 +52,9 @@ jobs:
   package:
     needs: build
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src/Comet
     steps:
       - uses: actions/checkout@v6
 
@@ -62,7 +68,7 @@ jobs:
         run: dotnet workload install maui
 
       - name: Pack Comet
-        run: dotnet pack src/Comet/src/Comet/Comet.csproj -c Release -o artifacts/packages
+        run: dotnet pack src/Comet/Comet.csproj -c Release -o ../../artifacts/packages
 
       - name: Upload packages
         uses: actions/upload-artifact@v7
@@ -73,6 +79,6 @@ jobs:
       - name: Attach packages to release
         if: github.event_name == 'release'
         run: |
-          gh release upload ${{ github.event.release.tag_name }} artifacts/packages/*.nupkg --clobber
+          gh release upload ${{ github.event.release.tag_name }} ../../artifacts/packages/*.nupkg --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
