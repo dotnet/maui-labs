@@ -73,7 +73,6 @@
     <!-- MAUI Go -->
   <ItemGroup Label="MAUI Go">
     <PackageVersion Include="QRCoder" Version="$(QRCoderVersion)" />
-    <PackageVersion Include="Clancey.Comet" Version="$(ClanceyCometVersion)" />
     <PackageVersion Include="ZXing.Net.Maui.Controls" Version="$(ZXingNetMauiVersion)" />
   </ItemGroup>
 

@@ -72,6 +72,5 @@
   <PropertyGroup Label="MAUI Go">
     <QRCoderVersion>1.7.0</QRCoderVersion>
     <ZXingNetMauiVersion>0.7.4</ZXingNetMauiVersion>
-    <ClanceyCometVersion>1.0.0-preview.5</ClanceyCometVersion>
   </PropertyGroup>
 </Project>
