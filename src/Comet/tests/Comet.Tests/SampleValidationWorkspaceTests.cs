@@ -185,7 +185,8 @@ namespace Comet.Tests
 			var directory = new DirectoryInfo(AppContext.BaseDirectory);
 			while (directory is not null)
 			{
-				if (File.Exists(IOPath.Combine(directory.FullName, "Comet.sln")))
+				if (File.Exists(IOPath.Combine(directory.FullName, "global.json")) &&
+					File.Exists(IOPath.Combine(directory.FullName, "Directory.Build.props")))
 					return directory.FullName;
 
 				directory = directory.Parent;
