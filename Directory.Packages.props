@@ -42,7 +42,7 @@
     <PackageVersion Include="XenoAtom.Terminal.UI" Version="$(XenoAtomTerminalUIVersion)" />
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="$(InteropUIAutomationClientVersion)" />
-    <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="5.0.0" />
+    <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="$(AathifMahirMauiIconsCupertinoVersion)" />
   </ItemGroup>
 
   <!-- MAUI Cli Tool dependencies -->
