@@ -84,6 +84,20 @@ On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractio
 |---------|-------------|
 | `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
 
+### AppProjectReference
+
+An MSBuild package that lets test projects, packaging projects, or CI tools declare a MAUI app as a build-time dependency and consume its platform artifacts (`.apk`, `.ipa`, `.app`, `.msix`) as MSBuild items with rich metadata.
+
+```xml
+<MauiAppProjectReference Include="..\MyApp\MyApp.csproj" />
+```
+
+Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `ApplicationId`, `Installable`, `Launchable`, and other metadata — no manual path hunting required.
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Build.AppProjectReference` | Build-time app project reference with artifact discovery |
+
 ## Getting Started
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
