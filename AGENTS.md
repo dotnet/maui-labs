@@ -186,8 +186,16 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ### Documentation
 
-5. Create a `README.md` in the product root (e.g. `src/{NewProduct}/README.md`) — this is packed into the NuGet package via `<None Include="README.md" Pack="true" PackagePath="/" />`. Set `<PackRepoRootReadme>false</PackRepoRootReadme>` so the repo-root README is not duplicated in the package.
-6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description and package table.
+5. Create a `README.md` in the product root (e.g. `src/{NewProduct}/README.md`). This is packed into the NuGet package via `<None Include="README.md" Pack="true" PackagePath="/" />`. Set `<PackRepoRootReadme>false</PackRepoRootReadme>` so the repo-root README is not duplicated in the package. The product README should include:
+   - Product name and one-line description
+   - Feature list with platform support matrix (if applicable)
+   - Quick start / code example
+   - Package table (package IDs and descriptions)
+   - Build instructions (including any platform-specific steps)
+   - Architecture overview (project structure, key components)
+   - Requirements (SDK version, workloads, OS constraints)
+   - Experimental/preview status warning
+6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description, feature highlights, and package table.
 
 ### CI/CD Setup
 

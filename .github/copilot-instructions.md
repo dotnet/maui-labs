@@ -187,8 +187,8 @@ When adding a new product to this repo you **must** set up two CI surfaces: a Gi
 
 You **must** also provide documentation:
 
-- **Product README** — create `README.md` in the product root (e.g. `src/{Product}/README.md`). This file is packed into the NuGet package. Add `<None Include="README.md" Pack="true" PackagePath="/" />` to the shipping csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` so the repo-root README is not duplicated.
-- **Root README entry** — add a section under `## Products` in the repo-root `README.md` with a brief description and package table.
+- **Product README** — create `README.md` in the product root (e.g. `src/{Product}/README.md`). This file is packed into the NuGet package. Add `<None Include="README.md" Pack="true" PackagePath="/" />` to the shipping csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` so the repo-root README is not duplicated. Include: product name, feature list, platform support matrix, quick start code, package table, build instructions, architecture overview, requirements, and experimental status warning.
+- **Root README entry** — add a section under `## Products` in the repo-root `README.md` with a brief description, feature highlights, and package table.
 
 ### Step 1: GitHub Actions PR / Push Workflow
 
