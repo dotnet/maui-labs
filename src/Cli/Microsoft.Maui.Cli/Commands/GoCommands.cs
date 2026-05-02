@@ -161,9 +161,31 @@ public static class GoCommands
 				return Task.FromResult(1);
 			}
 
+			// Validate the name as a simple identifier — must not contain path separators
+			// or other characters that could escape the current directory.
+			if (name!.IndexOfAny(new[] { '/', '\\', ':' }) >= 0
+				|| name.Contains("..")
+				|| Path.IsPathRooted(name))
+			{
+				Console.Error.WriteLine("Error: App name must be a simple name (no slashes, drive letters, or '..').");
+				return Task.FromResult(1);
+			}
+
 			var safeNamespace = name.Replace("-", "_").Replace(" ", "_");
 			var fileName = $"{name}.cs";
-			var filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+			var cwd = Directory.GetCurrentDirectory();
+			var filePath = Path.GetFullPath(Path.Combine(cwd, fileName));
+			var cwdNormalized = Path.GetFullPath(cwd);
+			var sep = Path.DirectorySeparatorChar;
+
+			// Defensive: confirm the resolved path stays under cwd even though
+			// we already rejected obvious traversal sequences above.
+			if (!filePath.StartsWith(cwdNormalized + sep, StringComparison.Ordinal)
+				&& filePath != cwdNormalized)
+			{
+				Console.Error.WriteLine("Error: Resolved file path escapes the current directory.");
+				return Task.FromResult(1);
+			}
 
 			if (File.Exists(filePath))
 			{
