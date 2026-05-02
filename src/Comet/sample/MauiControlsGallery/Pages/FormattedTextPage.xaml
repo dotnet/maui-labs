@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.FormattedTextPage"
+             Title="Formatted Text">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <Label Text="FormattedText Demos" FontSize="28" FontAttributes="Bold" />
+
+            <!-- Bold, Italic & Mixed -->
+            <Label Text="Bold, Italic &amp; Mixed Styles" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="This is " />
+                        <Span Text="bold" FontAttributes="Bold" />
+                        <Span Text=", this is " />
+                        <Span Text="italic" FontAttributes="Italic" />
+                        <Span Text=", and this is " />
+                        <Span Text="bold italic" FontAttributes="Bold,Italic" />
+                        <Span Text="." />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Text Colors -->
+            <Label Text="Text &amp; Background Colors" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Red text " TextColor="Red" />
+                        <Span Text="Blue text " TextColor="Blue" />
+                        <Span Text="Green text " TextColor="Green" />
+                        <Span Text=" Highlighted " TextColor="White" BackgroundColor="DodgerBlue" />
+                        <Span Text=" Warning " TextColor="Black" BackgroundColor="Gold" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Font Sizes -->
+            <Label Text="Font Sizes" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Tiny " FontSize="10" />
+                        <Span Text="Small " FontSize="13" />
+                        <Span Text="Medium " FontSize="18" />
+                        <Span Text="Large " FontSize="24" />
+                        <Span Text="Huge" FontSize="32" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Text Decorations -->
+            <Label Text="Text Decorations" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Normal  " />
+                        <Span Text="Underlined  " TextDecorations="Underline" />
+                        <Span Text="Strikethrough  " TextDecorations="Strikethrough" />
+                        <Span Text="Both" TextDecorations="Underline,Strikethrough" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Character Spacing -->
+            <Label Text="Character Spacing" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Normal spacing  " />
+                        <Span Text="Wide spacing" CharacterSpacing="4" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Rich Paragraph -->
+            <Label Text="Rich Paragraph" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="The " FontSize="15" />
+                        <Span Text="FormattedString" FontSize="15" FontAttributes="Bold" TextColor="DodgerBlue" />
+                        <Span Text=" property lets you build " FontSize="15" />
+                        <Span Text="rich text" FontSize="15" FontAttributes="Italic" TextColor="OrangeRed" />
+                        <Span Text=" with " FontSize="15" />
+                        <Span Text="multiple spans" FontSize="15" TextDecorations="Underline" />
+                        <Span Text=", each with its own " FontSize="15" />
+                        <Span Text="styling" FontSize="15" FontAttributes="Bold,Italic" BackgroundColor="LightYellow" />
+                        <Span Text=". This is rendered natively using " FontSize="15" />
+                        <Span Text="NSAttributedString" FontSize="14" FontFamily="Menlo" TextColor="Purple" BackgroundColor="#F2EBFF" />
+                        <Span Text=" on macOS." FontSize="15" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

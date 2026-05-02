@@ -43,6 +43,9 @@
     <XenoAtomTerminalUIVersion>1.7.1</XenoAtomTerminalUIVersion>
     <ModelContextProtocolVersion>1.1.0</ModelContextProtocolVersion>
     <InteropUIAutomationClientVersion>10.19041.0</InteropUIAutomationClientVersion>
+    <MicrosoftCodeAnalysisCSharpVersion>4.14.0</MicrosoftCodeAnalysisCSharpVersion>
+    <MicrosoftOpenApiVersion>3.5.0</MicrosoftOpenApiVersion>
+    <YamlDotNetVersion>16.3.0</YamlDotNetVersion>
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
@@ -79,10 +82,12 @@
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVisualstudioVersion>3.1.5</XunitRunnerVisualstudioVersion>
     <CoverletCollectorVersion>8.0.0</CoverletCollectorVersion>
-    <MicrosoftOpenApiVersion>3.5.0</MicrosoftOpenApiVersion>
-    <YamlDotNetVersion>16.3.0</YamlDotNetVersion>
   </PropertyGroup>
   <PropertyGroup Label="SourceLink">
     <MicrosoftSourceLinkGitHubVersion>10.0.201</MicrosoftSourceLinkGitHubVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="MAUI Go">
+    <QRCoderVersion>1.7.0</QRCoderVersion>
+    <ZXingNetMauiVersion>0.7.4</ZXingNetMauiVersion>
   </PropertyGroup>
 </Project>

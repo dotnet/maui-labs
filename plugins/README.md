@@ -10,6 +10,7 @@ DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`) are bundle
 |--------|-------|-------------|
 | [dotnet-maui](dotnet-maui/) | [maui-devflow-onboard](dotnet-maui/skills/maui-devflow-onboard/) | Add MAUI DevFlow packages and app registration to a project. |
 | | [maui-devflow-debug](dotnet-maui/skills/maui-devflow-debug/) | Run MAUI DevFlow build, deploy, connection recovery, inspect, and fix loops. |
+| | [devflow-connect](dotnet-maui/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
 | | [maui-ai-debugging](dotnet-maui/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |
 | | [android-slim-bindings](dotnet-maui/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |
 | | [ios-slim-bindings](dotnet-maui/skills/ios-slim-bindings/) | Create iOS slim bindings using the Native Library Interop approach. |

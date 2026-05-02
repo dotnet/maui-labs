@@ -103,4 +103,10 @@
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="$(MicrosoftSourceLinkGitHubVersion)" />
   </ItemGroup>
 
+    <!-- MAUI Go -->
+  <ItemGroup Label="MAUI Go">
+    <PackageVersion Include="QRCoder" Version="$(QRCoderVersion)" />
+    <PackageVersion Include="ZXing.Net.Maui.Controls" Version="$(ZXingNetMauiVersion)" />
+  </ItemGroup>
+
 </Project>

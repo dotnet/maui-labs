@@ -110,6 +110,10 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
 | **Profiling** | |
 | `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
+| **Go** | |
+| `maui go create` | Create a new MAUI Go single-file project |
+| `maui go serve` | Start the dev server with hot reload |
+| `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
 

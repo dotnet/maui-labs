@@ -16,6 +16,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **Apple platform management** (`maui apple`) — Xcode, simulator, and runtime management (macOS)
 - **Device listing** (`maui device list`) across all connected platforms
 - **DevFlow app automation** (`maui devflow`) — visual tree inspection, element interaction, screenshots, WebView/CDP automation, network monitoring, profiling, storage access, real-time log/sensor streaming, and MCP server for AI agents
+- **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
 
@@ -28,6 +29,24 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 dotnet tool install -g Microsoft.Maui.Cli --prerelease
 maui doctor
 ```
+
+### Comet
+
+Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, single-file apps via Comet Go.
+
+| Package | Description |
+|---------|-------------|
+| `Comet` | Core MVU framework |
+| `Comet.SourceGenerator` | Roslyn source generators for Comet |
+| `Comet.Layout.Yoga` | Yoga layout integration |
+
+### Go
+
+Single-file Comet apps server + companion app for rapid prototyping (alpha; sister to Comet).
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Go.Server` | Comet Go server for hosting single-file apps |
 
 ### DevFlow
 

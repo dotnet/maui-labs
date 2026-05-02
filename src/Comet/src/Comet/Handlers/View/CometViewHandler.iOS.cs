@@ -1,0 +1,52 @@
+﻿using System;
+using Comet.iOS;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Handlers;
+using UIKit;
+
+namespace Comet.Handlers
+{
+	public partial class CometViewHandler : ViewHandler<View, CometView>, IPlatformViewHandler
+	{
+		public static PropertyMapper<View, CometViewHandler> CometViewMapper = new ()
+		{
+			[nameof(ITitledElement.Title)] = MapTitle,
+			[nameof(IView.Background)] = MapBackgroundColor,
+		};
+
+
+		public CometViewHandler() : base(CometViewMapper)
+		{
+
+		}
+		CometViewController viewController;
+		UIViewController IPlatformViewHandler.ViewController => viewController ??= new CometViewController { ContainerView = this.PlatformView, MauiContext = MauiContext };
+		protected override CometView CreatePlatformView()
+		{
+			return new CometView(MauiContext);
+		}
+		public override void SetVirtualView(IView view)
+		{
+			base.SetVirtualView(view);
+			PlatformView.CurrentView = view;
+		}
+
+
+		public static void MapTitle(CometViewHandler handler, View view)
+		{
+			var vc = handler?.viewController;
+			if (vc is null)
+				return;
+			vc.Title = view.GetTitle() ?? "";
+		}
+		public static void MapBackgroundColor(CometViewHandler handler, View view)
+		{
+			var vc = handler?.viewController;
+			if (vc is null)
+				return;
+			vc.View.UpdateBackground(view);
+		}
+
+	}
+}
