@@ -95,6 +95,8 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
+    <!-- Windows: enables dotnet run for packaged MSIX apps -->
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="$(MicrosoftWindowsSDKBuildToolsWinAppVersion)" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are

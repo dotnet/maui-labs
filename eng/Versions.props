@@ -94,6 +94,8 @@
     <MicrosoftAgentsAIHostingVersion>1.0.0-preview.260225.1</MicrosoftAgentsAIHostingVersion>
     <!-- DeviceRunners (device test runner OSS replacement) -->
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
+    <!-- Windows: enables dotnet run for packaged MSIX apps -->
+    <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>
