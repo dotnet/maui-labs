@@ -33,3 +33,4 @@ jobs:
       install-workloads: true
       run-tests: false
       pack: true
+      xcode-version: '26.3'
