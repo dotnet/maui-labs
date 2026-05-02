@@ -186,15 +186,11 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ### Documentation
 
-5. Create a `README.md` in the product root (e.g. `src/{NewProduct}/README.md`). This is packed into the NuGet package via `<None Include="README.md" Pack="true" PackagePath="/" />`. Set `<PackRepoRootReadme>false</PackRepoRootReadme>` so the repo-root README is not duplicated in the package. The product README should include:
-   - Product name and one-line description
-   - Feature list with platform support matrix (if applicable)
-   - Quick start / code example
-   - Package table (package IDs and descriptions)
-   - Build instructions (including any platform-specific steps)
-   - Architecture overview (project structure, key components)
-   - Requirements (SDK version, workloads, OS constraints)
-   - Experimental/preview status warning
+5. Create **two READMEs**:
+   - A **contributor README** at the product root (e.g. `src/{NewProduct}/README.md`) for GitHub browsing — describes features, build instructions, architecture, and links to the NuGet README.
+   - A **NuGet README** next to the shipping csproj (e.g. `src/{NewProduct}/Microsoft.Maui.{NewProduct}/README.md`) — consumer-facing with install, quick start, and usage examples. Pack it via `<None Include="README.md" Pack="true" PackagePath="/" />` in the csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` to avoid duplicating the repo-root README.
+   
+   Both should include: product name, feature list, platform support matrix, quick start code, package table, requirements, and experimental status warning. Keep feature descriptions aligned to avoid drift.
 6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description, feature highlights, and package table.
 
 ### CI/CD Setup
