@@ -104,7 +104,7 @@ public class ShapesPage : ContentPage
 					SectionHeader("Path"),
 					new Microsoft.Maui.Controls.Shapes.Path
 					{
-						Data = (Geometry)new PathGeometryConverter().ConvertFromString(
+						Data = (Geometry?)new PathGeometryConverter().ConvertFromString(
 							"M 10,100 C 50,0 150,0 200,80 S 300,150 350,50"),
 						Stroke = new SolidColorBrush(Colors.Crimson),
 						StrokeThickness = 3,
