@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Emit;
+using Microsoft.Maui.Go;
 
 namespace Microsoft.Maui.Go.Server;
 
@@ -25,6 +26,7 @@ namespace Microsoft.Maui.Go.Server;
 public sealed class DeltaCompiler
 {
 	readonly string _projectDir;
+	readonly string? _singleFilePath;
 	readonly List<MetadataReference> _references;
 
 	CSharpCompilation? _currentCompilation;
@@ -36,10 +38,31 @@ public sealed class DeltaCompiler
 	public string AssemblyName { get; }
 	public byte[]? CurrentPe { get; private set; }
 	public byte[]? CurrentPdb { get; private set; }
+	public bool IsSingleFileMode => _singleFilePath is not null;
 
 	public DeltaCompiler(string projectDir, string assemblyName)
 	{
 		_projectDir = projectDir;
+		AssemblyName = assemblyName;
+		_references = ResolveReferences();
+	}
+
+	/// <summary>
+	/// Creates a DeltaCompiler in single-file mode.
+	/// The assembly name is derived from the file name.
+	/// </summary>
+	public static DeltaCompiler ForSingleFile(string csFilePath)
+	{
+		var fullPath = Path.GetFullPath(csFilePath);
+		var dir = Path.GetDirectoryName(fullPath)!;
+		var name = Path.GetFileNameWithoutExtension(fullPath);
+		return new DeltaCompiler(dir, name, fullPath);
+	}
+
+	DeltaCompiler(string projectDir, string assemblyName, string singleFilePath)
+	{
+		_projectDir = projectDir;
+		_singleFilePath = singleFilePath;
 		AssemblyName = assemblyName;
 		_references = ResolveReferences();
 	}
@@ -52,10 +75,11 @@ public sealed class DeltaCompiler
 		var sourceFiles = GetSourceFiles();
 		var syntaxTrees = sourceFiles
 			.Select(f => CSharpSyntaxTree.ParseText(
-				File.ReadAllText(f),
+				ReadSourceText(f),
 				CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest),
 				path: f,
 				encoding: System.Text.Encoding.UTF8))
+			.Append(CreateImplicitUsingsSyntaxTree())
 			.ToArray();
 
 		_currentCompilation = CSharpCompilation.Create(
@@ -155,10 +179,11 @@ public sealed class DeltaCompiler
 		var sourceFiles = GetSourceFiles();
 		var newTrees = sourceFiles
 			.Select(f => CSharpSyntaxTree.ParseText(
-				File.ReadAllText(f),
+				ReadSourceText(f),
 				CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest),
 				path: f,
 				encoding: System.Text.Encoding.UTF8))
+			.Append(CreateImplicitUsingsSyntaxTree())
 			.ToArray();
 
 		// Create new compilation
@@ -177,7 +202,8 @@ public sealed class DeltaCompiler
 			return new CompilationResult
 			{
 				Success = false,
-				Errors = errors.Select(FormatDiagnostic).ToList()
+				Errors = errors.Select(FormatDiagnostic).ToList(),
+				Diagnostics = errors.Select(ToStructuredDiagnostic).ToList()
 			};
 		}
 
@@ -229,7 +255,8 @@ public sealed class DeltaCompiler
 				return new CompilationResult
 				{
 					Success = true,
-					Errors = rudeEdits.Select(FormatDiagnostic).ToList()
+					Errors = rudeEdits.Select(FormatDiagnostic).ToList(),
+					Diagnostics = rudeEdits.Select(ToStructuredDiagnostic).ToList()
 				};
 			}
 
@@ -239,6 +266,10 @@ public sealed class DeltaCompiler
 				Errors = emitResult.Diagnostics
 					.Where(d => d.Severity == DiagnosticSeverity.Error)
 					.Select(FormatDiagnostic)
+					.ToList(),
+				Diagnostics = emitResult.Diagnostics
+					.Where(d => d.Severity == DiagnosticSeverity.Error)
+					.Select(ToStructuredDiagnostic)
 					.ToList()
 			};
 		}
@@ -318,7 +349,40 @@ public sealed class DeltaCompiler
 						edits.Add(new SemanticEdit(SemanticEditKind.Update, oldSymbol, newSymbol));
 					}
 				}
-				// Note: new methods in existing types may also need SemanticEditKind.Insert
+				else
+				{
+					// New method in existing type — this IS an edit
+					edits.Add(new SemanticEdit(SemanticEditKind.Insert, null, newSymbol));
+				}
+			}
+
+			// Compare constructors
+			var newCtors = newRoot.DescendantNodes().OfType<ConstructorDeclarationSyntax>().ToArray();
+			var oldCtors = oldRoot.DescendantNodes().OfType<ConstructorDeclarationSyntax>()
+				.ToDictionary(c => GetConstructorKey(oldModel, c));
+
+			foreach (var newCtor in newCtors)
+			{
+				var newSymbol = newModel.GetDeclaredSymbol(newCtor);
+				if (newSymbol is null) continue;
+
+				var key = GetConstructorKey(newModel, newCtor);
+
+				if (oldCtors.TryGetValue(key, out var oldCtor))
+				{
+					var oldBody = oldCtor.Body?.ToFullString() ?? oldCtor.ExpressionBody?.ToFullString() ?? "";
+					var newBody = newCtor.Body?.ToFullString() ?? newCtor.ExpressionBody?.ToFullString() ?? "";
+
+					if (oldBody != newBody)
+					{
+						var oldSymbol = oldModel.GetDeclaredSymbol(oldCtor);
+						edits.Add(new SemanticEdit(SemanticEditKind.Update, oldSymbol, newSymbol));
+					}
+				}
+				else
+				{
+					edits.Add(new SemanticEdit(SemanticEditKind.Insert, null, newSymbol));
+				}
 			}
 
 			// Compare properties (auto-properties with expression bodies)
@@ -345,6 +409,48 @@ public sealed class DeltaCompiler
 					}
 				}
 			}
+
+			// Compare field initializers
+			var newFields = newRoot.DescendantNodes().OfType<FieldDeclarationSyntax>().ToArray();
+			var oldFields = oldRoot.DescendantNodes().OfType<FieldDeclarationSyntax>()
+				.ToDictionary(f => GetFieldKey(oldModel, f));
+
+			foreach (var newField in newFields)
+			{
+				var key = GetFieldKey(newModel, newField);
+
+				if (oldFields.TryGetValue(key, out var oldField))
+				{
+					var oldText = oldField.ToFullString();
+					var newText = newField.ToFullString();
+
+					if (oldText != newText)
+					{
+						// Field initializer changed — update the containing type's constructor
+						var containingType = newField.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+						if (containingType is not null)
+						{
+							var typeSymbol = newModel.GetDeclaredSymbol(containingType);
+							if (typeSymbol is INamedTypeSymbol namedType)
+							{
+								// Find the instance constructor (or static constructor for static fields)
+								var isStatic = newField.Modifiers.Any(SyntaxKind.StaticKeyword);
+								var ctorSymbol = namedType.Constructors
+									.FirstOrDefault(c => c.IsStatic == isStatic);
+								if (ctorSymbol is not null)
+								{
+									var oldTypeSymbol = oldSymbols.TryGetValue(
+										typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), out var ots)
+										? ots as INamedTypeSymbol : null;
+									var oldCtorSymbol = oldTypeSymbol?.Constructors
+										.FirstOrDefault(c => c.IsStatic == isStatic);
+									edits.Add(new SemanticEdit(SemanticEditKind.Update, oldCtorSymbol, ctorSymbol));
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 
 		return edits;
@@ -356,10 +462,35 @@ public sealed class DeltaCompiler
 		return symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? method.Identifier.Text;
 	}
 
+	static string GetConstructorKey(SemanticModel model, ConstructorDeclarationSyntax ctor)
+	{
+		var symbol = model.GetDeclaredSymbol(ctor);
+		return symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? ctor.Identifier.Text;
+	}
+
 	static string GetPropertyKey(SemanticModel model, PropertyDeclarationSyntax prop)
 	{
 		var symbol = model.GetDeclaredSymbol(prop);
 		return symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? prop.Identifier.Text;
+	}
+
+	static string GetFieldKey(SemanticModel model, FieldDeclarationSyntax field)
+	{
+		var variable = field.Declaration.Variables.FirstOrDefault();
+		if (variable is null) return field.ToFullString();
+		var symbol = model.GetDeclaredSymbol(variable);
+		return symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? variable.Identifier.Text;
+	}
+
+	static SyntaxTree CreateImplicitUsingsSyntaxTree()
+	{
+		return CSharpSyntaxTree.ParseText(
+			"global using System;\n" +
+			"global using System.Linq;\n" +
+			"global using System.Collections.Generic;\n",
+			CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest),
+			path: "__implicit_usings.cs",
+			encoding: System.Text.Encoding.UTF8);
 	}
 
 	static void CollectSymbols(CSharpCompilation compilation, Dictionary<string, ISymbol> symbols)
@@ -383,142 +514,202 @@ public sealed class DeltaCompiler
 	}
 
 	string[] GetSourceFiles()
-		=> Directory.GetFiles(_projectDir, "*.cs", SearchOption.AllDirectories)
+	{
+		if (_singleFilePath is not null)
+			return [_singleFilePath];
+
+		return Directory.GetFiles(_projectDir, "*.cs", SearchOption.AllDirectories)
 			.Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") &&
 						!f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
 			.ToArray();
+	}
+
+	/// <summary>
+	/// Reads source text from a file, replacing file-based app directives (#: and #!)
+	/// with blank lines to preserve line number mapping for diagnostics.
+	/// </summary>
+	static string ReadSourceText(string filePath)
+	{
+		var lines = File.ReadAllLines(filePath);
+		var inDirectiveBlock = true;
+		for (var i = 0; i < lines.Length; i++)
+		{
+			if (!inDirectiveBlock) break;
+
+			var trimmed = lines[i].TrimStart();
+			if (trimmed.StartsWith("#:") || trimmed.StartsWith("#!"))
+				lines[i] = ""; // blank line preserves line numbers
+			else if (trimmed.Length == 0)
+				continue; // blank lines between directives are fine
+			else
+				inDirectiveBlock = false; // first real code line ends directive block
+		}
+		return string.Join(Environment.NewLine, lines);
+	}
 
 	List<MetadataReference> ResolveReferences()
 	{
 		var refs = new List<MetadataReference>();
 		var loadedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-		// Strategy: find pre-built Comet + MAUI reference assemblies from Comet.Tests output.
-		// This directory contains BOTH framework types (Comet, MAUI, Extensions) AND BCL types
-		// (System.*, Microsoft.*) all at the correct net11.0 version. Using these avoids
-		// version mismatches with the dev server's own runtime (which may be net10.0).
-		var refAssemblies = FindReferenceAssemblies();
-		var hasFrameworkRefs = refAssemblies.Count > 0;
+		// Step 1: Resolve Comet + MAUI from NuGet package cache
+		var nugetDlls = FindNuGetReferenceAssemblies();
 
-		foreach (var dll in refAssemblies)
+		foreach (var dll in nugetDlls)
 		{
 			if (loadedPaths.Add(dll))
 			{
 				try { refs.Add(MetadataReference.CreateFromFile(dll)); }
-				catch { /* Skip assemblies that can't be loaded as metadata references */ }
-			}
-		}
-
-		// Only add process runtime BCL assemblies if we don't have a complete ref set
-		// (the Comet.Tests output already includes all needed BCL assemblies)
-		if (!hasFrameworkRefs)
-		{
-			var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-			foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll"))
-			{
-				if (loadedPaths.Add(dll))
-				{
-					try { refs.Add(MetadataReference.CreateFromFile(dll)); }
-					catch { }
-				}
-			}
-		}
-
-		return refs;
-	}
-
-	/// <summary>
-	/// Finds Comet + MAUI reference assemblies for compilation.
-	/// Searches in priority order:
-	///   1. Comet.Tests build output (has net11.0 plain TFM with all transitive refs)
-	///   2. Companion app artifacts
-	///   3. Comet src build output (platform-specific, may work for compilation)
-	/// Also includes .NET SDK ref pack assemblies (System.Runtime, etc.)
-	/// </summary>
-	List<string> FindReferenceAssemblies()
-	{
-		var dlls = new List<string>();
-
-		// Walk up from project dir to find the repo root
-		var repoRoot = FindRepoRoot(_projectDir);
-		if (repoRoot is null)
-		{
-			Console.Write("(no repo root found, using runtime refs only)... ");
-			return dlls;
-		}
-
-		// Step 1: Find Comet + MAUI assemblies from Comet.Tests output
-		var cometTestsOutput = Path.Combine(repoRoot, "src", "Comet", "tests", "Comet.Tests", "bin");
-		var testDirs = new[]
-		{
-			Path.Combine(cometTestsOutput, "Release", "net11.0"),
-			Path.Combine(cometTestsOutput, "Debug", "net11.0"),
-		};
-
-		string? foundDir = null;
-		foreach (var dir in testDirs)
-		{
-			if (!Directory.Exists(dir)) continue;
-			var cometDll = Path.Combine(dir, "Comet.dll");
-			if (!File.Exists(cometDll)) continue;
-
-			foreach (var dll in Directory.GetFiles(dir, "*.dll"))
-			{
-				var name = Path.GetFileNameWithoutExtension(dll);
-				if (name.Contains("Tests") || name.Contains("xunit") || name.Contains("nunit") ||
-					name.Contains("testhost") || name.Contains("TestPlatform") || name.Contains("CodeCoverage"))
-					continue;
-				dlls.Add(dll);
-			}
-
-			if (dlls.Count > 0)
-			{
-				foundDir = dir;
-				break;
-			}
-		}
-
-		if (foundDir is null)
-		{
-			// Try building Comet.Tests
-			Console.Write("building Comet.Tests for references... ");
-			var cometTestsProj = Path.Combine(repoRoot, "src", "Comet", "tests", "Comet.Tests", "Comet.Tests.csproj");
-			if (File.Exists(cometTestsProj))
-			{
-				var psi = new ProcessStartInfo("dotnet", $"build \"{cometTestsProj}\" -c Release -f net11.0 --nologo --verbosity quiet")
-				{
-					RedirectStandardOutput = true,
-					RedirectStandardError = true,
-					UseShellExecute = false,
-				};
-				using var proc = Process.Start(psi);
-				proc?.StandardOutput.ReadToEnd();
-				proc?.StandardError.ReadToEnd();
-				proc?.WaitForExit(180_000);
-
-				if (proc?.ExitCode == 0)
-				{
-					var outputDir = Path.Combine(cometTestsOutput, "Release", "net11.0");
-					if (Directory.Exists(outputDir))
-					{
-						foreach (var dll in Directory.GetFiles(outputDir, "*.dll"))
-						{
-							var name = Path.GetFileNameWithoutExtension(dll);
-							if (!name.Contains("Tests") && !name.Contains("xunit") && !name.Contains("nunit") &&
-								!name.Contains("testhost") && !name.Contains("TestPlatform") && !name.Contains("CodeCoverage"))
-								dlls.Add(dll);
-						}
-					}
-				}
+				catch { }
 			}
 		}
 
 		// Step 2: Add .NET SDK ref pack assemblies (System.Runtime, System.Collections, etc.)
-		var sdkRefDlls = FindSdkRefPackAssemblies("net11.0");
-		dlls.AddRange(sdkRefDlls);
+		var sdkDlls = FindSdkRefPackAssemblies("net11.0");
+		foreach (var dll in sdkDlls)
+		{
+			if (loadedPaths.Add(dll))
+			{
+				try { refs.Add(MetadataReference.CreateFromFile(dll)); }
+				catch { }
+			}
+		}
 
-		Console.Write($"({dlls.Count} refs)... ");
+		Console.Write($"({refs.Count} refs)... ");
+		return refs;
+	}
+
+	/// <summary>
+	/// Resolves Comet and MAUI reference assemblies from the NuGet package cache.
+	/// Looks for packages in ~/.nuget/packages/ by name, picking the best available
+	/// TFM (prefer net11.0, fall back to any platform TFM like net11.0-maccatalyst).
+	/// </summary>
+	List<string> FindNuGetReferenceAssemblies()
+	{
+		var dlls = new List<string>();
+		var nugetRoot = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+			".nuget", "packages");
+
+		if (!Directory.Exists(nugetRoot))
+			return dlls;
+
+		// Parse #:package directives from source file (if single-file mode)
+		var requestedPackages = new List<(string Name, string? Version)>();
+		if (_singleFilePath is not null && File.Exists(_singleFilePath))
+		{
+			foreach (var line in File.ReadLines(_singleFilePath))
+			{
+				var trimmed = line.TrimStart();
+				if (trimmed.StartsWith("#:package "))
+				{
+					var spec = trimmed["#:package ".Length..].Trim();
+					var parts = spec.Split('@', 2);
+					requestedPackages.Add((parts[0], parts.Length > 1 ? parts[1] : null));
+				}
+				else if (!trimmed.StartsWith("#:") && !trimmed.StartsWith("#!") && trimmed.Length > 0)
+					break; // past directive block
+			}
+		}
+
+		// Always include Comet and its MAUI dependencies
+		string[] requiredPackages =
+		[
+			"Comet",
+			"Microsoft.Maui.Core",
+			"Microsoft.Maui.Controls",
+			"Microsoft.Maui.Graphics",
+			"Microsoft.Maui.Essentials",
+		];
+
+		foreach (var pkgName in requiredPackages)
+		{
+			var pkgDir = Path.Combine(nugetRoot, pkgName.ToLowerInvariant());
+			if (!Directory.Exists(pkgDir)) continue;
+
+			// Find the requested version or latest available
+			var requestedVersion = requestedPackages
+				.FirstOrDefault(p => string.Equals(p.Name, pkgName, StringComparison.OrdinalIgnoreCase))
+				.Version;
+
+			var dll = FindBestDllFromPackage(pkgDir, requestedVersion);
+			if (dll is not null)
+				dlls.Add(dll);
+		}
+
 		return dlls;
+	}
+
+	/// <summary>
+	/// Finds the best DLL from a NuGet package directory.
+	/// Prefers: requested version > latest preview.3 > latest version.
+	/// For TFM: prefers net11.0 > net11.0-maccatalyst > any net11.0-* > net10.0-*.
+	/// </summary>
+	static string? FindBestDllFromPackage(string packageDir, string? requestedVersion)
+	{
+		// Find the version directory
+		string? versionDir = null;
+
+		if (requestedVersion is not null)
+		{
+			var candidate = Path.Combine(packageDir, requestedVersion);
+			if (Directory.Exists(candidate))
+				versionDir = candidate;
+		}
+
+		if (versionDir is null)
+		{
+			// Pick the latest version, preferring preview.3 for .NET 11
+			var versions = Directory.GetDirectories(packageDir)
+				.Select(Path.GetFileName)
+				.Where(v => v is not null)
+				.OrderByDescending(v => v!.Contains("preview.3") ? 1 : 0)
+				.ThenByDescending(v => v)
+				.ToArray();
+
+			foreach (var ver in versions)
+			{
+				var candidate = Path.Combine(packageDir, ver!);
+				if (Directory.Exists(Path.Combine(candidate, "lib")))
+				{
+					versionDir = candidate;
+					break;
+				}
+			}
+		}
+
+		if (versionDir is null) return null;
+
+		var libDir = Path.Combine(versionDir, "lib");
+		if (!Directory.Exists(libDir)) return null;
+
+		// Find the best TFM directory
+		var tfmDirs = Directory.GetDirectories(libDir)
+			.Select(Path.GetFileName)
+			.Where(d => d is not null)
+			.ToArray();
+
+		// Priority: net11.0 (plain) > net11.0-ios* > net11.0-maccatalyst* > any net11.0-* > net10.0-* > netstandard*
+		// Prefer ios since the companion app typically runs on iOS simulator
+		// Only include TFMs that actually exist in the package
+		var tfmPriority = new List<string>();
+		if (tfmDirs.Contains("net11.0")) tfmPriority.Add("net11.0");
+		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0-ios")).OrderByDescending(d => d)!);
+		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0-maccatalyst")).OrderByDescending(d => d)!);
+		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net11.0-") && !d!.StartsWith("net11.0-ios") && !d!.StartsWith("net11.0-maccatalyst")).OrderByDescending(d => d)!);
+		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("net10.0")).OrderByDescending(d => d)!);
+		tfmPriority.AddRange(tfmDirs.Where(d => d!.StartsWith("netstandard")).OrderByDescending(d => d)!);
+
+		foreach (var tfm in tfmPriority)
+		{
+			var tfmDir = Path.Combine(libDir, tfm!);
+			if (!Directory.Exists(tfmDir)) continue;
+			var dllFiles = Directory.GetFiles(tfmDir, "*.dll");
+			if (dllFiles.Length > 0)
+				return dllFiles[0];
+		}
+
+		return null;
 	}
 
 	/// <summary>
@@ -567,25 +758,49 @@ public sealed class DeltaCompiler
 		return dlls;
 	}
 
-	static string? FindRepoRoot(string startDir)
-	{
-		var dir = new DirectoryInfo(startDir);
-		while (dir is not null)
-		{
-			if (File.Exists(Path.Combine(dir.FullName, "MauiLabs.slnx")) ||
-				(Directory.Exists(Path.Combine(dir.FullName, ".git")) &&
-				 Directory.Exists(Path.Combine(dir.FullName, "src", "Comet"))))
-				return dir.FullName;
-			dir = dir.Parent;
-		}
-		return null;
-	}
-
 	static string FormatDiagnostic(Diagnostic d)
 	{
 		var location = d.Location.GetLineSpan();
 		var file = Path.GetFileName(location.Path);
-		return $"{file}({location.StartLinePosition.Line + 1},{location.StartLinePosition.Character + 1}): {d.Id}: {d.GetMessage()}";
+		var formatted = $"{file}({location.StartLinePosition.Line + 1},{location.StartLinePosition.Character + 1}): {d.Id}: {d.GetMessage()}";
+		return formatted + AddHint(d);
+	}
+
+	/// <summary>
+	/// Post-processes common Roslyn diagnostics to add actionable hints for Comet users.
+	/// </summary>
+	static string AddHint(Diagnostic d)
+	{
+		var msg = d.GetMessage();
+		return d.Id switch
+		{
+			"CS0121" when msg.Contains("VStack") || msg.Contains("HStack")
+				=> "\nHint: Use named arg, e.g. VStack(spacing: 0f, ...)",
+			"CS0117" when msg.Contains("FontWeight")
+				=> "\nHint: Available values: Bold, Regular, Light, Medium, Heavy, Thin",
+			"CS1503" when msg.Contains("method group") && msg.Contains("Action")
+				=> "\nHint: Wrap in lambda, e.g. () => Method()",
+			"CS0246" when msg.Contains("Action") || msg.Contains("Func")
+				=> "\nHint: Add 'using System;'",
+			_ => ""
+		};
+	}
+
+	/// <summary>
+	/// Extracts structured diagnostic fields from a Roslyn diagnostic.
+	/// </summary>
+	internal static CompilationDiagnostic ToStructuredDiagnostic(Diagnostic d)
+	{
+		var location = d.Location.GetLineSpan();
+		return new CompilationDiagnostic
+		{
+			Id = d.Id,
+			Message = FormatDiagnostic(d),
+			FilePath = location.Path ?? "",
+			Line = location.StartLinePosition.Line + 1,
+			Column = location.StartLinePosition.Character + 1,
+			Severity = d.Severity.ToString(),
+		};
 	}
 }
 
@@ -626,6 +841,8 @@ public sealed class CompilationResult
 {
 	public bool Success { get; init; }
 	public List<string> Errors { get; init; } = [];
+	/// <summary>Structured diagnostics from Roslyn (populated for compilation errors).</summary>
+	public List<CompilationDiagnostic> Diagnostics { get; init; } = [];
 	public byte[]? Pe { get; init; }
 	public byte[]? Pdb { get; init; }
 	public byte[]? MetadataDelta { get; init; }

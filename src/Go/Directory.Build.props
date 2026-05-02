@@ -1,0 +1,51 @@
+<Project>
+
+  <!--
+    Go builds independently within maui-labs. It uses its own global.json
+    (targeting .NET 11 preview, see src/Go/global.json) so it can consume
+    Microsoft.Maui.Controls preview packages, and it does not yet integrate
+    with Arcade SDK. Full Arcade integration (signing, versioning, official
+    CI publishing) is a future step.
+
+    This file's main job is to STOP THE WALK: MSBuild walks up the directory
+    tree looking for Directory.Build.props and stops at the first one it
+    finds. Without this file, Go projects inherit the repo-root
+    Directory.Build.props which imports Microsoft.DotNet.Arcade.Sdk — and
+    Arcade can't be resolved alongside the .NET 11 preview SDK that Go uses.
+
+    See src/Comet/Directory.Build.props for the same pattern.
+  -->
+
+  <!--
+    Note: $(MicrosoftMauiControlsVersion) and other version variables are
+    provided by the repo-root Directory.Packages.props which imports
+    eng/Versions.props. The walk for Directory.Packages.props is independent
+    from Directory.Build.props, so it still applies to Go projects.
+  -->
+
+  <PropertyGroup>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">$(MicrosoftMauiControlsVersion)</MauiVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Common settings (mirrored from repo root, without Arcade SDK import) -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Copyright>.NET Foundation and Contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
+
+  <!-- Common SupportedOSPlatformVersion (matches CompanionApp targets) -->
+  <PropertyGroup>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+</Project>

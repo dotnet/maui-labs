@@ -16,8 +16,13 @@ namespace Microsoft.Maui.Go.CompanionApp;
 
 /// <summary>
 /// Full-screen camera QR code scanner page.
-/// Presented modally, returns the scanned URL via TaskCompletionSource.
+/// Presented modally via <see cref="ModalPresenter"/>, returns the scanned URL via TaskCompletionSource.
 /// </summary>
+/// <remarks>
+/// IMPORTANT: <c>ModalPresenter</c> presents this page by calling <c>ToHandler()</c> and pushing the
+/// raw <c>UIViewController</c>, which bypasses MAUI's Page lifecycle — <c>OnAppearing</c> never fires.
+/// Initialization runs from <c>HandlerChanged</c> instead.
+/// </remarks>
 public class QrScannerPage : ContentPage
 {
 	readonly TaskCompletionSource<string?> _tcs;
@@ -25,9 +30,9 @@ public class QrScannerPage : ContentPage
 	readonly Border _viewfinder;
 	readonly Border _statusBorder;
 	readonly Label _statusLabel;
+	bool _initStarted;
 	bool _scanned;
 
-	// Warm brown accent color (matches Comet Go theme)
 	static readonly Color AccentColor = Color.FromArgb("#D4A04A");
 	static readonly Color OverlayColor = Color.FromArgb("#AA281A0D");
 
@@ -37,6 +42,17 @@ public class QrScannerPage : ContentPage
 		Shell.SetNavBarIsVisible(this, false);
 		NavigationPage.SetHasNavigationBar(this, false);
 		BackgroundColor = Colors.Black;
+
+		// ModalPresenter bypasses MAUI's Page lifecycle (presents raw UIViewController),
+		// so OnAppearing never fires. HandlerChanged DOES fire when the platform handler attaches.
+		HandlerChanged += (_, _) =>
+		{
+			if (Handler is not null && !_initStarted)
+			{
+				_initStarted = true;
+				MainThread.BeginInvokeOnMainThread(() => _ = StartScannerAsync());
+			}
+		};
 
 		_barcodeReader = new CameraBarcodeReaderView
 		{
@@ -86,7 +102,6 @@ public class QrScannerPage : ContentPage
 			Content = _statusLabel,
 		};
 
-		// Corner accent marks (warm brown)
 		var cornersGrid = new Grid
 		{
 			HorizontalOptions = LayoutOptions.Center,
@@ -96,7 +111,6 @@ public class QrScannerPage : ContentPage
 		};
 		AddCornerAccents(cornersGrid);
 
-		// Top bar with close button and title
 		var closeButton = CreateCloseButton();
 		var titleLabel = new Label
 		{
@@ -122,7 +136,6 @@ public class QrScannerPage : ContentPage
 		topBar.Add(closeButton, 0);
 		topBar.Add(titleLabel, 1);
 
-		// Instruction BELOW viewfinder
 		var instructionLabel = new Label
 		{
 			Text = "Point your camera at the QR code\nshown by the dev server",
@@ -203,24 +216,29 @@ public class QrScannerPage : ContentPage
 		grid.Add(new BoxView { Color = AccentColor, WidthRequest = 3, HeightRequest = 36, HorizontalOptions = LayoutOptions.End, VerticalOptions = LayoutOptions.End });
 	}
 
-	protected override async void OnAppearing()
+	async Task StartScannerAsync()
 	{
-		base.OnAppearing();
-
-		var status = await Permissions.CheckStatusAsync<Permissions.Camera>();
-		if (status != PermissionStatus.Granted)
+		try
 		{
-			status = await Permissions.RequestAsync<Permissions.Camera>();
+			var status = await Permissions.CheckStatusAsync<Permissions.Camera>();
 			if (status != PermissionStatus.Granted)
 			{
-				_tcs.TrySetResult(null);
-				DismissScanner();
-				return;
+				status = await Permissions.RequestAsync<Permissions.Camera>();
+				if (status != PermissionStatus.Granted)
+				{
+					_tcs.TrySetResult(null);
+					DismissScanner();
+					return;
+				}
 			}
-		}
 
-		await Task.Delay(500);
-		_barcodeReader.IsDetecting = true;
+			await Task.Delay(500);
+			_barcodeReader.IsDetecting = true;
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[QrScanner] StartScannerAsync error: {ex}");
+		}
 	}
 
 	protected override void OnDisappearing()
@@ -237,7 +255,6 @@ public class QrScannerPage : ContentPage
 		if (result is null) return;
 
 		_scanned = true;
-		Console.WriteLine($"[QrScanner] Scanned: {result.Value}");
 
 		MainThread.BeginInvokeOnMainThread(async () =>
 		{
@@ -245,7 +262,6 @@ public class QrScannerPage : ContentPage
 			{
 				_barcodeReader.IsDetecting = false;
 
-				// Flash viewfinder green
 				_viewfinder.Stroke = Color.FromArgb("#48bb78");
 				_statusLabel.Text = "QR Code detected";
 				_statusBorder.IsVisible = true;
@@ -256,7 +272,7 @@ public class QrScannerPage : ContentPage
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[QrScanner] Error dismissing: {ex}");
+				Console.WriteLine($"[QrScanner] Dismiss error: {ex}");
 				_tcs.TrySetResult(result.Value);
 				try { DismissScanner(); } catch { }
 			}
