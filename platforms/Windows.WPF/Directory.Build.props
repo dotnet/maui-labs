@@ -16,8 +16,6 @@
 
   <!-- Common NuGet package properties for all src/ projects -->
   <PropertyGroup>
-    <VersionPrefix>0.1.0</VersionPrefix>
-    <Version>$(VersionPrefix)</Version>
     <Authors>Microsoft</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Windows.WPF</PackageProjectUrl>

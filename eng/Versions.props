@@ -62,6 +62,8 @@
     <PlatformMauiLinuxGtk4Version>0.6.0</PlatformMauiLinuxGtk4Version>
     <PlatformMauiLinuxGtk4BlazorWebViewVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4BlazorWebViewVersion>
     <PlatformMauiLinuxGtk4EssentialsVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4EssentialsVersion>
+    <PlatformMauiWindowsWpfVersion>0.1.0</PlatformMauiWindowsWpfVersion>
+    <PlatformMauiWindowsWpfEssentialsVersion>$(PlatformMauiWindowsWpfVersion)</PlatformMauiWindowsWpfEssentialsVersion>
   </PropertyGroup>
   <!-- EssentialsAI preview iteration (bump for each new preview drop when DotNetFinalVersionKind=release) -->
   <PropertyGroup Label="EssentialsAI">

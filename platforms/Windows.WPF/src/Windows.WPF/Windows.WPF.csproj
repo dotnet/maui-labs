@@ -7,6 +7,7 @@
     <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.Windows.WPF</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.Windows.WPF</PackageId>
+    <Version>$(PlatformMauiWindowsWpfVersion)</Version>
     <Description>A .NET MAUI backend for Windows using WPF. Run your MAUI apps on Windows desktops with native WPF controls.</Description>
     <PackageTags>maui;windows;wpf;desktop;dotnet;cross-platform</PackageTags>
     <IsPackable>true</IsPackable>

@@ -316,10 +316,8 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                useGlobalJson: true
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
             - script: .dotnet\dotnet workload install maui
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd

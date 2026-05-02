@@ -8,6 +8,7 @@
     <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF.Essentials</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.Windows.WPF.Essentials</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.Windows.WPF.Essentials</PackageId>
+    <Version>$(PlatformMauiWindowsWpfEssentialsVersion)</Version>
     <Description>MAUI Essentials implementations for the WPF backend — clipboard, preferences, device info, connectivity, and more using WPF and Windows APIs.</Description>
     <PackageTags>maui;windows;wpf;essentials;desktop;clipboard;preferences</PackageTags>
     <IsPackable>true</IsPackable>
