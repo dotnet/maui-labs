@@ -20,8 +20,24 @@ parameters:
   displayName: 'Publish Cli packages to NuGet.org'
   type: boolean
   default: false
+- name: publishAppProjectReferenceNuget
+  displayName: 'Publish AppProjectReference packages to NuGet.org'
+  type: boolean
+  default: false
 - name: publishLinuxGtk4Nuget
   displayName: 'Publish Linux GTK4 packages to NuGet.org'
+  type: boolean
+  default: false
+- name: publishWpfNuget
+  displayName: 'Publish WPF packages to NuGet.org'
+  type: boolean
+  default: false
+- name: publishMacOSNuget
+  displayName: 'Publish macOS AppKit packages to NuGet.org'
+  type: boolean
+  default: false
+- name: publishEssentialsAINuget
+  displayName: 'Publish EssentialsAI packages to NuGet.org'
   type: boolean
   default: false
 
@@ -88,8 +104,9 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
-              displayName: Install MAUI workloads
+            # DevFlow packages are built on Windows, including Apple library TFMs.
+            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen
+              displayName: Install MAUI and Apple workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
@@ -124,6 +141,30 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
 
+          - job: AppProjectReference
+            displayName: AppProjectReference - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\AppProjectReference\AppProjectReference.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test AppProjectReference
+
           # The Linux GTK4 NuGet packages are pure managed (net10.0) assemblies
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
           # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
@@ -151,6 +192,79 @@ extends:
                 -projects $(Build.SourcesDirectory)\platforms\Linux.Gtk4\Linux.Gtk4.slnx
                 $(_OfficialBuildArgs)
               displayName: Build and Pack Linux GTK4
+
+          - job: EssentialsAI_macOS
+            displayName: EssentialsAI - macOS (native build)
+            pool:
+              name: Azure Pipelines
+              vmImage: macos-15
+              os: macOS
+            templateContext:
+              outputs:
+              - output: pipelineArtifact
+                displayName: Publish Mac Native Artifacts
+                targetPath: '$(Agent.TempDirectory)/native-binaries'
+                artifactName: EssentialsAIMacNativeArtifacts
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+            steps:
+            - script: |
+                eng/common/dotnet.sh --info
+              displayName: Provision .NET SDK via Arcade
+            - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+              displayName: Select Xcode 26.3
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen
+              displayName: Install MAUI workloads
+            - script: |
+                ./eng/common/build.sh \
+                  --configuration $(_BuildConfig) \
+                  --restore \
+                  --build \
+                  --prepareMachine \
+                  --ci \
+                  --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
+              displayName: Build EssentialsAI (macOS)
+            - task: CopyFiles@2
+              displayName: Copy Native Binaries
+              inputs:
+                SourceFolder: '$(Build.SourcesDirectory)/artifacts/bin'
+                Contents: |
+                  */$(_BuildConfig)/*/*.resources.zip
+                TargetFolder: '$(Agent.TempDirectory)/native-binaries'
+
+          - job: EssentialsAI
+            displayName: EssentialsAI - Windows
+            dependsOn: EssentialsAI_macOS
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: DownloadPipelineArtifact@2
+              displayName: Download Mac Native Binaries
+              inputs:
+                artifact: EssentialsAIMacNativeArtifacts
+                path: '$(Build.SourcesDirectory)/artifacts/bin'
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
+              displayName: Install MAUI workloads
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
+              displayName: Install Android SDK dependencies
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\AI\EssentialsAI.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test EssentialsAI
 
           # Verification-only build on real Linux to catch any platform-specific
           # build breaks. This job does NOT pack or publish artifacts — the
@@ -194,6 +308,59 @@ extends:
                   --projects $(Build.SourcesDirectory)/platforms/Linux.Gtk4/Linux.Gtk4.slnx \
                   /p:OfficialBuild=false
               displayName: Build Linux GTK4 (no pack)
+
+          - job: WPF
+            displayName: WPF - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui
+              displayName: Install MAUI workload
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\platforms\Windows.WPF\Windows.WPF.slnx
+                $(_OfficialBuildArgs)
+              displayName: Build, Test and Pack WPF
+
+          # macOS AppKit packages target net10.0-macos — must build on macOS.
+          # Signing runs in the Arcade post-build stage (which validates on Windows),
+          # so the macOS-built nupkgs flow through the standard artifact pipeline.
+          - job: MacOS
+            displayName: macOS AppKit - macOS
+            pool:
+              name: Azure Pipelines
+              vmImage: macos-latest
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: dotnet workload install maui macos
+              displayName: Install MAUI and macOS workloads
+            - script: ./eng/common/cibuild.sh
+                --configuration $(_BuildConfig)
+                --prepareMachine
+                --projects $(Build.SourcesDirectory)/platforms/MacOS/MacOS.slnx
+                $(_OfficialBuildArgs)
+              displayName: Build and Pack macOS AppKit
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
@@ -284,6 +451,7 @@ extends:
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/CliPackages'
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.StartupProfiling.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
             displayName: Filter Cli packages
 
         - job: PublishNuGet
@@ -308,6 +476,61 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/CliPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/CliPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish AppProjectReference packages to NuGet.org
+    - ${{ if eq(parameters.publishAppProjectReferenceNuget, true) }}:
+      - stage: publish_appprojectreference_nuget
+        displayName: 'Publish AppProjectReference to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare AppProjectReference Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish AppProjectReference Packages
+              targetPath: '$(Pipeline.Workspace)/AppProjectReferencePackages'
+              artifactName: AppProjectReferencePackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/AppProjectReferencePackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Build.AppProjectReference.*.nupkg' '$(Pipeline.Workspace)/AppProjectReferencePackages/' -Verbose
+            displayName: Filter AppProjectReference packages
+
+        - job: PublishNuGet
+          displayName: 'Push AppProjectReference to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: AppProjectReferencePackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/AppProjectReferencePackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push AppProjectReference to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/AppProjectReferencePackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/AppProjectReferencePackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 
@@ -363,5 +586,138 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/LinuxGtk4Packages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish WPF packages to NuGet.org
+    - ${{ if eq(parameters.publishWpfNuget, true) }}:
+      - stage: publish_wpf_nuget
+        displayName: 'Publish WPF to NuGet.org'
+    # Publish EssentialsAI packages to NuGet.org
+    - ${{ if eq(parameters.publishEssentialsAINuget, true) }}:
+      - stage: publish_essentialsai_nuget
+        displayName: 'Publish EssentialsAI to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare WPF Artifacts'
+          displayName: 'Prepare EssentialsAI Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish WPF Packages
+              targetPath: '$(Pipeline.Workspace)/WpfPackages'
+              artifactName: WpfPackagesForNuGet
+              displayName: Publish EssentialsAI Packages
+              targetPath: '$(Pipeline.Workspace)/EssentialsAIPackages'
+              artifactName: EssentialsAIPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/WpfPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Windows.WPF.*.nupkg' '$(Pipeline.Workspace)/WpfPackages/' -Verbose -ErrorAction Stop
+            displayName: Filter WPF packages
+
+        - job: PublishNuGet
+          displayName: 'Push WPF to NuGet.org'
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/EssentialsAIPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Essentials.AI.*.nupkg' '$(Pipeline.Workspace)/EssentialsAIPackages/' -Verbose
+            displayName: Filter EssentialsAI packages
+
+        - job: PublishNuGet
+          displayName: 'Push EssentialsAI to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: WpfPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/WpfPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push WPF to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/WpfPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/WpfPackages'
+              artifactName: EssentialsAIPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/EssentialsAIPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push EssentialsAI to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/EssentialsAIPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/EssentialsAIPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish macOS AppKit packages to NuGet.org
+    - ${{ if eq(parameters.publishMacOSNuget, true) }}:
+      - stage: publish_macos_nuget
+        displayName: 'Publish macOS AppKit to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare macOS Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish macOS Packages
+              targetPath: '$(Pipeline.Workspace)/MacOSPackages'
+              artifactName: MacOSPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/MacOSPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.MacOS.*.nupkg' '$(Pipeline.Workspace)/MacOSPackages/' -Verbose -ErrorAction Stop
+            displayName: Filter macOS packages
+
+        - job: PublishNuGet
+          displayName: 'Push macOS to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: MacOSPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/MacOSPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push macOS to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/MacOSPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/MacOSPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'

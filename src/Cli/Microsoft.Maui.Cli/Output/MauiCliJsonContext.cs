@@ -42,6 +42,7 @@ namespace Microsoft.Maui.Cli.Output;
 [JsonSerializable(typeof(List<RuntimeInfo>))]
 [JsonSerializable(typeof(SimulatorInfo))]
 [JsonSerializable(typeof(List<SimulatorInfo>))]
+[JsonSerializable(typeof(AppleInstallResult))]
 [JsonSerializable(typeof(StatusMessageResult))]
 [JsonSerializable(typeof(VersionResult))]
 [JsonSerializable(typeof(CliCommandResult))]

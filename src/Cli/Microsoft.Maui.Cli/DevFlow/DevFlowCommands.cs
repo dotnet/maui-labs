@@ -1,11 +1,11 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Cli.DevFlow.Skills;
 using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.DevFlow;
@@ -1279,37 +1279,14 @@ public class DevFlowCommands
 
         devflowCommand.Add(mauiCommand);
 
-        // ===== update-skill command =====
-        var forceOption = new Option<bool>("--force", "-y") { Description = "Skip confirmation prompt" };
-        var outputDirOption = new Option<string?>("--output", "-o") { Description = "Output directory (defaults to current directory)" };
-        var branchOption = new Option<string>("--branch", "-b") { Description = "GitHub branch to download from", DefaultValueFactory = _ => "main" };
-        var updateSkillCmd = new Command("update-skill", "Download the latest maui-ai-debugging skill from GitHub")
-        {
-            forceOption, outputDirOption, branchOption
-        };
-        updateSkillCmd.SetAction(async (ctx, ct) =>
-        {
-            var force = ctx.GetValue(forceOption);
-            var output = ctx.GetValue(outputDirOption);
-            var branch = ctx.GetValue(branchOption)!;
-            await UpdateSkillAsync(force, output, branch);
-        });
-        devflowCommand.Add(updateSkillCmd);
+        // ===== init / skills commands =====
+        var initCommand = DevFlowSkillCommands.CreateInitCommand(jsonOption, noJsonOption, output);
+        initCommand.Aliases.Add("onboard");
+        devflowCommand.Add(initCommand);
+        devflowCommand.Add(DevFlowSkillCommands.CreateSkillsCommand(jsonOption, noJsonOption, output));
 
-        // ===== skill-version command =====
-        var skillVersionOutputOption = new Option<string?>("--output", "-o") { Description = "Skill directory (defaults to current directory)" };
-        var skillVersionBranchOption = new Option<string>("--branch", "-b") { Description = "GitHub branch to check against", DefaultValueFactory = _ => "main" };
-        var skillVersionCmd = new Command("skill-version", "Check the installed skill version and compare with remote")
-        {
-            skillVersionOutputOption, skillVersionBranchOption
-        };
-        skillVersionCmd.SetAction(async (ctx, ct) =>
-        {
-            var output = ctx.GetValue(skillVersionOutputOption);
-            var branch = ctx.GetValue(skillVersionBranchOption)!;
-            await SkillVersionAsync(output, branch);
-        });
-        devflowCommand.Add(skillVersionCmd);
+        // Hidden compatibility alias for the old standalone skill updater.
+        devflowCommand.Add(DevFlowSkillCommands.CreateUpdateCommand("update-skill", hidden: true, jsonOption, noJsonOption, output));
 
         // ===== broker commands =====
         var brokerCommand = new Command("broker", "Manage the Microsoft.Maui.DevFlow broker daemon");
@@ -1348,7 +1325,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson));
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         devflowCommand.Add(listCmd);
 
@@ -1358,7 +1335,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson));
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         devflowCommand.Add(diagnoseCmd);
 
@@ -1377,7 +1354,7 @@ public class DevFlowCommands
             var waitPlatform = ctx.GetValue(waitPlatformOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson));
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), ct);
         });
         devflowCommand.Add(waitCmd);
 
@@ -1402,7 +1379,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson));
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         agentCommand.Add(agentListCmd);
 
@@ -1420,7 +1397,7 @@ public class DevFlowCommands
             var waitPlatform = ctx.GetValue(agentWaitPlatformOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson));
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), ct);
         });
         agentCommand.Add(agentWaitCmd);
 
@@ -1429,7 +1406,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson));
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         agentCommand.Add(agentDiagnoseCmd);
 
@@ -2365,214 +2342,17 @@ public class DevFlowCommands
         new("broker stop", "Stop the broker daemon", true),
         new("broker status", "Show broker status", false),
         new("broker log", "Show broker log", false),
+        new("init", "Install DevFlow onboarding skills for this workspace", true),
+        new("skills install", "Install bundled DevFlow skills", true),
+        new("skills list", "List DevFlow skill install status", false),
+        new("skills check", "Check installed DevFlow skills", false),
+        new("skills update", "Update DevFlow skills from the current CLI bundle", true),
+        new("skills remove", "Remove an installed DevFlow skill", true),
+        new("skills doctor", "Validate DevFlow skills and CLI drift", false),
         new("mcp", "Start the MCP server", false),
         new("commands", "List all available commands", false),
         new("version", "Show CLI version", false),
     };
-
-    // ===== Update Skill Command =====
-
-    private const string SkillRepo = "dotnet/maui-labs";
-    private const string SkillBasePath = ".claude/skills/maui-ai-debugging";
-
-    private static async Task UpdateSkillAsync(bool force, string? outputDir, string branch)
-    {
-        var root = outputDir ?? Directory.GetCurrentDirectory();
-        var destBase = Path.Combine(root, SkillBasePath);
-
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Microsoft.Maui.DevFlow-CLI", "1.0"));
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-
-        // Discover files via GitHub Trees API (recursive)
-        Console.WriteLine("Fetching skill file list from GitHub...");
-        List<string> files;
-        try
-        {
-            files = await GetSkillFilesFromGitHubAsync(http, branch);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Failed to fetch file list: {ex.Message}");
-            return;
-        }
-
-        if (files.Count == 0)
-        {
-            Console.Error.WriteLine("No skill files found in the repository.");
-            return;
-        }
-
-        Console.WriteLine();
-        Console.WriteLine("maui devflow update-skill");
-        Console.WriteLine($"  Source: https://github.com/{SkillRepo}/tree/{branch}/{SkillBasePath}");
-        Console.WriteLine($"  Destination: {destBase}");
-        Console.WriteLine();
-        Console.WriteLine("Files to download:");
-        foreach (var file in files)
-        {
-            var destPath = Path.Combine(destBase, file);
-            var exists = File.Exists(destPath);
-            Console.WriteLine($"  {SkillBasePath}/{file}{(exists ? " (overwrite)" : " (new)")}");
-        }
-        Console.WriteLine();
-
-        if (!force)
-        {
-            Console.Write("Existing files will be overwritten. Continue? [y/N] ");
-            var response = Console.ReadLine()?.Trim().ToLowerInvariant();
-            if (response is not ("y" or "yes"))
-            {
-                Console.WriteLine("Cancelled.");
-                return;
-            }
-        }
-
-        var success = 0;
-        foreach (var file in files)
-        {
-            var url = $"https://raw.githubusercontent.com/{SkillRepo}/{branch}/{SkillBasePath}/{file}";
-            var destPath = Path.Combine(destBase, file);
-
-            try
-            {
-                var content = await http.GetStringAsync(url);
-                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                await File.WriteAllTextAsync(destPath, content);
-                Console.WriteLine($"  ✓ {file}");
-                success++;
-            }
-            catch (HttpRequestException ex)
-            {
-                Console.Error.WriteLine($"  ✗ {file}: {ex.Message}");
-            }
-        }
-
-        Console.WriteLine();
-        Console.WriteLine(success == files.Count
-            ? $"Done. {success} files updated."
-            : $"Done. {success}/{files.Count} files updated.");
-
-        // Write .skill-version with the latest commit SHA
-        await WriteSkillVersionAsync(http, destBase, branch);
-    }
-
-    private static async Task WriteSkillVersionAsync(HttpClient http, string destBase, string branch)
-    {
-        try
-        {
-            var sha = await GetRemoteSkillCommitShaAsync(http, branch);
-            if (sha == null) return;
-
-            var versionInfo = new JsonObject
-            {
-                ["commit"] = sha,
-                ["updatedAt"] = DateTime.UtcNow.ToString("o"),
-                ["branch"] = branch
-            };
-            var versionPath = Path.Combine(destBase, ".skill-version");
-            await File.WriteAllTextAsync(versionPath, CliJson.SerializeUntyped(versionInfo, indented: true));
-        }
-        catch { /* non-fatal — version tracking is best-effort */ }
-    }
-
-    private static async Task<string?> GetRemoteSkillCommitShaAsync(HttpClient http, string branch)
-    {
-        var url = $"https://api.github.com/repos/{SkillRepo}/commits?path={SkillBasePath}&sha={branch}&per_page=1";
-        var json = await http.GetStringAsync(url);
-        var commits = CliJson.ParseElement(json);
-        foreach (var commit in commits.EnumerateArray())
-            return commit.GetProperty("sha").GetString();
-        return null;
-    }
-
-    private static async Task SkillVersionAsync(string? outputDir, string branch)
-    {
-        var root = outputDir ?? Directory.GetCurrentDirectory();
-        var destBase = Path.Combine(root, SkillBasePath);
-        var versionPath = Path.Combine(destBase, ".skill-version");
-
-        // Read local version
-        string? localSha = null;
-        string? localDate = null;
-        string? localBranch = null;
-        if (File.Exists(versionPath))
-        {
-            try
-            {
-                var json = await File.ReadAllTextAsync(versionPath);
-                var doc = CliJson.ParseElement(json);
-                localSha = doc.TryGetProperty("commit", out var c) ? c.GetString() : null;
-                localDate = doc.TryGetProperty("updatedAt", out var d) ? d.GetString() : null;
-                localBranch = doc.TryGetProperty("branch", out var b) ? b.GetString() : null;
-            }
-            catch { /* corrupt file */ }
-        }
-
-        if (localSha == null)
-        {
-            Console.WriteLine("No local skill version found.");
-            Console.WriteLine("Run 'maui devflow update-skill' to install the skill and track its version.");
-            return;
-        }
-
-        Console.WriteLine($"Installed: {localSha[..12]} (branch: {localBranch ?? "unknown"})");
-        if (localDate != null && DateTime.TryParse(localDate, out var dt))
-            Console.WriteLine($"Updated:   {dt:yyyy-MM-dd HH:mm:ss} UTC");
-
-        // Check remote
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Microsoft.Maui.DevFlow-CLI", "1.0"));
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-
-        try
-        {
-            var remoteSha = await GetRemoteSkillCommitShaAsync(http, branch);
-            if (remoteSha == null)
-            {
-                Console.WriteLine("Could not fetch remote version.");
-                return;
-            }
-
-            Console.WriteLine($"Remote:    {remoteSha[..12]} (branch: {branch})");
-
-            if (string.Equals(localSha, remoteSha, StringComparison.OrdinalIgnoreCase))
-                Console.WriteLine("\n✓ Skill is up to date.");
-            else
-                Console.WriteLine("\n⚠ Update available! Run 'maui devflow update-skill' to get the latest version.");
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Could not check remote: {ex.Message}");
-        }
-    }
-
-    private static async Task<List<string>> GetSkillFilesFromGitHubAsync(HttpClient http, string branch)
-    {
-        var files = new List<string>();
-        await ListGitHubDirectoryAsync(http, SkillBasePath, "", files, branch);
-        return files;
-    }
-
-    private static async Task ListGitHubDirectoryAsync(HttpClient http, string basePath, string relativePath, List<string> files, string branch)
-    {
-        var apiPath = string.IsNullOrEmpty(relativePath) ? basePath : $"{basePath}/{relativePath}";
-        var url = $"https://api.github.com/repos/{SkillRepo}/contents/{apiPath}?ref={branch}";
-        var json = await http.GetStringAsync(url);
-        var items = CliJson.ParseElement(json);
-
-        foreach (var item in items.EnumerateArray())
-        {
-            var name = item.GetProperty("name").GetString()!;
-            var type = item.GetProperty("type").GetString()!;
-            var itemRelative = string.IsNullOrEmpty(relativePath) ? name : $"{relativePath}/{name}";
-
-            if (type == "file")
-                files.Add(itemRelative);
-            else if (type == "dir")
-                await ListGitHubDirectoryAsync(http, basePath, itemRelative, files, branch);
-        }
-    }
 
     // ===== MAUI Agent Commands =====
 
@@ -4152,8 +3932,10 @@ public class DevFlowCommands
             Console.WriteLine(lines[i]);
     }
 
-    private static async Task ListAgentsCommandAsync(bool json)
+    private static async Task ListAgentsCommandAsync(bool json, CancellationToken cancellationToken)
     {
+        await WriteSkillFreshnessHintAsync(json, cancellationToken);
+
         var port = await Broker.BrokerClient.EnsureBrokerRunningAsync();
         if (port == null)
         {
@@ -4199,6 +3981,7 @@ public class DevFlowCommands
                 else
                 {
                     Console.WriteLine("No DevFlow-enabled projects found in current directory.");
+                    Console.WriteLine("Hint: Run 'maui devflow init' to install DevFlow onboarding skills for this workspace.");
                 }
             }
             return;
@@ -4224,8 +4007,10 @@ public class DevFlowCommands
         }
     }
 
-    private static async Task DiagnoseCommandAsync(bool json)
+    private static async Task DiagnoseCommandAsync(bool json, CancellationToken cancellationToken)
     {
+        await WriteSkillFreshnessHintAsync(json, cancellationToken);
+
         var diagnostics = new Dictionary<string, object>();
         
         // Get CLI version
@@ -4311,11 +4096,14 @@ public class DevFlowCommands
         else
         {
             Console.WriteLine("📦 DevFlow-enabled projects: (none found in current directory)");
+            Console.WriteLine("💡 Suggestion: Run 'maui devflow init' to install DevFlow onboarding skills, then ask your AI agent to use maui-devflow-onboard.");
         }
     }
 
-    private static async Task WaitForAgentCommandAsync(int timeoutSeconds, string? projectFilter, string? platformFilter, bool json)
+    private static async Task WaitForAgentCommandAsync(int timeoutSeconds, string? projectFilter, string? platformFilter, bool json, CancellationToken cancellationToken)
     {
+        await WriteSkillFreshnessHintAsync(json, cancellationToken);
+
         var brokerPort = await Broker.BrokerClient.EnsureBrokerRunningAsync();
         if (brokerPort == null)
         {
@@ -4345,7 +4133,7 @@ public class DevFlowCommands
                     break;
             }
 
-            await Task.Delay(pollInterval);
+            await Task.Delay(pollInterval, cancellationToken);
         }
 
         if (matched == null)
@@ -4376,6 +4164,13 @@ public class DevFlowCommands
             return agent;
         }
         return null;
+    }
+
+    private static async Task WriteSkillFreshnessHintAsync(bool json, CancellationToken cancellationToken)
+    {
+        var hint = await DevFlowSkillManager.GetFreshnessHintAsync(json, "auto", cancellationToken);
+        if (!string.IsNullOrWhiteSpace(hint))
+            Console.Error.WriteLine($"Hint: {hint}");
     }
 
     // ===== Batch command: interactive stdin/stdout with JSONL responses =====

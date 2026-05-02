@@ -1,0 +1,5 @@
+<Project>
+	<!-- Import the repo root Directory.Build.targets for platform file filtering,
+	     but skip the sample/Directory.Build.targets which injects Comet dependencies. -->
+	<Import Project="$(MSBuildThisFileDirectory)../../Directory.Build.targets" />
+</Project>

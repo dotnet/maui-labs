@@ -22,5 +22,7 @@
     <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Use product-specific README instead of repo-root one -->
+    <PackRepoRootReadme>false</PackRepoRootReadme>
   </PropertyGroup>
 </Project>

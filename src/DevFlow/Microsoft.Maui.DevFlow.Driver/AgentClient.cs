@@ -513,9 +513,9 @@ public class AgentClient : IDisposable
         {
             using var content = DriverJson.CreateJsonContent(body);
             var response = await _http.PostAsync($"{_baseUrl}{path}", content);
-            if (!response.IsSuccessStatusCode)
-                return null;
             var responseBody = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return null;
             return DriverJson.Deserialize<T>(responseBody);
         }
         catch
@@ -556,6 +556,27 @@ public class AgentClient : IDisposable
         {
             return false;
         }
+    }
+
+    // ── DevFlow Actions ──
+
+    private const string InvokeApi = $"{ApiV1}/invoke";
+
+    /// <summary>
+    /// List all registered DevFlow Actions (methods annotated with [DevFlowAction]).
+    /// </summary>
+    public async Task<JsonElement> ListActionsAsync()
+        => await GetJsonAsync($"{InvokeApi}/actions");
+
+    /// <summary>
+    /// Invoke a registered DevFlow Action by name.
+    /// </summary>
+    public async Task<InvokeResult?> InvokeActionAsync(string actionName, JsonArray? args = null)
+    {
+        var body = new JsonObject();
+        if (args != null)
+            body["args"] = args;
+        return await PostJsonAsync<InvokeResult>($"{InvokeApi}/actions/{Uri.EscapeDataString(actionName)}", body);
     }
 
     // ── Preferences ──
@@ -1167,4 +1188,21 @@ public class ProfilerCapabilities
     public bool UiThreadStallSupported { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("threadCountSupported")]
     public bool ThreadCountSupported { get; set; }
+}
+
+/// <summary>
+/// Result of a DevFlow Action invocation.
+/// </summary>
+public class InvokeResult
+{
+    [System.Text.Json.Serialization.JsonPropertyName("success")]
+    public bool Success { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("returnValue")]
+    public string? ReturnValue { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("returnType")]
+    public string? ReturnType { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("error")]
+    public string? Error { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("action")]
+    public string? Action { get; set; }
 }

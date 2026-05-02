@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Windows.WPF/Windows.WPF.csproj" />
+    <Project Path="src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Windows.WPF.Sample/Windows.WPF.Sample.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HandlerTests/HandlerTests.csproj" />
+    <Project Path="tests/UITests/UITests.csproj" />
+  </Folder>
+</Solution>

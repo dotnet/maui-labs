@@ -6,12 +6,15 @@ using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
 using System.Text.Json.Nodes;
 using Xamarin.MacDev;
+using Xamarin.MacDev.Models;
 
 namespace Microsoft.Maui.Cli.Providers.Apple;
 
 /// <summary>
 /// Apple platform provider backed by Xamarin.Apple.Tools.MaciOS.
 /// Only functional on macOS; returns empty results on other platforms.
+/// Delegates environment checks to <see cref="EnvironmentChecker"/> and
+/// environment install to <see cref="AppleInstaller"/>.
 /// </summary>
 public class AppleProvider : IAppleProvider
 {
@@ -19,6 +22,8 @@ public class AppleProvider : IAppleProvider
 	readonly SimulatorService? _simulatorService;
 	readonly RuntimeService? _runtimeService;
 	readonly CommandLineTools? _commandLineTools;
+	readonly EnvironmentChecker? _environmentChecker;
+	readonly AppleInstaller? _appleInstaller;
 
 	public AppleProvider()
 	{
@@ -30,6 +35,8 @@ public class AppleProvider : IAppleProvider
 		_simulatorService = new SimulatorService(logger);
 		_runtimeService = new RuntimeService(logger);
 		_commandLineTools = new CommandLineTools(logger);
+		_environmentChecker = new EnvironmentChecker(logger);
+		_appleInstaller = new AppleInstaller(logger);
 	}
 
 	public List<XcodeInstallation> GetXcodeInstallations()
@@ -131,6 +138,12 @@ public class AppleProvider : IAppleProvider
 		return _simulatorService?.Boot(udidOrName) ?? false;
 	}
 
+	public void OpenSimulatorApp()
+	{
+		using var process = System.Diagnostics.Process.Start("open", ["-a", "Simulator"]);
+		process?.WaitForExit(5000);
+	}
+
 	public bool ShutdownSimulator(string udidOrName)
 	{
 		return _simulatorService?.Shutdown(udidOrName) ?? false;
@@ -150,7 +163,7 @@ public class AppleProvider : IAppleProvider
 	{
 		var checks = new List<HealthCheck>();
 
-		if (!PlatformDetector.IsMacOS)
+		if (!PlatformDetector.IsMacOS || _environmentChecker is null)
 		{
 			checks.Add(new HealthCheck
 			{
@@ -162,116 +175,227 @@ public class AppleProvider : IAppleProvider
 			return checks;
 		}
 
-		// Xcode check
-		var xcode = _xcodeManager?.GetBest();
-		if (xcode is not null)
-		{
-			checks.Add(new HealthCheck
-			{
-				Category = "apple",
-				Name = "Xcode",
-				Status = CheckStatus.Ok,
-				Message = $"Xcode {xcode.Version} ({xcode.Build}) at {xcode.Path}",
-				Details = new JsonObject
-				{
-					["version"] = xcode.Version.ToString(),
-					["build"] = xcode.Build,
-					["path"] = xcode.Path,
-					["selected"] = xcode.IsSelected
-				}
-			});
-		}
-		else
-		{
-			checks.Add(new HealthCheck
-			{
-				Category = "apple",
-				Name = "Xcode",
-				Status = CheckStatus.Error,
-				Message = "Xcode not found. Install Xcode from the App Store.",
-				Fix = new FixInfo
-				{
-					IssueId = ErrorCodes.AppleXcodeNotFound,
-					Description = "Install Xcode from the Mac App Store",
-					AutoFixable = false,
-					ManualSteps = new[] { "Open the Mac App Store and install Xcode" }
-				}
-			});
-		}
-
-		// Command Line Tools check
-		var clt = _commandLineTools?.Check();
-		if (clt is not null && clt.IsInstalled)
-		{
-			checks.Add(new HealthCheck
-			{
-				Category = "apple",
-				Name = "Command Line Tools",
-				Status = CheckStatus.Ok,
-				Message = $"CLT {clt.Version ?? "installed"} at {clt.Path}"
-			});
-		}
-		else
-		{
-			checks.Add(new HealthCheck
-			{
-				Category = "apple",
-				Name = "Command Line Tools",
-				Status = CheckStatus.Warning,
-				Message = "Xcode Command Line Tools not found",
-				Fix = new FixInfo
-				{
-					IssueId = ErrorCodes.AppleCltNotFound,
-					Description = "Install Command Line Tools",
-					AutoFixable = true,
-					Command = "xcode-select --install"
-				}
-			});
-		}
-
-		// Simulator runtimes check
-		HealthCheck iosRuntimesCheck;
+		EnvironmentCheckResult result;
 		try
 		{
-			var runtimes = _runtimeService?.List(availableOnly: true);
-			if (runtimes is { Count: > 0 })
-			{
-				var iosRuntimes = runtimes.Where(r => string.Equals(r.Platform, "iOS", StringComparison.OrdinalIgnoreCase)).ToList();
-				iosRuntimesCheck = new HealthCheck
-				{
-					Category = "apple",
-					Name = "iOS Runtimes",
-					Status = iosRuntimes.Count > 0 ? CheckStatus.Ok : CheckStatus.Warning,
-					Message = iosRuntimes.Count > 0
-						? $"{iosRuntimes.Count} iOS runtime(s) available (latest: {iosRuntimes.OrderByDescending(r => Version.TryParse(r.Version, out var v) ? v : new Version(0, 0)).First().Name})"
-						: "No iOS runtimes found. Install one via Xcode."
-				};
-			}
-			else
-			{
-				iosRuntimesCheck = new HealthCheck
-				{
-					Category = "apple",
-					Name = "iOS Runtimes",
-					Status = CheckStatus.Warning,
-					Message = "No simulator runtimes found. Install simulator runtimes via Xcode."
-				};
-			}
+			result = _environmentChecker.Check();
 		}
 		catch (Exception ex)
 		{
-			iosRuntimesCheck = new HealthCheck
+			checks.Add(new HealthCheck
+			{
+				Category = "apple",
+				Name = "Environment",
+				Status = CheckStatus.Error,
+				Message = $"Environment check failed: {ex.Message}"
+			});
+			return checks;
+		}
+
+		checks.Add(MapXcodeCheck(result));
+		checks.Add(MapCommandLineToolsCheck(result));
+
+		// License check only meaningful when Xcode is present
+		if (result.Xcode is not null)
+			checks.Add(MapXcodeLicenseCheck());
+
+		checks.Add(MapRuntimesCheck(result));
+
+		if (result.Platforms.Count > 0)
+		{
+			checks.Add(new HealthCheck
+			{
+				Category = "apple",
+				Name = "SDK Platforms",
+				Status = CheckStatus.Ok,
+				Message = $"Available: {string.Join(", ", result.Platforms)}",
+				Details = new JsonObject
+				{
+					["platforms"] = new JsonArray(result.Platforms.Select(p => (JsonNode)JsonValue.Create(p)!).ToArray())
+				}
+			});
+		}
+
+		return checks;
+	}
+
+	static HealthCheck MapXcodeCheck(EnvironmentCheckResult result)
+	{
+		if (result.Xcode is not null)
+		{
+			return new HealthCheck
+			{
+				Category = "apple",
+				Name = "Xcode",
+				Status = CheckStatus.Ok,
+				Message = $"Xcode {result.Xcode.Version} ({result.Xcode.Build}) at {result.Xcode.Path}",
+				Details = new JsonObject
+				{
+					["version"] = result.Xcode.Version.ToString(),
+					["build"] = result.Xcode.Build,
+					["path"] = result.Xcode.Path,
+					["selected"] = result.Xcode.IsSelected
+				}
+			};
+		}
+
+		return new HealthCheck
+		{
+			Category = "apple",
+			Name = "Xcode",
+			Status = CheckStatus.Error,
+			Message = "Xcode not found. Install Xcode from the App Store or run 'maui apple install'.",
+			Fix = new FixInfo
+			{
+				IssueId = ErrorCodes.AppleXcodeNotFound,
+				Description = "Install Xcode from the Mac App Store",
+				AutoFixable = false,
+				ManualSteps = new[] { "Open the Mac App Store and install Xcode", "Or run: maui apple install" }
+			}
+		};
+	}
+
+	static HealthCheck MapCommandLineToolsCheck(EnvironmentCheckResult result)
+	{
+		if (result.CommandLineTools.IsInstalled)
+		{
+			return new HealthCheck
+			{
+				Category = "apple",
+				Name = "Command Line Tools",
+				Status = CheckStatus.Ok,
+				Message = $"CLT {result.CommandLineTools.Version ?? "installed"} at {result.CommandLineTools.Path}"
+			};
+		}
+
+		return new HealthCheck
+		{
+			Category = "apple",
+			Name = "Command Line Tools",
+			Status = CheckStatus.Error,
+			Message = "Xcode Command Line Tools not found. Run 'maui apple install' to install.",
+			Fix = new FixInfo
+			{
+				IssueId = ErrorCodes.AppleCltNotFound,
+				Description = "Install Command Line Tools",
+				AutoFixable = true,
+				Command = "xcode-select --install"
+			}
+		};
+	}
+
+	HealthCheck MapXcodeLicenseCheck()
+	{
+		try
+		{
+			if (_environmentChecker?.IsXcodeLicenseAccepted() == true)
+			{
+				return new HealthCheck
+				{
+					Category = "apple",
+					Name = "Xcode License",
+					Status = CheckStatus.Ok,
+					Message = "Xcode license accepted"
+				};
+			}
+
+			return new HealthCheck
+			{
+				Category = "apple",
+				Name = "Xcode License",
+				Status = CheckStatus.Error,
+				Message = "Xcode license not accepted. Run 'sudo xcodebuild -license accept'.",
+				Fix = new FixInfo
+				{
+					IssueId = ErrorCodes.AppleXcodeLicenseNotAccepted,
+					Description = "Accept the Xcode license agreement",
+					AutoFixable = false,
+					ManualSteps = new[] { "Run: sudo xcodebuild -license accept", "Or run: maui apple install" }
+				}
+			};
+		}
+		catch
+		{
+			return new HealthCheck
+			{
+				Category = "apple",
+				Name = "Xcode License",
+				Status = CheckStatus.Warning,
+				Message = "Unable to determine Xcode license status"
+			};
+		}
+	}
+
+	static HealthCheck MapRuntimesCheck(EnvironmentCheckResult result)
+	{
+		if (result.Runtimes.Count == 0)
+		{
+			return new HealthCheck
 			{
 				Category = "apple",
 				Name = "iOS Runtimes",
 				Status = CheckStatus.Warning,
-				Message = $"Unable to determine installed iOS simulator runtimes: {ex.Message}"
+				Message = "No simulator runtimes found. Run 'maui apple install --platform iOS' to install."
 			};
 		}
 
-		checks.Add(iosRuntimesCheck);
+		var iosRuntimes = result.Runtimes
+			.Where(r => string.Equals(r.Platform, "iOS", StringComparison.OrdinalIgnoreCase))
+			.ToList();
 
-		return checks;
+		if (iosRuntimes.Count == 0)
+		{
+			return new HealthCheck
+			{
+				Category = "apple",
+				Name = "iOS Runtimes",
+				Status = CheckStatus.Warning,
+				Message = "No iOS runtimes found. Run 'maui apple install --platform iOS' to install."
+			};
+		}
+
+		var latest = iosRuntimes
+			.OrderByDescending(r => Version.TryParse(r.Version, out var v) ? v : new Version(0, 0))
+			.First();
+
+		return new HealthCheck
+		{
+			Category = "apple",
+			Name = "iOS Runtimes",
+			Status = CheckStatus.Ok,
+			Message = $"{iosRuntimes.Count} iOS runtime(s) available (latest: {latest.Name})"
+		};
+	}
+
+	public Task<AppleInstallResult> InstallEnvironmentAsync(IEnumerable<string>? platforms = null, bool dryRun = false, CancellationToken cancellationToken = default)
+	{
+		if (!PlatformDetector.IsMacOS || _appleInstaller is null)
+		{
+			return Task.FromResult(new AppleInstallResult
+			{
+				Status = "skipped",
+				DryRun = dryRun
+			});
+		}
+
+		// AppleInstaller.Install() is synchronous and cannot be interrupted mid-operation.
+		// Task.Run enables thread pool cancellation between the before/after checks.
+		return Task.Run(() =>
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var result = _appleInstaller.Install(platforms, dryRun);
+			cancellationToken.ThrowIfCancellationRequested();
+
+			return new AppleInstallResult
+			{
+				Status = result.Status.ToString().ToLowerInvariant(),
+				XcodeVersion = result.Xcode is not null ? $"{result.Xcode.Version} ({result.Xcode.Build})" : null,
+				CommandLineToolsInstalled = result.CommandLineTools.IsInstalled,
+				Platforms = result.Platforms.ToList(),
+				Runtimes = result.Runtimes.Select(r => r.Name).ToList(),
+				DryRun = dryRun
+			};
+		}, cancellationToken);
 	}
 
 	public List<Device> GetDevices()

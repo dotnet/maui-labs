@@ -93,6 +93,8 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui apple simulator stop` | Shut down a simulator |
 | `maui apple simulator delete` | Delete a simulator |
 | **DevFlow** | |
+| `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
+| `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
@@ -106,6 +108,12 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow diagnose` | Check DevFlow agent health |
 | `maui devflow wait` | Wait for an agent to connect |
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
+| **Profiling** | |
+| `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
+| **Go** | |
+| `maui go create` | Create a new MAUI Go single-file project |
+| `maui go serve` | Start the dev server with hot reload |
+| `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
 
@@ -151,7 +159,7 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 | Platform | Status | Notes |
 |----------|--------|-------|
 | macOS | ✅ | Full support including Apple commands (Xcode, simulators, runtimes) |
-| Windows | ✅ | Android and Windows SDK commands |
+| Windows | ✅ | Android SDK, JDK, and emulator commands |
 | Linux | ✅ | Android commands |
 
 ## Development

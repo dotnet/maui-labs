@@ -12,6 +12,7 @@ on:
       - 'global.json'
       - 'NuGet.config'
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
       - 'src/DevFlow/**'
@@ -30,3 +31,4 @@ jobs:
       project-name: devflow
       run-tests: true
       pack: true
+      os: '["windows-latest"]'

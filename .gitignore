@@ -14,6 +14,7 @@
 *.userosscache
 *.sln.docstates
 *.env
+*.lscache
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -402,7 +403,6 @@ FodyWeavers.xsd
 
 # VS Code files for those working on multiple tools
 .vscode/*
-!.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
@@ -422,3 +422,14 @@ FodyWeavers.xsd
 *.msp
 .DS_Store
 .dotnet
+
+# Local tool/build artifacts (not committed)
+*.csproj.lscache
+*.binlog
+screenshot_*.png
+.comet_sample_bid
+sim_tap.py
+
+# Personal / per-machine agent state
+.claude/settings.local.json
+.claude/skills/**/.skill-version

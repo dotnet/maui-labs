@@ -6,6 +6,7 @@
     <RootNamespace>Microsoft.Maui.Platforms.MacOS.Essentials</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.MacOS.Essentials</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.MacOS.Essentials</PackageId>
+    <Version>$(PlatformMauiMacOSEssentialsVersion)</Version>
     <Description>macOS AppKit implementations of Microsoft.Maui.Essentials APIs (AppInfo, Battery, Geolocation, Preferences, SecureStorage, etc.). Companion to Microsoft.Maui.Platforms.MacOS.</Description>
     <PackageTags>maui;macos;appkit;essentials;dotnet;cross-platform</PackageTags>
     <IsPackable>true</IsPackable>
@@ -25,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../../README.md" Pack="true" PackagePath="" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
 </Project>

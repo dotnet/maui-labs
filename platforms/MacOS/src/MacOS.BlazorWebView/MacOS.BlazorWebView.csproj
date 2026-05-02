@@ -6,6 +6,7 @@
     <RootNamespace>Microsoft.Maui.Platforms.MacOS</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.MacOS.BlazorWebView</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.MacOS.BlazorWebView</PackageId>
+    <Version>$(PlatformMauiMacOSBlazorWebViewVersion)</Version>
     <Description>Blazor Hybrid support for Microsoft.Maui.Platforms.MacOS — host Blazor components in a native macOS AppKit window using WKWebView.</Description>
     <PackageTags>maui;macos;blazor;webview;appkit;webkit;hybrid</PackageTags>
     <IsPackable>true</IsPackable>
@@ -29,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../../README.md" Pack="true" PackagePath="" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
     <None Include="buildTransitive/**" Pack="true" PackagePath="build/" />
   </ItemGroup>

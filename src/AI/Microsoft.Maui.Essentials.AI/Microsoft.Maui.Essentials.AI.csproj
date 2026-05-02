@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-macos;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <AssemblyName>Microsoft.Maui.Essentials.AI</AssemblyName>
+    <RootNamespace>Microsoft.Maui.Essentials.AI</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsBindingProject>true</IsBindingProject>
+    <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
+         older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- NuGet package information -->
+    <IsShipping>true</IsShipping>
+    <IsPackable>true</IsPackable>
+    <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
+    <!-- Keep this package always preview — it is experimental and should not ship stable
+         even when the rest of the repo stabilizes. Bump EssentialsAIPreviewVersionIteration
+         in eng/Versions.props for new previews.
+         The label/iteration only activate during stable builds (DotNetFinalVersionKind=release).
+         During preview builds, the AI package uses the same label as the rest of the repo. -->
+    <SuppressFinalPackageVersion>true</SuppressFinalPackageVersion>
+    <PreReleaseVersionLabel Condition="'$(DotNetFinalVersionKind)' == 'release'">preview</PreReleaseVersionLabel>
+    <PreReleaseVersionIteration Condition="'$(DotNetFinalVersionKind)' == 'release'">$(EssentialsAIPreviewVersionIteration)</PreReleaseVersionIteration>
+    <PackageTags>$(DefaultPackageTags);essentials;ai</PackageTags>
+    <Description>.NET Multi-platform App UI (.NET MAUI) is a cross-platform framework for creating native mobile and desktop apps with C# and XAML. This package contains a collection of cross-platform APIs for working with device AI and local models.</Description>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
+  <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
+    <Compile Remove="Platform\MaciOS\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
+    <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">
+      <SchemeName>EssentialsAI</SchemeName>
+    </XcodeProject>
+    <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
+    <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
+  </ItemGroup>
+  <Import Project="..\AppleBindings.targets" />
+</Project>

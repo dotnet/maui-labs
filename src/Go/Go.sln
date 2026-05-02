@@ -1,0 +1,61 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Server", "Server", "{DAD03CFC-D5FA-AC94-41C7-9ABAB326F09E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CompanionApp", "CompanionApp", "{A7F93118-AD6D-7EFF-BF89-24B3160A7721}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{4F52FD11-658E-A102-6CD3-7D7C16FFA15B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Templates", "Templates", "{808186BE-9BD0-DD1D-D574-36EEAD1E7F8F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "spike", "spike", "{D6EA9C13-5DDC-B6DF-E3F6-EC65D4C25D12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Go.Server", "Server\Microsoft.Maui.Go.Server.csproj", "{14578C1A-11AA-3201-AC85-62F68CB3A6D7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Go.CompanionApp", "CompanionApp\Microsoft.Maui.Go.CompanionApp.csproj", "{514B0F24-90DB-E26A-64F2-63B394009CE3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Maui.Go.Shared", "Shared\Microsoft.Maui.Go.Shared.csproj", "{68335BBD-5D5B-969D-3700-DD3DB944B219}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "maui-go", "maui-go", "{194DD9F7-994B-67AB-1C7A-48C3044C9CD5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetadataUpdaterSpike", "spike\MetadataUpdaterSpike\MetadataUpdaterSpike.csproj", "{C22C6F1E-5948-4E51-16C9-DFF2FFB6D2A7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{14578C1A-11AA-3201-AC85-62F68CB3A6D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14578C1A-11AA-3201-AC85-62F68CB3A6D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14578C1A-11AA-3201-AC85-62F68CB3A6D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14578C1A-11AA-3201-AC85-62F68CB3A6D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{514B0F24-90DB-E26A-64F2-63B394009CE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{514B0F24-90DB-E26A-64F2-63B394009CE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{514B0F24-90DB-E26A-64F2-63B394009CE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{514B0F24-90DB-E26A-64F2-63B394009CE3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68335BBD-5D5B-969D-3700-DD3DB944B219}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68335BBD-5D5B-969D-3700-DD3DB944B219}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68335BBD-5D5B-969D-3700-DD3DB944B219}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68335BBD-5D5B-969D-3700-DD3DB944B219}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C22C6F1E-5948-4E51-16C9-DFF2FFB6D2A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C22C6F1E-5948-4E51-16C9-DFF2FFB6D2A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C22C6F1E-5948-4E51-16C9-DFF2FFB6D2A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C22C6F1E-5948-4E51-16C9-DFF2FFB6D2A7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{14578C1A-11AA-3201-AC85-62F68CB3A6D7} = {DAD03CFC-D5FA-AC94-41C7-9ABAB326F09E}
+		{514B0F24-90DB-E26A-64F2-63B394009CE3} = {A7F93118-AD6D-7EFF-BF89-24B3160A7721}
+		{68335BBD-5D5B-969D-3700-DD3DB944B219} = {4F52FD11-658E-A102-6CD3-7D7C16FFA15B}
+		{194DD9F7-994B-67AB-1C7A-48C3044C9CD5} = {808186BE-9BD0-DD1D-D574-36EEAD1E7F8F}
+		{C22C6F1E-5948-4E51-16C9-DFF2FFB6D2A7} = {D6EA9C13-5DDC-B6DF-E3F6-EC65D4C25D12}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C5F5FD4E-1BF9-47D5-88B4-1C96C571E991}
+	EndGlobalSection
+EndGlobal

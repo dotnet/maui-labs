@@ -1,0 +1,71 @@
+﻿using System;
+using System.IO;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+
+namespace Comet
+{
+	public abstract class ImageSource : IImageSource
+	{
+		public abstract bool IsEmpty { get; }
+
+		public static implicit operator ImageSource(string value)
+		{
+			var isUrl = Uri.IsWellFormedUriString(value, UriKind.RelativeOrAbsolute) && value.Contains("://");
+			if (isUrl)
+				return new UriImageSource { Uri = new(value) };
+			return new FileImageSource { File = value };
+		}
+	}
+
+	public class FileImageSource : ImageSource , IFileImageSource
+	{
+		public string File { get; set; }
+
+		public override bool IsEmpty => string.IsNullOrWhiteSpace(File);
+		public override bool Equals(object obj) => obj is FileImageSource fis && fis.File == File;
+		public override int GetHashCode() => File?.GetHashCode() ?? base.GetHashCode();
+
+	}
+
+	public class UriImageSource : ImageSource, IUriImageSource, IStreamImageSource
+	{
+		static HttpClient client = new HttpClient();
+		public override bool IsEmpty => Uri is null;
+
+		public Uri Uri { get; set; }
+
+		public static TimeSpan DefaultCacheValidity = TimeSpan.MaxValue;
+		private TimeSpan? cacheValidity;
+		public TimeSpan CacheValidity { get => cacheValidity ?? DefaultCacheValidity; set => cacheValidity = value; }
+
+		public bool CachingEnabled { get; set; } = true;
+
+		Task<Stream> IStreamImageSource.GetStreamAsync(CancellationToken cancellationToken) => client.GetStreamAsync(Uri);
+		public override bool Equals(object obj) => obj is UriImageSource uis && uis.Uri == Uri;
+		public override int GetHashCode() => Uri?.GetHashCode() ?? base.GetHashCode();
+	}
+
+	public class FontImageSource : ImageSource, IFontImageSource
+	{
+		public override bool IsEmpty => string.IsNullOrEmpty(Glyph);
+
+		public Color Color { get; set; } = Colors.Black;
+
+		public Font Font { get; set; } = Font.Default;
+
+		public string Glyph { get; set; }
+
+		public FontImageSource() { }
+
+		public FontImageSource(string fontFamily, string glyph, double size = 24, Color color = null)
+		{
+			Glyph = glyph;
+			Font = Font.OfSize(fontFamily, size);
+			Color = color ?? Colors.Black;
+		}
+	}
+}

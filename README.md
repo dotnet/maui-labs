@@ -16,6 +16,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **Apple platform management** (`maui apple`) — Xcode, simulator, and runtime management (macOS)
 - **Device listing** (`maui device list`) across all connected platforms
 - **DevFlow app automation** (`maui devflow`) — visual tree inspection, element interaction, screenshots, WebView/CDP automation, network monitoring, profiling, storage access, real-time log/sensor streaming, and MCP server for AI agents
+- **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
 
@@ -28,6 +29,24 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 dotnet tool install -g Microsoft.Maui.Cli --prerelease
 maui doctor
 ```
+
+### Comet
+
+Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, single-file apps via Comet Go.
+
+| Package | Description |
+|---------|-------------|
+| `Comet` | Core MVU framework |
+| `Comet.SourceGenerator` | Roslyn source generators for Comet |
+| `Comet.Layout.Yoga` | Yoga layout integration |
+
+### Go
+
+Single-file Comet apps server + companion app for rapid prototyping (alpha; sister to Comet).
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Go.Server` | Comet Go server for hosting single-file apps |
 
 ### DevFlow
 
@@ -51,6 +70,63 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 | `Microsoft.Maui.DevFlow.Blazor.Gtk` | WebKitGTK CDP bridge |
 | `Microsoft.Maui.DevFlow.Driver` | Platform driver library |
 | `Microsoft.Maui.DevFlow.Logging` | Buffered JSONL file logger |
+
+### macOS AppKit Backend
+
+A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit apps with NSWindow, NSButton, NSScrollView, native menu bar, sidebar flyout, and more. An alternative to Mac Catalyst.
+
+- **Native AppKit controls** — NSTextField, NSButton, NSSwitch, NSSlider, NSImageView, and more
+- **Navigation** — Shell, NavigationPage, TabbedPage, FlyoutPage with sidebar
+- **Blazor WebView** — via WKWebView
+- **MapKit** — native MapView integration
+- **Essentials** — AppInfo, Battery, Clipboard, Geolocation, Preferences, SecureStorage, Sensors
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Platforms.MacOS` | Core AppKit backend — handlers, hosting, MapKit |
+| `Microsoft.Maui.Platforms.MacOS.Essentials` | Essentials APIs for macOS |
+| `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid via WKWebView |
+
+### WPF Backend
+
+A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI apps on Windows desktops using native WPF controls with 22+ fully implemented controls, Shell navigation, Blazor WebView, and 14 Essentials APIs.
+
+- **22+ controls** — Label, Button, Entry, Editor, Image, CheckBox, Switch, Slider, Picker, DatePicker, and more
+- **Navigation** — Shell (flyout + tabs + URI routing), NavigationPage, TabbedPage, FlyoutPage, modal pages
+- **Blazor WebView** — via WebView2 and AspNetCore.Components.WebView.Wpf
+- **Essentials** — AppInfo, DeviceInfo, Connectivity, Preferences, SecureStorage, Clipboard, Screenshot, and more
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Platforms.Windows.WPF` | Core WPF backend — handlers, hosting, Blazor WebView |
+| `Microsoft.Maui.Platforms.Windows.WPF.Essentials` | Essentials APIs for WPF |
+
+### Essentials.AI
+
+On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings.
+
+- **`IChatClient`** backed by Apple Intelligence on iOS, macOS, and Mac Catalyst
+- **Streaming infrastructure** — progressive JSON deserialization of LLM responses
+- **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
+- **Tool calling** — function-calling support for on-device models
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
+
+### AppProjectReference
+
+An MSBuild package that lets test projects, packaging projects, or CI tools declare a MAUI app as a build-time dependency and consume its platform artifacts (`.apk`, `.ipa`, `.app`, `.msix`) as MSBuild items with rich metadata.
+
+```xml
+<MauiAppProjectReference Include="..\MyApp\MyApp.csproj" />
+```
+
+Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `ApplicationId`, `Installable`, `Launchable`, and other metadata — no manual path hunting required.
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Build.AppProjectReference` | Build-time app project reference with artifact discovery |
 
 ## Getting Started
 

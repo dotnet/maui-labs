@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+
+    <PackageId>Microsoft.Maui.DevFlow.Agent.WPF</PackageId>
+    <Description>WPF agent for Microsoft.Maui.DevFlow. Provides visual tree inspection, element interactions, and screenshots for MAUI WPF apps.</Description>
+    <PackageTags>maui;automation;testing;agent;wpf;windows</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+    <ProjectReference Include="..\..\..\platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+</Project>

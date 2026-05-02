@@ -12,6 +12,7 @@ on:
       - 'global.json'
       - 'NuGet.config'
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
       - 'platforms/Linux.Gtk4/**'
