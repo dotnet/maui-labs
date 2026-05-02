@@ -11,6 +11,24 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
+## Screenshots
+
+| Home | Controls | Layouts |
+|------|----------|---------|
+| ![Home](docs/screenshots/home.png) | ![Controls](docs/screenshots/controls.png) | ![Layouts](docs/screenshots/layouts.png) |
+
+| Shapes | Graphics | CollectionView |
+|--------|----------|----------------|
+| ![Shapes](docs/screenshots/shapes.png) | ![Graphics](docs/screenshots/graphics.png) | ![CollectionView](docs/screenshots/collectionview.png) |
+
+| FormattedText | Pickers | Transforms |
+|---------------|---------|------------|
+| ![FormattedText](docs/screenshots/formattedtext.png) | ![Pickers](docs/screenshots/pickers.png) | ![Transforms](docs/screenshots/transforms.png) |
+
+| FontAwesome | ControlTemplate |
+|-------------|-----------------|
+| ![FontAwesome](docs/screenshots/fontawesome.png) | ![ControlTemplate](docs/screenshots/controltemplate.png) |
+
 ## Quick Start — Setting Up a WPF MAUI App
 
 ### 1. Create the project
