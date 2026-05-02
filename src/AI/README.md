@@ -7,7 +7,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
-- **NL embeddings** — on-device semantic search via `NLEmbeddingGenerator`
+- **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
 ### Platform Support
 
@@ -26,7 +26,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 
 // Register in MauiProgram.cs
-builder.Services.AddChatClient(new AppleIntelligenceChatClient());
+builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 
 // Use via DI
 var client = serviceProvider.GetRequiredService<IChatClient>();
@@ -45,8 +45,9 @@ var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
 # macOS (builds Swift bindings + .NET library)
 dotnet build src/AI/EssentialsAI.slnf
 
-# Windows (requires pre-built native artifacts from macOS CI)
-dotnet build src/AI/EssentialsAI.slnf
+# Windows (CI only — the Azure DevOps pipeline downloads macOS-built
+# native artifacts automatically. Local Windows builds require CI=true
+# or TF_BUILD=true for the pre-built artifact path to activate.)
 ```
 
 The CI pipeline handles the macOS → Windows artifact flow automatically. See `.github/workflows/ci-essentialsai.yml` for details.
@@ -65,6 +66,6 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 
 - .NET 10
 - MAUI workload (`dotnet workload install maui`)
-- Apple Intelligence requires iOS 26+, macOS 26+, or Mac Catalyst 26+
+- Apple Intelligence features require iOS 26+, Mac Catalyst 26+, or macOS 26+
 
 > ⚠️ **This package is experimental** (always ships as `-preview`). APIs may change between releases.

@@ -73,11 +73,11 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 
 ### Essentials.AI
 
-On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) through native Swift bindings for chat completion, streaming JSON deserialization, tool calling, and NL embedding generation.
+On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings.
 
 - **`IChatClient`** backed by Apple Intelligence on iOS, macOS, and Mac Catalyst
 - **Streaming infrastructure** — progressive JSON deserialization of LLM responses
-- **NL embeddings** — on-device semantic search via `NLEmbeddingGenerator`
+- **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 - **Tool calling** — function-calling support for on-device models
 
 | Package | Description |
