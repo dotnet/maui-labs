@@ -1,0 +1,12 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "samples\\EssentialsAISample\\EssentialsAISample.csproj",
+      "src\\AI\\Microsoft.Maui.Essentials.AI\\Microsoft.Maui.Essentials.AI.csproj",
+      "tests\\AI\\Microsoft.Maui.Essentials.AI.Benchmarks\\Microsoft.Maui.Essentials.AI.Benchmarks.csproj",
+      "tests\\AI\\Microsoft.Maui.Essentials.AI.DeviceTests\\Microsoft.Maui.Essentials.AI.DeviceTests.csproj",
+      "tests\\AI\\Microsoft.Maui.Essentials.AI.UnitTests\\Microsoft.Maui.Essentials.AI.UnitTests.csproj"
+    ]
+  }
+}

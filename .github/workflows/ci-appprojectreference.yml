@@ -1,0 +1,34 @@
+name: CI - AppProjectReference
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/AppProjectReference/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'src/AppProjectReference/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/AppProjectReference/AppProjectReference.slnf
+      project-name: appprojectreference
+      run-tests: true
+      pack: true
+      install-workloads: false

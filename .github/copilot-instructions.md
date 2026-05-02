@@ -185,6 +185,11 @@ You can also pass a pre-built binary: `./eng/smoke-tests/apple-cli-smoke-test.sh
 
 When adding a new product to this repo you **must** set up two CI surfaces: a GitHub Actions workflow for PR validation and a build job + publish stage in the Azure DevOps official pipeline for signing and NuGet.org publishing.
 
+You **must** also provide documentation:
+
+- **Product README** — create two READMEs: (1) a contributor README at the product root (`src/{Product}/README.md`) for GitHub browsing with features, build instructions, and architecture; (2) a NuGet README next to the shipping csproj (`src/{Product}/Microsoft.Maui.{Product}/README.md`) with install, quick start, and usage examples. Pack the NuGet README via `<None Include="README.md" Pack="true" PackagePath="/" />` and set `<PackRepoRootReadme>false</PackRepoRootReadme>`. Both should include: product name, features, platform support matrix, quick start, packages, requirements, and experimental status warning. Keep descriptions aligned to avoid drift.
+- **Root README entry** — add a section under `## Products` in the repo-root `README.md` with a brief description, feature highlights, and package table.
+
 ### Step 1: GitHub Actions PR / Push Workflow
 
 Create `.github/workflows/ci-{product}.yml`. Use the template below — replace every `{Product}` (PascalCase) and `{product}` (lowercase) placeholder.

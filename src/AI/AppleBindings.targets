@@ -1,0 +1,77 @@
+<Project>
+
+  <!--
+    Shared logic for projects that use XcodeProject items to build Apple native frameworks.
+    Handles:
+    1. Normal XcodeProject building on macOS
+    2. Pre-built .resources.zip inclusion on Windows CI (where Xcode is unavailable)
+    3. IntelliSense support for locally generated binding files
+    
+    Adapted from dotnet/maui src/AppleBindings.targets.
+  -->
+
+  <PropertyGroup>
+    <!-- Use pre-built native artifacts when on CI and NOT on macOS (i.e., Windows CI). -->
+    <_UsePrebuiltAppleArtifacts Condition="'$(_UsePrebuiltAppleArtifacts)' == '' and (('$(CI)' == 'true' or '$(TF_BUILD)' == 'true') and '$([MSBuild]::IsOSPlatform(OSX))' != 'true')">true</_UsePrebuiltAppleArtifacts>
+    <_UsePrebuiltAppleArtifacts Condition="'$(_UsePrebuiltAppleArtifacts)' == ''">false</_UsePrebuiltAppleArtifacts>
+  </PropertyGroup>
+
+  <!--
+    Remove XcodeProject items on Windows CI — Xcode can only build on macOS.
+    The pre-built .resources.zip artifacts are used instead.
+  -->
+  <Target Name="_RemoveXcodeProjectsOnWindowsCI" BeforeTargets="BeforeBuild" Condition="'$(_UsePrebuiltAppleArtifacts)' == 'true'">
+    <ItemGroup>
+      <XcodeProject Remove="@(XcodeProject)" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Include pre-built .resources.zip files from artifacts/bin when building on Windows CI.
+    These are produced by the macOS CI job and downloaded into the artifacts directory.
+    Path follows the Arcade SDK output layout: artifacts/bin/{ProjectName}/{Configuration}/{TFM}/
+  -->
+  <ItemGroup Condition="'$(_UsePrebuiltAppleArtifacts)' == 'true' and ('$(TargetPlatformIdentifier)' == 'ios' Or '$(TargetPlatformIdentifier)' == 'maccatalyst' Or '$(TargetPlatformIdentifier)' == 'macos')">
+    <None
+      Include="$(RepoRoot)artifacts\bin\$(ProjectName)\$(Configuration)\$(TargetFramework)\$(AssemblyName).resources.zip"
+      Pack="True"
+      PackagePath="lib\$(TargetFramework)\$(AssemblyName).resources.zip" />
+  </ItemGroup>
+
+  <!-- IntelliSense: include generated binding files for local development. -->
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios'">
+    <_AppleBindingFilesForIntellisense
+      Include="$(RepoRoot)artifacts\obj\$(ProjectName)\$(Configuration)\$(TargetFramework)\iOS\**\*.cs"
+      Link="Platform\iOS\generated\%(RecursiveDir)%(Filename)%(Extension)"
+      Condition="Exists('$(RepoRoot)artifacts\obj\$(ProjectName)\$(Configuration)\$(TargetFramework)\iOS\ObjCRuntime\Messaging.g.cs')" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'maccatalyst'">
+    <_AppleBindingFilesForIntellisense
+      Include="$(RepoRoot)artifacts\obj\$(ProjectName)\$(Configuration)\$(TargetFramework)\MacCatalyst\**\*.cs"
+      Link="Platform\MacCatalyst\generated\%(RecursiveDir)%(Filename)%(Extension)"
+      Condition="Exists('$(RepoRoot)artifacts\obj\$(ProjectName)\$(Configuration)\$(TargetFramework)\MacCatalyst\ObjCRuntime\Messaging.g.cs')" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'macos'">
+    <_AppleBindingFilesForIntellisense
+      Include="$(RepoRoot)artifacts\obj\$(ProjectName)\$(Configuration)\$(TargetFramework)\macOS\**\*.cs"
+      Link="Platform\Mac\generated\%(RecursiveDir)%(Filename)%(Extension)"
+      Condition="Exists('$(RepoRoot)artifacts\obj\$(ProjectName)\$(Configuration)\$(TargetFramework)\macOS\ObjCRuntime\Messaging.g.cs')" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' Or '$(TargetPlatformIdentifier)' == 'maccatalyst' Or '$(TargetPlatformIdentifier)' == 'macos'">
+    <_AppleBindingFilesForIntellisense Include="@(ObjcBindingCoreSource)" />
+    <Compile Include="@(_AppleBindingFilesForIntellisense)" Condition="'$(CI)' != 'true' and '$(TF_BUILD)' != 'true'" />
+  </ItemGroup>
+
+  <Target Name="_RemoveAppleBindingGeneratedFiles"
+          BeforeTargets="_CollectGeneratedSources"
+          Condition="'$(TargetPlatformIdentifier)' == 'ios' Or '$(TargetPlatformIdentifier)' == 'maccatalyst' Or '$(TargetPlatformIdentifier)' == 'macos'">
+    <ItemGroup>
+      <Compile Remove="@(_AppleBindingFilesForIntellisense)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

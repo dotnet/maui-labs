@@ -1,0 +1,140 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Comet.Reactive;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+
+namespace Comet
+{
+	/// <summary>
+	/// A multi-page container with tab navigation.
+	/// Each child page appears as a tab, supporting both icon and text tabs.
+	/// </summary>
+	public class TabbedPage : View, IEnumerable, IContainerView
+	{
+		readonly List<View> _children = new List<View>();
+		PropertySubscription<int> _currentTabIndex;
+
+		public TabbedPage()
+		{
+		}
+
+		/// <summary>
+		/// Gets or sets the currently selected tab index (0-based).
+		/// Supports two-way binding with State.
+		/// </summary>
+		public PropertySubscription<int> CurrentTabIndex
+		{
+			get => _currentTabIndex;
+			set => this.SetPropertySubscription(ref _currentTabIndex, value);
+		}
+
+		/// <summary>
+		/// Gets the currently selected page view.
+		/// </summary>
+		public View CurrentPage
+		{
+			get
+			{
+				var index = CurrentTabIndex?.CurrentValue ?? 0;
+				return (index >= 0 && index < _children.Count) ? _children[index] : null;
+			}
+		}
+
+		/// <summary>
+		/// Gets the collection of child pages.
+		/// </summary>
+		public IReadOnlyList<View> GetChildren() => _children.AsReadOnly();
+
+		/// <summary>
+		/// Adds a child page to the tabbed page.
+		/// The page's Title property is used as the tab label.
+		/// </summary>
+		public void Add(View view)
+		{
+			if (view is null)
+				return;
+
+			view.Parent = this;
+			view.Navigation = Parent?.Navigation;
+			_children.Add(view);
+			TypeHashCode = GetContentTypeHashCode();
+		}
+
+		public override int GetContentTypeHashCode()
+		{
+			var hash = base.GetContentTypeHashCode();
+			foreach (var child in _children)
+				hash = (hash * 31) + (child?.GetContentTypeHashCode() ?? 0);
+			return hash;
+		}
+
+		protected override void OnParentChange(View parent)
+		{
+			base.OnParentChange(parent);
+			foreach (var child in _children)
+			{
+				if (child is not null)
+					child.Parent = this;
+			}
+		}
+
+		internal override void ContextPropertyChanged(string property, object value, bool cascades)
+		{
+			base.ContextPropertyChanged(property, value, cascades);
+			foreach (var child in _children)
+				child?.ContextPropertyChanged(property, value, cascades);
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing)
+			{
+				foreach (var child in _children)
+					child?.Dispose();
+				_children.Clear();
+			}
+			base.Dispose(disposing);
+		}
+
+		internal override void Reload(bool isHotReload)
+		{
+			foreach (var child in _children)
+				child?.Reload(isHotReload);
+			base.Reload(isHotReload);
+		}
+
+		public override void ViewDidAppear()
+		{
+			foreach (var child in _children)
+				child?.ViewDidAppear();
+			base.ViewDidAppear();
+		}
+
+		public override void ViewDidDisappear()
+		{
+			foreach (var child in _children)
+				child?.ViewDidDisappear();
+			base.ViewDidDisappear();
+		}
+
+		public override void PauseAnimations()
+		{
+			foreach (var child in _children)
+				child?.PauseAnimations();
+			base.PauseAnimations();
+		}
+
+		public override void ResumeAnimations()
+		{
+			foreach (var child in _children)
+				child?.ResumeAnimations();
+			base.ResumeAnimations();
+		}
+
+		#region IEnumerable
+		IEnumerator IEnumerable.GetEnumerator() => _children.GetEnumerator();
+		#endregion
+	}
+}

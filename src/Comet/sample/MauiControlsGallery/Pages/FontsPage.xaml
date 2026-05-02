@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.FontsPage"
+             Title="Fonts">
+    <ScrollView>
+        <VerticalStackLayout Spacing="15" Padding="24">
+
+            <!-- System & Embedded Fonts -->
+            <Label Text="System Font (Default)" FontSize="16" />
+            <Label Text="OpenSans Regular (Embedded Font)" FontFamily="OpenSansRegular" FontSize="16" />
+            <Label Text="System Font Bold" FontSize="16" FontAttributes="Bold" />
+            <Label Text="System Font Italic" FontSize="16" FontAttributes="Italic" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Various Sizes -->
+            <Label Text="Font Sizes" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label Text="OpenSans Size 10" FontFamily="OpenSansRegular" FontSize="10" />
+            <Label Text="OpenSans Size 14" FontFamily="OpenSansRegular" FontSize="14" />
+            <Label Text="OpenSans Size 18" FontFamily="OpenSansRegular" FontSize="18" />
+            <Label Text="OpenSans Size 24" FontFamily="OpenSansRegular" FontSize="24" />
+            <Label Text="OpenSans Size 32" FontFamily="OpenSansRegular" FontSize="32" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Platform Fonts -->
+            <Label Text="Platform Fonts" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label Text="Menlo (monospace system font)" FontFamily="Menlo" FontSize="14" />
+            <Label Text="Georgia (serif system font)" FontFamily="Georgia" FontSize="14" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Controls with Fonts -->
+            <Label Text="Controls with Fonts" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Button Text="Button with OpenSans" FontFamily="OpenSansRegular" FontSize="14" />
+            <Entry Placeholder="Entry with OpenSans" FontFamily="OpenSansRegular" FontSize="14" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Unicode Glyphs -->
+            <Label Text="Unicode Glyphs" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <HorizontalStackLayout Spacing="12">
+                <Label Text="★" FontSize="32" TextColor="Gold" />
+                <Label Text="♥" FontSize="32" TextColor="Red" />
+                <Label Text="⚡" FontSize="32" TextColor="Orange" />
+                <Label Text="✓" FontSize="32" TextColor="Green" />
+                <Label Text="⚙" FontSize="32" TextColor="Gray" />
+                <Label Text="✈" FontSize="32" TextColor="DodgerBlue" />
+                <Label Text="⌘" FontSize="32" TextColor="Purple" />
+            </HorizontalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.GraphicsPage"
+             Title="Graphics">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <!-- Basic Shapes -->
+            <Label Text="Basic Shapes (GraphicsView)" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <GraphicsView x:Name="BasicShapesView" HeightRequest="140" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Color Palette -->
+            <Label Text="Color Palette" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <GraphicsView x:Name="ColorPaletteView" HeightRequest="100" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Chart Demo -->
+            <Label Text="Chart Demo" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <GraphicsView x:Name="ChartView" HeightRequest="200" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

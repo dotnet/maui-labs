@@ -33,6 +33,21 @@ on:
         type: string
         default: ''
         description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
+      xcode-version:
+        required: false
+        type: string
+        default: ''
+        description: 'Xcode version to select on macOS (e.g. "26.0.1"). Empty uses runner default.'
+      pre-build-artifact:
+        required: false
+        type: string
+        default: ''
+        description: 'Artifact name to download into artifacts/bin/ before building. Used to inject pre-built native artifacts (e.g. Apple .resources.zip) from a prior job.'
+      android-project:
+        required: false
+        type: string
+        default: 'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
+        description: 'Project path for InstallAndroidDependencies target. Must target net10.0-android.'
 
 env:
   CI_PACKAGE_VERSION_SUFFIX: ci.${{ github.run_number }}.${{ github.run_attempt }}
@@ -45,6 +60,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download pre-build artifact
+        if: inputs.pre-build-artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.pre-build-artifact }}
+          path: artifacts/bin
+
+      - name: Select Xcode
+        if: inputs.xcode-version != '' && runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -61,12 +87,12 @@ jobs:
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && matrix.os == 'windows-latest'
-        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
         shell: cmd
 
       - name: Install Android SDK dependencies (macOS)
         if: inputs.install-workloads && matrix.os == 'macos-latest'
-        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj
+        run: dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
 
       - name: Build, Test and Pack (Windows)
         if: matrix.os == 'windows-latest'
@@ -192,3 +218,11 @@ jobs:
           name: packages-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/packages/**/*.nupkg
           if-no-files-found: error
+
+      - name: Upload native Apple artifacts
+        if: inputs.pack && runner.os == 'macOS'
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-apple-${{ inputs.project-name }}
+          path: artifacts/bin/**/Release/**/*.resources.zip
+          if-no-files-found: ignore
