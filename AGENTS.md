@@ -184,10 +184,15 @@ Each product requires source setup **and** CI/CD configuration across two system
 3. Add package versions to `Directory.Packages.props`
 4. Add signing entries in `eng/Signing.props` for any new third-party DLLs
 
+### Documentation
+
+5. Create a `README.md` in the product root (e.g. `src/{NewProduct}/README.md`) — this is packed into the NuGet package via `<None Include="README.md" Pack="true" PackagePath="/" />`. Set `<PackRepoRootReadme>false</PackRepoRootReadme>` so the repo-root README is not duplicated in the package.
+6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description and package table.
+
 ### CI/CD Setup
 
-5. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
-6. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org.
+7. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
+8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org.
 
 > **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 
