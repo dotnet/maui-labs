@@ -10,7 +10,10 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 | Product | Package / Tool | Description |
 |---------|---------------|-------------|
+| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`) | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, and the `maui devflow` automation surface. |
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
+| **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
+| **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
 
 ### Technology Stack
 
@@ -19,7 +22,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 - **Microsoft.DotNet.Arcade.Sdk** for build infrastructure
 - **Central Package Management** — all versions in `Directory.Packages.props`
 - **xUnit** v2.9.3 for testing, **coverlet** for coverage
-- **System.CommandLine** 2.0.0-beta4 for CLI tooling
+- **System.CommandLine** 2.0.5 (stable) for CLI tooling
 
 ## Building
 
@@ -86,16 +89,26 @@ maui-labs/
 │   │   │       └── Mcp/Tools/            # MCP tool implementations
 │   │   ├── Microsoft.Maui.Cli.UnitTests/ # CLI unit tests
 │   │   └── Cli.slnf                      # Solution filter
-│   └── DevFlow/                          # DevFlow agent product
-│       ├── Microsoft.Maui.DevFlow.Agent.Core/   # Platform-agnostic agent (HTTP server, visual tree)
-│       ├── Microsoft.Maui.DevFlow.Agent/         # Platform-specific overrides (iOS/Android/macOS/Windows)
-│       ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
-│       ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
-│       ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
-│       ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
-│       ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
-│       ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
-│       └── DevFlow.slnf                          # Solution filter
+│   ├── DevFlow/                          # DevFlow agent product
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Core/   # Platform-agnostic agent (HTTP server, visual tree)
+│   │   ├── Microsoft.Maui.DevFlow.Agent/         # Platform-specific overrides (iOS/Android/macOS/Windows)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
+│   │   ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
+│   │   ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
+│   │   ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
+│   │   └── DevFlow.slnf                          # Solution filter
+│   ├── Comet/                            # Comet MVU framework
+│   │   ├── src/Comet/                    # Core MVU framework
+│   │   ├── src/Comet.SourceGenerator/    # Roslyn source generators
+│   │   ├── src/Comet.Layout.Yoga/        # Yoga layout integration
+│   │   ├── tests/Comet.Tests/            # xUnit tests
+│   │   └── sample/                       # Sample Comet apps
+│   └── Go/                               # Comet Go (single-file apps)
+│       ├── Server/Microsoft.Maui.Go.Server/  # Comet Go server
+│       ├── CompanionApp/                 # Comet Go companion MAUI app
+│       └── Shared/                       # Shared Comet Go code
 ├── samples/                              # Sample MAUI apps (not shipped)
 ├── playground/                           # Manual test/scratch apps
 ├── eng/                                  # Shared build infrastructure
@@ -171,10 +184,19 @@ Each product requires source setup **and** CI/CD configuration across two system
 3. Add package versions to `Directory.Packages.props`
 4. Add signing entries in `eng/Signing.props` for any new third-party DLLs
 
+### Documentation
+
+5. Create **two READMEs**:
+   - A **contributor README** at the product root (e.g. `src/{NewProduct}/README.md`) for GitHub browsing — describes features, build instructions, architecture, and links to the NuGet README.
+   - A **NuGet README** next to the shipping csproj (e.g. `src/{NewProduct}/Microsoft.Maui.{NewProduct}/README.md`) — consumer-facing with install, quick start, and usage examples. Pack it via `<None Include="README.md" Pack="true" PackagePath="/" />` in the csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` to avoid duplicating the repo-root README.
+   
+   Both should include: product name, feature list, platform support matrix, quick start code, package table, requirements, and experimental status warning. Keep feature descriptions aligned to avoid drift.
+6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description, feature highlights, and package table.
+
 ### CI/CD Setup
 
-5. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
-6. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org.
+7. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
+8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org.
 
 > **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 

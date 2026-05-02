@@ -1,0 +1,44 @@
+<Project>
+
+  <!--
+    Comet builds independently within maui-labs. It uses its own global.json
+    (targeting .NET 11 preview) and does not yet integrate with Arcade SDK.
+    Full Arcade integration (signing, versioning, CI) is a future step.
+  -->
+
+  <!-- Pull MAUI version from repo-level eng/Versions.props so Comet stays
+       in sync with the rest of the repo. Used by csprojs that reference
+       Microsoft.Maui.* PackageReferences with Version="$(MauiVersion)". -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\eng\Versions.props" />
+
+  <PropertyGroup>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">$(MicrosoftMauiControlsVersion)</MauiVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Common settings (mirrored from repo root, without Arcade SDK import) -->
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Copyright>.NET Foundation and Contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
+
+  <!-- Common SupportedOSPlatformVersion -->
+  <PropertyGroup>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <!-- macOS AppKit support -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
+  </PropertyGroup>
+
+</Project>

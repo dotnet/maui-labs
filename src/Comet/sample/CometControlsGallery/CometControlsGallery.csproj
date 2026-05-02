@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net11.0-android;net11.0-ios;net11.0-maccatalyst</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>CometControlsGallery</RootNamespace>
+		<UseMaui Condition="!$(TargetFramework.Contains('-macos'))">true</UseMaui>
+		<MauiVersion Condition="$(TargetFramework.Contains('-macos')) AND '$(MauiVersion)' == ''">10.0.31</MauiVersion>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<ApplicationTitle>Comet Controls Gallery</ApplicationTitle>
+		<ApplicationId>com.companyname.cometcontrolsgallery</ApplicationId>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">14.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#000000" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#000000" BaseSize="432,145" />
+		<MauiImage Include="Resources\Images\*" />
+		<MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
+		<MauiFont Include="Resources\Fonts\*" />
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="5.0.0" />
+		<PackageReference Include="Redth.MauiDevFlow.Agent" Version="*" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Comet\Comet.csproj" />
+	</ItemGroup>
+
+	<!-- Override NuGet package with local project reference for mauidevflow -->
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<PackageReference Remove="Redth.MauiDevFlow.Agent" />
+		<ProjectReference Include="..\..\..\mauidevflow\src\MauiDevFlow.Agent\MauiDevFlow.Agent.csproj" />
+	</ItemGroup>
+
+	<!-- Use shared Debug entitlements that include com.apple.security.network.server -->
+	<!-- This is set by sample/Directory.Build.targets for all samples in Debug mode -->
+
+	<PropertyGroup Condition="$(TargetFramework.Contains('-maccatalyst')) and '$(Configuration)' == 'Release'">
+		<CodesignEntitlements>Platforms/MacCatalyst/Entitlements.Release.plist</CodesignEntitlements>
+		<UseHardenedRuntime>true</UseHardenedRuntime>
+	</PropertyGroup>
+
+	<Import Project="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets"
+	        Condition="$(TargetFramework.Contains('-macos')) and Exists('..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets')" />
+
+	<!-- net11.0-macos is not a recognized MAUI single-project platform.
+	     _MauiRemovePlatformCompileItems strips all Platforms/ files for
+	     unrecognized platforms. Re-add macOS entry points after that target. -->
+	<Target Name="_ReAddMacOSPlatformFiles"
+	        AfterTargets="_MauiRemovePlatformCompileItems"
+	        Condition="$(TargetFramework.Contains('-macos'))">
+		<ItemGroup>
+			<Compile Include="Platforms\MacOS\**\*$(DefaultLanguageSourceExtension)" />
+		</ItemGroup>
+	</Target>
+
+</Project>

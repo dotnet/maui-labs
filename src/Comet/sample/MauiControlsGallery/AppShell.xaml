@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       xmlns:pages="clr-namespace:MauiControlsGallery.Pages"
+       x:Class="MauiControlsGallery.AppShell"
+       Title="MAUI Controls Gallery"
+       FlyoutBehavior="Flyout">
+
+    <!-- General -->
+    <FlyoutItem Title="General" FlyoutDisplayOptions="AsMultipleItems">
+        <ShellContent Title="Home" ContentTemplate="{DataTemplate pages:HomePage}" Route="home" />
+        <ShellContent Title="Controls" ContentTemplate="{DataTemplate pages:ControlsPage}" Route="controls" />
+        <ShellContent Title="RadioButton" ContentTemplate="{DataTemplate pages:RadioButtonPage}" Route="radiobutton" />
+        <ShellContent Title="Pickers &amp; Search" ContentTemplate="{DataTemplate pages:PickersPage}" Route="pickers" />
+        <ShellContent Title="Fonts" ContentTemplate="{DataTemplate pages:FontsPage}" Route="fonts" />
+        <ShellContent Title="Formatted Text" ContentTemplate="{DataTemplate pages:FormattedTextPage}" Route="formattedtext" />
+        <ShellContent Title="Layouts" ContentTemplate="{DataTemplate pages:LayoutsPage}" Route="layouts" />
+    </FlyoutItem>
+
+    <!-- Lists & Collections -->
+    <FlyoutItem Title="Lists &amp; Collections" FlyoutDisplayOptions="AsMultipleItems">
+        <ShellContent Title="CollectionView" ContentTemplate="{DataTemplate pages:CollectionViewPage}" Route="collectionview" />
+        <ShellContent Title="ListView" ContentTemplate="{DataTemplate pages:ListViewPage}" Route="listview" />
+    </FlyoutItem>
+
+    <!-- Drawing & Visual -->
+    <FlyoutItem Title="Drawing &amp; Visual" FlyoutDisplayOptions="AsMultipleItems">
+        <ShellContent Title="Shapes" ContentTemplate="{DataTemplate pages:ShapesPage}" Route="shapes" />
+        <ShellContent Title="Graphics" ContentTemplate="{DataTemplate pages:GraphicsPage}" Route="graphics" />
+        <ShellContent Title="Transforms" ContentTemplate="{DataTemplate pages:TransformsPage}" Route="transforms" />
+    </FlyoutItem>
+
+</Shell>

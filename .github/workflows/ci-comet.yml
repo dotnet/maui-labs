@@ -1,0 +1,84 @@
+name: CI - Comet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Comet/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Comet/**'
+  release:
+    types: [published]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src/Comet
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET 11 Preview
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      - name: Build Comet
+        run: dotnet build src/Comet/Comet.csproj -c Release
+
+      - name: Build Source Generator
+        run: dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
+
+      - name: Run tests
+        run: dotnet test tests/Comet.Tests/Comet.Tests.csproj -c Release --logger "trx;LogFileName=results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-comet-${{ matrix.os }}
+          path: '**/results.trx'
+
+  package:
+    needs: build
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src/Comet
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET 11 Preview
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      - name: Pack Comet
+        run: dotnet pack src/Comet/Comet.csproj -c Release -o ../../artifacts/packages
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-comet
+          path: artifacts/packages/*.nupkg
+
+      - name: Attach packages to release
+        if: github.event_name == 'release'
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} ../../artifacts/packages/*.nupkg --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

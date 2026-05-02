@@ -22,6 +22,7 @@ public class FakeAppleProvider : IAppleProvider
 	public List<SimulatorInfo> Simulators { get; set; } = new();
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
+	public AppleInstallResult InstallResult { get; set; } = new() { Status = "ok" };
 
 	public bool SelectXcodeResult { get; set; } = true;
 	public bool BootSimulatorResult { get; set; } = true;
@@ -36,6 +37,7 @@ public class FakeAppleProvider : IAppleProvider
 	public List<string> ShutdownSimulators { get; } = new();
 	public List<string> DeletedSimulators { get; } = new();
 	public List<(string Name, string DeviceType, string? Runtime)> CreatedSimulators { get; } = new();
+	public List<(IEnumerable<string>? Platforms, bool DryRun)> InstallCalls { get; } = new();
 
 	// --- IAppleProvider implementation ---
 
@@ -72,6 +74,8 @@ public class FakeAppleProvider : IAppleProvider
 		return BootSimulatorResult;
 	}
 
+	public void OpenSimulatorApp() { }
+
 	public bool ShutdownSimulator(string udidOrName)
 	{
 		ShutdownSimulators.Add(udidOrName);
@@ -91,6 +95,12 @@ public class FakeAppleProvider : IAppleProvider
 	}
 
 	public List<HealthCheck> CheckHealth() => HealthChecks;
+
+	public Task<AppleInstallResult> InstallEnvironmentAsync(IEnumerable<string>? platforms = null, bool dryRun = false, CancellationToken cancellationToken = default)
+	{
+		InstallCalls.Add((platforms, dryRun));
+		return Task.FromResult(InstallResult);
+	}
 
 	public List<Device> GetDevices() => Devices;
 }

@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <SingleProject>true</SingleProject>
+    <UseMaui>true</UseMaui>
+    <RootNamespace>Microsoft.Maui.Essentials.AI.DeviceTests</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Essentials.AI.DeviceTests</AssemblyName>
+    <!-- Disable multi-RID builds to workaround a parallel build issue -->
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
+    <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);MAUIAI0001;CA1416</NoWarn>
+    <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ApplicationTitle>AI Tests</ApplicationTitle>
+    <ApplicationId>com.microsoft.maui.ai.devicetests</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.Maui.Controls.Compatibility" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.utility" />
+    <!-- OSS device test runner -->
+    <PackageReference Include="DeviceRunners.UITesting.Maui" />
+    <PackageReference Include="DeviceRunners.UITesting.Xunit" />
+    <PackageReference Include="DeviceRunners.VisualRunners.Xunit" />
+    <PackageReference Include="DeviceRunners.VisualRunners.Maui" />
+  </ItemGroup>
+
+  <!-- XHarness support for CI/headless runs -->
+  <ItemGroup Condition="'$(TestingMode)' == 'XHarness'">
+    <PackageReference Include="DeviceRunners.XHarness.Xunit" />
+    <PackageReference Include="DeviceRunners.XHarness.Maui" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="Resources\appicon.svg" ForegroundFile="Resources\appiconfg.svg" Color="#512BD4" />
+    <MauiSplashScreen Include="Resources\appiconfg.svg" Color="#512BD4" BaseSize="128,128" />
+    <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+  </ItemGroup>
+
+  <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">
+    <PropertyGroup>
+      <UserSecretsFilePath Condition=" '$(OS)' == 'Windows_NT' ">
+        $([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))\AppData\Roaming\Microsoft\UserSecrets\$(UserSecretsId)\secrets.json
+      </UserSecretsFilePath>
+      <UserSecretsFilePath Condition=" '$(OS)' == 'Unix' ">
+        $([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/.microsoft/usersecrets/$(UserSecretsId)/secrets.json
+      </UserSecretsFilePath>
+    </PropertyGroup>
+    <ItemGroup>
+      <EmbeddedResource Include="$(UserSecretsFilePath)" Condition="Exists($(UserSecretsFilePath))" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="RemoveVisualStudioTestRunner" BeforeTargets="_ComputeAppxPackagePayload">
+    <ItemGroup>
+      <_VisualStudioTestRunnerFiles Include="@(PackagingOutputs)" Condition="$([System.String]::Copy('%(PackagingOutputs.FullPath)').Contains('xunit.runner.visualstudio'))" />
+      <PackagingOutputs Remove="@(_VisualStudioTestRunnerFiles)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

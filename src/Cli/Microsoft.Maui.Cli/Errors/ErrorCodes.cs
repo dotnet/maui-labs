@@ -42,6 +42,8 @@ public static class ErrorCodes
 	public const string AppleCltNotFound = "E2202";
 	public const string AppleSimctlFailed = "E2203";
 	public const string AppleSimulatorNotFound = "E2204";
+	public const string AppleXcodeLicenseNotAccepted = "E2205";
+	public const string AppleSetupFailed = "E2206";
 
 	// Platform/SDK errors - Windows (E23xx)
 	public const string WindowsSdkNotFound = "E2301";

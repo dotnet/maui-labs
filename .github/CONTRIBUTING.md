@@ -6,16 +6,16 @@ Thank you for your interest in contributing! This repository hosts experimental 
 
 ```
 maui-labs/
-├── src/                    # Source code, organized by product
-│   └── {Product}/          # Each product has its own folder
-│       ├── Version.props   # Per-product version
-│       ├── {Product}.slnf  # Solution filter for this product
-│       └── ...projects...
+├── src/                # Source code, organized by product
+│   ├── Cli/            # MAUI CLI and device management
+│   ├── DevFlow/        # DevFlow agent and testing toolkit
+│   ├── Comet/          # Comet MVU framework
+│   └── Go/             # Single-file Comet apps (Comet Go)
 ├── samples/                # Sample apps (not shipped)
 ├── playground/             # Manual verification/scratch apps
 ├── docs/                   # Documentation per product
 ├── eng/                    # Shared build infrastructure
-└── MauiLabs.sln            # Full solution
+└── MauiLabs.slnx           # Full solution
 ```
 
 ## Getting Started
@@ -29,7 +29,7 @@ maui-labs/
 
 ```bash
 # Build everything
-dotnet build MauiLabs.sln
+dotnet build MauiLabs.slnx
 
 # Build just one product (e.g., DevFlow)
 dotnet build src/DevFlow/DevFlow.slnf
@@ -42,7 +42,7 @@ dotnet build src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/
 
 ```bash
 # All tests
-dotnet test MauiLabs.sln
+dotnet test MauiLabs.slnx
 
 # Just DevFlow tests
 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
@@ -54,7 +54,7 @@ For focused development on a single product, open the solution filter:
 
 - **DevFlow**: `src/DevFlow/DevFlow.slnf`
 
-For the full repo, open `MauiLabs.sln`.
+For the full repo, open `MauiLabs.slnx`.
 
 ## Adding a New Product
 

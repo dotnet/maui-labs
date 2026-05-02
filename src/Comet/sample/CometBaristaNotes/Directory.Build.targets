@@ -1,0 +1,8 @@
+<Project>
+	<!-- Remove the NuGet DevFlow package; this project uses the local patched build instead -->
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<PackageReference Remove="Redth.MauiDevFlow.Agent" />
+		<PackageReference Remove="Microsoft.Extensions.Logging.Debug" />
+		<Compile Remove="$(MSBuildThisFileDirectory)..\Shared\RuntimeDebug\SampleRuntimeDebugExtensions.cs" />
+	</ItemGroup>
+</Project>

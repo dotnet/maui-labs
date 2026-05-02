@@ -1,0 +1,7 @@
+<Project>
+	<!-- Import parent Directory.Build.props (which sets MauiVersion from
+	     eng/Versions.props's MicrosoftMauiControlsVersion). Without this,
+	     MSBuild's "first Directory.Build.props wins" rule would skip the
+	     parent and samples would fall behind on MAUI version. -->
+	<Import Project="..\Directory.Build.props" />
+</Project>

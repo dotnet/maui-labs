@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Comet.Layout.Yoga</RootNamespace>
+    <AssemblyName>Comet.Layout.Yoga</AssemblyName>
+    <Description>Pure C# port of Meta's Yoga flexbox layout engine, adapted for Comet from microsoft/microsoft-ui-reactor.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Comet" />
+    <InternalsVisibleTo Include="Comet.Layout.Yoga.Tests" />
+    <InternalsVisibleTo Include="Comet.Tests" />
+  </ItemGroup>
+
+</Project>

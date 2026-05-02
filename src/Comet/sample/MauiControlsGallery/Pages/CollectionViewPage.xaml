@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.CollectionViewPage"
+             Title="CollectionView">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <!-- Vertical List -->
+            <Label Text="Vertical List" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label x:Name="SelectionLabel" Text="Tap an item" FontSize="12" TextColor="Gray" />
+            <CollectionView x:Name="VerticalList"
+                            SelectionMode="Single"
+                            SelectionChanged="OnVerticalSelectionChanged"
+                            HeightRequest="350">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Stroke="#4DC0C0C0" StrokeThickness="1" StrokeShape="RoundRectangle 8" Margin="0,0,0,8">
+                            <HorizontalStackLayout>
+                                <BoxView WidthRequest="4" Color="{Binding AccentColor}" />
+                                <VerticalStackLayout Spacing="2" Padding="12,8">
+                                    <Label Text="{Binding Name}" FontSize="15" FontAttributes="Bold" />
+                                    <Label Text="{Binding Description}" FontSize="12" TextColor="Gray" />
+                                </VerticalStackLayout>
+                            </HorizontalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Horizontal List -->
+            <Label Text="Horizontal List" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label Text="Scroll horizontally to see more items" FontSize="12" TextColor="Gray" />
+            <CollectionView x:Name="HorizontalList"
+                            HeightRequest="120"
+                            ItemsLayout="HorizontalList">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <VerticalStackLayout Spacing="6" WidthRequest="100" Padding="8">
+                            <Ellipse Fill="{Binding AccentColor}" WidthRequest="60" HeightRequest="60" HorizontalOptions="Center" />
+                            <Label Text="{Binding Name}" FontSize="13" FontAttributes="Bold" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- 3-Column Grid -->
+            <Label Text="3-Column Vertical Grid" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <CollectionView x:Name="GridList"
+                            HeightRequest="400">
+                <CollectionView.ItemsLayout>
+                    <GridItemsLayout Orientation="Vertical" Span="3" HorizontalItemSpacing="8" VerticalItemSpacing="8" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Stroke="#4DC0C0C0" StrokeThickness="1" StrokeShape="RoundRectangle 8">
+                            <VerticalStackLayout Spacing="6" Padding="8">
+                                <BoxView HeightRequest="50" Color="{Binding AccentColor}" />
+                                <Label Text="{Binding Name}" FontSize="12" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

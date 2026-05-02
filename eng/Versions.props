@@ -19,13 +19,16 @@
     <DevFlowMauiMinVersion>10.0.20</DevFlowMauiMinVersion>
     <MicrosoftMauiControlsCompatibilityVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsCompatibilityVersion>
     <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
+    <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
     <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
     <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
   </PropertyGroup>
@@ -40,6 +43,9 @@
     <XenoAtomTerminalUIVersion>1.7.1</XenoAtomTerminalUIVersion>
     <ModelContextProtocolVersion>1.1.0</ModelContextProtocolVersion>
     <InteropUIAutomationClientVersion>10.19041.0</InteropUIAutomationClientVersion>
+    <MicrosoftCodeAnalysisCSharpVersion>4.14.0</MicrosoftCodeAnalysisCSharpVersion>
+    <MicrosoftOpenApiVersion>3.5.0</MicrosoftOpenApiVersion>
+    <YamlDotNetVersion>16.3.0</YamlDotNetVersion>
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
@@ -47,7 +53,7 @@
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">
-    <XamarinAppleToolsMaciOSVersion>1.0.0-preview.1.26201.1</XamarinAppleToolsMaciOSVersion>
+    <XamarinAppleToolsMaciOSVersion>1.0.0-preview.1.26230.1</XamarinAppleToolsMaciOSVersion>
   </PropertyGroup>
   <PropertyGroup Label="Platform Extensions">
     <PlatformMauiMacOSVersion>0.3.0</PlatformMauiMacOSVersion>
@@ -57,15 +63,31 @@
     <PlatformMauiLinuxGtk4BlazorWebViewVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4BlazorWebViewVersion>
     <PlatformMauiLinuxGtk4EssentialsVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4EssentialsVersion>
   </PropertyGroup>
+  <!-- EssentialsAI preview iteration (bump for each new preview drop when DotNetFinalVersionKind=release) -->
+  <PropertyGroup Label="EssentialsAI">
+    <EssentialsAIPreviewVersionIteration>1</EssentialsAIPreviewVersionIteration>
+    <!-- Microsoft Extensions AI -->
+    <MicrosoftExtensionsAIVersion>10.3.0</MicrosoftExtensionsAIVersion>
+    <MicrosoftExtensionsAIAbstractionsVersion>10.3.0</MicrosoftExtensionsAIAbstractionsVersion>
+    <!-- Microsoft Agents AI (sample only) -->
+    <MicrosoftAgentsAIVersion>1.0.0-rc2</MicrosoftAgentsAIVersion>
+    <MicrosoftAgentsAIWorkflowsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsVersion>
+    <MicrosoftAgentsAIWorkflowsGeneratorsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsGeneratorsVersion>
+    <MicrosoftAgentsAIHostingVersion>1.0.0-preview.260225.1</MicrosoftAgentsAIHostingVersion>
+    <!-- DeviceRunners (device test runner OSS replacement) -->
+    <DeviceRunnersVersion>0.1.0-preview.6</DeviceRunnersVersion>
+  </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVisualstudioVersion>3.1.5</XunitRunnerVisualstudioVersion>
     <CoverletCollectorVersion>8.0.0</CoverletCollectorVersion>
-    <MicrosoftOpenApiVersion>3.5.0</MicrosoftOpenApiVersion>
-    <YamlDotNetVersion>16.3.0</YamlDotNetVersion>
   </PropertyGroup>
   <PropertyGroup Label="SourceLink">
     <MicrosoftSourceLinkGitHubVersion>10.0.201</MicrosoftSourceLinkGitHubVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="MAUI Go">
+    <QRCoderVersion>1.7.0</QRCoderVersion>
+    <ZXingNetMauiVersion>0.7.4</ZXingNetMauiVersion>
   </PropertyGroup>
 </Project>
