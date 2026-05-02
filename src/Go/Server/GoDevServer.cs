@@ -261,7 +261,7 @@ public static class GoDevServer
 		};
 
 		// Debounce: wait for writes to settle
-		var debounceTimer = new System.Timers.Timer(300) { AutoReset = false };
+		using var debounceTimer = new System.Timers.Timer(300) { AutoReset = false };
 		var pendingFiles = new HashSet<string>();
 		var pendingLock = new Lock();
 
@@ -320,7 +320,7 @@ public static class GoDevServer
 			EnableRaisingEvents = true,
 		};
 
-		var debounceTimer = new System.Timers.Timer(300) { AutoReset = false };
+		using var debounceTimer = new System.Timers.Timer(300) { AutoReset = false };
 
 		debounceTimer.Elapsed += async (_, _) =>
 		{
@@ -537,7 +537,7 @@ public static class GoDevServer
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
 			};
-			System.Diagnostics.Process.Start(psi);
+			using var _ = System.Diagnostics.Process.Start(psi);
 		}
 		catch
 		{
