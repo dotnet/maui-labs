@@ -8,7 +8,16 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via `NLEmbeddingGenerator`
-- **Cross-platform** — targets net10.0, Android, iOS, Mac Catalyst, macOS, and Windows (Apple Intelligence features require iOS 26+ / macOS 26+)
+
+### Platform Support
+
+| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
+|----------|-------------------|----------------------------------|
+| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
+| Android | 🔜 Coming soon | 🔜 Coming soon |
+| Windows | 🔜 Coming soon | 🔜 Coming soon |
 
 ## Quick Start
 
@@ -51,3 +60,11 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 ## Documentation
 
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
+
+## Requirements
+
+- .NET 10
+- MAUI workload (`dotnet workload install maui`)
+- Apple Intelligence requires iOS 26+, macOS 26+, or Mac Catalyst 26+
+
+> ⚠️ **This package is experimental** (always ships as `-preview`). APIs may change between releases.
