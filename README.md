@@ -52,6 +52,20 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 | `Microsoft.Maui.DevFlow.Driver` | Platform driver library |
 | `Microsoft.Maui.DevFlow.Logging` | Buffered JSONL file logger |
 
+### WPF Backend
+
+A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI apps on Windows desktops using native WPF controls with 22+ fully implemented controls, Shell navigation, Blazor WebView, and 14 Essentials APIs.
+
+- **22+ controls** — Label, Button, Entry, Editor, Image, CheckBox, Switch, Slider, Picker, DatePicker, and more
+- **Navigation** — Shell (flyout + tabs + URI routing), NavigationPage, TabbedPage, FlyoutPage, modal pages
+- **Blazor WebView** — via WebView2 and AspNetCore.Components.WebView.Wpf
+- **Essentials** — AppInfo, DeviceInfo, Connectivity, Preferences, SecureStorage, Clipboard, Screenshot, and more
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Platforms.Windows.WPF` | Core WPF backend — handlers, hosting, Blazor WebView |
+| `Microsoft.Maui.Platforms.Windows.WPF.Essentials` | Essentials APIs for WPF |
+
 ## Getting Started
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.

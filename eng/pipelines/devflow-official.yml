@@ -24,6 +24,10 @@ parameters:
   displayName: 'Publish Linux GTK4 packages to NuGet.org'
   type: boolean
   default: false
+- name: publishWpfNuget
+  displayName: 'Publish WPF packages to NuGet.org'
+  type: boolean
+  default: false
 
 variables:
 - template: /eng/pipelines/common-variables.yml@self
@@ -195,6 +199,32 @@ extends:
                   --projects $(Build.SourcesDirectory)/platforms/Linux.Gtk4/Linux.Gtk4.slnx \
                   /p:OfficialBuild=false
               displayName: Build Linux GTK4 (no pack)
+
+          - job: WPF
+            displayName: WPF - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                useGlobalJson: true
+            - script: .dotnet\dotnet workload install maui
+              displayName: Install MAUI workload
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\platforms\Windows.WPF\Windows.WPF.slnx
+                $(_OfficialBuildArgs)
+              displayName: Build, Test and Pack WPF
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
@@ -365,5 +395,60 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/LinuxGtk4Packages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish WPF packages to NuGet.org
+    - ${{ if eq(parameters.publishWpfNuget, true) }}:
+      - stage: publish_wpf_nuget
+        displayName: 'Publish WPF to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare WPF Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish WPF Packages
+              targetPath: '$(Pipeline.Workspace)/WpfPackages'
+              artifactName: WpfPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/WpfPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Windows.WPF.*.nupkg' '$(Pipeline.Workspace)/WpfPackages/' -Verbose -ErrorAction Stop
+            displayName: Filter WPF packages
+
+        - job: PublishNuGet
+          displayName: 'Push WPF to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: WpfPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/WpfPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push WPF to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/WpfPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/WpfPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'

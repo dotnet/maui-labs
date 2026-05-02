@@ -32,4 +32,8 @@
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/DevFlow/" />
+  <Folder Name="/platforms/Windows.WPF/">
+    <Project Path="platforms/Windows.WPF/src/Windows.WPF/Windows.WPF.csproj" />
+    <Project Path="platforms/Windows.WPF/src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />
+  </Folder>
 </Solution>
