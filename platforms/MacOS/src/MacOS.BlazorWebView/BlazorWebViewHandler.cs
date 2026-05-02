@@ -110,6 +110,10 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
 
         platformView.StopLoading();
 
+        // Remove the script message handler to break the retain cycle between
+        // WKUserContentController and the WebViewScriptMessageHandler.
+        platformView.Configuration.UserContentController.RemoveScriptMessageHandler("webwindowinterop");
+
         var webviewManager = System.Threading.Interlocked.Exchange(ref _webviewManager, null);
         if (webviewManager != null)
         {
@@ -357,7 +361,10 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         {
             var url = urlSchemeTask.Request.Url?.AbsoluteString;
             if (string.IsNullOrEmpty(url))
+            {
+                urlSchemeTask.DidFailWithError(new NSError(NSError.NSUrlErrorDomain, -1));
                 return;
+            }
 
             try
             {
@@ -385,9 +392,10 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
                 urlSchemeTask.DidReceiveData(NSData.FromArray(statusCode == 200 ? responseBytes : Array.Empty<byte>()));
                 urlSchemeTask.DidFinish();
             }
-            catch
+            catch (Exception ex)
             {
-                // Swallow errors to avoid crashing the WKWebView process
+                urlSchemeTask.DidFailWithError(new NSError(NSError.NSUrlErrorDomain, -1, NSDictionary.FromObjectAndKey(
+                    new NSString(ex.Message), NSError.LocalizedDescriptionKey)));
             }
         }
 
