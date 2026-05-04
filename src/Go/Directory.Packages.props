@@ -1,7 +1,0 @@
-<Project>
-  <PropertyGroup>
-    <!-- Go projects manage package versions independently (VersionOverride in csproj).
-         Disable central package management to avoid NU1507 with multiple NuGet sources. -->
-    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
-  </PropertyGroup>
-</Project>

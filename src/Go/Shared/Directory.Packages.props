@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Go.Shared specifies package versions directly.
+         Disable CPM to avoid NU1507 with multiple NuGet sources. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
