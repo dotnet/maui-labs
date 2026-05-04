@@ -2,7 +2,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Windows.Search.AppContentIndex;
 
-namespace Maui.Controls.Sample.Services;
+namespace EssentialsAISample.Services;
 
 /// <summary>
 /// Semantic search using the Windows AppContentIndexer API.

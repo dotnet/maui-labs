@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 
-namespace Maui.Controls.Sample.Services;
+namespace EssentialsAISample.Services;
 
 /// <summary>
 /// Single wrapper for PhiSilicaChatClient that handles structured output AND tool calling.
