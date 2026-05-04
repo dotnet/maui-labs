@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Maui.Cli.Models;
 using Spectre.Console;
 
@@ -369,10 +370,10 @@ public class SpectreOutputFormatter : IOutputFormatter
 		{
 			var totalMinutes = (int)elapsed.TotalMinutes;
 			var tenths = elapsed.Milliseconds / 100;
-			return $"{totalMinutes}:{elapsed.Seconds:00}.{tenths:0}s";
+			return string.Create(CultureInfo.InvariantCulture, $"{totalMinutes}:{elapsed.Seconds:00}.{tenths:0}s");
 		}
 
-		return $"{elapsed.TotalSeconds:0.0}s";
+		return string.Create(CultureInfo.InvariantCulture, $"{elapsed.TotalSeconds:0.0}s");
 	}
 
 	internal static string FormatTimedStatusMarkup(string statusMarkup, TimeSpan elapsed)
