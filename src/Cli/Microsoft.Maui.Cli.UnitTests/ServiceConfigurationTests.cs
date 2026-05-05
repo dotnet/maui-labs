@@ -11,6 +11,7 @@ using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
 
+[Collection("CLI")]
 public class ServiceConfigurationTests
 {
 	[Fact]
