@@ -131,7 +131,9 @@ For Mac Catalyst, ensure the Debug entitlements allow the in-app HTTP server:
 - GTK apps start the DevFlow agent after app activation.
 - Mac Catalyst Debug entitlements include `com.apple.security.network.server`.
 - `dotnet build` succeeds.
+- Important controls in the flows you plan to automate have stable `AutomationId`s.
 - A running app appears in `maui devflow list`.
+- `maui devflow agent status` returns the expected app name and platform.
 - `maui devflow ui tree --depth 1` returns a visual tree.
 
 ## References

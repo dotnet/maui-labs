@@ -33,10 +33,13 @@ Use this when a project already has DevFlow package references and `builder.AddM
    ```bash
    maui devflow list
    maui devflow wait
+   maui devflow agent status
    maui devflow ui tree --depth 1
    ```
 
-   A successful `ui tree` means connectivity is fixed; continue the main debug loop.
+   A successful `agent status` proves the CLI can reach the running app and
+   should show the expected app name/platform. A successful `ui tree` means
+   connectivity is fixed for UI automation; continue the main debug loop.
 
 ## Platform notes
 
@@ -55,8 +58,15 @@ adb forward --list
 If no broker is available and the app uses a direct `.mauidevflow` port, forward that port instead:
 
 ```bash
+adb devices
 adb forward tcp:9223 tcp:9223
+maui devflow agent status --agent-host localhost --agent-port 9223
 ```
+
+Use this direct status check before declaring Android connectivity broken. It is
+common for broker registration to be empty while a direct, forwarded v1 agent
+connection works. In that case continue with explicit `--agent-host localhost`
+and `--agent-port <port>` until broker registration is restored.
 
 ### iOS simulator
 
@@ -96,6 +106,7 @@ pgrep -f "YourApp"
 | `maui devflow list` shows no agents | Verify app is running in Debug, package references exist, and `AddMauiDevFlowAgent()` executes |
 | Android agent never registers | Run `adb reverse tcp:19223 tcp:19223` for broker registration |
 | Android connection refused after registration | Run `adb forward tcp:<port> tcp:<port>` using the port from `maui devflow list` |
+| Android broker list is empty but app is running | Forward the direct `.mauidevflow` port and run `maui devflow agent status --agent-host localhost --agent-port <port>` |
 | Broker unavailable | `maui devflow broker start`; retry the command |
 | Port already in use | Identify the owner with `lsof -i :<port>` before killing a PID |
 | Multiple agents connected | Ask which app/device/agent port to target; use `--agent-port` |
@@ -110,5 +121,6 @@ pgrep -f "YourApp"
 ## Anti-patterns
 
 - Do not treat an empty `maui devflow list` as proof the project is not integrated. It only means no runtime agent is connected.
+- Do not treat an empty broker/list result as final on Android until direct forwarded `agent status` has also failed.
 - Do not use `adb reverse` for the agent HTTP port when the host CLI must connect into the emulator. Use `adb forward tcp:<port> tcp:<port>` for that direction.
 - Do not kill random processes by name. Identify the owning PID first.

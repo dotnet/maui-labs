@@ -2,6 +2,7 @@
 
 ## Table of Contents
 - [Connection Refused](#connection-refused--cannot-connect)
+- [Android UI Thread Exceptions](#android-ui-thread-exceptions)
 - [Build Failures](#build-failures)
 - [CDP Not Connecting](#cdp-not-connecting-blazor-hybrid)
 - [Mac Catalyst Permission Dialogs](#mac-catalyst-repeated-permission-dialogs-on-rebuild)
@@ -22,12 +23,38 @@ If `maui devflow ui status` fails with connection refused:
    With the broker, this is less common since ports are auto-assigned.
 5. **Android?** Did you run `adb reverse tcp:19223 tcp:19223` (for broker) and
    `adb forward tcp:<port> tcp:<port>` (for agent)? Re-run after each deploy.
+   If broker/list is empty, still try direct status:
+   ```bash
+   adb devices
+   adb forward tcp:9223 tcp:9223
+   maui devflow agent status --agent-host localhost --agent-port 9223
+   ```
 6. **Mac Catalyst?** Check entitlements include `network.server` (see setup.md step 5).
 7. **macOS (AppKit)?** Ensure `AddMacOSEssentials()` is called and the app window appeared.
    See [references/macos.md](macos.md) for troubleshooting.
 8. **Linux/GTK?** No special network setup needed — runs directly on localhost. Check if the app started successfully.
 9. **Broker issues?** `maui devflow broker status` to check. `maui devflow broker stop` then
    retry (CLI will auto-restart it).
+
+## Android UI Thread Exceptions
+
+If `maui devflow ui tap`, `fill`, `focus`, or other UI actions fail on Android
+with `CalledFromWrongThreadException`, treat it as likely DevFlow agent action
+dispatch trouble rather than an app logic bug, especially when manual input or
+ADB taps work.
+
+Capture evidence before changing app code:
+
+```bash
+maui devflow agent status --agent-host localhost --agent-port <port>
+maui devflow ui query --automationId <control-id> --agent-host localhost --agent-port <port>
+adb logcat -d -t 300 | grep -i "CalledFromWrongThreadException\\|DevFlow\\|DOTNET"
+```
+
+Report the DevFlow command, target platform, agent version from `agent status`,
+the queried element id/AutomationId, and the logcat exception. Do not work
+around this with coordinate-only automation unless you only need a temporary
+validation fallback.
 
 ## Build Failures
 

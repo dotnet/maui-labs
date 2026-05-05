@@ -60,12 +60,27 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 
    ```bash
    maui devflow wait
+   maui devflow agent status
    maui devflow ui tree --depth 3 --fields "id,type,text,automationId"
    ```
 
+   Treat `agent status` as the runtime truth for reachability and app identity.
+   `diagnose` is broader environment state; it can report broker/project details
+   without proving the current app is reachable.
+
    If `wait`, `list`, or `ui tree` cannot connect after the app is running, load `references/connectivity.md` and recover the broker/agent connection before continuing.
 
-6. Inspect, interact, capture evidence, then edit the app and repeat from launch.
+6. Prefer AutomationId-first validation for UI flows:
+
+   ```bash
+   maui devflow ui query --automationId save-button
+   maui devflow ui tap <element-id-from-query>
+   ```
+
+   If important controls do not have stable `AutomationId`s, add them before
+   relying on text, coordinates, screenshots, or brittle tree positions.
+
+7. Inspect, interact, capture evidence, then edit the app and repeat from launch.
 
 ## Critical Anti-patterns
 
@@ -74,6 +89,7 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 - Do not kill an async `dotnet build -t:Run` or `dotnet run` shell while you still need the app; that often kills the app.
 - Do not reuse a busy simulator/emulator when multiple MAUI apps or agents may be running.
 - Do not debug Blazor WebView DOM issues through the native visual tree alone; use the WebView/CDP commands.
+- Do not drive key app flows by coordinates when AutomationIds are available or can be added.
 
 ## Stop Signals
 
