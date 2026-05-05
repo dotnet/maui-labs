@@ -356,6 +356,8 @@ extends:
               displayName: Install .NET SDK
               inputs:
                 version: 10.0.105
+            - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+              displayName: Select Xcode 26.3
             - script: dotnet workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
             - script: ./eng/common/cibuild.sh

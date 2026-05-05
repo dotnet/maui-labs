@@ -295,9 +295,11 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
               displayName: Build and Test {Product}
 ```
 
-> **Workload versioning:** Always pin workload installs with `--version 10.0.203` (or the current pinned version from `_build.yml`). Unpinned installs cause version drift between CI and official builds.
+> **SDK versioning:** Use `UseDotNet@2` with an explicit `version:` matching the repo-root `global.json` SDK version, **not** `useGlobalJson: true` — the latter scans the entire checkout and can find nested `global.json` files (e.g. Comet's .NET 11 preview) that break non-Comet jobs.
 >
-> **macOS builds:** Products targeting `net10.0-macos` must build on macOS. Use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with a `templateContext:` block (even if `outputs: []`). The internal `NetCore1ESPool-Internal` pool does not have macOS agents. See the `EssentialsAI_macOS` job for the full pattern.
+> **Workload versioning:** Always pin workload installs with `--version <pinned>`. Check `_build.yml` for the current pinned version. Unpinned installs cause version drift between CI and official builds.
+>
+> **macOS builds:** Products targeting `net10.0-macos` must build on macOS. Use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with a `templateContext:` block (even if `outputs: []`). Add a `sudo xcode-select` step before workload install — the required Xcode version depends on the workload version. Check by running `dotnet workload install maui --version <pinned>` locally and reading the error message, or consult https://aka.ms/xcode-requirement. See the `EssentialsAI_macOS` job for the full pattern.
 
 #### c) Conditional publish stage (at the bottom, after the other `publish_*_nuget` stages)
 
