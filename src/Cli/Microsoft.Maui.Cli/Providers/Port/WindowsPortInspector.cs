@@ -68,15 +68,18 @@ const uint ERROR_INSUFFICIENT_BUFFER = 122;
 IntPtr buffer = IntPtr.Zero;
 try
 {
+uint ret = ERROR_INSUFFICIENT_BUFFER;
 for (int attempt = 0; attempt < 4; attempt++)
 {
 if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+if (bufLen > (uint)int.MaxValue) return result;
 buffer = Marshal.AllocHGlobal((int)bufLen);
-var ret = GetExtendedTcpTable(buffer, ref bufLen, false, afFamily, TcpTableClass.OwnerPidListener, 0);
+ret = GetExtendedTcpTable(buffer, ref bufLen, false, afFamily, TcpTableClass.OwnerPidListener, 0);
 if (ret == 0) break;
 if (ret != ERROR_INSUFFICIENT_BUFFER) return result;
 bufLen = bufLen == 0 ? 8192 : bufLen * 2;
 }
+if (ret != 0) return result;
 
 var count = Marshal.ReadInt32(buffer);
 const int rowOffset = 4;

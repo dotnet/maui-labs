@@ -144,7 +144,8 @@ var output = "Proto Recv-Q Send-Q Local Address          Foreign Address        
 var result = UnixPortInspector.ParseNetstatOutput(output, 19223);
 
 Assert.Single(result);
-Assert.Equal("0.0.0.0", result[0].Address);
+Assert.Equal("::", result[0].Address);
+Assert.Equal("ipv6", result[0].Family);
 }
 
 [Fact]

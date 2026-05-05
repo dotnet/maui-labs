@@ -95,7 +95,10 @@ else
 {
 formatter.WriteInfo($"Port {port} is in use:");
 foreach (var l in result.Listeners)
-formatter.WriteInfo($"  PID {l.Pid} ({l.ProcessName}) {l.Address} [{l.Family}]");
+{
+var processInfo = l.Pid > 0 ? $"PID {l.Pid} ({(string.IsNullOrEmpty(l.ProcessName) ? "unknown" : l.ProcessName)})" : "unknown process";
+formatter.WriteInfo($"  {processInfo} {l.Address} [{l.Family}]");
+}
 }
 }
 

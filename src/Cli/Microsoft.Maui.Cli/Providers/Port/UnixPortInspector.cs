@@ -169,8 +169,8 @@ if (dotIdx < 0) continue;
 if (!int.TryParse(localAddr[(dotIdx + 1)..], out var parsedPort) || parsedPort != port) continue;
 
 var addrPart = localAddr[..dotIdx];
-var addr = addrPart == "*" ? "0.0.0.0" : addrPart;
 var family = parts[0].Contains('6') ? "ipv6" : "ipv4";
+var addr = addrPart == "*" ? (family == "ipv6" ? "::" : "0.0.0.0") : addrPart;
 result.Add(new PortListenerInfo(port, 0, string.Empty, addr, family));
 }
 return result;
