@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Maui.Cli.DevFlow;
+using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Xunit;
 
@@ -79,6 +81,110 @@ public class DevFlowCliIntegrationTests
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/tap");
         Assert.Equal("POST", request.Method);
         Assert.Contains("el-1", request.Body);
+    }
+
+    [Fact]
+    public async Task DiagnoseJson_WhenBrokerIsNotRunning_ReportsJsonArraysWithoutStartingBroker()
+    {
+        var cli = new CliTestHarness(mockAgentPort: 9223);
+        var tempDir = Directory.CreateTempSubdirectory("maui-devflow-diagnose-");
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+        var brokerPortResolverCalled = false;
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () =>
+        {
+            brokerPortResolverCalled = true;
+            return Task.FromResult<int?>(null);
+        };
+        DevFlowCommands.ListBrokerAgentsAsync = _ => throw new InvalidOperationException("Diagnose should not list agents when the broker is not running.");
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tempDir.FullName, "App.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <ItemGroup>
+                    <PackageReference Include="Microsoft.Maui.DevFlow.Agent" Version="0.1.0-preview" />
+                  </ItemGroup>
+                </Project>
+                """);
+            Directory.SetCurrentDirectory(tempDir.FullName);
+
+            var result = await cli.InvokeRawAsync("devflow", "diagnose", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(brokerPortResolverCalled);
+
+            var json = result.ParseJsonOutput();
+            Assert.False(json.GetProperty("broker_running").GetBoolean());
+            Assert.False(json.TryGetProperty("broker_port", out _));
+            Assert.Equal(0, json.GetProperty("agent_count").GetInt32());
+            Assert.Equal(JsonValueKind.Array, json.GetProperty("agents").ValueKind);
+            Assert.Empty(json.GetProperty("agents").EnumerateArray());
+            Assert.Equal(JsonValueKind.Array, json.GetProperty("projects").ValueKind);
+            Assert.Equal("App.csproj", Assert.Single(json.GetProperty("projects").EnumerateArray()).GetString());
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DiagnoseJson_WhenBrokerIsRunning_ReportsAgentsAsJsonArray()
+    {
+        var cli = new CliTestHarness(mockAgentPort: 9223);
+        var tempDir = Directory.CreateTempSubdirectory("maui-devflow-diagnose-");
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = brokerPort =>
+        {
+            Assert.Equal(19223, brokerPort);
+            return Task.FromResult<AgentRegistration[]?>(
+            [
+                new AgentRegistration
+                {
+                    Id = "agent-1",
+                    Project = "/src/App.csproj",
+                    Tfm = "net10.0-android",
+                    Platform = "Android",
+                    AppName = "SampleApp",
+                    Port = 9223,
+                    Version = "0.1.0-preview",
+                    ConnectedAt = DateTime.UnixEpoch
+                }
+            ]);
+        };
+
+        try
+        {
+            Directory.SetCurrentDirectory(tempDir.FullName);
+
+            var result = await cli.InvokeRawAsync("devflow", "diagnose", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+
+            var json = result.ParseJsonOutput();
+            Assert.True(json.GetProperty("broker_running").GetBoolean());
+            Assert.Equal(19223, json.GetProperty("broker_port").GetInt32());
+            Assert.Equal(1, json.GetProperty("agent_count").GetInt32());
+            Assert.Equal(JsonValueKind.Array, json.GetProperty("agents").ValueKind);
+            var agent = Assert.Single(json.GetProperty("agents").EnumerateArray());
+            Assert.Equal("agent-1", agent.GetProperty("id").GetString());
+            Assert.Equal("SampleApp", agent.GetProperty("appName").GetString());
+            Assert.Equal(JsonValueKind.Array, json.GetProperty("projects").ValueKind);
+            Assert.Empty(json.GetProperty("projects").EnumerateArray());
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+            tempDir.Delete(recursive: true);
+        }
     }
 
     [Fact]

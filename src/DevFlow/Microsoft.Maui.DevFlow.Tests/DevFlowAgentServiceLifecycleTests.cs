@@ -81,6 +81,32 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(new[] { "list" }, features);
     }
 
+    [Fact]
+    public async Task DispatchAsync_WhenDispatcherDoesNotRequireDispatchButMainThreadDoes_UsesMainThreadFallback()
+    {
+        using var service = new DispatchProbeAgentService(new ImmediateDispatcher(), mainThreadDispatchRequired: true);
+
+        var result = await service.RunDispatchAsync(() => service.IsInsideMainThreadFallback ? "main-thread" : "direct");
+
+        Assert.Equal("main-thread", result);
+        Assert.Equal(1, service.MainThreadFallbackCallCount);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_AsyncFunc_WhenDispatcherDoesNotRequireDispatchButMainThreadDoes_UsesMainThreadFallback()
+    {
+        using var service = new DispatchProbeAgentService(new ImmediateDispatcher(), mainThreadDispatchRequired: true);
+
+        var result = await service.RunDispatchAsync(async () =>
+        {
+            await Task.Yield();
+            return service.IsInsideMainThreadFallback ? "main-thread" : "direct";
+        });
+
+        Assert.Equal("main-thread", result);
+        Assert.Equal(1, service.MainThreadFallbackCallCount);
+    }
+
     private static async Task<AgentStatus?> WaitForStatusAsync(AgentClient client)
     {
         for (int i = 0; i < 10; i++)
@@ -107,6 +133,67 @@ public class DevFlowAgentServiceLifecycleTests
         protected override bool IsJobsSupported => true;
 
         protected override bool IsJobRunSupported => false;
+    }
+
+    private sealed class DispatchProbeAgentService : DevFlowAgentService
+    {
+        private readonly bool _mainThreadDispatchRequired;
+
+        public DispatchProbeAgentService(IDispatcher dispatcher, bool mainThreadDispatchRequired)
+        {
+            _dispatcher = dispatcher;
+            _mainThreadDispatchRequired = mainThreadDispatchRequired;
+        }
+
+        public int MainThreadFallbackCallCount { get; private set; }
+
+        public bool IsInsideMainThreadFallback { get; private set; }
+
+        public Task<string> RunDispatchAsync(Func<string> func) => DispatchAsync(func);
+
+        public Task<string?> RunDispatchAsync(Func<Task<string?>> func) => DispatchAsync(func);
+
+        protected override bool IsMainThreadDispatchRequired() => _mainThreadDispatchRequired;
+
+        protected override Task<T> DispatchViaMainThreadAsync<T>(Func<T> func)
+        {
+            MainThreadFallbackCallCount++;
+            return RunInsideMainThreadFallbackAsync(func);
+        }
+
+        protected override Task<T?> DispatchViaMainThreadAsync<T>(Func<Task<T?>> func) where T : class
+        {
+            MainThreadFallbackCallCount++;
+            return RunInsideMainThreadFallbackAsync(func);
+        }
+
+        private Task<T> RunInsideMainThreadFallbackAsync<T>(Func<T> func)
+        {
+            var wasInsideMainThreadFallback = IsInsideMainThreadFallback;
+            IsInsideMainThreadFallback = true;
+            try
+            {
+                return Task.FromResult(func());
+            }
+            finally
+            {
+                IsInsideMainThreadFallback = wasInsideMainThreadFallback;
+            }
+        }
+
+        private async Task<T?> RunInsideMainThreadFallbackAsync<T>(Func<Task<T?>> func) where T : class
+        {
+            var wasInsideMainThreadFallback = IsInsideMainThreadFallback;
+            IsInsideMainThreadFallback = true;
+            try
+            {
+                return await func();
+            }
+            finally
+            {
+                IsInsideMainThreadFallback = wasInsideMainThreadFallback;
+            }
+        }
     }
 
     private sealed class ImmediateDispatcher : IDispatcher

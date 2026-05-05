@@ -2679,7 +2679,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return await DispatchViaMauiDispatcherAsync(func);
 
         if (IsMainThreadDispatchRequired())
-            return await MainThread.InvokeOnMainThreadAsync(func);
+            return await DispatchViaMainThreadAsync(func);
 
         return func();
     }
@@ -2702,7 +2702,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return await DispatchViaMauiDispatcherAsync(func);
 
         if (IsMainThreadDispatchRequired())
-            return await MainThread.InvokeOnMainThreadAsync(func);
+            return await DispatchViaMainThreadAsync(func);
 
         return await func();
     }
@@ -2719,11 +2719,17 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return await tcs.Task;
     }
 
-    private static bool IsMainThreadDispatchRequired()
+    protected virtual bool IsMainThreadDispatchRequired()
     {
         try { return !MainThread.IsMainThread; }
         catch { return false; }
     }
+
+    protected virtual Task<T> DispatchViaMainThreadAsync<T>(Func<T> func)
+        => MainThread.InvokeOnMainThreadAsync(func);
+
+    protected virtual Task<T?> DispatchViaMainThreadAsync<T>(Func<Task<T?>> func) where T : class
+        => MainThread.InvokeOnMainThreadAsync(func);
 
     private object BuildProfilerCapabilitiesPayload()
     {

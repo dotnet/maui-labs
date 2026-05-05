@@ -32,6 +32,16 @@ public static class BrokerClient
     }
 
     /// <summary>
+    /// Returns the broker port only when an existing broker is reachable.
+    /// Does not start a broker or clean up stale broker state.
+    /// </summary>
+    internal static async Task<int?> GetRunningBrokerPortAsync()
+    {
+        var port = ReadBrokerPort() ?? BrokerServer.DefaultPort;
+        return await IsBrokerAliveAsync(port) ? port : null;
+    }
+
+    /// <summary>
     /// Lists all agents registered with the broker.
     /// </summary>
     public static async Task<AgentRegistration[]?> ListAgentsAsync(int brokerPort)

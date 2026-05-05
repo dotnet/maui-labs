@@ -19,8 +19,16 @@ public class DevFlowCommands
     private static Command? _devflowCommand;
     private static bool _errorOccurred;
     private static IDevFlowOutputWriter? s_output;
+    internal static Func<Task<int?>> ResolveRunningBrokerPortAsync { get; set; } = Broker.BrokerClient.GetRunningBrokerPortAsync;
+    internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
 
     private static IDevFlowOutputWriter Output => s_output ?? throw new InvalidOperationException("DevFlowCommands not initialized. Call CreateDevFlowCommand first.");
+
+    internal static void ResetBrokerClientForTests()
+    {
+        ResolveRunningBrokerPortAsync = Broker.BrokerClient.GetRunningBrokerPortAsync;
+        ListBrokerAgentsAsync = Broker.BrokerClient.ListAgentsAsync;
+    }
 
     /// <summary>
     /// Creates the "devflow" command with all subcommands for integration into the MAUI CLI.
@@ -4019,11 +4027,11 @@ public class DevFlowCommands
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
         
         // Check broker status
-        var brokerPort = await Broker.BrokerClient.EnsureBrokerRunningAsync();
+        var brokerPort = await ResolveRunningBrokerPortAsync();
         var brokerRunning = brokerPort != null;
         
         // List connected agents
-        var agents = brokerRunning ? await Broker.BrokerClient.ListAgentsAsync(brokerPort!.Value) : null;
+        var agents = brokerRunning ? await ListBrokerAgentsAsync(brokerPort!.Value) : null;
         var agentCount = agents?.Length ?? 0;
         if (agents is not null)
         {
@@ -4042,11 +4050,12 @@ public class DevFlowCommands
             {
                 ["cli_version"] = version,
                 ["broker_running"] = brokerRunning,
-                ["broker_port"] = brokerPort,
                 ["agent_count"] = agentCount,
                 ["agents"] = agentsJson,
                 ["projects"] = projectsJson
             };
+            if (brokerPort is not null)
+                diagnostics["broker_port"] = brokerPort;
             Output.WriteResult(diagnostics, json);
             return;
         }
