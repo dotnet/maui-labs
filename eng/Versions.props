@@ -55,7 +55,7 @@
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">
-    <XamarinAppleToolsMaciOSVersion>1.0.0-preview.1.26230.1</XamarinAppleToolsMaciOSVersion>
+    <XamarinAppleToolsMaciOSVersion>1.0.0-preview.1.26255.1</XamarinAppleToolsMaciOSVersion>
   </PropertyGroup>
   <PropertyGroup Label="Platform Extensions">
     <PlatformMauiLinuxGtk4Version>0.6.0</PlatformMauiLinuxGtk4Version>
