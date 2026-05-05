@@ -2675,11 +2675,20 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     protected async Task<T> DispatchAsync<T>(Func<T> func)
     {
-        if (_dispatcher == null || _dispatcher.IsDispatchRequired == false)
-            return func();
+        if (_dispatcher is { IsDispatchRequired: true })
+            return await DispatchViaMauiDispatcherAsync(func);
 
-        var tcs = new TaskCompletionSource<T>();
-        _dispatcher.Dispatch(() =>
+        if (IsMainThreadDispatchRequired())
+            return await MainThread.InvokeOnMainThreadAsync(func);
+
+        return func();
+    }
+
+    private async Task<T> DispatchViaMauiDispatcherAsync<T>(Func<T> func)
+    {
+        var dispatcher = _dispatcher ?? throw new InvalidOperationException("Dispatcher is not available.");
+        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        dispatcher.Dispatch(() =>
         {
             try { tcs.SetResult(func()); }
             catch (Exception ex) { tcs.SetException(ex); }
@@ -2689,16 +2698,31 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     protected async Task<T?> DispatchAsync<T>(Func<Task<T?>> func) where T : class
     {
-        if (_dispatcher == null || _dispatcher.IsDispatchRequired == false)
-            return await func();
+        if (_dispatcher is { IsDispatchRequired: true })
+            return await DispatchViaMauiDispatcherAsync(func);
 
-        var tcs = new TaskCompletionSource<T?>();
-        _dispatcher.Dispatch(async () =>
+        if (IsMainThreadDispatchRequired())
+            return await MainThread.InvokeOnMainThreadAsync(func);
+
+        return await func();
+    }
+
+    private async Task<T?> DispatchViaMauiDispatcherAsync<T>(Func<Task<T?>> func) where T : class
+    {
+        var dispatcher = _dispatcher ?? throw new InvalidOperationException("Dispatcher is not available.");
+        var tcs = new TaskCompletionSource<T?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        dispatcher.Dispatch(async () =>
         {
             try { tcs.SetResult(await func()); }
             catch (Exception ex) { tcs.SetException(ex); }
         });
         return await tcs.Task;
+    }
+
+    private static bool IsMainThreadDispatchRequired()
+    {
+        try { return !MainThread.IsMainThread; }
+        catch { return false; }
     }
 
     private object BuildProfilerCapabilitiesPayload()
