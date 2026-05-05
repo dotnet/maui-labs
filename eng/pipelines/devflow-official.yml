@@ -133,7 +133,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -157,7 +157,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -185,7 +185,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -286,7 +286,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: |
                 sudo apt-get update
                 sudo apt-get install -y \
@@ -355,7 +355,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: dotnet workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
             - script: ./eng/common/cibuild.sh
