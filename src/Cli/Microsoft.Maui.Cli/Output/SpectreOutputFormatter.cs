@@ -370,7 +370,7 @@ public class SpectreOutputFormatter : IOutputFormatter
 		{
 			var totalMinutes = (int)elapsed.TotalMinutes;
 			var tenths = elapsed.Milliseconds / 100;
-			return $"{totalMinutes}:{elapsed.Seconds:00}.{tenths}s";
+			return FormattableString.Invariant($"{totalMinutes}:{elapsed.Seconds:00}.{tenths}s");
 		}
 
 		return elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "s";
