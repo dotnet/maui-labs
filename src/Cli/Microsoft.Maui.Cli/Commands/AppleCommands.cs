@@ -518,9 +518,15 @@ public static class AppleCommands
 			var udid = parseResult.GetValue(udidArg)!;
 			var appPath = parseResult.GetValue(appPathArg)!;
 
+			if (!appPath.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Path must point to a .app bundle directory, got: '{appPath}'."));
+				return 1;
+			}
+
 			if (!Directory.Exists(appPath))
 			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorInstallFailed, $"App bundle not found at '{appPath}'."));
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"App bundle not found at '{appPath}'."));
 				return 1;
 			}
 
@@ -534,7 +540,7 @@ public static class AppleCommands
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			if (useJson)
-				formatter.Write(new SimulatorAppResult { Udid = udid, BundleIdentifier = Path.GetFileNameWithoutExtension(appPath), Action = "installed", Success = true });
+				formatter.Write(new SimulatorAppResult { Udid = udid, AppPath = appPath, Action = "installed", Success = true });
 			else
 				formatter.WriteSuccess($"App installed on simulator '{udid}'.");
 			return 0;

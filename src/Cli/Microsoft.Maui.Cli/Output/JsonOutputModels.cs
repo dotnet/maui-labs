@@ -131,7 +131,12 @@ internal sealed record SimulatorAppResult
 	public required string Udid { get; init; }
 
 	[JsonPropertyName("bundle_identifier")]
-	public required string BundleIdentifier { get; init; }
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? BundleIdentifier { get; init; }
+
+	[JsonPropertyName("app_path")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? AppPath { get; init; }
 
 	[JsonPropertyName("action")]
 	public required string Action { get; init; }
