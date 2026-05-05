@@ -105,7 +105,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen
+            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI and Apple workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
@@ -197,7 +197,7 @@ extends:
             displayName: EssentialsAI - macOS (native build)
             pool:
               name: Azure Pipelines
-              vmImage: macos-15
+              vmImage: macos-latest-internal
               os: macOS
             templateContext:
               outputs:
@@ -215,7 +215,7 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
-            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
             - script: |
                 ./eng/common/build.sh \
@@ -255,7 +255,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
               displayName: Install Android SDK dependencies
@@ -324,7 +324,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui
+            - script: .dotnet\dotnet workload install maui --version 10.0.203
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -340,7 +340,10 @@ extends:
             displayName: macOS AppKit - macOS
             pool:
               name: Azure Pipelines
-              vmImage: macos-latest
+              vmImage: macos-latest-internal
+              os: macOS
+            templateContext:
+              outputs: []
             strategy:
               matrix:
                 Release:
@@ -353,7 +356,7 @@ extends:
               displayName: Install .NET SDK
               inputs:
                 useGlobalJson: true
-            - script: dotnet workload install maui macos
+            - script: dotnet workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
             - script: ./eng/common/cibuild.sh
                 --configuration $(_BuildConfig)

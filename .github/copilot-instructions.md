@@ -295,6 +295,10 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
               displayName: Build and Test {Product}
 ```
 
+> **Workload versioning:** Always pin workload installs with `--version 10.0.203` (or the current pinned version from `_build.yml`). Unpinned installs cause version drift between CI and official builds.
+>
+> **macOS builds:** Products targeting `net10.0-macos` must build on macOS. Use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with a `templateContext:` block (even if `outputs: []`). The internal `NetCore1ESPool-Internal` pool does not have macOS agents. See the `EssentialsAI_macOS` job for the full pattern.
+
 #### c) Conditional publish stage (at the bottom, after the other `publish_*_nuget` stages)
 
 This stage filters the product's `.nupkg` files from the shared `PackageArtifacts` artifact, then pushes them to NuGet.org via the `1ES.PublishNuget` task.
