@@ -30,6 +30,11 @@ public class FakeAppleProvider : IAppleProvider
 	public bool DeleteSimulatorResult { get; set; } = true;
 	public string? CreateSimulatorResult { get; set; } = "new-udid";
 	public bool EraseSimulatorResult { get; set; } = true;
+	public bool InstallAppResult { get; set; } = true;
+	public bool UninstallAppResult { get; set; } = true;
+	public bool LaunchAppResult { get; set; } = true;
+	public bool TerminateAppResult { get; set; } = true;
+	public string? GetAppContainerResult { get; set; } = "/path/to/container";
 
 	// --- Call tracking ---
 
@@ -40,6 +45,11 @@ public class FakeAppleProvider : IAppleProvider
 	public List<(string Name, string DeviceType, string? Runtime)> CreatedSimulators { get; } = new();
 	public List<(IEnumerable<string>? Platforms, bool DryRun)> InstallCalls { get; } = new();
 	public List<string> ErasedSimulators { get; } = new();
+	public List<(string Udid, string AppPath)> InstalledApps { get; } = new();
+	public List<(string Udid, string BundleId)> UninstalledApps { get; } = new();
+	public List<(string Udid, string BundleId, string[] Args)> LaunchedApps { get; } = new();
+	public List<(string Udid, string BundleId)> TerminatedApps { get; } = new();
+	public List<(string Udid, string BundleId, string? ContainerType)> GetAppContainerCalls { get; } = new();
 
 	// --- IAppleProvider implementation ---
 
@@ -100,6 +110,36 @@ public class FakeAppleProvider : IAppleProvider
 	{
 		ErasedSimulators.Add(udidOrName);
 		return EraseSimulatorResult;
+	}
+
+	public bool InstallApp(string udid, string appBundlePath)
+	{
+		InstalledApps.Add((udid, appBundlePath));
+		return InstallAppResult;
+	}
+
+	public bool UninstallApp(string udid, string bundleIdentifier)
+	{
+		UninstalledApps.Add((udid, bundleIdentifier));
+		return UninstallAppResult;
+	}
+
+	public bool LaunchApp(string udid, string bundleIdentifier, params string[] extraArgs)
+	{
+		LaunchedApps.Add((udid, bundleIdentifier, extraArgs));
+		return LaunchAppResult;
+	}
+
+	public bool TerminateApp(string udid, string bundleIdentifier)
+	{
+		TerminatedApps.Add((udid, bundleIdentifier));
+		return TerminateAppResult;
+	}
+
+	public string? GetAppContainer(string udid, string bundleIdentifier, string? containerType = null)
+	{
+		GetAppContainerCalls.Add((udid, bundleIdentifier, containerType));
+		return GetAppContainerResult;
 	}
 
 	public List<HealthCheck> CheckHealth() => HealthChecks;

@@ -46,6 +46,11 @@ public static class ErrorCodes
 	public const string AppleSetupFailed = "E2206";
 	public const string AppleSimulatorCreateFailed = "E2207";
 	public const string AppleSimulatorEraseFailed = "E2208";
+	public const string AppleSimulatorInstallFailed = "E2209";
+	public const string AppleSimulatorUninstallFailed = "E2210";
+	public const string AppleSimulatorLaunchFailed = "E2211";
+	public const string AppleSimulatorTerminateFailed = "E2212";
+	public const string AppleSimulatorGetContainerFailed = "E2213";
 
 	// Platform/SDK errors - Windows (E23xx)
 	public const string WindowsSdkNotFound = "E2301";
