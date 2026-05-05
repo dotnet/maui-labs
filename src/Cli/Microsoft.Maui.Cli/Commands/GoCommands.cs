@@ -39,6 +39,7 @@ public static class GoCommands
 			Arity = ArgumentArity.ZeroOrOne,
 		};
 
+		// TODO: Migrate Go command output to use Program.GetFormatter(parseResult) for --json/--verbose support
 		var goCommand = new Command("go", "Comet Go — instant prototyping without IDE setup")
 		{
 			portOption,
@@ -172,15 +173,17 @@ public static class GoCommands
 			}
 
 			var safeNamespace = name.Replace("-", "_").Replace(" ", "_");
+			safeNamespace = new string(safeNamespace.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray());
+			if (safeNamespace.Length == 0 || char.IsDigit(safeNamespace[0]))
+				safeNamespace = "_" + safeNamespace;
 			var fileName = $"{name}.cs";
 			var cwd = Directory.GetCurrentDirectory();
 			var filePath = Path.GetFullPath(Path.Combine(cwd, fileName));
-			var cwdNormalized = Path.GetFullPath(cwd);
-			var sep = Path.DirectorySeparatorChar;
+			var cwdNormalized = Path.GetFullPath(cwd).TrimEnd(Path.DirectorySeparatorChar);
 
 			// Defensive: confirm the resolved path stays under cwd even though
 			// we already rejected obvious traversal sequences above.
-			if (!filePath.StartsWith(cwdNormalized + sep, StringComparison.Ordinal)
+			if (!filePath.StartsWith(cwdNormalized + Path.DirectorySeparatorChar, StringComparison.Ordinal)
 				&& filePath != cwdNormalized)
 			{
 				Console.Error.WriteLine("Error: Resolved file path escapes the current directory.");
@@ -242,6 +245,7 @@ public static class GoCommands
 				Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
 				".copilot", "skills", "comet-go");
 			var skillPath = Path.Combine(skillDir, "SKILL.md");
+			// Skill file is created once. Users can update via `maui ai update` or delete and re-create.
 			if (!File.Exists(skillPath))
 			{
 				Directory.CreateDirectory(skillDir);
@@ -263,8 +267,8 @@ public static class GoCommands
 	}
 
 	/// <summary>
-	/// Returns the Comet Go skill content in the standard SKILL.md format
-	/// for GitHub Copilot CLI user skills (~/.copilot/skills/comet-go/SKILL.md).
+	/// Returns the Comet Go skill content. This is a copy of .github/skills/comet-go/SKILL.md
+	/// and should be kept in sync with it.
 	/// </summary>
 	static string GetCometGoSkill() => """
 		---
@@ -587,6 +591,8 @@ public static class GoCommands
 		var command = new Command("serve", "Start the Comet Go dev server with hot reload")
 		{
 			fileArg,
+			portOption,
+			noQrOption,
 		};
 
 		command.SetAction(async (ParseResult parseResult, CancellationToken ct) =>

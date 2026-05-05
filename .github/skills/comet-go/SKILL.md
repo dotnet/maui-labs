@@ -150,7 +150,7 @@ Chain these after any control:
 .AutomationId("my-button")                 // accessibility / test identifier
 ```
 
-> ⚠️ **`.CornerRadius()` is Button-only.** Using it on VStack, HStack, TextField, or other non-Button views is silently ignored or crashes. Use `.RoundedBorder()` instead for rounded corners on containers.
+> ⚠️ **`.CornerRadius()` works on Button and Border but NOT on layout views (VStack, HStack, TextField, etc.).** Using it on unsupported views is silently ignored or crashes. Use `.RoundedBorder()` instead for rounded corners on containers and other views.
 
 ## Reactive State: Reactive<T> vs Signal<T>
 
