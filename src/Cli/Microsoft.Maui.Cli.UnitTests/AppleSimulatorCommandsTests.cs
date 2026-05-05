@@ -1,16 +1,21 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.CommandLine;
+using System.CommandLine.Parsing;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
 
+[Collection("CLI")]
 public class AppleSimulatorCommandsTests
 {
 	[Fact]
@@ -347,5 +352,109 @@ public class AppleSimulatorCommandsTests
 		var error = ErrorResult.FromException(ex);
 		Assert.Equal("E2213", error.Code);
 		Assert.Equal("platform", error.Category);
+	}
+
+	// --- Handler-level tests (require macOS, exercise CLI argument parsing) ---
+
+	static async Task<(int ExitCode, string StdOut, string StdErr, FakeAppleProvider Fake)> InvokeSimulatorCommandAsync(
+		Action<FakeAppleProvider>? configure = null,
+		params string[] args)
+	{
+		var fake = new FakeAppleProvider();
+		configure?.Invoke(fake);
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(appleProvider: fake);
+		var originalServices = Program.Services;
+		var stdOut = new StringWriter();
+		var stdErr = new StringWriter();
+		var originalOut = Console.Out;
+		var originalErr = Console.Error;
+		try
+		{
+			Program.Services = testProvider;
+			Console.SetOut(stdOut);
+			Console.SetError(stdErr);
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse(args);
+			var exitCode = await parseResult.InvokeAsync();
+			return (exitCode, stdOut.ToString(), stdErr.ToString(), fake);
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
+			Console.SetError(originalErr);
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task LaunchCommand_ForwardsArgsToProvider()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return;
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 15", Udid = "AAAA-BBBB", IsAvailable = true });
+				f.LaunchAppResult = true;
+			},
+			"apple", "simulator", "launch", "AAAA-BBBB", "com.test.app", "--args", "--debug", "--wait-for-debugger", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.LaunchedApps);
+		Assert.Equal("AAAA-BBBB", fake.LaunchedApps[0].Udid);
+		Assert.Equal("com.test.app", fake.LaunchedApps[0].BundleId);
+		Assert.Equal(new[] { "--debug", "--wait-for-debugger" }, fake.LaunchedApps[0].Args);
+	}
+
+	[Fact]
+	public async Task InstallCommand_InvalidUdid_ReturnsSimulatorNotFound()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return;
+
+		// Create a temporary .app directory so we pass path validation and hit the UDID check
+		var tempApp = Path.Combine(Path.GetTempPath(), $"FakeTest_{Guid.NewGuid():N}.app");
+		Directory.CreateDirectory(tempApp);
+		try
+		{
+			var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+				f =>
+				{
+					// No simulators — any UDID will be "not found"
+					f.InstallAppResult = true;
+				},
+				"apple", "simulator", "install", "BAD-UDID", tempApp, "--json");
+
+			Assert.Equal(1, exitCode);
+			Assert.Contains("E2204", stdout);
+			Assert.Empty(fake.InstalledApps); // never reached the provider
+		}
+		finally
+		{
+			Directory.Delete(tempApp, recursive: true);
+		}
+	}
+
+	[Fact]
+	public async Task UninstallCommand_ValidUdid_CallsProvider()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return;
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-1234", IsAvailable = true });
+				f.UninstallAppResult = true;
+			},
+			"apple", "simulator", "uninstall", "SIM-1234", "com.example.myapp", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.UninstalledApps);
+		Assert.Equal(("SIM-1234", "com.example.myapp"), fake.UninstalledApps[0]);
+		Assert.Contains("uninstalled", stdout);
 	}
 }

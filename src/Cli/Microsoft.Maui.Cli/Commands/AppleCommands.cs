@@ -530,6 +530,12 @@ public static class AppleCommands
 				return 1;
 			}
 
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
 			var success = appleProvider.InstallApp(udid, appPath);
 
 			if (!success)
@@ -568,6 +574,12 @@ public static class AppleCommands
 			var appleProvider = Program.AppleProvider;
 			var udid = parseResult.GetValue(udidArg)!;
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
 
 			var success = appleProvider.UninstallApp(udid, bundleId);
 
@@ -610,6 +622,12 @@ public static class AppleCommands
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
 			var extraArgs = parseResult.GetValue(extraArgsOption) ?? Array.Empty<string>();
 
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
 			var success = appleProvider.LaunchApp(udid, bundleId, extraArgs);
 
 			if (!success)
@@ -648,6 +666,12 @@ public static class AppleCommands
 			var appleProvider = Program.AppleProvider;
 			var udid = parseResult.GetValue(udidArg)!;
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
 
 			var success = appleProvider.TerminateApp(udid, bundleId);
 
@@ -690,6 +714,12 @@ public static class AppleCommands
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
 			var containerType = parseResult.GetValue(containerTypeOption);
 
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
 			var path = appleProvider.GetAppContainer(udid, bundleId, containerType);
 
 			if (path is null)
@@ -707,5 +737,11 @@ public static class AppleCommands
 		});
 
 		return containerCommand;
+	}
+
+	static bool SimulatorExists(IAppleProvider appleProvider, string udid)
+	{
+		var sims = appleProvider.GetSimulators();
+		return sims.Any(s => string.Equals(s.Udid, udid, StringComparison.OrdinalIgnoreCase));
 	}
 }

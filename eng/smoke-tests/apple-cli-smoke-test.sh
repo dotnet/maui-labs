@@ -159,6 +159,31 @@ else
     fail "Install --platform all dry-run" "No status in JSON output"
 fi
 
+# --- Test 8: Simulator app lifecycle commands (invalid UDID = validates error handling) ---
+echo "Test 8: maui apple simulator install (invalid UDID, expects E2204)"
+SIM_INSTALL_OUTPUT=$($MAUI apple simulator install "INVALID-UDID" "/tmp/Fake.app" --json 2>&1) || true
+if echo "$SIM_INSTALL_OUTPUT" | grep -q 'E2204'; then
+    pass "Simulator install correctly returns E2204 for invalid UDID"
+else
+    fail "Simulator install error handling" "Expected E2204 in output"
+fi
+
+echo "Test 9: maui apple simulator launch (invalid UDID, expects E2204)"
+SIM_LAUNCH_OUTPUT=$($MAUI apple simulator launch "INVALID-UDID" "com.fake.app" --json 2>&1) || true
+if echo "$SIM_LAUNCH_OUTPUT" | grep -q 'E2204'; then
+    pass "Simulator launch correctly returns E2204 for invalid UDID"
+else
+    fail "Simulator launch error handling" "Expected E2204 in output"
+fi
+
+echo "Test 10: maui apple simulator get-app-container (invalid UDID, expects E2204)"
+SIM_CONTAINER_OUTPUT=$($MAUI apple simulator get-app-container "INVALID-UDID" "com.fake.app" --json 2>&1) || true
+if echo "$SIM_CONTAINER_OUTPUT" | grep -q 'E2204'; then
+    pass "Simulator get-app-container correctly returns E2204 for invalid UDID"
+else
+    fail "Simulator get-app-container error handling" "Expected E2204 in output"
+fi
+
 # --- Summary ---
 echo ""
 echo "========================================"
