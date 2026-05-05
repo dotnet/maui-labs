@@ -15,7 +15,7 @@
     <IsShipping>true</IsShipping>
     <IsAotCompatible>true</IsAotCompatible>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
+    <NoWarn>$(NoWarn);CS1572;CS1573;IL2026;IL2104;IL3050</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>

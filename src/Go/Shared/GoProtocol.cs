@@ -182,6 +182,7 @@ public static class GoProtocol
 	/// <summary>
 	/// Encode a JSON message (Hello, Welcome, CompilationError, RestartRequired).
 	/// </summary>
+#pragma warning disable IL2026, IL3050 // JSON serialization in dev-time tool
 	public static byte[] EncodeJson<T>(GoMessageType type, T message)
 	{
 		var json = JsonSerializer.SerializeToUtf8Bytes(message, JsonOptions);
@@ -200,6 +201,7 @@ public static class GoProtocol
 	/// </summary>
 	public static T DecodeJson<T>(ReadOnlySpan<byte> payload)
 		=> JsonSerializer.Deserialize<T>(payload, JsonOptions)!;
+#pragma warning restore IL2026, IL3050
 
 	/// <summary>
 	/// Encode a Ping or Pong frame (no payload).
