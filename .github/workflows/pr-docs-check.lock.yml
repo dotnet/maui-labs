@@ -27,7 +27,7 @@
 # docs-maui with the actual documentation changes. If not, it comments on the
 # source PR explaining why.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"34cc4266ed0151a2037903be77206b4bf5ffe97f7c725420f700d0cd134bd486","compiler_version":"v0.53.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"b03e406e037b8b4fce1d6f330ae269ae0ff23ab54d27bdf5de9512ee8fbdfd19","compiler_version":"v0.53.5"}
 
 name: "PR Documentation Check"
 "on":
@@ -325,7 +325,6 @@ jobs:
         with:
           persist-credentials: false
           repository: dotnet/docs-maui
-          token: ${{ secrets.MAUI_BOT_TOKEN }}
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
       - name: Configure Git credentials

@@ -41,7 +41,6 @@ if: >-
 
 checkout:
   - repository: dotnet/docs-maui
-    github-token: ${{ secrets.MAUI_BOT_TOKEN }}
     current: true
 
 permissions:
