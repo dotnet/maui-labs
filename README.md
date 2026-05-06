@@ -128,12 +128,6 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 |---------|-------------|
 | `Microsoft.Maui.Build.AppProjectReference` | Build-time app project reference with artifact discovery |
 
-## Getting Started
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
-
-For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
-
 ## Agent Skills
 
 This repository is also a marketplace for distributable agent skills for .NET MAUI development. Skills are organized as plugins compatible with Copilot CLI, Claude Code, and VS Code.
@@ -149,6 +143,30 @@ This repository is also a marketplace for distributable agent skills for .NET MA
 ```
 
 See [plugins/](plugins/) for the full catalog and [plugins/CONTRIBUTING.md](plugins/CONTRIBUTING.md) for how to add skills.
+
+## Nightly Builds
+
+Preview packages from `main` are published automatically to the dotnet10 feed:
+
+```
+https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json
+```
+
+Add this feed to your `NuGet.config`:
+
+```xml
+<packageSources>
+  <add key="dotnet10" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json" />
+</packageSources>
+```
+
+These are CI builds from `main` only — PR builds are not published. Use wildcard versions (e.g., `0.1.0-preview.*`) to get the latest.
+
+## Getting Started
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
+
+For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
 ## Support
 
