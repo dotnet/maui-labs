@@ -1,0 +1,131 @@
+# Automatically creates a GitHub Release when a version tag is pushed.
+# Tags are created manually or by CI after a successful publish.
+
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Build release notes
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Determine prerelease status
+          if [[ "$TAG" == *"preview"* ]] || [[ "$TAG" == *"rc"* ]] || [[ "$TAG" == *"alpha"* ]] || [[ "$TAG" == *"beta"* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Discover shipped packages (IsPackable != false and has PackageId)
+          PACKAGES=""
+          while IFS= read -r csproj; do
+            # Skip projects explicitly marked as not packable
+            if grep -q '<IsPackable>false</IsPackable>' "$csproj" 2>/dev/null; then
+              continue
+            fi
+            PKG=$(grep -o '<PackageId>[^<]*</PackageId>' "$csproj" 2>/dev/null | sed 's/<[^>]*>//g')
+            if [ -n "$PKG" ]; then
+              PACKAGES="${PACKAGES}${PKG}"$'\n'
+            fi
+          done < <(find src/ platforms/ -name '*.csproj' 2>/dev/null)
+
+          PACKAGES=$(echo "$PACKAGES" | sort -u)
+
+          # Build package table
+          {
+            echo "### NuGet Packages"
+            echo ""
+            echo "| Package | NuGet |"
+            echo "|---------|-------|"
+
+            while IFS= read -r pkg; do
+              [ -z "$pkg" ] && continue
+              echo "| ${pkg} | [![NuGet](https://img.shields.io/nuget/v/${pkg}.svg)](https://www.nuget.org/packages/${pkg}) |"
+            done <<< "$PACKAGES"
+
+            echo ""
+            echo "---"
+            echo ""
+          } > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.notes.outputs.prerelease }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          ARGS=(
+            "$TAG"
+            --title "$TAG"
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+            --generate-notes
+          )
+
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+
+          # Skip if release already exists (idempotent on re-run)
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists — skipping."
+            exit 0
+          fi
+
+          gh release create "${ARGS[@]}"
+
+      - name: Assign milestone to PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Find the previous tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -A1 "^${TAG}$" | tail -1)
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$TAG" ]; then
+            echo "No previous tag found — skipping milestone assignment."
+            exit 0
+          fi
+          echo "Assigning PRs between $PREV_TAG and $TAG"
+
+          # Create milestone (closed — this release is done)
+          MS_NUMBER=$(gh api "repos/${{ github.repository }}/milestones" \
+            --method POST -f title="$TAG" -f state="closed" \
+            --jq '.number' 2>/dev/null)
+
+          if [ -z "$MS_NUMBER" ]; then
+            # Milestone may already exist
+            MS_NUMBER=$(gh api "repos/${{ github.repository }}/milestones?state=all" \
+              --jq ".[] | select(.title == \"$TAG\") | .number")
+          fi
+
+          if [ -z "$MS_NUMBER" ]; then
+            echo "Failed to create or find milestone — skipping."
+            exit 0
+          fi
+          echo "Milestone: $TAG (#$MS_NUMBER)"
+
+          # Extract PR numbers from commit messages between tags
+          PR_NUMBERS=$(git log "${PREV_TAG}..${TAG}" --oneline | grep -oE '#[0-9]+' | tr -d '#' | sort -un)
+
+          for pr in $PR_NUMBERS; do
+            gh api "repos/${{ github.repository }}/issues/$pr" \
+              --method PATCH --input - <<< "{\"milestone\":$MS_NUMBER}" --silent 2>/dev/null \
+              && echo "  Assigned #$pr" \
+              || echo "  Skipped #$pr (not found or already assigned)"
+          done
