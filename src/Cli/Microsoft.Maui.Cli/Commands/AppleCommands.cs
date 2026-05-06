@@ -530,11 +530,8 @@ public static class AppleCommands
 				return 1;
 			}
 
-			if (!SimulatorExists(appleProvider, udid))
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
-			}
 
 			var success = appleProvider.InstallApp(udid, appPath);
 
@@ -575,11 +572,8 @@ public static class AppleCommands
 			var udid = parseResult.GetValue(udidArg)!;
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
 
-			if (!SimulatorExists(appleProvider, udid))
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
-			}
 
 			var success = appleProvider.UninstallApp(udid, bundleId);
 
@@ -622,11 +616,8 @@ public static class AppleCommands
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
 			var extraArgs = parseResult.GetValue(extraArgsOption) ?? Array.Empty<string>();
 
-			if (!SimulatorExists(appleProvider, udid))
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
-			}
 
 			var success = appleProvider.LaunchApp(udid, bundleId, extraArgs);
 
@@ -667,11 +658,8 @@ public static class AppleCommands
 			var udid = parseResult.GetValue(udidArg)!;
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
 
-			if (!SimulatorExists(appleProvider, udid))
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
-			}
 
 			var success = appleProvider.TerminateApp(udid, bundleId);
 
@@ -714,11 +702,8 @@ public static class AppleCommands
 			var bundleId = parseResult.GetValue(bundleIdArg)!;
 			var containerType = parseResult.GetValue(containerTypeOption);
 
-			if (!SimulatorExists(appleProvider, udid))
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
-			}
 
 			var path = appleProvider.GetAppContainer(udid, bundleId, containerType);
 
@@ -739,9 +724,34 @@ public static class AppleCommands
 		return containerCommand;
 	}
 
-	static bool SimulatorExists(IAppleProvider appleProvider, string udid)
+	/// <summary>
+	/// Resolves a simulator by UDID, returning the match or null. Fetches the list once per call
+	/// (intentional: the subsequent simctl operation is a different command, so caching across
+	/// the validation + operation boundary isn't possible).
+	/// </summary>
+	static SimulatorInfo? FindSimulator(IAppleProvider appleProvider, string udid)
 	{
 		var sims = appleProvider.GetSimulators();
-		return sims.Any(s => string.Equals(s.Udid, udid, StringComparison.OrdinalIgnoreCase));
+		return sims.FirstOrDefault(s => string.Equals(s.Udid, udid, StringComparison.OrdinalIgnoreCase));
+	}
+
+	/// <summary>
+	/// Validates that the UDID refers to an existing, available simulator. Writes the appropriate
+	/// error via the formatter and returns false if validation fails.
+	/// </summary>
+	static bool ValidateSimulator(IAppleProvider appleProvider, string udid, IOutputFormatter formatter)
+	{
+		var sim = FindSimulator(appleProvider, udid);
+		if (sim is null)
+		{
+			formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+			return false;
+		}
+		if (!sim.IsAvailable)
+		{
+			formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"Simulator '{udid}' exists but is unavailable (its runtime may have been deleted). Use 'maui apple simulator list' to find an available device."));
+			return false;
+		}
+		return true;
 	}
 }

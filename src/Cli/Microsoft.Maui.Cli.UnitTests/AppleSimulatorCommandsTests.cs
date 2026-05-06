@@ -392,7 +392,7 @@ public class AppleSimulatorCommandsTests
 	public async Task LaunchCommand_ForwardsArgsToProvider()
 	{
 		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-			return;
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
 
 		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
 			f =>
@@ -413,7 +413,7 @@ public class AppleSimulatorCommandsTests
 	public async Task InstallCommand_InvalidUdid_ReturnsSimulatorNotFound()
 	{
 		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-			return;
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
 
 		// Create a temporary .app directory so we pass path validation and hit the UDID check
 		var tempApp = Path.Combine(Path.GetTempPath(), $"FakeTest_{Guid.NewGuid():N}.app");
@@ -442,7 +442,7 @@ public class AppleSimulatorCommandsTests
 	public async Task UninstallCommand_ValidUdid_CallsProvider()
 	{
 		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-			return;
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
 
 		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
 			f =>
@@ -456,5 +456,66 @@ public class AppleSimulatorCommandsTests
 		Assert.Single(fake.UninstalledApps);
 		Assert.Equal(("SIM-1234", "com.example.myapp"), fake.UninstalledApps[0]);
 		Assert.Contains("uninstalled", stdout);
+	}
+
+	[Fact]
+	public async Task TerminateCommand_ValidUdid_CallsProvider()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-TERM", IsAvailable = true });
+				f.TerminateAppResult = true;
+			},
+			"apple", "simulator", "terminate", "SIM-TERM", "com.example.running", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.TerminatedApps);
+		Assert.Equal(("SIM-TERM", "com.example.running"), fake.TerminatedApps[0]);
+		Assert.Contains("terminated", stdout);
+	}
+
+	[Fact]
+	public async Task GetAppContainerCommand_ValidUdid_ReturnsPath()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-CONT", IsAvailable = true });
+				f.GetAppContainerResult = "/Users/test/Library/Developer/CoreSimulator/Devices/SIM-CONT/data/Containers/Bundle/Application/ABC/MyApp.app";
+			},
+			"apple", "simulator", "get-app-container", "SIM-CONT", "com.example.myapp", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.GetAppContainerCalls);
+		Assert.Equal(("SIM-CONT", "com.example.myapp", (string?)null), fake.GetAppContainerCalls[0]);
+		Assert.Contains("MyApp.app", stdout);
+	}
+
+	[Fact]
+	public async Task GetAppContainerCommand_UnavailableSimulator_ReturnsError()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				// Simulator exists but IsAvailable = false (runtime deleted)
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 12", Udid = "OLD-SIM", IsAvailable = false });
+				f.GetAppContainerResult = "/some/path";
+			},
+			"apple", "simulator", "get-app-container", "OLD-SIM", "com.example.app", "--json");
+
+		Assert.Equal(1, exitCode);
+		Assert.Contains("E2204", stdout);
+		Assert.Contains("unavailable", stdout);
+		Assert.Empty(fake.GetAppContainerCalls); // never reached the provider
 	}
 }
