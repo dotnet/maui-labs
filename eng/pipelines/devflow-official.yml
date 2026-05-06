@@ -356,7 +356,7 @@ extends:
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
-                -projects $(Build.SourcesDirectory)\platforms\MacOS\MacOS.slnx
+                -projects $(Build.SourcesDirectory)\platforms\MacOS\MacOS-libs.slnf
                 $(_OfficialBuildArgs)
               displayName: Build, Test and Pack macOS AppKit
        
