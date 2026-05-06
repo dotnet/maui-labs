@@ -46,13 +46,13 @@ internal static class ProfileSessionSetup
 
 		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
-		var hasStartupProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.StartupProfilingPackageId);
+		var hasProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.ProfilingHelperPackageId);
 		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
 			? null
 			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
 				context.DiagnosticAddress,
 				context.ReservedPorts!.ExitControlPort,
-				injectBootstrap: !hasStartupProfilingHelper,
+				injectBootstrap: !hasProfilingHelper,
 				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
 				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
 
@@ -76,8 +76,8 @@ internal static class ProfileSessionSetup
 		if (context.AutoSelectedStoppingEvent)
 		{
 			context.Formatter.WriteInfo(
-				$"Stopping event: {ProfileCommand.StartupProfilingProviderName}/{ProfileCommand.StartupProfilingEventName} " +
-				"(auto-detected from the app's startup profiling helper).");
+				$"Stopping event: {ProfileCommand.ProfilingHelperProviderName}/{ProfileCommand.ProfilingHelperEventName} " +
+				"(auto-detected from the app's profiling helper).");
 		}
 
 		if (context.UseRuntimeOwnedTraceCollection && !string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
@@ -117,12 +117,19 @@ internal static class ProfileSessionSetup
 		if (context.BuildInjection is null)
 		{
 			context.Formatter.WriteWarning(
-				"The CLI's startup profiling injection assets were not found next to the tool binaries, so automatic startup-complete and graceful app-exit injection are unavailable for this run.");
+				"The CLI's profiling injection assets were not found next to the tool binaries, so automatic startup-complete and graceful app-exit injection are unavailable for this run.");
 		}
 	}
 
 	static bool ShouldUseRuntimeOwnedTraceCollection(ProfileSessionContext context)
 	{
+		// Runtime-owned EventPipe collection is tightly coupled to the startup-suspend
+		// handshake: the runtime opens the pipe at process start and writes the trace to
+		// a device-side file. Manual-start lets the app run normally and only attaches a
+		// trace later, so this path doesn't apply.
+		if (context.ManualStart)
+			return false;
+
 		if (!string.Equals(context.Transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase))
 			return false;
 

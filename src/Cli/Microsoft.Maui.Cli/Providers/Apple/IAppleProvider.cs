@@ -72,6 +72,34 @@ public interface IAppleProvider
 	bool EraseSimulator(string udidOrName);
 
 	/// <summary>
+	/// Installs an app bundle on a simulator.
+	/// </summary>
+	bool InstallApp(string udid, string appBundlePath);
+
+	/// <summary>
+	/// Uninstalls an app from a simulator by bundle identifier.
+	/// </summary>
+	bool UninstallApp(string udid, string bundleIdentifier);
+
+	/// <summary>
+	/// Launches an app on a simulator.
+	/// </summary>
+	bool LaunchApp(string udid, string bundleIdentifier, params string[] extraArgs);
+
+	/// <summary>
+	/// Terminates a running app on a simulator.
+	/// </summary>
+	bool TerminateApp(string udid, string bundleIdentifier);
+
+	/// <summary>
+	/// Gets the container path for an installed app on a simulator.
+	/// </summary>
+	/// <param name="udid">Simulator UDID.</param>
+	/// <param name="bundleIdentifier">App bundle identifier.</param>
+	/// <param name="containerType">Container type (e.g., "app", "data", "groups"). Null for default (app).</param>
+	string? GetAppContainer(string udid, string bundleIdentifier, string? containerType = null);
+
+	/// <summary>
 	/// Gets the health status of Apple tooling (Xcode, CLT, simulators).
 	/// </summary>
 	List<HealthCheck> CheckHealth();

@@ -164,6 +164,31 @@ public class AppleProvider : IAppleProvider
 		return _simulatorService?.Erase(udidOrName) ?? false;
 	}
 
+	public bool InstallApp(string udid, string appBundlePath)
+	{
+		return _simulatorService?.Install(udid, appBundlePath) ?? false;
+	}
+
+	public bool UninstallApp(string udid, string bundleIdentifier)
+	{
+		return _simulatorService?.Uninstall(udid, bundleIdentifier) ?? false;
+	}
+
+	public bool LaunchApp(string udid, string bundleIdentifier, params string[] extraArgs)
+	{
+		return _simulatorService?.Launch(udid, bundleIdentifier, extraArgs) ?? false;
+	}
+
+	public bool TerminateApp(string udid, string bundleIdentifier)
+	{
+		return _simulatorService?.Terminate(udid, bundleIdentifier) ?? false;
+	}
+
+	public string? GetAppContainer(string udid, string bundleIdentifier, string? containerType = null)
+	{
+		return _simulatorService?.GetAppContainer(udid, bundleIdentifier, containerType);
+	}
+
 	public List<HealthCheck> CheckHealth()
 	{
 		var checks = new List<HealthCheck>();

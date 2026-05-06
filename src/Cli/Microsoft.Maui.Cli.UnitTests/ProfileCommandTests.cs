@@ -595,7 +595,7 @@ public class ProfileCommandTests
 			transport: transport,
 			traceProfile: null,
 			duration: null,
-			stoppingEventProvider: "Microsoft.Maui.StartupProfiling",
+			stoppingEventProvider: "Microsoft.Maui.ProfilingHelper",
 			stoppingEventName: "StartupComplete",
 			stoppingEventPayloadFilter: null).ToArray();
 
@@ -607,7 +607,7 @@ public class ProfileCommandTests
 		// Stopping event provider enabled via --providers
 		var providersIdx = Array.IndexOf(args, "--providers");
 		Assert.True(providersIdx >= 0, "--providers flag should be present");
-		Assert.Contains("Microsoft.Maui.StartupProfiling", args[providersIdx + 1]);
+		Assert.Contains("Microsoft.Maui.ProfilingHelper", args[providersIdx + 1]);
 		Assert.Contains("Microsoft-Windows-DotNETRuntime", args[providersIdx + 1]);
 		Assert.Contains("0x1F000080018:5", args[providersIdx + 1]);
 
@@ -655,7 +655,7 @@ public class ProfileCommandTests
 			transport: transport,
 			traceProfile: "gc-verbose",
 			duration: null,
-			stoppingEventProvider: "Microsoft.Maui.StartupProfiling",
+			stoppingEventProvider: "Microsoft.Maui.ProfilingHelper",
 			stoppingEventName: "StartupComplete",
 			stoppingEventPayloadFilter: null).ToArray();
 
@@ -666,7 +666,7 @@ public class ProfileCommandTests
 		// Stopping event provider still injected
 		var providersIdx = Array.IndexOf(args, "--providers");
 		Assert.True(providersIdx >= 0);
-		Assert.Contains("Microsoft.Maui.StartupProfiling", args[providersIdx + 1]);
+		Assert.Contains("Microsoft.Maui.ProfilingHelper", args[providersIdx + 1]);
 		Assert.Contains("Microsoft-Windows-DotNETRuntime", args[providersIdx + 1]);
 		Assert.Contains("0x1F000080018:5", args[providersIdx + 1]);
 	}
@@ -744,15 +744,15 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
-	public void MauiStartupProfilingInjectionTargets_IncludeDynamicPgoEnvironmentVariables()
+	public void MauiProfilingHelperInjectionTargets_IncludeDynamicPgoEnvironmentVariables()
 	{
 		var targetsPath = Path.GetFullPath(Path.Combine(
 			AppContext.BaseDirectory,
-			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiStartupProfilingInjection.targets"));
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiProfilingHelperInjection.targets"));
 
 		var contents = File.ReadAllText(targetsPath);
 
-		Assert.Contains("MauiStartupProfilingEnableRuntimePgo", contents);
+		Assert.Contains("MauiProfilingHelperEnableRuntimePgo", contents);
 		Assert.Contains("DOTNET_TieredPGO=1", contents);
 		Assert.Contains("DOTNET_ReadyToRun=0", contents);
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
@@ -854,8 +854,8 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var buildInjection = new ProfilingBuildInjection(
-			TargetsPath: TestPath("fake", "MauiStartupProfilingInjection.targets"),
-			AssemblyPath: TestPath("fake", "Microsoft.Maui.StartupProfiling.dll"),
+			TargetsPath: TestPath("fake", "MauiProfilingHelperInjection.targets"),
+			AssemblyPath: TestPath("fake", "Microsoft.Maui.ProfilingHelper.dll"),
 			ExitControlHost: "10.0.2.2",
 			ExitControlPort: 9001,
 			InjectBootstrap: true,
@@ -872,10 +872,10 @@ public class ProfileCommandTests
 
 		Assert.DoesNotContain("-p:DiagnosticSuspend=true", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
-		Assert.Contains("-p:MauiStartupProfilingExitHost=10.0.2.2", args);
-		Assert.Contains("-p:MauiStartupProfilingExitPort=9001", args);
-		Assert.Contains("-p:MauiStartupProfilingEnableRuntimePgo=true", args);
-		Assert.Contains("-p:MauiStartupProfilingEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
+		Assert.Contains("-p:MauiProfilingHelperExitHost=10.0.2.2", args);
+		Assert.Contains("-p:MauiProfilingHelperExitPort=9001", args);
+		Assert.Contains("-p:MauiProfilingHelperEnableRuntimePgo=true", args);
+		Assert.Contains("-p:MauiProfilingHelperEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
 	}
 
 	[Fact]
@@ -884,8 +884,8 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
 		var buildInjection = new ProfilingBuildInjection(
-			TargetsPath: TestPath("fake", "MauiStartupProfilingInjection.targets"),
-			AssemblyPath: TestPath("fake", "Microsoft.Maui.StartupProfiling.dll"),
+			TargetsPath: TestPath("fake", "MauiProfilingHelperInjection.targets"),
+			AssemblyPath: TestPath("fake", "Microsoft.Maui.ProfilingHelper.dll"),
 			ExitControlHost: "10.0.2.2",
 			ExitControlPort: 9001,
 			InjectBootstrap: true,
@@ -904,8 +904,76 @@ public class ProfileCommandTests
 		Assert.DoesNotContain("-p:AndroidEnableProfiler=true", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains("-p:Device=android-emu", args);
-		Assert.Contains("-p:MauiStartupProfilingExitHost=10.0.2.2", args);
-		Assert.Contains("-p:MauiStartupProfilingExitPort=9001", args);
+		Assert.Contains("-p:MauiProfilingHelperExitHost=10.0.2.2", args);
+		Assert.Contains("-p:MauiProfilingHelperExitPort=9001", args);
+	}
+
+	[Fact]
+	public void BuildCompileArguments_ManualMode_EmitsDiagnosticSuspendFalse()
+	{
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+
+		var args = ProfileCommand.BuildCompileArguments(
+			TestPath("fake", "MyApp.csproj"),
+			"net10.0-android",
+			"Release",
+			transport,
+			9000,
+			buildInjection: null,
+			diagnosticSuspend: false);
+
+		Assert.Contains("-p:DiagnosticSuspend=false", args);
+		Assert.DoesNotContain("-p:DiagnosticSuspend=true", args);
+		Assert.Contains("-p:EnableDiagnostics=true", args);
+		Assert.Contains("-p:DiagnosticPort=9000", args);
+	}
+
+	[Fact]
+	public void BuildLaunchArguments_ManualMode_EmitsDiagnosticSuspendFalse()
+	{
+		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
+
+		var args = ProfileCommand.BuildLaunchArguments(
+			TestPath("fake", "MyApp.csproj"),
+			"net10.0-ios",
+			"Release",
+			device,
+			transport,
+			9000,
+			buildInjection: null,
+			diagnosticSuspend: false);
+
+		Assert.Contains("-p:DiagnosticSuspend=false", args);
+		Assert.DoesNotContain("-p:DiagnosticSuspend=true", args);
+	}
+
+	[Fact]
+	public void BuildCompileArguments_StartupMode_DefaultsToDiagnosticSuspendTrue()
+	{
+		// Regression: startup callers don't pass diagnosticSuspend, so the default must remain true
+		// to preserve the suspended-startup handshake.
+		var device = CreateDevice(Platforms.Android, isEmulator: true);
+		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+
+		var args = ProfileCommand.BuildCompileArguments(
+			TestPath("fake", "MyApp.csproj"),
+			"net10.0-android",
+			"Release",
+			transport,
+			9000,
+			buildInjection: null);
+
+		Assert.Contains("-p:DiagnosticSuspend=true", args);
+	}
+
+	[Fact]
+	public void ProfileCommand_ManualSubcommand_IsRegistered()
+	{
+		var profile = ProfileCommand.Create();
+		Assert.Contains(profile.Subcommands, c => c.Name == "manual");
+		Assert.Contains(profile.Subcommands, c => c.Name == "startup");
 	}
 
 	[Fact]

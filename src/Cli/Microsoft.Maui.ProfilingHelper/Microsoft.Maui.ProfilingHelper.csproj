@@ -5,9 +5,9 @@
          dependencies. MAUI apps on Android/iOS/Mac Catalyst can reference it via the
          standard TFM compatibility fallback. -->
     <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
-    <RootNamespace>Microsoft.Maui.StartupProfiling</RootNamespace>
-    <PackageId>Microsoft.Maui.StartupProfiling</PackageId>
-    <Description>A lightweight helper for .NET MAUI startup profiling. Add this package to your app, call StartupProfilingMarker.Complete() when startup is logically done, and maui profile will stop the trace automatically via dotnet-trace --stopping-event-* integration.</Description>
+    <RootNamespace>Microsoft.Maui.ProfilingHelper</RootNamespace>
+    <PackageId>Microsoft.Maui.ProfilingHelper</PackageId>
+    <Description>A lightweight helper for .NET MAUI profiling. The maui CLI injects this assembly to drive its exit-control handshake; you can also reference it directly to mark startup completion via MauiProfilingMarker.Complete().</Description>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

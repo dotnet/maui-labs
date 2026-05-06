@@ -347,6 +347,11 @@ public static class AppleCommands
 		simCommand.Add(deleteCommand);
 		simCommand.Add(CreateSimulatorCreateCommand());
 		simCommand.Add(CreateSimulatorEraseCommand());
+		simCommand.Add(CreateSimulatorInstallCommand());
+		simCommand.Add(CreateSimulatorUninstallCommand());
+		simCommand.Add(CreateSimulatorLaunchCommand());
+		simCommand.Add(CreateSimulatorTerminateCommand());
+		simCommand.Add(CreateSimulatorGetAppContainerCommand());
 		return simCommand;
 	}
 
@@ -491,5 +496,252 @@ public static class AppleCommands
 		});
 
 		return eraseCommand;
+	}
+
+	static Command CreateSimulatorInstallCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var appPathArg = new Argument<string>("app-bundle-path") { Description = "Path to the .app bundle to install" };
+
+		var installCommand = new Command("install", "Install an app bundle on a simulator") { udidArg, appPathArg };
+		installCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var appPath = parseResult.GetValue(appPathArg)!;
+
+			if (!appPath.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Path must point to a .app bundle directory, got: '{appPath}'."));
+				return 1;
+			}
+
+			if (!Directory.Exists(appPath))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"App bundle not found at '{appPath}'."));
+				return 1;
+			}
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
+			var success = appleProvider.InstallApp(udid, appPath);
+
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorInstallFailed, $"Failed to install app on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorAppResult { Udid = udid, AppPath = appPath, Action = "installed", Success = true });
+			else
+				formatter.WriteSuccess($"App installed on simulator '{udid}'.");
+			return 0;
+		});
+
+		return installCommand;
+	}
+
+	static Command CreateSimulatorUninstallCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var bundleIdArg = new Argument<string>("bundle-identifier") { Description = "App bundle identifier (e.g. com.example.MyApp)" };
+
+		var uninstallCommand = new Command("uninstall", "Uninstall an app from a simulator") { udidArg, bundleIdArg };
+		uninstallCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var bundleId = parseResult.GetValue(bundleIdArg)!;
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
+			var success = appleProvider.UninstallApp(udid, bundleId);
+
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorUninstallFailed, $"Failed to uninstall '{bundleId}' from simulator '{udid}'."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorAppResult { Udid = udid, BundleIdentifier = bundleId, Action = "uninstalled", Success = true });
+			else
+				formatter.WriteSuccess($"App '{bundleId}' uninstalled from simulator '{udid}'.");
+			return 0;
+		});
+
+		return uninstallCommand;
+	}
+
+	static Command CreateSimulatorLaunchCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var bundleIdArg = new Argument<string>("bundle-identifier") { Description = "App bundle identifier (e.g. com.example.MyApp)" };
+		var extraArgsOption = new Option<string[]>("--args") { Description = "Extra arguments to pass to the app", AllowMultipleArgumentsPerToken = true };
+
+		var launchCommand = new Command("launch", "Launch an app on a simulator") { udidArg, bundleIdArg, extraArgsOption };
+		launchCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var bundleId = parseResult.GetValue(bundleIdArg)!;
+			var extraArgs = parseResult.GetValue(extraArgsOption) ?? Array.Empty<string>();
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
+			var success = appleProvider.LaunchApp(udid, bundleId, extraArgs);
+
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorLaunchFailed, $"Failed to launch '{bundleId}' on simulator '{udid}'. Ensure the app is installed and the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorAppResult { Udid = udid, BundleIdentifier = bundleId, Action = "launched", Success = true });
+			else
+				formatter.WriteSuccess($"App '{bundleId}' launched on simulator '{udid}'.");
+			return 0;
+		});
+
+		return launchCommand;
+	}
+
+	static Command CreateSimulatorTerminateCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var bundleIdArg = new Argument<string>("bundle-identifier") { Description = "App bundle identifier (e.g. com.example.MyApp)" };
+
+		var terminateCommand = new Command("terminate", "Terminate a running app on a simulator") { udidArg, bundleIdArg };
+		terminateCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var bundleId = parseResult.GetValue(bundleIdArg)!;
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
+			var success = appleProvider.TerminateApp(udid, bundleId);
+
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorTerminateFailed, $"Failed to terminate '{bundleId}' on simulator '{udid}'."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorAppResult { Udid = udid, BundleIdentifier = bundleId, Action = "terminated", Success = true });
+			else
+				formatter.WriteSuccess($"App '{bundleId}' terminated on simulator '{udid}'.");
+			return 0;
+		});
+
+		return terminateCommand;
+	}
+
+	static Command CreateSimulatorGetAppContainerCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var bundleIdArg = new Argument<string>("bundle-identifier") { Description = "App bundle identifier (e.g. com.example.MyApp)" };
+		var containerTypeOption = new Option<string?>("--type") { Description = "Container type: 'app' (default), 'data', 'groups', or a specific group identifier" };
+
+		var containerCommand = new Command("get-app-container", "Get the container path for an installed app") { udidArg, bundleIdArg, containerTypeOption };
+		containerCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var bundleId = parseResult.GetValue(bundleIdArg)!;
+			var containerType = parseResult.GetValue(containerTypeOption);
+
+			if (!SimulatorExists(appleProvider, udid))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"No simulator found with UDID '{udid}'. List simulators with 'maui apple simulator list'."));
+				return 1;
+			}
+
+			var path = appleProvider.GetAppContainer(udid, bundleId, containerType);
+
+			if (path is null)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorGetContainerFailed, $"Failed to get container for '{bundleId}' on simulator '{udid}'. Ensure the app is installed."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorAppContainerResult { Udid = udid, BundleIdentifier = bundleId, ContainerType = containerType, Path = path });
+			else
+				formatter.WriteSuccess(path);
+			return 0;
+		});
+
+		return containerCommand;
+	}
+
+	static bool SimulatorExists(IAppleProvider appleProvider, string udid)
+	{
+		var sims = appleProvider.GetSimulators();
+		return sims.Any(s => string.Equals(s.Udid, udid, StringComparison.OrdinalIgnoreCase));
 	}
 }

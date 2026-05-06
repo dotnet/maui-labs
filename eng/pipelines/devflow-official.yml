@@ -105,7 +105,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen
+            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI and Apple workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
               displayName: Install Android SDK dependencies
@@ -133,7 +133,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -157,7 +157,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -185,7 +185,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -197,7 +197,7 @@ extends:
             displayName: EssentialsAI - macOS (native build)
             pool:
               name: Azure Pipelines
-              vmImage: macos-15
+              vmImage: macos-latest-internal
               os: macOS
             templateContext:
               outputs:
@@ -215,7 +215,7 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
-            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
             - script: |
                 ./eng/common/build.sh \
@@ -255,7 +255,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen
+            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
               displayName: Install Android SDK dependencies
@@ -286,7 +286,7 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET SDK
               inputs:
-                useGlobalJson: true
+                version: 10.0.105
             - script: |
                 sudo apt-get update
                 sudo apt-get install -y \
@@ -324,7 +324,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui
+            - script: .dotnet\dotnet workload install maui --version 10.0.203
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -333,14 +333,14 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build, Test and Pack WPF
 
-          # macOS AppKit packages target net10.0-macos — must build on macOS.
-          # Signing runs in the Arcade post-build stage (which validates on Windows),
-          # so the macOS-built nupkgs flow through the standard artifact pipeline.
+          # macOS AppKit is pure managed C# — the macOS workload provides Apple
+          # reference assemblies on Windows, so it compiles and signs on Windows
+          # without needing a macOS agent. MicroBuild handles signing automatically.
           - job: MacOS
-            displayName: macOS AppKit - macOS
+            displayName: macOS AppKit - Windows
             pool:
-              name: Azure Pipelines
-              vmImage: macos-latest
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
             strategy:
               matrix:
                 Release:
@@ -349,18 +349,16 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                useGlobalJson: true
-            - script: dotnet workload install maui macos
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            - script: .dotnet\dotnet workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
-            - script: ./eng/common/cibuild.sh
-                --configuration $(_BuildConfig)
-                --prepareMachine
-                --projects $(Build.SourcesDirectory)/platforms/MacOS/MacOS.slnx
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\platforms\MacOS\MacOS-libs.slnf
                 $(_OfficialBuildArgs)
-              displayName: Build and Pack macOS AppKit
+              displayName: Build, Test and Pack macOS AppKit
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:

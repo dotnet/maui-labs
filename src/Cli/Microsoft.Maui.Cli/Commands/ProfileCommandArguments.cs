@@ -13,7 +13,8 @@ internal static class ProfileCommandArguments
 		string configuration,
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
-		ProfilingBuildInjection? buildInjection)
+		ProfilingBuildInjection? buildInjection,
+		bool diagnosticSuspend = true)
 	{
 		var args = new List<string>
 		{
@@ -27,7 +28,7 @@ internal static class ProfileCommandArguments
 		AppendEnableDiagnosticsArgument(args);
 
 		if (!UsesRuntimeOwnedEventPipe(buildInjection))
-			AppendDiagnosticArguments(args, transport, diagnosticPort);
+			AppendDiagnosticArguments(args, transport, diagnosticPort, diagnosticSuspend);
 
 		AppendBuildInjectionArguments(args, buildInjection);
 		return [.. args];
@@ -40,7 +41,8 @@ internal static class ProfileCommandArguments
 		Device device,
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
-		ProfilingBuildInjection? buildInjection)
+		ProfilingBuildInjection? buildInjection,
+		bool diagnosticSuspend = true)
 	{
 		var args = new List<string>
 		{
@@ -56,7 +58,7 @@ internal static class ProfileCommandArguments
 		AppendEnableDiagnosticsArgument(args);
 
 		if (!UsesRuntimeOwnedEventPipe(buildInjection))
-			AppendDiagnosticArguments(args, transport, diagnosticPort);
+			AppendDiagnosticArguments(args, transport, diagnosticPort, diagnosticSuspend);
 
 		if (string.Equals(transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
 		{
@@ -67,11 +69,11 @@ internal static class ProfileCommandArguments
 		return [.. args];
 	}
 
-	static void AppendDiagnosticArguments(List<string> args, ProfileTransportConfiguration transport, int diagnosticPort)
+	static void AppendDiagnosticArguments(List<string> args, ProfileTransportConfiguration transport, int diagnosticPort, bool diagnosticSuspend)
 	{
 		args.Add($"-p:DiagnosticAddress={transport.DiagnosticAddress}");
 		args.Add($"-p:DiagnosticPort={diagnosticPort}");
-		args.Add("-p:DiagnosticSuspend=true");
+		args.Add($"-p:DiagnosticSuspend={(diagnosticSuspend ? "true" : "false")}");
 		args.Add($"-p:DiagnosticListenMode={transport.DiagnosticListenMode}");
 	}
 
@@ -84,19 +86,19 @@ internal static class ProfileCommandArguments
 			return;
 
 		args.Add($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}");
-		args.Add("-p:MauiStartupProfilingInject=true");
+		args.Add("-p:MauiProfilingHelperInject=true");
 		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))
-			args.Add($"-p:MauiStartupProfilingExitHost={buildInjection.ExitControlHost}");
+			args.Add($"-p:MauiProfilingHelperExitHost={buildInjection.ExitControlHost}");
 		if (buildInjection.ExitControlPort > 0)
-			args.Add($"-p:MauiStartupProfilingExitPort={buildInjection.ExitControlPort}");
-		args.Add($"-p:MauiStartupProfilingInjectBootstrap={(buildInjection.InjectBootstrap ? "true" : "false")}");
+			args.Add($"-p:MauiProfilingHelperExitPort={buildInjection.ExitControlPort}");
+		args.Add($"-p:MauiProfilingHelperInjectBootstrap={(buildInjection.InjectBootstrap ? "true" : "false")}");
 		if (buildInjection.EnableRuntimePgo)
-			args.Add("-p:MauiStartupProfilingEnableRuntimePgo=true");
+			args.Add("-p:MauiProfilingHelperEnableRuntimePgo=true");
 		if (!string.IsNullOrWhiteSpace(buildInjection.EventPipeOutputPath))
-			args.Add($"-p:MauiStartupProfilingEventPipeOutputPath={buildInjection.EventPipeOutputPath}");
+			args.Add($"-p:MauiProfilingHelperEventPipeOutputPath={buildInjection.EventPipeOutputPath}");
 
 		if (!string.IsNullOrWhiteSpace(buildInjection.AssemblyPath))
-			args.Add($"-p:MauiStartupProfilingAssemblyPath={buildInjection.AssemblyPath}");
+			args.Add($"-p:MauiProfilingHelperAssemblyPath={buildInjection.AssemblyPath}");
 	}
 
 	static bool UsesRuntimeOwnedEventPipe(ProfilingBuildInjection? buildInjection)

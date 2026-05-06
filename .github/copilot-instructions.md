@@ -295,6 +295,12 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
               displayName: Build and Test {Product}
 ```
 
+> **SDK versioning:** Use `UseDotNet@2` with an explicit `version:` matching the repo-root `global.json` SDK version, **not** `useGlobalJson: true` — the latter scans the entire checkout and can find nested `global.json` files (e.g. Comet's .NET 11 preview) that break non-Comet jobs.
+>
+> **Workload versioning:** Always pin workload installs with `--version <pinned>`. Check `_build.yml` for the current pinned version. Unpinned installs cause version drift between CI and official builds.
+>
+> **macOS/Apple builds:** Products targeting Apple TFMs (`net10.0-macos`, `-ios`, `-maccatalyst`) that are **pure managed C#** can build on Windows — the macOS workload provides Apple reference assemblies for cross-compilation, and MicroBuild signs on Windows automatically. Products with **native code** (e.g. Swift bindings) require a **two-stage build**: a macOS job that compiles native artifacts, then a Windows job that downloads them and packs/signs. Use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with `templateContext: outputs:` for the macOS stage. Add `sudo xcode-select` before workload install — check https://aka.ms/xcode-requirement for the required Xcode version. See the `EssentialsAI_macOS`/`EssentialsAI` job pair for the native two-stage pattern, and the `MacOS` job for the pure managed single-stage pattern.
+
 #### c) Conditional publish stage (at the bottom, after the other `publish_*_nuget` stages)
 
 This stage filters the product's `.nupkg` files from the shared `PackageArtifacts` artifact, then pushes them to NuGet.org via the `1ES.PublishNuget` task.

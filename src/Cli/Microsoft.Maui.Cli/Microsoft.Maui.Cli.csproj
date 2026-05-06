@@ -55,7 +55,7 @@
   </Target>
 
   <ItemGroup>
-    <ProjectReference Include="..\Microsoft.Maui.StartupProfiling\Microsoft.Maui.StartupProfiling.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
     <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
@@ -66,9 +66,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Build\MauiStartupProfiling.AutoInitialize.cs" />
-    <Content Include="Build\MauiStartupProfilingInjection.targets" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Build\MauiStartupProfiling.AutoInitialize.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Compile Remove="Build\MauiProfilingHelper.AutoInitialize.cs" />
+    <Content Include="Build\MauiProfilingHelperInjection.targets" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Build\MauiProfilingHelper.AutoInitialize.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

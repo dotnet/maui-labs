@@ -19,7 +19,11 @@ internal static class ProfileSessionRunner
 			{
 				stopRequestedByUser = await ProfileTraceLifecycle.WaitForCompletionAsync(
 					context.TraceProcess,
-					allowManualStop: !context.UseJson,
+					// Manual mode is driven by stdin signals, so we still listen for
+					// a newline / Ctrl-C even in --json: scripted callers pipe a second
+					// newline (or close stdin) to stop. Other modes keep the existing
+					// "no manual stop in JSON" behavior.
+					allowManualStop: !context.UseJson || context.ManualStart,
 					context.Formatter,
 					context.UseJson,
 					context.Verbose,
@@ -109,9 +113,11 @@ internal static class ProfileSessionRunner
 
 		if (!appExitRequested && !context.UseJson)
 		{
-			context.Formatter.WriteWarning(
-				"The app did not connect to the startup profiling exit channel, so it may remain running and not flush PGO data. " +
-				"Ensure it references Microsoft.Maui.StartupProfiling and loads that assembly during startup.");
+			context.Formatter.WriteWarning(context.ManualStart
+				? "The app did not connect to the profiling exit channel, so it may remain running. " +
+				  "Ensure it references Microsoft.Maui.ProfilingHelper."
+				: "The app did not connect to the startup profiling exit channel, so it may remain running and not flush PGO data. " +
+				  "Ensure it references Microsoft.Maui.ProfilingHelper and loads that assembly during startup.");
 		}
 	}
 
