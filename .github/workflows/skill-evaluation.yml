@@ -75,6 +75,8 @@ jobs:
           fi
 
       - name: Post evaluation commit status
+        # Skip on fork PRs — restricted GITHUB_TOKEN can't write commit statuses
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
