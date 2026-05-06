@@ -2,8 +2,6 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Windows.WPF.svg?label=Microsoft.Maui.Platforms.Windows.WPF)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Windows.WPF/)
 [![NuGet](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Windows.WPF.Essentials.svg?label=Microsoft.Maui.Platforms.Windows.WPF.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Windows.WPF.Essentials/)
-[![Build](https://github.com/dotnet/maui-labs/actions/workflows/build.yml/badge.svg)](https://github.com/dotnet/maui-labs/actions/workflows/build.yml)
-[![UI Tests](https://github.com/dotnet/maui-labs/actions/workflows/ui-tests.yml/badge.svg)](https://github.com/dotnet/maui-labs/actions/workflows/ui-tests.yml)
 
 Custom .NET MAUI backend targeting WPF (Windows Presentation Foundation) — an alternative to the official WinUI backend.
 
