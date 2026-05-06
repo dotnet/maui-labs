@@ -188,7 +188,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 5. Create **two READMEs**:
    - A **contributor README** at the product root (e.g. `src/{NewProduct}/README.md`) for GitHub browsing — describes features, build instructions, architecture, and links to the NuGet README.
-   - A **NuGet README** next to the shipping csproj (e.g. `src/{NewProduct}/Microsoft.Maui.{NewProduct}/README.md`) — consumer-facing with install, quick start, and usage examples. Pack it via `<None Include="README.md" Pack="true" PackagePath="/" />` in the csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` to avoid duplicating the repo-root README.
+   - A **NuGet README** next to the shipping csproj (e.g. `src/{NewProduct}/Microsoft.Maui.{NewProduct}/README.md`) — consumer-facing with install, quick start, and usage examples. Pack it via `<None Include="README.md" Pack="true" PackagePath="/" />` in the csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` to avoid duplicating the repo-root README. **Images must use absolute URLs** (`https://raw.githubusercontent.com/dotnet/maui-labs/main/...`) — relative paths break on NuGet.org.
    
    Both should include: product name, feature list, platform support matrix, quick start code, package table, requirements, and experimental status warning. Keep feature descriptions aligned to avoid drift.
 6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description, feature highlights, and package table.

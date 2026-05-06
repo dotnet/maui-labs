@@ -13,19 +13,19 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 | Home | Controls | Layouts |
 |------|----------|---------|
-| ![Home](docs/screenshots/home.png) | ![Controls](docs/screenshots/controls.png) | ![Layouts](docs/screenshots/layouts.png) |
+| ![Home](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/home.png) | ![Controls](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/controls.png) | ![Layouts](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/layouts.png) |
 
 | Shapes | Graphics | CollectionView |
 |--------|----------|----------------|
-| ![Shapes](docs/screenshots/shapes.png) | ![Graphics](docs/screenshots/graphics.png) | ![CollectionView](docs/screenshots/collectionview.png) |
+| ![Shapes](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/shapes.png) | ![Graphics](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/graphics.png) | ![CollectionView](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/collectionview.png) |
 
 | FormattedText | Pickers | Transforms |
 |---------------|---------|------------|
-| ![FormattedText](docs/screenshots/formattedtext.png) | ![Pickers](docs/screenshots/pickers.png) | ![Transforms](docs/screenshots/transforms.png) |
+| ![FormattedText](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/formattedtext.png) | ![Pickers](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/pickers.png) | ![Transforms](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/transforms.png) |
 
 | FontAwesome | ControlTemplate |
 |-------------|-----------------|
-| ![FontAwesome](docs/screenshots/fontawesome.png) | ![ControlTemplate](docs/screenshots/controltemplate.png) |
+| ![FontAwesome](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/fontawesome.png) | ![ControlTemplate](https://raw.githubusercontent.com/dotnet/maui-labs/main/platforms/Windows.WPF/docs/screenshots/controltemplate.png) |
 
 ## Quick Start — Setting Up a WPF MAUI App
 
