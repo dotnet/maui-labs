@@ -196,7 +196,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 ### CI/CD Setup
 
 7. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
-8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. Use `UseDotNet@2` with an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. macOS products must use `pool: { name: Azure Pipelines, vmImage: macos-latest-internal, os: macOS }` with `templateContext:`, and select the Xcode version required by the pinned workload (check https://aka.ms/xcode-requirement).
+8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. Use `UseDotNet@2` with an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
 
 > **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 
