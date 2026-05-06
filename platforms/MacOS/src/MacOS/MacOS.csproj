@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <RootNamespace>Microsoft.Maui.Platforms.MacOS</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.MacOS</AssemblyName>
+    <PackageId>Microsoft.Maui.Platforms.MacOS</PackageId>
+    <Version>$(PlatformMauiMacOSVersion)</Version>
+    <Description>A .NET MAUI backend for macOS using AppKit. Run your MAUI apps natively on macOS with real AppKit controls (NSWindow, NSButton, NSTextField, etc.) — not Mac Catalyst.</Description>
+    <PackageTags>maui;macos;appkit;desktop;dotnet;cross-platform</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+
+  <!-- Linker descriptor: preserve all public API types for AOT/trimming -->
+  <ItemGroup>
+    <EmbeddedResource Include="ILLink.Descriptors.xml">
+      <LogicalName>ILLink.Descriptors.xml</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="buildTransitive/**" Pack="true" PackagePath="build/" />
+  </ItemGroup>
+
+</Project>

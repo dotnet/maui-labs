@@ -185,6 +185,22 @@ public class ProfilerCoreTests
     }
 
     [Fact]
+    public void RuntimeProfilerCollector_InvalidFrameEstimate_UsesDefaultFrameEstimate()
+    {
+        var collector = new RuntimeProfilerCollector();
+        collector.Start(100);
+        SetPrivateField(collector, "_estimatedFrameTimeMs", 0d);
+
+        var collected = collector.TryCollect(out var sample);
+        collector.Stop();
+
+        Assert.True(collected);
+        Assert.True(sample.Fps > 0, $"Fps was {sample.Fps}, expected > 0");
+        Assert.True(sample.FrameTimeMsP95 > 0, $"FrameTimeMsP95 was {sample.FrameTimeMsP95}, expected > 0");
+        Assert.StartsWith("estimated.default-60hz", sample.FrameQuality);
+    }
+
+    [Fact]
     public void ProfilerSessionStore_IsActiveReflectsLifecycle()
     {
         var store = new ProfilerSessionStore(10, 10, 10);
@@ -353,6 +369,13 @@ public class ProfilerCoreTests
         Assert.True(
             missingInDriver.Length == 0,
             $"Driver contract {typeof(TDriver).Name} is missing properties: {string.Join(", ", missingInDriver)}");
+    }
+
+    private static void SetPrivateField<TValue>(object instance, string fieldName, TValue value)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field.SetValue(instance, value);
     }
 
     private sealed class ThrowingNativeProvider : INativeFrameStatsProvider

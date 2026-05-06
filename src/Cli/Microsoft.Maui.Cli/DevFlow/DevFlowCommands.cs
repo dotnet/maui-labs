@@ -1,11 +1,11 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Cli.DevFlow.Skills;
 using Microsoft.Maui.Cli.Utils;
 
 namespace Microsoft.Maui.Cli.DevFlow;
@@ -834,7 +834,18 @@ public class DevFlowCommands
         devflowCommand.Add(networkCommand);
 
         // ===== storage subcommands =====
-        var storageCommand = new Command("storage", "Manage app preferences and secure storage");
+        var storageCommand = new Command("storage", "Manage app preferences, secure storage, and sandboxed app files");
+
+        var storageRootsCmd = new Command("roots", "List file storage roots advertised by the app");
+        storageRootsCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await SimpleGetAsync(host, port, "/api/v1/storage/roots", output.ResolveJsonMode(json, noJson));
+        });
+        storageCommand.Add(storageRootsCmd);
 
         // ===== preferences subcommands =====
         var prefsCommand = new Command("preferences", "Manage app preferences (key-value store)");
@@ -997,6 +1008,102 @@ public class DevFlowCommands
         secureCommand.Add(secureClearCmd);
 
         storageCommand.Add(secureCommand);
+
+        // ===== app file subcommands =====
+        var filesCommand = new Command("files", "Manage files under an advertised app storage root");
+        var filesRootOption = new Option<string?>("--root") { Description = "Storage root id (default: appData; use 'storage roots' to discover supported roots)" };
+        filesRootOption.Recursive = true;
+        filesCommand.Add(filesRootOption);
+
+        var filesListPathArg = new Argument<string?>("path") { Description = "Relative subdirectory path to list", DefaultValueFactory = _ => null };
+        var filesListCmd = new Command("list", "List files and directories") { filesListPathArg };
+        filesListCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            var path = ctx.GetValue(filesListPathArg);
+            var root = ctx.GetValue(filesRootOption);
+            var isJson = output.ResolveJsonMode(json, noJson);
+            var qs = BuildStorageFilesQuery(path, root);
+            await SimpleGetAsync(host, port, $"/api/v1/storage/files{qs}", isJson);
+        });
+        filesCommand.Add(filesListCmd);
+
+        var filesDownloadPathArg = new Argument<string>("path") { Description = "Relative file path under the selected storage root" };
+        var filesDownloadOutputOption = new Option<string?>("--output", "-o")
+        {
+            Description = "Local file or directory path to write the downloaded file to. Relative paths are resolved from the current directory."
+        };
+        var filesDownloadCmd = new Command("download", "Download a file as base64 content or write it locally") { filesDownloadPathArg, filesDownloadOutputOption };
+        filesDownloadCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            var path = ctx.GetValue(filesDownloadPathArg)!;
+            var root = ctx.GetValue(filesRootOption);
+            var outputPath = ctx.GetValue(filesDownloadOutputOption);
+            var isJson = output.ResolveJsonMode(json, noJson);
+
+            if (string.IsNullOrWhiteSpace(outputPath))
+                await SimpleGetAsync(host, port, $"/api/v1/storage/files/{Uri.EscapeDataString(path)}{BuildStorageFilesQuery(root: root)}", isJson);
+            else
+                await DownloadFileToLocalPathAsync(host, port, path, root, outputPath, isJson);
+        });
+        filesCommand.Add(filesDownloadCmd);
+
+        var filesUploadPathArg = new Argument<string>("path") { Description = "Relative file path under the selected storage root" };
+        var filesUploadContentArg = new Argument<string?>("contentBase64")
+        {
+            Description = "Base64-encoded file content. Omit when using --file.",
+            DefaultValueFactory = _ => null
+        };
+        var filesUploadFileOption = new Option<string?>("--file", "-f")
+        {
+            Description = "Local file to upload. Relative paths are resolved from the current directory."
+        };
+        var filesUploadCmd = new Command("upload", "Upload base64 content or a local file") { filesUploadPathArg, filesUploadContentArg, filesUploadFileOption };
+        filesUploadCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            var path = ctx.GetValue(filesUploadPathArg)!;
+            var contentBase64Argument = ctx.GetValue(filesUploadContentArg);
+            var localFilePath = ctx.GetValue(filesUploadFileOption);
+            var root = ctx.GetValue(filesRootOption);
+            var isJson = output.ResolveJsonMode(json, noJson);
+
+            var contentBase64 = await GetUploadContentBase64Async(contentBase64Argument, localFilePath, isJson);
+            if (contentBase64 is null)
+                return;
+
+            await SimplePutAsync(host, port, $"/api/v1/storage/files/{Uri.EscapeDataString(path)}{BuildStorageFilesQuery(root: root)}", new JsonObject
+            {
+                ["contentBase64"] = contentBase64
+            }, isJson);
+        });
+        filesCommand.Add(filesUploadCmd);
+
+        var filesDeletePathArg = new Argument<string>("path") { Description = "Relative file path under the selected storage root" };
+        var filesDeleteCmd = new Command("delete", "Delete a file") { filesDeletePathArg };
+        filesDeleteCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            var path = ctx.GetValue(filesDeletePathArg)!;
+            var root = ctx.GetValue(filesRootOption);
+            await SimpleDeleteAsync(host, port, $"/api/v1/storage/files/{Uri.EscapeDataString(path)}{BuildStorageFilesQuery(root: root)}", output.ResolveJsonMode(json, noJson));
+        });
+        filesCommand.Add(filesDeleteCmd);
+
+        storageCommand.Add(filesCommand);
         devflowCommand.Add(storageCommand);
 
         // ===== device subcommands (read-only) =====
@@ -1172,37 +1279,14 @@ public class DevFlowCommands
 
         devflowCommand.Add(mauiCommand);
 
-        // ===== update-skill command =====
-        var forceOption = new Option<bool>("--force", "-y") { Description = "Skip confirmation prompt" };
-        var outputDirOption = new Option<string?>("--output", "-o") { Description = "Output directory (defaults to current directory)" };
-        var branchOption = new Option<string>("--branch", "-b") { Description = "GitHub branch to download from", DefaultValueFactory = _ => "main" };
-        var updateSkillCmd = new Command("update-skill", "Download the latest maui-ai-debugging skill from GitHub")
-        {
-            forceOption, outputDirOption, branchOption
-        };
-        updateSkillCmd.SetAction(async (ctx, ct) =>
-        {
-            var force = ctx.GetValue(forceOption);
-            var output = ctx.GetValue(outputDirOption);
-            var branch = ctx.GetValue(branchOption)!;
-            await UpdateSkillAsync(force, output, branch);
-        });
-        devflowCommand.Add(updateSkillCmd);
+        // ===== init / skills commands =====
+        var initCommand = DevFlowSkillCommands.CreateInitCommand(jsonOption, noJsonOption, output);
+        initCommand.Aliases.Add("onboard");
+        devflowCommand.Add(initCommand);
+        devflowCommand.Add(DevFlowSkillCommands.CreateSkillsCommand(jsonOption, noJsonOption, output));
 
-        // ===== skill-version command =====
-        var skillVersionOutputOption = new Option<string?>("--output", "-o") { Description = "Skill directory (defaults to current directory)" };
-        var skillVersionBranchOption = new Option<string>("--branch", "-b") { Description = "GitHub branch to check against", DefaultValueFactory = _ => "main" };
-        var skillVersionCmd = new Command("skill-version", "Check the installed skill version and compare with remote")
-        {
-            skillVersionOutputOption, skillVersionBranchOption
-        };
-        skillVersionCmd.SetAction(async (ctx, ct) =>
-        {
-            var output = ctx.GetValue(skillVersionOutputOption);
-            var branch = ctx.GetValue(skillVersionBranchOption)!;
-            await SkillVersionAsync(output, branch);
-        });
-        devflowCommand.Add(skillVersionCmd);
+        // Hidden compatibility alias for the old standalone skill updater.
+        devflowCommand.Add(DevFlowSkillCommands.CreateUpdateCommand("update-skill", hidden: true, jsonOption, noJsonOption, output));
 
         // ===== broker commands =====
         var brokerCommand = new Command("broker", "Manage the Microsoft.Maui.DevFlow broker daemon");
@@ -1241,7 +1325,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson));
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         devflowCommand.Add(listCmd);
 
@@ -1251,7 +1335,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson));
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         devflowCommand.Add(diagnoseCmd);
 
@@ -1270,7 +1354,7 @@ public class DevFlowCommands
             var waitPlatform = ctx.GetValue(waitPlatformOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson));
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), ct);
         });
         devflowCommand.Add(waitCmd);
 
@@ -1295,7 +1379,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson));
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         agentCommand.Add(agentListCmd);
 
@@ -1313,7 +1397,7 @@ public class DevFlowCommands
             var waitPlatform = ctx.GetValue(agentWaitPlatformOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson));
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), ct);
         });
         agentCommand.Add(agentWaitCmd);
 
@@ -1322,7 +1406,7 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson));
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), ct);
         });
         agentCommand.Add(agentDiagnoseCmd);
 
@@ -1766,6 +1850,141 @@ public class DevFlowCommands
         return CliJson.PrettyPrint(element);
     }
 
+    private static string BuildStorageFilesQuery(string? path = null, string? root = null)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(path))
+            query.Add($"path={Uri.EscapeDataString(path)}");
+        if (!string.IsNullOrEmpty(root))
+            query.Add($"root={Uri.EscapeDataString(root)}");
+
+        return query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
+    }
+
+    private static async Task<string?> GetUploadContentBase64Async(string? contentBase64Argument, string? localFilePath, bool json)
+    {
+        var hasContentArgument = contentBase64Argument is not null;
+        var hasLocalFile = !string.IsNullOrWhiteSpace(localFilePath);
+
+        if (hasContentArgument == hasLocalFile)
+        {
+            Output.WriteError("Provide exactly one of contentBase64 or --file.", json, "InvocationError");
+            _errorOccurred = true;
+            return null;
+        }
+
+        if (hasContentArgument)
+            return contentBase64Argument!;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(localFilePath!);
+            if (!File.Exists(fullPath))
+            {
+                Output.WriteError($"Local file not found: {fullPath}", json, "InvocationError");
+                _errorOccurred = true;
+                return null;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(fullPath);
+            return Convert.ToBase64String(bytes);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            Output.WriteError($"Failed to read local file: {ex.Message}", json);
+            _errorOccurred = true;
+            return null;
+        }
+    }
+
+    private static async Task DownloadFileToLocalPathAsync(string host, int port, string devicePath, string? root, string destinationPath, bool json)
+    {
+        try
+        {
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(30);
+            var response = await http.GetAsync($"http://{host}:{port}/api/v1/storage/files/{Uri.EscapeDataString(devicePath)}{BuildStorageFilesQuery(root: root)}");
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine(body);
+                _errorOccurred = true;
+                return;
+            }
+
+            var responseObject = CliJson.ParseNode(body) as JsonObject;
+            if (responseObject is null ||
+                !responseObject.TryGetPropertyValue("contentBase64", out var contentNode) ||
+                contentNode is null ||
+                contentNode.GetValueKind() != JsonValueKind.String)
+            {
+                Output.WriteError("Download response did not include contentBase64.", json);
+                _errorOccurred = true;
+                return;
+            }
+
+            var contentBase64 = contentNode.GetValue<string>();
+
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(contentBase64);
+            }
+            catch (FormatException ex)
+            {
+                Output.WriteError($"Download response contained invalid base64 content: {ex.Message}", json);
+                _errorOccurred = true;
+                return;
+            }
+
+            var localPath = ResolveDownloadDestinationPath(destinationPath, devicePath);
+            var parentDirectory = Path.GetDirectoryName(localPath);
+            if (!string.IsNullOrEmpty(parentDirectory))
+                Directory.CreateDirectory(parentDirectory);
+
+            await File.WriteAllBytesAsync(localPath, bytes);
+
+            if (json)
+            {
+                responseObject.Remove("contentBase64");
+                responseObject["success"] = true;
+                responseObject["localPath"] = localPath;
+                Console.WriteLine(CliJson.SerializeUntyped(responseObject));
+            }
+            else
+            {
+                Console.WriteLine($"Downloaded {devicePath} to {localPath}");
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or HttpRequestException or IOException or JsonException or NotSupportedException or TaskCanceledException or UnauthorizedAccessException)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+    }
+
+    private static string ResolveDownloadDestinationPath(string destinationPath, string devicePath)
+    {
+        var fullDestinationPath = Path.GetFullPath(destinationPath);
+        if (Directory.Exists(fullDestinationPath) || EndsWithDirectorySeparator(destinationPath))
+            return Path.Combine(fullDestinationPath, GetDeviceFileName(devicePath));
+
+        return fullDestinationPath;
+    }
+
+    private static bool EndsWithDirectorySeparator(string path)
+        => path.Length > 0 && (path[^1] == Path.DirectorySeparatorChar || path[^1] == Path.AltDirectorySeparatorChar);
+
+    private static string GetDeviceFileName(string devicePath)
+    {
+        var normalizedPath = devicePath.Replace('\\', '/').TrimEnd('/');
+        var fileName = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        if (string.IsNullOrEmpty(fileName))
+            throw new ArgumentException("The device path must include a file name.", nameof(devicePath));
+
+        return fileName;
+    }
+
     // ===== Generic agent HTTP helpers (for preferences, platform, sensors, etc.) =====
 
     private static async Task SimpleGetAsync(string host, int port, string path, bool json)
@@ -2123,214 +2342,17 @@ public class DevFlowCommands
         new("broker stop", "Stop the broker daemon", true),
         new("broker status", "Show broker status", false),
         new("broker log", "Show broker log", false),
+        new("init", "Install DevFlow onboarding skills for this workspace", true),
+        new("skills install", "Install bundled DevFlow skills", true),
+        new("skills list", "List DevFlow skill install status", false),
+        new("skills check", "Check installed DevFlow skills", false),
+        new("skills update", "Update DevFlow skills from the current CLI bundle", true),
+        new("skills remove", "Remove an installed DevFlow skill", true),
+        new("skills doctor", "Validate DevFlow skills and CLI drift", false),
         new("mcp", "Start the MCP server", false),
         new("commands", "List all available commands", false),
         new("version", "Show CLI version", false),
     };
-
-    // ===== Update Skill Command =====
-
-    private const string SkillRepo = "dotnet/maui-labs";
-    private const string SkillBasePath = ".claude/skills/maui-ai-debugging";
-
-    private static async Task UpdateSkillAsync(bool force, string? outputDir, string branch)
-    {
-        var root = outputDir ?? Directory.GetCurrentDirectory();
-        var destBase = Path.Combine(root, SkillBasePath);
-
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Microsoft.Maui.DevFlow-CLI", "1.0"));
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-
-        // Discover files via GitHub Trees API (recursive)
-        Console.WriteLine("Fetching skill file list from GitHub...");
-        List<string> files;
-        try
-        {
-            files = await GetSkillFilesFromGitHubAsync(http, branch);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Failed to fetch file list: {ex.Message}");
-            return;
-        }
-
-        if (files.Count == 0)
-        {
-            Console.Error.WriteLine("No skill files found in the repository.");
-            return;
-        }
-
-        Console.WriteLine();
-        Console.WriteLine("maui devflow update-skill");
-        Console.WriteLine($"  Source: https://github.com/{SkillRepo}/tree/{branch}/{SkillBasePath}");
-        Console.WriteLine($"  Destination: {destBase}");
-        Console.WriteLine();
-        Console.WriteLine("Files to download:");
-        foreach (var file in files)
-        {
-            var destPath = Path.Combine(destBase, file);
-            var exists = File.Exists(destPath);
-            Console.WriteLine($"  {SkillBasePath}/{file}{(exists ? " (overwrite)" : " (new)")}");
-        }
-        Console.WriteLine();
-
-        if (!force)
-        {
-            Console.Write("Existing files will be overwritten. Continue? [y/N] ");
-            var response = Console.ReadLine()?.Trim().ToLowerInvariant();
-            if (response is not ("y" or "yes"))
-            {
-                Console.WriteLine("Cancelled.");
-                return;
-            }
-        }
-
-        var success = 0;
-        foreach (var file in files)
-        {
-            var url = $"https://raw.githubusercontent.com/{SkillRepo}/{branch}/{SkillBasePath}/{file}";
-            var destPath = Path.Combine(destBase, file);
-
-            try
-            {
-                var content = await http.GetStringAsync(url);
-                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                await File.WriteAllTextAsync(destPath, content);
-                Console.WriteLine($"  ✓ {file}");
-                success++;
-            }
-            catch (HttpRequestException ex)
-            {
-                Console.Error.WriteLine($"  ✗ {file}: {ex.Message}");
-            }
-        }
-
-        Console.WriteLine();
-        Console.WriteLine(success == files.Count
-            ? $"Done. {success} files updated."
-            : $"Done. {success}/{files.Count} files updated.");
-
-        // Write .skill-version with the latest commit SHA
-        await WriteSkillVersionAsync(http, destBase, branch);
-    }
-
-    private static async Task WriteSkillVersionAsync(HttpClient http, string destBase, string branch)
-    {
-        try
-        {
-            var sha = await GetRemoteSkillCommitShaAsync(http, branch);
-            if (sha == null) return;
-
-            var versionInfo = new JsonObject
-            {
-                ["commit"] = sha,
-                ["updatedAt"] = DateTime.UtcNow.ToString("o"),
-                ["branch"] = branch
-            };
-            var versionPath = Path.Combine(destBase, ".skill-version");
-            await File.WriteAllTextAsync(versionPath, CliJson.SerializeUntyped(versionInfo, indented: true));
-        }
-        catch { /* non-fatal — version tracking is best-effort */ }
-    }
-
-    private static async Task<string?> GetRemoteSkillCommitShaAsync(HttpClient http, string branch)
-    {
-        var url = $"https://api.github.com/repos/{SkillRepo}/commits?path={SkillBasePath}&sha={branch}&per_page=1";
-        var json = await http.GetStringAsync(url);
-        var commits = CliJson.ParseElement(json);
-        foreach (var commit in commits.EnumerateArray())
-            return commit.GetProperty("sha").GetString();
-        return null;
-    }
-
-    private static async Task SkillVersionAsync(string? outputDir, string branch)
-    {
-        var root = outputDir ?? Directory.GetCurrentDirectory();
-        var destBase = Path.Combine(root, SkillBasePath);
-        var versionPath = Path.Combine(destBase, ".skill-version");
-
-        // Read local version
-        string? localSha = null;
-        string? localDate = null;
-        string? localBranch = null;
-        if (File.Exists(versionPath))
-        {
-            try
-            {
-                var json = await File.ReadAllTextAsync(versionPath);
-                var doc = CliJson.ParseElement(json);
-                localSha = doc.TryGetProperty("commit", out var c) ? c.GetString() : null;
-                localDate = doc.TryGetProperty("updatedAt", out var d) ? d.GetString() : null;
-                localBranch = doc.TryGetProperty("branch", out var b) ? b.GetString() : null;
-            }
-            catch { /* corrupt file */ }
-        }
-
-        if (localSha == null)
-        {
-            Console.WriteLine("No local skill version found.");
-            Console.WriteLine("Run 'maui devflow update-skill' to install the skill and track its version.");
-            return;
-        }
-
-        Console.WriteLine($"Installed: {localSha[..12]} (branch: {localBranch ?? "unknown"})");
-        if (localDate != null && DateTime.TryParse(localDate, out var dt))
-            Console.WriteLine($"Updated:   {dt:yyyy-MM-dd HH:mm:ss} UTC");
-
-        // Check remote
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Microsoft.Maui.DevFlow-CLI", "1.0"));
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-
-        try
-        {
-            var remoteSha = await GetRemoteSkillCommitShaAsync(http, branch);
-            if (remoteSha == null)
-            {
-                Console.WriteLine("Could not fetch remote version.");
-                return;
-            }
-
-            Console.WriteLine($"Remote:    {remoteSha[..12]} (branch: {branch})");
-
-            if (string.Equals(localSha, remoteSha, StringComparison.OrdinalIgnoreCase))
-                Console.WriteLine("\n✓ Skill is up to date.");
-            else
-                Console.WriteLine("\n⚠ Update available! Run 'maui devflow update-skill' to get the latest version.");
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Could not check remote: {ex.Message}");
-        }
-    }
-
-    private static async Task<List<string>> GetSkillFilesFromGitHubAsync(HttpClient http, string branch)
-    {
-        var files = new List<string>();
-        await ListGitHubDirectoryAsync(http, SkillBasePath, "", files, branch);
-        return files;
-    }
-
-    private static async Task ListGitHubDirectoryAsync(HttpClient http, string basePath, string relativePath, List<string> files, string branch)
-    {
-        var apiPath = string.IsNullOrEmpty(relativePath) ? basePath : $"{basePath}/{relativePath}";
-        var url = $"https://api.github.com/repos/{SkillRepo}/contents/{apiPath}?ref={branch}";
-        var json = await http.GetStringAsync(url);
-        var items = CliJson.ParseElement(json);
-
-        foreach (var item in items.EnumerateArray())
-        {
-            var name = item.GetProperty("name").GetString()!;
-            var type = item.GetProperty("type").GetString()!;
-            var itemRelative = string.IsNullOrEmpty(relativePath) ? name : $"{relativePath}/{name}";
-
-            if (type == "file")
-                files.Add(itemRelative);
-            else if (type == "dir")
-                await ListGitHubDirectoryAsync(http, basePath, itemRelative, files, branch);
-        }
-    }
 
     // ===== MAUI Agent Commands =====
 
@@ -3910,8 +3932,10 @@ public class DevFlowCommands
             Console.WriteLine(lines[i]);
     }
 
-    private static async Task ListAgentsCommandAsync(bool json)
+    private static async Task ListAgentsCommandAsync(bool json, CancellationToken cancellationToken)
     {
+        await WriteSkillFreshnessHintAsync(json, cancellationToken);
+
         var port = await Broker.BrokerClient.EnsureBrokerRunningAsync();
         if (port == null)
         {
@@ -3957,6 +3981,7 @@ public class DevFlowCommands
                 else
                 {
                     Console.WriteLine("No DevFlow-enabled projects found in current directory.");
+                    Console.WriteLine("Hint: Run 'maui devflow init' to install DevFlow onboarding skills for this workspace.");
                 }
             }
             return;
@@ -3982,8 +4007,10 @@ public class DevFlowCommands
         }
     }
 
-    private static async Task DiagnoseCommandAsync(bool json)
+    private static async Task DiagnoseCommandAsync(bool json, CancellationToken cancellationToken)
     {
+        await WriteSkillFreshnessHintAsync(json, cancellationToken);
+
         var diagnostics = new Dictionary<string, object>();
         
         // Get CLI version
@@ -4069,11 +4096,14 @@ public class DevFlowCommands
         else
         {
             Console.WriteLine("📦 DevFlow-enabled projects: (none found in current directory)");
+            Console.WriteLine("💡 Suggestion: Run 'maui devflow init' to install DevFlow onboarding skills, then ask your AI agent to use maui-devflow-onboard.");
         }
     }
 
-    private static async Task WaitForAgentCommandAsync(int timeoutSeconds, string? projectFilter, string? platformFilter, bool json)
+    private static async Task WaitForAgentCommandAsync(int timeoutSeconds, string? projectFilter, string? platformFilter, bool json, CancellationToken cancellationToken)
     {
+        await WriteSkillFreshnessHintAsync(json, cancellationToken);
+
         var brokerPort = await Broker.BrokerClient.EnsureBrokerRunningAsync();
         if (brokerPort == null)
         {
@@ -4103,7 +4133,7 @@ public class DevFlowCommands
                     break;
             }
 
-            await Task.Delay(pollInterval);
+            await Task.Delay(pollInterval, cancellationToken);
         }
 
         if (matched == null)
@@ -4134,6 +4164,13 @@ public class DevFlowCommands
             return agent;
         }
         return null;
+    }
+
+    private static async Task WriteSkillFreshnessHintAsync(bool json, CancellationToken cancellationToken)
+    {
+        var hint = await DevFlowSkillManager.GetFreshnessHintAsync(json, "auto", cancellationToken);
+        if (!string.IsNullOrWhiteSpace(hint))
+            Console.Error.WriteLine($"Hint: {hint}");
     }
 
     // ===== Batch command: interactive stdin/stdout with JSONL responses =====

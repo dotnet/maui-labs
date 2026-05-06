@@ -33,9 +33,9 @@ tags:
   - name: logs
     description: Application logs
   - name: device
-    description: Device info, sensors, permissions, geolocation
+    description: Device info, sensors, BLE, jobs, permissions, geolocation
   - name: storage
-    description: Preferences and secure storage
+    description: Preferences, secure storage, and sandboxed app files
   - name: extensions
     description: Third-party extension routes
 
@@ -1394,6 +1394,219 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/device/jobs:
+    get:
+      operationId: listDeviceJobs
+      tags: [device]
+      summary: List platform background jobs
+      description: >
+        Returns platform background jobs known to the agent. Android reports
+        WorkManager identifiers, tags, states, and run attempts. iOS and Mac
+        Catalyst report pending BGTaskScheduler requests.
+      responses:
+        "200":
+          description: Platform job list.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/JobListResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/jobs/{identifier}/run:
+    post:
+      operationId: runDeviceJob
+      tags: [device]
+      summary: Trigger a platform background job
+      description: >
+        Attempts to trigger the named platform background job. iOS and Mac
+        Catalyst submit a BGTaskRequest for the identifier; pass `type` when
+        the task is known to be an app refresh task. Android currently reports
+        `success=false` because WorkManager worker types and request inputs
+        cannot be reconstructed safely from the listed identifier or tags.
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          description: Platform job identifier returned by the list endpoint.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/device.json#/$defs/JobRunRequest"
+      responses:
+        "200":
+          description: Job trigger result.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/JobRunResponse"
+        "501":
+          $ref: "#/components/responses/UnsupportedCapability"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble:
+    get:
+      operationId: getBleStatus
+      tags: [device]
+      summary: Get BLE monitor status
+      description: >
+        Returns Bluetooth Low Energy monitor status, including whether scanning
+        is active, the buffered event count, subscriber count, and whether native
+        scanning is supported by this agent.
+      responses:
+        "200":
+          description: BLE monitor status.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/BleStatus"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble/events:
+    get:
+      operationId: getBleEvents
+      tags: [device]
+      summary: List BLE events
+      description: >
+        Returns recent BLE events recorded by the agent, optionally filtered by
+        event type. Events include scan results, connection changes,
+        characteristic reads/writes, notifications, service discoveries,
+        descriptor writes, MTU changes, bond state changes, and scan failures.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of events to return. Use 0 to return no events.
+          schema:
+            type: integer
+            minimum: 0
+            default: 100
+        - name: type
+          in: query
+          description: Optional event type filter.
+          schema:
+            $ref: "./schemas/device.json#/$defs/BleEventType"
+      responses:
+        "200":
+          description: Buffered BLE events.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/BleEventsResponse"
+        "400":
+          description: Invalid BLE event query.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: clearBleEvents
+      tags: [device]
+      summary: Clear BLE events
+      description: Clears all buffered BLE events.
+      responses:
+        "200":
+          description: BLE events cleared.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/ActionResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble/scan/start:
+    post:
+      operationId: startBleScan
+      tags: [device]
+      summary: Start BLE scan
+      description: >
+        Starts native BLE scanning when supported by the current platform.
+        Discovered advertisements are buffered as BLE events and streamed to BLE
+        WebSocket subscribers.
+      responses:
+        "200":
+          description: BLE scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/ActionResponse"
+        "400":
+          description: BLE scanning is unavailable or cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/ble/scan/stop:
+    post:
+      operationId: stopBleScan
+      tags: [device]
+      summary: Stop BLE scan
+      description: Stops an active BLE scan.
+      responses:
+        "200":
+          description: BLE scan stopped.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/ActionResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ws/v1/ble:
+    get:
+      operationId: streamBleEvents
+      tags: [device]
+      summary: Stream BLE events
+      description: >
+        Opens a WebSocket stream for BLE events. The server first sends a
+        `subscribed` message containing the current scanning state and replay
+        settings, optionally sends a `replay` message with buffered events, then
+        sends `ble_event` messages as events are recorded. Streamed events remain
+        in the bounded BLE event buffer until evicted by retention or cleared via
+        the REST API. Set `scan=true` to start a native BLE scan for the lifetime
+        of this WebSocket connection when scanning is supported.
+      parameters:
+        - name: scan
+          in: query
+          description: Start BLE scanning automatically while this WebSocket connection is active.
+          schema:
+            type: boolean
+            default: false
+        - name: replay
+          in: query
+          description: Number of buffered BLE events to replay after subscription. Use 0 for live-only streaming.
+          schema:
+            type: integer
+            minimum: 0
+            default: 100
+        - name: type
+          in: query
+          description: Optional event type filter applied to replayed and live events.
+          schema:
+            $ref: "./schemas/device.json#/$defs/BleEventType"
+      responses:
+        "101":
+          description: WebSocket connection established.
+        "400":
+          description: WebSocket upgrade failed or BLE scanning cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/device/permissions:
     get:
       operationId: listPermissions
@@ -1607,6 +1820,169 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/storage/roots:
+    get:
+      operationId: listStorageRoots
+      tags: [storage]
+      summary: List file storage roots
+      description: >
+        Lists logical file storage roots advertised by the agent. The current
+        shared implementation advertises only `appData`; platform agents may
+        advertise additional roots in the future. Absolute on-device paths are
+        not returned.
+      responses:
+        "200":
+          description: Storage roots.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/StorageRootsResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/files:
+    get:
+      operationId: listFiles
+      tags: [storage]
+      summary: List storage files
+      description: >
+        Lists files and directories under an advertised storage root. The
+        optional path is always relative to the selected root; rooted paths, `..`
+        traversal segments, and symlink/reparse-point traversal are rejected.
+        Absolute on-device paths are not returned. Omit `root` to use the
+        default `appData` root.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+        - name: path
+          in: query
+          description: Relative subdirectory path. Omit or pass an empty string for the selected root.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Directory listing.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileListResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/files/{path}:
+    get:
+      operationId: downloadFile
+      tags: [storage]
+      summary: Download a storage file
+      description: >
+        Downloads a file under an advertised storage root and returns base64-encoded
+        content. The path parameter is a single URI-encoded relative path; path
+        separators inside it must be percent-encoded. Omit `root` to use the
+        default `appData` root.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative file path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: File content and metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileDownloadResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: uploadFile
+      tags: [storage]
+      summary: Upload a storage file
+      description: >
+        Creates or overwrites a file under an advertised storage root. Parent
+        directories are created automatically after path sandbox validation.
+        Omit `root` to use the default `appData` root.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative file path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/storage.json#/$defs/FileUploadRequest"
+      responses:
+        "200":
+          description: Uploaded file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileUploadResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: deleteFile
+      tags: [storage]
+      summary: Delete a storage file
+      description: Deletes a file under an advertised storage root. Omit `root` to use the default `appData` root.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative file path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: Deleted file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileDeleteResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/storage/secure:
     delete:
       operationId: clearSecureStorage
@@ -1757,6 +2133,18 @@ components:
             title: Invalid selector
             status: 400
             errorCode: invalid-selector
+
+    InvalidPath:
+      description: Invalid or unsafe storage path or unavailable storage root.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:invalid-path"
+            title: Invalid storage path
+            status: 400
+            errorCode: invalid-path
 
     Timeout:
       description: Operation timed out.

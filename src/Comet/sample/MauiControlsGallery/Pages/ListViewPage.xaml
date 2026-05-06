@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.ListViewPage"
+             Title="ListView">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <!-- ViewCell ListView -->
+            <Label Text="ViewCell with DataTemplate" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="Gray" StrokeThickness="1" StrokeShape="RoundRectangle 8" HeightRequest="350">
+                <ListView x:Name="FoodListView"
+                          HasUnevenRows="True"
+                          SelectionMode="None">
+                    <ListView.Header>
+                        <Label Text="Food Items" FontSize="14" FontAttributes="Bold" Padding="12,8" />
+                    </ListView.Header>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <ViewCell>
+                                <HorizontalStackLayout Spacing="10" Padding="12,8">
+                                    <Label Text="{Binding Emoji}" FontSize="20" WidthRequest="30" VerticalOptions="Center" />
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label Text="{Binding Name}" FontSize="14" FontAttributes="Bold" />
+                                        <Label Text="{Binding Category}" FontSize="11" TextColor="Gray" />
+                                    </VerticalStackLayout>
+                                </HorizontalStackLayout>
+                            </ViewCell>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                    <ListView.Footer>
+                        <Label Text="8 items total" FontSize="12" TextColor="Gray" Padding="12,8" />
+                    </ListView.Footer>
+                </ListView>
+            </Border>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- TextCell ListView -->
+            <Label Text="TextCell ListView" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="Gray" StrokeThickness="1" StrokeShape="RoundRectangle 8" HeightRequest="200">
+                <ListView x:Name="SettingsListView"
+                          SelectionMode="None">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextCell Text="{Binding Title}" Detail="{Binding Subtitle}" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

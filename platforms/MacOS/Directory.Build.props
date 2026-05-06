@@ -1,0 +1,30 @@
+<Project>
+  <Import Project="../../Directory.Build.props" />
+
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <MauiVersion>$(MicrosoftMauiControlsVersion)</MauiVersion>
+    <!-- Keep the experimental AppKit backend building under Arcade's CI-wide warnaserror while preserving local diagnostics. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS0067;CS0108;CS0414;CS0612;CS0618;CS8601;CS8602;CS8603;CS8604;CS8619;CS8625;CS8765;CA1416;CA1422;IL2070</WarningsNotAsErrors>
+    <!-- Set to false when the maui-labs DevFlow projects should not be referenced by the sample -->
+    <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+    <DefineConstants>$(DefineConstants);MAUIDEVFLOW</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Common NuGet package properties for all src/ projects -->
+  <PropertyGroup>
+    <Authors>Microsoft</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/MacOS</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Use product-specific README instead of repo-root one -->
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+</Project>

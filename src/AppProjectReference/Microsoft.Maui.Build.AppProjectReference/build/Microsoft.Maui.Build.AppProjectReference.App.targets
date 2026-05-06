@@ -1,0 +1,87 @@
+<Project>
+
+  <Target Name="_MauiAppRefBuildAndGetArtifacts"
+          DependsOnTargets="$(MauiAppRefInnerBuildTarget);_GetMauiAppArtifacts"
+          Returns="@(MauiAppArtifact)" />
+
+  <Target Name="_GetMauiAppArtifacts">
+    <PropertyGroup>
+      <_MauiAppTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_MauiAppTargetPlatform>
+      <_MauiAppSearchRoot Condition="'$(MauiAppRefOutputRoot)' != ''">$(MauiAppRefOutputRoot)</_MauiAppSearchRoot>
+      <_MauiAppSearchRoot Condition="'$(_MauiAppSearchRoot)' == ''">$(OutputPath)</_MauiAppSearchRoot>
+      <_MauiAppSearchAppRoot Condition="'$(_MauiAppSearchRoot)' != ''">$([System.IO.Path]::Combine('$(_MauiAppSearchRoot)', 'app'))</_MauiAppSearchAppRoot>
+      <_MauiAppRefReferenceName Condition="'$(MauiAppRefReferenceName)' != ''">$(MauiAppRefReferenceName)</_MauiAppRefReferenceName>
+      <_MauiAppRefReferenceName Condition="'$(_MauiAppRefReferenceName)' == ''">$(MSBuildProjectName)</_MauiAppRefReferenceName>
+      <_MauiAppAppBundleDirFullPath Condition="'$(AppBundleDir)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AppBundleDir)'))))</_MauiAppAppBundleDirFullPath>
+      <_MauiAppPublishDirFullPath Condition="'$(PublishDir)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(PublishDir)'))))</_MauiAppPublishDirFullPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_MauiAppArtifactCandidate Include="$(MauiAppRefExpectedArtifact)"
+                                     Condition="'$(MauiAppRefExpectedArtifact)' != '' and Exists('$(MauiAppRefExpectedArtifact)')" />
+      <_MauiAppArtifactCandidate Include="$(AppBundleDir)"
+                                     Condition="'$(AppBundleDir)' != '' and Exists('$(AppBundleDir)')" />
+      <_MauiAppArtifactCandidate Include="$([System.IO.Directory]::GetDirectories('$(_MauiAppSearchRoot)', '*.app'))"
+                                     Condition="'$(_MauiAppSearchRoot)' != '' and Exists('$(_MauiAppSearchRoot)')" />
+      <_MauiAppArtifactCandidate Include="$([System.IO.Directory]::GetDirectories('$(_MauiAppSearchAppRoot)', '*.app'))"
+                                     Condition="'$(_MauiAppSearchAppRoot)' != '' and Exists('$(_MauiAppSearchAppRoot)')" />
+      <_MauiAppArtifactCandidate Include="$([System.IO.Directory]::GetDirectories('$(OutputPath)', '*.app'))"
+                                     Condition="'$(OutputPath)' != '' and Exists('$(OutputPath)')" />
+      <_MauiAppArtifactCandidate Include="$(IpaPackageDir)**\*.ipa"
+                                     Condition="'$(IpaPackageDir)' != '' and Exists('$(IpaPackageDir)')" />
+      <_MauiAppArtifactCandidate Include="$(AndroidPackageOutputPath)**\*.apk;$(AndroidPackageOutputPath)**\*.aab"
+                                     Condition="'$(AndroidPackageOutputPath)' != '' and Exists('$(AndroidPackageOutputPath)')" />
+      <_MauiAppArtifactCandidate Include="$(_MauiAppSearchRoot)**\*.apk;$(_MauiAppSearchRoot)**\*.aab;$(_MauiAppSearchRoot)**\*.ipa;$(_MauiAppSearchRoot)**\*.msix;$(_MauiAppSearchRoot)**\*.appinstaller"
+                                     Condition="'$(_MauiAppSearchRoot)' != '' and Exists('$(_MauiAppSearchRoot)')" />
+      <_MauiAppArtifactCandidate Include="$(PublishDir)"
+                                     Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)')" />
+      <_MauiAppArtifactCandidate Include="$(TargetPath)"
+                                     Condition="'$(TargetPath)' != '' and '$(_MauiAppTargetPlatform)' == '' and Exists('$(TargetPath)')" />
+      <_MauiAppArtifactCandidate Update="@(_MauiAppArtifactCandidate)">
+        <_MauiAppFullPathWithTrailingSlash>$([MSBuild]::EnsureTrailingSlash('%(_MauiAppArtifactCandidate.FullPath)'))</_MauiAppFullPathWithTrailingSlash>
+      </_MauiAppArtifactCandidate>
+    </ItemGroup>
+
+    <ItemGroup>
+      <MauiAppArtifact Include="@(_MauiAppArtifactCandidate)"
+                           Condition="Exists('%(_MauiAppArtifactCandidate.Identity)')">
+        <ReferenceName>$(_MauiAppRefReferenceName)</ReferenceName>
+        <ProjectPath>$(MSBuildProjectFullPath)</ProjectPath>
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+        <TargetPlatformIdentifier>$(_MauiAppTargetPlatform)</TargetPlatformIdentifier>
+        <RuntimeIdentifier>$(RuntimeIdentifier)</RuntimeIdentifier>
+        <Configuration>$(Configuration)</Configuration>
+        <ApplicationId>$(ApplicationId)</ApplicationId>
+        <BundleIdentifier>$(ApplicationId)</BundleIdentifier>
+        <PackageName>$(ApplicationId)</PackageName>
+        <ArtifactType>unknown</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk'">apk</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.aab'">aab</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.app'">app</ArtifactType>
+        <ArtifactType Condition="'$(_MauiAppAppBundleDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppAppBundleDirFullPath)'">app</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.ipa'">ipa</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.msix'">msix</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.appinstaller'">appinstaller</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.exe'">exe</ArtifactType>
+        <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.dll'">dll</ArtifactType>
+        <ArtifactType Condition="'$(_MauiAppPublishDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppPublishDirFullPath)'">publish-directory</ArtifactType>
+        <Installable>false</Installable>
+        <Installable Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiAppArtifactCandidate.Extension)' == '.aab' or '%(_MauiAppArtifactCandidate.Extension)' == '.app' or '%(_MauiAppArtifactCandidate.Extension)' == '.ipa' or '%(_MauiAppArtifactCandidate.Extension)' == '.msix'">true</Installable>
+        <Installable Condition="'$(_MauiAppAppBundleDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppAppBundleDirFullPath)'">true</Installable>
+        <Launchable>false</Launchable>
+        <Launchable Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiAppArtifactCandidate.Extension)' == '.app' or '%(_MauiAppArtifactCandidate.Extension)' == '.exe' or '%(_MauiAppArtifactCandidate.Extension)' == '.msix'">true</Launchable>
+        <Launchable Condition="'$(_MauiAppAppBundleDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppAppBundleDirFullPath)'">true</Launchable>
+      </MauiAppArtifact>
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(MauiAppArtifact)">
+      <Output TaskParameter="Filtered" ItemName="_MauiAppDistinctArtifact" />
+    </RemoveDuplicates>
+
+    <ItemGroup>
+      <MauiAppArtifact Remove="@(MauiAppArtifact)" />
+      <MauiAppArtifact Include="@(_MauiAppDistinctArtifact)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

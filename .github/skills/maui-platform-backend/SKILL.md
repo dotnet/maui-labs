@@ -5,7 +5,7 @@ description: >
   in the dotnet/maui-labs repository. USE FOR: creating a new MAUI backend, implementing
   a control handler, adding Essentials services, setting up build targets, scaffolding
   project structure, debugging handler rendering with DevFlow. DO NOT USE FOR: building
-  or running existing MAUI apps (use maui-ai-debugging skill), DevFlow CLI/MCP tool
+  or running existing MAUI apps (use maui-devflow-debug skill), DevFlow CLI/MCP tool
   development (see AGENTS.md). INVOKES: GitHub MCP tools for reference code, web_fetch
   for MAUI source and platform API docs.
 ---

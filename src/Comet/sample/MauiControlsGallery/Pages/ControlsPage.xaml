@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.ControlsPage"
+             Title="Controls">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <!-- Button & ProgressBar -->
+            <Label Text="Button &amp; ProgressBar" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Button x:Name="ClickButton" Text="Click me!" Clicked="OnClickButtonClicked" />
+            <Button Text="Styled Button" BackgroundColor="Purple" TextColor="White" />
+            <Label x:Name="ClickCountLabel" Text="Clicks: 0" FontSize="14" />
+            <Label Text="Progress (click 20x to fill):" FontSize="12" TextColor="Gray" />
+            <ProgressBar x:Name="ClickProgress" Progress="0" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Entry -->
+            <Label Text="Entry" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Entry x:Name="TextEntry" Placeholder="Type here..." TextChanged="OnEntryTextChanged" />
+            <Label x:Name="EntryEcho" Text="Echo: " FontSize="14" TextColor="Gray" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Editor -->
+            <Label Text="Editor" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Editor Placeholder="Multi-line text editor..." HeightRequest="80" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Slider -->
+            <Label Text="Slider" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Slider x:Name="DemoSlider" Minimum="0" Maximum="100" Value="50" ValueChanged="OnSliderValueChanged" />
+            <Label x:Name="SliderLabel" Text="Slider: 50" FontSize="14" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Switch -->
+            <Label Text="Switch" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <HorizontalStackLayout Spacing="12">
+                <Switch x:Name="DemoSwitch" Toggled="OnSwitchToggled" />
+                <Label x:Name="SwitchLabel" Text="Off" FontSize="14" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- CheckBox -->
+            <Label Text="CheckBox" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <HorizontalStackLayout Spacing="12">
+                <CheckBox x:Name="DemoCheckBox" CheckedChanged="OnCheckBoxChanged" />
+                <Label x:Name="CheckBoxLabel" Text="Unchecked" FontSize="14" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Stepper -->
+            <Label Text="Stepper (increment by 5)" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Stepper x:Name="DemoStepper" Minimum="0" Maximum="50" Increment="5" ValueChanged="OnStepperValueChanged" />
+            <Label x:Name="StepperLabel" Text="Stepper: 0" FontSize="14" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- ActivityIndicator -->
+            <Label Text="ActivityIndicator" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <ActivityIndicator IsRunning="True" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- ImageButton -->
+            <Label Text="ImageButton" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <ImageButton HeightRequest="44" WidthRequest="44" BackgroundColor="LightGray" CornerRadius="8" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

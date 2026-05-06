@@ -513,9 +513,9 @@ public class AgentClient : IDisposable
         {
             using var content = DriverJson.CreateJsonContent(body);
             var response = await _http.PostAsync($"{_baseUrl}{path}", content);
-            if (!response.IsSuccessStatusCode)
-                return null;
             var responseBody = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return null;
             return DriverJson.Deserialize<T>(responseBody);
         }
         catch
@@ -556,6 +556,27 @@ public class AgentClient : IDisposable
         {
             return false;
         }
+    }
+
+    // ── DevFlow Actions ──
+
+    private const string InvokeApi = $"{ApiV1}/invoke";
+
+    /// <summary>
+    /// List all registered DevFlow Actions (methods annotated with [DevFlowAction]).
+    /// </summary>
+    public async Task<JsonElement> ListActionsAsync()
+        => await GetJsonAsync($"{InvokeApi}/actions");
+
+    /// <summary>
+    /// Invoke a registered DevFlow Action by name.
+    /// </summary>
+    public async Task<InvokeResult?> InvokeActionAsync(string actionName, JsonArray? args = null)
+    {
+        var body = new JsonObject();
+        if (args != null)
+            body["args"] = args;
+        return await PostJsonAsync<InvokeResult>($"{InvokeApi}/actions/{Uri.EscapeDataString(actionName)}", body);
     }
 
     // ── Preferences ──
@@ -685,6 +706,122 @@ public class AgentClient : IDisposable
         return await PostActionAsync($"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/stop", new JsonObject());
     }
 
+    // ── Jobs ──
+
+    public async Task<JsonElement> GetJobsAsync()
+    {
+        return await GetJsonAsync($"{DeviceApi}/jobs");
+    }
+
+    public async Task<JsonElement> RunJobAsync(string identifier, string? type = null)
+    {
+        try
+        {
+            var payload = new JsonObject();
+            if (!string.IsNullOrWhiteSpace(type))
+                payload["type"] = type;
+
+            using var content = DriverJson.CreateJsonContent(payload);
+            using var response = await _http.PostAsync($"{_baseUrl}{DeviceApi}/jobs/{Uri.EscapeDataString(identifier)}/run", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return default;
+            return DriverJson.ParseElement(responseBody);
+        }
+        catch { return default; }
+    }
+
+    // ── Files ──
+
+    public async Task<JsonElement> ListStorageRootsAsync()
+    {
+        return await GetJsonAsync($"{StorageApi}/roots");
+    }
+
+    public async Task<JsonElement> ListFilesAsync(string? path = null, string? root = null)
+    {
+        var url = $"{StorageApi}/files";
+        var query = BuildStorageFilesQuery(path, root);
+        if (!string.IsNullOrEmpty(query))
+            url += query;
+
+        return await GetJsonAsync(url);
+    }
+
+    public async Task<JsonElement> DownloadFileAsync(string path, string? root = null)
+    {
+        return await GetJsonAsync($"{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}");
+    }
+
+    public async Task<JsonElement> UploadFileAsync(string path, string contentBase64, string? root = null)
+    {
+        var body = new JsonObject { ["contentBase64"] = contentBase64 };
+        using var content = DriverJson.CreateJsonContent(body);
+        using var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(responseBody))
+            return default;
+
+        return DriverJson.ParseElement(responseBody);
+    }
+
+    public async Task<bool> DeleteFileAsync(string path, string? root = null)
+    {
+        return await DeleteActionAsync($"{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}");
+    }
+
+    private static string BuildStorageFilesQuery(string? path, string? root)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(path))
+            query.Add($"path={Uri.EscapeDataString(path)}");
+        if (!string.IsNullOrEmpty(root))
+            query.Add($"root={Uri.EscapeDataString(root)}");
+
+        return query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
+    }
+
+    private static string BuildRootQuery(string? root)
+        => string.IsNullOrEmpty(root) ? string.Empty : $"?root={Uri.EscapeDataString(root)}";
+
+    // ── BLE ──
+
+    public Task<JsonElement> GetBleStatusAsync()
+        => GetJsonAsync($"{DeviceApi}/ble");
+
+    public Task<JsonElement> GetBleEventsAsync(int limit = 100, string? type = null)
+    {
+        var path = $"{DeviceApi}/ble/events?limit={limit}";
+        if (!string.IsNullOrEmpty(type))
+            path += $"&type={Uri.EscapeDataString(type)}";
+        return GetJsonAsync(path);
+    }
+
+    public Task<bool> StartBleScanAsync()
+        => PostActionAsync($"{DeviceApi}/ble/scan/start", new JsonObject());
+
+    public Task<bool> StopBleScanAsync()
+        => PostActionAsync($"{DeviceApi}/ble/scan/stop", new JsonObject());
+
+    public Task<bool> ClearBleEventsAsync()
+        => DeleteActionAsync($"{DeviceApi}/ble/events");
+
+    /// <summary>
+    /// Returns the WebSocket URL for live BLE event streaming.
+    /// </summary>
+    public string GetBleWebSocketUrl(bool scan = false, int replay = 100, string? type = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(replay);
+
+        var query = new List<string> { $"replay={replay}" };
+        if (scan)
+            query.Add("scan=true");
+        if (!string.IsNullOrEmpty(type))
+            query.Add($"type={Uri.EscapeDataString(type)}");
+
+        return $"{GetWebSocketBaseUrl()}/ws/v1/ble?{string.Join("&", query)}";
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -729,9 +866,11 @@ public class AgentClient : IDisposable
     /// </summary>
     public string GetNetworkWebSocketUrl()
     {
-        var wsBase = _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
-        return $"{wsBase}/ws/v1/network";
+        return $"{GetWebSocketBaseUrl()}/ws/v1/network";
     }
+
+    private string GetWebSocketBaseUrl()
+        => _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
 
     internal sealed class ProfilerSessionEnvelope
     {
@@ -833,6 +972,8 @@ public class AgentCapabilities
     public bool Storage { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("profiler")]
     public bool Profiler { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("jobs")]
+    public bool Jobs { get; set; }
 }
 
 public class NetworkRequest
@@ -1047,4 +1188,21 @@ public class ProfilerCapabilities
     public bool UiThreadStallSupported { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("threadCountSupported")]
     public bool ThreadCountSupported { get; set; }
+}
+
+/// <summary>
+/// Result of a DevFlow Action invocation.
+/// </summary>
+public class InvokeResult
+{
+    [System.Text.Json.Serialization.JsonPropertyName("success")]
+    public bool Success { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("returnValue")]
+    public string? ReturnValue { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("returnType")]
+    public string? ReturnType { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("error")]
+    public string? Error { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("action")]
+    public string? Action { get; set; }
 }

@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <RootNamespace>MacOS.Sample</RootNamespace>
+
+    <ApplicationTitle>MAUI macOS Sample</ApplicationTitle>
+    <ApplicationId>com.microsoft.maui.platforms.macos.sample</ApplicationId>
+    <ApplicationIdGuid>C5E91D2A-367B-4F8C-A1D3-8B4F22E5D691</ApplicationIdGuid>
+
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+
+    <DefineConstants>$(DefineConstants);MACAPP</DefineConstants>
+    <EnableMauiDevFlow Condition="'$(EnableMauiDevFlow)' == ''">false</EnableMauiDevFlow>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+    <DefineConstants>$(DefineConstants);MAUIDEVFLOW</DefineConstants>
+  </PropertyGroup>
+
+  <Import Project="..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.targets"
+          Condition="Exists('..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.targets')" />
+  <Import Project="..\..\src\MacOS.BlazorWebView\buildTransitive\Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets"
+          Condition="Exists('..\..\src\MacOS.BlazorWebView\buildTransitive\Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets')" />
+
+  <ItemGroup>
+    <PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MacOS\MacOS.csproj" />
+    <ProjectReference Include="..\..\src\MacOS.Essentials\MacOS.Essentials.csproj" />
+    <ProjectReference Include="..\..\src\MacOS.BlazorWebView\MacOS.BlazorWebView.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableMauiDevFlow)' == 'true'">
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <BundleResource Include="wwwroot\**" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiIcon Include="Resources\AppIcon\appicon.png" />
+    <MauiFont Include="Resources\Fonts\*" />
+  </ItemGroup>
+
+</Project>

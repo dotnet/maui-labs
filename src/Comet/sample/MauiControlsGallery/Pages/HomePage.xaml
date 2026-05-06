@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.HomePage"
+             Title="Home">
+    <ScrollView>
+        <VerticalStackLayout Spacing="16" Padding="24">
+            <Label Text="MAUI Controls Gallery"
+                   FontSize="32"
+                   FontAttributes="Bold" />
+            <Label Text="Standard .NET MAUI controls with default styling"
+                   FontSize="16"
+                   TextColor="Gray" />
+            <Label Text="This app demonstrates standard .NET MAUI controls rendered with the default MAUI template styling on Mac Catalyst. Use the flyout menu to navigate between different control demos."
+                   FontSize="14" />
+            <Border Stroke="{StaticResource Primary}" StrokeThickness="1" StrokeShape="RoundRectangle 8">
+                <VerticalStackLayout Spacing="8" Padding="16">
+                    <Label Text="About This Gallery" FontSize="18" FontAttributes="Bold" />
+                    <Label Text="• Default MAUI template styling — no customization" FontSize="14" />
+                    <Label Text="• Mirrors the CometControlsGallery page structure" FontSize="14" />
+                    <Label Text="• Used for visual parity comparison with Comet" FontSize="14" />
+                    <Label Text="• Targets Mac Catalyst and iOS" FontSize="14" />
+                    <Label Text=".NET 10 / MAUI 10" FontSize="14" TextColor="Gray" />
+                </VerticalStackLayout>
+            </Border>
+            <Label Text="Use the flyout menu on the left to explore different control demos."
+                   FontSize="14"
+                   TextColor="Gray" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

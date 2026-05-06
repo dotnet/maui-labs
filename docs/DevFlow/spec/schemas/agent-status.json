@@ -115,6 +115,25 @@
       "type": "boolean",
       "description": "Whether the application is currently running and responsive."
     },
+    "capabilities": {
+      "type": "object",
+      "description": "Boolean status summary for agent capabilities.",
+      "properties": {
+        "ui": { "type": "boolean" },
+        "screenshots": { "type": "boolean" },
+        "webview": { "type": "boolean" },
+        "network": { "type": "boolean" },
+        "logs": { "type": "boolean" },
+        "sensors": { "type": "boolean" },
+        "storage": { "type": "boolean" },
+        "profiler": { "type": "boolean" },
+        "jobs": {
+          "type": "boolean",
+          "description": "Whether platform background jobs are supported by this agent."
+        }
+      },
+      "additionalProperties": true
+    },
     "uptime": {
       "type": "string",
       "description": "Agent uptime as an ISO 8601 duration (e.g. 'PT1H30M15S').",

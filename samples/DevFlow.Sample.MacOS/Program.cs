@@ -1,4 +1,4 @@
-using Microsoft.Maui.Platform.MacOS.Hosting;
+using Microsoft.Maui.Platforms.MacOS.Platform;
 using Microsoft.Maui.Hosting;
 using AppKit;
 using Foundation;

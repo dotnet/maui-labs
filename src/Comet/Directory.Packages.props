@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Comet manages its own package versions independently -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

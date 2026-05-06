@@ -1,0 +1,29 @@
+<h1>🔥 Blazor on macOS (AppKit)</h1>
+<p>This is a Blazor component running inside a native macOS app via BlazorWebView!</p>
+
+<div class="counter">
+    <p>Current count: @currentCount</p>
+</div>
+
+<button @onclick="IncrementCount">Click me</button>
+
+<p style="margin-top: 20px; color: #888;">
+    Platform: macOS (AppKit) via custom MAUI backend
+</p>
+
+@for (int i = 1; i <= 30; i++)
+{
+    <div style="padding: 12px; margin: 8px 16px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); border-radius: 8px;">
+        <h3 style="margin: 0 0 4px 0;">Section @i</h3>
+        <p style="margin: 0; color: #666;">Scrollable content demonstrating ContentInsets — the content scrolls behind the titlebar while the initial position is inset from the top.</p>
+    </div>
+}
+
+@code {
+    private int currentCount = 0;
+
+    private void IncrementCount()
+    {
+        currentCount++;
+    }
+}

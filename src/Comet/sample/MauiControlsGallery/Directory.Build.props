@@ -1,0 +1,4 @@
+<Project>
+	<!-- Import the sample-level props for MauiVersion -->
+	<Import Project="$(MSBuildThisFileDirectory)../Directory.Build.props" />
+</Project>

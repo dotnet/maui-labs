@@ -1,0 +1,27 @@
+<Project>
+	<!-- Force-bump SupportedOSPlatformVersion for all Comet samples. The current
+	     iOS/MacCatalyst SDK requires >= 17.0; current Android requires minSdk >= 23.
+	     Override in Directory.Build.targets (after the csproj evaluates) so all
+	     samples pick this up without per-project edits. -->
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
+		<SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<PackageReference Include="Redth.MauiDevFlow.Agent" Version="0.18.0" />
+		<Compile Include="$(MSBuildThisFileDirectory)Shared/RuntimeDebug/SampleRuntimeDebugExtensions.cs"
+		         Link="Shared/RuntimeDebug/SampleRuntimeDebugExtensions.cs"
+		         Visible="false" />
+	</ItemGroup>
+
+	<PropertyGroup Condition="'$(Configuration)' == 'Debug' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
+		<CodesignEntitlements>$(MSBuildThisFileDirectory)Shared/RuntimeDebug/Entitlements.Debug.plist</CodesignEntitlements>
+	</PropertyGroup>
+</Project>

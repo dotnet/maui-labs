@@ -461,6 +461,133 @@ channels:
                   type: string
                   description: Name of the sensor to unsubscribe from.
 
+  # ── BLE Event Stream ─────────────────────────────────────────────────────
+  ble:
+    address: /ws/v1/ble
+    description: |
+      Live Bluetooth Low Energy event stream. Connect with query parameters to
+      optionally replay buffered events, filter by event type, and start native
+      scanning for the lifetime of the connection when supported. Streamed
+      events remain in the bounded BLE buffer until evicted or explicitly
+      cleared through the REST API.
+    servers:
+      - $ref: '#/servers/agent'
+    bindings:
+      ws:
+        query:
+          type: object
+          description: Connection query-string parameters for BLE streaming.
+          properties:
+            scan:
+              type: boolean
+              default: false
+              description: Start BLE scanning while this WebSocket connection is active.
+            replay:
+              type: integer
+              default: 100
+              minimum: 0
+              description: Number of buffered BLE events to replay on connect. Use 0 for live-only streaming.
+            type:
+              $ref: './schemas/device.json#/$defs/BleEventType'
+              description: Optional event type filter applied to replayed and live events.
+    messages:
+      bleSubscribed:
+        name: bleSubscribed
+        title: BLE Subscribed
+        summary: Confirmation that the BLE event stream is active.
+        contentType: application/json
+        payload:
+          type: object
+          description: BLE stream subscription confirmation.
+          required: [type, timestamp, scanning, replay]
+          properties:
+            type:
+              type: string
+              const: subscribed
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            scanning:
+              type: boolean
+              description: Whether native BLE scanning is currently active.
+            replay:
+              type: integer
+              minimum: 0
+              description: Number of buffered events requested for replay.
+            eventType:
+              $ref: './schemas/device.json#/$defs/BleEventType'
+              description: Event type filter for this stream, if any.
+
+      bleReplay:
+        name: bleReplay
+        title: BLE Event Replay
+        summary: Initial replay of buffered BLE events on connect.
+        contentType: application/json
+        payload:
+          type: object
+          description: Replay of buffered BLE events.
+          required: [type, timestamp, count, events]
+          properties:
+            type:
+              type: string
+              const: replay
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            count:
+              type: integer
+              minimum: 0
+              description: Number of events included in this replay message.
+            events:
+              type: array
+              items:
+                $ref: './schemas/device.json#/$defs/BleEvent'
+              description: Buffered BLE events matching the stream filter.
+
+      bleEvent:
+        name: bleEvent
+        title: BLE Event
+        summary: New BLE event recorded by the monitor.
+        contentType: application/json
+        payload:
+          type: object
+          description: Live BLE event.
+          required: [type, timestamp, event]
+          properties:
+            type:
+              type: string
+              const: ble_event
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            event:
+              $ref: './schemas/device.json#/$defs/BleEvent'
+              description: The BLE event.
+
+      bleError:
+        name: bleError
+        title: BLE Stream Error
+        summary: Error encountered while opening the BLE stream.
+        contentType: application/json
+        payload:
+          type: object
+          description: BLE stream error message.
+          required: [type, timestamp, error]
+          properties:
+            type:
+              type: string
+              const: error
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            error:
+              type: string
+              description: Human-readable error message.
+
   # ── Profiler Data Stream ────────────────────────────────────────────────
   profiler:
     address: /ws/v1/profiler

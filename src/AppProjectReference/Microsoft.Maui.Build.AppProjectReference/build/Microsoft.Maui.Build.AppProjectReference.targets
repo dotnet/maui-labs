@@ -1,0 +1,241 @@
+<Project>
+
+  <PropertyGroup>
+    <MauiAppRefAppTargetsPath Condition="'$(MauiAppRefAppTargetsPath)' == ''">$(MSBuildThisFileDirectory)Microsoft.Maui.Build.AppProjectReference.App.targets</MauiAppRefAppTargetsPath>
+    <MauiAppRefCustomAfterMicrosoftCommonTargetsPath Condition="'$(MauiAppRefCustomAfterMicrosoftCommonTargetsPath)' == ''">$(MSBuildThisFileDirectory)Microsoft.Maui.Build.AppProjectReference.CustomAfter.targets</MauiAppRefCustomAfterMicrosoftCommonTargetsPath>
+    <MauiAppRefOutputRoot Condition="'$(MauiAppRefOutputRoot)' == ''">$(BaseIntermediateOutputPath)maui-app-refs\</MauiAppRefOutputRoot>
+  </PropertyGroup>
+
+  <!--
+    Project a MauiAppProjectReference item into a real ProjectReference so that NuGet
+    restore, project-graph builds, IDE solution explorer, and external project-graph
+    analyzers see a real project edge. The projection lives in the targets file (rather
+    than props) so it can see items declared in the consuming project body, while still
+    being part of pure MSBuild evaluation (visible to NuGet restore).
+
+    User-supplied metadata wins thanks to MSBuild::ValueOrDefault.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="@(MauiAppProjectReference)">
+      <MauiAppProjectReference>true</MauiAppProjectReference>
+      <ReferenceOutputAssembly>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.ReferenceOutputAssembly)', 'false'))</ReferenceOutputAssembly>
+      <BuildReference>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.BuildReference)', 'false'))</BuildReference>
+      <PrivateAssets>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.PrivateAssets)', 'all'))</PrivateAssets>
+      <SkipGetTargetFrameworkProperties>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.SkipGetTargetFrameworkProperties)', 'true'))</SkipGetTargetFrameworkProperties>
+      <IncludeAssets>$([MSBuild]::ValueOrDefault('%(MauiAppProjectReference.IncludeAssets)', 'none'))</IncludeAssets>
+    </ProjectReference>
+
+    <MauiAppProjectReference Remove="@(MauiAppProjectReference)" />
+  </ItemGroup>
+
+  <Target Name="_CollectAppProjectReferences"
+          BeforeTargets="AssignProjectConfiguration;PrepareProjectReferences;ResolveProjectReferences">
+    <ItemGroup>
+      <_MauiAppMarkedProjectReference Remove="@(_MauiAppMarkedProjectReference)" />
+      <_MauiAppMarkedProjectReference Include="@(ProjectReference)"
+                                   Condition="'%(ProjectReference.MauiAppProjectReference)' == 'true'" />
+      <ProjectReference Remove="@(_MauiAppMarkedProjectReference)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_MauiAppRefBuildOnBuild"
+          BeforeTargets="$(MauiAppRefBuildBeforeTargets)"
+          DependsOnTargets="BuildAppProjectReferences"
+          Condition="'$(MauiAppRefBuildEnabled)' == 'true' and '$(MauiAppRefBuildOnBuild)' == 'true'" />
+
+  <Target Name="_MauiAppRefBuildOnTest"
+          BeforeTargets="VSTest"
+          DependsOnTargets="BuildAppProjectReferences"
+          Condition="'$(MauiAppRefBuildEnabled)' == 'true' and '$(MauiAppRefBuildOnTest)' == 'true'" />
+
+  <Target Name="ResolveAppProjectReferences"
+          DependsOnTargets="_CollectAppProjectReferences">
+    <ItemGroup>
+      <_MauiAppCollectedProjectReference Include="@(_MauiAppMarkedProjectReference)">
+        <_MauiAppUserProperties>%(_MauiAppMarkedProjectReference.Properties)</_MauiAppUserProperties>
+        <_MauiAppUserAdditionalProperties>%(_MauiAppMarkedProjectReference.AdditionalProperties)</_MauiAppUserAdditionalProperties>
+        <_MauiAppUserCustomAfterMicrosoftCommonTargets>$([System.Text.RegularExpressions.Regex]::Match('%(_MauiAppMarkedProjectReference.Properties);%(_MauiAppMarkedProjectReference.AdditionalProperties)', '(^|;)CustomAfterMicrosoftCommonTargets=([^;]+)').Groups[2].Value)</_MauiAppUserCustomAfterMicrosoftCommonTargets>
+        <Properties></Properties>
+      </_MauiAppCollectedProjectReference>
+
+      <_MauiAppExplicitReference Include="@(MauiAppProjectReference)">
+        <_MauiAppUserProperties>%(MauiAppProjectReference.Properties)</_MauiAppUserProperties>
+        <_MauiAppUserAdditionalProperties>%(MauiAppProjectReference.AdditionalProperties)</_MauiAppUserAdditionalProperties>
+        <_MauiAppUserCustomAfterMicrosoftCommonTargets>$([System.Text.RegularExpressions.Regex]::Match('%(MauiAppProjectReference.Properties);%(MauiAppProjectReference.AdditionalProperties)', '(^|;)CustomAfterMicrosoftCommonTargets=([^;]+)').Groups[2].Value)</_MauiAppUserCustomAfterMicrosoftCommonTargets>
+        <Properties></Properties>
+      </_MauiAppExplicitReference>
+
+      <_ResolvedMauiAppProjectReference Include="@(_MauiAppCollectedProjectReference)">
+        <ReferenceName Condition="'%(_MauiAppCollectedProjectReference.ReferenceName)' != ''">%(_MauiAppCollectedProjectReference.ReferenceName)</ReferenceName>
+        <ReferenceName Condition="'%(_MauiAppCollectedProjectReference.ReferenceName)' == ''">%(_MauiAppCollectedProjectReference.Filename)</ReferenceName>
+        <ProjectPath>%(_MauiAppCollectedProjectReference.FullPath)</ProjectPath>
+        <TargetFramework Condition="'%(_MauiAppCollectedProjectReference.TargetFramework)' != ''">%(_MauiAppCollectedProjectReference.TargetFramework)</TargetFramework>
+        <TargetFramework Condition="'%(_MauiAppCollectedProjectReference.TargetFramework)' == '' and '%(_MauiAppCollectedProjectReference.SetTargetFramework)' != ''">$([System.Text.RegularExpressions.Regex]::Match('%(_MauiAppCollectedProjectReference.SetTargetFramework)', 'TargetFramework=([^;]+)').Groups[1].Value)</TargetFramework>
+        <Configuration Condition="'%(_MauiAppCollectedProjectReference.Configuration)' != ''">%(_MauiAppCollectedProjectReference.Configuration)</Configuration>
+        <Configuration Condition="'%(_MauiAppCollectedProjectReference.Configuration)' == ''">$(Configuration)</Configuration>
+        <RuntimeIdentifier>%(_MauiAppCollectedProjectReference.RuntimeIdentifier)</RuntimeIdentifier>
+        <Platform>%(_MauiAppCollectedProjectReference.Platform)</Platform>
+        <BuildTarget Condition="'%(_MauiAppCollectedProjectReference.BuildTarget)' != ''">%(_MauiAppCollectedProjectReference.BuildTarget)</BuildTarget>
+        <BuildTarget Condition="'%(_MauiAppCollectedProjectReference.BuildTarget)' == ''">$(MauiAppRefInnerBuildTarget)</BuildTarget>
+        <ArtifactName Condition="'%(_MauiAppCollectedProjectReference.ArtifactName)' != ''">%(_MauiAppCollectedProjectReference.ArtifactName)</ArtifactName>
+        <ArtifactName Condition="'%(_MauiAppCollectedProjectReference.ArtifactName)' == ''">%(_MauiAppCollectedProjectReference.Filename)</ArtifactName>
+        <ExpectedArtifact>%(_MauiAppCollectedProjectReference.ExpectedArtifact)</ExpectedArtifact>
+        <SetPlatformOutputPaths Condition="'%(_MauiAppCollectedProjectReference.SetPlatformOutputPaths)' != ''">%(_MauiAppCollectedProjectReference.SetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <SetPlatformOutputPaths Condition="'%(_MauiAppCollectedProjectReference.SetPlatformOutputPaths)' == ''">$(MauiAppRefSetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <_MauiAppOutputRootExplicit Condition="'%(_MauiAppCollectedProjectReference.OutputRoot)' != ''">true</_MauiAppOutputRootExplicit>
+        <OutputRoot Condition="'%(_MauiAppCollectedProjectReference.OutputRoot)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '%(_MauiAppCollectedProjectReference.OutputRoot)'))))</OutputRoot>
+        <OutputRoot Condition="'%(_MauiAppCollectedProjectReference.OutputRoot)' == ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(MauiAppRefOutputRoot)', '%(_MauiAppCollectedProjectReference.Filename)'))))</OutputRoot>
+        <PreviousCustomAfterMicrosoftCommonTargets Condition="'%(_MauiAppCollectedProjectReference._MauiAppUserCustomAfterMicrosoftCommonTargets)' != ''">%(_MauiAppCollectedProjectReference._MauiAppUserCustomAfterMicrosoftCommonTargets)</PreviousCustomAfterMicrosoftCommonTargets>
+        <PreviousCustomAfterMicrosoftCommonTargets Condition="'%(_MauiAppCollectedProjectReference._MauiAppUserCustomAfterMicrosoftCommonTargets)' == ''">$(CustomAfterMicrosoftCommonTargets)</PreviousCustomAfterMicrosoftCommonTargets>
+        <_MauiAppUserProperties>%(_MauiAppCollectedProjectReference._MauiAppUserProperties)</_MauiAppUserProperties>
+        <_MauiAppUserAdditionalProperties>%(_MauiAppCollectedProjectReference._MauiAppUserAdditionalProperties)</_MauiAppUserAdditionalProperties>
+        <Properties></Properties>
+        <Targets></Targets>
+      </_ResolvedMauiAppProjectReference>
+
+      <_ResolvedMauiAppProjectReference Include="@(_MauiAppExplicitReference)">
+        <ReferenceName Condition="'%(_MauiAppExplicitReference.ReferenceName)' != ''">%(_MauiAppExplicitReference.ReferenceName)</ReferenceName>
+        <ReferenceName Condition="'%(_MauiAppExplicitReference.ReferenceName)' == ''">%(_MauiAppExplicitReference.Filename)</ReferenceName>
+        <ProjectPath>%(_MauiAppExplicitReference.FullPath)</ProjectPath>
+        <TargetFramework>%(_MauiAppExplicitReference.TargetFramework)</TargetFramework>
+        <Configuration Condition="'%(_MauiAppExplicitReference.Configuration)' != ''">%(_MauiAppExplicitReference.Configuration)</Configuration>
+        <Configuration Condition="'%(_MauiAppExplicitReference.Configuration)' == ''">$(Configuration)</Configuration>
+        <RuntimeIdentifier>%(_MauiAppExplicitReference.RuntimeIdentifier)</RuntimeIdentifier>
+        <Platform>%(_MauiAppExplicitReference.Platform)</Platform>
+        <BuildTarget Condition="'%(_MauiAppExplicitReference.BuildTarget)' != ''">%(_MauiAppExplicitReference.BuildTarget)</BuildTarget>
+        <BuildTarget Condition="'%(_MauiAppExplicitReference.BuildTarget)' == ''">$(MauiAppRefInnerBuildTarget)</BuildTarget>
+        <ArtifactName Condition="'%(_MauiAppExplicitReference.ArtifactName)' != ''">%(_MauiAppExplicitReference.ArtifactName)</ArtifactName>
+        <ArtifactName Condition="'%(_MauiAppExplicitReference.ArtifactName)' == ''">%(_MauiAppExplicitReference.Filename)</ArtifactName>
+        <ExpectedArtifact>%(_MauiAppExplicitReference.ExpectedArtifact)</ExpectedArtifact>
+        <SetPlatformOutputPaths Condition="'%(_MauiAppExplicitReference.SetPlatformOutputPaths)' != ''">%(_MauiAppExplicitReference.SetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <SetPlatformOutputPaths Condition="'%(_MauiAppExplicitReference.SetPlatformOutputPaths)' == ''">$(MauiAppRefSetPlatformOutputPaths)</SetPlatformOutputPaths>
+        <_MauiAppOutputRootExplicit Condition="'%(_MauiAppExplicitReference.OutputRoot)' != ''">true</_MauiAppOutputRootExplicit>
+        <OutputRoot Condition="'%(_MauiAppExplicitReference.OutputRoot)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '%(_MauiAppExplicitReference.OutputRoot)'))))</OutputRoot>
+        <OutputRoot Condition="'%(_MauiAppExplicitReference.OutputRoot)' == ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(MauiAppRefOutputRoot)', '%(_MauiAppExplicitReference.Filename)'))))</OutputRoot>
+        <PreviousCustomAfterMicrosoftCommonTargets Condition="'%(_MauiAppExplicitReference._MauiAppUserCustomAfterMicrosoftCommonTargets)' != ''">%(_MauiAppExplicitReference._MauiAppUserCustomAfterMicrosoftCommonTargets)</PreviousCustomAfterMicrosoftCommonTargets>
+        <PreviousCustomAfterMicrosoftCommonTargets Condition="'%(_MauiAppExplicitReference._MauiAppUserCustomAfterMicrosoftCommonTargets)' == ''">$(CustomAfterMicrosoftCommonTargets)</PreviousCustomAfterMicrosoftCommonTargets>
+        <_MauiAppUserProperties>%(_MauiAppExplicitReference._MauiAppUserProperties)</_MauiAppUserProperties>
+        <_MauiAppUserAdditionalProperties>%(_MauiAppExplicitReference._MauiAppUserAdditionalProperties)</_MauiAppUserAdditionalProperties>
+        <Properties></Properties>
+        <Targets></Targets>
+      </_ResolvedMauiAppProjectReference>
+    </ItemGroup>
+
+    <Error Condition="'@(_ResolvedMauiAppProjectReference)' != '' and !Exists('$(MauiAppRefAppTargetsPath)')"
+            Text="The MAUI app reference child targets file was not found at '$(MauiAppRefAppTargetsPath)'." />
+
+    <Error Condition="'@(_ResolvedMauiAppProjectReference)' != '' and !Exists('$(MauiAppRefCustomAfterMicrosoftCommonTargetsPath)')"
+           Text="The MAUI app reference custom-after wrapper targets file was not found at '$(MauiAppRefCustomAfterMicrosoftCommonTargetsPath)'." />
+
+    <ItemGroup>
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                     Condition="'%(_ResolvedMauiAppProjectReference._MauiAppOutputRootExplicit)' != 'true' and '%(_ResolvedMauiAppProjectReference.TargetFramework)' != ''">
+        <OutputRoot>$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('%(_ResolvedMauiAppProjectReference.OutputRoot)', '%(_ResolvedMauiAppProjectReference.TargetFramework)'))))</OutputRoot>
+      </_ResolvedMauiAppProjectReference>
+
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                     Condition="'%(_ResolvedMauiAppProjectReference._MauiAppOutputRootExplicit)' != 'true' and '%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">
+        <OutputRoot>$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('%(_ResolvedMauiAppProjectReference.OutputRoot)', '%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)'))))</OutputRoot>
+      </_ResolvedMauiAppProjectReference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)">
+        <AdditionalProperties>%(_ResolvedMauiAppProjectReference._MauiAppUserProperties);%(_ResolvedMauiAppProjectReference._MauiAppUserAdditionalProperties);Configuration=%(_ResolvedMauiAppProjectReference.Configuration);MauiAppRefInnerBuildTarget=%(_ResolvedMauiAppProjectReference.BuildTarget);MauiAppRefOutputRoot=%(_ResolvedMauiAppProjectReference.OutputRoot);MauiAppRefReferenceName=%(_ResolvedMauiAppProjectReference.ReferenceName);MauiAppRefArtifactName=%(_ResolvedMauiAppProjectReference.ArtifactName);MauiAppRefExpectedArtifact=%(_ResolvedMauiAppProjectReference.ExpectedArtifact);MauiAppRefSetPlatformOutputPaths=%(_ResolvedMauiAppProjectReference.SetPlatformOutputPaths);MauiAppRefAppTargetsPath=$(MauiAppRefAppTargetsPath);MauiAppRefPreviousCustomAfterMicrosoftCommonTargets=%(_ResolvedMauiAppProjectReference.PreviousCustomAfterMicrosoftCommonTargets);CustomAfterMicrosoftCommonTargets=$(MauiAppRefCustomAfterMicrosoftCommonTargetsPath)</AdditionalProperties>
+      </_ResolvedMauiAppProjectReference>
+
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                    Condition="'%(_ResolvedMauiAppProjectReference.TargetFramework)' != ''">
+        <AdditionalProperties>%(_ResolvedMauiAppProjectReference.AdditionalProperties);TargetFramework=%(_ResolvedMauiAppProjectReference.TargetFramework)</AdditionalProperties>
+      </_ResolvedMauiAppProjectReference>
+
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                    Condition="'%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">
+        <AdditionalProperties>%(_ResolvedMauiAppProjectReference.AdditionalProperties);RuntimeIdentifier=%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)</AdditionalProperties>
+      </_ResolvedMauiAppProjectReference>
+
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                    Condition="'%(_ResolvedMauiAppProjectReference.Platform)' != ''">
+        <AdditionalProperties>%(_ResolvedMauiAppProjectReference.AdditionalProperties);Platform=%(_ResolvedMauiAppProjectReference.Platform)</AdditionalProperties>
+      </_ResolvedMauiAppProjectReference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                    Condition="'%(_ResolvedMauiAppProjectReference.SetPlatformOutputPaths)' == 'true'">
+        <AdditionalProperties Condition="'%(_ResolvedMauiAppProjectReference.SetPlatformOutputPaths)' == 'true'">%(_ResolvedMauiAppProjectReference.AdditionalProperties);OutputPath=%(_ResolvedMauiAppProjectReference.OutputRoot)bin\;AndroidPackageOutputPath=%(_ResolvedMauiAppProjectReference.OutputRoot)package\;AndroidBuildApplicationPackage=true;AppBundleDir=%(_ResolvedMauiAppProjectReference.OutputRoot)app\%(_ResolvedMauiAppProjectReference.ArtifactName).app;IpaPackageDir=%(_ResolvedMauiAppProjectReference.OutputRoot)package\;PublishDir=%(_ResolvedMauiAppProjectReference.OutputRoot)publish\</AdditionalProperties>
+      </_ResolvedMauiAppProjectReference>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="BuildAppProjectReferences"
+          DependsOnTargets="ResolveAppProjectReferences">
+    <ItemGroup>
+      <_MauiAppProjectReferenceForMSBuild Remove="@(_MauiAppProjectReferenceForMSBuild)" />
+      <_MauiAppProjectReferenceForMSBuild Include="@(_ResolvedMauiAppProjectReference)"
+                                        KeepMetadata="AdditionalProperties" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_MauiAppProjectReferenceForMSBuild)"
+             Targets="Restore"
+             BuildInParallel="$(BuildInParallel)"
+             SkipNonexistentProjects="false"
+             SkipNonexistentTargets="false"
+             Condition="'@(_MauiAppProjectReferenceForMSBuild)' != ''" />
+
+    <MSBuild Projects="@(_MauiAppProjectReferenceForMSBuild)"
+             Targets="_MauiAppRefBuildAndGetArtifacts"
+             BuildInParallel="$(BuildInParallel)"
+             SkipNonexistentProjects="false"
+             SkipNonexistentTargets="false">
+      <Output TaskParameter="TargetOutputs" ItemName="_MauiAppBuiltArtifact" />
+    </MSBuild>
+
+    <ItemGroup>
+      <MauiAppArtifact Include="@(_MauiAppBuiltArtifact)" />
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(MauiAppArtifact)"
+                      Condition="'@(MauiAppArtifact)' != ''">
+      <Output TaskParameter="Filtered" ItemName="_MauiAppDistinctBuiltArtifact" />
+    </RemoveDuplicates>
+
+    <ItemGroup Condition="'@(_MauiAppDistinctBuiltArtifact)' != ''">
+      <MauiAppArtifact Remove="@(MauiAppArtifact)" />
+      <MauiAppArtifact Include="@(_MauiAppDistinctBuiltArtifact)" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <MauiAppArtifacts>@(MauiAppArtifact)</MauiAppArtifacts>
+      <MauiAppArtifactPaths>@(MauiAppArtifact->'%(FullPath)')</MauiAppArtifactPaths>
+    </PropertyGroup>
+
+    <Message Importance="High"
+             Condition="'@(MauiAppArtifact)' != ''"
+             Text="Resolved MAUI app artifact: %(MauiAppArtifact.Identity) (%(MauiAppArtifact.TargetFramework) %(MauiAppArtifact.RuntimeIdentifier))" />
+
+    <Error Condition="'@(_ResolvedMauiAppProjectReference)' != '' and '$(MauiAppRefFailIfNoArtifacts)' == 'true' and '@(MauiAppArtifact)' == ''"
+           Text="No MAUI app artifacts were produced. Check MauiAppProjectReference metadata, target framework, runtime identifier, and child build properties." />
+  </Target>
+
+  <Target Name="CleanAppProjectReferenceArtifacts"
+          AfterTargets="Clean"
+          Condition="'$(MauiAppRefOutputRoot)' != '' and Exists('$(MauiAppRefOutputRoot)')">
+    <PropertyGroup>
+      <_MauiAppCleanOutputRoot>$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(MauiAppRefOutputRoot)'))))</_MauiAppCleanOutputRoot>
+      <_MauiAppCleanBaseIntermediateOutputPath>$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)'))))</_MauiAppCleanBaseIntermediateOutputPath>
+      <_MauiAppCleanOutputRootForComparison Condition="'$(OS)' == 'Windows_NT'">$([System.String]::Copy('$(_MauiAppCleanOutputRoot)').ToUpperInvariant())</_MauiAppCleanOutputRootForComparison>
+      <_MauiAppCleanBaseIntermediateOutputPathForComparison Condition="'$(OS)' == 'Windows_NT'">$([System.String]::Copy('$(_MauiAppCleanBaseIntermediateOutputPath)').ToUpperInvariant())</_MauiAppCleanBaseIntermediateOutputPathForComparison>
+      <_MauiAppCleanOutputRootForComparison Condition="'$(OS)' != 'Windows_NT'">$(_MauiAppCleanOutputRoot)</_MauiAppCleanOutputRootForComparison>
+      <_MauiAppCleanBaseIntermediateOutputPathForComparison Condition="'$(OS)' != 'Windows_NT'">$(_MauiAppCleanBaseIntermediateOutputPath)</_MauiAppCleanBaseIntermediateOutputPathForComparison>
+      <_MauiAppCleanOutputRootIsSafe Condition="'$(_MauiAppCleanOutputRootForComparison)' != '$(_MauiAppCleanBaseIntermediateOutputPathForComparison)' and $([System.String]::Copy('$(_MauiAppCleanOutputRootForComparison)').StartsWith('$(_MauiAppCleanBaseIntermediateOutputPathForComparison)'))">true</_MauiAppCleanOutputRootIsSafe>
+    </PropertyGroup>
+
+    <Warning Condition="'$(_MauiAppCleanOutputRootIsSafe)' != 'true'"
+             Text="Skipping MAUI app reference artifact clean because '$(MauiAppRefOutputRoot)' is outside '$(BaseIntermediateOutputPath)' or resolves to the intermediate root itself." />
+
+    <RemoveDir Directories="$(MauiAppRefOutputRoot)"
+               Condition="'$(_MauiAppCleanOutputRootIsSafe)' == 'true'" />
+  </Target>
+
+</Project>

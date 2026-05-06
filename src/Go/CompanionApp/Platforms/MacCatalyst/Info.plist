@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>LSEnvironment</key>
+	<dict>
+		<key>DOTNET_MODIFIABLE_ASSEMBLIES</key>
+		<string>Debug</string>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Comet Go needs camera access to scan the QR code displayed by the dev server.</string>
+</dict>
+</plist>

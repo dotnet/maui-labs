@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.RadioButtonPage"
+             Title="RadioButton">
+    <ScrollView>
+        <VerticalStackLayout Spacing="16" Padding="24">
+            <Label Text="RadioButton Demos" FontSize="24" FontAttributes="Bold" />
+            <Label x:Name="SelectedLabel" Text="Selected: None" FontSize="16" FontAttributes="Bold" TextColor="DodgerBlue" />
+
+            <!-- Size Selection -->
+            <Label Text="Size Selection" FontSize="18" FontAttributes="Bold" />
+            <Label Text="Standard native radio buttons:" FontSize="13" TextColor="Gray" />
+            <RadioButton Content="Small" GroupName="size" CheckedChanged="OnSizeChecked" />
+            <RadioButton Content="Medium" GroupName="size" IsChecked="True" CheckedChanged="OnSizeChecked" />
+            <RadioButton Content="Large" GroupName="size" CheckedChanged="OnSizeChecked" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Color Selection -->
+            <Label Text="Color Selection" FontSize="18" FontAttributes="Bold" />
+            <Label Text="Choose a color:" FontSize="13" TextColor="Gray" />
+            <RadioButton Content="Red" GroupName="color" IsChecked="True" CheckedChanged="OnColorChecked" />
+            <RadioButton Content="Green" GroupName="color" CheckedChanged="OnColorChecked" />
+            <RadioButton Content="Blue" GroupName="color" CheckedChanged="OnColorChecked" />
+            <RadioButton Content="Yellow" GroupName="color" CheckedChanged="OnColorChecked" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Plan Selection -->
+            <Label Text="Plan Selection" FontSize="18" FontAttributes="Bold" />
+            <Label Text="Select a plan:" FontSize="13" TextColor="Gray" />
+            <RadioButton Content="Free" GroupName="plan" IsChecked="True" CheckedChanged="OnPlanChecked" />
+            <RadioButton Content="Pro" GroupName="plan" CheckedChanged="OnPlanChecked" />
+            <RadioButton Content="Enterprise" GroupName="plan" CheckedChanged="OnPlanChecked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

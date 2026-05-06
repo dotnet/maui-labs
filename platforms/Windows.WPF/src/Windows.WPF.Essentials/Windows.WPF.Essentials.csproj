@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseMaui>true</UseMaui>
+    <SkipValidateMauiImplicitPackageReferences>true</SkipValidateMauiImplicitPackageReferences>
+    <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF.Essentials</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.Windows.WPF.Essentials</AssemblyName>
+    <PackageId>Microsoft.Maui.Platforms.Windows.WPF.Essentials</PackageId>
+    <Version>$(PlatformMauiWindowsWpfEssentialsVersion)</Version>
+    <Description>MAUI Essentials implementations for the WPF backend — clipboard, preferences, device info, connectivity, and more using WPF and Windows APIs.</Description>
+    <PackageTags>maui;windows;wpf;essentials;desktop;clipboard;preferences</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Maui.Core" Version="$(MauiVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Windows.WPF\Windows.WPF.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

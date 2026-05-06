@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.TransformsPage"
+             Title="Transforms">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <Label x:Name="StatusLabel" Text="Use the buttons below to animate the box" FontSize="14" TextColor="Gray" />
+
+            <!-- Basic Transforms -->
+            <Label Text="Basic Transforms" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border x:Name="TargetBox" BackgroundColor="DodgerBlue"
+                    StrokeThickness="0" StrokeShape="RoundRectangle 8"
+                    WidthRequest="100" HeightRequest="100"
+                    HorizontalOptions="Start">
+                <BoxView Color="DodgerBlue" />
+            </Border>
+            <HorizontalStackLayout Spacing="8">
+                <Button Text="Translate" Clicked="OnTranslateClicked" />
+                <Button Text="Scale 1.5x" Clicked="OnScaleClicked" />
+                <Button Text="Rotate 90°" Clicked="OnRotateClicked" />
+                <Button Text="Fade" Clicked="OnFadeClicked" />
+            </HorizontalStackLayout>
+            <Button Text="Reset All" Clicked="OnResetClicked" BackgroundColor="Crimson" TextColor="White" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Anchor Point -->
+            <Label Text="AnchorX / AnchorY" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label x:Name="AnchorLabel" Text="Anchor: (0.5, 0.5) — center" FontSize="14" />
+            <Border x:Name="AnchorBox" BackgroundColor="MediumPurple"
+                    StrokeThickness="0" StrokeShape="RoundRectangle 8"
+                    WidthRequest="80" HeightRequest="80"
+                    HorizontalOptions="Start">
+                <BoxView Color="MediumPurple" />
+            </Border>
+            <HorizontalStackLayout Spacing="8">
+                <Button Text="Anchor (0,0)" Clicked="OnAnchorTopLeft" />
+                <Button Text="Anchor (0.5,0.5)" Clicked="OnAnchorCenter" />
+                <Button Text="Anchor (1,1)" Clicked="OnAnchorBottomRight" />
+            </HorizontalStackLayout>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Composite -->
+            <Label Text="Composite Animation" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Label Text="Translate + Scale + Rotate + Fade simultaneously" FontSize="14" TextColor="Gray" />
+            <Border x:Name="CompositeBox" BackgroundColor="Coral"
+                    StrokeThickness="0" StrokeShape="RoundRectangle 8"
+                    WidthRequest="80" HeightRequest="80"
+                    HorizontalOptions="Start">
+                <BoxView Color="Coral" />
+            </Border>
+            <Button Text="Run Composite Animation" Clicked="OnCompositeClicked" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

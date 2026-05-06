@@ -18,6 +18,7 @@
     <FileSignInfo Include="Interop.UIAutomationClient.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="ModelContextProtocol.Core.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="ModelContextProtocol.dll" CertificateName="3PartySHA2" />
+    <FileSignInfo Include="QRCoder.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="Spectre.Console.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="Wcwidth.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="Websocket.Client.dll" CertificateName="3PartySHA2" />

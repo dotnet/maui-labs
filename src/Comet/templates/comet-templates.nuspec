@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+    <metadata>
+        <id>Microsoft.Maui.Comet.Templates.Multiplatform</id>
+        <title>Comet Template Pack</title>
+        <version>0.3.418-beta</version>
+        <authors>Microsoft</authors>
+        <description>Templates for building Android, iOS, and macOS application with Comet.</description>
+        <projectUrl>https://github.com/nicwise/maui-labs</projectUrl>
+        <licenseUrl>https://www.microsoft.com/web/webpi/eula/net_library_eula_enu.htm</licenseUrl>
+        <copyright>Microsoft</copyright>
+        <packageTypes>
+            <packageType name="Template"/>
+        </packageTypes>
+    </metadata>
+</package>

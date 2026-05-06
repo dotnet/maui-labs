@@ -1,0 +1,31 @@
+﻿using System;
+using UIKit;
+namespace Comet.iOS
+{
+	public static class iOSExtensions
+	{
+		public static UIViewController GetViewController(this UIView view)
+		{
+			if (view.NextResponder is UIViewController vc)
+				return vc;
+			if (view.NextResponder is UIView uIView)
+				return uIView.GetViewController();
+			return null;
+		}
+
+		public static UIGestureRecognizer ToGestureRecognizer(this Gesture gesture)
+		{
+			if (gesture is TapGesture tapGesture)
+				return new CUITapGesture(tapGesture);
+			if (gesture is LongPressGesture longPressGesture)
+				return new CUILongPressGesture(longPressGesture);
+			if (gesture is PanGesture panGesture)
+				return new CUIPanGesture(panGesture);
+			if (gesture is PinchGesture pinchGesture)
+				return new CUIPinchGesture(pinchGesture);
+			if (gesture is SwipeGesture swipeGesture)
+				return new CUISwipeGesture(swipeGesture);
+			throw new NotSupportedException($"Gesture type {gesture.GetType().Name} is not supported.");
+		}
+	}
+}

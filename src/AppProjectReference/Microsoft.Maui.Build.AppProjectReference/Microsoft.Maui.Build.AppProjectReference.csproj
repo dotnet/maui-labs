@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+
+    <PackageId>Microsoft.Maui.Build.AppProjectReference</PackageId>
+    <Description>MSBuild package for declaring MAUI/.NET app projects as build references and exposing the built app artifacts (.apk, .aab, .app, .ipa, .msix, .exe, ...) back to the consuming project. Useful for test projects that need to install/launch an app, or any tooling that needs deterministic access to a built app's outputs.</Description>
+    <PackageTags>maui;dotnet;msbuild;android;ios;maccatalyst;macos;windows;testing;build;appreference</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="/" />
+    <None Include="build\**" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive\" />
+  </ItemGroup>
+
+</Project>

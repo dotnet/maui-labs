@@ -95,3 +95,68 @@ internal sealed record CliCommandResult
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public List<int>? Versions { get; init; }
 }
+
+internal sealed record SimulatorCreateResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("name")]
+	public required string Name { get; init; }
+
+	[JsonPropertyName("device_type")]
+	public required string DeviceType { get; init; }
+
+	[JsonPropertyName("runtime")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? Runtime { get; init; }
+}
+
+/// <summary>
+/// Result of a successful simulator erase. The <see cref="Erased"/> field is always <c>true</c>;
+/// failure is reported via a MauiToolException before this model is emitted.
+/// </summary>
+internal sealed record SimulatorEraseResult
+{
+	[JsonPropertyName("target")]
+	public required string Target { get; init; }
+
+	[JsonPropertyName("erased")]
+	public bool Erased { get; init; }
+}
+
+internal sealed record SimulatorAppResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("bundle_identifier")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? BundleIdentifier { get; init; }
+
+	[JsonPropertyName("app_path")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? AppPath { get; init; }
+
+	[JsonPropertyName("action")]
+	public required string Action { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorAppContainerResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("bundle_identifier")]
+	public required string BundleIdentifier { get; init; }
+
+	[JsonPropertyName("container_type")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? ContainerType { get; init; }
+
+	[JsonPropertyName("path")]
+	public required string Path { get; init; }
+}

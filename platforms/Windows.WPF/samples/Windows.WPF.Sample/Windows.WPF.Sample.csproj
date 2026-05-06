@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <!-- Use Windows SDK-versioned TFM so the WinRT projections (Microsoft.Windows.SDK.NET) are
+         available. WebView2CompositionControl (used internally by Wpf.BlazorWebView) loads them
+         from its ControlTemplate during the WPF measure pass. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseMaui>true</UseMaui>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF.Sample</RootNamespace>
+    <AssemblyName>Windows.WPF.Sample</AssemblyName>
+    <ApplicationId>com.microsoft.maui.platforms.windows.wpf.sample</ApplicationId>
+
+    <!-- No App.xaml — using explicit [STAThread] Main() in Program.cs -->
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <!-- Prevent WPF SDK from auto-including *.xaml as Page (conflicts with MAUI XAML files) -->
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <!-- MAUI's default Page include scans for .xaml pairs; we use manual MauiXaml items -->
+    <EnableDefaultMauiItems>false</EnableDefaultMauiItems>
+    <StartupObject>Microsoft.Maui.Platforms.Windows.WPF.Sample.Program</StartupObject>
+    <!-- Suppress MA002 — Controls and BlazorWebView flow transitively from the backend project -->
+    <SkipValidateMauiImplicitPackageReferences>true</SkipValidateMauiImplicitPackageReferences>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Razor SDK auto-includes wwwroot/** as Content; no explicit include needed. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MAUI resources -->
+    <MauiFont Include="Resources\Fonts\*" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiIcon Include="Resources\AppIcon\appicon-modern.svg" />
+    <!-- Copy image assets to output so the WPF ImageHandler can resolve them at runtime.
+         The standard Resizetizer pipeline doesn't run for this custom backend TFM. -->
+    <Content Include="Resources\Images\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MAUI XAML pages -->
+    <MauiXaml Include="Pages\ImagePage.xaml">
+      <SubType>Designer</SubType>
+    </MauiXaml>
+    <MauiXaml Include="Pages\XamlRuntimePage.xaml">
+      <SubType>Designer</SubType>
+    </MauiXaml>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
+    <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="Windows.WPF.Sample" />
+    <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
+  </ItemGroup>
+
+</Project>

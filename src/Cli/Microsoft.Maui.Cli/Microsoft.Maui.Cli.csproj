@@ -15,7 +15,7 @@
     <IsShipping>true</IsShipping>
     <IsAotCompatible>true</IsAotCompatible>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1572;CS1573</NoWarn>
+    <NoWarn>$(NoWarn);CS1572;CS1573;IL2026;IL2104;IL3050</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
@@ -57,6 +57,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
+    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -68,6 +69,15 @@
     <Compile Remove="Build\MauiProfilingHelper.AutoInitialize.cs" />
     <Content Include="Build\MauiProfilingHelperInjection.targets" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Build\MauiProfilingHelper.AutoInitialize.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-onboard\**\*" LogicalName="devflow.skills/maui-devflow-onboard/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-debug\**\*" LogicalName="devflow.skills/maui-devflow-debug/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

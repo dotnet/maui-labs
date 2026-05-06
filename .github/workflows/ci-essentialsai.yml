@@ -1,0 +1,56 @@
+name: CI - EssentialsAI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/AI/**'
+      - 'tests/AI/**'
+      - 'samples/EssentialsAISample/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'src/AI/**'
+      - 'tests/AI/**'
+      - 'samples/EssentialsAISample/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  # Step 1: Build on macOS — compiles Swift xcframeworks, produces .resources.zip,
+  # and uploads them as native-apple-essentialsai artifact via _build.yml.
+  build-macos:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/AI/EssentialsAI.slnf
+      project-name: essentialsai
+      os: '["macos-latest"]'
+      run-tests: true
+      pack: true
+      xcode-version: '26.3'
+      android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+
+  # Step 2: Build on Windows — downloads native .resources.zip from macOS build
+  # via pre-build-artifact so AppleBindings.targets includes them during pack.
+  build-windows:
+    needs: build-macos
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/AI/EssentialsAI.slnf
+      project-name: essentialsai
+      os: '["windows-latest"]'
+      run-tests: true
+      pack: true
+      pre-build-artifact: native-apple-essentialsai
+      android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.ShapesPage"
+             Title="Shapes">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <!-- Rectangle -->
+            <Label Text="Rectangle" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Rectangle Fill="DodgerBlue" Stroke="Navy" StrokeThickness="3"
+                       WidthRequest="160" HeightRequest="80"
+                       RadiusX="8" RadiusY="8"
+                       HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Ellipse -->
+            <Label Text="Ellipse" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Ellipse Fill="Coral" Stroke="DarkRed" StrokeThickness="2"
+                     WidthRequest="160" HeightRequest="90"
+                     HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Line -->
+            <Label Text="Line" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Line X1="0" Y1="0" X2="200" Y2="40"
+                  Stroke="MediumSeaGreen" StrokeThickness="3"
+                  HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Dashed Line -->
+            <Label Text="Line (Dashed)" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Line X1="0" Y1="0" X2="250" Y2="0"
+                  Stroke="MediumPurple" StrokeThickness="3"
+                  StrokeDashArray="4,2"
+                  HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Polyline -->
+            <Label Text="Polyline" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Polyline Points="0,40 30,0 60,40 90,10 120,40 150,5 180,40"
+                      Stroke="Orange" StrokeThickness="3"
+                      HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Polygon -->
+            <Label Text="Polygon" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Polygon Points="60,0 120,40 100,100 20,100 0,40"
+                     Fill="#882ecc71" Stroke="MediumSeaGreen" StrokeThickness="2"
+                     HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Path -->
+            <Label Text="Path" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Path Data="M 10,100 C 50,0 150,0 200,80 C 250,160 300,150 350,50"
+                  Stroke="Crimson" StrokeThickness="3"
+                  HorizontalOptions="Start" />
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Dash Patterns -->
+            <Label Text="Dash Patterns" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Line X1="0" Y1="0" X2="300" Y2="0"
+                  Stroke="SteelBlue" StrokeThickness="3"
+                  StrokeDashArray="1,1"
+                  HorizontalOptions="Start" />
+            <Label Text="Dots: {1, 1}" FontSize="11" TextColor="Gray" />
+            <Line X1="0" Y1="0" X2="300" Y2="0"
+                  Stroke="SteelBlue" StrokeThickness="3"
+                  StrokeDashArray="6,2"
+                  HorizontalOptions="Start" />
+            <Label Text="Dash: {6, 2}" FontSize="11" TextColor="Gray" />
+            <Line X1="0" Y1="0" X2="300" Y2="0"
+                  Stroke="SteelBlue" StrokeThickness="3"
+                  StrokeDashArray="6,2,1,2"
+                  HorizontalOptions="Start" />
+            <Label Text="Dash-Dot: {6, 2, 1, 2}" FontSize="11" TextColor="Gray" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

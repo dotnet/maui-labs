@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="MauiControlsGallery.Pages.LayoutsPage"
+             Title="Layouts">
+    <ScrollView>
+        <VerticalStackLayout Spacing="10" Padding="24">
+
+            <!-- VerticalStackLayout -->
+            <Label Text="VerticalStackLayout" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="SlateGray" StrokeThickness="1" StrokeShape="RoundRectangle 8" Padding="12">
+                <VerticalStackLayout Spacing="6">
+                    <Border BackgroundColor="CornflowerBlue" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Item 1" TextColor="White" FontAttributes="Bold" FontSize="14" />
+                    </Border>
+                    <Border BackgroundColor="MediumSeaGreen" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Item 2" TextColor="White" FontAttributes="Bold" FontSize="14" />
+                    </Border>
+                    <Border BackgroundColor="Coral" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Item 3" TextColor="White" FontAttributes="Bold" FontSize="14" />
+                    </Border>
+                </VerticalStackLayout>
+            </Border>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- HorizontalStackLayout -->
+            <Label Text="HorizontalStackLayout" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="SlateGray" StrokeThickness="1" StrokeShape="RoundRectangle 8" Padding="12">
+                <HorizontalStackLayout Spacing="8">
+                    <Border BackgroundColor="DodgerBlue" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8" WidthRequest="80">
+                        <Label Text="A" TextColor="White" FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                    </Border>
+                    <Border BackgroundColor="Orange" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8" WidthRequest="80">
+                        <Label Text="B" TextColor="White" FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                    </Border>
+                    <Border BackgroundColor="MediumPurple" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8" WidthRequest="80">
+                        <Label Text="C" TextColor="White" FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                    </Border>
+                    <Border BackgroundColor="Teal" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8" WidthRequest="80">
+                        <Label Text="D" TextColor="White" FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                    </Border>
+                </HorizontalStackLayout>
+            </Border>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Grid -->
+            <Label Text="Grid (2x2)" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="SlateGray" StrokeThickness="1" StrokeShape="RoundRectangle 8" Padding="12">
+                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" RowSpacing="8" ColumnSpacing="8">
+                    <Border Grid.Row="0" Grid.Column="0" BackgroundColor="Salmon" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Top-Left" TextColor="White" FontAttributes="Bold" />
+                    </Border>
+                    <Border Grid.Row="0" Grid.Column="1" BackgroundColor="SkyBlue" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Top-Right" TextColor="White" FontAttributes="Bold" />
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="0" BackgroundColor="PaleGreen" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Bottom-Left" FontAttributes="Bold" />
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="1" BackgroundColor="Plum" StrokeThickness="0" StrokeShape="RoundRectangle 6" Padding="12,8">
+                        <Label Text="Bottom-Right" FontAttributes="Bold" />
+                    </Border>
+                </Grid>
+            </Border>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Border -->
+            <Label Text="Border" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="DarkOrange" StrokeThickness="1" StrokeShape="RoundRectangle 8" Padding="16">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Inside a Border" FontSize="16" FontAttributes="Bold" />
+                    <Label Text="Borders provide a container with custom stroke and thickness." FontSize="13" TextColor="Gray" />
+                </VerticalStackLayout>
+            </Border>
+            <Border Stroke="MediumPurple" StrokeThickness="2" StrokeShape="RoundRectangle 8" Padding="16">
+                <VerticalStackLayout>
+                    <Label Text="Styled Border" FontSize="16" FontAttributes="Bold" />
+                    <Label Text="Borders can have custom stroke color and thickness." FontSize="13" TextColor="Gray" />
+                </VerticalStackLayout>
+            </Border>
+            <BoxView HeightRequest="1" Color="LightGray" />
+
+            <!-- Rounded Borders -->
+            <Label Text="Rounded Borders" FontSize="16" FontAttributes="Bold" TextColor="CornflowerBlue" />
+            <Border Stroke="DodgerBlue" StrokeThickness="2" StrokeShape="RoundRectangle 12" Padding="16">
+                <Label Text="Uniform 12px corners" FontSize="14" />
+            </Border>
+            <Border Stroke="MediumPurple" StrokeThickness="2" StrokeShape="RoundRectangle 12" Padding="16"
+                    BackgroundColor="#1A9370DB">
+                <Label Text="Colored background with rounded corners" FontSize="14" />
+            </Border>
+            <Border StrokeThickness="0" BackgroundColor="Teal" StrokeShape="RoundRectangle 24" Padding="20">
+                <Label Text="Pill-style rounded" FontSize="14" TextColor="White" />
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

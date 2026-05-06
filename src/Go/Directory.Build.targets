@@ -1,0 +1,8 @@
+<Project>
+  <!--
+    Empty stop-walk for Go. See Directory.Build.props in this folder for
+    full explanation. MSBuild walks up looking for Directory.Build.targets
+    and stops at the first one, so this file prevents Arcade SDK targets
+    from being applied to Go projects (which use the .NET 11 preview SDK).
+  -->
+</Project>

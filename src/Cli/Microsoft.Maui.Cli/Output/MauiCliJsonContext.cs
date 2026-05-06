@@ -42,7 +42,12 @@ namespace Microsoft.Maui.Cli.Output;
 [JsonSerializable(typeof(List<RuntimeInfo>))]
 [JsonSerializable(typeof(SimulatorInfo))]
 [JsonSerializable(typeof(List<SimulatorInfo>))]
+[JsonSerializable(typeof(AppleInstallResult))]
 [JsonSerializable(typeof(StatusMessageResult))]
 [JsonSerializable(typeof(VersionResult))]
 [JsonSerializable(typeof(CliCommandResult))]
+[JsonSerializable(typeof(SimulatorCreateResult))]
+[JsonSerializable(typeof(SimulatorEraseResult))]
+[JsonSerializable(typeof(SimulatorAppResult))]
+[JsonSerializable(typeof(SimulatorAppContainerResult))]
 internal sealed partial class MauiCliJsonContext : JsonSerializerContext;

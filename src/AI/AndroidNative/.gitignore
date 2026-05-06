@@ -1,0 +1,10 @@
+# Gradle build output and caches
+.gradle/
+build/
+
+# IntelliJ / Android Studio project files
+.idea/
+*.iml
+
+# Android SDK local configuration (machine-specific, never commit)
+local.properties

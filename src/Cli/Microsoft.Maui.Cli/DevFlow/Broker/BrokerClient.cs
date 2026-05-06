@@ -232,7 +232,9 @@ public static class BrokerClient
             string arguments;
 
             // If running via `dotnet run` or `dotnet <dll>`, exePath is the dotnet host.
-            // In that case, use `dotnet <entryDll> broker start --foreground` instead.
+            // In that case, use `dotnet <entryDll> devflow broker start --foreground` instead.
+            // Note: the `devflow` token is required because broker is a subcommand of devflow,
+            // not a top-level CLI command.
             if (exePath.EndsWith("dotnet", StringComparison.OrdinalIgnoreCase)
                 || exePath.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
             {
@@ -243,12 +245,12 @@ public static class BrokerClient
                     return null;
                 }
                 fileName = exePath;
-                arguments = $"\"{dllPath}\" broker start --foreground";
+                arguments = $"\"{dllPath}\" devflow broker start --foreground";
             }
             else
             {
                 fileName = exePath;
-                arguments = "broker start --foreground";
+                arguments = "devflow broker start --foreground";
             }
 
             var startInfo = new ProcessStartInfo

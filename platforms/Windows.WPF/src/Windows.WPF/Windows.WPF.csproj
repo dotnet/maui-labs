@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseMaui>true</UseMaui>
+    <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.Windows.WPF</AssemblyName>
+    <PackageId>Microsoft.Maui.Platforms.Windows.WPF</PackageId>
+    <Version>$(PlatformMauiWindowsWpfVersion)</Version>
+    <Description>A .NET MAUI backend for Windows using WPF. Run your MAUI apps on Windows desktops with native WPF controls.</Description>
+    <PackageTags>maui;windows;wpf;desktop;dotnet;cross-platform</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <!-- Suppress obsolete warnings: this backend implements handlers for deprecated MAUI types (ListView, TableView, Frame, NamedSize) -->
+    <NoWarn>$(NoWarn);CS0612;CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="$(MauiVersion)" />
+  </ItemGroup>
+
+  <!-- Include MSBuild targets for MAUI asset processing -->
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="build\Microsoft.Maui.Platforms.Windows.WPF.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+</Project>

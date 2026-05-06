@@ -14,9 +14,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Platform.Maui.MacOS" />
-    <PackageReference Include="Platform.Maui.MacOS.BlazorWebView" />
-    <PackageReference Include="Platform.Maui.MacOS.Essentials" />
+    <ProjectReference Include="..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
+    <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.BlazorWebView\MacOS.BlazorWebView.csproj" />
+    <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.Essentials\MacOS.Essentials.csproj" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />

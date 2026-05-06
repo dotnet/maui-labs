@@ -1,5 +1,5 @@
 #if MACOS
-using Microsoft.Maui.Platform.MacOS.Controls;
+using Microsoft.Maui.Platforms.MacOS.Controls;
 #endif
 
 namespace DevFlow.Sample;

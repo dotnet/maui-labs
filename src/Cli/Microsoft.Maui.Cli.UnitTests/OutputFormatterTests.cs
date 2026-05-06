@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Commands;
+using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
 using Spectre.Console;
@@ -109,6 +110,45 @@ public class OutputFormatterTests
 		var console = new TestConsole();
 		var formatter = new SpectreOutputFormatter(console, verbose);
 		return (formatter, console);
+	}
+
+	[Fact]
+	public void DevFlowOutputWriter_WriteResult_UsesInjectedConsoleForRichHumanOutput()
+	{
+		var console = new TestConsole();
+		var formatter = new DevFlowOutputWriter(console);
+
+		formatter.WriteResult("payload", json: false, (value, ansiConsole) =>
+			ansiConsole.MarkupLine($"[green]{Markup.Escape(value)}[/]"));
+
+		Assert.Contains("payload", console.Output);
+	}
+
+	[Fact]
+	public void DevFlowOutputWriter_WriteResult_JsonModeBypassesRichHumanOutput()
+	{
+		var console = new TestConsole();
+		var formatter = new DevFlowOutputWriter(console);
+		var originalOut = Console.Out;
+		var sb = new StringBuilder();
+
+		try
+		{
+			using var writer = new StringWriter(sb);
+			Console.SetOut(writer);
+
+			formatter.WriteResult(
+				new JsonObject { ["name"] = "payload" },
+				json: true,
+				(_, ansiConsole) => ansiConsole.MarkupLine("[red]should not render[/]"));
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
+		}
+
+		Assert.Contains("\"name\": \"payload\"", sb.ToString());
+		Assert.DoesNotContain("should not render", console.Output);
 	}
 
 	private static Process StartTestProcessThatWritesStderr()

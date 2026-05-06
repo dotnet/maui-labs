@@ -1,0 +1,195 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Microsoft.Maui;
+using Microsoft.Maui.Graphics;
+
+namespace Comet
+{
+	/// <summary>
+	/// A page that manages a flyout panel and a detail page.
+	/// Commonly used for master-detail layouts and navigation menus.
+	/// </summary>
+	public class FlyoutPage : View, IEnumerable, IContainerView, IFlyoutView
+	{
+		View _flyout;
+		View _detail;
+		Binding<bool> _isPresented;
+		Binding<FlyoutBehavior> _flyoutBehavior;
+
+		public FlyoutPage()
+		{
+		}
+
+		/// <summary>
+		/// Gets or sets the flyout (master) page content.
+		/// This is typically a navigation menu or list of options.
+		/// </summary>
+		public View Flyout
+		{
+			get => _flyout;
+			set
+			{
+				if (_flyout != null)
+					_flyout.Parent = null;
+				_flyout = value;
+				if (_flyout != null)
+				{
+					_flyout.Parent = this;
+					_flyout.Navigation = Parent?.Navigation;
+				}
+				TypeHashCode = GetContentTypeHashCode();
+			}
+		}
+
+		/// <summary>
+		/// Gets or sets the detail page content.
+		/// This is the main content area shown when the flyout is hidden.
+		/// </summary>
+		public View Detail
+		{
+			get => _detail;
+			set
+			{
+				if (_detail != null)
+					_detail.Parent = null;
+				_detail = value;
+				if (_detail != null)
+				{
+					_detail.Parent = this;
+					_detail.Navigation = Parent?.Navigation;
+				}
+				TypeHashCode = GetContentTypeHashCode();
+			}
+		}
+
+		/// <summary>
+		/// Gets or sets whether the flyout is currently presented (visible).
+		/// Supports two-way binding with State.
+		/// </summary>
+		public Binding<bool> IsPresented
+		{
+			get => _isPresented;
+			set => this.SetBindingValue(ref _isPresented, value);
+		}
+
+		/// <summary>
+		/// Gets or sets the flyout presentation behavior.
+		/// Controls how the flyout appears and interacts with the detail page.
+		/// </summary>
+		public Binding<FlyoutBehavior> FlyoutLayoutBehavior
+		{
+			get => _flyoutBehavior;
+			set => this.SetBindingValue(ref _flyoutBehavior, value);
+		}
+
+		/// <summary>
+		/// Gets the child views (flyout and detail).
+		/// </summary>
+		public IReadOnlyList<View> GetChildren()
+		{
+			var children = new List<View>();
+			if (_flyout != null)
+				children.Add(_flyout);
+			if (_detail != null)
+				children.Add(_detail);
+			return children.AsReadOnly();
+		}
+
+		public override int GetContentTypeHashCode()
+		{
+			var hash = base.GetContentTypeHashCode();
+			hash = (hash * 31) + (_flyout?.GetContentTypeHashCode() ?? 0);
+			hash = (hash * 31) + (_detail?.GetContentTypeHashCode() ?? 0);
+			return hash;
+		}
+
+		protected override void OnParentChange(View parent)
+		{
+			base.OnParentChange(parent);
+			if (_flyout != null)
+				_flyout.Parent = this;
+			if (_detail != null)
+				_detail.Parent = this;
+		}
+
+		internal override void ContextPropertyChanged(string property, object value, bool cascades)
+		{
+			base.ContextPropertyChanged(property, value, cascades);
+			_flyout?.ContextPropertyChanged(property, value, cascades);
+			_detail?.ContextPropertyChanged(property, value, cascades);
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing)
+			{
+				_flyout?.Dispose();
+				_detail?.Dispose();
+				_flyout = null;
+				_detail = null;
+			}
+			base.Dispose(disposing);
+		}
+
+		internal override void Reload(bool isHotReload)
+		{
+			_flyout?.Reload(isHotReload);
+			_detail?.Reload(isHotReload);
+			base.Reload(isHotReload);
+		}
+
+		public override void ViewDidAppear()
+		{
+			_flyout?.ViewDidAppear();
+			_detail?.ViewDidAppear();
+			base.ViewDidAppear();
+		}
+
+		public override void ViewDidDisappear()
+		{
+			_flyout?.ViewDidDisappear();
+			_detail?.ViewDidDisappear();
+			base.ViewDidDisappear();
+		}
+
+		public override void PauseAnimations()
+		{
+			_flyout?.PauseAnimations();
+			_detail?.PauseAnimations();
+			base.PauseAnimations();
+		}
+
+		public override void ResumeAnimations()
+		{
+			_flyout?.ResumeAnimations();
+			_detail?.ResumeAnimations();
+			base.ResumeAnimations();
+		}
+
+		#region IFlyoutView
+		IView IFlyoutView.Flyout => _flyout;
+		IView IFlyoutView.Detail => _detail;
+
+		bool IFlyoutView.IsPresented
+		{
+			get => IsPresented?.CurrentValue ?? false;
+			set
+			{
+				if (IsPresented != null)
+					IsPresented.Set(value);
+			}
+		}
+
+		FlyoutBehavior IFlyoutView.FlyoutBehavior => FlyoutLayoutBehavior?.CurrentValue ?? FlyoutBehavior.Flyout;
+
+		double IFlyoutView.FlyoutWidth => this.GetEnvironment<double>(nameof(IFlyoutView.FlyoutWidth), -1);
+
+		bool IFlyoutView.IsGestureEnabled => this.GetEnvironment<bool>(nameof(IFlyoutView.IsGestureEnabled), true);
+		#endregion
+
+		#region IEnumerable
+		IEnumerator IEnumerable.GetEnumerator() => GetChildren().GetEnumerator();
+		#endregion
+	}
+}

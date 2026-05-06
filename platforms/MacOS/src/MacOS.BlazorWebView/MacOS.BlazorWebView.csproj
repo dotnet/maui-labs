@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <RootNamespace>Microsoft.Maui.Platforms.MacOS</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.MacOS.BlazorWebView</AssemblyName>
+    <PackageId>Microsoft.Maui.Platforms.MacOS.BlazorWebView</PackageId>
+    <Version>$(PlatformMauiMacOSBlazorWebViewVersion)</Version>
+    <Description>Blazor Hybrid support for Microsoft.Maui.Platforms.MacOS — host Blazor components in a native macOS AppKit window using WKWebView.</Description>
+    <PackageTags>maui;macos;blazor;webview;appkit;webkit;hybrid</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MacOS\MacOS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ILLink.Descriptors.xml">
+      <LogicalName>ILLink.Descriptors.xml</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="buildTransitive/**" Pack="true" PackagePath="build/" />
+  </ItemGroup>
+
+</Project>

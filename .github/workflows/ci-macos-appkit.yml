@@ -1,0 +1,36 @@
+name: CI - macOS AppKit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platforms/MacOS/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'platforms/MacOS/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/MacOS/MacOS.slnx
+      project-name: macos-appkit
+      os: '["macos-latest"]'
+      install-workloads: true
+      run-tests: false
+      pack: true
+      xcode-version: '26.3'
