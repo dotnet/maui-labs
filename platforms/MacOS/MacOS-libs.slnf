@@ -2,9 +2,9 @@
   "solution": {
     "path": "MacOS.slnx",
     "projects": [
-      "src/MacOS/MacOS.csproj",
-      "src/MacOS.Essentials/MacOS.Essentials.csproj",
-      "src/MacOS.BlazorWebView/MacOS.BlazorWebView.csproj"
+      "src\\MacOS\\MacOS.csproj",
+      "src\\MacOS.Essentials\\MacOS.Essentials.csproj",
+      "src\\MacOS.BlazorWebView\\MacOS.BlazorWebView.csproj"
     ]
   }
 }
