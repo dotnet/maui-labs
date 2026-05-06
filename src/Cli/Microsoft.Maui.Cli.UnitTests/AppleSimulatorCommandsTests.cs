@@ -514,7 +514,7 @@ public class AppleSimulatorCommandsTests
 			"apple", "simulator", "get-app-container", "OLD-SIM", "com.example.app", "--json");
 
 		Assert.Equal(1, exitCode);
-		Assert.Contains("E2204", stdout);
+		Assert.Contains("E2214", stdout);
 		Assert.Contains("unavailable", stdout);
 		Assert.Empty(fake.GetAppContainerCalls); // never reached the provider
 	}

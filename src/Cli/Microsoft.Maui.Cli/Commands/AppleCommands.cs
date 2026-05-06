@@ -749,7 +749,7 @@ public static class AppleCommands
 		}
 		if (!sim.IsAvailable)
 		{
-			formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorNotFound, $"Simulator '{udid}' exists but is unavailable (its runtime may have been deleted). Use 'maui apple simulator list' to find an available device."));
+			formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorUnavailable, $"Simulator '{udid}' exists but is unavailable (its runtime may have been deleted). Use 'maui apple simulator list' to find an available device."));
 			return false;
 		}
 		return true;
