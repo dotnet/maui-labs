@@ -2,9 +2,8 @@
 description: |
   Analyzes merged pull requests for documentation needs. When a PR is merged,
   this workflow reviews the changes and determines if documentation updates are
-  needed on dotnet/docs-maui. If updates are needed, it creates a draft PR on
-  docs-maui with the actual documentation changes. If not, it comments on the
-  source PR explaining why.
+  needed on dotnet/docs-maui. If updates are needed, it opens an issue on
+  docs-maui with a detailed description of the changes needed.
 
 on:
   pull_request:
@@ -39,10 +38,6 @@ if: >-
   (github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch')
   && github.repository_owner == 'dotnet'
 
-checkout:
-  - repository: dotnet/docs-maui
-    current: true
-
 permissions:
   contents: read
   pull-requests: read
@@ -60,34 +55,25 @@ tools:
 
 safe-outputs:
   github-token: ${{ secrets.MAUI_BOT_TOKEN }}
-  create-pull-request:
+  create-issue:
     title-prefix: "[maui-labs docs] "
     labels: [docs-from-code]
-    draft: true
     target-repo: "dotnet/docs-maui"
-    fallback-as-issue: true
-  add-comment:
-    target-repo: "dotnet/maui-labs"
-    hide-older-comments: true
 
-timeout-minutes: 20
+timeout-minutes: 15
 ---
 
 # PR Documentation Check
 
 Analyze a merged pull request in `dotnet/maui-labs` and determine whether
 documentation updates are needed on the `dotnet/docs-maui` documentation site.
-If updates are needed, write the actual documentation changes and create a draft PR.
+If updates are needed, open an issue on docs-maui. If not, do nothing.
 
 ## Context
 
 - **Source repository**: `dotnet/maui-labs`
 - **PR Number**: `${{ github.event.pull_request.number || github.event.inputs.pr_number }}`
 - **PR Title**: `${{ github.event.pull_request.title }}`
-
-> [!NOTE]
-> The agent runs with `dotnet/docs-maui` as the current workspace. Use GitHub
-> tools to read the source `dotnet/maui-labs` PR details and diff.
 
 ## Step 1: Gather PR Information
 
@@ -96,10 +82,8 @@ for the PR number above, including the title, description, author, labels, base
 branch, and the full diff of changes.
 
 If this was triggered via `workflow_dispatch`, use the `pr_number` input to look up
-the PR details. If the PR number is invalid or the PR cannot be found, stop and
-comment on the workflow run that the input was invalid. If the PR was not merged
-(still open or closed without merging), comment that no documentation updates are
-needed because the PR was not merged, then **stop**.
+the PR details. If the PR number is invalid or the PR cannot be found, stop.
+If the PR was not merged (still open or closed without merging), stop.
 
 ## Step 2: Quick Filter — Skip Obviously Non-Doc PRs
 
@@ -114,8 +98,7 @@ Before doing a deep analysis, check if this PR can be **skipped entirely**:
 - ALL changed files are CI/build infrastructure only (`eng/`, `.github/`,
   `*.yml`, `*.yaml`, `*.props`, `*.targets`)
 
-If the PR is skipped, comment on the PR with a brief one-line message confirming
-no documentation updates are needed and why, then **stop**.
+If the PR is skipped, **stop silently** — do not create any issues or comments.
 
 **Always proceed with analysis if:**
 - Any file in `src/Cli/Microsoft.Maui.Cli/DevFlow/` was changed (CLI DevFlow commands)
@@ -127,7 +110,7 @@ no documentation updates are needed and why, then **stop**.
 
 Review the PR diff for user-facing changes that affect documentation.
 
-**PROCEED with a docs PR if the change includes any of:**
+**PROCEED if the change includes any of:**
 - New or changed CLI commands, flags, or options
 - New or changed MCP tools (new tools, renamed tools, changed parameters)
 - New public APIs in user-facing packages (AgentClient, DevFlow CLI, etc.)
@@ -137,7 +120,7 @@ Review the PR diff for user-facing changes that affect documentation.
 - New NuGet packages
 - Behavioral changes users will notice (e.g., a CLI flag works differently)
 
-**SKIP (no docs PR needed) if the change is only:**
+**SKIP if the change is only:**
 - Internal refactoring with no public API or behavior change
 - Test-only changes
 - Bug fixes that don't change documented behavior
@@ -146,78 +129,44 @@ Review the PR diff for user-facing changes that affect documentation.
 - Performance improvements that don't change usage patterns
 - Help text or error message fixes (these are self-documenting)
 
-**When uncertain, PROCEED.** Draft PRs are cheap; missing docs are expensive.
+If no documentation is needed, **stop silently** — do not create any issues or comments.
 
-## Step 4: If Documentation IS Needed
+**When uncertain, PROCEED.** Issues are cheap; missing docs are expensive.
 
-### 4a: Read Existing Documentation
+## Step 4: Open an Issue on docs-maui
 
-Browse the checked-out `dotnet/docs-maui` workspace to understand the current
-documentation structure. The developer-tools documentation lives under
-`docs/developer-tools/` with this structure:
+If documentation updates ARE needed, create an issue on `dotnet/docs-maui` with
+a clear, actionable description. The issue will be picked up by an agentic
+workflow on the docs-maui side that creates a draft PR from it.
 
-**CLI documentation** (`docs/developer-tools/cli/`):
-- `index.md` — .NET MAUI CLI overview
-- `environment-diagnostics.md` — Environment diagnostics with `maui doctor`
-- `android-management.md` — Android SDK and emulator management
-- `device-management.md` — Device management
+The issue body MUST include all of the following sections:
 
-**DevFlow documentation** (`docs/developer-tools/devflow/`):
-- `index.md` — DevFlow overview
-- `visual-tree-screenshots.md` — Visual tree inspection and screenshots
-- `element-interaction.md` — Element interaction and automation
-- `blazor-cdp.md` — Blazor WebView debugging with CDP
-- `mcp-server.md` — MCP server for AI agents
-- `network-profiling.md` — Network monitoring and profiling
-- `broker.md` — DevFlow broker architecture
-- `setup-windows.md` — DevFlow Windows setup
-- `setup-android.md` — DevFlow Android setup
-- `setup-apple.md` — DevFlow Apple platforms setup
+### Source PR
+Link to the source PR with full URL:
+`https://github.com/dotnet/maui-labs/pull/<number>`
 
-Also check:
-- `docs/developer-tools/index.md` — Landing page for the developer-tools section
-- `docs/TOC.yml` — Table of contents (update if adding new pages)
+Include the PR title, author, and merge date.
 
-### 4b: Write Documentation Changes
+### Summary of Changes
+A concise summary of the user-facing changes. Focus on what changed from a
+documentation perspective, not implementation details.
 
-Based on your analysis, make the actual file changes in the workspace:
+### Documentation Pages Affected
+List which existing pages need updating. Reference the file paths in the docs repo:
 
-- **For updates to existing pages**: Edit the relevant `.md` files in place
-- **For new pages**: Create new `.md` files in the appropriate directory
+- CLI docs: `docs/developer-tools/cli/`
+- DevFlow docs: `docs/developer-tools/devflow/`
+- Landing page: `docs/developer-tools/index.md`
+- TOC: `docs/TOC.yml`
 
-Follow these MS Learn documentation conventions:
-- **Frontmatter**: Every page needs `title`, `description`, and `ms.date` (format: `MM/DD/YYYY`)
-- **Headings**: Use `#` for the page title (must match frontmatter `title`), `##` for sections
-- **Code blocks**: Use triple backticks with language identifier (e.g., ````csharp`, ````bash`)
-- **Notes/warnings**: Use `> [!NOTE]`, `> [!IMPORTANT]`, `> [!WARNING]`
-- **Cross-references**: Use relative paths for internal links (e.g., `[DevFlow overview](../devflow/index.md)`)
-- **TOC.yml**: If adding new pages, add an entry under the appropriate section
+### Suggested Changes
+Provide the specific text, code blocks, table rows, or sections to add or modify.
+Be detailed enough that a docs author (or an agent) can apply the changes without
+reading the full source PR diff. Include:
 
-### 4c: Create Draft PR
+- Exact headings, parameter tables, code examples
+- Where in the existing page the content should be inserted
+- If a new page is needed, suggest the filename and TOC.yml placement
 
-Create a draft pull request on `dotnet/docs-maui` with:
-
-**Title**: A clear, concise title describing the documentation work
-(the `[maui-labs docs]` prefix will be added automatically)
-
-**Description** that includes:
-- A link to the source PR: `Documents changes from dotnet/maui-labs#<number>`
-- The PR author mention: `@<author>`
-- A summary of what documentation was added or changed
-- A list of files modified or created
-
-### 4d: Comment on Source PR
-
-After the draft PR is created, comment on the original PR in `dotnet/maui-labs` with:
-- A message indicating documentation updates have been drafted
-- A link to the newly created draft PR on `dotnet/docs-maui`
-- A brief summary of what documentation changes were made
-- A note that the draft PR needs human review before merging
-
-## Step 5: If Documentation is NOT Needed
-
-Comment on the PR in `dotnet/maui-labs` with a brief one-line message confirming
-no documentation updates are required and a short reason (e.g., "internal
-refactoring only", "test changes only", "bug fix with no behavioral change").
-
-Keep the comment concise — one or two sentences maximum.
+The issue body should be **self-contained** — everything needed to make the
+documentation update should be in the issue itself.
