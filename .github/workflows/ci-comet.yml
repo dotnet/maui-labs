@@ -52,6 +52,8 @@ jobs:
   package:
     needs: build
     runs-on: windows-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: src/Comet
