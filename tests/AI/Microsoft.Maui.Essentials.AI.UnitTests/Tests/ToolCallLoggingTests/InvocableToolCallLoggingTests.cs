@@ -21,7 +21,7 @@ public class InvocableToolCallLoggingTests
 	{
 		var (pipeline, logs, options) = BuildPipeline(LogLevel.Trace, informationalOnly: false);
 
-		await pipeline.GetResponseAsync([new ChatMessage(ChatRole.User, "weather?")], options);
+		var response = await pipeline.GetResponseAsync([new ChatMessage(ChatRole.User, "weather?")], options);
 
 		var allLogs = CombineLogs(logs);
 
@@ -31,6 +31,9 @@ public class InvocableToolCallLoggingTests
 		// FICC logs "GetWeather invocation completed. Duration: ..." at Debug (captured at Trace min)
 		Assert.Contains("invocation completed", allLogs, StringComparison.Ordinal);
 		Assert.Contains("Duration", allLogs, StringComparison.Ordinal);
+
+		// FICC invoked the tool, re-called the model, and the Round 2 text is in the final response
+		Assert.Contains("The weather is sunny.", response.Text ?? string.Empty, StringComparison.Ordinal);
 	}
 
 	[Fact]
@@ -38,7 +41,7 @@ public class InvocableToolCallLoggingTests
 	{
 		var (pipeline, logs, options) = BuildPipeline(LogLevel.Debug, informationalOnly: false);
 
-		await pipeline.GetResponseAsync([new ChatMessage(ChatRole.User, "weather?")], options);
+		var response = await pipeline.GetResponseAsync([new ChatMessage(ChatRole.User, "weather?")], options);
 
 		var debugMessages = logs.Entries.Where(e => e.Level == LogLevel.Debug).Select(e => e.Message).ToList();
 
@@ -49,6 +52,9 @@ public class InvocableToolCallLoggingTests
 
 		// LoggingChatClient lifecycle still present
 		Assert.Contains(debugMessages, m => m.Contains("GetResponseAsync invoked", StringComparison.Ordinal));
+
+		// Tool was invoked and Round 2 model response is present
+		Assert.Contains("The weather is sunny.", response.Text ?? string.Empty, StringComparison.Ordinal);
 	}
 
 	[Fact]
@@ -56,11 +62,17 @@ public class InvocableToolCallLoggingTests
 	{
 		var (pipeline, logs, options) = BuildPipeline(LogLevel.Trace, informationalOnly: false);
 
-		await foreach (var _ in pipeline.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "weather?")], options))
+		var responseText = new System.Text.StringBuilder();
+		await foreach (var update in pipeline.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "weather?")], options))
 		{
+			if (update.Text is not null)
+				responseText.Append(update.Text);
 		}
 
 		var allLogs = CombineLogs(logs);
 		Assert.Contains("Invoking GetWeather", allLogs, StringComparison.Ordinal);
+
+		// Round 2 model text is present in the streamed response
+		Assert.Contains("The weather is sunny.", responseText.ToString(), StringComparison.Ordinal);
 	}
 }
