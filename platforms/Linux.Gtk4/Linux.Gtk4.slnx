@@ -7,4 +7,7 @@
     <Project Path="src/Linux.Gtk4.Essentials/Linux.Gtk4.Essentials.csproj" />
     <Project Path="src/Linux.Gtk4/Linux.Gtk4.csproj" />
   </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/Linux.Gtk4.Templates.csproj" />
+  </Folder>
 </Solution>

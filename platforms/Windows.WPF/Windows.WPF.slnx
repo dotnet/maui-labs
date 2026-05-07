@@ -10,4 +10,7 @@
     <Project Path="tests/HandlerTests/HandlerTests.csproj" />
     <Project Path="tests/UITests/UITests.csproj" />
   </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/Windows.WPF.Templates.csproj" />
+  </Folder>
 </Solution>
