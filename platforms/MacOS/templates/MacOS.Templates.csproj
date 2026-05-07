@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <PackageType>Template</PackageType>
-    <PackageId>Microsoft.Maui.Platforms.Linux.Gtk4.Templates</PackageId>
-    <Version>$(PlatformMauiLinuxGtk4Version)</Version>
+    <PackageId>Microsoft.Maui.Platforms.MacOS.Templates</PackageId>
+    <Version>$(PlatformMauiMacOSVersion)</Version>
     <Authors>Microsoft</Authors>
-    <Description>Project templates for .NET MAUI apps running on Linux with GTK4.</Description>
+    <Description>Project templates for .NET MAUI apps running on macOS with the AppKit backend.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>dotnet-new;templates;maui;linux;gtk;gtk4</PackageTags>
-    <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Linux.Gtk4</PackageProjectUrl>
+    <PackageTags>dotnet-new;templates;maui;macos;appkit;desktop</PackageTags>
+    <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/MacOS</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
 
     <TargetFramework>net10.0</TargetFramework>
@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="" />
-    <Content Include="maui-linux-gtk4-app\**\*" Exclude="maui-linux-gtk4-app\**\bin\**;maui-linux-gtk4-app\**\obj\**" />
+    <Content Include="maui-macos-app\**\*" Exclude="maui-macos-app\**\bin\**;maui-macos-app\**\obj\**" />
     <Compile Remove="**\*" />
   </ItemGroup>
 

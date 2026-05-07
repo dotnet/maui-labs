@@ -29,7 +29,21 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 ## Quick Start — Setting Up a WPF MAUI App
 
-### 1. Create the project
+### Option 1: Use the template (recommended)
+
+```bash
+# Install the template
+dotnet new install Microsoft.Maui.Platforms.Windows.WPF.Templates --prerelease
+
+# Create a new WPF MAUI app
+dotnet new maui-wpf -n MyApp.WPF
+cd MyApp.WPF
+dotnet run
+```
+
+### Option 2: Add to an existing project manually
+
+#### 1. Create the project
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -49,7 +63,7 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 </Project>
 ```
 
-### 2. App.xaml
+#### 2. App.xaml
 
 ```xml
 <Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication
@@ -60,7 +74,7 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 </Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication>
 ```
 
-### 3. App.xaml.cs
+#### 3. App.xaml.cs
 
 ```csharp
 using Microsoft.Maui.Platform.WPF;
@@ -73,7 +87,7 @@ public partial class App : MauiWPFApplication
 }
 ```
 
-### 4. MauiProgram.cs
+#### 4. MauiProgram.cs
 
 ```csharp
 using Microsoft.Maui.Platform.WPF.Hosting;
@@ -97,7 +111,7 @@ public static class MauiProgram
 }
 ```
 
-### 5. App class
+#### 5. App class
 
 ```csharp
 public class App : Application

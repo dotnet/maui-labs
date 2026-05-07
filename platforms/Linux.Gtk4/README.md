@@ -1,6 +1,6 @@
 # Microsoft.Maui.Platforms.Linux.Gtk4
 
-A community-driven .NET MAUI backend for Linux, powered by **GTK4**. Run your .NET MAUI applications natively on Linux desktops with GTK4 rendering via [GirCore](https://github.com/gircore/gir.core) bindings.
+A .NET MAUI backend for Linux, powered by **GTK4**. Run your .NET MAUI applications natively on Linux desktops with GTK4 rendering via [GirCore](https://github.com/gircore/gir.core) bindings.
 
 > **Status:** Early / experimental — contributions and feedback are welcome!
 
@@ -135,7 +135,7 @@ sudo dnf install gtk4-devel webkitgtk6.0-devel \
 
 ```bash
 # Install the template
-dotnet new install Microsoft.Maui.Platforms.Linux.Gtk4.Templates
+dotnet new install Microsoft.Maui.Platforms.Linux.Gtk4.Templates --prerelease
 
 # Create a new Linux MAUI app
 dotnet new maui-linux-gtk4 -n MyApp.Linux

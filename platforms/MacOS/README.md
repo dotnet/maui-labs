@@ -28,7 +28,21 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 
 ## Quick start
 
-### 1. Project file
+### Option 1: Use the template (recommended)
+
+```bash
+# Install the template
+dotnet new install Microsoft.Maui.Platforms.MacOS.Templates --prerelease
+
+# Create a new macOS MAUI app
+dotnet new maui-macos -n MyApp.MacOS
+cd MyApp.MacOS
+dotnet run
+```
+
+### Option 2: Add to an existing project manually
+
+#### 1. Project file
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -55,7 +69,7 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 </Project>
 ```
 
-### 2. `Main.cs`
+#### 2. `Main.cs`
 
 ```csharp
 using AppKit;
@@ -71,11 +85,11 @@ public class MainClass
 }
 ```
 
-### 3. `MauiMacOSApp.cs`
+#### 3. `MauiMacOSApp.cs`
 
 ```csharp
 using Foundation;
-using Microsoft.Maui.Platforms.MacOS;
+using Microsoft.Maui.Platforms.MacOS.Platform;
 
 [Register("MauiMacOSApp")]
 public class MauiMacOSApp : MacOSMauiApplication
@@ -84,10 +98,11 @@ public class MauiMacOSApp : MacOSMauiApplication
 }
 ```
 
-### 4. `MauiProgram.cs`
+#### 4. `MauiProgram.cs`
 
 ```csharp
 using Microsoft.Maui.Platforms.MacOS.Hosting;
+using Microsoft.Maui.Platforms.MacOS.Essentials;
 
 public static class MauiProgram
 {
@@ -107,7 +122,7 @@ public static class MauiProgram
 }
 ```
 
-### 5. `App.cs`
+#### 5. `App.cs`
 
 ```csharp
 public class App : Application
