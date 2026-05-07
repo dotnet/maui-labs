@@ -53,6 +53,33 @@ public class AndroidProvider : IAndroidProvider
 		GC.SuppressFinalize(this);
 	}
 
+	public string? GetSdkPathSource()
+	{
+		var androidHome = Environment.GetEnvironmentVariable("ANDROID_HOME");
+		if (!string.IsNullOrEmpty(androidHome) && Directory.Exists(androidHome))
+			return "ANDROID_HOME";
+
+		var androidSdkRoot = Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT");
+		if (!string.IsNullOrEmpty(androidSdkRoot) && Directory.Exists(androidSdkRoot))
+			return "ANDROID_SDK_ROOT";
+
+		if (Directory.Exists(PlatformDetector.Paths.DefaultAndroidSdkPath))
+			return "default";
+
+		return SdkPath != null ? "auto-detected" : null;
+	}
+
+	public ToolPaths GetToolPaths()
+	{
+		return new ToolPaths
+		{
+			Sdkmanager = _sdkManager.SdkManagerPath,
+			Avdmanager = _avdManager.AvdManagerPath,
+			Adb = _adb.AdbPath,
+			Emulator = _avdManager.EmulatorPath
+		};
+	}
+
 	public async Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default)
 	{
 		var checks = new List<HealthCheck>();

@@ -28,6 +28,7 @@ public class AvdManager
 		var env = AndroidEnvironment.BuildEnvironmentVariables(sdkPath, getJdkPath());
 
 		var avdManagerPath = ResolveAvdManagerPath(sdkPath);
+		_avdManagerPath = avdManagerPath;
 		if (avdManagerPath != null)
 			_runner = new AvdManagerRunner(avdManagerPath, env);
 
@@ -38,6 +39,9 @@ public class AvdManager
 	}
 
 	public bool IsAvailable => _runner != null;
+
+	readonly string? _avdManagerPath;
+	public string? AvdManagerPath => _avdManagerPath;
 
 	readonly string? _emulatorPath;
 	public string? EmulatorPath => _emulatorPath;

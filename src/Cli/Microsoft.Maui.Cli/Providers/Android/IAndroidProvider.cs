@@ -36,6 +36,16 @@ public interface IAndroidProvider : IDisposable
 	bool SdkPathRequiresElevation { get; }
 
 	/// <summary>
+	/// Gets the source of the SDK path (e.g. "ANDROID_HOME", "ANDROID_SDK_ROOT", "default").
+	/// </summary>
+	string? GetSdkPathSource();
+
+	/// <summary>
+	/// Gets the paths to key Android SDK tools (sdkmanager, avdmanager, adb, emulator).
+	/// </summary>
+	ToolPaths GetToolPaths();
+
+	/// <summary>
 	/// Gets the health status of Android tooling.
 	/// </summary>
 	Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default);
@@ -178,4 +188,41 @@ public record SdkPackage
 	public string? Description { get; init; }
 	public string? Location { get; init; }
 	public bool IsInstalled { get; init; }
+}
+
+/// <summary>
+/// Paths to key Android SDK tools.
+/// </summary>
+public record ToolPaths
+{
+	public string? Sdkmanager { get; init; }
+	public string? Avdmanager { get; init; }
+	public string? Adb { get; init; }
+	public string? Emulator { get; init; }
+}
+
+/// <summary>
+/// Comprehensive Android development environment summary.
+/// </summary>
+public record AndroidEnvironmentInfo
+{
+	public string? SdkPath { get; init; }
+	public string? SdkPathSource { get; init; }
+	public string? JdkPath { get; init; }
+	public string? JdkVersion { get; init; }
+	public bool? LicensesAccepted { get; init; }
+	public bool RequiresElevation { get; init; }
+	public List<ApiLevelInfo> InstalledApiLevels { get; init; } = new();
+	public ToolPaths? Tools { get; init; }
+}
+
+/// <summary>
+/// Information about an installed Android API level.
+/// </summary>
+public record ApiLevelInfo
+{
+	public int Api { get; init; }
+	public bool Platform { get; init; }
+	public string? BuildTools { get; init; }
+	public List<string> SystemImages { get; init; } = new();
 }

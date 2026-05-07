@@ -5,6 +5,7 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
+using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
 
@@ -233,6 +234,7 @@ public class AndroidCommandsTests
 
 		// Assert
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "install");
+		Assert.Contains(androidCommand.Subcommands, c => c.Name == "info");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "jdk");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "sdk");
 		Assert.Contains(androidCommand.Subcommands, c => c.Name == "emulator");
@@ -325,5 +327,120 @@ public class AndroidCommandsTests
 
 		Assert.Equal(0, exitCode);
 		Assert.Single(fake.InstallCalls);
+	}
+
+	// --- Handler-level tests for the 'android info' command. ---
+
+	static async Task<(int ExitCode, string Output)> InvokeAndroidInfoJsonAsync(
+		Action<FakeAndroidProvider> configure,
+		Action<FakeJdkManager>? configureJdk = null)
+	{
+		var fakeAndroid = new FakeAndroidProvider();
+		configure(fakeAndroid);
+
+		var fakeJdk = new FakeJdkManager();
+		configureJdk?.Invoke(fakeJdk);
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(
+			androidProvider: fakeAndroid,
+			jdkManager: fakeJdk);
+		try
+		{
+			Program.Services = testProvider;
+
+			// Capture stdout
+			var sb = new System.Text.StringBuilder();
+			using var writer = new StringWriter(sb);
+			var originalOut = Console.Out;
+			Console.SetOut(writer);
+			try
+			{
+				var rootCommand = Program.BuildRootCommand();
+				var parseResult = rootCommand.Parse(new[] { "android", "info", "--json" });
+				var exitCode = await parseResult.InvokeAsync();
+				return (exitCode, sb.ToString());
+			}
+			finally
+			{
+				Console.SetOut(originalOut);
+			}
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_ReturnsSdkAndJdkPaths()
+	{
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(
+			f =>
+			{
+				f.SdkPath = "/test/sdk";
+				f.JdkPath = "/test/jdk";
+				f.IsSdkInstalled = true;
+				f.LicensesAccepted = true;
+				f.SdkPathSource = "ANDROID_HOME";
+				f.InstalledPackages = new List<SdkPackage>
+				{
+					new SdkPackage { Path = "platforms;android-35", IsInstalled = true },
+					new SdkPackage { Path = "build-tools;35.0.0", IsInstalled = true },
+				};
+				f.ToolPathsResult = new ToolPaths
+				{
+					Sdkmanager = "/test/sdk/cmdline-tools/13.0/bin/sdkmanager",
+					Adb = "/test/sdk/platform-tools/adb",
+				};
+			},
+			jdk =>
+			{
+				jdk.DetectedJdkPath = "/test/jdk";
+				jdk.DetectedJdkVersion = 21;
+			});
+
+		Assert.Equal(0, exitCode);
+		Assert.Contains("\"sdk_path\": \"/test/sdk\"", output);
+		Assert.Contains("\"sdk_path_source\": \"ANDROID_HOME\"", output);
+		Assert.Contains("\"jdk_path\": \"/test/jdk\"", output);
+		Assert.Contains("\"jdk_version\": \"21\"", output);
+		Assert.Contains("\"licenses_accepted\": true", output);
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_HandlesNoSdkInstalled()
+	{
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(f =>
+		{
+			f.IsSdkInstalled = false;
+			f.SdkPath = null;
+			f.JdkPath = null;
+		});
+
+		Assert.Equal(0, exitCode);
+		Assert.Contains("\"sdk_path\": null", output);
+	}
+
+	[Fact]
+	public async Task InfoCommand_Json_IncludesInstalledApiLevels()
+	{
+		var (exitCode, output) = await InvokeAndroidInfoJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.SdkPath = "/test/sdk";
+			f.LicensesAccepted = true;
+			f.InstalledPackages = new List<SdkPackage>
+			{
+				new SdkPackage { Path = "platforms;android-35", IsInstalled = true },
+				new SdkPackage { Path = "build-tools;35.0.0", IsInstalled = true },
+				new SdkPackage { Path = "system-images;android-35;google_apis;arm64-v8a", IsInstalled = true },
+				new SdkPackage { Path = "platforms;android-34", IsInstalled = true },
+			};
+		});
+
+		Assert.Equal(0, exitCode);
+		Assert.Contains("\"api\": 35", output);
+		Assert.Contains("\"api\": 34", output);
+		Assert.Contains("google_apis/arm64-v8a", output);
 	}
 }

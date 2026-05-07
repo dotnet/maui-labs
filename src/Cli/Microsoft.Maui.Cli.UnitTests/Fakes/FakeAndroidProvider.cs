@@ -20,6 +20,8 @@ public class FakeAndroidProvider : IAndroidProvider
 	public bool IsSdkInstalled { get; set; }
 	public bool IsJdkInstalled { get; set; }
 	public bool SdkPathRequiresElevation { get; set; }
+	public string? SdkPathSource { get; set; }
+	public ToolPaths ToolPathsResult { get; set; } = new();
 
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
@@ -158,6 +160,12 @@ public class FakeAndroidProvider : IAndroidProvider
 
 	public (string Command, string Arguments)? GetLicenseAcceptanceCommand()
 		=> LicenseAcceptanceCommand;
+
+	public string? GetSdkPathSource()
+		=> SdkPathSource;
+
+	public ToolPaths GetToolPaths()
+		=> ToolPathsResult;
 
 	public Task InstallJdkAsync(int? version = null, string? installPath = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
 	{
