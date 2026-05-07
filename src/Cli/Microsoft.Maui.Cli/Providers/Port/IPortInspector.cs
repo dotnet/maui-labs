@@ -5,5 +5,5 @@ namespace Microsoft.Maui.Cli.Providers.Port;
 
 internal interface IPortInspector
 {
-IReadOnlyList<PortListenerInfo> GetListeners(int port);
+	IReadOnlyList<PortListenerInfo> GetListeners(int port);
 }

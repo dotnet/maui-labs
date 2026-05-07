@@ -9,209 +9,209 @@ namespace Microsoft.Maui.Cli.Providers.Port;
 
 internal sealed class UnixPortInspector : IPortInspector
 {
-public IReadOnlyList<PortListenerInfo> GetListeners(int port)
-{
-var listeners = TryLsof(port);
-if (listeners is not null) return listeners;
+	public IReadOnlyList<PortListenerInfo> GetListeners(int port)
+	{
+		var listeners = TryLsof(port);
+		if (listeners is not null) return listeners;
 
-if (OperatingSystem.IsLinux())
-{
-listeners = TrySs(port);
-if (listeners is not null) return listeners;
-}
+		if (OperatingSystem.IsLinux())
+		{
+			listeners = TrySs(port);
+			if (listeners is not null) return listeners;
+		}
 
-if (OperatingSystem.IsMacOS())
-{
-listeners = TryNetstat(port);
-if (listeners is not null) return listeners;
-}
+		if (OperatingSystem.IsMacOS())
+		{
+			listeners = TryNetstat(port);
+			if (listeners is not null) return listeners;
+		}
 
-return FallbackIPGlobalProperties(port);
-}
+		return FallbackIPGlobalProperties(port);
+	}
 
-private static List<PortListenerInfo>? TryLsof(int port)
-{
-try
-{
-var output = RunCommand("lsof", $"-nP -iTCP:{port} -sTCP:LISTEN");
-if (output is null) return null;
-var result = ParseLsofOutput(output, port);
-return result.Count > 0 ? result : null;
-}
-catch { return null; }
-}
+	private static List<PortListenerInfo>? TryLsof(int port)
+	{
+		try
+		{
+			var output = RunCommand("lsof", $"-nP -iTCP:{port} -sTCP:LISTEN");
+			if (output is null) return null;
+			var result = ParseLsofOutput(output, port);
+			return result.Count > 0 ? result : null;
+		}
+		catch { return null; }
+	}
 
-private static List<PortListenerInfo>? TrySs(int port)
-{
-try
-{
-var output = RunCommand("ss", $"-tlnpH sport = :{port}");
-if (output is null) return null;
-var result = ParseSsOutput(output, port);
-return result.Count > 0 ? result : null;
-}
-catch { return null; }
-}
+	private static List<PortListenerInfo>? TrySs(int port)
+	{
+		try
+		{
+			var output = RunCommand("ss", $"-tlnpH sport = :{port}");
+			if (output is null) return null;
+			var result = ParseSsOutput(output, port);
+			return result.Count > 0 ? result : null;
+		}
+		catch { return null; }
+	}
 
-private static List<PortListenerInfo>? TryNetstat(int port)
-{
-try
-{
-var output = RunCommand("netstat", "-anp tcp");
-if (output is null) return null;
-var result = ParseNetstatOutput(output, port);
-return result.Count > 0 ? result : null;
-}
-catch { return null; }
-}
+	private static List<PortListenerInfo>? TryNetstat(int port)
+	{
+		try
+		{
+			var output = RunCommand("netstat", "-anp tcp");
+			if (output is null) return null;
+			var result = ParseNetstatOutput(output, port);
+			return result.Count > 0 ? result : null;
+		}
+		catch { return null; }
+	}
 
-private static List<PortListenerInfo> FallbackIPGlobalProperties(int port)
-{
-var result = new List<PortListenerInfo>();
-var props = IPGlobalProperties.GetIPGlobalProperties();
-foreach (var ep in props.GetActiveTcpListeners())
-{
-if (ep.Port != port) continue;
-var family = ep.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? "ipv6" : "ipv4";
-result.Add(new PortListenerInfo(port, 0, string.Empty, ep.Address.ToString(), family));
-}
-return result;
-}
+	private static List<PortListenerInfo> FallbackIPGlobalProperties(int port)
+	{
+		var result = new List<PortListenerInfo>();
+		var props = IPGlobalProperties.GetIPGlobalProperties();
+		foreach (var ep in props.GetActiveTcpListeners())
+		{
+			if (ep.Port != port) continue;
+			var family = ep.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? "ipv6" : "ipv4";
+			result.Add(new PortListenerInfo(port, 0, string.Empty, ep.Address.ToString(), family));
+		}
+		return result;
+	}
 
-internal static List<PortListenerInfo> ParseLsofOutput(string output, int port)
-{
-var result = new List<PortListenerInfo>();
-foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-{
-var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-if (parts.Length < 9) continue;
+	internal static List<PortListenerInfo> ParseLsofOutput(string output, int port)
+	{
+		var result = new List<PortListenerInfo>();
+		foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+		{
+			var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length < 9) continue;
 
-// NAME column may be followed by "(LISTEN)" as a separate token
-var namePart = parts[^1] == "(LISTEN)" && parts.Length >= 10 ? parts[^2] : parts[^1];
-if (!namePart.Contains(':')) continue;
+			// NAME column may be followed by "(LISTEN)" as a separate token
+			var namePart = parts[^1] == "(LISTEN)" && parts.Length >= 10 ? parts[^2] : parts[^1];
+			if (!namePart.Contains(':')) continue;
 
-var colonIdx = namePart.LastIndexOf(':');
-var addrRaw = namePart[..colonIdx];
-var portRaw = namePart[(colonIdx + 1)..].TrimEnd(')').Trim();
-if (!int.TryParse(portRaw, out var parsedPort) || parsedPort != port) continue;
+			var colonIdx = namePart.LastIndexOf(':');
+			var addrRaw = namePart[..colonIdx];
+			var portRaw = namePart[(colonIdx + 1)..].TrimEnd(')').Trim();
+			if (!int.TryParse(portRaw, out var parsedPort) || parsedPort != port) continue;
 
-var typeCol = parts.Length > 4 ? parts[4] : string.Empty;
-var isIpv6 = typeCol == "IPv6";
-var addr = addrRaw == "*" ? (isIpv6 ? "::" : "0.0.0.0") : addrRaw;
-var family = isIpv6 || addr.Contains(':') ? "ipv6" : "ipv4";
+			var typeCol = parts.Length > 4 ? parts[4] : string.Empty;
+			var isIpv6 = typeCol == "IPv6";
+			var addr = addrRaw == "*" ? (isIpv6 ? "::" : "0.0.0.0") : addrRaw;
+			var family = isIpv6 || addr.Contains(':') ? "ipv6" : "ipv4";
 
-if (!int.TryParse(parts[1], out var pid)) continue;
-result.Add(new PortListenerInfo(port, pid, parts[0], addr, family));
-}
-return result;
-}
+			if (!int.TryParse(parts[1], out var pid)) continue;
+			result.Add(new PortListenerInfo(port, pid, parts[0], addr, family));
+		}
+		return result;
+	}
 
-internal static List<PortListenerInfo> ParseSsOutput(string output, int port)
-{
-var result = new List<PortListenerInfo>();
-foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-{
-var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-if (parts.Length < 2) continue;
+	internal static List<PortListenerInfo> ParseSsOutput(string output, int port)
+	{
+		var result = new List<PortListenerInfo>();
+		foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+		{
+			var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length < 2) continue;
 
-var localAddr = parts.FirstOrDefault(p => p.EndsWith($":{port}"));
-if (localAddr is null) continue;
+			var localAddr = parts.FirstOrDefault(p => p.EndsWith($":{port}"));
+			if (localAddr is null) continue;
 
-var colonIdx = localAddr.LastIndexOf(':');
-var addrPart = colonIdx >= 0 ? localAddr[..colonIdx] : "0.0.0.0";
-// ss prints IPv6 wildcards as "*" or "[::]"; honor those as "::" when bracketed or paired with ipv6 family hint
-var isBracketed = addrPart.StartsWith('[') && addrPart.EndsWith(']');
-var addrCore = isBracketed ? addrPart[1..^1] : addrPart;
-var hasIpv6Hint = isBracketed || (addrCore.Contains(':') && !addrCore.StartsWith("::ffff:"));
-var addr = addrCore is "*" or ""
-? (hasIpv6Hint ? "::" : "0.0.0.0")
-: addrCore;
-var family = hasIpv6Hint ? "ipv6" : "ipv4";
+			var colonIdx = localAddr.LastIndexOf(':');
+			var addrPart = colonIdx >= 0 ? localAddr[..colonIdx] : "0.0.0.0";
+			// ss prints IPv6 wildcards as "*" or "[::]"; honor those as "::" when bracketed or paired with ipv6 family hint
+			var isBracketed = addrPart.StartsWith('[') && addrPart.EndsWith(']');
+			var addrCore = isBracketed ? addrPart[1..^1] : addrPart;
+			var hasIpv6Hint = isBracketed || (addrCore.Contains(':') && !addrCore.StartsWith("::ffff:"));
+			var addr = addrCore is "*" or ""
+			? (hasIpv6Hint ? "::" : "0.0.0.0")
+			: addrCore;
+			var family = hasIpv6Hint ? "ipv6" : "ipv4";
 
-int pid = 0;
-string processName = string.Empty;
-var usersIdx = line.IndexOf("users:((", StringComparison.Ordinal);
-if (usersIdx >= 0)
-{
-var usersSection = line[(usersIdx + 8)..];
-var q1 = usersSection.IndexOf('"');
-var q2 = q1 >= 0 ? usersSection.IndexOf('"', q1 + 1) : -1;
-if (q1 >= 0 && q2 > q1) processName = usersSection[(q1 + 1)..q2];
+			int pid = 0;
+			string processName = string.Empty;
+			var usersIdx = line.IndexOf("users:((", StringComparison.Ordinal);
+			if (usersIdx >= 0)
+			{
+				var usersSection = line[(usersIdx + 8)..];
+				var q1 = usersSection.IndexOf('"');
+				var q2 = q1 >= 0 ? usersSection.IndexOf('"', q1 + 1) : -1;
+				if (q1 >= 0 && q2 > q1) processName = usersSection[(q1 + 1)..q2];
 
-var pidIdx = usersSection.IndexOf("pid=", StringComparison.Ordinal);
-if (pidIdx >= 0)
-{
-var pidStr = usersSection[(pidIdx + 4)..];
-var comma = pidStr.IndexOf(',');
-var end = pidStr.IndexOf(')');
-var len = comma >= 0 && (end < 0 || comma < end) ? comma : end;
-if (len > 0) int.TryParse(pidStr[..len], out pid);
-}
-}
-result.Add(new PortListenerInfo(port, pid, processName, addr, family));
-}
-return result;
-}
+				var pidIdx = usersSection.IndexOf("pid=", StringComparison.Ordinal);
+				if (pidIdx >= 0)
+				{
+					var pidStr = usersSection[(pidIdx + 4)..];
+					var comma = pidStr.IndexOf(',');
+					var end = pidStr.IndexOf(')');
+					var len = comma >= 0 && (end < 0 || comma < end) ? comma : end;
+					if (len > 0) int.TryParse(pidStr[..len], out pid);
+				}
+			}
+			result.Add(new PortListenerInfo(port, pid, processName, addr, family));
+		}
+		return result;
+	}
 
-internal static List<PortListenerInfo> ParseNetstatOutput(string output, int port)
-{
-var result = new List<PortListenerInfo>();
-foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-{
-var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-if (parts.Length < 6) continue;
-if (!parts[0].StartsWith("tcp", StringComparison.OrdinalIgnoreCase)) continue;
-if (!parts[^1].Equals("LISTEN", StringComparison.OrdinalIgnoreCase)) continue;
+	internal static List<PortListenerInfo> ParseNetstatOutput(string output, int port)
+	{
+		var result = new List<PortListenerInfo>();
+		foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+		{
+			var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length < 6) continue;
+			if (!parts[0].StartsWith("tcp", StringComparison.OrdinalIgnoreCase)) continue;
+			if (!parts[^1].Equals("LISTEN", StringComparison.OrdinalIgnoreCase)) continue;
 
-var localAddr = parts[3];
-var dotIdx = localAddr.LastIndexOf('.');
-if (dotIdx < 0) continue;
-if (!int.TryParse(localAddr[(dotIdx + 1)..], out var parsedPort) || parsedPort != port) continue;
+			var localAddr = parts[3];
+			var dotIdx = localAddr.LastIndexOf('.');
+			if (dotIdx < 0) continue;
+			if (!int.TryParse(localAddr[(dotIdx + 1)..], out var parsedPort) || parsedPort != port) continue;
 
-var addrPart = localAddr[..dotIdx];
-var family = parts[0].Contains('6') ? "ipv6" : "ipv4";
-var addr = addrPart == "*" ? (family == "ipv6" ? "::" : "0.0.0.0") : addrPart;
-result.Add(new PortListenerInfo(port, 0, string.Empty, addr, family));
-}
-return result;
-}
+			var addrPart = localAddr[..dotIdx];
+			var family = parts[0].Contains('6') ? "ipv6" : "ipv4";
+			var addr = addrPart == "*" ? (family == "ipv6" ? "::" : "0.0.0.0") : addrPart;
+			result.Add(new PortListenerInfo(port, 0, string.Empty, addr, family));
+		}
+		return result;
+	}
 
-private static string? RunCommand(string executable, string arguments)
-{
-try
-{
+	private static string? RunCommand(string executable, string arguments)
+	{
+		try
+		{
 using var process = new Process
-{
-StartInfo = new ProcessStartInfo(executable, arguments)
-{
-RedirectStandardOutput = true,
-RedirectStandardError = true,
-UseShellExecute = false,
-CreateNoWindow = true,
-}
-};
+			{
+				StartInfo = new ProcessStartInfo(executable, arguments)
+				{
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					UseShellExecute = false,
+					CreateNoWindow = true,
+				}
+			};
 
-var stdout = new StringBuilder();
-process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdout.AppendLine(e.Data); };
-// Drain stderr to a sink we discard — required to prevent the child from
-// blocking on a full stderr pipe (e.g., lsof permission-denied messages).
-process.ErrorDataReceived += (_, _) => { };
+			var stdout = new StringBuilder();
+			process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdout.AppendLine(e.Data); };
+			// Drain stderr to a sink we discard — required to prevent the child from
+			// blocking on a full stderr pipe (e.g., lsof permission-denied messages).
+			process.ErrorDataReceived += (_, _) => { };
 
-process.Start();
-process.BeginOutputReadLine();
-process.BeginErrorReadLine();
+			process.Start();
+			process.BeginOutputReadLine();
+			process.BeginErrorReadLine();
 
-if (!process.WaitForExit(5000))
-{
-try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
-return null;
-}
-// Ensure async readers have flushed before we read ExitCode.
-process.WaitForExit();
+			if (!process.WaitForExit(5000))
+			{
+				try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+				return null;
+			}
+			// Ensure async readers have flushed before we read ExitCode.
+			process.WaitForExit();
 
-var output = stdout.ToString();
-return process.ExitCode == 0 || output.Length > 0 ? output : null;
-}
-catch { return null; }
-}
+			var output = stdout.ToString();
+			return process.ExitCode == 0 || output.Length > 0 ? output : null;
+		}
+		catch { return null; }
+	}
 }

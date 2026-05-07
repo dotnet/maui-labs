@@ -7,30 +7,30 @@ namespace Microsoft.Maui.Cli.Models;
 
 public sealed record PortCheckResult
 {
-[JsonPropertyName("port")]
-public int Port { get; init; }
+	[JsonPropertyName("port")]
+	public int Port { get; init; }
 
-[JsonPropertyName("in_use")]
-public bool InUse { get; init; }
+	[JsonPropertyName("in_use")]
+	public bool InUse { get; init; }
 
-[JsonPropertyName("listeners")]
-public List<PortListenerResult> Listeners { get; init; } = [];
+	[JsonPropertyName("listeners")]
+	public List<PortListenerResult> Listeners { get; init; } = [];
 }
 
 public sealed record PortListenerResult
 {
-[JsonPropertyName("pid")]
-public int Pid { get; init; }
+	[JsonPropertyName("pid")]
+	public int Pid { get; init; }
 
-[JsonPropertyName("process_name")]
-public string ProcessName { get; init; } = string.Empty;
+	[JsonPropertyName("process_name")]
+	public string ProcessName { get; init; } = string.Empty;
 
-[JsonPropertyName("address")]
-public string Address { get; init; } = string.Empty;
+	[JsonPropertyName("address")]
+	public string Address { get; init; } = string.Empty;
 
-[JsonPropertyName("family")]
-public string Family { get; init; } = "ipv4";
+	[JsonPropertyName("family")]
+	public string Family { get; init; } = "ipv4";
 
-[JsonPropertyName("state")]
-public string State { get; init; } = "listen";
+	[JsonPropertyName("state")]
+	public string State { get; init; } = "listen";
 }
