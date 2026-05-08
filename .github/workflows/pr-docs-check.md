@@ -59,6 +59,7 @@ safe-outputs:
     title-prefix: "[maui-labs docs] "
     labels: [docs-from-code]
     target-repo: "dotnet/docs-maui"
+  noop: false
 
 timeout-minutes: 15
 ---
