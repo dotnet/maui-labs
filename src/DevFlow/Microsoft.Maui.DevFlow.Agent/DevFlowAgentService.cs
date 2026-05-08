@@ -494,21 +494,6 @@ public class PlatformAgentService : DevFlowAgentService
     }
 #endif
 
-    protected override BleMonitor CreateBleMonitor()
-    {
-#if ANDROID
-        return new Ble.AndroidBleMonitor();
-#elif IOS || MACCATALYST
-        return new Ble.AppleBleMonitor();
-#elif WINDOWS
-        return new Ble.WindowsBleMonitor();
-#elif MACOS
-        return new Ble.MacOsBleMonitor();
-#else
-        return base.CreateBleMonitor();
-#endif
-    }
-
     protected override bool TryNativeTap(VisualElement ve)
     {
         try

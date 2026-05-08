@@ -44,11 +44,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     public SensorManager Sensors { get; }
 
-    /// <summary>
-    /// Monitors BLE scan results, connections, reads, writes, and notifications.
-    /// </summary>
-    public BleMonitor Ble { get; }
-
     private readonly IProfilerCollector _profilerCollector;
     private readonly ProfilerSessionStore _profilerSessions;
     private readonly SemaphoreSlim _profilerStateGate = new(1, 1);
@@ -254,8 +249,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _treeWalker = CreateTreeWalker();
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         Sensors = new SensorManager();
-        Ble = CreateBleMonitor();
-        BleMonitor.Instance = Ble;
         _profilerCollector = CreateProfilerCollector();
         _profilerSessions = new ProfilerSessionStore(
             Math.Max(1, _options.MaxProfilerSamples),
@@ -301,12 +294,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// to provide native frame/CPU integrations.
     /// </summary>
     protected virtual IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
-
-    /// <summary>
-    /// Creates the BLE monitor. Override in platform-specific subclasses
-    /// to provide native scan and connection monitoring.
-    /// </summary>
-    protected virtual BleMonitor CreateBleMonitor() => new BleMonitor();
 
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
     protected virtual string PlatformName => DeviceInfo.Current.Platform.ToString();
@@ -531,12 +518,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         _server.MapGet("/api/v1/device/jobs", HandleJobsList);
         _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleJobRun);
-        _server.MapGet("/api/v1/device/ble", HandleBleStatus);
-        _server.MapGet("/api/v1/device/ble/events", HandleBleEvents);
-        _server.MapPost("/api/v1/device/ble/scan/start", HandleBleScanStart);
-        _server.MapPost("/api/v1/device/ble/scan/stop", HandleBleScanStop);
-        _server.MapDelete("/api/v1/device/ble/events", HandleBleClearEvents);
-        _server.MapWebSocket("/ws/v1/ble", HandleBleWebSocket);
 
         _server.MapGet("/api/v1/storage/preferences", HandlePreferencesList);
         _server.MapGet("/api/v1/storage/preferences/{key}", HandlePreferencesGet);
@@ -619,7 +600,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     network = true,
                     logs = true,
                     sensors = true,
-                    ble = true,
                     storage = true,
                     profiler = IsProfilerFeatureAvailable,
                     jobs = IsJobsSupported,
@@ -681,11 +661,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             {
                 supported = true,
                 features = new[] { "list", "start", "stop", "stream" }
-            },
-            ble = new
-            {
-                supported = Ble.SupportedFeatures.Count > 0,
-                features = Ble.SupportedFeatures
             },
             storage = new
             {
@@ -4080,7 +4055,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
         StopAutoUiHooks();
         Sensors.Dispose();
-        Ble.Dispose();
 
         var cts = _profilerLoopCts;
         var loopTask = _profilerLoopTask;
@@ -6329,170 +6303,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error($"Running jobs is not supported on {PlatformName}", 501, "unsupported-capability");
 
         return HttpResponse.Json(result);
-    }
-
-    // ── BLE endpoints ──
-
-    private Task<HttpResponse> HandleBleStatus(HttpRequest request)
-    {
-        return Task.FromResult(HttpResponse.Json(Ble.GetStatus()));
-    }
-
-    private Task<HttpResponse> HandleBleEvents(HttpRequest request)
-    {
-        var limit = 100;
-        if (request.QueryParams.TryGetValue("limit", out var limitStr))
-        {
-            if (!int.TryParse(limitStr, out limit) || limit < 0)
-            {
-                return Task.FromResult(HttpResponse.Error(
-                    "BLE event limit must be a non-negative integer",
-                    400,
-                    "invalid_limit",
-                    new { limit = limitStr }));
-            }
-        }
-
-        var type = request.QueryParams.GetValueOrDefault("type");
-        var events = Ble.GetEvents(limit, type);
-        return Task.FromResult(HttpResponse.Json(new { count = events.Count, events }));
-    }
-
-    private Task<HttpResponse> HandleBleScanStart(HttpRequest request)
-    {
-        var error = Ble.StartScanning();
-        return Task.FromResult(error != null
-            ? HttpResponse.Error(error)
-            : HttpResponse.Ok("BLE scan started"));
-    }
-
-    private Task<HttpResponse> HandleBleScanStop(HttpRequest request)
-    {
-        var error = Ble.StopScanning();
-        return Task.FromResult(error != null
-            ? HttpResponse.Error(error)
-            : HttpResponse.Ok("BLE scan stopped"));
-    }
-
-    private Task<HttpResponse> HandleBleClearEvents(HttpRequest request)
-    {
-        Ble.ClearEvents();
-        return Task.FromResult(HttpResponse.Ok("BLE events cleared"));
-    }
-
-    private async Task HandleBleWebSocket(
-        System.Net.Sockets.TcpClient client,
-        System.Net.Sockets.NetworkStream stream,
-        HttpRequest request,
-        CancellationToken ct)
-    {
-        var autoScan = request.QueryParams.GetValueOrDefault("scan", "false")
-            .Equals("true", StringComparison.OrdinalIgnoreCase);
-
-        var replay = 100;
-        if (request.QueryParams.TryGetValue("replay", out var replayStr) &&
-            (!int.TryParse(replayStr, out replay) || replay < 0))
-        {
-            await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
-                {
-                    type = "error",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    error = "BLE stream replay must be a non-negative integer"
-                }), ct);
-            return;
-        }
-
-        var type = request.QueryParams.GetValueOrDefault("type");
-        List<BleEvent> replayEvents = replay > 0 ? Ble.GetEvents(replay, type) : [];
-        var queue = Ble.Subscribe(type);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-        var startedScan = false;
-
-        try
-        {
-            if (autoScan)
-            {
-                startedScan = Ble.TryStartScanning(out var error);
-                if (error != null)
-                {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream,
-                        JsonSerializer.Serialize(new
-                        {
-                            type = "error",
-                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                            error
-                        }), ct);
-                    return;
-                }
-            }
-
-            await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
-                {
-                    type = "subscribed",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    scanning = Ble.IsScanning,
-                    replay,
-                    eventType = type
-                }), ct);
-
-            if (replay > 0)
-            {
-                await AgentHttpServer.WebSocketSendTextAsync(stream,
-                    JsonSerializer.Serialize(new
-                    {
-                        type = "replay",
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                        count = replayEvents.Count,
-                        events = replayEvents
-                    }), ct);
-            }
-
-            var readTask = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
-                    if (msg == null) { await cts.CancelAsync(); break; }
-                }
-            }, cts.Token);
-
-            var lastPing = DateTime.UtcNow;
-            while (!cts.Token.IsCancellationRequested)
-            {
-                while (queue.TryDequeue(out var evt))
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendTextAsync(stream, evt, cts.Token);
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
-                        lastPing = DateTime.UtcNow;
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                try { await Task.Delay(20, cts.Token); }
-                catch { break; }
-            }
-
-            await readTask;
-        }
-        finally
-        {
-            Ble.Unsubscribe(queue);
-            if (startedScan)
-                Ble.StopScanning();
-        }
     }
 }
 
