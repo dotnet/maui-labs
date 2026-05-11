@@ -19,12 +19,14 @@
                        FontFamily="FluentFilled"
                        FontSize="{StaticResource FontSizeBody}"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.Description="" />
                 <Label Text="Cart"
                        FontSize="{StaticResource FontSizeBody}"
                        FontAttributes="Bold"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </HorizontalStackLayout>
 
             <Border Grid.Column="1"
@@ -41,7 +43,8 @@
                         FontAttributes="Bold"
                         BorderWidth="0"
                         VerticalOptions="Center"
-                        Command="{Binding CycleCartModeCommand}" />
+                        Command="{Binding CycleCartModeCommand}"
+                        SemanticProperties.Hint="Cycles between normal and compact cart views" />
             </Border>
         </Grid>
 

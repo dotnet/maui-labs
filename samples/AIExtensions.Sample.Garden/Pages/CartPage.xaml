@@ -30,15 +30,19 @@
                             BackgroundColor="Transparent"
                             TextColor="{StaticResource White}"
                             VerticalOptions="Center"
-                            Clicked="OnCloseClicked" />
+                            Clicked="OnCloseClicked"
+                            SemanticProperties.Description="Close"
+                            SemanticProperties.Hint="Returns to previous page" />
                     <Label Text="&#xF26B;"
                            FontFamily="FluentFilled"
                            FontSize="{StaticResource FontSizeTitle}"
-                           TextColor="{StaticResource White}" VerticalOptions="Center" />
+                           TextColor="{StaticResource White}" VerticalOptions="Center"
+                           SemanticProperties.Description="" />
                     <Label Text="Cart"
                            FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                            TextColor="{StaticResource White}"
-                           VerticalOptions="Center" />
+                           VerticalOptions="Center"
+                           SemanticProperties.HeadingLevel="Level1" />
                 </HorizontalStackLayout>
                 <Border Grid.Column="1"
                         BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
@@ -53,7 +57,8 @@
                             FontAttributes="Bold"
                             BorderWidth="0"
                             VerticalOptions="Center"
-                            Command="{Binding CycleCartModeCommand}" />
+                            Command="{Binding CycleCartModeCommand}"
+                            SemanticProperties.Hint="Cycles between normal and compact cart views" />
                 </Border>
             </Grid>
         </Border>

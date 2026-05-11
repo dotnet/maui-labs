@@ -28,12 +28,15 @@
                         BackgroundColor="Transparent"
                         TextColor="{StaticResource White}"
                         VerticalOptions="Center"
-                        Command="{Binding CancelCommand}" />
+                        Command="{Binding CancelCommand}"
+                        SemanticProperties.Description="Cancel"
+                        SemanticProperties.Hint="Cancels the review and returns to product details" />
                 <Label Grid.Column="1"
                        Text="Write Review"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </Grid>
         </Border>
 
@@ -51,11 +54,14 @@
                 <VerticalStackLayout Spacing="6">
                     <Label Text="Rating"
                            FontSize="{StaticResource FontSizeBody}"
-                           FontAttributes="Bold" />
+                           FontAttributes="Bold"
+                           SemanticProperties.HeadingLevel="Level2" />
                     <Slider Minimum="1" Maximum="5"
                             Value="{Binding Rating}"
                             MinimumTrackColor="{StaticResource Primary}"
-                            ThumbColor="{StaticResource Primary}" />
+                            ThumbColor="{StaticResource Primary}"
+                            SemanticProperties.Description="Rating"
+                            SemanticProperties.Hint="Slide to select 1 to 5 stars" />
                     <Label FontSize="{StaticResource FontSizeSubtitle}"
                            HorizontalTextAlignment="Center"
                            TextColor="#E5A100">
@@ -71,7 +77,8 @@
                 <VerticalStackLayout Spacing="6">
                     <Label Text="Comment (optional)"
                            FontSize="{StaticResource FontSizeBody}"
-                           FontAttributes="Bold" />
+                           FontAttributes="Bold"
+                           SemanticProperties.HeadingLevel="Level2" />
                     <Border BackgroundColor="{AppThemeBinding Light={StaticResource InputBackgroundLight}, Dark={StaticResource InputBackgroundDark}}"
                             Stroke="{AppThemeBinding Light={StaticResource InputStrokeLight}, Dark={StaticResource InputStrokeDark}}"
                             StrokeThickness="1"
@@ -90,7 +97,8 @@
                         TextColor="{StaticResource White}"
                         FontAttributes="Bold"
                         CornerRadius="12"
-                        Command="{Binding SubmitCommand}" />
+                        Command="{Binding SubmitCommand}"
+                        SemanticProperties.Hint="Submits your review for this product" />
 
             </VerticalStackLayout>
         </ScrollView>

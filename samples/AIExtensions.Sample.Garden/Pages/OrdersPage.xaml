@@ -30,15 +30,19 @@
                             BackgroundColor="Transparent"
                             TextColor="{StaticResource White}"
                             VerticalOptions="Center"
-                            Clicked="OnBackClicked" />
+                            Clicked="OnBackClicked"
+                            SemanticProperties.Description="Back"
+                            SemanticProperties.Hint="Returns to previous page" />
                     <Label Text="&#xEA07;"
                            FontFamily="FluentFilled"
                            FontSize="{StaticResource FontSizeTitle}"
-                           TextColor="{StaticResource White}" VerticalOptions="Center" />
+                           TextColor="{StaticResource White}" VerticalOptions="Center"
+                           SemanticProperties.Description="" />
                     <Label Text="Orders"
                            FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                            TextColor="{StaticResource White}"
-                           VerticalOptions="Center" />
+                           VerticalOptions="Center"
+                           SemanticProperties.HeadingLevel="Level1" />
                 </HorizontalStackLayout>
                 <Button Grid.Column="1"
                         Text="Clear All"
@@ -49,7 +53,8 @@
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                         CornerRadius="14"
                         VerticalOptions="Center"
-                        Command="{Binding ClearCommand}" />
+                        Command="{Binding ClearCommand}"
+                        SemanticProperties.Hint="Removes all past orders" />
             </Grid>
         </Border>
 

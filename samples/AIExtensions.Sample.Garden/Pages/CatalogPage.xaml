@@ -25,15 +25,19 @@
                         BackgroundColor="Transparent"
                         TextColor="{StaticResource White}"
                         VerticalOptions="Center"
-                        Clicked="OnBackClicked" />
+                        Clicked="OnBackClicked"
+                        SemanticProperties.Description="Back"
+                        SemanticProperties.Hint="Returns to previous page" />
                 <Label Text="&#xF788;"
                        FontFamily="FluentFilled"
                        FontSize="{StaticResource FontSizeTitle}"
-                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+                       TextColor="{StaticResource White}" VerticalOptions="Center"
+                       SemanticProperties.Description="" />
                 <Label Text="Products"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </HorizontalStackLayout>
         </Border>
 

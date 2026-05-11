@@ -28,10 +28,12 @@
                 <Label Text="&#xE76C;"
                        FontFamily="FluentFilled"
                        FontSize="{StaticResource FontSizeTitle}"
-                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+                       TextColor="{StaticResource White}" VerticalOptions="Center"
+                       SemanticProperties.Description="Sage app icon" />
                 <Label Text="Sage"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
-                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+                       TextColor="{StaticResource White}" VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </HorizontalStackLayout>
             <HorizontalStackLayout Grid.Column="1" Spacing="6"
                                    HorizontalOptions="End" VerticalOptions="Center">
@@ -43,7 +45,9 @@
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
-                            Clicked="OnProductsClicked" />
+                            Clicked="OnProductsClicked"
+                            SemanticProperties.Description="Products"
+                            SemanticProperties.Hint="Opens the product catalog" />
                 </Border>
                 <!-- Orders -->
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
@@ -53,7 +57,9 @@
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
-                            Clicked="OnOrdersClicked" />
+                            Clicked="OnOrdersClicked"
+                            SemanticProperties.Description="Orders"
+                            SemanticProperties.Hint="Opens your past orders" />
                 </Border>
                 <!-- Cart -->
                 <Border x:Name="CartHeaderBtn"
@@ -65,7 +71,9 @@
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
-                            Command="{Binding ShowCartCommand}" />
+                            Command="{Binding ShowCartCommand}"
+                            SemanticProperties.Description="Cart"
+                            SemanticProperties.Hint="Opens your shopping cart" />
                     <Border.Triggers>
                         <DataTrigger TargetType="Border"
                                      Binding="{Binding Source={x:Reference CartSidebar}, Path=IsVisible}"
@@ -83,7 +91,9 @@
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
-                            Command="{Binding StartNewSessionCommand}" />
+                            Command="{Binding StartNewSessionCommand}"
+                            SemanticProperties.Description="New chat"
+                            SemanticProperties.Hint="Starts a new conversation" />
                 </Border>
             </HorizontalStackLayout>
         </Grid>
