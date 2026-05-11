@@ -7,8 +7,10 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | Package | Description |
 |---------|-------------|
 | [`Microsoft.Maui.AI.Attributes`](Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts — `[ExportAIFunction]`, DI binding, AOT-safe |
+| [`Microsoft.Maui.AI.Indexer`](Microsoft.Maui.AI.Indexer/) | Compile-time XAML UI indexer — generates AI-friendly semantic Markdown from XAML pages |
 
-- [Full documentation](Microsoft.Maui.AI.Attributes/README.md) — API reference, samples, and equivalence rules
+- [AI Attributes documentation](Microsoft.Maui.AI.Attributes/README.md) — API reference, samples, and equivalence rules
+- [UI Indexer documentation](Microsoft.Maui.AI.Indexer/README.md) — accessibility-first UI indexing for AI agents
 
 ## Samples
 
