@@ -284,8 +284,8 @@ internal sealed class MarkdownBuilder
             return "";
         }
 
-        // Image
-        if (el.TypeName == "Image")
+        // Image / ImageButton source
+        if (el.TypeName is "Image" or "ImageButton")
         {
             if (el.Source != null)
                 return $"\"{el.Source}\"";
