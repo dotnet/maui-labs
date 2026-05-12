@@ -148,7 +148,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty PlaceholderProperty =
-        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(CopilotChatView), "Ask anything...");
+        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(CopilotChatView), "Ask anything...",
+            propertyChanged: (b, _, v) => { if (b is CopilotChatView c && c._inputEntry is not null) c._inputEntry.Placeholder = v as string; });
 
     public string Placeholder
     {
@@ -354,7 +355,8 @@ public class CopilotChatView : ContentView
     // ══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty SendButtonTextProperty =
-        BindableProperty.Create(nameof(SendButtonText), typeof(string), typeof(CopilotChatView), "Send");
+        BindableProperty.Create(nameof(SendButtonText), typeof(string), typeof(CopilotChatView), "Send",
+            propertyChanged: (b, _, v) => { if (b is CopilotChatView c && c._sendButton is not null) c._sendButton.Text = v as string; });
 
     public string SendButtonText
     {
@@ -363,7 +365,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty ApproveButtonTextProperty =
-        BindableProperty.Create(nameof(ApproveButtonText), typeof(string), typeof(CopilotChatView), "Approve");
+        BindableProperty.Create(nameof(ApproveButtonText), typeof(string), typeof(CopilotChatView), "Approve",
+            propertyChanged: (b, _, v) => { if (b is CopilotChatView c && c._approveButton is not null) c._approveButton.Text = v as string; });
 
     public string ApproveButtonText
     {
@@ -372,7 +375,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty RejectButtonTextProperty =
-        BindableProperty.Create(nameof(RejectButtonText), typeof(string), typeof(CopilotChatView), "Reject");
+        BindableProperty.Create(nameof(RejectButtonText), typeof(string), typeof(CopilotChatView), "Reject",
+            propertyChanged: (b, _, v) => { if (b is CopilotChatView c && c._rejectButton is not null) c._rejectButton.Text = v as string; });
 
     public string RejectButtonText
     {
@@ -534,6 +538,21 @@ public class CopilotChatView : ContentView
         if (_approveButton is not null) _approveButton.Clicked += OnApproveClicked;
         if (_rejectButton is not null) _rejectButton.Clicked += OnRejectClicked;
         if (_inputEntry is not null) _inputEntry.Completed += OnInputCompleted;
+
+        // Sync properties that template bindings may not propagate correctly
+        SyncTemplateProperties();
+    }
+
+    private void SyncTemplateProperties()
+    {
+        if (_inputEntry is not null)
+            _inputEntry.Placeholder = Placeholder;
+        if (_sendButton is not null)
+            _sendButton.Text = SendButtonText;
+        if (_approveButton is not null)
+            _approveButton.Text = ApproveButtonText;
+        if (_rejectButton is not null)
+            _rejectButton.Text = RejectButtonText;
     }
 
     private void OnSendClicked(object? sender, EventArgs e) => _ = HandleSendAsync();
