@@ -156,13 +156,13 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 
 ### `--json` flag
 
-Most commands accept `--json` for structured output. Some commands may emit multiple JSON objects to stdout (JSONL / newline-delimited JSON) — for example, progress or status records before the final result. The final JSON object is the command result, whose shape is command-specific (see per-command `--help` and examples below). When a non-DevFlow command **fails** and the error is a recognized `MauiToolException`, it emits the canonical error envelope described in the next section. Note: unrecognized parse errors (e.g. invalid flags) do not use this envelope, and `maui devflow ...` uses a different JSON contract and writes structured errors to stderr rather than stdout.
+Most commands accept `--json` for structured output. Some commands may emit multiple JSON objects to stdout (JSONL / newline-delimited JSON) — for example, progress or status records before the final result. The final JSON object is the command result, whose shape is command-specific (see per-command `--help` and examples below). When a non-DevFlow command **fails** and the exception is handled by `HandleCommandException`, it emits the canonical error envelope described in the next section. This applies to both recognized `MauiToolException` errors (which produce specific error codes) and unexpected exceptions (which become `E1001`/`InternalError` via `ErrorResult.FromException`). Note: unrecognized parse errors (e.g. invalid flags) do not use this envelope, `OperationCanceledException` produces a status message with exit code 130 rather than the error envelope, and `maui devflow ...` uses a different JSON contract and writes structured errors to stderr rather than stdout.
 
 Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts. Parse the output as a stream of JSON objects rather than assuming a single top-level document.
 
 ### Error envelope <a name="error-envelope"></a>
 
-For non-DevFlow `maui` commands, when a command exits with a non-zero exit code and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`. This section does not apply to `maui devflow ...`, which uses a different JSON error shape and writes structured errors to stderr.
+For non-DevFlow `maui` commands, when a command throws an exception that is handled by `HandleCommandException` and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`. Note: some commands may return non-zero exit codes without throwing (e.g. validation paths), and `OperationCanceledException` is treated as a cancellation (exit code 130) rather than an error envelope. This section does not apply to `maui devflow ...`, which uses a different JSON error shape and writes structured errors to stderr.
 
 ```json
 {
@@ -201,7 +201,7 @@ For non-DevFlow `maui` commands, when a command exits with a non-zero exit code 
 | `E1xxx` | `tool` | `E1001` InternalError, `E1004` InvalidArgument, `E1006` DeviceNotFound, `E1007` PlatformNotSupported |
 | `E20xx` | `platform` | `E2001` JdkNotFound, `E2002` JdkVersionUnsupported, `E2003` JdkInstallFailed |
 | `E21xx` | `platform` | `E2101` AndroidSdkNotFound, `E2102` AndroidSdkManagerNotFound, `E2103` AndroidLicensesNotAccepted, `E2105` AndroidPackageInstallFailed, `E2106` AndroidEmulatorNotFound, `E2108` AndroidAvdCreateFailed, `E2110` AndroidAdbNotFound, `E2111` AndroidDeviceNotFound, `E2112` AndroidAvdDeleteFailed |
-| `E22xx` | `platform` | `E2201` AppleXcodeNotFound, `E2202` AppleCltNotFound, `E2203` AppleSimctlFailed, `E2204` AppleSimulatorNotFound |
+| `E22xx` | `platform` | `E2201` AppleXcodeNotFound, `E2202` AppleCltNotFound, `E2203` AppleSimctlFailed, `E2204` AppleSimulatorNotFound, `E2205` AppleXcodeLicenseNotAccepted, `E2206` AppleSetupFailed, `E2207` AppleSimulatorCreateFailed, `E2208` AppleSimulatorEraseFailed |
 | `E23xx` | `platform` | `E2301` WindowsSdkNotFound |
 | `E24xx` | `platform` | `E2401` DotNetNotFound, `E2402` MauiWorkloadMissing, `E2403` DiagnosticsToolNotFound |
 | `E3xxx` | `user` | User action required (wrong arguments, missing inputs) |
