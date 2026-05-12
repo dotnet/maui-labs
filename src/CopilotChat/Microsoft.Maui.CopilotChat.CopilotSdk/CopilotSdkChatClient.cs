@@ -82,9 +82,16 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
         if (string.IsNullOrEmpty(prompt))
             yield break;
 
-        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var updates = new System.Collections.Concurrent.ConcurrentQueue<ChatResponseUpdate>();
+        // Use Channel for immediate wake-on-write — each SDK event wakes the consumer
+        // immediately instead of batching behind a polling delay.
+        var channel = System.Threading.Channels.Channel.CreateUnbounded<ChatResponseUpdate>(
+            new System.Threading.Channels.UnboundedChannelOptions
+            {
+                SingleWriter = false,
+                SingleReader = true,
+            });
         var lastActivity = DateTime.UtcNow;
+        Exception? streamError = null;
 
         using var sub = _session!.On(evt =>
         {
@@ -92,7 +99,7 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
             switch (evt)
             {
                 case AssistantMessageDeltaEvent delta:
-                    updates.Enqueue(new ChatResponseUpdate
+                    channel.Writer.TryWrite(new ChatResponseUpdate
                     {
                         Role = ChatRole.Assistant,
                         Contents = [new TextContent(delta.Data.DeltaContent)]
@@ -104,14 +111,14 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
                     break;
 
                 case ToolExecutionStartEvent tool:
-                    updates.Enqueue(new ChatResponseUpdate
+                    channel.Writer.TryWrite(new ChatResponseUpdate
                     {
                         Contents = [new FunctionCallContent(tool.Data.ToolCallId ?? "", tool.Data.ToolName ?? "")]
                     });
                     break;
 
                 case ToolExecutionCompleteEvent toolComplete:
-                    updates.Enqueue(new ChatResponseUpdate
+                    channel.Writer.TryWrite(new ChatResponseUpdate
                     {
                         Contents = [new FunctionResultContent(
                             toolComplete.Data.ToolCallId ?? "",
@@ -120,45 +127,45 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
                     break;
 
                 case SessionIdleEvent:
-                    done.TrySetResult(true);
+                    channel.Writer.TryComplete();
                     break;
 
                 case SessionErrorEvent err:
-                    done.TrySetException(new InvalidOperationException(err.Data.Message));
+                    streamError = new InvalidOperationException(err.Data.Message);
+                    channel.Writer.TryComplete(streamError);
                     break;
             }
         });
 
-        await _session!.SendAsync(new MessageOptions { Prompt = prompt });
-
-        // Yield updates as they arrive with inactivity timeout
-        while (!done.Task.IsCompleted || !updates.IsEmpty)
+        // Start inactivity timeout monitor
+        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _ = Task.Run(async () =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            while (updates.TryDequeue(out var update))
-                yield return update;
-
-            if (!done.Task.IsCompleted)
+            while (!timeoutCts.Token.IsCancellationRequested)
             {
-                // Check for inactivity timeout
+                await Task.Delay(TimeSpan.FromSeconds(5), timeoutCts.Token).ConfigureAwait(false);
                 if (DateTime.UtcNow - lastActivity > StreamingTimeout)
                 {
-                    done.TrySetException(new TimeoutException(
-                        $"No response from Copilot SDK within {StreamingTimeout.TotalSeconds}s."));
+                    streamError = new TimeoutException(
+                        $"No response from Copilot SDK within {StreamingTimeout.TotalSeconds}s.");
+                    channel.Writer.TryComplete(streamError);
+                    break;
                 }
-
-                await Task.WhenAny(done.Task, Task.Delay(50, cancellationToken)).ConfigureAwait(false);
             }
+        }, timeoutCts.Token);
+
+        await _session!.SendAsync(new MessageOptions { Prompt = prompt });
+
+        // Yield each update as soon as it arrives — no batching
+        await foreach (var update in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            yield return update;
         }
 
-        // Drain remaining
-        while (updates.TryDequeue(out var remaining))
-            yield return remaining;
+        timeoutCts.Cancel();
 
-        // Propagate errors stored in done.Task
-        if (done.Task.IsFaulted)
-            await done.Task.ConfigureAwait(false);
+        if (streamError is not null)
+            throw streamError;
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null)
