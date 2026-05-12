@@ -10,9 +10,6 @@ The indexer analyzes your XAML files at build time and generates structured Mark
 
 ```xml
 <PackageReference Include="Microsoft.Maui.AI.Indexer" />
-<PackageReference Include="Microsoft.Maui.AI.Indexer.Generators"
-                  OutputItemType="Analyzer"
-                  ReferenceOutputAssembly="false" />
 ```
 
 Build your project. The generator produces one `{PageName}_UiIndex.g.cs` per XAML page, each containing a `const string Markdown` with the page's semantic content.
