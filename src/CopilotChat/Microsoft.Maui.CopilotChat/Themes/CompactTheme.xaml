@@ -32,65 +32,65 @@
                             ItemsSource="{Binding Messages}"
                             Margin="0,4,0,0" BackgroundColor="Transparent" VerticalOptions="Fill">
                 <CollectionView.ItemsLayout>
-                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="{StaticResource CopilotMessageSpacing}" />
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="{DynamicResource CopilotMessageSpacing}" />
                 </CollectionView.ItemsLayout>
                 <!-- ItemTemplate wired from CopilotChatView.OnApplyTemplate -->
                 <CollectionView.EmptyView>
                     <Grid Padding="16" RowDefinitions="Auto,Auto" RowSpacing="8"
                           MaximumWidthRequest="600" HorizontalOptions="Center">
                         <Label Grid.Row="0" Text="{Binding WelcomeTitle}"
-                               FontSize="{StaticResource CopilotFontSizeTitle}" FontAttributes="Bold"
+                               FontSize="{DynamicResource CopilotFontSizeTitle}" FontAttributes="Bold"
                                HorizontalTextAlignment="Center" />
                         <Label Grid.Row="1" Text="{Binding WelcomeMessage}"
-                               FontSize="{StaticResource CopilotFontSizeBody}" HorizontalTextAlignment="Center"
+                               FontSize="{DynamicResource CopilotFontSizeBody}" HorizontalTextAlignment="Center"
                                LineBreakMode="WordWrap"
-                               TextColor="{AppThemeBinding Light={StaticResource CopilotTextSecondaryLight}, Dark={StaticResource CopilotTextSecondaryDark}}" />
+                               TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}" />
                     </Grid>
                 </CollectionView.EmptyView>
             </CollectionView>
 
             <Grid Grid.Row="1"
-                  IsVisible="{Binding IsApprovalPending, Converter={StaticResource CopilotInverseBool}}"
-                  Padding="{StaticResource CopilotInputPadding}"
+                  IsVisible="{Binding IsApprovalPending, Converter={DynamicResource CopilotInverseBool}}"
+                  Padding="{DynamicResource CopilotInputPadding}"
                   ColumnDefinitions="*,Auto" ColumnSpacing="4"
                   MaximumWidthRequest="600" HorizontalOptions="Center">
                 <Border StrokeShape="RoundRectangle 16"
-                        Stroke="{AppThemeBinding Light={StaticResource CopilotInputStrokeLight}, Dark={StaticResource CopilotInputStrokeDark}}"
+                        Stroke="{AppThemeBinding Light={DynamicResource CopilotInputStrokeLight}, Dark={DynamicResource CopilotInputStrokeDark}}"
                         StrokeThickness="1"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource CopilotInputBackgroundLight}, Dark={StaticResource CopilotInputBackgroundDark}}"
+                        BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotInputBackgroundLight}, Dark={DynamicResource CopilotInputBackgroundDark}}"
                         Padding="0">
                     <Entry x:Name="PART_Input"
                            Text="{Binding InputText, Mode=TwoWay}"
                            Placeholder="{Binding Placeholder}"
-                           IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
-                           ReturnType="Send" FontSize="{StaticResource CopilotFontSizeBody}"
+                           IsEnabled="{Binding IsBusy, Converter={DynamicResource CopilotInverseBool}}"
+                           ReturnType="Send" FontSize="{DynamicResource CopilotFontSizeBody}"
                            BackgroundColor="Transparent" Margin="12,0" />
                 </Border>
                 <Button x:Name="PART_Send" Grid.Column="1" Text="Send"
-                        IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAccent}, Dark={StaticResource CopilotAccentDark}}"
-                        TextColor="{StaticResource CopilotWhite}"
-                        FontSize="{StaticResource CopilotFontSizeBody}"
+                        IsEnabled="{Binding IsBusy, Converter={DynamicResource CopilotInverseBool}}"
+                        BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
+                        TextColor="{DynamicResource CopilotWhite}"
+                        FontSize="{DynamicResource CopilotFontSizeBody}"
                         CornerRadius="16" Padding="12,4" VerticalOptions="Center" />
             </Grid>
 
             <Border Grid.Row="2" Padding="8,4,8,8"
                     IsVisible="{Binding IsApprovalPending}"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource CopilotApprovalBackgroundLight}, Dark={StaticResource CopilotApprovalBackgroundDark}}"
+                    BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotApprovalBackgroundLight}, Dark={DynamicResource CopilotApprovalBackgroundDark}}"
                     Margin="8,4" StrokeShape="RoundRectangle 8" StrokeThickness="0"
                     MaximumWidthRequest="600">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
                     <Label Text="{Binding ApprovalText}"
-                           FontSize="{StaticResource CopilotFontSizeBody}" FontAttributes="Bold"
+                           FontSize="{DynamicResource CopilotFontSizeBody}" FontAttributes="Bold"
                            VerticalOptions="Center" LineBreakMode="TailTruncation" />
                     <Button x:Name="PART_Approve" Grid.Column="1" Text="Approve"
-                            BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAccent}, Dark={StaticResource CopilotAccentDark}}"
-                            TextColor="{StaticResource CopilotWhite}"
-                            FontSize="{StaticResource CopilotFontSizeCaption}" CornerRadius="6" Padding="10,4" />
+                            BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
+                            TextColor="{DynamicResource CopilotWhite}"
+                            FontSize="{DynamicResource CopilotFontSizeCaption}" CornerRadius="6" Padding="10,4" />
                     <Button x:Name="PART_Reject" Grid.Column="2" Text="Reject"
-                            BackgroundColor="{StaticResource CopilotDanger}"
-                            TextColor="{StaticResource CopilotWhite}"
-                            FontSize="{StaticResource CopilotFontSizeCaption}" CornerRadius="6" Padding="10,4" />
+                            BackgroundColor="{DynamicResource CopilotDanger}"
+                            TextColor="{DynamicResource CopilotWhite}"
+                            FontSize="{DynamicResource CopilotFontSizeCaption}" CornerRadius="6" Padding="10,4" />
                 </Grid>
             </Border>
         </Grid>
