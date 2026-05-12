@@ -50,7 +50,7 @@
             </CollectionView>
 
             <Grid Grid.Row="1"
-                  IsVisible="{Binding IsApprovalPending, Converter={DynamicResource CopilotInverseBool}}"
+                  IsVisible="{Binding IsApprovalPending, Converter={StaticResource CopilotInverseBool}}"
                   Padding="{DynamicResource CopilotInputPadding}"
                   ColumnDefinitions="*,Auto" ColumnSpacing="4"
                   MaximumWidthRequest="600" HorizontalOptions="Center">
@@ -62,12 +62,12 @@
                     <Entry x:Name="PART_Input"
                            Text="{Binding InputText, Mode=TwoWay}"
                            Placeholder="{Binding Placeholder}"
-                           IsEnabled="{Binding IsBusy, Converter={DynamicResource CopilotInverseBool}}"
+                           IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
                            ReturnType="Send" FontSize="{DynamicResource CopilotFontSizeBody}"
                            BackgroundColor="Transparent" Margin="12,0" />
                 </Border>
                 <Button x:Name="PART_Send" Grid.Column="1" Text="Send"
-                        IsEnabled="{Binding IsBusy, Converter={DynamicResource CopilotInverseBool}}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
                         BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
                         TextColor="{DynamicResource CopilotWhite}"
                         FontSize="{DynamicResource CopilotFontSizeBody}"

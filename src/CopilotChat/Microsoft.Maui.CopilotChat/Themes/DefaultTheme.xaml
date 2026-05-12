@@ -103,7 +103,7 @@
                            IsVisible="{Binding HasAvatarImage}" />
                     <Label Text="{Binding AvatarText}" FontSize="11"
                            HorizontalOptions="Center" VerticalOptions="Center"
-                           IsVisible="{Binding HasAvatarImage, Converter={DynamicResource CopilotInverseBool}}"
+                           IsVisible="{Binding HasAvatarImage, Converter={StaticResource CopilotInverseBool}}"
                            TextColor="{AppThemeBinding Light={DynamicResource CopilotUserAvatarTextLight}, Dark={DynamicResource CopilotUserAvatarTextDark}}" />
                 </Grid>
             </Border>
@@ -124,7 +124,7 @@
                            IsVisible="{Binding HasAvatarImage}" />
                     <Label Text="{Binding AvatarText}" FontSize="11"
                            HorizontalOptions="Center" VerticalOptions="Center"
-                           IsVisible="{Binding HasAvatarImage, Converter={DynamicResource CopilotInverseBool}}"
+                           IsVisible="{Binding HasAvatarImage, Converter={StaticResource CopilotInverseBool}}"
                            TextColor="{AppThemeBinding Light={DynamicResource CopilotAssistantAvatarTextLight}, Dark={DynamicResource CopilotAssistantAvatarTextDark}}" />
                 </Grid>
             </Border>
@@ -170,16 +170,16 @@
                         <VerticalStackLayout Spacing="6">
                             <Label Text="Arguments" FontSize="{DynamicResource CopilotFontSizeCaption}" FontAttributes="Bold"
                                    TextColor="{AppThemeBinding Light={DynamicResource CopilotTextTertiaryLight}, Dark={DynamicResource CopilotTextTertiaryDark}}"
-                                   IsVisible="{Binding ToolArgs, Converter={DynamicResource CopilotIsNotNull}}" />
+                                   IsVisible="{Binding ToolArgs, Converter={StaticResource CopilotIsNotNull}}" />
                             <Label Text="{Binding ToolArgs}" FontSize="{DynamicResource CopilotFontSizeCaption}"
                                    TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}"
-                                   IsVisible="{Binding ToolArgs, Converter={DynamicResource CopilotIsNotNull}}" LineBreakMode="WordWrap" />
+                                   IsVisible="{Binding ToolArgs, Converter={StaticResource CopilotIsNotNull}}" LineBreakMode="WordWrap" />
                             <Label Text="Result" FontSize="{DynamicResource CopilotFontSizeCaption}" FontAttributes="Bold"
                                    TextColor="{AppThemeBinding Light={DynamicResource CopilotTextTertiaryLight}, Dark={DynamicResource CopilotTextTertiaryDark}}"
-                                   IsVisible="{Binding ToolResult, Converter={DynamicResource CopilotIsNotNull}}" />
+                                   IsVisible="{Binding ToolResult, Converter={StaticResource CopilotIsNotNull}}" />
                             <Label Text="{Binding ToolResult}" FontSize="{DynamicResource CopilotFontSizeCaption}"
                                    TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}"
-                                   IsVisible="{Binding ToolResult, Converter={DynamicResource CopilotIsNotNull}}" LineBreakMode="WordWrap" />
+                                   IsVisible="{Binding ToolResult, Converter={StaticResource CopilotIsNotNull}}" LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
                     </ScrollView>
                 </Border>
@@ -258,7 +258,7 @@
 
             <!-- Input area -->
             <VerticalStackLayout Grid.Row="1"
-                                 IsVisible="{Binding IsApprovalPending, Converter={DynamicResource CopilotInverseBool}}"
+                                 IsVisible="{Binding IsApprovalPending, Converter={StaticResource CopilotInverseBool}}"
                                  Spacing="0" BackgroundColor="Transparent"
                                  MaximumWidthRequest="840" HorizontalOptions="Center">
                 <!-- Suggestion chips -->
@@ -278,7 +278,7 @@
                         <Entry x:Name="PART_Input"
                                Text="{Binding InputText, Mode=TwoWay}"
                                Placeholder="{Binding Placeholder}"
-                               IsEnabled="{Binding IsBusy, Converter={DynamicResource CopilotInverseBool}}"
+                               IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
                                ReturnType="Send"
                                FontSize="{DynamicResource CopilotFontSizeBody}"
                                BackgroundColor="Transparent"
@@ -286,7 +286,7 @@
                     </Border>
                     <Button x:Name="PART_Send" Grid.Column="1"
                             Text="{Binding SendButtonText}"
-                            IsEnabled="{Binding IsBusy, Converter={DynamicResource CopilotInverseBool}}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
                             BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
                             TextColor="{DynamicResource CopilotWhite}"
                             FontSize="{DynamicResource CopilotFontSizeBody}"
