@@ -12,7 +12,9 @@ namespace AIExtensions.Sample.Garden.Services;
 /// </summary>
 public sealed class UiDiscovery
 {
-    private static UiIndexRegistry Registry => UiIndexRegistry.Instance;
+    // The generated index class name follows the pattern {SanitizedAssemblyName}UiIndex.
+    // For AIExtensions.Sample.Garden → AIExtensions_Sample_GardenUiIndex
+    private static UiPageIndex Index => AIExtensions_Sample_GardenUiIndex.Default;
 
     [ExportAIFunction("search_ui")]
     [Description(
@@ -30,7 +32,7 @@ public sealed class UiDiscovery
         var sb = new StringBuilder();
         var matchedPages = new Dictionary<string, List<string>>();
 
-        foreach (var page in Registry.Pages)
+        foreach (var page in Index.Pages)
         {
             var matchedTerms = new List<string>();
             foreach (var term in searchTerms)
@@ -57,13 +59,12 @@ public sealed class UiDiscovery
 
         foreach (var kv in matchedPages.OrderByDescending(x => x.Value.Count))
         {
-            var page = Registry.FindByName(kv.Key);
+            var page = Index.FindByName(kv.Key);
             if (page == null) continue;
 
             sb.AppendLine($"## {kv.Key}");
             sb.AppendLine($"Matched terms: {string.Join(", ", kv.Value)}");
 
-            // Extract relevant lines containing the search terms
             var lines = page.Markdown.Split('\n');
             var relevantLines = new List<string>();
             foreach (var line in lines)
@@ -104,12 +105,12 @@ public sealed class UiDiscovery
         if (string.IsNullOrWhiteSpace(pageName))
             return "Please provide a page name.";
 
-        var page = Registry.FindByName(pageName);
+        var page = Index.FindByName(pageName);
         if (page != null)
             return page.Markdown;
 
         // Try fuzzy matching
-        var candidates = Registry.Pages
+        var candidates = Index.Pages
             .Where(p => p.Name.Contains(pageName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
@@ -119,7 +120,7 @@ public sealed class UiDiscovery
         if (candidates.Length > 1)
             return $"Multiple pages match '{pageName}': {string.Join(", ", candidates.Select(c => c.Name))}. Please be more specific.";
 
-        return $"Page '{pageName}' not found. Available pages: {string.Join(", ", Registry.Pages.Select(p => p.Name))}";
+        return $"Page '{pageName}' not found. Available pages: {string.Join(", ", Index.Pages.Select(p => p.Name))}";
     }
 
     [ExportAIFunction("list_app_pages")]
@@ -132,7 +133,7 @@ public sealed class UiDiscovery
         sb.AppendLine("App pages and views:");
         sb.AppendLine();
 
-        foreach (var page in Registry.Pages.OrderBy(p => p.Name))
+        foreach (var page in Index.Pages.OrderBy(p => p.Name))
         {
             var route = page.Route != null ? $" (route: {page.Route})" : "";
             var file = page.FilePath != null ? $" — {page.FilePath}" : "";

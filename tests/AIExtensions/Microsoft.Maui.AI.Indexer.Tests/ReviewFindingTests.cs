@@ -358,8 +358,9 @@ public class ReviewFindingTests
         var page = Page("RootPage", "<Label Text=\"Hi\" />");
         var sources = GeneratorTestHarness.GetGeneratedSources(("RootPage.xaml", page));
 
-        var agg = sources["UiIndex.g.cs"];
-        Assert.Contains("global::RootPage_UiIndex.Markdown", agg);
+        var aggKey = sources.Keys.FirstOrDefault(k => k.Contains("UiIndex.g.cs") && !k.Contains("RootPage_"));
+        Assert.NotNull(aggKey);
+        Assert.Contains("global::RootPage_UiIndex.Markdown", sources[aggKey!]);
     }
 
     // ──────────────────────────────────────────────

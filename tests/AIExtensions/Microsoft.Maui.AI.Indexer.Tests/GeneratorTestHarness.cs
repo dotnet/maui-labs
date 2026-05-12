@@ -137,17 +137,22 @@ public static class GeneratorTestHarness
         var attributeSource = @"
 namespace Microsoft.Maui.AI.Indexer
 {
-    [System.AttributeUsage(System.AttributeTargets.Class)]
-    public sealed class UiPageIndexAttribute : System.Attribute
+    public sealed class UiPageEntry
     {
-        public UiPageIndexAttribute(string pageName) { PageName = pageName; }
-        public string PageName { get; }
-        public string? Route { get; set; }
-        public string? FilePath { get; set; }
+        public UiPageEntry(string name, string? route, string? filePath, string markdown)
+        {
+            Name = name; Route = route; FilePath = filePath; Markdown = markdown;
+        }
+        public string Name { get; }
+        public string? Route { get; }
+        public string? FilePath { get; }
+        public string Markdown { get; }
     }
 
-    [System.AttributeUsage(System.AttributeTargets.Class)]
-    public sealed class UiProjectIndexAttribute : System.Attribute { }
+    public abstract class UiPageIndex
+    {
+        public abstract System.Collections.Generic.IReadOnlyList<UiPageEntry> Pages { get; }
+    }
 }
 ";
         var compilation = CSharpCompilation.Create("TestAssembly",

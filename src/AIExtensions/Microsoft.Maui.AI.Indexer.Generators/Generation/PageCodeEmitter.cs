@@ -25,11 +25,6 @@ internal static class PageCodeEmitter
         sb.AppendLine("/// <summary>");
         sb.AppendLine($"/// AI-generated UI index for {page.ClassName}.");
         sb.AppendLine("/// </summary>");
-
-        var routeAttr = page.Route != null ? $", Route = \"{Escape(page.Route)}\"" : "";
-        var fileAttr = !string.IsNullOrEmpty(page.FilePath) ? $", FilePath = \"{Escape(page.FilePath)}\"" : "";
-
-        sb.AppendLine($"[global::Microsoft.Maui.AI.Indexer.UiPageIndex(\"{Escape(page.ClassName)}\"{routeAttr}{fileAttr})]");
         sb.AppendLine($"public static partial class {SanitizeIdentifier(page.ClassName)}_UiIndex");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Structured markdown representation of the page UI.</summary>");
@@ -50,13 +45,6 @@ internal static class PageCodeEmitter
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>The page class name.</summary>");
         sb.AppendLine($"    public const string PageName = \"{Escape(page.ClassName)}\";");
-
-        if (page.Route != null)
-        {
-            sb.AppendLine();
-            sb.AppendLine($"    /// <summary>The Shell route for this page.</summary>");
-            sb.AppendLine($"    public const string Route = \"{Escape(page.Route)}\";");
-        }
 
         sb.AppendLine("}");
 
