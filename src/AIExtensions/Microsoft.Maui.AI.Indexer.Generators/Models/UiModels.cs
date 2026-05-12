@@ -42,6 +42,9 @@ internal sealed class UiElement
     public List<UiElement> Children { get; set; } = new();
     public VisibilityCondition? Condition { get; set; }
 
+    // Cross-file user control reference
+    public bool IsUserControlReference { get; set; }
+
     // Collection-specific
     public string? ItemsSourceBinding { get; set; }
     public bool IsGrouped { get; set; }

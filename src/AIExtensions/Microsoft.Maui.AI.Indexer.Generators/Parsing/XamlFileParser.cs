@@ -130,6 +130,27 @@ internal static class XamlFileParser
             return results;
         }
 
+        // User controls with namespace prefix (e.g., views:CartView) — mark for cross-file resolution
+        var hasNamespacePrefix = element.Name.NamespaceName != Maui.NamespaceName
+                              && !string.IsNullOrEmpty(element.Name.NamespaceName)
+                              && !element.Name.NamespaceName.StartsWith("http://schemas.microsoft.com", StringComparison.Ordinal);
+
+        if (hasNamespacePrefix && !StructuralElements.Contains(localName))
+        {
+            var customSemantics = AccessibilityExtractor.Extract(element);
+            var customCondition = ConditionalDetector.DetectCondition(element);
+
+            var ucElement = new UiElement
+            {
+                TypeName = localName,
+                IsUserControlReference = true,
+                Semantics = customSemantics,
+                Condition = customCondition,
+            };
+            results.Add(ucElement);
+            return results;
+        }
+
         // Structural elements — check for SemanticProperties promotion
         if (StructuralElements.Contains(localName) || IsUnknownElement(localName))
         {
@@ -158,7 +179,7 @@ internal static class XamlFileParser
             return results;
         }
 
-        // For anything else (custom controls), try walking children
+        // For anything else, walk children inline
         foreach (var child in element.Elements())
         {
             results.AddRange(WalkElement(child));

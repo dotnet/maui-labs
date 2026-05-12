@@ -99,6 +99,13 @@ internal sealed class MarkdownBuilder
             return;
         }
 
+        // Handle user control references (inlined from cross-file resolution)
+        if (el.IsUserControlReference)
+        {
+            RenderUserControl(mb, el);
+            return;
+        }
+
         // Regular semantic element
         mb.RenderElement(el);
 
@@ -183,6 +190,19 @@ internal sealed class MarkdownBuilder
         mb.Dedent();
     }
 
+    private static void RenderUserControl(MarkdownBuilder mb, UiElement el)
+    {
+        var cond = el.Condition != null ? $" [{el.Condition}]" : "";
+        mb.AppendLine($"- [{el.TypeName}]:{cond}");
+
+        if (el.Children.Count > 0)
+        {
+            mb.Indent();
+            RenderElements(mb, el.Children);
+            mb.Dedent();
+        }
+    }
+
     private static void RenderBindableLayout(MarkdownBuilder mb, UiElement el)
     {
         var source = el.BindableLayoutItemsSource != null ? $" with items from \"{{{el.BindableLayoutItemsSource}}}\"" : "";
@@ -242,7 +262,7 @@ internal sealed class MarkdownBuilder
             "DatePicker" => "DatePicker: ",
             "TimePicker" => "TimePicker: ",
             "Image" => "Image: ",
-            "ActivityIndicator" => "ActivityIndicator",
+            "ActivityIndicator" => "ActivityIndicator: ",
             "ProgressBar" => "ProgressBar: ",
             _ => $"{el.TypeName}: ",
         };

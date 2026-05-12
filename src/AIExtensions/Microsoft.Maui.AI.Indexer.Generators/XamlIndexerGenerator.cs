@@ -56,6 +56,10 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
         if (pages.Count == 0)
             return;
 
+        // Cross-file resolution: inline user control references
+        var resolver = new CrossFileResolver(pages);
+        resolver.ResolveAll(pages);
+
         var rootNamespace = compilation.AssemblyName ?? "";
 
         var projectIndex = new ProjectIndex { Pages = pages };
