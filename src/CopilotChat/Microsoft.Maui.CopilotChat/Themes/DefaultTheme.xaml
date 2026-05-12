@@ -195,14 +195,8 @@
                 <CollectionView.ItemsLayout>
                     <LinearItemsLayout Orientation="Vertical" ItemSpacing="{StaticResource CopilotMessageSpacing}" />
                 </CollectionView.ItemsLayout>
-                <CollectionView.ItemTemplate>
-                    <copilot:ChatMessageTemplateSelector
-                        UserTemplate="{Binding UserMessageTemplate}"
-                        AssistantTemplate="{Binding AssistantMessageTemplate}"
-                        ToolTemplate="{Binding ToolMessageTemplate}"
-                        SystemTemplate="{Binding SystemMessageTemplate}"
-                        ErrorTemplate="{Binding ErrorMessageTemplate}" />
-                </CollectionView.ItemTemplate>
+                <!-- ItemTemplate is wired from CopilotChatView.OnApplyTemplate via code
+                     because DataTemplateSelector has CLR properties, not BindableProperties -->
 
                 <!-- Welcome empty view -->
                 <CollectionView.EmptyView>
