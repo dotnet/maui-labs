@@ -8,15 +8,15 @@ internal static class MarkupExtensionParser
 {
     private static readonly Regex BindingRegex = new(
         @"^\{(?:Binding)\s*(.*)\}$",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Singleline);
 
     private static readonly Regex TemplateBindingRegex = new(
         @"^\{TemplateBinding\s+(.*)\}$",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Singleline);
 
     private static readonly Regex StaticResourceRegex = new(
         @"^\{StaticResource\s+(\w+)\}$",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Singleline);
 
     /// <summary>
     /// Try to parse a value string as a binding. Returns null if it's not a binding.

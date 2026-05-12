@@ -12,8 +12,8 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
-    <None Include="build\**" Pack="true" PackagePath="build\" />
-    <None Include="build\**" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="build/Microsoft.Maui.AI.Indexer.targets" Pack="true" PackagePath="build/Microsoft.Maui.AI.Indexer.targets" />
+    <None Include="build/Microsoft.Maui.AI.Indexer.targets" Pack="true" PackagePath="buildTransitive/Microsoft.Maui.AI.Indexer.targets" />
   </ItemGroup>
 
 </Project>

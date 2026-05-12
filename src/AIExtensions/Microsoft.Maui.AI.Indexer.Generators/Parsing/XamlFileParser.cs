@@ -32,7 +32,7 @@ internal static class XamlFileParser
         "Grid", "StackLayout", "VerticalStackLayout", "HorizontalStackLayout",
         "FlexLayout", "AbsoluteLayout", "ScrollView",
         "Border", "Frame", "BoxView", "ContentView", "ContentPresenter",
-        "Shadow", "RefreshView", "SwipeView",
+        "RefreshView", "SwipeView",
     };
 
     // Elements we completely ignore (resources, styles, non-visual)
@@ -57,7 +57,7 @@ internal static class XamlFileParser
         {
             doc = XDocument.Parse(content!);
         }
-        catch
+        catch (System.Xml.XmlException)
         {
             return null;
         }

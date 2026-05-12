@@ -24,15 +24,15 @@ internal static class AccessibilityExtractor
         {
             var name = attr.Name.LocalName;
 
-            if (name == SemanticDescription || name == "Description" && IsSemanticNamespace(attr))
+            if (name == SemanticDescription || (name == "Description" && IsSemanticNamespace(attr)))
             {
                 info.Description = attr.Value;
             }
-            else if (name == SemanticHint || name == "Hint" && IsSemanticNamespace(attr))
+            else if (name == SemanticHint || (name == "Hint" && IsSemanticNamespace(attr)))
             {
                 info.Hint = attr.Value;
             }
-            else if (name == SemanticHeadingLevel || name == "HeadingLevel" && IsSemanticNamespace(attr))
+            else if (name == SemanticHeadingLevel || (name == "HeadingLevel" && IsSemanticNamespace(attr)))
             {
                 info.HeadingLevel = ParseHeadingLevel(attr.Value);
             }
