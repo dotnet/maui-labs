@@ -25,7 +25,10 @@ public static class MauiProgram
         {
             options.Model = "gpt-4.1";
             options.SystemMessage = "You are a helpful assistant in a MAUI app. Be concise and friendly.";
+            options.CliPath = "/opt/homebrew/bin/copilot";
         });
+
+        builder.Services.AddTransient<MainPage>();
 
         return builder.Build();
     }
