@@ -413,6 +413,37 @@ public class GoUpgradeTests : IDisposable
 	}
 
 	[Fact]
+	public async Task CometPackageCaseInsensitive_AcceptsLowercase()
+	{
+		WriteUserFile("""
+			#:package comet
+			using Comet;
+			namespace MyGoApp;
+			public class MainPage : View { [Body] View body() => Text("x"); }
+			""");
+
+		var result = await GoUpgradeRunner.RunAsync(Options(), null, CancellationToken.None);
+		Assert.Equal(0, result.ExitCode);
+		Assert.Equal("MainPage", result.Detection!.RootViewClassName);
+	}
+
+	[Fact]
+	public void ToApplicationId_StripsNonAsciiCharacters()
+	{
+		var id = GoFileBasedDetector.ToApplicationId("MiAño");
+		Assert.Equal("com.cometgo.miao", id);
+		Assert.DoesNotMatch("[^a-z0-9.]", id);
+	}
+
+	[Fact]
+	public void ToApplicationId_AllNonAscii_FallsBackToHash()
+	{
+		var id = GoFileBasedDetector.ToApplicationId("日本語");
+		Assert.StartsWith("com.cometgo.app", id);
+		Assert.Matches("^com\\.cometgo\\.app[0-9a-f]{8}$", id);
+	}
+
+	[Fact]
 	public void ParseDirectives_RejectsPropertyNameWithXmlSpecialChars()
 	{
 		var src = "#:property Foo>Bar=value\n\nclass MainPage : View { }\n";

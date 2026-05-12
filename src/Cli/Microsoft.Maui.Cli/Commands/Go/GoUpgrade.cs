@@ -495,7 +495,7 @@ internal static class GoFileBasedDetector
 					return new GoMalformedDirective($"`#:package` invalid package name `{name}`: {raw}") { OriginalLine = raw };
 				if (ver is not null && !IsValidVersionString(ver))
 					return new GoMalformedDirective($"`#:package` invalid version `{ver}`: {raw}") { OriginalLine = raw };
-				if (string.Equals(name, "Comet", StringComparison.Ordinal))
+				if (string.Equals(name, "Comet", StringComparison.OrdinalIgnoreCase))
 					return new GoCometPackageDirective(ver) { OriginalLine = raw };
 				return new GoPackageDirective(name, ver) { OriginalLine = raw };
 			}
@@ -616,7 +616,7 @@ internal static class GoFileBasedDetector
 		var sb = new StringBuilder();
 		foreach (var ch in dirName)
 		{
-			if (char.IsLetterOrDigit(ch))
+			if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'))
 				sb.Append(char.ToLowerInvariant(ch));
 		}
 		var slug = sb.ToString();
@@ -724,7 +724,7 @@ internal static class GoUpgradeTemplates
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="{d.CometProjectRelativePath}" />
+    <ProjectReference Include="{System.Security.SecurityElement.Escape(d.CometProjectRelativePath)}" />
   </ItemGroup>
 
   <ItemGroup>
