@@ -58,8 +58,10 @@ public partial class MainPage : ContentPage
         BuildColorSwatches(UserBubbleSwatches, UserBubblePresets, "CopilotUserBubbleLight");
         BuildColorSwatches(AssistantBubbleSwatches, AssistantBubblePresets, "CopilotAssistantBubbleLight");
 
-        WireTextSettings();
         WireSliders();
+
+        // Defer text wiring so TextChanged doesn't fire during Entry initialization
+        Loaded += (_, _) => WireTextSettings();
     }
 
     // ─── Layout ───
@@ -195,42 +197,7 @@ public partial class MainPage : ContentPage
 
     private void OverrideResource(string key, object value)
     {
+        // DynamicResource bindings in templates auto-update when we set values here
         ChatView.Resources[key] = value;
-        RefreshTemplates();
-    }
-
-    private void RefreshTemplates()
-    {
-        // StaticResource bindings in templates need a template reassignment to pick up changes
-        var ct = FindResource("CopilotChatViewDefaultTemplate") as ControlTemplate;
-        if (ct is not null)
-        {
-            ChatView.ControlTemplate = null;
-            ChatView.ControlTemplate = ct;
-        }
-
-        ResetTemplate(v => v.UserMessageTemplate, "CopilotDefaultUserMessageTemplate");
-        ResetTemplate(v => v.AssistantMessageTemplate, "CopilotDefaultAssistantMessageTemplate");
-        ResetTemplate(v => v.ToolMessageTemplate, "CopilotDefaultToolMessageTemplate");
-        ResetTemplate(v => v.SystemMessageTemplate, "CopilotDefaultSystemMessageTemplate");
-        ResetTemplate(v => v.ErrorMessageTemplate, "CopilotDefaultErrorMessageTemplate");
-        ResetTemplate(v => v.SuggestionItemTemplate, "CopilotDefaultSuggestionItemTemplate");
-    }
-
-    private void ResetTemplate(Func<CopilotChatView, DataTemplate?> getter, string key)
-    {
-        if (FindResource(key) is not DataTemplate dt) return;
-        // Force MAUI to re-inflate by clearing and reassigning
-        var prop = typeof(CopilotChatView).GetProperty(getter.Method.Name.Replace("get_", ""));
-        prop?.SetValue(ChatView, null);
-        prop?.SetValue(ChatView, dt);
-    }
-
-    private object? FindResource(string key)
-    {
-        if (ChatView.Resources.TryGetValue(key, out var val)) return val;
-        foreach (var d in ChatView.Resources.MergedDictionaries)
-            if (d.TryGetValue(key, out val)) return val;
-        return null;
     }
 }
