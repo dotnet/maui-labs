@@ -21,7 +21,7 @@ public static class MauiProgram
 #endif
 
         // Register Copilot SDK as the default IChatClient
-        builder.Services.AddCopilotChat(options =>
+        builder.Services.AddCopilotChatWithCopilotSdk(options =>
         {
             options.Model = "gpt-4.1";
             options.SystemMessage = "You are a helpful assistant in a MAUI app. Be concise and friendly.";
