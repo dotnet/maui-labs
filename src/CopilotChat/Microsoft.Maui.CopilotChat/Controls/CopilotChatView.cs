@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using System.Windows.Input;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.CopilotChat.Themes;
@@ -32,7 +33,9 @@ public class CopilotChatView : ContentView
 
     public CopilotChatView()
     {
-        // Load default theme and apply default ControlTemplate
+        // Load default theme as fallback. To override, merge your own ResourceDictionary
+        // with Copilot* keys into App.Resources BEFORE the control loads (app-level wins
+        // because MAUI resolves up the visual tree: control → page → app).
         var theme = new DefaultThemeResourceDictionary();
         Resources.MergedDictionaries.Add(theme);
         SetDynamicResource(ControlTemplateProperty, "CopilotChatViewDefaultTemplate");
@@ -255,6 +258,135 @@ public class CopilotChatView : ContentView
     {
         get => (string)GetValue(WelcomeIconProperty);
         set => SetValue(WelcomeIconProperty, value);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  AVATARS & IDENTITY
+    // ══════════════════════════════════════════════════════════════
+
+    public static readonly BindableProperty ShowAvatarsProperty =
+        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(CopilotChatView), true);
+
+    public bool ShowAvatars
+    {
+        get => (bool)GetValue(ShowAvatarsProperty);
+        set => SetValue(ShowAvatarsProperty, value);
+    }
+
+    public static readonly BindableProperty AvatarSizeProperty =
+        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(CopilotChatView), 28.0);
+
+    public double AvatarSize
+    {
+        get => (double)GetValue(AvatarSizeProperty);
+        set => SetValue(AvatarSizeProperty, value);
+    }
+
+    public static readonly BindableProperty UserDisplayNameProperty =
+        BindableProperty.Create(nameof(UserDisplayName), typeof(string), typeof(CopilotChatView), "You");
+
+    public string UserDisplayName
+    {
+        get => (string)GetValue(UserDisplayNameProperty);
+        set => SetValue(UserDisplayNameProperty, value);
+    }
+
+    public static readonly BindableProperty AssistantDisplayNameProperty =
+        BindableProperty.Create(nameof(AssistantDisplayName), typeof(string), typeof(CopilotChatView), "Assistant");
+
+    public string AssistantDisplayName
+    {
+        get => (string)GetValue(AssistantDisplayNameProperty);
+        set => SetValue(AssistantDisplayNameProperty, value);
+    }
+
+    public static readonly BindableProperty UserAvatarSourceProperty =
+        BindableProperty.Create(nameof(UserAvatarSource), typeof(ImageSource), typeof(CopilotChatView));
+
+    public ImageSource? UserAvatarSource
+    {
+        get => (ImageSource?)GetValue(UserAvatarSourceProperty);
+        set => SetValue(UserAvatarSourceProperty, value);
+    }
+
+    public static readonly BindableProperty AssistantAvatarSourceProperty =
+        BindableProperty.Create(nameof(AssistantAvatarSource), typeof(ImageSource), typeof(CopilotChatView));
+
+    public ImageSource? AssistantAvatarSource
+    {
+        get => (ImageSource?)GetValue(AssistantAvatarSourceProperty);
+        set => SetValue(AssistantAvatarSourceProperty, value);
+    }
+
+    public static readonly BindableProperty UserAvatarTextProperty =
+        BindableProperty.Create(nameof(UserAvatarText), typeof(string), typeof(CopilotChatView), "You");
+
+    public string UserAvatarText
+    {
+        get => (string)GetValue(UserAvatarTextProperty);
+        set => SetValue(UserAvatarTextProperty, value);
+    }
+
+    public static readonly BindableProperty AssistantAvatarTextProperty =
+        BindableProperty.Create(nameof(AssistantAvatarText), typeof(string), typeof(CopilotChatView), "AI");
+
+    public string AssistantAvatarText
+    {
+        get => (string)GetValue(AssistantAvatarTextProperty);
+        set => SetValue(AssistantAvatarTextProperty, value);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  TIMESTAMPS & DISPLAY
+    // ══════════════════════════════════════════════════════════════
+
+    public static readonly BindableProperty ShowTimestampsProperty =
+        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(CopilotChatView), false);
+
+    public bool ShowTimestamps
+    {
+        get => (bool)GetValue(ShowTimestampsProperty);
+        set => SetValue(ShowTimestampsProperty, value);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  LOCALIZABLE TEXT
+    // ══════════════════════════════════════════════════════════════
+
+    public static readonly BindableProperty SendButtonTextProperty =
+        BindableProperty.Create(nameof(SendButtonText), typeof(string), typeof(CopilotChatView), "Send");
+
+    public string SendButtonText
+    {
+        get => (string)GetValue(SendButtonTextProperty);
+        set => SetValue(SendButtonTextProperty, value);
+    }
+
+    public static readonly BindableProperty ApproveButtonTextProperty =
+        BindableProperty.Create(nameof(ApproveButtonText), typeof(string), typeof(CopilotChatView), "Approve");
+
+    public string ApproveButtonText
+    {
+        get => (string)GetValue(ApproveButtonTextProperty);
+        set => SetValue(ApproveButtonTextProperty, value);
+    }
+
+    public static readonly BindableProperty RejectButtonTextProperty =
+        BindableProperty.Create(nameof(RejectButtonText), typeof(string), typeof(CopilotChatView), "Reject");
+
+    public string RejectButtonText
+    {
+        get => (string)GetValue(RejectButtonTextProperty);
+        set => SetValue(RejectButtonTextProperty, value);
+    }
+
+    public static readonly BindableProperty TypingIndicatorTextProperty =
+        BindableProperty.Create(nameof(TypingIndicatorText), typeof(string), typeof(CopilotChatView), "Thinking…");
+
+    public string TypingIndicatorText
+    {
+        get => (string)GetValue(TypingIndicatorTextProperty);
+        set => SetValue(TypingIndicatorTextProperty, value);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -518,8 +650,8 @@ public class CopilotChatView : ContentView
                                 {
                                     null => "(null)",
                                     string s => s,
-                                    _ => System.Text.Json.JsonSerializer.Serialize(result.Result,
-                                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true })
+                                    _ => JsonSerializer.Serialize(result.Result,
+                                        new JsonSerializerOptions { WriteIndented = true })
                                 };
                             }
                             catch
@@ -565,7 +697,10 @@ public class CopilotChatView : ContentView
         }
 
         if (assistantMessage is not null)
+        {
+            assistantMessage.IsStreaming = false;
             ResponseReceived?.Invoke(this, assistantMessage);
+        }
         else if (string.IsNullOrEmpty(responseText))
             AddMessage(ChatMessageKind.Assistant, "(no response)");
     }
@@ -624,7 +759,31 @@ public class CopilotChatView : ContentView
 
     private CopilotChatMessage AddMessage(ChatMessageKind kind, string text, string? icon = null)
     {
-        var msg = new CopilotChatMessage(kind, text, icon);
+        var msg = new CopilotChatMessage(kind, text, icon)
+        {
+            Timestamp = DateTimeOffset.Now,
+        };
+
+        // Populate avatar/identity from control defaults
+        switch (kind)
+        {
+            case ChatMessageKind.User:
+                msg.AuthorName = UserDisplayName;
+                msg.AvatarSource = UserAvatarSource;
+                msg.AvatarText = UserAvatarText;
+                break;
+            case ChatMessageKind.Assistant:
+                msg.AuthorName = AssistantDisplayName;
+                msg.AvatarSource = AssistantAvatarSource;
+                msg.AvatarText = AssistantAvatarText;
+                msg.IsStreaming = true;
+                break;
+            case ChatMessageKind.Tool:
+                msg.AuthorName = "Tool";
+                msg.AvatarText = icon ?? ChatIcons.Wrench;
+                break;
+        }
+
         Messages.Add(msg);
 
         // Auto-scroll

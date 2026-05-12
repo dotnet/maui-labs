@@ -35,8 +35,6 @@ public static class MauiProgram
 
         // Register pages
         builder.Services.AddTransient<MainPage>();
-        builder.Services.AddTransient<ChatPage>();
-        builder.Services.AddTransient<SettingsPage>();
 
         return builder.Build();
     }
