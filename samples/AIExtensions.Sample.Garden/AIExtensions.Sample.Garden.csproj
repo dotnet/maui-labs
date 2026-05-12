@@ -8,6 +8,7 @@
 		<RootNamespace>AIExtensions.Sample.Garden</RootNamespace>
 		<UseMaui>true</UseMaui>
 		<SingleProject>true</SingleProject>
+		<ValidateXcodeVersion>false</ValidateXcodeVersion>
 
 		<ApplicationTitle>Garden AI Sample</ApplicationTitle>
 		<ApplicationId>com.microsoft.maui.aiattributes.sample.garden</ApplicationId>

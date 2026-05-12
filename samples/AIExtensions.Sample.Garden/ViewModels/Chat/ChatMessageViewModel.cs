@@ -31,6 +31,7 @@ public sealed partial class ChatMessageViewModel(ChatMessageKind kind, string te
     /// Tool call result. Populated after the tool returns.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDetails))]
     public partial string? ToolResult { get; set; }
 
     public bool HasDetails => ToolArgs is not null || ToolResult is not null;

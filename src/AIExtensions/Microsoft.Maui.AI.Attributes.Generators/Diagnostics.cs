@@ -58,13 +58,6 @@ internal sealed record DiagnosticInfo(
             $"[ExportAIFunction] method '{methodName}' has an unsupported signature: {reason}",
             LocationInfo.From(location));
 
-    public static DiagnosticInfo IncludeAndExcludeBothSet(string typeName, Location? location) =>
-        new(
-            "MAUIAI005",
-            DiagnosticSeverity.Error,
-            $"[AIToolSource(typeof({typeName}))] sets both IncludeTools and ExcludeTools. Use only one.",
-            LocationInfo.From(location));
-
     public static DiagnosticInfo FilteredToolNotFound(string toolName, string typeName, Location? location) =>
         new(
             "MAUIAI006",

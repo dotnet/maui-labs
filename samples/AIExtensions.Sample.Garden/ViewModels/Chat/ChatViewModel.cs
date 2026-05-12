@@ -237,7 +237,6 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                             if (result.CallId is not null && toolCallMessages.TryGetValue(result.CallId, out var toolMsg))
                             {
                                 toolMsg.ToolResult = resultText;
-                                OnPropertyChanged(nameof(toolMsg.HasDetails));
                             }
                             break;
                         }

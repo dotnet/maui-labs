@@ -11,7 +11,6 @@
     <PackageProjectUrl>https://github.com/dotnet/maui-labs</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnet/maui-labs</RepositoryUrl>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <ValidateXcodeVersion>false</ValidateXcodeVersion>
     <!-- Allow restoring/building Windows TFMs on non-Windows hosts (macOS CI runners) -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <!-- NU1507: official builds inject internal feeds via SetupNugetSources that aren't in packageSourceMapping -->
