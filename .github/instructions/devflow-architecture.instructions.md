@@ -51,6 +51,9 @@ Microsoft.Maui.DevFlow.Agent.Gtk (NuGet package for GTK/Linux apps)
 ├── Microsoft.Maui.DevFlow.Agent.Core
 └── Microsoft.Maui.DevFlow.Blazor.Gtk (optional — WebKitGTK CDP)
 
+Microsoft.Maui.DevFlow.Agent.WPF (NuGet package for WPF apps)
+└── Microsoft.Maui.DevFlow.Agent.Core
+
 Microsoft.Maui.DevFlow.Logging (standalone — no MAUI dependency)
 ```
 
@@ -80,6 +83,7 @@ Override virtual methods from `Agent.Core/DevFlowAgentService.cs`:
 
 - In `Agent/DevFlowAgentService.cs` with `#if` directives for iOS/Android/macOS/Windows
 - In `Agent.Gtk/GtkAgentService.cs` for Linux/GTK
+- In `Agent.WPF/WpfAgentService.cs` for WPF
 - Always call `await DispatchAsync(() => ...)` to run on the UI thread
 
 ## Visual Tree and Element Resolution

@@ -14,9 +14,15 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 
 | Product | Test Project | Target |
 |---------|-------------|--------|
+| AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
+| Cli | `src/Cli/Microsoft.Maui.Cli.UnitTests/` | `net10.0` |
+| Comet | `src/Comet/tests/Comet.Tests/` | multi-TFM |
+| Comet | `src/Comet/tests/Comet.Blazor.Tests/` | multi-TFM |
+| Comet | `src/Comet/src/Comet.Layout.Yoga.Tests/` | multi-TFM |
 | DevFlow | `src/DevFlow/Microsoft.Maui.DevFlow.Tests/` | `net10.0` |
 | DevFlow (integration) | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/` | `net10.0` |
-| Cli | `src/Cli/Microsoft.Maui.Cli.UnitTests/` | `net10.0` |
+| WPF | `platforms/Windows.WPF/tests/HandlerTests/` | `net10.0-windows` |
+| WPF | `platforms/Windows.WPF/tests/UITests/` | `net10.0-windows` |
 
 ## Running Tests
 

@@ -14,6 +14,11 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
+| **Essentials.AI** | `Microsoft.Maui.Essentials.AI` | On-device AI for .NET MAUI — semantic search, chat completion, embeddings, and tool use against local models. |
+| **AppProjectReference** | `Microsoft.Maui.Build.AppProjectReference` | MSBuild SDK extension that enables referencing MAUI app projects from test and tooling projects. |
+| **Linux GTK4** | `Microsoft.Maui.Platforms.Linux.Gtk4` + associated packages | .NET MAUI platform backend for Linux using GTK4 — handler, Essentials, BlazorWebView, and project templates. |
+| **macOS AppKit** | `Microsoft.Maui.Platforms.MacOS` + associated packages | .NET MAUI platform backend for macOS AppKit — handler, Essentials, BlazorWebView, and project templates. |
+| **WPF** | `Microsoft.Maui.Platforms.Windows.WPF` + associated packages | .NET MAUI platform backend for WPF — handler, Essentials, and project templates. |
 
 ### Technology Stack
 
@@ -93,12 +98,18 @@ maui-labs/
 │   │   ├── Microsoft.Maui.DevFlow.Agent.Core/   # Platform-agnostic agent (HTTP server, visual tree)
 │   │   ├── Microsoft.Maui.DevFlow.Agent/         # Platform-specific overrides (iOS/Android/macOS/Windows)
 │   │   ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
+│   │   ├── Microsoft.Maui.DevFlow.Agent.WPF/     # WPF agent
+│   │   ├── Microsoft.Maui.DevFlow.Analyzers/     # Roslyn analyzers
 │   │   ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
 │   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
 │   │   ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
 │   │   ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
 │   │   ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
 │   │   └── DevFlow.slnf                          # Solution filter
+│   ├── AI/                               # Essentials.AI product
+│   │   └── Microsoft.Maui.Essentials.AI/ # On-device AI package
+│   ├── AppProjectReference/              # AppProjectReference product
+│   │   └── Microsoft.Maui.Build.AppProjectReference/ # MSBuild SDK extension
 │   ├── Comet/                            # Comet MVU framework
 │   │   ├── src/Comet/                    # Core MVU framework
 │   │   ├── src/Comet.SourceGenerator/    # Roslyn source generators
@@ -109,6 +120,10 @@ maui-labs/
 │       ├── Server/Microsoft.Maui.Go.Server/  # Comet Go server
 │       ├── CompanionApp/                 # Comet Go companion MAUI app
 │       └── Shared/                       # Shared Comet Go code
+├── platforms/                            # Platform backend products
+│   ├── Linux.Gtk4/                       # Linux GTK4 platform backend
+│   ├── MacOS/                            # macOS AppKit platform backend
+│   └── Windows.WPF/                      # WPF platform backend
 ├── samples/                              # Sample MAUI apps (not shipped)
 ├── playground/                           # Manual test/scratch apps
 ├── eng/                                  # Shared build infrastructure
@@ -156,7 +171,7 @@ Each product has its own workflow file: `.github/workflows/ci-{product}.yml`, ca
 - **`pull_request.types`**: Must always include `[opened, synchronize, reopened, edited]` — the `edited` type ensures CI re-runs when GitHub auto-retargets a PR after a stacked branch merges
 - Steps: restore → build → test → upload test results + packages
 
-Existing workflows: `ci-cli.yml`, `ci-devflow.yml`, `ci-linux-gtk4.yml`
+Existing workflows: `ci-cli.yml`, `ci-comet.yml`, `ci-devflow.yml`, `ci-essentialsai.yml`, `ci-appprojectreference.yml`, `ci-linux-gtk4.yml`, `ci-macos-appkit.yml`, `ci-wpf.yml`
 
 ### Azure DevOps (official builds)
 
@@ -202,59 +217,73 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 49 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 63 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
-| `maui_list_agents` | List connected MAUI DevFlow agents (running apps) |
-| `maui_select_agent` | Select a specific agent for subsequent commands |
-| `maui_wait` | Wait for an agent to connect |
-| `maui_status` | Agent connection status, platform, app name |
-| `maui_tree` | Inspect visual tree — structured JSON hierarchy with IDs, types, bounds |
-| `maui_query` | Query elements by type, AutomationId, or text |
-| `maui_query_css` | Query elements by CSS selector |
-| `maui_element` | Get full element details |
-| `maui_hittest` | Find elements at screen coordinates |
-| `maui_tap` | Tap a UI element |
-| `maui_fill` | Fill text into Entry/Editor |
-| `maui_clear` | Clear text from an element |
-| `maui_scroll` | Scroll by delta, item index, or into view |
-| `maui_focus` | Set focus to an element |
-| `maui_navigate` | Shell navigation to a route |
-| `maui_resize` | Resize the app window |
-| `maui_screenshot` | Capture screenshot (page, element, or fullscreen) |
+| `maui_app_info` | App name, version, package, theme |
 | `maui_assert` | Assert element property equals expected value |
-| `maui_get_property` | Read any element property |
-| `maui_set_property` | Live-edit element properties |
-| `maui_logs` | Retrieve app logs (ILogger + WebView console) |
-| `maui_network` | List captured HTTP requests |
-| `maui_network_detail` | Full request/response details |
-| `maui_network_clear` | Clear captured request buffer |
+| `maui_back` | Go back in the app navigation stack |
+| `maui_batch` | Execute multiple UI actions in a single request |
+| `maui_battery_info` | Battery level, state, power source |
+| `maui_capabilities` | Get capabilities supported by the connected agent |
 | `maui_cdp_evaluate` | Execute JavaScript in Blazor WebView via CDP |
 | `maui_cdp_screenshot` | WebView screenshot via CDP |
 | `maui_cdp_source` | Get WebView page source |
 | `maui_cdp_webviews` | List available WebViews |
+| `maui_clear` | Clear text from an element |
+| `maui_connectivity` | Network access and connection profiles |
+| `maui_device_info` | Device manufacturer, model, OS |
+| `maui_display_info` | Screen density, size, orientation |
+| `maui_element` | Get full element details |
+| `maui_files_delete` | Delete a file from an advertised app storage root |
+| `maui_files_download` | Download a file from an advertised app storage root |
+| `maui_files_list` | List files and directories under an advertised app storage root |
+| `maui_files_upload` | Upload a file to an advertised app storage root |
+| `maui_fill` | Fill text into Entry/Editor |
+| `maui_focus` | Set focus to an element |
+| `maui_geolocation` | GPS coordinates |
+| `maui_gesture` | Perform a touch gesture on the app |
+| `maui_get_property` | Read any element property |
+| `maui_hittest` | Find elements at screen coordinates |
+| `maui_invoke_action` | Invoke a registered DevFlow Action by name |
+| `maui_jobs_list` | List background jobs registered on the device |
+| `maui_jobs_run` | Trigger a supported background job by identifier |
+| `maui_key` | Send a key press to an element |
+| `maui_list_actions` | List all registered DevFlow Actions |
+| `maui_list_agents` | List connected MAUI DevFlow agents (running apps) |
+| `maui_logs` | Retrieve app logs (ILogger + WebView console) |
+| `maui_navigate` | Shell navigation to a route |
+| `maui_network` | List captured HTTP requests |
+| `maui_network_clear` | Clear captured request buffer |
+| `maui_network_detail` | Full request/response details |
+| `maui_preferences_clear` | Clear all preferences |
+| `maui_preferences_delete` | Delete a preference |
+| `maui_preferences_get` | Read a preference value |
+| `maui_preferences_list` | List preference keys |
+| `maui_preferences_set` | Write a preference value |
+| `maui_query` | Query elements by type, AutomationId, or text |
+| `maui_query_css` | Query elements by CSS selector |
 | `maui_recording_start` | Start screen recording |
-| `maui_recording_stop` | Stop screen recording |
 | `maui_recording_status` | Check recording status |
+| `maui_recording_stop` | Stop screen recording |
+| `maui_resize` | Resize the app window |
+| `maui_screenshot` | Capture screenshot (page, element, or fullscreen) |
+| `maui_scroll` | Scroll by delta, item index, or into view |
+| `maui_secure_storage_clear` | Clear all secure storage |
+| `maui_secure_storage_delete` | Delete secure storage entry |
+| `maui_secure_storage_get` | Read secure storage value |
+| `maui_secure_storage_set` | Write secure storage value |
+| `maui_select_agent` | Select a specific agent for subsequent commands |
 | `maui_sensors_list` | List available device sensors |
 | `maui_sensors_start` | Start a sensor |
 | `maui_sensors_stop` | Stop a sensor |
-| `maui_app_info` | App name, version, package, theme |
-| `maui_device_info` | Device manufacturer, model, OS |
-| `maui_display_info` | Screen density, size, orientation |
-| `maui_battery_info` | Battery level, state, power source |
-| `maui_connectivity` | Network access and connection profiles |
-| `maui_geolocation` | GPS coordinates |
-| `maui_preferences_list` | List preference keys |
-| `maui_preferences_get` | Read a preference value |
-| `maui_preferences_set` | Write a preference value |
-| `maui_preferences_delete` | Delete a preference |
-| `maui_preferences_clear` | Clear all preferences |
-| `maui_secure_storage_get` | Read secure storage value |
-| `maui_secure_storage_set` | Write secure storage value |
-| `maui_secure_storage_delete` | Delete secure storage entry |
-| `maui_secure_storage_clear` | Clear all secure storage |
+| `maui_set_property` | Live-edit element properties |
+| `maui_status` | Agent connection status, platform, app name |
+| `maui_storage_roots` | List file storage roots advertised by the app |
+| `maui_tap` | Tap a UI element |
+| `maui_tree` | Inspect visual tree — structured JSON hierarchy with IDs, types, bounds |
+| `maui_wait` | Wait for an agent to connect |
 
 ## Important Notes
 
