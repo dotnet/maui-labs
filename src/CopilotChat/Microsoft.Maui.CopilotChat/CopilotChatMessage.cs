@@ -106,7 +106,7 @@ public sealed class CopilotChatMessage : INotifyPropertyChanged
         set { SetProperty(ref _isExpanded, value); OnPropertyChanged(nameof(ExpandIcon)); }
     }
 
-    public string ExpandIcon => IsExpanded ? ChatIcons.ChevronDown : ChatIcons.ChevronRight;
+    public string ExpandIcon => IsExpanded ? "▼" : "▶";
 
     /// <summary>Command that toggles the expanded state.</summary>
     public ICommand ToggleExpandCommand { get; }

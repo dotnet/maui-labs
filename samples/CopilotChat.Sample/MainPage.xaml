@@ -7,72 +7,145 @@
 
     <Grid x:Name="RootLayout">
 
-        <!-- Main content area -->
+        <!-- Settings / playground area -->
         <ScrollView x:Name="ContentArea">
-            <VerticalStackLayout Spacing="20" Padding="30" VerticalOptions="Center"
-                                 MaximumWidthRequest="600" HorizontalOptions="Center">
+            <VerticalStackLayout Spacing="0" Padding="16" MaximumWidthRequest="560" HorizontalOptions="Center">
 
-                <Image Source="dotnet_bot.png" HeightRequest="140" HorizontalOptions="Center" />
+                <!-- Header -->
+                <Label Text="Copilot Chat Playground" FontSize="22" FontAttributes="Bold" Margin="0,8,0,4" />
+                <Label Text="Customize every aspect of the chat control in real-time." FontSize="13" Opacity="0.6" Margin="0,0,0,16" />
 
-                <Label Text="Copilot Chat Demo" FontSize="28" FontAttributes="Bold"
-                       HorizontalTextAlignment="Center" />
-
-                <Label Text="A drop-in MAUI chat control backed by the GitHub Copilot SDK. The chat panel is on the right — try asking it to use tools!"
-                       FontSize="14" HorizontalTextAlignment="Center" Opacity="0.7"
-                       LineBreakMode="WordWrap" />
-
-                <Border StrokeShape="RoundRectangle 12" Padding="16" StrokeThickness="1"
+                <!-- ═══ General ═══ -->
+                <Label Text="GENERAL" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,8,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
                         Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
                     <VerticalStackLayout Spacing="10">
-                        <Label Text="Available Tools" FontSize="17" FontAttributes="Bold" />
-                        <Label Text="&#x2022;  Get Weather — ask about any city" FontSize="13" />
-                        <Label Text="&#x2022;  Calculate — evaluate math expressions" FontSize="13" />
-                        <Label Text="&#x2022;  Random Fact — fun facts on demand" FontSize="13" />
-                        <Label Text="&#x2022;  App Info — device and app details" FontSize="13" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <!-- Settings section -->
-                <Border StrokeShape="RoundRectangle 12" Padding="16" StrokeThickness="1"
-                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
-                    <VerticalStackLayout Spacing="10">
-                        <Label Text="Settings" FontSize="17" FontAttributes="Bold" />
-
-                        <Label Text="Your Name" FontSize="13" FontAttributes="Bold" />
-                        <Entry x:Name="UserNameEntry" Text="You" FontSize="13"
-                               TextChanged="OnSettingChanged" />
-
-                        <Label Text="Assistant Name" FontSize="13" FontAttributes="Bold" />
-                        <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13"
-                               TextChanged="OnSettingChanged" />
-
-                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
-                            <Label Text="Show Avatars" VerticalOptions="Center" FontSize="13" />
-                            <Switch x:Name="ShowAvatarsSwitch" IsToggled="True" Grid.Column="1"
-                                    Toggled="OnSettingChanged" />
-                        </Grid>
-
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Show Timestamps" VerticalOptions="Center" FontSize="13" />
-                            <Switch x:Name="ShowTimestampsSwitch" IsToggled="False" Grid.Column="1"
-                                    Toggled="OnSettingChanged" />
-                        </Grid>
-
-                        <Button Text="Clear Chat" FontSize="13" CornerRadius="8"
+                        <Label Text="Welcome Icon" FontSize="12" FontAttributes="Bold" />
+                        <Entry x:Name="WelcomeIconEntry" Text="💬" MaxLength="4" FontSize="13" />
+                        <Label Text="Welcome Title" FontSize="12" FontAttributes="Bold" />
+                        <Entry x:Name="WelcomeTitleEntry" Text="Copilot Assistant" FontSize="13" />
+                        <Label Text="Placeholder" FontSize="12" FontAttributes="Bold" />
+                        <Entry x:Name="PlaceholderEntry" Text="Ask me anything..." FontSize="13" />
+                        <Button Text="Clear Chat" FontSize="12" CornerRadius="8"
                                 BackgroundColor="#DC2626" TextColor="White"
                                 Padding="12,6" HorizontalOptions="Start"
                                 Clicked="OnClearChatClicked" />
                     </VerticalStackLayout>
                 </Border>
 
+                <!-- ═══ Identity ═══ -->
+                <Label Text="IDENTITY" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,16,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Your Name" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="UserNameEntry" Text="You" FontSize="13" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                <Label Text="Avatar Text" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="UserAvatarEntry" Text="You" MaxLength="3" FontSize="13" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Assistant Name" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                <Label Text="Avatar Text" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="AssistantAvatarEntry" Text="AI" MaxLength="3" FontSize="13" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Show Avatars" VerticalOptions="Center" FontSize="13" />
+                            <Switch x:Name="ShowAvatarsSwitch" IsToggled="True" Grid.Column="1" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Label Text="Size" VerticalOptions="Center" FontSize="13" />
+                            <Slider x:Name="AvatarSizeSlider" Grid.Column="1" Minimum="18" Maximum="48" Value="28" Margin="8,0" />
+                            <Label x:Name="AvatarSizeLabel" Grid.Column="2" Text="28" FontSize="13" WidthRequest="30" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- ═══ Messages ═══ -->
+                <Label Text="MESSAGES" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,16,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="User Bubble Color" FontSize="12" FontAttributes="Bold" />
+                        <HorizontalStackLayout x:Name="UserBubbleSwatches" Spacing="6" />
+                        <Label Text="Assistant Bubble Color" FontSize="12" FontAttributes="Bold" />
+                        <HorizontalStackLayout x:Name="AssistantBubbleSwatches" Spacing="6" />
+                        <Label Text="Accent Color (send button, chips)" FontSize="12" FontAttributes="Bold" />
+                        <HorizontalStackLayout x:Name="AccentSwatches" Spacing="6" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Show Timestamps" VerticalOptions="Center" FontSize="13" />
+                            <Switch x:Name="ShowTimestampsSwitch" Grid.Column="1" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Label Text="Spacing" VerticalOptions="Center" FontSize="13" />
+                            <Slider x:Name="SpacingSlider" Grid.Column="1" Minimum="0" Maximum="20" Value="6" Margin="8,0" />
+                            <Label x:Name="SpacingLabel" Grid.Column="2" Text="6" FontSize="13" WidthRequest="30" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Label Text="Font Size" VerticalOptions="Center" FontSize="13" />
+                            <Slider x:Name="FontSizeSlider" Grid.Column="1" Minimum="11" Maximum="20" Value="14" Margin="8,0" />
+                            <Label x:Name="FontSizeLabel" Grid.Column="2" Text="14" FontSize="13" WidthRequest="30" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- ═══ Localization ═══ -->
+                <Label Text="LOCALIZATION" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,16,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Send Button" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="SendTextEntry" Text="Send" FontSize="13" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                <Label Text="Approve Button" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="ApproveTextEntry" Text="Approve" FontSize="13" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Reject Button" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="RejectTextEntry" Text="Reject" FontSize="13" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                <Label Text="Typing Indicator" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="TypingTextEntry" Text="Thinking…" FontSize="13" />
+                            </VerticalStackLayout>
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- ═══ Tools ═══ -->
+                <Label Text="TOOLS" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,16,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" Margin="0,0,0,40">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="The assistant can use these tools:" FontSize="13" Opacity="0.7" />
+                        <Label Text="🌤  Get Weather — any city's weather" FontSize="13" />
+                        <Label Text="🔢  Calculate — math expressions" FontSize="13" />
+                        <Label Text="💡  Random Fact — fun facts" FontSize="13" />
+                        <Label Text="📱  App Info — device details" FontSize="13" />
+                    </VerticalStackLayout>
+                </Border>
+
             </VerticalStackLayout>
         </ScrollView>
 
-        <!-- Chat sidebar (visible on wide screens) -->
+        <!-- Chat sidebar -->
         <Grid x:Name="ChatSidebar"
               BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1E1E2E}"
-              HorizontalOptions="End"
-              WidthRequest="400">
+              HorizontalOptions="End" WidthRequest="400">
             <BoxView Color="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
                      WidthRequest="1" HorizontalOptions="Start" />
             <copilot:CopilotChatView
@@ -87,19 +160,12 @@
                 ShowAvatars="True" />
         </Grid>
 
-        <!-- FAB for narrow screens (toggles chat overlay) -->
-        <Button x:Name="ChatFab"
-                Text="&#x1F4AC;"
-                FontSize="24"
-                WidthRequest="56" HeightRequest="56"
-                CornerRadius="28"
-                BackgroundColor="#6366F1"
-                TextColor="White"
+        <!-- FAB for narrow screens -->
+        <Button x:Name="ChatFab" Text="💬" FontSize="24"
+                WidthRequest="56" HeightRequest="56" CornerRadius="28"
+                BackgroundColor="#6366F1" TextColor="White"
                 HorizontalOptions="End" VerticalOptions="End"
-                Margin="0,0,20,20"
-                Shadow="{Shadow Brush=Black, Offset='0,2', Radius=6, Opacity=0.25}"
-                IsVisible="False"
+                Margin="0,0,20,20" IsVisible="False"
                 Clicked="OnFabClicked" />
-
     </Grid>
 </ContentPage>
