@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Data;
 using Microsoft.Extensions.AI;
 
 namespace CopilotChat.Sample;
@@ -37,7 +38,7 @@ public class SampleTools
     {
         try
         {
-            var result = new System.Data.DataTable().Compute(expression, null);
+            var result = new DataTable().Compute(expression, null);
             return $"{expression} = {result}";
         }
         catch (Exception ex)

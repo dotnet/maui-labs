@@ -1,39 +1,105 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:copilot="clr-namespace:Microsoft.Maui.CopilotChat.Controls;assembly=Microsoft.Maui.CopilotChat"
              x:Class="CopilotChat.Sample.MainPage"
-             Title="Home">
-    <ScrollView>
-        <VerticalStackLayout Spacing="20" Padding="30" VerticalOptions="Center"
-                             MaximumWidthRequest="600" HorizontalOptions="Center">
+             Title="Copilot Chat">
 
-            <Image Source="dotnet_bot.png" HeightRequest="160" HorizontalOptions="Center" />
+    <Grid x:Name="RootLayout">
 
-            <Label Text="Copilot Chat Sample" FontSize="28" FontAttributes="Bold"
-                   HorizontalTextAlignment="Center" />
+        <!-- Main content area -->
+        <ScrollView x:Name="ContentArea">
+            <VerticalStackLayout Spacing="20" Padding="30" VerticalOptions="Center"
+                                 MaximumWidthRequest="600" HorizontalOptions="Center">
 
-            <Label Text="A drop-in MAUI chat control backed by the GitHub Copilot SDK. Fully customizable with ControlTemplate and DataTemplate overrides."
-                   FontSize="15" HorizontalTextAlignment="Center" Opacity="0.7"
-                   LineBreakMode="WordWrap" />
+                <Image Source="dotnet_bot.png" HeightRequest="140" HorizontalOptions="Center" />
 
-            <Border StrokeShape="RoundRectangle 12" Padding="16" StrokeThickness="1"
-                    Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
-                <VerticalStackLayout Spacing="12">
-                    <Label Text="Available Tools" FontSize="18" FontAttributes="Bold" />
-                    <Label Text="The chat can invoke these tools:" FontSize="14" Opacity="0.7" />
-                    <Label Text="&#x2022; Get Weather &#8212; ask about any city's weather" FontSize="14" />
-                    <Label Text="&#x2022; Calculate &#8212; evaluate math expressions" FontSize="14" />
-                    <Label Text="&#x2022; Random Fact &#8212; get fun facts" FontSize="14" />
-                    <Label Text="&#x2022; Navigate &#8212; move between app pages" FontSize="14" />
-                    <Label Text="&#x2022; App Info &#8212; query device and app details" FontSize="14" />
-                </VerticalStackLayout>
-            </Border>
+                <Label Text="Copilot Chat Demo" FontSize="28" FontAttributes="Bold"
+                       HorizontalTextAlignment="Center" />
 
-            <Button Text="Open Chat" FontSize="16"
-                    BackgroundColor="#6366F1" TextColor="White" CornerRadius="12"
-                    Padding="20,12" HorizontalOptions="Center"
-                    Clicked="OnOpenChatClicked" />
+                <Label Text="A drop-in MAUI chat control backed by the GitHub Copilot SDK. The chat panel is on the right — try asking it to use tools!"
+                       FontSize="14" HorizontalTextAlignment="Center" Opacity="0.7"
+                       LineBreakMode="WordWrap" />
 
-        </VerticalStackLayout>
-    </ScrollView>
+                <Border StrokeShape="RoundRectangle 12" Padding="16" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Available Tools" FontSize="17" FontAttributes="Bold" />
+                        <Label Text="&#x2022;  Get Weather — ask about any city" FontSize="13" />
+                        <Label Text="&#x2022;  Calculate — evaluate math expressions" FontSize="13" />
+                        <Label Text="&#x2022;  Random Fact — fun facts on demand" FontSize="13" />
+                        <Label Text="&#x2022;  App Info — device and app details" FontSize="13" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Settings section -->
+                <Border StrokeShape="RoundRectangle 12" Padding="16" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Settings" FontSize="17" FontAttributes="Bold" />
+
+                        <Label Text="Your Name" FontSize="13" FontAttributes="Bold" />
+                        <Entry x:Name="UserNameEntry" Text="You" FontSize="13"
+                               TextChanged="OnSettingChanged" />
+
+                        <Label Text="Assistant Name" FontSize="13" FontAttributes="Bold" />
+                        <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13"
+                               TextChanged="OnSettingChanged" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <Label Text="Show Avatars" VerticalOptions="Center" FontSize="13" />
+                            <Switch x:Name="ShowAvatarsSwitch" IsToggled="True" Grid.Column="1"
+                                    Toggled="OnSettingChanged" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Show Timestamps" VerticalOptions="Center" FontSize="13" />
+                            <Switch x:Name="ShowTimestampsSwitch" IsToggled="False" Grid.Column="1"
+                                    Toggled="OnSettingChanged" />
+                        </Grid>
+
+                        <Button Text="Clear Chat" FontSize="13" CornerRadius="8"
+                                BackgroundColor="#DC2626" TextColor="White"
+                                Padding="12,6" HorizontalOptions="Start"
+                                Clicked="OnClearChatClicked" />
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Chat sidebar (visible on wide screens) -->
+        <Grid x:Name="ChatSidebar"
+              BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1E1E2E}"
+              HorizontalOptions="End"
+              WidthRequest="400">
+            <BoxView Color="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
+                     WidthRequest="1" HorizontalOptions="Start" />
+            <copilot:CopilotChatView
+                x:Name="ChatView"
+                WelcomeTitle="Copilot Assistant"
+                WelcomeMessage="I can check the weather, do math, and share fun facts. Try it!"
+                Placeholder="Ask me anything..."
+                UserDisplayName="You"
+                AssistantDisplayName="Copilot"
+                UserAvatarText="You"
+                AssistantAvatarText="AI"
+                ShowAvatars="True" />
+        </Grid>
+
+        <!-- FAB for narrow screens (toggles chat overlay) -->
+        <Button x:Name="ChatFab"
+                Text="&#x1F4AC;"
+                FontSize="24"
+                WidthRequest="56" HeightRequest="56"
+                CornerRadius="28"
+                BackgroundColor="#6366F1"
+                TextColor="White"
+                HorizontalOptions="End" VerticalOptions="End"
+                Margin="0,0,20,20"
+                Shadow="{Shadow Brush=Black, Offset='0,2', Radius=6, Opacity=0.25}"
+                IsVisible="False"
+                Clicked="OnFabClicked" />
+
+    </Grid>
 </ContentPage>

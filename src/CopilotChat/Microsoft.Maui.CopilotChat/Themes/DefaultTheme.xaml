@@ -62,16 +62,28 @@
     <Color x:Key="CopilotChipTextLight">#4338CA</Color>
     <Color x:Key="CopilotChipTextDark">#A5B4FC</Color>
 
+    <!-- ═══════ AVATARS ═══════ -->
+    <Color x:Key="CopilotUserAvatarBackgroundLight">#C7D2FE</Color>
+    <Color x:Key="CopilotUserAvatarBackgroundDark">#3730A3</Color>
+    <Color x:Key="CopilotUserAvatarTextLight">#312E81</Color>
+    <Color x:Key="CopilotUserAvatarTextDark">#E0E7FF</Color>
+    <Color x:Key="CopilotAssistantAvatarBackgroundLight">#E0E7FF</Color>
+    <Color x:Key="CopilotAssistantAvatarBackgroundDark">#1E1B4B</Color>
+    <Color x:Key="CopilotAssistantAvatarTextLight">#4338CA</Color>
+    <Color x:Key="CopilotAssistantAvatarTextDark">#A5B4FC</Color>
+
     <!-- ═══════ APPROVAL ═══════ -->
     <Color x:Key="CopilotApprovalBackgroundLight">#FEF9C3</Color>
     <Color x:Key="CopilotApprovalBackgroundDark">#422006</Color>
 
     <!-- ═══════ DEFAULT MESSAGE TEMPLATES ═══════ -->
 
-    <!-- User message: right-aligned indigo bubble -->
+    <!-- User message: right-aligned indigo bubble with avatar -->
     <DataTemplate x:Key="CopilotDefaultUserMessageTemplate" x:DataType="local:CopilotChatMessage">
-        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
-            <Border BackgroundColor="{AppThemeBinding Light={StaticResource CopilotUserBubbleLight}, Dark={StaticResource CopilotUserBubbleDark}}"
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0"
+              ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Border Grid.Column="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource CopilotUserBubbleLight}, Dark={StaticResource CopilotUserBubbleDark}}"
                     Padding="{StaticResource CopilotBubblePadding}"
                     HorizontalOptions="End"
                     MaximumWidthRequest="560"
@@ -81,13 +93,43 @@
                        FontSize="{StaticResource CopilotFontSizeBody}"
                        TextColor="{AppThemeBinding Light={StaticResource CopilotUserBubbleTextLight}, Dark={StaticResource CopilotUserBubbleTextDark}}" />
             </Border>
+            <!-- Avatar circle -->
+            <Border Grid.Column="1" WidthRequest="28" HeightRequest="28"
+                    StrokeShape="RoundRectangle 14" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource CopilotUserAvatarBackgroundLight}, Dark={StaticResource CopilotUserAvatarBackgroundDark}}"
+                    VerticalOptions="End">
+                <Grid>
+                    <Image Source="{Binding AvatarSource}" Aspect="AspectFill"
+                           IsVisible="{Binding HasAvatarImage}" />
+                    <Label Text="{Binding AvatarText}" FontSize="11"
+                           HorizontalOptions="Center" VerticalOptions="Center"
+                           IsVisible="{Binding HasAvatarImage, Converter={StaticResource CopilotInverseBool}}"
+                           TextColor="{AppThemeBinding Light={StaticResource CopilotUserAvatarTextLight}, Dark={StaticResource CopilotUserAvatarTextDark}}" />
+                </Grid>
+            </Border>
         </Grid>
     </DataTemplate>
 
-    <!-- Assistant message: left-aligned white bubble with shadow -->
+    <!-- Assistant message: left-aligned white bubble with avatar and shadow -->
     <DataTemplate x:Key="CopilotDefaultAssistantMessageTemplate" x:DataType="local:CopilotChatMessage">
-        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
-            <Border BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAssistantBubbleLight}, Dark={StaticResource CopilotAssistantBubbleDark}}"
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0"
+              ColumnDefinitions="Auto,*" ColumnSpacing="8">
+            <!-- Avatar circle -->
+            <Border Grid.Column="0" WidthRequest="28" HeightRequest="28"
+                    StrokeShape="RoundRectangle 14" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAssistantAvatarBackgroundLight}, Dark={StaticResource CopilotAssistantAvatarBackgroundDark}}"
+                    VerticalOptions="End">
+                <Grid>
+                    <Image Source="{Binding AvatarSource}" Aspect="AspectFill"
+                           IsVisible="{Binding HasAvatarImage}" />
+                    <Label Text="{Binding AvatarText}" FontSize="11"
+                           HorizontalOptions="Center" VerticalOptions="Center"
+                           IsVisible="{Binding HasAvatarImage, Converter={StaticResource CopilotInverseBool}}"
+                           TextColor="{AppThemeBinding Light={StaticResource CopilotAssistantAvatarTextLight}, Dark={StaticResource CopilotAssistantAvatarTextDark}}" />
+                </Grid>
+            </Border>
+            <Border Grid.Column="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAssistantBubbleLight}, Dark={StaticResource CopilotAssistantBubbleDark}}"
                     Padding="{StaticResource CopilotBubblePadding}"
                     HorizontalOptions="Start"
                     MaximumWidthRequest="560"
@@ -243,7 +285,7 @@
                                Margin="16,0" />
                     </Border>
                     <Button x:Name="PART_Send" Grid.Column="1"
-                            Text="Send"
+                            Text="{Binding SendButtonText}"
                             IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
                             BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAccent}, Dark={StaticResource CopilotAccentDark}}"
                             TextColor="{StaticResource CopilotWhite}"
@@ -263,12 +305,12 @@
                     <Label Text="{Binding ApprovalText}"
                            FontSize="{StaticResource CopilotFontSizeBody}" FontAttributes="Bold"
                            VerticalOptions="Center" LineBreakMode="TailTruncation" />
-                    <Button x:Name="PART_Approve" Grid.Column="1" Text="Approve"
+                    <Button x:Name="PART_Approve" Grid.Column="1" Text="{Binding ApproveButtonText}"
                             BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAccent}, Dark={StaticResource CopilotAccentDark}}"
                             TextColor="{StaticResource CopilotWhite}"
                             FontSize="{StaticResource CopilotFontSizeBody}"
                             CornerRadius="8" Padding="16,8" VerticalOptions="Center" />
-                    <Button x:Name="PART_Reject" Grid.Column="2" Text="Reject"
+                    <Button x:Name="PART_Reject" Grid.Column="2" Text="{Binding RejectButtonText}"
                             BackgroundColor="{StaticResource CopilotDanger}"
                             TextColor="{StaticResource CopilotWhite}"
                             FontSize="{StaticResource CopilotFontSizeBody}"
