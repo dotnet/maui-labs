@@ -476,6 +476,16 @@ public class CopilotChatView : ContentView
                         else
                             assistantMessage.Text = responseText;
                         break;
+
+                    case FunctionApprovalRequestContent approval:
+                    {
+                        var toolName = approval.FunctionCall?.Name ?? "unknown";
+                        ApprovalText = $"{toolName} — approve?";
+                        IsApprovalPending = true;
+                        AddMessage(ChatMessageKind.Tool, $"Approval required: {toolName}", ChatIcons.LockClosed);
+                        ApprovalRequested?.Invoke(this, toolName ?? "unknown");
+                        break;
+                    }
                 }
             }
         }

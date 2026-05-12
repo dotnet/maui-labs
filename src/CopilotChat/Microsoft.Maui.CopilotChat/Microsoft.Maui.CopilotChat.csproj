@@ -9,12 +9,15 @@
     <Description>A drop-in MAUI chat control backed by IChatClient with a Copilot SDK adapter. Beautiful by default, fully customizable via ControlTemplate and DataTemplate overrides.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackRepoRootReadme>false</PackRepoRootReadme>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- FunctionApprovalRequestContent is marked experimental (MEAI001) -->
+    <NoWarn>$(NoWarn);MEAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
-    <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
 </Project>
