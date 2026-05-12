@@ -49,6 +49,9 @@
 		                  OutputItemType="Analyzer"
 		                  ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Indexer\Microsoft.Maui.AI.Indexer.csproj" />
+		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Indexer.Generators\Microsoft.Maui.AI.Indexer.Generators.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
 

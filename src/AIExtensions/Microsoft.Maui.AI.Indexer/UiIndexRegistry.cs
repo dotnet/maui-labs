@@ -1,13 +1,22 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace Microsoft.Maui.AI.Indexer;
 
 /// <summary>
-/// Runtime registry that discovers all generated UI page indexes via reflection
+/// Runtime registry that discovers all generated UI page indexes
 /// and provides search and lookup capabilities.
 /// </summary>
 public sealed class UiIndexRegistry
 {
+    private static UiIndexRegistry? _instance;
+
+    /// <summary>
+    /// The shared registry instance. Call <see cref="CreateFromAssembly"/> first.
+    /// </summary>
+    public static UiIndexRegistry Instance => _instance
+        ?? throw new InvalidOperationException("Call UiIndexRegistry.CreateFromAssembly() at app startup.");
+
     private readonly PageInfo[] _pages;
 
     /// <summary>All indexed pages.</summary>
@@ -19,9 +28,19 @@ public sealed class UiIndexRegistry
     }
 
     /// <summary>
+    /// Register pages directly. Called by the generated UiIndex class.
+    /// </summary>
+    public static UiIndexRegistry Register(params PageInfo[] pages)
+    {
+        _instance = new UiIndexRegistry(pages);
+        return _instance;
+    }
+
+    /// <summary>
     /// Scan an assembly for all types marked with [UiPageIndex] and build the registry.
     /// Call this once at app startup.
     /// </summary>
+    [RequiresUnreferencedCode("Uses reflection to discover [UiPageIndex] types. Prefer Register() for trimmed apps.")]
     public static UiIndexRegistry CreateFromAssembly(Assembly assembly)
     {
         var pages = new List<PageInfo>();
@@ -41,7 +60,8 @@ public sealed class UiIndexRegistry
             pages.Add(new PageInfo(attr.PageName, attr.Route, attr.FilePath, markdown));
         }
 
-        return new UiIndexRegistry(pages.OrderBy(p => p.Name).ToArray());
+        _instance = new UiIndexRegistry(pages.OrderBy(p => p.Name).ToArray());
+        return _instance;
     }
 
     /// <summary>

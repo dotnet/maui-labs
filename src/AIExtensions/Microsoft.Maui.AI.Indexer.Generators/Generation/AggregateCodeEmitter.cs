@@ -111,6 +111,23 @@ internal static class AggregateCodeEmitter
         // All markdown concatenated (for full-corpus search)
         sb.AppendLine("    /// <summary>All page markdown concatenated, separated by page breaks.</summary>");
         sb.AppendLine("    public static string AllMarkdown => string.Join(\"\\n\\n---\\n\\n\", Pages.Select(p => p.Markdown));");
+        sb.AppendLine();
+
+        // RegisterAll method — trim-safe alternative to reflection-based discovery
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Register all indexed pages with the UiIndexRegistry.");
+        sb.AppendLine("    /// Call this once at app startup to enable the search_ui and get_page_ui AI tools.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public static global::Microsoft.Maui.AI.Indexer.UiIndexRegistry RegisterAll()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return global::Microsoft.Maui.AI.Indexer.UiIndexRegistry.Register(");
+        sb.AppendLine("            Pages.Select(p => new global::Microsoft.Maui.AI.Indexer.UiIndexRegistry.PageInfo(p.Name, p.Route, p.FilePath, p.Markdown)).ToArray());");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Module initializer — auto-registers on assembly load, no user code needed
+        sb.AppendLine("    [global::System.Runtime.CompilerServices.ModuleInitializer]");
+        sb.AppendLine("    internal static void AutoRegister() => RegisterAll();");
 
         sb.AppendLine("}");
 

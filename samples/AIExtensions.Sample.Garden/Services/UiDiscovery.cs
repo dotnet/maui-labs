@@ -12,10 +12,7 @@ namespace AIExtensions.Sample.Garden.Services;
 /// </summary>
 public sealed class UiDiscovery
 {
-    private static readonly Lazy<UiIndexRegistry> _registry = new(
-        () => UiIndexRegistry.CreateFromAssembly(typeof(UiDiscovery).Assembly));
-
-    private static UiIndexRegistry Registry => _registry.Value;
+    private static UiIndexRegistry Registry => UiIndexRegistry.Instance;
 
     [ExportAIFunction("search_ui")]
     [Description(
