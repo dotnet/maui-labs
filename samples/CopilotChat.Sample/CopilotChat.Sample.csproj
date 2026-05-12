@@ -16,10 +16,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\CopilotChat\Microsoft.Maui.CopilotChat\Microsoft.Maui.CopilotChat.csproj" />
     <ProjectReference Include="..\..\src\CopilotChat\Microsoft.Maui.CopilotChat.CopilotSdk\Microsoft.Maui.CopilotChat.CopilotSdk.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.DevFlow.Agent" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
   </ItemGroup>
 
