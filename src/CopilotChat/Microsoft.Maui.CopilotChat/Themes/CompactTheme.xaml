@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:copilot="clr-namespace:Microsoft.Maui.CopilotChat.Controls"
+    xmlns:converters="clr-namespace:Microsoft.Maui.CopilotChat.Converters"
+    xmlns:local="clr-namespace:Microsoft.Maui.CopilotChat"
+    x:Class="Microsoft.Maui.CopilotChat.Themes.CompactThemeResourceDictionary">
+
+    <!-- Compact theme inherits DefaultTheme colors and overrides spacing/sizes -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="DefaultTheme.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ═══════ COMPACT TYPE SCALE ═══════ -->
+    <x:Double x:Key="CopilotFontSizeHero">36</x:Double>
+    <x:Double x:Key="CopilotFontSizeTitle">16</x:Double>
+    <x:Double x:Key="CopilotFontSizeBody">12</x:Double>
+    <x:Double x:Key="CopilotFontSizeCaption">10</x:Double>
+
+    <!-- ═══════ COMPACT SPACING ═══════ -->
+    <x:Double x:Key="CopilotMessageSpacing">4</x:Double>
+    <Thickness x:Key="CopilotBubblePadding">8,4</Thickness>
+    <Thickness x:Key="CopilotInputPadding">8,4,8,8</Thickness>
+
+    <!-- ═══════ COMPACT CONTROL TEMPLATE ═══════ -->
+    <ControlTemplate x:Key="CopilotChatViewCompactTemplate" x:DataType="copilot:CopilotChatView">
+        <Grid BindingContext="{Binding Source={RelativeSource TemplatedParent}}"
+              RowDefinitions="*,Auto,Auto" RowSpacing="0">
+
+            <CollectionView x:Name="PART_Messages" Grid.Row="0"
+                            ItemsSource="{Binding Messages}"
+                            Margin="0,4,0,0" BackgroundColor="Transparent" VerticalOptions="Fill">
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="{StaticResource CopilotMessageSpacing}" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <copilot:ChatMessageTemplateSelector
+                        UserTemplate="{Binding UserMessageTemplate}"
+                        AssistantTemplate="{Binding AssistantMessageTemplate}"
+                        ToolTemplate="{Binding ToolMessageTemplate}"
+                        SystemTemplate="{Binding SystemMessageTemplate}"
+                        ErrorTemplate="{Binding ErrorMessageTemplate}" />
+                </CollectionView.ItemTemplate>
+                <CollectionView.EmptyView>
+                    <Grid Padding="16" RowDefinitions="Auto,Auto" RowSpacing="8"
+                          MaximumWidthRequest="600" HorizontalOptions="Center">
+                        <Label Grid.Row="0" Text="{Binding WelcomeTitle}"
+                               FontSize="{StaticResource CopilotFontSizeTitle}" FontAttributes="Bold"
+                               HorizontalTextAlignment="Center" />
+                        <Label Grid.Row="1" Text="{Binding WelcomeMessage}"
+                               FontSize="{StaticResource CopilotFontSizeBody}" HorizontalTextAlignment="Center"
+                               LineBreakMode="WordWrap"
+                               TextColor="{AppThemeBinding Light={StaticResource CopilotTextSecondaryLight}, Dark={StaticResource CopilotTextSecondaryDark}}" />
+                    </Grid>
+                </CollectionView.EmptyView>
+            </CollectionView>
+
+            <Grid Grid.Row="1"
+                  IsVisible="{Binding IsApprovalPending, Converter={StaticResource CopilotInverseBool}}"
+                  Padding="{StaticResource CopilotInputPadding}"
+                  ColumnDefinitions="*,Auto" ColumnSpacing="4"
+                  MaximumWidthRequest="600" HorizontalOptions="Center">
+                <Border StrokeShape="RoundRectangle 16"
+                        Stroke="{AppThemeBinding Light={StaticResource CopilotInputStrokeLight}, Dark={StaticResource CopilotInputStrokeDark}}"
+                        StrokeThickness="1"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource CopilotInputBackgroundLight}, Dark={StaticResource CopilotInputBackgroundDark}}"
+                        Padding="0">
+                    <Entry x:Name="PART_Input"
+                           Text="{Binding InputText, Mode=TwoWay}"
+                           Placeholder="{Binding Placeholder}"
+                           IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
+                           ReturnType="Send" FontSize="{StaticResource CopilotFontSizeBody}"
+                           BackgroundColor="Transparent" Margin="12,0" />
+                </Border>
+                <Button x:Name="PART_Send" Grid.Column="1" Text="Send"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAccent}, Dark={StaticResource CopilotAccentDark}}"
+                        TextColor="{StaticResource CopilotWhite}"
+                        FontSize="{StaticResource CopilotFontSizeBody}"
+                        CornerRadius="16" Padding="12,4" VerticalOptions="Center" />
+            </Grid>
+
+            <Border Grid.Row="2" Padding="8,4,8,8"
+                    IsVisible="{Binding IsApprovalPending}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource CopilotApprovalBackgroundLight}, Dark={StaticResource CopilotApprovalBackgroundDark}}"
+                    Margin="8,4" StrokeShape="RoundRectangle 8" StrokeThickness="0"
+                    MaximumWidthRequest="600">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                    <Label Text="{Binding ApprovalText}"
+                           FontSize="{StaticResource CopilotFontSizeBody}" FontAttributes="Bold"
+                           VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                    <Button x:Name="PART_Approve" Grid.Column="1" Text="Approve"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource CopilotAccent}, Dark={StaticResource CopilotAccentDark}}"
+                            TextColor="{StaticResource CopilotWhite}"
+                            FontSize="{StaticResource CopilotFontSizeCaption}" CornerRadius="6" Padding="10,4" />
+                    <Button x:Name="PART_Reject" Grid.Column="2" Text="Reject"
+                            BackgroundColor="{StaticResource CopilotDanger}"
+                            TextColor="{StaticResource CopilotWhite}"
+                            FontSize="{StaticResource CopilotFontSizeCaption}" CornerRadius="6" Padding="10,4" />
+                </Grid>
+            </Border>
+        </Grid>
+    </ControlTemplate>
+
+</ResourceDictionary>

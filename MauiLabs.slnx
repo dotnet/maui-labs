@@ -78,6 +78,12 @@
     <Project Path="src/Testing/templates/Microsoft.Maui.Testing.Templates.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/src/CopilotChat/">
+    <Project Path="src/CopilotChat/Microsoft.Maui.CopilotChat/Microsoft.Maui.CopilotChat.csproj" />
+  </Folder>
+  <Folder Name="/tests/CopilotChat/">
+    <Project Path="tests/Microsoft.Maui.CopilotChat.Tests/Microsoft.Maui.CopilotChat.Tests.csproj" />
+  </Folder>
   <Folder Name="/tests/AI/">
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.Benchmarks/Microsoft.Maui.Essentials.AI.Benchmarks.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj" />
