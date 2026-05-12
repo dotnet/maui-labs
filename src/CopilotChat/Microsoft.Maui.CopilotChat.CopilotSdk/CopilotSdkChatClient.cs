@@ -73,7 +73,7 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
         ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await EnsureSessionAsync(cancellationToken).ConfigureAwait(false);
+        await EnsureSessionAsync(options?.Tools, cancellationToken).ConfigureAwait(false);
 
         // Build prompt from the last user message (Copilot SDK manages conversation state server-side)
         var lastUserMessage = messages.LastOrDefault(m => m.Role == ChatRole.User);
@@ -187,6 +187,7 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
             {
                 await _session.DisposeAsync().ConfigureAwait(false);
                 _session = null;
+                _sessionTools = null;
             }
         }
         finally
@@ -195,14 +196,34 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
         }
     }
 
-    private async Task EnsureSessionAsync(CancellationToken cancellationToken)
+    private IList<AITool>? _sessionTools;
+
+    private async Task EnsureSessionAsync(IList<AITool>? tools, CancellationToken cancellationToken)
     {
+        // If tools changed, reset session to pick up new tools
+        var toolsChanged = _session is not null && !ReferenceEquals(tools, _sessionTools) && tools is { Count: > 0 };
+        if (toolsChanged)
+        {
+            await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_session is not null)
+                {
+                    await _session.DisposeAsync().ConfigureAwait(false);
+                    _session = null;
+                }
+            }
+            finally
+            {
+                _initLock.Release();
+            }
+        }
+
         if (_session is not null) return;
 
         await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Double-check after acquiring lock
             if (_session is not null) return;
 
             _client ??= new CopilotClient(new CopilotClientOptions
@@ -221,6 +242,10 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
                 OnPermissionRequest = PermissionHandler.ApproveAll,
             };
 
+            // Pass tools to the SDK session — the SDK handles tool invocation natively
+            if (tools is { Count: > 0 })
+                sessionConfig.Tools = [.. tools.OfType<AIFunction>()];
+
             if (!string.IsNullOrEmpty(_config.SystemMessage))
             {
                 sessionConfig.SystemMessage = new SystemMessageConfig
@@ -231,6 +256,7 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
             }
 
             _session = await _client.CreateSessionAsync(sessionConfig);
+            _sessionTools = tools;
         }
         finally
         {

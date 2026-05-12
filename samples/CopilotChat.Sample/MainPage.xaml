@@ -1,15 +1,39 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:copilot="clr-namespace:Microsoft.Maui.CopilotChat.Controls;assembly=Microsoft.Maui.CopilotChat"
              x:Class="CopilotChat.Sample.MainPage"
-             Title="Copilot Chat">
+             Title="Home">
+    <ScrollView>
+        <VerticalStackLayout Spacing="20" Padding="30" VerticalOptions="Center"
+                             MaximumWidthRequest="600" HorizontalOptions="Center">
 
-    <copilot:CopilotChatView
-        x:Name="ChatView"
-        WelcomeTitle="Welcome to Copilot Chat"
-        WelcomeMessage="Ask me anything! This sample uses the Copilot SDK as the AI backend."
-        Placeholder="Ask Copilot anything..."
-        SuggestionPrompts="{Binding Suggestions}" />
+            <Image Source="dotnet_bot.png" HeightRequest="160" HorizontalOptions="Center" />
 
+            <Label Text="Copilot Chat Sample" FontSize="28" FontAttributes="Bold"
+                   HorizontalTextAlignment="Center" />
+
+            <Label Text="A drop-in MAUI chat control backed by the GitHub Copilot SDK. Fully customizable with ControlTemplate and DataTemplate overrides."
+                   FontSize="15" HorizontalTextAlignment="Center" Opacity="0.7"
+                   LineBreakMode="WordWrap" />
+
+            <Border StrokeShape="RoundRectangle 12" Padding="16" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Available Tools" FontSize="18" FontAttributes="Bold" />
+                    <Label Text="The chat can invoke these tools:" FontSize="14" Opacity="0.7" />
+                    <Label Text="&#x2022; Get Weather &#8212; ask about any city's weather" FontSize="14" />
+                    <Label Text="&#x2022; Calculate &#8212; evaluate math expressions" FontSize="14" />
+                    <Label Text="&#x2022; Random Fact &#8212; get fun facts" FontSize="14" />
+                    <Label Text="&#x2022; Navigate &#8212; move between app pages" FontSize="14" />
+                    <Label Text="&#x2022; App Info &#8212; query device and app details" FontSize="14" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Open Chat" FontSize="16"
+                    BackgroundColor="#6366F1" TextColor="White" CornerRadius="12"
+                    Padding="20,12" HorizontalOptions="Center"
+                    Clicked="OnOpenChatClicked" />
+
+        </VerticalStackLayout>
+    </ScrollView>
 </ContentPage>
