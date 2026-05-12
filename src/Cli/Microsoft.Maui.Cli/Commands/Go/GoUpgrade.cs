@@ -43,6 +43,7 @@ internal sealed class DefaultGoUpgradeProcessRunner : IGoUpgradeProcessRunner
 	{
 		const int TailSize = 30;
 		var tail = new Queue<string>(TailSize);
+		var tailLock = new object();
 
 		var psi = new ProcessStartInfo
 		{
@@ -65,8 +66,11 @@ internal sealed class DefaultGoUpgradeProcessRunner : IGoUpgradeProcessRunner
 		{
 			if (line is null) return;
 			lineSink?.Invoke(line);
-			if (tail.Count >= TailSize) tail.Dequeue();
-			tail.Enqueue(line);
+			lock (tailLock)
+			{
+				if (tail.Count >= TailSize) tail.Dequeue();
+				tail.Enqueue(line);
+			}
 		}
 
 		proc.OutputDataReceived += (_, e) => OnLine(e.Data);
@@ -75,8 +79,21 @@ internal sealed class DefaultGoUpgradeProcessRunner : IGoUpgradeProcessRunner
 		proc.BeginOutputReadLine();
 		proc.BeginErrorReadLine();
 
-		await proc.WaitForExitAsync(ct).ConfigureAwait(false);
-		return (proc.ExitCode, tail.ToArray());
+		try
+		{
+			await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+		}
+		catch (OperationCanceledException)
+		{
+			try { proc.Kill(entireProcessTree: true); } catch { }
+			throw;
+		}
+		string[] result;
+		lock (tailLock)
+		{
+			result = tail.ToArray();
+		}
+		return (proc.ExitCode, result);
 	}
 }
 
@@ -281,8 +298,8 @@ internal static class GoUpgradeRunner
 internal static class GoFileBasedDetector
 {
 	static readonly Regex DirectiveLine = new(@"^#:(\w+)\s+(.*)$", RegexOptions.Compiled);
-	static readonly Regex FileScopedNs = new(@"^namespace\s+([A-Za-z_][\w.]*)\s*;\s*$", RegexOptions.Multiline | RegexOptions.Compiled);
-	static readonly Regex BlockNs = new(@"^namespace\s+([A-Za-z_][\w.]*)\s*\{", RegexOptions.Multiline | RegexOptions.Compiled);
+	static readonly Regex FileScopedNs = new(@"^\s*namespace\s+([A-Za-z_][\w.]*)\s*;\s*$", RegexOptions.Multiline | RegexOptions.Compiled);
+	static readonly Regex BlockNs = new(@"^\s*namespace\s+([A-Za-z_][\w.]*)\s*\{", RegexOptions.Multiline | RegexOptions.Compiled);
 	// Class deriving from View. Tolerates `: View`, `: View, IFoo`, or `: SomeBase, View`.
 	// Captures the class name; we then check the base list for `View`.
 	static readonly Regex ClassDecl = new(@"^\s*(?:public|internal|sealed|abstract|partial|static|\s)*\s*class\s+([A-Za-z_]\w*)\s*(?::\s*([^\{]+))?\{?", RegexOptions.Multiline | RegexOptions.Compiled);
@@ -615,7 +632,7 @@ internal static class GoUpgradeScaffolder
 	{
 		var files = new List<GoScaffoldFile>
 		{
-			new($"{d.DirName}.csproj", GoUpgradeTemplates.RenderCsproj(d)),
+			new($"{d.SafeName}.csproj", GoUpgradeTemplates.RenderCsproj(d)),
 			new("MauiProgram.cs", GoUpgradeTemplates.RenderMauiProgram(d)),
 			new("Platforms/iOS/Program.cs", GoUpgradeTemplates.RenderIosProgram(d)),
 			new("Platforms/iOS/AppDelegate.cs", GoUpgradeTemplates.RenderIosAppDelegate(d)),
@@ -665,7 +682,7 @@ internal static class GoUpgradeTemplates
     <SingleProject>true</SingleProject>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationTitle>{d.DirName}</ApplicationTitle>
+    <ApplicationTitle>{System.Security.SecurityElement.Escape(d.DirName)}</ApplicationTitle>
     <ApplicationId>{d.ApplicationId}</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
