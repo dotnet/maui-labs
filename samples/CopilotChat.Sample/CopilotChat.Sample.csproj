@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CopilotChat\Microsoft.Maui.CopilotChat\Microsoft.Maui.CopilotChat.csproj" />
+    <ProjectReference Include="..\..\src\CopilotChat\Microsoft.Maui.CopilotChat.CopilotSdk\Microsoft.Maui.CopilotChat.CopilotSdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>
