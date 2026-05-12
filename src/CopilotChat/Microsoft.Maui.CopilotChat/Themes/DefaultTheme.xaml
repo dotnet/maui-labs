@@ -167,7 +167,7 @@
 
     <!-- ═══════ DEFAULT SUB-COMPONENT TEMPLATES ═══════ -->
 
-    <!-- Suggestion chip -->
+    <!-- Suggestion chip — tap handled via code in CopilotChatView.OnApplyTemplate -->
     <DataTemplate x:Key="CopilotDefaultSuggestionItemTemplate" x:DataType="x:String">
         <Border BackgroundColor="{AppThemeBinding Light={StaticResource CopilotChipBackgroundLight}, Dark={StaticResource CopilotChipBackgroundDark}}"
                 Stroke="{AppThemeBinding Light={StaticResource CopilotChipStrokeLight}, Dark={StaticResource CopilotChipStrokeDark}}"
@@ -175,17 +175,12 @@
             <Label Text="{Binding}"
                    FontSize="{StaticResource CopilotFontSizeBody}"
                    TextColor="{AppThemeBinding Light={StaticResource CopilotChipTextLight}, Dark={StaticResource CopilotChipTextDark}}" />
-            <Border.GestureRecognizers>
-                <TapGestureRecognizer
-                    Command="{Binding InternalSuggestionCommand, Source={RelativeSource AncestorType={x:Type copilot:CopilotChatView}}}"
-                    CommandParameter="{Binding}" />
-            </Border.GestureRecognizers>
         </Border>
     </DataTemplate>
 
     <!-- ═══════ DEFAULT CONTROL TEMPLATE ═══════ -->
     <ControlTemplate x:Key="CopilotChatViewDefaultTemplate" x:DataType="copilot:CopilotChatView">
-        <Grid BindingContext="{Binding Source={RelativeSource TemplatedParent}}"
+        <Grid x:Name="PART_Root" BindingContext="{Binding Source={RelativeSource TemplatedParent}}"
               RowDefinitions="*,Auto,Auto" RowSpacing="0">
 
             <!-- Messages list -->
@@ -226,7 +221,8 @@
                                  MaximumWidthRequest="840" HorizontalOptions="Center">
                 <!-- Suggestion chips -->
                 <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never" Padding="16,8,16,0">
-                    <HorizontalStackLayout BindableLayout.ItemsSource="{Binding SuggestionPrompts}"
+                    <HorizontalStackLayout x:Name="PART_Suggestions"
+                                           BindableLayout.ItemsSource="{Binding SuggestionPrompts}"
                                            BindableLayout.ItemTemplate="{Binding SuggestionItemTemplate}"
                                            Spacing="6" />
                 </ScrollView>

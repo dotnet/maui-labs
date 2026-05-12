@@ -25,6 +25,7 @@ public class CopilotChatView : ContentView
     private Button? _sendButton;
     private Button? _approveButton;
     private Button? _rejectButton;
+    private Layout? _suggestionsLayout;
     private List<ChatMessage> _history = [];
     private CancellationTokenSource _cts = new();
     private FunctionApprovalRequestContent? _pendingApproval;
@@ -382,6 +383,17 @@ public class CopilotChatView : ContentView
         _approveButton = GetTemplateChild("PART_Approve") as Button;
         _rejectButton = GetTemplateChild("PART_Reject") as Button;
 
+        // Wire suggestion chips from code (ControlTemplate boundary prevents XAML binding)
+        if (_suggestionsLayout is not null) _suggestionsLayout.ChildAdded -= OnSuggestionChildAdded;
+        _suggestionsLayout = GetTemplateChild("PART_Suggestions") as Layout;
+        if (_suggestionsLayout is not null)
+        {
+            _suggestionsLayout.ChildAdded += OnSuggestionChildAdded;
+            // Wire existing children
+            foreach (var child in _suggestionsLayout.Children)
+                WireSuggestionTap(child as View);
+        }
+
         // Wire message selector from code (CLR properties can't be bound in XAML ControlTemplate)
         UpdateMessageSelector();
 
@@ -396,6 +408,21 @@ public class CopilotChatView : ContentView
     private void OnApproveClicked(object? sender, EventArgs e) => _ = HandleApproveAsync();
     private void OnRejectClicked(object? sender, EventArgs e) => _ = HandleRejectAsync("User rejected");
     private void OnInputCompleted(object? sender, EventArgs e) => _ = HandleSendAsync();
+
+    private void OnSuggestionChildAdded(object? sender, ElementEventArgs e)
+        => WireSuggestionTap(e.Element as View);
+
+    private void WireSuggestionTap(View? view)
+    {
+        if (view is null) return;
+        var tap = new TapGestureRecognizer();
+        tap.Tapped += (s, e) =>
+        {
+            if (view.BindingContext is string prompt)
+                InternalSuggestionCommand?.Execute(prompt);
+        };
+        view.GestureRecognizers.Add(tap);
+    }
 
     // ══════════════════════════════════════════════════════════════
     //  CHAT ENGINE (uses IChatClient)

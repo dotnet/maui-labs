@@ -2,8 +2,15 @@ namespace CopilotChat.Sample;
 
 public class App : Application
 {
-    public App()
+    private readonly IServiceProvider _services;
+
+    public App(IServiceProvider services)
     {
-        MainPage = new MainPage();
+        _services = services;
+    }
+
+    protected override Window CreateWindow(IActivationState? activationState)
+    {
+        return new Window(_services.GetRequiredService<MainPage>()) { Title = "Copilot Chat" };
     }
 }
