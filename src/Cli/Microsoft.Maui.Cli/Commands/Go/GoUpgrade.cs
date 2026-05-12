@@ -165,22 +165,7 @@ internal static class GoUpgradeRunner
 		// 2. Plan files.
 		var plan = GoUpgradeScaffolder.BuildPlan(detection);
 
-		// 3. Pre-flight collision checks (existing files we'd write under non-force).
-		if (!options.Force)
-		{
-			var conflicts = plan
-				.Where(f => File.Exists(Path.Combine(options.Cwd, f.RelativePath)))
-				.Select(f => f.RelativePath)
-				.ToList();
-			if (conflicts.Count > 0)
-			{
-				Log("Refusing to overwrite existing files (use --force to overwrite known-generated files):");
-				foreach (var c in conflicts) Log($"  {c}");
-				return new GoUpgradeResult(1, detection, messages, null, false, null);
-			}
-		}
-
-		// 4. Verify resource sources exist before any write (pre-flight).
+		// 3. Verify resource sources exist before any write (pre-flight).
 		var resources = GoUpgradeScaffolder.ResourceSources(detection.RepoRoot);
 		var missing = resources.Where(r => !File.Exists(r.Source)).ToList();
 		if (missing.Count > 0)
@@ -188,6 +173,24 @@ internal static class GoUpgradeRunner
 			Log("Missing required resource files in repo (cannot upgrade):");
 			foreach (var m in missing) Log($"  {m.Source}");
 			return new GoUpgradeResult(1, detection, messages, null, false, null);
+		}
+
+		// 4. Pre-flight collision checks (existing files we'd write under non-force).
+		if (!options.Force)
+		{
+			var conflicts = plan
+				.Where(f => File.Exists(Path.Combine(options.Cwd, f.RelativePath)))
+				.Select(f => f.RelativePath)
+				.ToList();
+			conflicts.AddRange(resources
+				.Where(r => File.Exists(Path.Combine(options.Cwd, r.RelativePath)))
+				.Select(r => r.RelativePath));
+			if (conflicts.Count > 0)
+			{
+				Log("Refusing to overwrite existing files (use --force to overwrite known-generated files):");
+				foreach (var c in conflicts) Log($"  {c}");
+				return new GoUpgradeResult(1, detection, messages, null, false, null);
+			}
 		}
 
 		// 5. Dry-run preview.
@@ -223,14 +226,21 @@ internal static class GoUpgradeRunner
 					File.Copy(dest, backupTarget, overwrite: true);
 				}
 			}
+			foreach (var r in resources)
+			{
+				var dest = Path.Combine(options.Cwd, r.RelativePath);
+				if (File.Exists(dest))
+				{
+					var rel = r.RelativePath.Replace('/', Path.DirectorySeparatorChar);
+					var backupTarget = Path.Combine(backupDir, rel);
+					Directory.CreateDirectory(Path.GetDirectoryName(backupTarget)!);
+					File.Copy(dest, backupTarget, overwrite: true);
+				}
+			}
 			Log($"Backup: {Path.GetRelativePath(options.Cwd, backupDir)}");
 		}
 
-		// 7. Strip directives from user file.
-		File.WriteAllText(detection.UserFilePath, detection.SourceWithoutDirectives);
-		Log($"  stripped #: directives from {Path.GetFileName(detection.UserFilePath)}");
-
-		// 8. Write generated files.
+		// 7. Write generated files.
 		foreach (var f in plan)
 		{
 			var dest = Path.Combine(options.Cwd, f.RelativePath);
@@ -239,7 +249,7 @@ internal static class GoUpgradeRunner
 			Log($"  wrote {f.RelativePath}");
 		}
 
-		// 9. Copy resources.
+		// 8. Copy resources.
 		foreach (var r in resources)
 		{
 			var dest = Path.Combine(options.Cwd, r.RelativePath);
@@ -247,6 +257,10 @@ internal static class GoUpgradeRunner
 			File.Copy(r.Source, dest, overwrite: true);
 			Log($"  wrote {r.RelativePath}");
 		}
+
+		// 9. Strip directives from user file (last, so if anything above fails the original file is untouched).
+		File.WriteAllText(detection.UserFilePath, detection.SourceWithoutDirectives);
+		Log($"  stripped #: directives from {Path.GetFileName(detection.UserFilePath)}");
 
 		// 10. Optional build.
 		bool buildAttempted = false;
@@ -357,6 +371,12 @@ internal static class GoFileBasedDetector
 		{
 			errors.Add($"`{Path.GetFileName(userFile)}` does not declare `#:package Comet`; not a Comet Go project.");
 			return (null, errors);
+		}
+
+		// Warn about malformed directives (don't abort, just inform).
+		foreach (var bad in directives.OfType<GoMalformedDirective>())
+		{
+			Console.Error.WriteLine($"Warning: skipped malformed directive: {bad.Reason}");
 		}
 
 		// 4. Find root view class.
@@ -640,6 +660,7 @@ internal static class GoUpgradeScaffolder
 			new("Platforms/MacCatalyst/Program.cs", GoUpgradeTemplates.RenderIosProgram(d)),
 			new("Platforms/MacCatalyst/AppDelegate.cs", GoUpgradeTemplates.RenderIosAppDelegate(d)),
 			new("Platforms/MacCatalyst/Info.plist", GoUpgradeTemplates.MacCatalystInfoPlist),
+			new("Platforms/MacCatalyst/Entitlements.Debug.plist", GoUpgradeTemplates.MacCatalystEntitlementsDebugPlist),
 			new("Platforms/Android/MainActivity.cs", GoUpgradeTemplates.RenderAndroidMainActivity(d)),
 			new("Platforms/Android/MainApplication.cs", GoUpgradeTemplates.RenderAndroidMainApplication(d)),
 			new("Platforms/Android/AndroidManifest.xml", GoUpgradeTemplates.AndroidManifest),
@@ -840,6 +861,15 @@ public class AppDelegate : MauiUIApplicationDelegate
 	<string>Assets.xcassets/appicon.appiconset</string>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
+</dict>
+</plist>
+""";
+
+	public const string MacCatalystEntitlementsDebugPlist = """
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
 </dict>
 </plist>
 """;
