@@ -32,14 +32,18 @@ public static class GeneratorTestHarness
 
     /// <summary>
     /// Run the generator and extract the Markdown constant for a specific page.
+    /// Searches by class name suffix in the generated file keys.
     /// Returns null if not found.
     /// </summary>
     public static string? GetMarkdown(string pageClassName,
         params (string Path, string Content)[] xamlFiles)
     {
         var sources = GetGeneratedSources(xamlFiles);
-        var key = $"{pageClassName}_UiIndex.g.cs";
-        if (!sources.TryGetValue(key, out var source))
+
+        // Find the key that ends with {ClassName}_UiIndex.g.cs
+        var suffix = $"{pageClassName}_UiIndex.g.cs";
+        var key = sources.Keys.FirstOrDefault(k => k.EndsWith(suffix));
+        if (key == null || !sources.TryGetValue(key, out var source))
             return null;
 
         return ExtractMarkdownConstant(source);
@@ -47,13 +51,19 @@ public static class GeneratorTestHarness
 
     /// <summary>
     /// Run the generator and extract the full generated .g.cs source for a specific page.
+    /// Searches by suffix match on hint name.
     /// </summary>
     public static string? GetGeneratedSource(string hintName,
         params (string Path, string Content)[] xamlFiles)
     {
         var sources = GetGeneratedSources(xamlFiles);
-        sources.TryGetValue(hintName, out var source);
-        return source;
+        // Try exact match first, then suffix match
+        if (sources.TryGetValue(hintName, out var source))
+            return source;
+        var key = sources.Keys.FirstOrDefault(k => k.EndsWith(hintName));
+        if (key != null)
+            return sources[key];
+        return null;
     }
 
     /// <summary>

@@ -86,10 +86,14 @@ internal static class ConditionalDetector
                 var setterValue = setter.Attribute("Value")?.Value;
                 if (property == "IsVisible" && setterValue != null)
                 {
+                    // If the setter sets IsVisible to False, it's a "hidden when" condition
+                    var isHiddenTrigger = setterValue.Equals("False", System.StringComparison.OrdinalIgnoreCase);
+
                     return new VisibilityCondition
                     {
                         Property = binding.Path,
                         Value = value,
+                        IsInverted = isHiddenTrigger,
                     };
                 }
             }

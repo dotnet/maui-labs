@@ -45,6 +45,9 @@ internal sealed class UiElement
     // Cross-file user control reference
     public bool IsUserControlReference { get; set; }
 
+    // Condition group (structural container with visibility condition wrapping children)
+    public bool IsConditionGroup { get; set; }
+
     // Collection-specific
     public string? ItemsSourceBinding { get; set; }
     public bool IsGrouped { get; set; }
@@ -87,8 +90,15 @@ internal sealed class VisibilityCondition
 
     public override string ToString()
     {
-        var val = IsInverted ? "false" : Value;
-        return $"visible when {Property} = {val}";
+        if (IsInverted)
+        {
+            // For inverse converters on boolean bindings, show "= false"
+            // For DataTrigger hiding, show "hidden when Property = Value"
+            if (Value == "true")
+                return $"visible when {Property} = false";
+            return $"hidden when {Property} = {Value}";
+        }
+        return $"visible when {Property} = {Value}";
     }
 }
 

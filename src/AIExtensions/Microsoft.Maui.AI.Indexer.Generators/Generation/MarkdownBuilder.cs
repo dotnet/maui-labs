@@ -106,6 +106,13 @@ internal sealed class MarkdownBuilder
             return;
         }
 
+        // Handle condition groups (structural container with visibility condition)
+        if (el.IsConditionGroup)
+        {
+            RenderConditionGroup(mb, el);
+            return;
+        }
+
         // Regular semantic element
         mb.RenderElement(el);
 
@@ -118,13 +125,29 @@ internal sealed class MarkdownBuilder
         }
     }
 
+    private static void RenderConditionGroup(MarkdownBuilder mb, UiElement el)
+    {
+        var cond = el.Condition != null ? $" [{el.Condition}]" : "";
+        mb.AppendLine($"- When{cond}:");
+        mb.Indent();
+        RenderElements(mb, el.Children);
+        mb.Dedent();
+    }
+
     private static void RenderCollectionView(MarkdownBuilder mb, UiElement el)
     {
         var source = el.ItemsSourceBinding != null ? $": \"{{{el.ItemsSourceBinding}}}\"" : "";
-        var grouped = el.IsGrouped ? ", grouped" : "";
-        var cond = el.Condition != null ? $" [{el.Condition}]" : "";
 
-        mb.AppendLine($"- {el.TypeName}{source}{(grouped.Length > 0 || cond.Length > 0 ? $" [{grouped.TrimStart(',', ' ')}{cond.TrimStart(' ')}]".Replace("[ ", "[").Replace("[]", "") : "")}");
+        // Build annotations list
+        var annotations = new List<string>();
+        if (el.IsGrouped)
+            annotations.Add("grouped");
+        if (el.Condition != null)
+            annotations.Add(el.Condition.ToString());
+
+        var annotStr = annotations.Count > 0 ? $" [{string.Join(", ", annotations)}]" : "";
+
+        mb.AppendLine($"- {el.TypeName}{source}{annotStr}");
 
         mb.Indent();
 

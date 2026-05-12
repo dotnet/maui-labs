@@ -13,16 +13,28 @@ namespace Microsoft.Maui.AI.Indexer.Generators.Parsing;
 /// </summary>
 internal sealed class CrossFileResolver
 {
-    private readonly Dictionary<string, PageModel> _pagesByClassName;
+    private readonly Dictionary<string, PageModel> _pagesBySimpleName;
+    private readonly Dictionary<string, PageModel> _pagesByFqn;
     private readonly Dictionary<string, List<UiElement>> _resolvedCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _inProgress = new(StringComparer.OrdinalIgnoreCase);
 
     public CrossFileResolver(IEnumerable<PageModel> allPages)
     {
-        _pagesByClassName = new Dictionary<string, PageModel>(StringComparer.OrdinalIgnoreCase);
+        _pagesBySimpleName = new Dictionary<string, PageModel>(StringComparer.OrdinalIgnoreCase);
+        _pagesByFqn = new Dictionary<string, PageModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var page in allPages)
         {
-            // Index by simple class name (e.g., "CartView")
-            _pagesByClassName[page.ClassName] = page;
+            // Index by fully qualified name for precise resolution
+            var fqn = !string.IsNullOrEmpty(page.Namespace)
+                ? $"{page.Namespace}.{page.ClassName}"
+                : page.ClassName;
+            _pagesByFqn[fqn] = page;
+
+            // Also index by simple name (last resort fallback when unambiguous)
+            if (!_pagesBySimpleName.ContainsKey(page.ClassName))
+                _pagesBySimpleName[page.ClassName] = page;
+            else
+                _pagesBySimpleName[page.ClassName] = null!; // Ambiguous — mark as unusable
         }
     }
 
@@ -50,7 +62,6 @@ internal sealed class CrossFileResolver
                 var inlined = ResolveUserControl(el.TypeName, ownerClassName);
                 if (inlined != null)
                 {
-                    // Create a wrapper element showing the user control name
                     var wrapper = new UiElement
                     {
                         TypeName = el.TypeName,
@@ -61,7 +72,19 @@ internal sealed class CrossFileResolver
                     };
                     resolved.Add(wrapper);
                 }
-                // If not resolved, skip (the control's XAML isn't available)
+                else
+                {
+                    // Unresolved — keep as placeholder if it has semantic properties
+                    // (e.g., third-party controls with SemanticProperties)
+                    var wrapper = new UiElement
+                    {
+                        TypeName = el.TypeName,
+                        IsUserControlReference = true,
+                        Semantics = el.Semantics,
+                        Condition = el.Condition,
+                    };
+                    resolved.Add(wrapper);
+                }
             }
             else
             {
@@ -69,7 +92,6 @@ internal sealed class CrossFileResolver
                 if (el.Children.Count > 0)
                     el.Children = ResolveElements(el.Children, ownerClassName);
 
-                // Also resolve inside templates
                 if (el.ItemTemplate != null)
                     el.ItemTemplate = ResolveElements(el.ItemTemplate, ownerClassName);
                 if (el.HeaderTemplate != null)
@@ -98,24 +120,39 @@ internal sealed class CrossFileResolver
         if (string.Equals(typeName, ownerClassName, StringComparison.OrdinalIgnoreCase))
             return null;
 
+        // Prevent indirect cycles (A→B→A)
+        if (_inProgress.Contains(typeName))
+            return null;
+
         // Check cache first
         if (_resolvedCache.TryGetValue(typeName, out var cached))
             return DeepCloneElements(cached);
 
-        // Find the page model for this control
-        if (!_pagesByClassName.TryGetValue(typeName, out var controlPage))
+        // Find the page model — try simple name first (most common case)
+        PageModel? controlPage = null;
+        if (_pagesBySimpleName.TryGetValue(typeName, out var simplePage) && simplePage != null)
+            controlPage = simplePage;
+
+        if (controlPage == null)
             return null;
 
-        // Cache a deep clone of the elements before resolving (to prevent infinite recursion)
-        _resolvedCache[typeName] = controlPage.Elements;
+        // Mark as in-progress to prevent indirect cycles
+        _inProgress.Add(typeName);
 
-        // Recursively resolve the control's own references
-        var resolvedElements = ResolveElements(controlPage.Elements, typeName);
+        try
+        {
+            // Recursively resolve the control's own references
+            var resolvedElements = ResolveElements(controlPage.Elements, typeName);
 
-        // Update cache with fully resolved version
-        _resolvedCache[typeName] = resolvedElements;
+            // Cache the fully resolved version
+            _resolvedCache[typeName] = resolvedElements;
 
-        return DeepCloneElements(resolvedElements);
+            return DeepCloneElements(resolvedElements);
+        }
+        finally
+        {
+            _inProgress.Remove(typeName);
+        }
     }
 
     /// <summary>
@@ -150,6 +187,7 @@ internal sealed class CrossFileResolver
             IsBindableLayout = el.IsBindableLayout,
             BindableLayoutItemsSource = el.BindableLayoutItemsSource,
             IsUserControlReference = el.IsUserControlReference,
+            IsConditionGroup = el.IsConditionGroup,
             Minimum = el.Minimum,
             Maximum = el.Maximum,
             ValueBinding = el.ValueBinding,

@@ -68,7 +68,12 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
         foreach (var page in pages)
         {
             var source = PageCodeEmitter.Emit(page);
-            var hintName = $"{SanitizeIdentifier(page.ClassName)}_UiIndex.g.cs";
+            // Use namespace+class for unique hint names (avoids collision when
+            // two pages share the same simple class name in different namespaces)
+            var qualifiedName = !string.IsNullOrEmpty(page.Namespace)
+                ? $"{page.Namespace}.{page.ClassName}"
+                : page.ClassName;
+            var hintName = $"{SanitizeIdentifier(qualifiedName)}_UiIndex.g.cs";
             spc.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
         }
 

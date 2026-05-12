@@ -303,12 +303,14 @@ public class EmojiAndUnicodeTests
     [Fact]
     public void Condition_AlwaysHidden()
     {
+        // IsVisible="False" elements are now skipped entirely (not accessible)
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
-                "<Label Text=\"Hidden\" IsVisible=\"False\" />")));
-        Assert.Equal(
-            "# T\n\nFile: T.xaml\n\n- Label: \"Hidden\" [visible when (always hidden) = false]",
-            md);
+                """
+                <Label Text="Hidden" IsVisible="False" />
+                <Label Text="Visible" />
+                """)));
+        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Visible\"", md);
     }
 
     [Fact]

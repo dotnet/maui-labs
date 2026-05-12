@@ -657,8 +657,10 @@ public class ExactOutputTests
             ("Pages/Page2.xaml", page2),
             ("Views/SharedWidget.xaml", widget));
 
-        var md1 = GeneratorTestHarness.ExtractMarkdownConstant(sources["Page1_UiIndex.g.cs"]);
-        var md2 = GeneratorTestHarness.ExtractMarkdownConstant(sources["Page2_UiIndex.g.cs"]);
+        var p1Key = sources.Keys.First(k => k.Contains("Page1_UiIndex"));
+        var p2Key = sources.Keys.First(k => k.Contains("Page2_UiIndex"));
+        var md1 = GeneratorTestHarness.ExtractMarkdownConstant(sources[p1Key]);
+        var md2 = GeneratorTestHarness.ExtractMarkdownConstant(sources[p2Key]);
 
         Assert.Equal(
             """

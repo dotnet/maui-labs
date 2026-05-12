@@ -101,10 +101,11 @@ public class AdditionalExactTests
     [Fact]
     public void PromotedBorder_WithDescription()
     {
+        // Promoted containers now also walk children
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Border SemanticProperties.Description="Product card"><Label Text="Inside" /></Border>""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Border: \"Product card\"", md);
+        Assert.Equal("# T\n\nFile: T.xaml\n\n- Border: \"Product card\"\n  - Label: \"Inside\"", md);
     }
 
     [Fact]
@@ -229,9 +230,9 @@ public class AdditionalExactTests
     }
 
     [Fact]
-    public void CrossFile_UnresolvedControl_Omitted()
+    public void CrossFile_UnresolvedControl_KeptAsPlaceholder()
     {
-        // When a user control isn't found in the parsed files, it's omitted
+        // Unresolved user controls are now kept as placeholders
         var page = """
             <?xml version="1.0" encoding="utf-8" ?>
             <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
@@ -247,8 +248,6 @@ public class AdditionalExactTests
         var md = GeneratorTestHarness.GetMarkdown("TestPage",
             ("TestPage.xaml", page));
 
-        // Unresolved user controls are kept as markers (no inlined content)
-        // But if the control isn't found, it remains as a placeholder
         Assert.Equal(
             """
             # TestPage
@@ -256,6 +255,7 @@ public class AdditionalExactTests
             File: TestPage.xaml
 
             - Label: "Before"
+            - [MissingWidget]:
             - Label: "After"
             """,
             md);
@@ -270,8 +270,9 @@ public class AdditionalExactTests
         var sources = GeneratorTestHarness.GetGeneratedSources(
             ("P1.xaml", p1), ("P2.xaml", p2));
 
-        Assert.True(sources.ContainsKey("P1_UiIndex.g.cs"));
-        Assert.True(sources.ContainsKey("P2_UiIndex.g.cs"));
+        // Hint names now include namespace
+        Assert.True(sources.Keys.Any(k => k.Contains("P1_UiIndex")));
+        Assert.True(sources.Keys.Any(k => k.Contains("P2_UiIndex")));
         Assert.True(sources.ContainsKey("UiIndex.g.cs"));
 
         var agg = sources["UiIndex.g.cs"];

@@ -19,9 +19,12 @@ internal static class AggregateCodeEmitter
         sb.AppendLine("using System.Linq;");
         sb.AppendLine();
 
-        if (!string.IsNullOrEmpty(rootNamespace))
+        // Validate namespace — assembly names can contain invalid C# chars
+        var safeNamespace = IsValidCSharpNamespace(rootNamespace) ? rootNamespace : null;
+
+        if (!string.IsNullOrEmpty(safeNamespace))
         {
-            sb.AppendLine($"namespace {rootNamespace};");
+            sb.AppendLine($"namespace {safeNamespace};");
             sb.AppendLine();
         }
 
@@ -61,7 +64,9 @@ internal static class AggregateCodeEmitter
             var route = page.Route != null ? $"\"{Escape(page.Route)}\"" : "null";
             var filePath = !string.IsNullOrEmpty(page.FilePath) ? $"\"{Escape(page.FilePath)}\"" : "null";
             var className = SanitizeIdentifier(page.ClassName);
-            var fqn = !string.IsNullOrEmpty(page.Namespace) ? $"global::{page.Namespace}.{className}_UiIndex" : $"{className}_UiIndex";
+            var fqn = !string.IsNullOrEmpty(page.Namespace)
+                ? $"global::{page.Namespace}.{className}_UiIndex"
+                : $"global::{className}_UiIndex";
 
             sb.AppendLine($"        new PageEntry(\"{Escape(page.ClassName)}\", {route}, {filePath}, {fqn}.Markdown),");
         }
@@ -128,5 +133,25 @@ internal static class AggregateCodeEmitter
                 sb.Append('_');
         }
         return sb.ToString();
+    }
+
+    private static bool IsValidCSharpNamespace(string? ns)
+    {
+        if (string.IsNullOrWhiteSpace(ns))
+            return false;
+
+        foreach (var part in ns!.Split('.'))
+        {
+            if (part.Length == 0)
+                return false;
+            if (!char.IsLetter(part[0]) && part[0] != '_')
+                return false;
+            foreach (var ch in part)
+            {
+                if (!char.IsLetterOrDigit(ch) && ch != '_')
+                    return false;
+            }
+        }
+        return true;
     }
 }

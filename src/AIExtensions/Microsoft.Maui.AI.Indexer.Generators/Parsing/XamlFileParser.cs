@@ -93,8 +93,12 @@ internal static class XamlFileParser
             return page;
         }
 
-        // Walk the tree
-        page.Elements.AddRange(WalkElement(root));
+        // Walk the root's children (not the root itself — root is ContentPage/ContentView
+        // and should never be promoted/skipped by semantic or structural checks)
+        foreach (var child in root.Elements())
+        {
+            page.Elements.AddRange(WalkElement(child));
+        }
 
         return page;
     }
@@ -155,27 +159,60 @@ internal static class XamlFileParser
         if (StructuralElements.Contains(localName) || IsUnknownElement(localName))
         {
             var semantics = AccessibilityExtractor.Extract(element);
+
+            if (AccessibilityExtractor.IsDecorative(semantics))
+                return results; // Explicitly decorative, skip entirely
+
+            // Check for visibility condition on this container — propagate to children
+            var containerCondition = ConditionalDetector.DetectCondition(element);
+
+            // Skip statically hidden elements entirely
+            if (containerCondition != null && containerCondition.Property == "(always hidden)")
+                return results;
+
             if (semantics.Description != null && semantics.Description.Length > 0)
             {
-                // Promoted: developer explicitly set a description
+                // Promoted: developer explicitly set a description.
+                // ALSO walk children so actionable descendants are preserved.
                 var promoted = new UiElement
                 {
                     TypeName = localName,
                     Text = semantics.Description,
                     Semantics = semantics,
+                    Condition = containerCondition,
                 };
+                foreach (var child in element.Elements())
+                {
+                    promoted.Children.AddRange(WalkElement(child));
+                }
                 results.Add(promoted);
                 return results;
             }
 
-            if (AccessibilityExtractor.IsDecorative(semantics))
-                return results; // Explicitly decorative, skip entirely
-
-            // Walk children
+            // Walk children, propagating container condition if present
+            var childElements = new List<UiElement>();
             foreach (var child in element.Elements())
             {
-                results.AddRange(WalkElement(child));
+                childElements.AddRange(WalkElement(child));
             }
+
+            // If the container has a condition, wrap children in a condition group
+            if (containerCondition != null && childElements.Count > 0)
+            {
+                var condGroup = new UiElement
+                {
+                    TypeName = localName,
+                    IsConditionGroup = true,
+                    Condition = containerCondition,
+                    Children = childElements,
+                };
+                results.Add(condGroup);
+            }
+            else
+            {
+                results.AddRange(childElements);
+            }
+
             return results;
         }
 
@@ -195,10 +232,18 @@ internal static class XamlFileParser
         if (AccessibilityExtractor.IsDecorative(semantics))
             return null;
 
+        // Extract condition early to check for always-hidden
+        var condition = ConditionalDetector.DetectCondition(element);
+
+        // Skip statically hidden elements — they're not reachable by screen readers
+        if (condition != null && condition.Property == "(always hidden)")
+            return null;
+
         var ui = new UiElement
         {
             TypeName = typeName,
             Semantics = semantics,
+            Condition = condition,
         };
 
         // Extract text/content based on element type
@@ -285,9 +330,6 @@ internal static class XamlFileParser
                 break;
         }
 
-        // Extract visibility condition
-        ui.Condition = ConditionalDetector.DetectCondition(element);
-
         return ui;
     }
 
@@ -357,7 +399,7 @@ internal static class XamlFileParser
             {
                 ui.EmptyView = ExtractChildElements(child);
             }
-            else if (name.EndsWith(".ItemTemplate") == false && name.Contains(".") == false)
+            else if (!name.Contains("."))
             {
                 // Direct child DataTemplate without property element wrapper
                 if (name == "DataTemplate")
@@ -366,28 +408,6 @@ internal static class XamlFileParser
                 }
             }
         }
-
-        // Check for EmptyView as direct attribute or child element
-        if (ui.EmptyView == null)
-        {
-            foreach (var child in element.Elements())
-            {
-                if (!child.Name.LocalName.Contains("."))
-                {
-                    var emptyViewChildren = new List<UiElement>();
-                    foreach (var inner in child.Elements())
-                    {
-                        emptyViewChildren.AddRange(WalkElement(inner));
-                    }
-                    // If it's not a template, walk it as regular content (these are EmptyView inline elements)
-                }
-            }
-        }
-
-        // Extract DataTemplateSelector variants from the ItemTemplate if it's a selector reference
-        // (Tier 2 - we detect the selector usage but can't resolve it at XAML level without code-behind)
-
-        ui.Condition = ConditionalDetector.DetectCondition(element);
     }
 
     private static List<UiElement> ExtractTemplateContent(XElement templatePropertyElement)
@@ -445,22 +465,26 @@ internal static class XamlFileParser
 
     private static List<UiElement> WalkPropertyElement(XElement element)
     {
-        // Property elements like Grid.RowDefinitions — skip most
         var localName = element.Name.LocalName;
 
-        // Special handling for known useful property elements
-        if (localName.EndsWith(".EmptyView") || localName.EndsWith(".EmptyViewTemplate"))
+        // Ignore known non-visual property elements
+        if (localName.EndsWith(".Resources") || localName.EndsWith(".ResourceDictionary")
+            || localName.EndsWith(".RowDefinitions") || localName.EndsWith(".ColumnDefinitions")
+            || localName.EndsWith(".Triggers") || localName.EndsWith(".Behaviors")
+            || localName.EndsWith(".GestureRecognizers") || localName.EndsWith(".Effects")
+            || localName.EndsWith(".MenuBarItems") || localName.EndsWith(".ToolbarItems")
+            || localName.EndsWith(".Styles") || localName.EndsWith(".VisualStateManager.VisualStateGroups")
+            || localName.EndsWith(".ItemTemplate") || localName.EndsWith(".HeaderTemplate")
+            || localName.EndsWith(".FooterTemplate") || localName.EndsWith(".GroupHeaderTemplate")
+            || localName.EndsWith(".GroupFooterTemplate"))
         {
-            return ExtractChildElements(element);
+            return new List<UiElement>();
         }
 
-        // Walk through for nested content (like CollectionView.Header containing real content)
-        if (localName.EndsWith(".Header") || localName.EndsWith(".Footer"))
-        {
-            return ExtractChildElements(element);
-        }
-
-        return new List<UiElement>();
+        // Walk children for content-carrying property elements
+        // This handles ContentPage.Content, ScrollView.Content, Border.Content,
+        // CollectionView.EmptyView, CollectionView.Header, CollectionView.Footer, etc.
+        return ExtractChildElements(element);
     }
 
     private static List<UiElement> ParseShellElements(XElement root)

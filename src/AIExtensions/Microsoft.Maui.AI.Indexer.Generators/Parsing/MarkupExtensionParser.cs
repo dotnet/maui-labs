@@ -7,7 +7,7 @@ namespace Microsoft.Maui.AI.Indexer.Generators.Parsing;
 internal static class MarkupExtensionParser
 {
     private static readonly Regex BindingRegex = new(
-        @"^\{(?:Binding)\s*(.*)\}$",
+        @"^\{Binding(?:\s+(.*))?\}$",
         RegexOptions.Singleline);
 
     private static readonly Regex TemplateBindingRegex = new(
