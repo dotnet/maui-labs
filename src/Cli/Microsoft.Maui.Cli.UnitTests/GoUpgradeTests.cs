@@ -334,6 +334,85 @@ public class GoUpgradeTests : IDisposable
 	}
 
 	[Fact]
+	public async Task RecordCollision_Detected()
+	{
+		WriteUserFile("""
+			#:package Comet
+			using Comet;
+			namespace MyGoApp;
+			public record MauiProgram(string Name);
+			public class MainPage : View { [Body] View body() => Text("x"); }
+			""");
+
+		var result = await GoUpgradeRunner.RunAsync(Options(force: true), null, CancellationToken.None);
+		Assert.NotEqual(0, result.ExitCode);
+		Assert.Contains(result.Messages, m => m.Contains("collide"));
+	}
+
+	[Fact]
+	public async Task StructCollision_Detected()
+	{
+		WriteUserFile("""
+			#:package Comet
+			using Comet;
+			namespace MyGoApp;
+			public struct Program { }
+			public class MainPage : View { [Body] View body() => Text("x"); }
+			""");
+
+		var result = await GoUpgradeRunner.RunAsync(Options(force: true), null, CancellationToken.None);
+		Assert.NotEqual(0, result.ExitCode);
+		Assert.Contains(result.Messages, m => m.Contains("collide"));
+	}
+
+	[Fact]
+	public async Task InterfaceCollision_Detected()
+	{
+		WriteUserFile("""
+			#:package Comet
+			using Comet;
+			namespace MyGoApp;
+			public interface MauiProgram { }
+			public class MainPage : View { [Body] View body() => Text("x"); }
+			""");
+
+		var result = await GoUpgradeRunner.RunAsync(Options(force: true), null, CancellationToken.None);
+		Assert.NotEqual(0, result.ExitCode);
+		Assert.Contains(result.Messages, m => m.Contains("collide"));
+	}
+
+	[Fact]
+	public async Task RecordClassCollision_CometAppSuffix_Detected()
+	{
+		WriteUserFile("""
+			#:package Comet
+			using Comet;
+			namespace MyGoApp;
+			public record class MyGoAppCometApp(string X);
+			public class MainPage : View { [Body] View body() => Text("x"); }
+			""");
+
+		var result = await GoUpgradeRunner.RunAsync(Options(force: true), null, CancellationToken.None);
+		Assert.NotEqual(0, result.ExitCode);
+		Assert.Contains(result.Messages, m => m.Contains("collide"));
+	}
+
+	[Fact]
+	public async Task NonCollidingRecord_PassesSuccessfully()
+	{
+		WriteUserFile("""
+			#:package Comet
+			using Comet;
+			namespace MyGoApp;
+			public record ViewModel(string Name);
+			public class MainPage : View { [Body] View body() => Text("x"); }
+			""");
+
+		var result = await GoUpgradeRunner.RunAsync(Options(), null, CancellationToken.None);
+		Assert.Equal(0, result.ExitCode);
+	}
+
+	[Fact]
 	public void ParseDirectives_RejectsPropertyNameWithXmlSpecialChars()
 	{
 		var src = "#:property Foo>Bar=value\n\nclass MainPage : View { }\n";

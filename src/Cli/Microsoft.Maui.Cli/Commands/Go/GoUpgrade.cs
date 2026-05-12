@@ -317,6 +317,9 @@ internal static class GoFileBasedDetector
 	// Class deriving from View. Tolerates `: View`, `: View, IFoo`, or `: SomeBase, View`.
 	// Captures the class name; we then check the base list for `View`.
 	static readonly Regex ClassDecl = new(@"^\s*(?:public|internal|sealed|abstract|partial|static|\s)*\s*class\s+([A-Za-z_]\w*)\s*(?::\s*([^\{]+))?\{?", RegexOptions.Multiline | RegexOptions.Compiled);
+	// Any type declaration (class, record, struct, interface) for collision detection.
+	// Handles compound forms: `record class`, `record struct`.
+	static readonly Regex TypeDecl = new(@"^\s*(?:public|internal|sealed|abstract|partial|static|ref|readonly|\s)*\s*(?:record\s+class|record\s+struct|class|record|struct|interface)\s+([A-Za-z_]\w*)", RegexOptions.Multiline | RegexOptions.Compiled);
 
 	static readonly string[] CollisionTypeNames = new[] { "MauiProgram", "AppDelegate", "MainActivity", "MainApplication", "Program" };
 
@@ -586,7 +589,7 @@ internal static class GoFileBasedDetector
 	static IReadOnlyList<string> ScanCollisions(string source)
 	{
 		var found = new List<string>();
-		foreach (Match m in ClassDecl.Matches(source))
+		foreach (Match m in TypeDecl.Matches(source))
 		{
 			var name = m.Groups[1].Value;
 			if (CollisionTypeNames.Contains(name) || name.EndsWith("CometApp", StringComparison.Ordinal))
