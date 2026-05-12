@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:copilot="clr-namespace:Microsoft.Maui.CopilotChat.Controls;assembly=Microsoft.Maui.CopilotChat"
+             x:Class="CopilotChat.Sample.MainPage"
+             Title="Copilot Chat">
+
+    <copilot:CopilotChatView
+        x:Name="ChatView"
+        WelcomeTitle="Welcome to Copilot Chat"
+        WelcomeMessage="Ask me anything! This sample uses the Copilot SDK as the AI backend."
+        Placeholder="Ask Copilot anything..."
+        SuggestionPrompts="{Binding Suggestions}" />
+
+</ContentPage>
