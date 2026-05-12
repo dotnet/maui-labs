@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.CopilotChat</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.CopilotChat</PackageId>
+    <Description>A drop-in MAUI chat control backed by IChatClient with a Copilot SDK adapter. Beautiful by default, fully customizable via ControlTemplate and DataTemplate overrides.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
+  </ItemGroup>
+
+</Project>
