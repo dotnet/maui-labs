@@ -252,7 +252,7 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty WelcomeIconProperty =
-        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(CopilotChatView), ChatIcons.ChatSparkle);
+        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(CopilotChatView), "💬");
 
     public string WelcomeIcon
     {
@@ -633,7 +633,7 @@ public class CopilotChatView : ContentView
                             var argsText = call.Arguments is not null
                                 ? string.Join("\n", call.Arguments.Select(kv => $"  {kv.Key}: {kv.Value}"))
                                 : "";
-                            var msg = AddMessage(ChatMessageKind.Tool, call.Name ?? "tool", ChatIcons.Wrench);
+                            var msg = AddMessage(ChatMessageKind.Tool, call.Name ?? "tool", "🔧");
                             msg.ToolArgs = argsText;
                             if (call.CallId is not null)
                                 toolCallMessages[call.CallId] = msg;
@@ -681,7 +681,7 @@ public class CopilotChatView : ContentView
                             var toolName = approval.FunctionCall?.Name ?? "unknown";
                             ApprovalText = $"{toolName} — approve?";
                             IsApprovalPending = true;
-                            AddMessage(ChatMessageKind.Tool, $"Approval required: {toolName}", ChatIcons.LockClosed);
+                            AddMessage(ChatMessageKind.Tool, $"Approval required: {toolName}", "🔒");
                             ApprovalRequested?.Invoke(this, toolName);
                             break;
                         }
@@ -718,7 +718,7 @@ public class CopilotChatView : ContentView
         {
             var response = approval.CreateResponse(approved: true);
             _history.Add(new ChatMessage(ChatRole.User, [response]));
-            AddMessage(ChatMessageKind.Tool, "Approved", ChatIcons.Checkmark);
+            AddMessage(ChatMessageKind.Tool, "Approved", "✅");
             await ProcessStreamingResponseAsync();
         }
         catch (Exception ex)
@@ -744,7 +744,7 @@ public class CopilotChatView : ContentView
         {
             var response = approval.CreateResponse(approved: false, reason);
             _history.Add(new ChatMessage(ChatRole.User, [response]));
-            AddMessage(ChatMessageKind.Tool, "Rejected", ChatIcons.Dismiss);
+            AddMessage(ChatMessageKind.Tool, "Rejected", "❌");
             await ProcessStreamingResponseAsync();
         }
         catch (Exception ex)
@@ -780,7 +780,7 @@ public class CopilotChatView : ContentView
                 break;
             case ChatMessageKind.Tool:
                 msg.AuthorName = "Tool";
-                msg.AvatarText = icon ?? ChatIcons.Wrench;
+                msg.AvatarText = icon ?? "🔧";
                 break;
         }
 
