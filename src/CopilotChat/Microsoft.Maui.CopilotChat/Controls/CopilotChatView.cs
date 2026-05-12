@@ -27,6 +27,7 @@ public class CopilotChatView : ContentView
     private Button? _rejectButton;
     private List<ChatMessage> _history = [];
     private CancellationTokenSource _cts = new();
+    private FunctionApprovalRequestContent? _pendingApproval;
 
     public CopilotChatView()
     {
@@ -69,7 +70,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty SystemMessageProperty =
-        BindableProperty.Create(nameof(SystemMessage), typeof(string), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(SystemMessage), typeof(string), typeof(CopilotChatView),
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).InitializeHistory());
 
     public string? SystemMessage
     {
@@ -164,7 +166,8 @@ public class CopilotChatView : ContentView
     // ══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty UserMessageTemplateProperty =
-        BindableProperty.Create(nameof(UserMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(UserMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: OnMessageTemplateChanged);
 
     public DataTemplate? UserMessageTemplate
     {
@@ -173,7 +176,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty AssistantMessageTemplateProperty =
-        BindableProperty.Create(nameof(AssistantMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(AssistantMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: OnMessageTemplateChanged);
 
     public DataTemplate? AssistantMessageTemplate
     {
@@ -182,7 +186,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty ToolMessageTemplateProperty =
-        BindableProperty.Create(nameof(ToolMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(ToolMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: OnMessageTemplateChanged);
 
     public DataTemplate? ToolMessageTemplate
     {
@@ -191,7 +196,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty SystemMessageTemplateProperty =
-        BindableProperty.Create(nameof(SystemMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(SystemMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: OnMessageTemplateChanged);
 
     public DataTemplate? SystemMessageTemplate
     {
@@ -200,7 +206,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty ErrorMessageTemplateProperty =
-        BindableProperty.Create(nameof(ErrorMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(ErrorMessageTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: OnMessageTemplateChanged);
 
     public DataTemplate? ErrorMessageTemplate
     {
@@ -315,11 +322,15 @@ public class CopilotChatView : ContentView
     /// <summary>Clear all messages and reset conversation history.</summary>
     public void ClearMessages()
     {
-        try { _cts.Cancel(); } catch { }
-        _cts.Dispose();
-        _cts = new CancellationTokenSource();
+        // Swap CTS atomically to avoid disposing while in-flight stream uses the token
+        var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        try { oldCts.Cancel(); } catch { }
+        // Dispose asynchronously to avoid ObjectDisposedException in in-flight token registrations
+        Task.Run(() => { try { oldCts.Dispose(); } catch { } });
+
         _history.Clear();
         Messages.Clear();
+        _pendingApproval = null;
         IsApprovalPending = false;
         IsBusy = false;
         InitializeHistory();
@@ -334,6 +345,25 @@ public class CopilotChatView : ContentView
     // ══════════════════════════════════════════════════════════════
     //  TEMPLATE WIRING
     // ══════════════════════════════════════════════════════════════
+
+    private static void OnMessageTemplateChanged(BindableObject bindable, object oldValue, object newValue)
+    {
+        if (bindable is CopilotChatView view)
+            view.UpdateMessageSelector();
+    }
+
+    private void UpdateMessageSelector()
+    {
+        if (_messagesView is null) return;
+        _messagesView.ItemTemplate = new ChatMessageTemplateSelector
+        {
+            UserTemplate = UserMessageTemplate,
+            AssistantTemplate = AssistantMessageTemplate,
+            ToolTemplate = ToolMessageTemplate,
+            SystemTemplate = SystemMessageTemplate,
+            ErrorTemplate = ErrorMessageTemplate,
+        };
+    }
 
     protected override void OnApplyTemplate()
     {
@@ -351,6 +381,9 @@ public class CopilotChatView : ContentView
         _sendButton = GetTemplateChild("PART_Send") as Button;
         _approveButton = GetTemplateChild("PART_Approve") as Button;
         _rejectButton = GetTemplateChild("PART_Reject") as Button;
+
+        // Wire message selector from code (CLR properties can't be bound in XAML ControlTemplate)
+        UpdateMessageSelector();
 
         // Wire events
         if (_sendButton is not null) _sendButton.Clicked += OnSendClicked;
@@ -399,6 +432,10 @@ public class CopilotChatView : ContentView
         {
             await ProcessStreamingResponseAsync();
         }
+        catch (OperationCanceledException)
+        {
+            // Cancellation is expected (e.g. ClearMessages during stream)
+        }
         catch (Exception ex)
         {
             AddMessage(ChatMessageKind.Error, $"Error: {ex.Message}");
@@ -422,76 +459,83 @@ public class CopilotChatView : ContentView
         if (Tools is { Count: > 0 })
             options.Tools = [.. Tools];
 
-        await foreach (var update in ChatClient.GetStreamingResponseAsync(_history, options, _cts.Token))
+        try
         {
-            updates.Add(update);
-
-            foreach (var content in update.Contents)
+            await foreach (var update in ChatClient.GetStreamingResponseAsync(_history, options, _cts.Token))
             {
-                switch (content)
+                updates.Add(update);
+
+                foreach (var content in update.Contents)
                 {
-                    case FunctionCallContent call:
+                    switch (content)
                     {
-                        var argsText = call.Arguments is not null
-                            ? string.Join("\n", call.Arguments.Select(kv => $"  {kv.Key}: {kv.Value}"))
-                            : "";
-                        var msg = AddMessage(ChatMessageKind.Tool, call.Name ?? "tool", ChatIcons.Wrench);
-                        msg.ToolArgs = argsText;
-                        if (call.CallId is not null)
-                            toolCallMessages[call.CallId] = msg;
-                        ToolExecuting?.Invoke(this, msg);
-                        break;
-                    }
-
-                    case FunctionResultContent result:
-                    {
-                        string resultText;
-                        try
+                        case FunctionCallContent call:
                         {
-                            resultText = result.Result switch
+                            var argsText = call.Arguments is not null
+                                ? string.Join("\n", call.Arguments.Select(kv => $"  {kv.Key}: {kv.Value}"))
+                                : "";
+                            var msg = AddMessage(ChatMessageKind.Tool, call.Name ?? "tool", ChatIcons.Wrench);
+                            msg.ToolArgs = argsText;
+                            if (call.CallId is not null)
+                                toolCallMessages[call.CallId] = msg;
+                            ToolExecuting?.Invoke(this, msg);
+                            break;
+                        }
+
+                        case FunctionResultContent result:
+                        {
+                            string resultText;
+                            try
                             {
-                                null => "(null)",
-                                string s => s,
-                                _ => System.Text.Json.JsonSerializer.Serialize(result.Result,
-                                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true })
-                            };
+                                resultText = result.Result switch
+                                {
+                                    null => "(null)",
+                                    string s => s,
+                                    _ => System.Text.Json.JsonSerializer.Serialize(result.Result,
+                                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true })
+                                };
+                            }
+                            catch
+                            {
+                                resultText = result.Result?.ToString() ?? "";
+                            }
+                            if (result.CallId is not null && toolCallMessages.TryGetValue(result.CallId, out var toolMsg))
+                            {
+                                toolMsg.ToolResult = resultText;
+                                ToolExecuted?.Invoke(this, toolMsg);
+                            }
+                            break;
                         }
-                        catch
-                        {
-                            resultText = result.Result?.ToString() ?? "";
-                        }
-                        if (result.CallId is not null && toolCallMessages.TryGetValue(result.CallId, out var toolMsg))
-                        {
-                            toolMsg.ToolResult = resultText;
-                            ToolExecuted?.Invoke(this, toolMsg);
-                        }
-                        break;
-                    }
 
-                    case TextContent tc when tc.Text is not null:
-                        responseText += tc.Text;
-                        ResponseStreaming?.Invoke(this, tc.Text);
-                        if (assistantMessage is null)
-                            assistantMessage = AddMessage(ChatMessageKind.Assistant, responseText);
-                        else
-                            assistantMessage.Text = responseText;
-                        break;
+                        case TextContent tc when tc.Text is not null:
+                            responseText += tc.Text;
+                            ResponseStreaming?.Invoke(this, tc.Text);
+                            if (assistantMessage is null)
+                                assistantMessage = AddMessage(ChatMessageKind.Assistant, responseText);
+                            else
+                                assistantMessage.Text = responseText;
+                            break;
 
-                    case FunctionApprovalRequestContent approval:
-                    {
-                        var toolName = approval.FunctionCall?.Name ?? "unknown";
-                        ApprovalText = $"{toolName} — approve?";
-                        IsApprovalPending = true;
-                        AddMessage(ChatMessageKind.Tool, $"Approval required: {toolName}", ChatIcons.LockClosed);
-                        ApprovalRequested?.Invoke(this, toolName ?? "unknown");
-                        break;
+                        case FunctionApprovalRequestContent approval:
+                        {
+                            _pendingApproval = approval;
+                            var toolName = approval.FunctionCall?.Name ?? "unknown";
+                            ApprovalText = $"{toolName} — approve?";
+                            IsApprovalPending = true;
+                            AddMessage(ChatMessageKind.Tool, $"Approval required: {toolName}", ChatIcons.LockClosed);
+                            ApprovalRequested?.Invoke(this, toolName);
+                            break;
+                        }
                     }
                 }
             }
         }
-
-        // Add response to history
-        _history.AddMessages(updates);
+        finally
+        {
+            // Always flush history, even on cancellation/error, to avoid orphan messages
+            if (updates.Count > 0)
+                _history.AddMessages(updates);
+        }
 
         if (assistantMessage is not null)
             ResponseReceived?.Invoke(this, assistantMessage);
@@ -499,18 +543,56 @@ public class CopilotChatView : ContentView
             AddMessage(ChatMessageKind.Assistant, "(no response)");
     }
 
-    private Task HandleApproveAsync()
+    private async Task HandleApproveAsync()
     {
+        if (_pendingApproval is null) return;
+
+        var approval = _pendingApproval;
+        _pendingApproval = null;
         IsApprovalPending = false;
-        AddMessage(ChatMessageKind.Tool, "Approved", ChatIcons.Checkmark);
-        return Task.CompletedTask;
+        IsBusy = true;
+
+        try
+        {
+            var response = approval.CreateResponse(approved: true);
+            _history.Add(new ChatMessage(ChatRole.User, [response]));
+            AddMessage(ChatMessageKind.Tool, "Approved", ChatIcons.Checkmark);
+            await ProcessStreamingResponseAsync();
+        }
+        catch (Exception ex)
+        {
+            AddMessage(ChatMessageKind.Error, $"Error: {ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
-    private Task HandleRejectAsync(string reason)
+    private async Task HandleRejectAsync(string reason)
     {
+        if (_pendingApproval is null) return;
+
+        var approval = _pendingApproval;
+        _pendingApproval = null;
         IsApprovalPending = false;
-        AddMessage(ChatMessageKind.Tool, "Rejected", ChatIcons.Dismiss);
-        return Task.CompletedTask;
+        IsBusy = true;
+
+        try
+        {
+            var response = approval.CreateResponse(approved: false, reason);
+            _history.Add(new ChatMessage(ChatRole.User, [response]));
+            AddMessage(ChatMessageKind.Tool, "Rejected", ChatIcons.Dismiss);
+            await ProcessStreamingResponseAsync();
+        }
+        catch (Exception ex)
+        {
+            AddMessage(ChatMessageKind.Error, $"Error: {ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private CopilotChatMessage AddMessage(ChatMessageKind kind, string text, string? icon = null)
