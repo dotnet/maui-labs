@@ -16,4 +16,7 @@ public sealed class CopilotChatConfiguration
 
     /// <summary>Explicit GitHub token. If set, <see cref="UseLoggedInUser"/> is ignored.</summary>
     public string? GitHubToken { get; set; }
+
+    /// <summary>Path to the Copilot CLI binary. If null, the SDK uses its bundled CLI or searches PATH.</summary>
+    public string? CliPath { get; set; }
 }

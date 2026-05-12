@@ -202,6 +202,7 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
             {
                 UseLoggedInUser = _config.UseLoggedInUser,
                 GitHubToken = _config.GitHubToken,
+                CliPath = _config.CliPath,
             });
 
             await _client.StartAsync(cancellationToken);
