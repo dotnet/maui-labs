@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CopilotChat.Sample.SettingsPage"
+             Title="Settings">
+    <ScrollView>
+        <VerticalStackLayout Spacing="16" Padding="20" MaximumWidthRequest="600" HorizontalOptions="Center">
+
+            <Label Text="Chat Settings" FontSize="24" FontAttributes="Bold" />
+            <Label Text="Configure the Copilot Chat control." FontSize="14" Opacity="0.7" />
+
+            <!-- System Prompt -->
+            <Label Text="System Prompt" FontAttributes="Bold" FontSize="15" Margin="0,8,0,0" />
+            <Border StrokeShape="RoundRectangle 8" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#CBD5E1, Dark=#475569}" Padding="4">
+                <Editor x:Name="SystemPromptEditor" HeightRequest="120"
+                        FontSize="14" Placeholder="Enter system instructions..."
+                        Text="You are a helpful assistant. Be concise and friendly. When using tools, explain what you're doing." />
+            </Border>
+
+            <!-- Model -->
+            <Label Text="Model" FontAttributes="Bold" FontSize="15" Margin="0,8,0,0" />
+            <Border StrokeShape="RoundRectangle 8" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#CBD5E1, Dark=#475569}" Padding="4">
+                <Picker x:Name="ModelPicker" FontSize="14">
+                    <Picker.ItemsSource>
+                        <x:Array Type="{x:Type x:String}">
+                            <x:String>gpt-4.1</x:String>
+                            <x:String>gpt-5-mini</x:String>
+                            <x:String>claude-sonnet-4.5</x:String>
+                            <x:String>claude-haiku-4.5</x:String>
+                        </x:Array>
+                    </Picker.ItemsSource>
+                </Picker>
+            </Border>
+
+            <!-- Welcome Text -->
+            <Label Text="Welcome Title" FontAttributes="Bold" FontSize="15" Margin="0,8,0,0" />
+            <Border StrokeShape="RoundRectangle 8" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#CBD5E1, Dark=#475569}" Padding="4">
+                <Entry x:Name="WelcomeTitleEntry" FontSize="14"
+                       Text="Copilot Assistant" />
+            </Border>
+
+            <Label Text="Welcome Message" FontAttributes="Bold" FontSize="15" Margin="0,4,0,0" />
+            <Border StrokeShape="RoundRectangle 8" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#CBD5E1, Dark=#475569}" Padding="4">
+                <Entry x:Name="WelcomeMessageEntry" FontSize="14"
+                       Text="I can check the weather, do math, share fun facts, and navigate this app. Try asking me!" />
+            </Border>
+
+            <!-- Placeholder -->
+            <Label Text="Input Placeholder" FontAttributes="Bold" FontSize="15" Margin="0,8,0,0" />
+            <Border StrokeShape="RoundRectangle 8" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#CBD5E1, Dark=#475569}" Padding="4">
+                <Entry x:Name="PlaceholderEntry" FontSize="14"
+                       Text="Ask me anything..." />
+            </Border>
+
+            <!-- Apply -->
+            <Button Text="Apply Settings" FontSize="15"
+                    BackgroundColor="#6366F1" TextColor="White" CornerRadius="10"
+                    Padding="16,10" Margin="0,12,0,0"
+                    Clicked="OnApplyClicked" />
+
+            <Label x:Name="StatusLabel" FontSize="13" TextColor="#6366F1"
+                   HorizontalTextAlignment="Center" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

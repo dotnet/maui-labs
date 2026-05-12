@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="xunit" />
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
