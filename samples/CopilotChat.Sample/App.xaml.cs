@@ -1,16 +1,17 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-
-namespace CopilotChat.Sample;
+﻿namespace CopilotChat.Sample;
 
 public partial class App : Application
 {
-	public App()
-	{
-		InitializeComponent();
-	}
+    public App(IServiceProvider services)
+    {
+        InitializeComponent();
+        _services = services;
+    }
 
-	protected override Window CreateWindow(IActivationState? activationState)
-	{
-		return new Window(new AppShell());
-	}
+    private readonly IServiceProvider _services;
+
+    protected override Window CreateWindow(IActivationState? activationState)
+    {
+        return new Window(_services.GetRequiredService<MainPage>()) { Title = "Copilot Chat" };
+    }
 }

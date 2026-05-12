@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
 
@@ -84,8 +85,8 @@ public sealed class CopilotSdkChatClient : IChatClient, IAsyncDisposable
 
         // Use Channel for immediate wake-on-write — each SDK event wakes the consumer
         // immediately instead of batching behind a polling delay.
-        var channel = System.Threading.Channels.Channel.CreateUnbounded<ChatResponseUpdate>(
-            new System.Threading.Channels.UnboundedChannelOptions
+        var channel = Channel.CreateUnbounded<ChatResponseUpdate>(
+            new UnboundedChannelOptions
             {
                 SingleWriter = false,
                 SingleReader = true,
