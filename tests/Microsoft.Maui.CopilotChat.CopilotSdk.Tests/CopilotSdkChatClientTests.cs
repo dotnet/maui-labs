@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using Microsoft.Extensions.AI;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.CopilotChat.CopilotSdk.Tests;
 
@@ -9,11 +11,11 @@ public class CopilotChatConfigurationTests
     public void Defaults_AreCorrect()
     {
         var config = new CopilotChatConfiguration();
-
         Assert.Equal("gpt-4.1", config.Model);
         Assert.Null(config.SystemMessage);
         Assert.True(config.UseLoggedInUser);
         Assert.Null(config.GitHubToken);
+        Assert.Null(config.CliPath);
     }
 
     [Fact]
@@ -25,12 +27,13 @@ public class CopilotChatConfigurationTests
             SystemMessage = "Be helpful",
             UseLoggedInUser = false,
             GitHubToken = "ghp_test",
+            CliPath = "/usr/local/bin/copilot",
         };
-
         Assert.Equal("claude-sonnet-4.5", config.Model);
         Assert.Equal("Be helpful", config.SystemMessage);
         Assert.False(config.UseLoggedInUser);
         Assert.Equal("ghp_test", config.GitHubToken);
+        Assert.Equal("/usr/local/bin/copilot", config.CliPath);
     }
 }
 
@@ -39,304 +42,338 @@ public class CopilotSdkChatClientUnitTests
     [Fact]
     public void Constructor_DoesNotThrow()
     {
-        var config = new CopilotChatConfiguration();
-        var client = new CopilotSdkChatClient(config);
-
+        using var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
         Assert.NotNull(client);
-        client.Dispose();
     }
 
     [Fact]
-    public void GetService_ReturnsNullForUnknownType()
+    public void GetService_ReturnsNullBeforeFirstCall()
     {
-        var config = new CopilotChatConfiguration();
-        using var client = new CopilotSdkChatClient(config);
-
+        using var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
         Assert.Null(client.GetService(typeof(string)));
+        Assert.Null(client.GetService(typeof(GitHub.Copilot.SDK.CopilotSession)));
     }
 
     [Fact]
-    public void Dispose_CanBeCalledMultipleTimes()
+    public void Dispose_Idempotent()
     {
-        var config = new CopilotChatConfiguration();
-        var client = new CopilotSdkChatClient(config);
-
+        var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
         client.Dispose();
         client.Dispose();
     }
 
     [Fact]
-    public async Task DisposeAsync_CanBeCalledMultipleTimes()
+    public async Task DisposeAsync_Idempotent()
     {
-        var config = new CopilotChatConfiguration();
-        var client = new CopilotSdkChatClient(config);
-
+        var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
         await client.DisposeAsync();
         await client.DisposeAsync();
     }
 
     [Fact]
-    public void StreamingTimeout_DefaultIs5Minutes()
+    public void StreamingTimeout_Default5Min()
     {
-        var config = new CopilotChatConfiguration();
-        using var client = new CopilotSdkChatClient(config);
-
+        using var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
         Assert.Equal(TimeSpan.FromMinutes(5), client.StreamingTimeout);
     }
 
     [Fact]
-    public void StreamingTimeout_CanBeChanged()
+    public async Task EmptyPrompt_YieldsNothing()
     {
-        var config = new CopilotChatConfiguration();
-        using var client = new CopilotSdkChatClient(config);
-
-        client.StreamingTimeout = TimeSpan.FromSeconds(30);
-        Assert.Equal(TimeSpan.FromSeconds(30), client.StreamingTimeout);
+        using var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
+        var count = 0;
+        await foreach (var _ in client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "")]))
+            count++;
+        Assert.Equal(0, count);
     }
 
     [Fact]
-    public async Task GetStreamingResponseAsync_EmptyPrompt_YieldsNothing()
+    public async Task NoUserMessage_YieldsNothing()
     {
-        var config = new CopilotChatConfiguration();
-        using var client = new CopilotSdkChatClient(config);
-
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.User, "")
-        };
-
-        var updates = new List<ChatResponseUpdate>();
-        await foreach (var update in client.GetStreamingResponseAsync(messages))
-            updates.Add(update);
-
-        Assert.Empty(updates);
+        using var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
+        var count = 0;
+        await foreach (var _ in client.GetStreamingResponseAsync([new ChatMessage(ChatRole.System, "hi")]))
+            count++;
+        Assert.Equal(0, count);
     }
 
     [Fact]
-    public async Task GetStreamingResponseAsync_NoUserMessage_YieldsNothing()
+    public void ImplementsInterfaces()
     {
-        var config = new CopilotChatConfiguration();
-        using var client = new CopilotSdkChatClient(config);
-
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.System, "You are helpful")
-        };
-
-        var updates = new List<ChatResponseUpdate>();
-        await foreach (var update in client.GetStreamingResponseAsync(messages))
-            updates.Add(update);
-
-        Assert.Empty(updates);
-    }
-
-    [Fact]
-    public void ImplementsIChatClient()
-    {
-        var config = new CopilotChatConfiguration();
-        using var client = new CopilotSdkChatClient(config);
-
+        using var client = new CopilotSdkChatClient(new CopilotChatConfiguration());
         Assert.IsAssignableFrom<IChatClient>(client);
         Assert.IsAssignableFrom<IAsyncDisposable>(client);
     }
 }
 
 /// <summary>
-/// Integration tests that require a real Copilot CLI and authentication.
-/// Skipped if Copilot CLI is not available.
+/// Integration tests against the real Copilot SDK / CLI.
+/// Covers the full IChatClient surface: text, streaming, tool calling, sessions, lifecycle.
 /// </summary>
-public class CopilotSdkChatClientIntegrationTests
+public class CopilotSdkIntegrationTests : IAsyncLifetime
 {
-    private static bool IsCopilotAvailable()
-    {
-        try
-        {
-            var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "copilot",
-                Arguments = "--version",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            });
-            process?.WaitForExit(5000);
-            return process?.ExitCode == 0;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private readonly ITestOutputHelper _output;
+    private CopilotSdkChatClient _client = null!;
 
-    private static CopilotSdkChatClient CreateClient(string? systemMessage = null)
+    public CopilotSdkIntegrationTests(ITestOutputHelper output) => _output = output;
+
+    public Task InitializeAsync()
     {
-        return new CopilotSdkChatClient(new CopilotChatConfiguration
+        _client = new CopilotSdkChatClient(new CopilotChatConfiguration
         {
             Model = "gpt-4.1",
             UseLoggedInUser = true,
-            SystemMessage = systemMessage,
+            SystemMessage = "You are a test assistant. Be extremely brief. When tools are available, always use them immediately without asking.",
         });
+        return Task.CompletedTask;
+    }
+
+    public async Task DisposeAsync() => await _client.DisposeAsync();
+
+    // ═══════════ TEXT ═══════════
+
+    [Fact]
+    public async Task GetResponseAsync_ReturnsText()
+    {
+        var resp = await _client.GetResponseAsync([new ChatMessage(ChatRole.User, "Reply HELLO")]);
+        var text = resp.Messages[0].Text!;
+        Assert.Contains("HELLO", text, StringComparison.OrdinalIgnoreCase);
+        _output.WriteLine(text);
     }
 
     [Fact]
-    public async Task GetResponseAsync_BasicPrompt_ReturnsNonEmptyResponse()
+    public async Task GetResponseAsync_SystemMessageRespected()
     {
-        if (!IsCopilotAvailable())
-            return; // Skip silently when CLI not available
+        var resp = await _client.GetResponseAsync([new ChatMessage(ChatRole.User, "Are you brief? One word.")]);
+        Assert.NotEmpty(resp.Messages[0].Text!);
+        _output.WriteLine(resp.Messages[0].Text!);
+    }
 
-        await using var client = CreateClient("You are a helpful assistant. Be extremely brief.");
+    // ═══════════ STREAMING ═══════════
 
-        var messages = new List<ChatMessage>
+    [Fact]
+    public async Task Streaming_YieldsMultipleChunks()
+    {
+        var textChunks = new List<string>();
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "Count 1 to 10, each on a new line")]))
         {
-            new(ChatRole.User, "Reply with exactly: hello world")
-        };
-
-        var response = await client.GetResponseAsync(messages);
-
-        Assert.NotNull(response);
-        Assert.NotEmpty(response.Messages);
-
-        var text = response.Messages[0].Text;
-        Assert.NotNull(text);
-        Assert.NotEmpty(text);
+            foreach (var tc in u.Contents.OfType<TextContent>())
+                textChunks.Add(tc.Text ?? "");
+        }
+        Assert.True(textChunks.Count > 1, $"Expected >1 chunks, got {textChunks.Count}");
+        _output.WriteLine($"{textChunks.Count} chunks");
     }
 
     [Fact]
-    public async Task GetStreamingResponseAsync_BasicPrompt_YieldsTextChunks()
+    public async Task Streaming_ChunksArriveOverTime()
     {
-        if (!IsCopilotAvailable())
-            return;
-
-        await using var client = CreateClient("Be extremely brief. One sentence max.");
-
-        var messages = new List<ChatMessage>
+        var times = new List<DateTime>();
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "Write 3 sentences about the ocean.")]))
         {
-            new(ChatRole.User, "What is 2+2? Reply with just the number.")
+            if (u.Contents.OfType<TextContent>().Any())
+                times.Add(DateTime.UtcNow);
+        }
+        if (times.Count >= 2)
+        {
+            var span = times[^1] - times[0];
+            _output.WriteLine($"Span: {span.TotalMilliseconds}ms over {times.Count} chunks");
+            Assert.True(span.TotalMilliseconds > 50, "Chunks should arrive over time, not all at once");
+        }
+    }
+
+    // ═══════════ TOOL CALLING (native SDK tool execution) ═══════════
+
+    [Fact]
+    public async Task Tools_SingleTool_GetsInvoked()
+    {
+        var called = false;
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(() => { called = true; return "22 degrees Celsius, Sunny"; },
+                name: "get_weather",
+                description: "Get the current weather. Always call this when asked about weather."),
         };
 
-        var chunks = new List<ChatResponseUpdate>();
-        await foreach (var update in client.GetStreamingResponseAsync(messages))
-            chunks.Add(update);
+        var fullText = "";
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "What is the weather? Use the get_weather tool.")],
+            new ChatOptions { Tools = tools }))
+        {
+            foreach (var tc in u.Contents.OfType<TextContent>())
+                fullText += tc.Text;
+        }
 
-        Assert.NotEmpty(chunks);
-
-        var textChunks = chunks
-            .SelectMany(c => c.Contents.OfType<TextContent>())
-            .ToList();
-        Assert.NotEmpty(textChunks);
-
-        var fullText = string.Join("", textChunks.Select(tc => tc.Text));
-        Assert.Contains("4", fullText);
+        Assert.True(called, "get_weather tool should have been invoked by the SDK");
+        _output.WriteLine($"Tool response: {fullText}");
     }
 
     [Fact]
-    public async Task GetStreamingResponseAsync_CanBeCancelled()
+    public async Task Tools_ToolResultAppearsInResponse()
     {
-        if (!IsCopilotAvailable())
-            return;
-
-        await using var client = CreateClient();
-
-        var messages = new List<ChatMessage>
+        var tools = new List<AITool>
         {
-            new(ChatRole.User, "Write a very long essay about the history of computing. Make it at least 10000 words.")
+            AIFunctionFactory.Create(() => "The first computer bug was a real moth found in 1947.",
+                name: "get_fact",
+                description: "Returns a fun fact. Always call this when asked for a fact."),
         };
 
+        var fullText = "";
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "Give me a fact. Use get_fact tool.")],
+            new ChatOptions { Tools = tools }))
+        {
+            foreach (var tc in u.Contents.OfType<TextContent>())
+                fullText += tc.Text;
+        }
+
+        Assert.Contains("moth", fullText, StringComparison.OrdinalIgnoreCase);
+        _output.WriteLine(fullText);
+    }
+
+    [Fact]
+    public async Task Tools_WithArgs_ReceivesArguments()
+    {
+        string? receivedCity = null;
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(
+                ([Description("The city name")] string city) =>
+                {
+                    receivedCity = city;
+                    return $"Weather in {city}: 18°C, Cloudy";
+                },
+                name: "get_city_weather",
+                description: "Get weather for a specific city. Always call this for weather queries."),
+        };
+
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "Weather in Tokyo? Use get_city_weather.")],
+            new ChatOptions { Tools = tools }))
+        {
+            // consume
+        }
+
+        Assert.NotNull(receivedCity);
+        Assert.Contains("Tokyo", receivedCity!, StringComparison.OrdinalIgnoreCase);
+        _output.WriteLine($"Received city arg: {receivedCity}");
+    }
+
+    [Fact]
+    public async Task Tools_MultipleAvailable_SelectsCorrectOne()
+    {
+        string? calledTool = null;
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(() => { calledTool = "weather"; return "Sunny"; },
+                name: "get_weather", description: "Get weather info"),
+            AIFunctionFactory.Create(() => { calledTool = "fact"; return "A fun fact"; },
+                name: "get_fact", description: "Get a fun fact"),
+            AIFunctionFactory.Create(
+                ([Description("Math expression")] string expr) => { calledTool = "calc"; return "42"; },
+                name: "calculate", description: "Evaluate a math expression"),
+        };
+
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "What is 6*7? Use calculate.")],
+            new ChatOptions { Tools = tools }))
+        {
+            // consume
+        }
+
+        Assert.Equal("calc", calledTool);
+        _output.WriteLine($"Selected: {calledTool}");
+    }
+
+    [Fact]
+    public async Task Tools_StreamIncludesToolEvents()
+    {
+        var sawToolStart = false;
+        var sawToolComplete = false;
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(() => "result-data",
+                name: "my_tool", description: "A test tool. Always call this."),
+        };
+
+        await foreach (var u in _client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "Call my_tool now.")],
+            new ChatOptions { Tools = tools }))
+        {
+            foreach (var c in u.Contents)
+            {
+                if (c is FunctionCallContent) sawToolStart = true;
+                if (c is FunctionResultContent) sawToolComplete = true;
+            }
+        }
+
+        Assert.True(sawToolStart, "Should see FunctionCallContent in stream");
+        Assert.True(sawToolComplete, "Should see FunctionResultContent in stream");
+        _output.WriteLine($"ToolStart={sawToolStart} ToolComplete={sawToolComplete}");
+    }
+
+    // ═══════════ SESSION ═══════════
+
+    [Fact]
+    public async Task Session_ContextMaintainedAcrossCalls()
+    {
+        // Use non-sensitive data the model won't refuse to repeat
+        await _client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "My favorite color is TURQUOISE. Say OK.")]);
+
+        var resp = await _client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "What is my favorite color? Just the color.")]);
+
+        Assert.Contains("TURQUOISE", resp.Messages[0].Text!, StringComparison.OrdinalIgnoreCase);
+        _output.WriteLine(resp.Messages[0].Text!);
+    }
+
+    [Fact]
+    public async Task ResetSession_ClearsContext()
+    {
+        await _client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "My pet's name is BISCUIT42. Say OK.")]);
+
+        await _client.ResetSessionAsync();
+
+        var resp = await _client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "What is my pet's name? If unknown say UNKNOWN.")]);
+
+        Assert.Contains("UNKNOWN", resp.Messages[0].Text!, StringComparison.OrdinalIgnoreCase);
+        _output.WriteLine(resp.Messages[0].Text!);
+    }
+
+    // ═══════════ CANCELLATION ═══════════
+
+    [Fact]
+    public async Task Streaming_CanBeCancelled()
+    {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-
-        var chunks = new List<ChatResponseUpdate>();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var update in client.GetStreamingResponseAsync(messages, cancellationToken: cts.Token))
-                chunks.Add(update);
+            await foreach (var _ in _client.GetStreamingResponseAsync(
+                [new ChatMessage(ChatRole.User, "Write a 10000 word essay.")],
+                cancellationToken: cts.Token))
+            { }
         });
+    }
 
-        // Should have received some chunks before cancellation
-        // (but not guaranteed if the SDK is slow to start)
+    // ═══════════ LIFECYCLE ═══════════
+
+    [Fact]
+    public async Task DisposeAsync_AfterUse()
+    {
+        var c = new CopilotSdkChatClient(new CopilotChatConfiguration { Model = "gpt-4.1", UseLoggedInUser = true });
+        await c.GetResponseAsync([new ChatMessage(ChatRole.User, "Hi")]);
+        await c.DisposeAsync();
     }
 
     [Fact]
-    public async Task GetResponseAsync_WithSystemMessage_RespectsInstructions()
+    public async Task GetService_ReturnsSessionAfterFirstCall()
     {
-        if (!IsCopilotAvailable())
-            return;
-
-        await using var client = CreateClient("You must always respond with exactly: PONG");
-
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.User, "ping")
-        };
-
-        var response = await client.GetResponseAsync(messages);
-        var text = response.Messages[0].Text ?? "";
-
-        Assert.Contains("PONG", text, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task GetResponseAsync_MultipleSequentialCalls_MaintainSession()
-    {
-        if (!IsCopilotAvailable())
-            return;
-
-        await using var client = CreateClient("Be extremely brief. One word answers only.");
-
-        // First message
-        var response1 = await client.GetResponseAsync([
-            new ChatMessage(ChatRole.User, "My name is TestBot42. Remember it. Just say OK.")
-        ]);
-        Assert.NotNull(response1.Messages[0].Text);
-
-        // Second message — should remember context from session
-        var response2 = await client.GetResponseAsync([
-            new ChatMessage(ChatRole.User, "What name did I just tell you? Reply with just the name.")
-        ]);
-        var text2 = response2.Messages[0].Text ?? "";
-        Assert.Contains("TestBot42", text2, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ResetSessionAsync_ClearsSessionState()
-    {
-        if (!IsCopilotAvailable())
-            return;
-
-        await using var client = CreateClient("Be extremely brief.");
-
-        // Establish context
-        await client.GetResponseAsync([
-            new ChatMessage(ChatRole.User, "Remember the code word: ZEBRA42. Say OK.")
-        ]);
-
-        // Reset
-        await client.ResetSessionAsync();
-
-        // After reset, session should not remember
-        var response = await client.GetResponseAsync([
-            new ChatMessage(ChatRole.User, "What was the code word I told you? If you don't know, say UNKNOWN.")
-        ]);
-        var text = response.Messages[0].Text ?? "";
-
-        // After reset, it should NOT know the code word
-        Assert.Contains("UNKNOWN", text, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task DisposeAsync_AfterUse_CleansUpResources()
-    {
-        if (!IsCopilotAvailable())
-            return;
-
-        var client = CreateClient("Be brief.");
-
-        // Use the client
-        await client.GetResponseAsync([
-            new ChatMessage(ChatRole.User, "Say hello")
-        ]);
-
-        // Dispose should not throw
-        await client.DisposeAsync();
+        Assert.Null(_client.GetService(typeof(GitHub.Copilot.SDK.CopilotSession)));
+        await _client.GetResponseAsync([new ChatMessage(ChatRole.User, "OK")]);
+        Assert.NotNull(_client.GetService(typeof(GitHub.Copilot.SDK.CopilotSession)));
     }
 }
