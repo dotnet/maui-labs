@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/AI/">
+    <Project Path="Microsoft.Maui.AI/Microsoft.Maui.AI.csproj" />
+  </Folder>
+</Solution>
