@@ -26,6 +26,10 @@
                         <Entry x:Name="WelcomeTitleEntry" Text="Copilot Assistant" FontSize="13" />
                         <Label Text="Placeholder" FontSize="12" FontAttributes="Bold" />
                         <Entry x:Name="PlaceholderEntry" Text="Ask me anything..." FontSize="13" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Compact Theme" VerticalOptions="Center" FontSize="13" />
+                            <Switch x:Name="CompactSwitch" Grid.Column="1" />
+                        </Grid>
                         <Button Text="Clear Chat" FontSize="12" CornerRadius="8"
                                 BackgroundColor="#DC2626" TextColor="White"
                                 Padding="12,6" HorizontalOptions="Start"

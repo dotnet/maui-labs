@@ -82,22 +82,26 @@
     <DataTemplate x:Key="CopilotDefaultUserMessageTemplate" x:DataType="local:CopilotChatMessage">
         <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0"
               ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <Border Grid.Column="0"
-                    BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleLight}, Dark={DynamicResource CopilotUserBubbleDark}}"
-                    Padding="{DynamicResource CopilotBubblePadding}"
-                    HorizontalOptions="End"
-                    MaximumWidthRequest="560"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 12">
-                <Label Text="{Binding Text}"
-                       FontSize="{DynamicResource CopilotFontSizeBody}"
-                       TextColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleTextLight}, Dark={DynamicResource CopilotUserBubbleTextDark}}" />
-            </Border>
+            <VerticalStackLayout Grid.Column="0" HorizontalOptions="End" Spacing="2">
+                <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleLight}, Dark={DynamicResource CopilotUserBubbleDark}}"
+                        Padding="{DynamicResource CopilotBubblePadding}"
+                        MaximumWidthRequest="560"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12">
+                    <Label Text="{Binding Text}"
+                           FontSize="{DynamicResource CopilotFontSizeBody}"
+                           TextColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleTextLight}, Dark={DynamicResource CopilotUserBubbleTextDark}}" />
+                </Border>
+                <Label Text="{Binding TimestampText}" FontSize="10" Opacity="0.5"
+                       HorizontalOptions="End" IsVisible="{Binding ShowTimestamp}" />
+            </VerticalStackLayout>
             <!-- Avatar circle -->
-            <Border Grid.Column="1" WidthRequest="28" HeightRequest="28"
-                    StrokeShape="RoundRectangle 14" StrokeThickness="0"
+            <Border Grid.Column="1"
+                    WidthRequest="{Binding AvatarSize}" HeightRequest="{Binding AvatarSize}"
+                    StrokeShape="RoundRectangle 999" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotUserAvatarBackgroundLight}, Dark={DynamicResource CopilotUserAvatarBackgroundDark}}"
-                    VerticalOptions="End">
+                    VerticalOptions="End"
+                    IsVisible="{Binding ShowAvatar}">
                 <Grid>
                     <Image Source="{Binding AvatarSource}" Aspect="AspectFill"
                            IsVisible="{Binding HasAvatarImage}" />
@@ -115,10 +119,12 @@
         <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0"
               ColumnDefinitions="Auto,*" ColumnSpacing="8">
             <!-- Avatar circle -->
-            <Border Grid.Column="0" WidthRequest="28" HeightRequest="28"
-                    StrokeShape="RoundRectangle 14" StrokeThickness="0"
+            <Border Grid.Column="0"
+                    WidthRequest="{Binding AvatarSize}" HeightRequest="{Binding AvatarSize}"
+                    StrokeShape="RoundRectangle 999" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAssistantAvatarBackgroundLight}, Dark={DynamicResource CopilotAssistantAvatarBackgroundDark}}"
-                    VerticalOptions="End">
+                    VerticalOptions="End"
+                    IsVisible="{Binding ShowAvatar}">
                 <Grid>
                     <Image Source="{Binding AvatarSource}" Aspect="AspectFill"
                            IsVisible="{Binding HasAvatarImage}" />
@@ -128,18 +134,20 @@
                            TextColor="{AppThemeBinding Light={DynamicResource CopilotAssistantAvatarTextLight}, Dark={DynamicResource CopilotAssistantAvatarTextDark}}" />
                 </Grid>
             </Border>
-            <Border Grid.Column="1"
-                    BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAssistantBubbleLight}, Dark={DynamicResource CopilotAssistantBubbleDark}}"
-                    Padding="{DynamicResource CopilotBubblePadding}"
-                    HorizontalOptions="Start"
-                    MaximumWidthRequest="560"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 12">
-                <Border.Shadow>
-                    <Shadow Brush="Black" Offset="0,1" Radius="3" Opacity="0.08" />
-                </Border.Shadow>
-                <Label Text="{Binding Text}" FontSize="{DynamicResource CopilotFontSizeBody}" />
-            </Border>
+            <VerticalStackLayout Grid.Column="1" HorizontalOptions="Start" Spacing="2">
+                <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAssistantBubbleLight}, Dark={DynamicResource CopilotAssistantBubbleDark}}"
+                        Padding="{DynamicResource CopilotBubblePadding}"
+                        MaximumWidthRequest="560"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12">
+                    <Border.Shadow>
+                        <Shadow Brush="Black" Offset="0,1" Radius="3" Opacity="0.08" />
+                    </Border.Shadow>
+                    <Label Text="{Binding Text}" FontSize="{DynamicResource CopilotFontSizeBody}" />
+                </Border>
+                <Label Text="{Binding TimestampText}" FontSize="10" Opacity="0.5"
+                       IsVisible="{Binding ShowTimestamp}" />
+            </VerticalStackLayout>
         </Grid>
     </DataTemplate>
 

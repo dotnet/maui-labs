@@ -266,7 +266,8 @@ public class CopilotChatView : ContentView
     // ══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty ShowAvatarsProperty =
-        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(CopilotChatView), true);
+        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(CopilotChatView), true,
+            propertyChanged: (b, _, v) => ((CopilotChatView)b).PropagateToMessages(m => m.ShowAvatar = (bool)v));
 
     public bool ShowAvatars
     {
@@ -275,7 +276,8 @@ public class CopilotChatView : ContentView
     }
 
     public static readonly BindableProperty AvatarSizeProperty =
-        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(CopilotChatView), 28.0);
+        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(CopilotChatView), 28.0,
+            propertyChanged: (b, _, v) => ((CopilotChatView)b).PropagateToMessages(m => m.AvatarSize = (double)v));
 
     public double AvatarSize
     {
@@ -342,7 +344,8 @@ public class CopilotChatView : ContentView
     // ══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty ShowTimestampsProperty =
-        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(CopilotChatView), false);
+        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(CopilotChatView), false,
+            propertyChanged: (b, _, v) => ((CopilotChatView)b).PropagateToMessages(m => m.ShowTimestamp = (bool)v));
 
     public bool ShowTimestamps
     {
@@ -606,9 +609,12 @@ public class CopilotChatView : ContentView
         _history.Add(new ChatMessage(ChatRole.User, text));
         MessageSent?.Invoke(this, userMsg);
 
+        // Show thinking indicator
+        var thinkingMsg = AddMessage(ChatMessageKind.System, TypingIndicatorText);
+
         try
         {
-            await ProcessStreamingResponseAsync();
+            await ProcessStreamingResponseAsync(thinkingMsg);
         }
         catch (OperationCanceledException)
         {
@@ -624,7 +630,7 @@ public class CopilotChatView : ContentView
         }
     }
 
-    private async Task ProcessStreamingResponseAsync()
+    private async Task ProcessStreamingResponseAsync(CopilotChatMessage? thinkingMsg = null)
     {
         if (ChatClient is null) return;
 
@@ -649,6 +655,7 @@ public class CopilotChatView : ContentView
                     {
                         case FunctionCallContent call:
                         {
+                            if (thinkingMsg is not null) { Messages.Remove(thinkingMsg); thinkingMsg = null; }
                             var argsText = call.Arguments is not null
                                 ? string.Join("\n", call.Arguments.Select(kv => $"  {kv.Key}: {kv.Value}"))
                                 : "";
@@ -688,6 +695,8 @@ public class CopilotChatView : ContentView
                         case TextContent tc when tc.Text is not null:
                             responseText += tc.Text;
                             ResponseStreaming?.Invoke(this, tc.Text);
+                            // Remove thinking indicator on first text
+                            if (thinkingMsg is not null) { Messages.Remove(thinkingMsg); thinkingMsg = null; }
                             if (assistantMessage is null)
                                 assistantMessage = AddMessage(ChatMessageKind.Assistant, responseText);
                             else
@@ -781,6 +790,9 @@ public class CopilotChatView : ContentView
         var msg = new CopilotChatMessage(kind, text, icon)
         {
             Timestamp = DateTimeOffset.Now,
+            ShowAvatar = ShowAvatars,
+            AvatarSize = AvatarSize,
+            ShowTimestamp = ShowTimestamps,
         };
 
         // Populate avatar/identity from control defaults
@@ -816,5 +828,11 @@ public class CopilotChatView : ContentView
         }
 
         return msg;
+    }
+
+    private void PropagateToMessages(Action<CopilotChatMessage> action)
+    {
+        foreach (var msg in Messages)
+            action(msg);
     }
 }
