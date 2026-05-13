@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls"
+    xmlns:converters="clr-namespace:Microsoft.Maui.AI.Controls.Converters"
+    xmlns:ai="clr-namespace:Microsoft.Maui.AI;assembly=Microsoft.Maui.AI"
+    x:Class="Microsoft.Maui.AI.Controls.Themes.CompactThemeResourceDictionary">
+
+    <!-- Compact theme inherits DefaultTheme colors and overrides spacing/sizes -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="DefaultTheme.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ═══════ COMPACT TYPE SCALE ═══════ -->
+    <x:Double x:Key="CopilotFontSizeHero">36</x:Double>
+    <x:Double x:Key="CopilotFontSizeTitle">16</x:Double>
+    <x:Double x:Key="CopilotFontSizeBody">12</x:Double>
+    <x:Double x:Key="CopilotFontSizeCaption">10</x:Double>
+
+    <!-- ═══════ COMPACT SPACING ═══════ -->
+    <x:Double x:Key="CopilotMessageSpacing">4</x:Double>
+    <Thickness x:Key="CopilotBubblePadding">8,4</Thickness>
+    <Thickness x:Key="CopilotInputPadding">8,4,8,8</Thickness>
+
+    <!-- ═══════ COMPACT CONTROL TEMPLATE ═══════ -->
+    <ControlTemplate x:Key="CopilotChatViewCompactTemplate" x:DataType="controls:AgentChatView">
+        <Grid BindingContext="{Binding Source={RelativeSource TemplatedParent}}"
+              RowDefinitions="*,Auto" RowSpacing="0">
+
+            <CollectionView x:Name="PART_Messages" Grid.Row="0"
+                            ItemsSource="{Binding Messages}"
+                            Margin="0,4,0,0" BackgroundColor="Transparent" VerticalOptions="Fill">
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="{DynamicResource CopilotMessageSpacing}" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.EmptyView>
+                    <Grid Padding="16" RowDefinitions="Auto,Auto" RowSpacing="8"
+                          MaximumWidthRequest="600" HorizontalOptions="Center">
+                        <Label Grid.Row="0" Text="{Binding WelcomeTitle}"
+                               FontSize="{DynamicResource CopilotFontSizeTitle}" FontAttributes="Bold"
+                               HorizontalTextAlignment="Center" />
+                        <Label Grid.Row="1" Text="{Binding WelcomeMessage}"
+                               FontSize="{DynamicResource CopilotFontSizeBody}" HorizontalTextAlignment="Center"
+                               LineBreakMode="WordWrap"
+                               TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}" />
+                    </Grid>
+                </CollectionView.EmptyView>
+            </CollectionView>
+
+            <Grid Grid.Row="1"
+                  Padding="{DynamicResource CopilotInputPadding}"
+                  ColumnDefinitions="*,Auto" ColumnSpacing="4"
+                  MaximumWidthRequest="600" HorizontalOptions="Center">
+                <Border StrokeShape="RoundRectangle 16"
+                        Stroke="{AppThemeBinding Light={DynamicResource CopilotInputStrokeLight}, Dark={DynamicResource CopilotInputStrokeDark}}"
+                        StrokeThickness="1"
+                        BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotInputBackgroundLight}, Dark={DynamicResource CopilotInputBackgroundDark}}"
+                        Padding="0">
+                    <Entry x:Name="PART_Input"
+                           Text="{Binding InputText, Mode=TwoWay}"
+                           Placeholder="{Binding Placeholder}"
+                           IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
+                           ReturnType="Send" FontSize="{DynamicResource CopilotFontSizeBody}"
+                           BackgroundColor="Transparent" Margin="12,0" />
+                </Border>
+                <Button x:Name="PART_Send" Grid.Column="1" Text="Send"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
+                        BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
+                        TextColor="{DynamicResource CopilotWhite}"
+                        FontSize="{DynamicResource CopilotFontSizeBody}"
+                        CornerRadius="16" Padding="12,4" VerticalOptions="Center" />
+            </Grid>
+        </Grid>
+    </ControlTemplate>
+
+</ResourceDictionary>
