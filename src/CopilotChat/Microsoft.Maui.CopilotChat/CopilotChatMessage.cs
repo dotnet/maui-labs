@@ -66,13 +66,43 @@ public sealed class CopilotChatMessage : INotifyPropertyChanged
 
     public bool HasAvatarImage => AvatarSource is not null;
 
+    // ── Display options (set by control when creating messages) ──
+
+    private bool _showAvatar = true;
+    private double _avatarSize = 28;
+    private bool _showTimestamp;
+
+    /// <summary>Whether to show the avatar on this message.</summary>
+    public bool ShowAvatar
+    {
+        get => _showAvatar;
+        set => SetProperty(ref _showAvatar, value);
+    }
+
+    /// <summary>Avatar circle size in pixels.</summary>
+    public double AvatarSize
+    {
+        get => _avatarSize;
+        set => SetProperty(ref _avatarSize, value);
+    }
+
+    /// <summary>Whether to show the timestamp on this message.</summary>
+    public bool ShowTimestamp
+    {
+        get => _showTimestamp;
+        set => SetProperty(ref _showTimestamp, value);
+    }
+
+    /// <summary>Formatted timestamp for display.</summary>
+    public string TimestampText => Timestamp.LocalDateTime.ToString("h:mm tt");
+
     // ── Timestamps & state ──
 
     /// <summary>When the message was created.</summary>
     public DateTimeOffset Timestamp
     {
         get => _timestamp;
-        set => SetProperty(ref _timestamp, value);
+        set { SetProperty(ref _timestamp, value); OnPropertyChanged(nameof(TimestampText)); }
     }
 
     /// <summary>True while the assistant is still streaming this message.</summary>

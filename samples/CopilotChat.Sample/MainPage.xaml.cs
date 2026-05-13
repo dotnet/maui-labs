@@ -141,6 +141,24 @@ public partial class MainPage : ContentPage
         ApproveTextEntry.TextChanged += (_, e) => ChatView.ApproveButtonText = e.NewTextValue ?? "Approve";
         RejectTextEntry.TextChanged += (_, e) => ChatView.RejectButtonText = e.NewTextValue ?? "Reject";
         TypingTextEntry.TextChanged += (_, e) => ChatView.TypingIndicatorText = e.NewTextValue ?? "Thinking…";
+
+        CompactSwitch.Toggled += (_, e) =>
+        {
+            if (e.Value)
+            {
+                var compact = new Microsoft.Maui.CopilotChat.Themes.CompactThemeResourceDictionary();
+                ChatView.Resources.MergedDictionaries.Clear();
+                ChatView.Resources.MergedDictionaries.Add(compact);
+            }
+            else
+            {
+                var normal = new Microsoft.Maui.CopilotChat.Themes.DefaultThemeResourceDictionary();
+                ChatView.Resources.MergedDictionaries.Clear();
+                ChatView.Resources.MergedDictionaries.Add(normal);
+            }
+            // Re-apply the control template
+            ChatView.SetDynamicResource(ControlTemplateProperty, "CopilotChatViewDefaultTemplate");
+        };
     }
 
     // ─── Slider wiring ───
