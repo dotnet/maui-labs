@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls"
+    xmlns:converters="clr-namespace:Microsoft.Maui.AI.Controls.Converters"
+    xmlns:ai="clr-namespace:Microsoft.Maui.AI;assembly=Microsoft.Maui.AI"
+    x:Class="Microsoft.Maui.AI.Controls.Themes.DefaultThemeResourceDictionary">
+
+    <!-- ═══════ CONVERTERS ═══════ -->
+    <converters:IsNotNullConverter x:Key="CopilotIsNotNull" />
+    <converters:InverseBoolConverter x:Key="CopilotInverseBool" />
+
+    <!-- ═══════ ACCENT & BRAND ═══════ -->
+    <Color x:Key="CopilotAccent">#6366F1</Color>
+    <Color x:Key="CopilotAccentDark">#818CF8</Color>
+    <Color x:Key="CopilotDanger">#DC2626</Color>
+    <Color x:Key="CopilotWhite">#FFFFFF</Color>
+
+    <!-- ═══════ TYPE SCALE ═══════ -->
+    <x:Double x:Key="CopilotFontSizeHero">48</x:Double>
+    <x:Double x:Key="CopilotFontSizeTitle">20</x:Double>
+    <x:Double x:Key="CopilotFontSizeBody">14</x:Double>
+    <x:Double x:Key="CopilotFontSizeCaption">12</x:Double>
+
+    <!-- ═══════ SPACING ═══════ -->
+    <x:Double x:Key="CopilotMessageSpacing">6</x:Double>
+    <Thickness x:Key="CopilotBubblePadding">12,8</Thickness>
+    <Thickness x:Key="CopilotInputPadding">12,8,12,12</Thickness>
+
+    <!-- ═══════ SURFACE COLORS ═══════ -->
+    <Color x:Key="CopilotSurfaceLight">#F8FAFC</Color>
+    <Color x:Key="CopilotSurfaceDark">#1E1E2E</Color>
+    <Color x:Key="CopilotCardStrokeLight">#E2E8F0</Color>
+    <Color x:Key="CopilotCardStrokeDark">#334155</Color>
+
+    <!-- ═══════ CHAT BUBBLES ═══════ -->
+    <Color x:Key="CopilotUserBubbleLight">#E0E7FF</Color>
+    <Color x:Key="CopilotUserBubbleDark">#312E81</Color>
+    <Color x:Key="CopilotUserBubbleTextLight">#1E1B4B</Color>
+    <Color x:Key="CopilotUserBubbleTextDark">#E0E7FF</Color>
+    <Color x:Key="CopilotAssistantBubbleLight">#FFFFFF</Color>
+    <Color x:Key="CopilotAssistantBubbleDark">#2D2D3F</Color>
+
+    <!-- ═══════ TEXT ═══════ -->
+    <Color x:Key="CopilotTextSecondaryLight">#64748B</Color>
+    <Color x:Key="CopilotTextSecondaryDark">#94A3B8</Color>
+    <Color x:Key="CopilotTextTertiaryLight">#94A3B8</Color>
+    <Color x:Key="CopilotTextTertiaryDark">#64748B</Color>
+
+    <!-- ═══════ INPUT ═══════ -->
+    <Color x:Key="CopilotInputBackgroundLight">#FFFFFF</Color>
+    <Color x:Key="CopilotInputBackgroundDark">#1E1E2E</Color>
+    <Color x:Key="CopilotInputStrokeLight">#CBD5E1</Color>
+    <Color x:Key="CopilotInputStrokeDark">#475569</Color>
+
+    <!-- ═══════ CHIPS ═══════ -->
+    <Color x:Key="CopilotChipBackgroundLight">#EEF2FF</Color>
+    <Color x:Key="CopilotChipBackgroundDark">#1E1B4B</Color>
+    <Color x:Key="CopilotChipStrokeLight">#C7D2FE</Color>
+    <Color x:Key="CopilotChipStrokeDark">#3730A3</Color>
+    <Color x:Key="CopilotChipTextLight">#4338CA</Color>
+    <Color x:Key="CopilotChipTextDark">#A5B4FC</Color>
+
+    <!-- ═══════ AVATARS ═══════ -->
+    <Color x:Key="CopilotUserAvatarBackgroundLight">#C7D2FE</Color>
+    <Color x:Key="CopilotUserAvatarBackgroundDark">#3730A3</Color>
+    <Color x:Key="CopilotUserAvatarTextLight">#312E81</Color>
+    <Color x:Key="CopilotUserAvatarTextDark">#E0E7FF</Color>
+    <Color x:Key="CopilotAssistantAvatarBackgroundLight">#E0E7FF</Color>
+    <Color x:Key="CopilotAssistantAvatarBackgroundDark">#1E1B4B</Color>
+    <Color x:Key="CopilotAssistantAvatarTextLight">#4338CA</Color>
+    <Color x:Key="CopilotAssistantAvatarTextDark">#A5B4FC</Color>
+
+    <!-- ═══════ DEFAULT MESSAGE TEMPLATES ═══════ -->
+
+    <!-- User message: right-aligned indigo bubble with avatar -->
+    <DataTemplate x:Key="CopilotDefaultUserMessageTemplate" x:DataType="ai:ChatMessageViewModel">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0"
+              ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <VerticalStackLayout Grid.Column="0" HorizontalOptions="End" Spacing="2">
+                <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleLight}, Dark={DynamicResource CopilotUserBubbleDark}}"
+                        Padding="{DynamicResource CopilotBubblePadding}"
+                        MaximumWidthRequest="560"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12">
+                    <Label Text="{Binding Text}"
+                           FontSize="{DynamicResource CopilotFontSizeBody}"
+                           TextColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleTextLight}, Dark={DynamicResource CopilotUserBubbleTextDark}}" />
+                </Border>
+                <Label Text="{Binding TimestampText}" FontSize="10" Opacity="0.5"
+                       HorizontalOptions="End" IsVisible="{Binding ShowTimestamp}" />
+            </VerticalStackLayout>
+            <!-- Avatar circle -->
+            <Border Grid.Column="1"
+                    WidthRequest="{Binding AvatarSize}" HeightRequest="{Binding AvatarSize}"
+                    StrokeShape="RoundRectangle 999" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotUserAvatarBackgroundLight}, Dark={DynamicResource CopilotUserAvatarBackgroundDark}}"
+                    VerticalOptions="End"
+                    IsVisible="{Binding ShowAvatar}">
+                <Grid>
+                    <Image Source="{Binding AvatarSource}" Aspect="AspectFill"
+                           IsVisible="{Binding HasAvatarImage}" />
+                    <Label Text="{Binding AvatarText}" FontSize="11"
+                           HorizontalOptions="Center" VerticalOptions="Center"
+                           IsVisible="{Binding HasAvatarImage, Converter={StaticResource CopilotInverseBool}}"
+                           TextColor="{AppThemeBinding Light={DynamicResource CopilotUserAvatarTextLight}, Dark={DynamicResource CopilotUserAvatarTextDark}}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </DataTemplate>
+
+    <!-- Assistant message: left-aligned white bubble with avatar and shadow -->
+    <DataTemplate x:Key="CopilotDefaultAssistantMessageTemplate" x:DataType="ai:ChatMessageViewModel">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0"
+              ColumnDefinitions="Auto,*" ColumnSpacing="8">
+            <!-- Avatar circle -->
+            <Border Grid.Column="0"
+                    WidthRequest="{Binding AvatarSize}" HeightRequest="{Binding AvatarSize}"
+                    StrokeShape="RoundRectangle 999" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAssistantAvatarBackgroundLight}, Dark={DynamicResource CopilotAssistantAvatarBackgroundDark}}"
+                    VerticalOptions="End"
+                    IsVisible="{Binding ShowAvatar}">
+                <Grid>
+                    <Image Source="{Binding AvatarSource}" Aspect="AspectFill"
+                           IsVisible="{Binding HasAvatarImage}" />
+                    <Label Text="{Binding AvatarText}" FontSize="11"
+                           HorizontalOptions="Center" VerticalOptions="Center"
+                           IsVisible="{Binding HasAvatarImage, Converter={StaticResource CopilotInverseBool}}"
+                           TextColor="{AppThemeBinding Light={DynamicResource CopilotAssistantAvatarTextLight}, Dark={DynamicResource CopilotAssistantAvatarTextDark}}" />
+                </Grid>
+            </Border>
+            <VerticalStackLayout Grid.Column="1" HorizontalOptions="Start" Spacing="2">
+                <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAssistantBubbleLight}, Dark={DynamicResource CopilotAssistantBubbleDark}}"
+                        Padding="{DynamicResource CopilotBubblePadding}"
+                        MaximumWidthRequest="560"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12">
+                    <Border.Shadow>
+                        <Shadow Brush="Black" Offset="0,1" Radius="3" Opacity="0.08" />
+                    </Border.Shadow>
+                    <Label Text="{Binding Text}" FontSize="{DynamicResource CopilotFontSizeBody}" />
+                </Border>
+                <Label Text="{Binding TimestampText}" FontSize="10" Opacity="0.5"
+                       IsVisible="{Binding ShowTimestamp}" />
+            </VerticalStackLayout>
+        </Grid>
+    </DataTemplate>
+
+    <!-- Tool message: expandable row with args/result -->
+    <DataTemplate x:Key="CopilotDefaultToolMessageTemplate" x:DataType="ai:ChatMessageViewModel">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+            <VerticalStackLayout Spacing="0" HorizontalOptions="Start">
+                <HorizontalStackLayout Spacing="4" Padding="4,2">
+                    <HorizontalStackLayout.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding ToggleExpandCommand}" />
+                    </HorizontalStackLayout.GestureRecognizers>
+                    <Label Text="{Binding ExpandIcon}"
+                           FontSize="{DynamicResource CopilotFontSizeCaption}"
+                           TextColor="{AppThemeBinding Light={DynamicResource CopilotTextTertiaryLight}, Dark={DynamicResource CopilotTextTertiaryDark}}"
+                           VerticalOptions="Center" WidthRequest="14" />
+                    <Label Text="{Binding Text}"
+                           FontSize="{DynamicResource CopilotFontSizeCaption}"
+                           TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}"
+                           FontAttributes="Italic" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Border IsVisible="{Binding IsExpanded}"
+                        Margin="18,4,0,4" Padding="10,8"
+                        MaximumHeightRequest="300"
+                        BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotSurfaceLight}, Dark={DynamicResource CopilotSurfaceDark}}"
+                        Stroke="{AppThemeBinding Light={DynamicResource CopilotCardStrokeLight}, Dark={DynamicResource CopilotCardStrokeDark}}"
+                        StrokeThickness="1" StrokeShape="RoundRectangle 8">
+                    <ScrollView>
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Arguments" FontSize="{DynamicResource CopilotFontSizeCaption}" FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light={DynamicResource CopilotTextTertiaryLight}, Dark={DynamicResource CopilotTextTertiaryDark}}"
+                                   IsVisible="{Binding ToolArgs, Converter={StaticResource CopilotIsNotNull}}" />
+                            <Label Text="{Binding ToolArgs}" FontSize="{DynamicResource CopilotFontSizeCaption}"
+                                   TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}"
+                                   IsVisible="{Binding ToolArgs, Converter={StaticResource CopilotIsNotNull}}" LineBreakMode="WordWrap" />
+                            <Label Text="Result" FontSize="{DynamicResource CopilotFontSizeCaption}" FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light={DynamicResource CopilotTextTertiaryLight}, Dark={DynamicResource CopilotTextTertiaryDark}}"
+                                   IsVisible="{Binding ToolResult, Converter={StaticResource CopilotIsNotNull}}" />
+                            <Label Text="{Binding ToolResult}" FontSize="{DynamicResource CopilotFontSizeCaption}"
+                                   TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}"
+                                   IsVisible="{Binding ToolResult, Converter={StaticResource CopilotIsNotNull}}" LineBreakMode="WordWrap" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Border>
+            </VerticalStackLayout>
+        </Grid>
+    </DataTemplate>
+
+    <!-- System message: center-aligned accent -->
+    <DataTemplate x:Key="CopilotDefaultSystemMessageTemplate" x:DataType="ai:ChatMessageViewModel">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+            <Label Text="{Binding Text}"
+                   FontSize="{DynamicResource CopilotFontSizeCaption}"
+                   TextColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
+                   FontAttributes="Bold" HorizontalOptions="Center" Padding="8,4" />
+        </Grid>
+    </DataTemplate>
+
+    <!-- Error message: left-aligned red -->
+    <DataTemplate x:Key="CopilotDefaultErrorMessageTemplate" x:DataType="ai:ChatMessageViewModel">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+            <Label Text="{Binding Text}"
+                   FontSize="{DynamicResource CopilotFontSizeCaption}"
+                   TextColor="{DynamicResource CopilotDanger}"
+                   HorizontalOptions="Start" Padding="4,2" />
+        </Grid>
+    </DataTemplate>
+
+    <!-- ═══════ DEFAULT SUB-COMPONENT TEMPLATES ═══════ -->
+
+    <!-- Suggestion chip — tap handled via code in AgentChatView.OnApplyTemplate -->
+    <DataTemplate x:Key="CopilotDefaultSuggestionItemTemplate" x:DataType="ai:Suggestion">
+        <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotChipBackgroundLight}, Dark={DynamicResource CopilotChipBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={DynamicResource CopilotChipStrokeLight}, Dark={DynamicResource CopilotChipStrokeDark}}"
+                StrokeThickness="1" StrokeShape="RoundRectangle 16" Padding="14,8">
+            <Label Text="{Binding Text}"
+                   FontSize="{DynamicResource CopilotFontSizeBody}"
+                   TextColor="{AppThemeBinding Light={DynamicResource CopilotChipTextLight}, Dark={DynamicResource CopilotChipTextDark}}" />
+        </Border>
+    </DataTemplate>
+
+    <!-- ═══════ DEFAULT CONTROL TEMPLATE ═══════ -->
+    <ControlTemplate x:Key="CopilotChatViewDefaultTemplate" x:DataType="controls:AgentChatView">
+        <Grid x:Name="PART_Root" BindingContext="{Binding Source={RelativeSource TemplatedParent}}"
+              RowDefinitions="*,Auto" RowSpacing="0">
+
+            <!-- Messages list -->
+            <CollectionView x:Name="PART_Messages" Grid.Row="0"
+                            ItemsSource="{Binding Messages}"
+                            Margin="0,8,0,0" BackgroundColor="Transparent" VerticalOptions="Fill">
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="{DynamicResource CopilotMessageSpacing}" />
+                </CollectionView.ItemsLayout>
+
+                <!-- Welcome empty view -->
+                <CollectionView.EmptyView>
+                    <ScrollView>
+                        <Grid Padding="24" RowDefinitions="Auto,Auto,Auto" RowSpacing="12"
+                              MaximumWidthRequest="840" HorizontalOptions="Center">
+                            <Label Grid.Row="0" Text="{Binding WelcomeIcon}"
+                                   FontSize="{DynamicResource CopilotFontSizeHero}"
+                                   TextColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
+                                   HorizontalOptions="Center" />
+                            <Label Grid.Row="1" Text="{Binding WelcomeTitle}"
+                                   FontSize="{DynamicResource CopilotFontSizeTitle}" FontAttributes="Bold"
+                                   HorizontalTextAlignment="Center" />
+                            <Label Grid.Row="2" Text="{Binding WelcomeMessage}"
+                                   FontSize="{DynamicResource CopilotFontSizeBody}" HorizontalTextAlignment="Center"
+                                   LineBreakMode="WordWrap"
+                                   TextColor="{AppThemeBinding Light={DynamicResource CopilotTextSecondaryLight}, Dark={DynamicResource CopilotTextSecondaryDark}}" />
+                        </Grid>
+                    </ScrollView>
+                </CollectionView.EmptyView>
+            </CollectionView>
+
+            <!-- Input area -->
+            <VerticalStackLayout Grid.Row="1"
+                                 Spacing="0" BackgroundColor="Transparent"
+                                 MaximumWidthRequest="840" HorizontalOptions="Center">
+                <!-- Suggestion chips -->
+                <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never" Padding="16,8,16,0">
+                    <HorizontalStackLayout x:Name="PART_Suggestions"
+                                           BindableLayout.ItemsSource="{Binding SuggestionPrompts}"
+                                           BindableLayout.ItemTemplate="{Binding SuggestionItemTemplate}"
+                                           Spacing="6" />
+                </ScrollView>
+                <!-- Entry + Send -->
+                <Grid Padding="{DynamicResource CopilotInputPadding}" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Border StrokeShape="RoundRectangle 20"
+                            Stroke="{AppThemeBinding Light={DynamicResource CopilotInputStrokeLight}, Dark={DynamicResource CopilotInputStrokeDark}}"
+                            StrokeThickness="1"
+                            BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotInputBackgroundLight}, Dark={DynamicResource CopilotInputBackgroundDark}}"
+                            Padding="0">
+                        <Entry x:Name="PART_Input"
+                               Text="{Binding InputText, Mode=TwoWay}"
+                               Placeholder="{Binding Placeholder}"
+                               IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
+                               ReturnType="Send"
+                               FontSize="{DynamicResource CopilotFontSizeBody}"
+                               BackgroundColor="Transparent"
+                               Margin="16,0" />
+                    </Border>
+                    <Button x:Name="PART_Send" Grid.Column="1"
+                            Text="{Binding SendButtonText}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource CopilotInverseBool}}"
+                            BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
+                            TextColor="{DynamicResource CopilotWhite}"
+                            FontSize="{DynamicResource CopilotFontSizeBody}"
+                            CornerRadius="20" Padding="16,8"
+                            VerticalOptions="Center" />
+                </Grid>
+            </VerticalStackLayout>
+        </Grid>
+    </ControlTemplate>
+
+</ResourceDictionary>

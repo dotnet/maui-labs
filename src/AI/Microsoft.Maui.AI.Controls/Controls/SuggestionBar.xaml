@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Microsoft.Maui.AI.Controls.Controls.SuggestionBar"
+             x:Name="Root">
+
+    <ScrollView Orientation="Horizontal"
+                HorizontalScrollBarVisibility="Never"
+                VerticalOptions="Center">
+        <HorizontalStackLayout x:Name="SuggestionsLayout"
+                               Spacing="8"
+                               Padding="12,6"
+                               BindableLayout.ItemsSource="{Binding Suggestions, Source={x:Reference Root}}">
+            <BindableLayout.ItemTemplate>
+                <DataTemplate>
+                    <Button Text="{Binding Text}"
+                            Command="{Binding SuggestionTapped, Source={x:Reference Root}}"
+                            CommandParameter="{Binding .}"
+                            BackgroundColor="{AppThemeBinding Light=#E8E8E8, Dark=#3A3A3A}"
+                            TextColor="{AppThemeBinding Light=#333333, Dark=#E0E0E0}"
+                            FontSize="13"
+                            CornerRadius="16"
+                            Padding="14,8"
+                            BorderWidth="0"
+                            CharacterSpacing="0.3" />
+                </DataTemplate>
+            </BindableLayout.ItemTemplate>
+        </HorizontalStackLayout>
+    </ScrollView>
+
+</ContentView>
