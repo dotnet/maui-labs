@@ -1,5 +1,5 @@
 <Solution>
-  <Folder Name="/AI/">
-    <Project Path="Microsoft.Maui.AI/Microsoft.Maui.AI.csproj" />
-  </Folder>
+  <Project Path="Microsoft.Maui.AI/Microsoft.Maui.AI.csproj" />
+  <Project Path="Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
+  <Project Path="Microsoft.Maui.AI.CopilotSdk/Microsoft.Maui.AI.CopilotSdk.csproj" />
 </Solution>
