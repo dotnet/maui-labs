@@ -27,7 +27,7 @@
   <Folder Name="/src/AI/">
     <Project Path="src/AI/Microsoft.Maui.AI/Microsoft.Maui.AI.csproj" />
     <Project Path="src/AI/Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
-    <Project Path="src/AI/Microsoft.Maui.AI.CopilotSdk/Microsoft.Maui.AI.CopilotSdk.csproj" />
+
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
@@ -82,14 +82,7 @@
     <Project Path="src/Testing/templates/Microsoft.Maui.Testing.Templates.csproj" />
   </Folder>
   <Folder Name="/tests/" />
-  <Folder Name="/src/CopilotChat/">
-    <Project Path="src/CopilotChat/Microsoft.Maui.CopilotChat/Microsoft.Maui.CopilotChat.csproj" />
-    <Project Path="src/CopilotChat/Microsoft.Maui.CopilotChat.CopilotSdk/Microsoft.Maui.CopilotChat.CopilotSdk.csproj" />
-  </Folder>
-  <Folder Name="/tests/CopilotChat/">
-    <Project Path="tests/Microsoft.Maui.CopilotChat.Tests/Microsoft.Maui.CopilotChat.Tests.csproj" />
-    <Project Path="tests/Microsoft.Maui.CopilotChat.CopilotSdk.Tests/Microsoft.Maui.CopilotChat.CopilotSdk.Tests.csproj" />
-  </Folder>
+
   <Folder Name="/tests/AI/">
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.Benchmarks/Microsoft.Maui.Essentials.AI.Benchmarks.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj" />
