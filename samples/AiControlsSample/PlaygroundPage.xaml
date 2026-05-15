@@ -26,13 +26,16 @@
             AssistantAvatarText="AI"
             ShowAvatars="True" />
 
-        <!-- Settings panel: docked sidebar on wide, overlay on narrow -->
+        <!-- Settings panel: docked sidebar on wide, popup on narrow -->
         <Border x:Name="SettingsPanel" Grid.Column="1"
                 IsVisible="False"
                 BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1A1A2E}"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeThickness="1,0,0,0"
-                Padding="0" WidthRequest="280">
+                StrokeShape="Rectangle"
+                StrokeThickness="1"
+                Padding="0"
+                MinimumWidthRequest="220"
+                MaximumWidthRequest="320">
             <Grid RowDefinitions="Auto,*">
                 <!-- Header -->
                 <Grid Padding="16,14" ColumnDefinitions="*,Auto"
@@ -94,24 +97,28 @@
                         </VerticalStackLayout>
 
                         <Label Text="TOOLS" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,8,0,0" />
-                        <FlexLayout Wrap="Wrap" Direction="Row">
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
-                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
-                                <Label Text="🌤 Weather" FontSize="11" />
-                            </Border>
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
-                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
-                                <Label Text="🔢 Calculate" FontSize="11" />
-                            </Border>
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
-                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
-                                <Label Text="💡 Fact" FontSize="11" />
-                            </Border>
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
-                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
-                                <Label Text="📱 App Info" FontSize="11" />
-                            </Border>
-                        </FlexLayout>
+                        <VerticalStackLayout Spacing="6">
+                            <HorizontalStackLayout Spacing="6">
+                                <Border StrokeShape="RoundRectangle 12" Padding="10,6" 
+                                        BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                                    <Label Text="🌤 Weather" FontSize="12" LineBreakMode="NoWrap" />
+                                </Border>
+                                <Border StrokeShape="RoundRectangle 12" Padding="10,6"
+                                        BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                                    <Label Text="🔢 Calculate" FontSize="12" LineBreakMode="NoWrap" />
+                                </Border>
+                            </HorizontalStackLayout>
+                            <HorizontalStackLayout Spacing="6">
+                                <Border StrokeShape="RoundRectangle 12" Padding="10,6"
+                                        BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                                    <Label Text="💡 Fact" FontSize="12" LineBreakMode="NoWrap" />
+                                </Border>
+                                <Border StrokeShape="RoundRectangle 12" Padding="10,6"
+                                        BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                                    <Label Text="📱 App Info" FontSize="12" LineBreakMode="NoWrap" />
+                                </Border>
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
 
                     </VerticalStackLayout>
                 </ScrollView>

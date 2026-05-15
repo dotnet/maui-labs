@@ -42,27 +42,38 @@ public partial class PlaygroundPage : ContentPage
         {
             if (isWide)
             {
-                // Sidebar mode: chat + settings side-by-side
-                RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star), new ColumnDefinition(280)];
+                // Proportional sidebar: 80% chat, 20% settings
+                RootLayout.ColumnDefinitions = [new ColumnDefinition(new GridLength(4, GridUnitType.Star)), new ColumnDefinition(new GridLength(1, GridUnitType.Star))];
                 Grid.SetColumn(SettingsPanel, 1);
+                SettingsPanel.WidthRequest = -1; // fill column
                 SettingsPanel.HorizontalOptions = LayoutOptions.Fill;
                 SettingsPanel.VerticalOptions = LayoutOptions.Fill;
+                SettingsPanel.IsVisible = true;
             }
             else
             {
-                // Overlay mode: settings overlays chat
+                // Narrow: show as modal popup instead of taking space
                 RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
-                Grid.SetColumn(SettingsPanel, 0);
-                SettingsPanel.HorizontalOptions = LayoutOptions.End;
-                SettingsPanel.VerticalOptions = LayoutOptions.Fill;
+                SettingsPanel.IsVisible = false;
+                ShowSettingsPopup();
             }
-            SettingsPanel.IsVisible = true;
         }
         else
         {
             RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
             SettingsPanel.IsVisible = false;
         }
+    }
+
+    private async void ShowSettingsPopup()
+    {
+        // On narrow screens, show settings as a bottom sheet / action sheet
+        var result = await DisplayActionSheetAsync("Settings", "Close", null,
+            $"Welcome Icon: {WelcomeIconEntry.Text}",
+            $"Welcome Title: {WelcomeTitleEntry.Text}",
+            $"Show Avatars: {(ShowAvatarsSwitch.IsToggled ? "On" : "Off")}");
+
+        _settingsVisible = false;
     }
 
     private void OnSettingsToggleClicked(object? sender, EventArgs e)
