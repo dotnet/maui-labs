@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="AiControlsSample.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:AiControlsSample"
+    Title="MAUI AI Sample"
+    FlyoutBehavior="Locked"
+    FlyoutWidth="260">
+
+    <FlyoutItem Title="Playground" Route="playground">
+        <ShellContent ContentTemplate="{DataTemplate local:PlaygroundPage}" />
+    </FlyoutItem>
+    <FlyoutItem Title="Agentic Chat" Route="agentic-chat">
+        <ShellContent ContentTemplate="{DataTemplate local:AgenticChatPage}" />
+    </FlyoutItem>
+    <FlyoutItem Title="Tool Rendering" Route="tool-rendering">
+        <ShellContent ContentTemplate="{DataTemplate local:ToolRenderingPage}" />
+    </FlyoutItem>
+
+</Shell>

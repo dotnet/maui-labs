@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             x:Class="AiControlsSample.ToolRenderingPage"
+             Title="Tool Rendering">
+
+    <controls:AgentChatView
+        x:Name="ChatView"
+        WelcomeTitle="Tool Rendering"
+        WelcomeIcon="🔧"
+        WelcomeMessage="Ask about the weather to see tool calls and structured results rendered inline."
+        Placeholder="Try 'What's the weather in San Francisco?'..."
+        AssistantDisplayName="Tools Agent"
+        AssistantAvatarText="🔧" />
+</ContentPage>
