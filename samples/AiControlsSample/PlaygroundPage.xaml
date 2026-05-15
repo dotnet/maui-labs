@@ -8,7 +8,6 @@
 
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="🗑️ Clear" Clicked="OnClearChatClicked" />
-        <ToolbarItem Text="⚙️" Clicked="OnSettingsToggleClicked" />
     </ContentPage.ToolbarItems>
 
     <Grid x:Name="RootLayout" ColumnDefinitions="*,Auto">
@@ -26,9 +25,9 @@
             AssistantAvatarText="AI"
             ShowAvatars="True" />
 
-        <!-- Settings panel: docked sidebar on wide, toggled via toolbar -->
+        <!-- Settings panel: docked sidebar, auto-hidden on narrow -->
         <Border x:Name="SettingsPanel" Grid.Column="1"
-                IsVisible="False"
+                IsVisible="True"
                 BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1A1A2E}"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
                 StrokeShape="Rectangle"
@@ -36,14 +35,9 @@
                 Padding="0">
             <Grid RowDefinitions="Auto,*">
                 <!-- Header -->
-                <Grid Padding="16,14" ColumnDefinitions="*,Auto"
+                <Grid Padding="16,14"
                       BackgroundColor="{AppThemeBinding Light=#F1F5F9, Dark=#262640}">
                     <Label Text="⚙️ Settings" FontSize="14" FontAttributes="Bold" VerticalOptions="Center" />
-                    <Button Grid.Column="1" Text="✕" FontSize="13"
-                            BackgroundColor="Transparent"
-                            TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}"
-                            Clicked="OnCloseSettingsClicked"
-                            WidthRequest="28" HeightRequest="28" Padding="0" />
                 </Grid>
 
                 <!-- Settings content -->

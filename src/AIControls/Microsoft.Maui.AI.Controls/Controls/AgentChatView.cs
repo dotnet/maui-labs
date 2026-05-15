@@ -218,7 +218,8 @@ public class AgentChatView : ContentView
     // ══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty ShowAvatarsProperty =
-        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(AgentChatView), true);
+        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(AgentChatView), true,
+            propertyChanged: (b, _, _) => (b as AgentChatView)?.RedecorateAllMessages());
 
     public bool ShowAvatars
     {
@@ -272,7 +273,8 @@ public class AgentChatView : ContentView
     }
 
     public static readonly BindableProperty UserAvatarTextProperty =
-        BindableProperty.Create(nameof(UserAvatarText), typeof(string), typeof(AgentChatView), "You");
+        BindableProperty.Create(nameof(UserAvatarText), typeof(string), typeof(AgentChatView), "You",
+            propertyChanged: (b, _, _) => (b as AgentChatView)?.RedecorateAllMessages());
 
     public string UserAvatarText
     {
@@ -281,7 +283,8 @@ public class AgentChatView : ContentView
     }
 
     public static readonly BindableProperty AssistantAvatarTextProperty =
-        BindableProperty.Create(nameof(AssistantAvatarText), typeof(string), typeof(AgentChatView), "AI");
+        BindableProperty.Create(nameof(AssistantAvatarText), typeof(string), typeof(AgentChatView), "AI",
+            propertyChanged: (b, _, _) => (b as AgentChatView)?.RedecorateAllMessages());
 
     public string AssistantAvatarText
     {
@@ -478,13 +481,52 @@ public class AgentChatView : ContentView
         if (_messagesView is not null)
             _messagesView.ItemsSource = session.Messages;
 
+        session.Messages.CollectionChanged += OnMessagesCollectionChanged;
+        session.PendingMessages.CollectionChanged += OnMessagesCollectionChanged;
         session.PropertyChanged += OnSessionPropertyChanged;
     }
 
     private void UnbindFromSession(IAgentSession? session)
     {
         if (session is null) return;
+        session.Messages.CollectionChanged -= OnMessagesCollectionChanged;
+        session.PendingMessages.CollectionChanged -= OnMessagesCollectionChanged;
         session.PropertyChanged -= OnSessionPropertyChanged;
+    }
+
+    private void OnMessagesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is null) return;
+        foreach (var item in e.NewItems)
+        {
+            if (item is ChatMessageViewModel vm)
+                DecorateMessage(vm);
+        }
+    }
+
+    private void DecorateMessage(ChatMessageViewModel vm)
+    {
+        if (vm.IsUser)
+        {
+            vm.AvatarText = UserAvatarText;
+            vm.AvatarSource = UserAvatarSource;
+            vm.ShowAvatar = ShowAvatars;
+        }
+        else
+        {
+            vm.AvatarText = AssistantAvatarText;
+            vm.AvatarSource = AssistantAvatarSource;
+            vm.ShowAvatar = ShowAvatars;
+        }
+    }
+
+    private void RedecorateAllMessages()
+    {
+        if (Session is null) return;
+        foreach (var vm in Session.Messages)
+            DecorateMessage(vm);
+        foreach (var vm in Session.PendingMessages)
+            DecorateMessage(vm);
     }
 
     private void OnSessionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

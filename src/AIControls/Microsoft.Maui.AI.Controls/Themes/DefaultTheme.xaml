@@ -76,7 +76,7 @@
 
     <!-- User message: right-aligned indigo bubble with avatar -->
     <DataTemplate x:Key="CopilotDefaultUserMessageTemplate" x:DataType="ai:ChatMessageViewModel">
-        <Grid HorizontalOptions="Center" MaximumWidthRequest="960" Padding="16,0"
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="960" Padding="16,0"
               ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <VerticalStackLayout Grid.Column="0" HorizontalOptions="End" Spacing="2">
                 <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotUserBubbleLight}, Dark={DynamicResource CopilotUserBubbleDark}}"
@@ -112,7 +112,7 @@
 
     <!-- Assistant message: left-aligned white bubble with avatar and shadow -->
     <DataTemplate x:Key="CopilotDefaultAssistantMessageTemplate" x:DataType="ai:ChatMessageViewModel">
-        <Grid HorizontalOptions="Center" MaximumWidthRequest="960" Padding="16,0"
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="960" Padding="16,0"
               ColumnDefinitions="Auto,*" ColumnSpacing="8">
             <!-- Avatar circle -->
             <Border Grid.Column="0"
@@ -149,7 +149,7 @@
 
     <!-- Tool message: expandable row with args/result -->
     <DataTemplate x:Key="CopilotDefaultToolMessageTemplate" x:DataType="ai:ChatMessageViewModel">
-        <Grid HorizontalOptions="Center" MaximumWidthRequest="960" Padding="16,0">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="960" Padding="16,0">
             <VerticalStackLayout Spacing="0" HorizontalOptions="Start">
                 <HorizontalStackLayout Spacing="4" Padding="4,2">
                     <HorizontalStackLayout.GestureRecognizers>
@@ -193,7 +193,7 @@
 
     <!-- System message: center-aligned accent -->
     <DataTemplate x:Key="CopilotDefaultSystemMessageTemplate" x:DataType="ai:ChatMessageViewModel">
-        <Grid HorizontalOptions="Center" MaximumWidthRequest="960" Padding="16,0">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="960" Padding="16,0">
             <Label Text="{Binding Text}"
                    FontSize="{DynamicResource CopilotFontSizeCaption}"
                    TextColor="{AppThemeBinding Light={DynamicResource CopilotAccent}, Dark={DynamicResource CopilotAccentDark}}"
@@ -203,7 +203,7 @@
 
     <!-- Error message: left-aligned red -->
     <DataTemplate x:Key="CopilotDefaultErrorMessageTemplate" x:DataType="ai:ChatMessageViewModel">
-        <Grid HorizontalOptions="Center" MaximumWidthRequest="960" Padding="16,0">
+        <Grid HorizontalOptions="Fill" MaximumWidthRequest="960" Padding="16,0">
             <Label Text="{Binding Text}"
                    FontSize="{DynamicResource CopilotFontSizeCaption}"
                    TextColor="{DynamicResource CopilotDanger}"

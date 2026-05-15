@@ -7,7 +7,6 @@ namespace AiControlsSample;
 public partial class PlaygroundPage : ContentPage
 {
     private const double SidebarWidth = 300;
-    private bool _settingsVisible;
 
     public PlaygroundPage(IAgentSessionFactory sessionFactory, IChatClient chatClient, SampleTools tools)
     {
@@ -32,24 +31,13 @@ public partial class PlaygroundPage : ContentPage
     protected override void OnSizeAllocated(double width, double height)
     {
         base.OnSizeAllocated(width, height);
-    }
-
-    private void UpdateSettingsVisibility()
-    {
-        SettingsPanel.IsVisible = _settingsVisible;
-        SettingsPanel.WidthRequest = _settingsVisible ? SidebarWidth : 0;
-    }
-
-    private void OnSettingsToggleClicked(object? sender, EventArgs e)
-    {
-        _settingsVisible = !_settingsVisible;
-        UpdateSettingsVisibility();
-    }
-
-    private void OnCloseSettingsClicked(object? sender, EventArgs e)
-    {
-        _settingsVisible = false;
-        UpdateSettingsVisibility();
+        if (width > 0)
+        {
+            // Hide sidebar on narrow screens, show on wide
+            var isWide = width >= 700;
+            SettingsPanel.IsVisible = isWide;
+            SettingsPanel.WidthRequest = isWide ? SidebarWidth : 0;
+        }
     }
 
     private void OnClearChatClicked(object? sender, EventArgs e) => ChatView.ClearMessages();
