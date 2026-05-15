@@ -6,9 +6,6 @@ namespace AiControlsSample;
 
 public partial class PlaygroundPage : ContentPage
 {
-    private const double SidebarBreakpoint = 700;
-    private bool _chatOverlayVisible;
-
     public PlaygroundPage(IAgentSessionFactory sessionFactory, IChatClient chatClient, SampleTools tools)
     {
         InitializeComponent();
@@ -28,37 +25,14 @@ public partial class PlaygroundPage : ContentPage
         Loaded += (_, _) => WireTextSettings();
     }
 
-    protected override void OnSizeAllocated(double width, double height)
+    private void OnSettingsToggleClicked(object? sender, EventArgs e)
     {
-        base.OnSizeAllocated(width, height);
-        var isWide = width >= SidebarBreakpoint;
-        if (isWide)
-        {
-            RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star), new ColumnDefinition(400)];
-            Grid.SetColumn(ContentArea, 0);
-            Grid.SetColumn(ChatSidebar, 1);
-            ChatSidebar.IsVisible = true;
-            ChatSidebar.WidthRequest = 400;
-            ChatFab.IsVisible = false;
-            _chatOverlayVisible = false;
-        }
-        else
-        {
-            RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
-            Grid.SetColumn(ContentArea, 0);
-            Grid.SetColumn(ChatSidebar, 0);
-            ChatSidebar.WidthRequest = -1;
-            ChatSidebar.IsVisible = _chatOverlayVisible;
-            ChatFab.IsVisible = !_chatOverlayVisible;
-        }
+        SettingsPanel.IsVisible = true;
     }
 
-    private void OnFabClicked(object? sender, EventArgs e)
+    private void OnCloseSettingsClicked(object? sender, EventArgs e)
     {
-        _chatOverlayVisible = true;
-        ChatSidebar.IsVisible = true;
-        ChatSidebar.WidthRequest = -1;
-        ChatFab.IsVisible = false;
+        SettingsPanel.IsVisible = false;
     }
 
     private void OnClearChatClicked(object? sender, EventArgs e) => ChatView.ClearMessages();
