@@ -22,7 +22,8 @@ namespace Microsoft.Maui.AI.Controls.Controls;
 public class AgentChatView : ContentView
 {
     private CollectionView? _messagesView;
-    private Entry? _inputEntry;
+    private Layout? _pendingLayout;
+    private Editor? _inputEditor;
     private Button? _sendButton;
     private Layout? _suggestionsLayout;
 
@@ -101,7 +102,7 @@ public class AgentChatView : ContentView
 
     public static readonly BindableProperty PlaceholderProperty =
         BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(AgentChatView), "Ask anything...",
-            propertyChanged: (b, _, v) => { if (b is AgentChatView c && c._inputEntry is not null) c._inputEntry.Placeholder = v as string; });
+            propertyChanged: (b, _, v) => { if (b is AgentChatView c && c._inputEditor is not null) c._inputEditor.Placeholder = v as string; });
 
     public string Placeholder
     {
@@ -297,12 +298,74 @@ public class AgentChatView : ContentView
     // ══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty ShowTimestampsProperty =
-        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(AgentChatView), false);
+        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(AgentChatView), false,
+            propertyChanged: (b, _, _) => (b as AgentChatView)?.RedecorateAllMessages());
 
     public bool ShowTimestamps
     {
         get => (bool)GetValue(ShowTimestampsProperty);
         set => SetValue(ShowTimestampsProperty, value);
+    }
+
+    public static readonly BindableProperty ShowToolMessagesProperty =
+        BindableProperty.Create(nameof(ShowToolMessages), typeof(bool), typeof(AgentChatView), true);
+
+    public bool ShowToolMessages
+    {
+        get => (bool)GetValue(ShowToolMessagesProperty);
+        set => SetValue(ShowToolMessagesProperty, value);
+    }
+
+    public static readonly BindableProperty BubbleCornerRadiusProperty =
+        BindableProperty.Create(nameof(BubbleCornerRadius), typeof(double), typeof(AgentChatView), 12.0);
+
+    public double BubbleCornerRadius
+    {
+        get => (double)GetValue(BubbleCornerRadiusProperty);
+        set => SetValue(BubbleCornerRadiusProperty, value);
+    }
+
+    public static readonly BindableProperty BubbleStrokeThicknessProperty =
+        BindableProperty.Create(nameof(BubbleStrokeThickness), typeof(double), typeof(AgentChatView), 0.0);
+
+    public double BubbleStrokeThickness
+    {
+        get => (double)GetValue(BubbleStrokeThicknessProperty);
+        set => SetValue(BubbleStrokeThicknessProperty, value);
+    }
+
+    public static readonly BindableProperty ShowReasoningProperty =
+        BindableProperty.Create(nameof(ShowReasoning), typeof(bool), typeof(AgentChatView), true);
+
+    public bool ShowReasoning
+    {
+        get => (bool)GetValue(ShowReasoningProperty);
+        set => SetValue(ShowReasoningProperty, value);
+    }
+
+    public static readonly BindableProperty ShowNewChatButtonProperty =
+        BindableProperty.Create(nameof(ShowNewChatButton), typeof(bool), typeof(AgentChatView), false);
+
+    /// <summary>Whether to display a "New Chat" button that calls <see cref="ClearMessages"/>.</summary>
+    public bool ShowNewChatButton
+    {
+        get => (bool)GetValue(ShowNewChatButtonProperty);
+        set => SetValue(ShowNewChatButtonProperty, value);
+    }
+
+    public static readonly BindableProperty CustomContentTemplateSelectorProperty =
+        BindableProperty.Create(nameof(CustomContentTemplateSelector), typeof(ContentTemplateSelector), typeof(AgentChatView));
+
+    /// <summary>
+    /// Optional <see cref="ContentTemplateSelector"/> for rendering rich inline content
+    /// (weather cards, plan cards, etc.) based on <see cref="AIContent"/> type or function name.
+    /// When set, messages that contain matching content types will use these templates
+    /// instead of the default text bubble.
+    /// </summary>
+    public ContentTemplateSelector? CustomContentTemplateSelector
+    {
+        get => (ContentTemplateSelector?)GetValue(CustomContentTemplateSelectorProperty);
+        set => SetValue(CustomContentTemplateSelectorProperty, value);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -396,11 +459,12 @@ public class AgentChatView : ContentView
 
         // Unwire previous
         if (_sendButton is not null) _sendButton.Clicked -= OnSendClicked;
-        if (_inputEntry is not null) _inputEntry.Completed -= OnInputCompleted;
+        if (_inputEditor is not null) _inputEditor.Completed -= OnInputCompleted;
 
         // Find PART_ elements
         _messagesView = GetTemplateChild("PART_Messages") as CollectionView;
-        _inputEntry = GetTemplateChild("PART_Input") as Entry;
+        _pendingLayout = GetTemplateChild("PART_Pending") as Layout;
+        _inputEditor = GetTemplateChild("PART_Input") as Editor;
         _sendButton = GetTemplateChild("PART_Send") as Button;
 
         // Wire suggestion chips from code (ControlTemplate boundary prevents XAML binding)
@@ -418,7 +482,7 @@ public class AgentChatView : ContentView
 
         // Wire events
         if (_sendButton is not null) _sendButton.Clicked += OnSendClicked;
-        if (_inputEntry is not null) _inputEntry.Completed += OnInputCompleted;
+        if (_inputEditor is not null) _inputEditor.Completed += OnInputCompleted;
 
         // Sync properties that template bindings may not propagate correctly
         SyncTemplateProperties();
@@ -429,8 +493,8 @@ public class AgentChatView : ContentView
 
     private void SyncTemplateProperties()
     {
-        if (_inputEntry is not null)
-            _inputEntry.Placeholder = Placeholder;
+        if (_inputEditor is not null)
+            _inputEditor.Placeholder = Placeholder;
         if (_sendButton is not null)
             _sendButton.Text = SendButtonText;
     }
@@ -444,13 +508,25 @@ public class AgentChatView : ContentView
     private void WireSuggestionTap(View? view)
     {
         if (view is null) return;
-        var tap = new TapGestureRecognizer();
-        tap.Tapped += (s, e) =>
+
+        if (view is Button button)
         {
-            if (view.BindingContext is Suggestion suggestion)
-                InternalSuggestionCommand?.Execute(suggestion);
-        };
-        view.GestureRecognizers.Add(tap);
+            button.Clicked += (s, e) =>
+            {
+                if (button.BindingContext is Suggestion suggestion)
+                    InternalSuggestionCommand?.Execute(suggestion);
+            };
+        }
+        else
+        {
+            var tap = new TapGestureRecognizer();
+            tap.Tapped += (s, e) =>
+            {
+                if (view.BindingContext is Suggestion suggestion)
+                    InternalSuggestionCommand?.Execute(suggestion);
+            };
+            view.GestureRecognizers.Add(tap);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -472,6 +548,8 @@ public class AgentChatView : ContentView
         {
             Messages = null;
             IsBusy = false;
+            if (_pendingLayout is not null)
+                BindableLayout.SetItemsSource(_pendingLayout, null);
             return;
         }
 
@@ -480,6 +558,19 @@ public class AgentChatView : ContentView
 
         if (_messagesView is not null)
             _messagesView.ItemsSource = session.Messages;
+
+        if (_pendingLayout is not null)
+        {
+            BindableLayout.SetItemsSource(_pendingLayout, session.PendingMessages);
+            BindableLayout.SetItemTemplateSelector(_pendingLayout, new ChatMessageTemplateSelector
+            {
+                UserTemplate = UserMessageTemplate,
+                AssistantTemplate = AssistantMessageTemplate,
+                ToolTemplate = ToolMessageTemplate,
+                SystemTemplate = SystemMessageTemplate,
+                ErrorTemplate = ErrorMessageTemplate,
+            });
+        }
 
         session.Messages.CollectionChanged += OnMessagesCollectionChanged;
         session.PendingMessages.CollectionChanged += OnMessagesCollectionChanged;
@@ -506,17 +597,21 @@ public class AgentChatView : ContentView
 
     private void DecorateMessage(ChatMessageViewModel vm)
     {
+        vm.ShowTimestamp = ShowTimestamps;
+
         if (vm.IsUser)
         {
             vm.AvatarText = UserAvatarText;
             vm.AvatarSource = UserAvatarSource;
             vm.ShowAvatar = ShowAvatars;
+            vm.AuthorName = UserDisplayName;
         }
         else
         {
             vm.AvatarText = AssistantAvatarText;
             vm.AvatarSource = AssistantAvatarSource;
             vm.ShowAvatar = ShowAvatars;
+            vm.AuthorName = AssistantDisplayName;
         }
     }
 

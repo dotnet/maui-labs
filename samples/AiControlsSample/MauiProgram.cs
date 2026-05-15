@@ -42,6 +42,8 @@ public static class MauiProgram
         builder.Services.AddTransient<PlaygroundPage>();
         builder.Services.AddTransient<AgenticChatPage>();
         builder.Services.AddTransient<ToolRenderingPage>();
+        builder.Services.AddTransient<HumanInTheLoopPage>();
+        builder.Services.AddTransient<SharedStatePage>();
 
         return builder.Build();
     }

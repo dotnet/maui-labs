@@ -33,5 +33,11 @@
     <FlyoutItem Title="🔧  Tool Rendering" Route="tool-rendering">
         <ShellContent ContentTemplate="{DataTemplate local:ToolRenderingPage}" />
     </FlyoutItem>
+    <FlyoutItem Title="📋  Human in the Loop" Route="hitl">
+        <ShellContent ContentTemplate="{DataTemplate local:HumanInTheLoopPage}" />
+    </FlyoutItem>
+    <FlyoutItem Title="🍳  Shared State" Route="shared-state">
+        <ShellContent ContentTemplate="{DataTemplate local:SharedStatePage}" />
+    </FlyoutItem>
 
 </Shell>
