@@ -163,6 +163,14 @@ public partial class AgentSession : ObservableObject, IAgentSession
                         });
                         break;
 
+                    case TextReasoningContent reasoningContent:
+                        await MainThread.InvokeOnMainThreadAsync(() =>
+                        {
+                            currentPending.ReasoningText += reasoningContent.Text ?? string.Empty;
+                            currentPending.Contents.Add(content);
+                        });
+                        break;
+
                     case FunctionCallContent functionCall:
                         var invocation = new InvocationContext(
                             functionCall.CallId,

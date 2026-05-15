@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             x:Class="AiControlsSample.SharedStatePage"
+             Title="Shared State">
+
+    <Grid ColumnDefinitions="*,*" ColumnSpacing="0">
+        <!-- Left: Recipe editor -->
+        <Border Grid.Column="0"
+                Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
+                StrokeShape="Rectangle" StrokeThickness="0,0,1,0"
+                Padding="16">
+            <ScrollView>
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="🍳 Recipe Editor" FontSize="18" FontAttributes="Bold" />
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Recipe Title" FontSize="12" Opacity="0.7" />
+                        <Entry x:Name="RecipeTitleEntry" Text="Pasta Primavera" FontSize="14" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Skill Level" FontSize="12" Opacity="0.7" />
+                        <Picker x:Name="SkillPicker" SelectedIndex="0">
+                            <Picker.ItemsSource>
+                                <x:Array Type="{x:Type x:String}">
+                                    <x:String>Beginner</x:String>
+                                    <x:String>Intermediate</x:String>
+                                    <x:String>Advanced</x:String>
+                                </x:Array>
+                            </Picker.ItemsSource>
+                        </Picker>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Cooking Time" FontSize="12" Opacity="0.7" />
+                        <Picker x:Name="TimePicker" SelectedIndex="3">
+                            <Picker.ItemsSource>
+                                <x:Array Type="{x:Type x:String}">
+                                    <x:String>5 min</x:String>
+                                    <x:String>10 min</x:String>
+                                    <x:String>15 min</x:String>
+                                    <x:String>30 min</x:String>
+                                    <x:String>45 min</x:String>
+                                    <x:String>60+ min</x:String>
+                                </x:Array>
+                            </Picker.ItemsSource>
+                        </Picker>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Ingredients" FontSize="12" FontAttributes="Bold" Opacity="0.7" />
+                        <VerticalStackLayout x:Name="IngredientsLayout" Spacing="4" />
+                        <Button Text="+ Add Ingredient" FontSize="12" Padding="8,4"
+                                BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}"
+                                TextColor="{AppThemeBinding Light=#4338CA, Dark=#A5B4FC}"
+                                CornerRadius="8" Clicked="OnAddIngredientClicked" />
+                    </VerticalStackLayout>
+
+                    <Button Text="✨ Improve with AI" FontSize="14" Padding="12,8"
+                            BackgroundColor="{AppThemeBinding Light=#6366F1, Dark=#818CF8}"
+                            TextColor="White" CornerRadius="12"
+                            Clicked="OnImproveClicked" />
+                </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+
+        <!-- Right: Chat panel -->
+        <controls:AgentChatView
+            Grid.Column="1"
+            x:Name="ChatView"
+            WelcomeTitle="Recipe Copilot"
+            WelcomeIcon="🍳"
+            WelcomeMessage="I can help improve your recipe! Edit on the left or ask me for suggestions."
+            Placeholder="Ask about your recipe..."
+            AssistantDisplayName="Chef AI"
+            AssistantAvatarText="👨‍🍳" />
+    </Grid>
+</ContentPage>
