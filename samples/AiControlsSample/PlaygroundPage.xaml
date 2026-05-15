@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             x:Class="AiControlsSample.PlaygroundPage"
+             Title="Playground">
+
+    <Grid x:Name="RootLayout">
+
+        <!-- Settings / playground area -->
+        <ScrollView x:Name="ContentArea">
+            <VerticalStackLayout Spacing="0" Padding="16" MaximumWidthRequest="560" HorizontalOptions="Center">
+
+                <!-- Header -->
+                <Label Text="AI Chat Playground" FontSize="22" FontAttributes="Bold" Margin="0,8,0,4" />
+                <Label Text="Customize every aspect of the chat control in real-time." FontSize="13" Opacity="0.6" Margin="0,0,0,16" />
+
+                <!-- ═══ General ═══ -->
+                <Label Text="GENERAL" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,8,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Welcome Icon" FontSize="12" FontAttributes="Bold" />
+                        <Entry x:Name="WelcomeIconEntry" Text="🤖" MaxLength="4" FontSize="13" />
+                        <Label Text="Welcome Title" FontSize="12" FontAttributes="Bold" />
+                        <Entry x:Name="WelcomeTitleEntry" Text="AI Assistant" FontSize="13" />
+                        <Label Text="Placeholder" FontSize="12" FontAttributes="Bold" />
+                        <Entry x:Name="PlaceholderEntry" Text="Ask me anything..." FontSize="13" />
+                        <Button Text="Clear Chat" FontSize="12" CornerRadius="8"
+                                BackgroundColor="#DC2626" TextColor="White"
+                                Padding="12,6" HorizontalOptions="Start"
+                                Clicked="OnClearChatClicked" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- ═══ Identity ═══ -->
+                <Label Text="IDENTITY" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,16,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}">
+                    <VerticalStackLayout Spacing="10">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Your Name" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="UserNameEntry" Text="You" FontSize="13" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                <Label Text="Avatar Text" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="UserAvatarEntry" Text="You" MaxLength="3" FontSize="13" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Assistant Name" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                <Label Text="Avatar Text" FontSize="12" FontAttributes="Bold" />
+                                <Entry x:Name="AssistantAvatarEntry" Text="AI" MaxLength="3" FontSize="13" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Show Avatars" VerticalOptions="Center" FontSize="13" />
+                            <Switch x:Name="ShowAvatarsSwitch" IsToggled="True" Grid.Column="1" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- ═══ Tools ═══ -->
+                <Label Text="TOOLS" FontSize="11" FontAttributes="Bold" Opacity="0.5" Margin="0,16,0,4" />
+                <Border StrokeShape="RoundRectangle 10" Padding="14" StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" Margin="0,0,0,40">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="The assistant can use these tools:" FontSize="13" Opacity="0.7" />
+                        <Label Text="🌤  Get Weather — any city's weather (JSON)" FontSize="13" />
+                        <Label Text="🔢  Calculate — math expressions" FontSize="13" />
+                        <Label Text="💡  Random Fact — fun facts" FontSize="13" />
+                        <Label Text="📱  App Info — device details" FontSize="13" />
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Chat sidebar -->
+        <Grid x:Name="ChatSidebar"
+              BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1E1E2E}"
+              HorizontalOptions="End" WidthRequest="400">
+            <BoxView Color="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
+                     WidthRequest="1" HorizontalOptions="Start" />
+            <controls:AgentChatView
+                x:Name="ChatView"
+                WelcomeTitle="AI Assistant"
+                WelcomeMessage="I can check the weather, do math, and share fun facts. Try it!"
+                Placeholder="Ask me anything..."
+                UserDisplayName="You"
+                AssistantDisplayName="Copilot"
+                UserAvatarText="You"
+                AssistantAvatarText="AI"
+                ShowAvatars="True" />
+        </Grid>
+
+        <!-- FAB for narrow screens -->
+        <Button x:Name="ChatFab" Text="💬" FontSize="24"
+                WidthRequest="56" HeightRequest="56" CornerRadius="28"
+                BackgroundColor="#6366F1" TextColor="White"
+                HorizontalOptions="End" VerticalOptions="End"
+                Margin="0,0,20,20" IsVisible="False"
+                Clicked="OnFabClicked" />
+    </Grid>
+</ContentPage>
