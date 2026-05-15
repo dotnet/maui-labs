@@ -96,10 +96,7 @@
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
   </ItemGroup>
 
-  <!-- CopilotChat dependencies -->
-  <ItemGroup Label="CopilotChat">
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="0.3.0" />
-  </ItemGroup>
+
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
        implicitly provided by the Arcade SDK — do not define PackageVersion for them) -->
