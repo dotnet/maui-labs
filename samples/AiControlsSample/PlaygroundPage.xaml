@@ -11,7 +11,7 @@
         <ToolbarItem Text="⚙️" Clicked="OnSettingsToggleClicked" />
     </ContentPage.ToolbarItems>
 
-    <Grid x:Name="RootLayout">
+    <Grid x:Name="RootLayout" ColumnDefinitions="*,Auto">
 
         <!-- Chat fills available space -->
         <controls:AgentChatView
@@ -26,16 +26,14 @@
             AssistantAvatarText="AI"
             ShowAvatars="True" />
 
-        <!-- Settings panel: docked sidebar on wide, popup on narrow -->
+        <!-- Settings panel: docked sidebar on wide, toggled via toolbar -->
         <Border x:Name="SettingsPanel" Grid.Column="1"
                 IsVisible="False"
                 BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1A1A2E}"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
                 StrokeShape="Rectangle"
                 StrokeThickness="1"
-                Padding="0"
-                MinimumWidthRequest="220"
-                MaximumWidthRequest="320">
+                Padding="0">
             <Grid RowDefinitions="Auto,*">
                 <!-- Header -->
                 <Grid Padding="16,14" ColumnDefinitions="*,Auto"
