@@ -8,10 +8,10 @@
     <Project Path="playground/DevFlow.Console/DevFlow.Console.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/AiControlsSample/AiControlsSample.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj" />
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
-    <Project Path="samples/AI.Sample/AI.Sample.csproj" />
     <Project Path="samples/DevFlow.Sample.Linux/DevFlow.Sample.Linux.csproj" />
     <Project Path="samples/DevFlow.Sample.MacOS/DevFlow.Sample.MacOS.csproj" />
     <Project Path="samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj" />
@@ -25,10 +25,10 @@
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
-    <Project Path="src/AI/Microsoft.Maui.AI/Microsoft.Maui.AI.csproj" />
-    <Project Path="src/AI/Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
-
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
+  </Folder>
+  <Folder Name="/src/AIControls/">
+    <Project Path="src/AIControls/Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
