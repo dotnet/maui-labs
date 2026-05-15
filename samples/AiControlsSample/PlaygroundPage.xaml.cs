@@ -6,6 +6,9 @@ namespace AiControlsSample;
 
 public partial class PlaygroundPage : ContentPage
 {
+    private const double WideBreakpoint = 800;
+    private bool _settingsVisible;
+
     public PlaygroundPage(IAgentSessionFactory sessionFactory, IChatClient chatClient, SampleTools tools)
     {
         InitializeComponent();
@@ -25,14 +28,53 @@ public partial class PlaygroundPage : ContentPage
         Loaded += (_, _) => WireTextSettings();
     }
 
+    protected override void OnSizeAllocated(double width, double height)
+    {
+        base.OnSizeAllocated(width, height);
+        UpdateLayout(width);
+    }
+
+    private void UpdateLayout(double width)
+    {
+        var isWide = width >= WideBreakpoint;
+
+        if (_settingsVisible)
+        {
+            if (isWide)
+            {
+                // Sidebar mode: chat + settings side-by-side
+                RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star), new ColumnDefinition(280)];
+                Grid.SetColumn(SettingsPanel, 1);
+                SettingsPanel.HorizontalOptions = LayoutOptions.Fill;
+                SettingsPanel.VerticalOptions = LayoutOptions.Fill;
+            }
+            else
+            {
+                // Overlay mode: settings overlays chat
+                RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
+                Grid.SetColumn(SettingsPanel, 0);
+                SettingsPanel.HorizontalOptions = LayoutOptions.End;
+                SettingsPanel.VerticalOptions = LayoutOptions.Fill;
+            }
+            SettingsPanel.IsVisible = true;
+        }
+        else
+        {
+            RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
+            SettingsPanel.IsVisible = false;
+        }
+    }
+
     private void OnSettingsToggleClicked(object? sender, EventArgs e)
     {
-        SettingsPanel.IsVisible = true;
+        _settingsVisible = !_settingsVisible;
+        UpdateLayout(Width);
     }
 
     private void OnCloseSettingsClicked(object? sender, EventArgs e)
     {
-        SettingsPanel.IsVisible = false;
+        _settingsVisible = false;
+        UpdateLayout(Width);
     }
 
     private void OnClearChatClicked(object? sender, EventArgs e) => ChatView.ClearMessages();

@@ -6,9 +6,14 @@
              Title="Playground"
              Shell.NavBarIsVisible="True">
 
-    <Grid RowDefinitions="*,Auto">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="🗑️ Clear" Clicked="OnClearChatClicked" />
+        <ToolbarItem Text="⚙️" Clicked="OnSettingsToggleClicked" />
+    </ContentPage.ToolbarItems>
 
-        <!-- Chat takes full width/height -->
+    <Grid x:Name="RootLayout">
+
+        <!-- Chat fills available space -->
         <controls:AgentChatView
             x:Name="ChatView"
             WelcomeTitle="AI Assistant"
@@ -21,110 +26,92 @@
             AssistantAvatarText="AI"
             ShowAvatars="True" />
 
-        <!-- Settings toggle bar at bottom -->
-        <Border Grid.Row="1" StrokeThickness="0"
-                BackgroundColor="{AppThemeBinding Light=#F1F5F9, Dark=#1E293B}"
-                Padding="12,8">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button x:Name="SettingsToggle" Text="⚙️ Settings"
-                        FontSize="13" CornerRadius="16" Padding="14,6"
-                        BackgroundColor="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                        TextColor="{AppThemeBinding Light=#334155, Dark=#E2E8F0}"
-                        Clicked="OnSettingsToggleClicked" />
-                <Label Grid.Column="1" Text="Playground" FontSize="11" Opacity="0.5"
-                       VerticalOptions="Center" HorizontalOptions="Center" />
-                <Button Grid.Column="2" Text="🗑️ Clear"
-                        FontSize="13" CornerRadius="16" Padding="14,6"
-                        BackgroundColor="{AppThemeBinding Light=#FEE2E2, Dark=#451A1A}"
-                        TextColor="{AppThemeBinding Light=#DC2626, Dark=#FCA5A5}"
-                        Clicked="OnClearChatClicked" />
-            </Grid>
-        </Border>
-
-        <!-- Settings overlay panel (slides up) -->
-        <Border x:Name="SettingsPanel" Grid.RowSpan="2"
+        <!-- Settings panel: docked sidebar on wide, overlay on narrow -->
+        <Border x:Name="SettingsPanel" Grid.Column="1"
                 IsVisible="False"
-                VerticalOptions="End"
-                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1E1E2E}"
-                StrokeShape="RoundRectangle 16,16,0,0"
+                BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1A1A2E}"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeThickness="1"
-                Shadow="{OnPlatform Default={Shadow Brush=Black, Opacity=0.15, Offset='0,-4', Radius=12}}"
-                Padding="0" MaximumHeightRequest="400">
+                StrokeThickness="1,0,0,0"
+                Padding="0" WidthRequest="280">
             <Grid RowDefinitions="Auto,*">
-                <!-- Handle bar + close -->
-                <Grid Padding="16,12" ColumnDefinitions="*,Auto"
-                      BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#262640}">
-                    <Label Text="⚙️ Customize" FontSize="15" FontAttributes="Bold" VerticalOptions="Center" />
-                    <Button Grid.Column="1" Text="✕" FontSize="14"
+                <!-- Header -->
+                <Grid Padding="16,14" ColumnDefinitions="*,Auto"
+                      BackgroundColor="{AppThemeBinding Light=#F1F5F9, Dark=#262640}">
+                    <Label Text="⚙️ Settings" FontSize="14" FontAttributes="Bold" VerticalOptions="Center" />
+                    <Button Grid.Column="1" Text="✕" FontSize="13"
                             BackgroundColor="Transparent"
                             TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}"
                             Clicked="OnCloseSettingsClicked"
-                            WidthRequest="32" HeightRequest="32" Padding="0" />
+                            WidthRequest="28" HeightRequest="28" Padding="0" />
                 </Grid>
 
-                <!-- Scrollable settings -->
-                <ScrollView Grid.Row="1" Padding="16,0,16,16">
+                <!-- Settings content -->
+                <ScrollView Grid.Row="1" Padding="16,8,16,16">
                     <VerticalStackLayout Spacing="14">
 
-                        <!-- General -->
-                        <Label Text="GENERAL" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,8,0,0" />
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <Label Text="GENERAL" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,4,0,0" />
+                        <VerticalStackLayout Spacing="8">
                             <VerticalStackLayout Spacing="4">
                                 <Label Text="Welcome Icon" FontSize="11" Opacity="0.7" />
                                 <Entry x:Name="WelcomeIconEntry" Text="🤖" MaxLength="4" FontSize="13" />
                             </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <VerticalStackLayout Spacing="4">
                                 <Label Text="Welcome Title" FontSize="11" Opacity="0.7" />
                                 <Entry x:Name="WelcomeTitleEntry" Text="AI Assistant" FontSize="13" />
                             </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Row="1" Grid.ColumnSpan="2" Spacing="4">
+                            <VerticalStackLayout Spacing="4">
                                 <Label Text="Placeholder" FontSize="11" Opacity="0.7" />
                                 <Entry x:Name="PlaceholderEntry" Text="Ask me anything..." FontSize="13" />
                             </VerticalStackLayout>
-                        </Grid>
+                        </VerticalStackLayout>
 
-                        <!-- Identity -->
-                        <Label Text="IDENTITY" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,4,0,0" />
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
-                            <VerticalStackLayout Spacing="4">
-                                <Label Text="Your Name" FontSize="11" Opacity="0.7" />
-                                <Entry x:Name="UserNameEntry" Text="You" FontSize="13" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Column="1" Spacing="4">
-                                <Label Text="Your Avatar" FontSize="11" Opacity="0.7" />
-                                <Entry x:Name="UserAvatarEntry" Text="You" MaxLength="3" FontSize="13" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Row="1" Spacing="4">
-                                <Label Text="Assistant Name" FontSize="11" Opacity="0.7" />
-                                <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Row="1" Grid.Column="1" Spacing="4">
-                                <Label Text="Assistant Avatar" FontSize="11" Opacity="0.7" />
-                                <Entry x:Name="AssistantAvatarEntry" Text="AI" MaxLength="3" FontSize="13" />
-                            </VerticalStackLayout>
-                            <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
+                        <Label Text="IDENTITY" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,8,0,0" />
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label Text="Your Name" FontSize="11" Opacity="0.7" />
+                                    <Entry x:Name="UserNameEntry" Text="You" FontSize="13" />
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label Text="Avatar" FontSize="11" Opacity="0.7" />
+                                    <Entry x:Name="UserAvatarEntry" Text="You" MaxLength="3" FontSize="13" />
+                                </VerticalStackLayout>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label Text="Assistant" FontSize="11" Opacity="0.7" />
+                                    <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13" />
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label Text="Avatar" FontSize="11" Opacity="0.7" />
+                                    <Entry x:Name="AssistantAvatarEntry" Text="AI" MaxLength="3" FontSize="13" />
+                                </VerticalStackLayout>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" Padding="0,4">
                                 <Label Text="Show Avatars" VerticalOptions="Center" FontSize="13" />
                                 <Switch x:Name="ShowAvatarsSwitch" IsToggled="True" Grid.Column="1" />
                             </Grid>
-                        </Grid>
+                        </VerticalStackLayout>
 
-                        <!-- Tools info -->
-                        <Label Text="AVAILABLE TOOLS" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,4,0,0" />
-                        <HorizontalStackLayout Spacing="8">
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                        <Label Text="TOOLS" FontSize="10" FontAttributes="Bold" Opacity="0.5" Margin="0,8,0,0" />
+                        <FlexLayout Wrap="Wrap" Direction="Row">
+                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
+                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
                                 <Label Text="🌤 Weather" FontSize="11" />
                             </Border>
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
+                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
                                 <Label Text="🔢 Calculate" FontSize="11" />
                             </Border>
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
+                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
                                 <Label Text="💡 Fact" FontSize="11" />
                             </Border>
-                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
+                            <Border StrokeShape="RoundRectangle 12" Padding="8,4" Margin="0,0,6,6"
+                                    BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
                                 <Label Text="📱 App Info" FontSize="11" />
                             </Border>
-                        </HorizontalStackLayout>
+                        </FlexLayout>
 
                     </VerticalStackLayout>
                 </ScrollView>
