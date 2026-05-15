@@ -49,6 +49,10 @@ public partial class ChatMessageViewModel : ObservableObject
     private bool _isStreaming;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReasoning))]
+    private string _reasoningText = string.Empty;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasDetails))]
     private string? _toolArgs;
 
@@ -75,6 +79,8 @@ public partial class ChatMessageViewModel : ObservableObject
     public string TimestampText => Timestamp.LocalDateTime.ToString("h:mm tt");
 
     public bool HasDetails => ToolArgs is not null || ToolResult is not null;
+
+    public bool HasReasoning => !string.IsNullOrEmpty(ReasoningText);
 
     public string ExpandIcon => IsExpanded ? "▼" : "▶";
 

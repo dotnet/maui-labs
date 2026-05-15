@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
+  <Project Path="Microsoft.Maui.AI.Controls.Tests/Microsoft.Maui.AI.Controls.Tests.csproj" />
 </Solution>
