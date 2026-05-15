@@ -6,7 +6,7 @@ namespace AiControlsSample;
 
 public partial class PlaygroundPage : ContentPage
 {
-    private const double WideBreakpoint = 800;
+    private const double SidebarWidth = 300;
     private bool _settingsVisible;
 
     public PlaygroundPage(IAgentSessionFactory sessionFactory, IChatClient chatClient, SampleTools tools)
@@ -25,67 +25,31 @@ public partial class PlaygroundPage : ContentPage
             new Suggestion("What app am I running?"),
         ];
 
+        SettingsPanel.WidthRequest = SidebarWidth;
         Loaded += (_, _) => WireTextSettings();
     }
 
     protected override void OnSizeAllocated(double width, double height)
     {
         base.OnSizeAllocated(width, height);
-        UpdateLayout(width);
     }
 
-    private void UpdateLayout(double width)
+    private void UpdateSettingsVisibility()
     {
-        var isWide = width >= WideBreakpoint;
-
-        if (_settingsVisible)
-        {
-            if (isWide)
-            {
-                // Proportional sidebar: 80% chat, 20% settings
-                RootLayout.ColumnDefinitions = [new ColumnDefinition(new GridLength(4, GridUnitType.Star)), new ColumnDefinition(new GridLength(1, GridUnitType.Star))];
-                Grid.SetColumn(SettingsPanel, 1);
-                SettingsPanel.WidthRequest = -1; // fill column
-                SettingsPanel.HorizontalOptions = LayoutOptions.Fill;
-                SettingsPanel.VerticalOptions = LayoutOptions.Fill;
-                SettingsPanel.IsVisible = true;
-            }
-            else
-            {
-                // Narrow: show as modal popup instead of taking space
-                RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
-                SettingsPanel.IsVisible = false;
-                ShowSettingsPopup();
-            }
-        }
-        else
-        {
-            RootLayout.ColumnDefinitions = [new ColumnDefinition(GridLength.Star)];
-            SettingsPanel.IsVisible = false;
-        }
-    }
-
-    private async void ShowSettingsPopup()
-    {
-        // On narrow screens, show settings as a bottom sheet / action sheet
-        var result = await DisplayActionSheetAsync("Settings", "Close", null,
-            $"Welcome Icon: {WelcomeIconEntry.Text}",
-            $"Welcome Title: {WelcomeTitleEntry.Text}",
-            $"Show Avatars: {(ShowAvatarsSwitch.IsToggled ? "On" : "Off")}");
-
-        _settingsVisible = false;
+        SettingsPanel.IsVisible = _settingsVisible;
+        SettingsPanel.WidthRequest = _settingsVisible ? SidebarWidth : 0;
     }
 
     private void OnSettingsToggleClicked(object? sender, EventArgs e)
     {
         _settingsVisible = !_settingsVisible;
-        UpdateLayout(Width);
+        UpdateSettingsVisibility();
     }
 
     private void OnCloseSettingsClicked(object? sender, EventArgs e)
     {
         _settingsVisible = false;
-        UpdateLayout(Width);
+        UpdateSettingsVisibility();
     }
 
     private void OnClearChatClicked(object? sender, EventArgs e) => ChatView.ClearMessages();
