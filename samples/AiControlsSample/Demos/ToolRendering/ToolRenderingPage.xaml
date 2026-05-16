@@ -12,5 +12,6 @@
         WelcomeMessage="Ask about the weather to see tool calls and structured results rendered inline."
         Placeholder="Try 'What's the weather in San Francisco?'..."
         AssistantDisplayName="Tools Agent"
-        AssistantAvatarText="🔧" />
+        AssistantAvatarText="🔧"
+        ShowToolMessages="True" />
 </ContentPage>
