@@ -1,5 +1,7 @@
 // Copyright (c) Microsoft. All rights reserved.
 
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.AI;
@@ -19,7 +21,7 @@ public class JsonPatchOperation
 
     /// <summary>The value to apply (for "replace" and "add" operations).</summary>
     [JsonPropertyName("value")]
-    public object? Value { get; set; }
+    public JsonElement? Value { get; set; }
 
     /// <summary>Source path for "move" and "copy" operations.</summary>
     [JsonPropertyName("from")]

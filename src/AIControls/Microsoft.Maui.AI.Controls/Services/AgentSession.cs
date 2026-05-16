@@ -11,13 +11,14 @@ namespace Microsoft.Maui.AI;
 /// Default implementation of <see cref="IAgentSession"/>.
 /// Streams responses from an <see cref="IChatClient"/> and marshals UI updates to the main thread.
 /// </summary>
-public partial class AgentSession : ObservableObject, IAgentSession
+public partial class AgentSession : ObservableObject, IAgentSession, IDisposable
 {
     private readonly IChatClient _client;
     private readonly List<AITool> _tools = [];
     private readonly ConcurrentDictionary<string, InvocationContext> _invocations = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<object>> _pendingResponses = new();
     private CancellationTokenSource? _cts;
+    private bool _disposed;
 
     [ObservableProperty]
     private bool _isProcessing;
@@ -29,6 +30,7 @@ public partial class AgentSession : ObservableObject, IAgentSession
     public event Action<ReadOnlyMemory<byte>>? StateSnapshotReceived;
     public event Action<ReadOnlyMemory<byte>>? StateDeltaReceived;
     public event Action? ResponseUpdated;
+    public event Action<Exception>? Failed;
 
     public AgentSession(IChatClient client)
     {
@@ -114,7 +116,9 @@ public partial class AgentSession : ObservableObject, IAgentSession
                 await MainThread.InvokeOnMainThreadAsync(() =>
                 {
                     PendingMessages.Remove(currentPending);
-                    if (!string.IsNullOrEmpty(currentPending.Text) || currentPending.Contents.Count > 0)
+                    if (!string.IsNullOrEmpty(currentPending.Text)
+                        || !string.IsNullOrEmpty(currentPending.ReasoningText)
+                        || currentPending.Contents.Count > 0)
                     {
                         Messages.Add(currentPending);
                     }
@@ -128,8 +132,7 @@ public partial class AgentSession : ObservableObject, IAgentSession
         }
         catch (Exception ex)
         {
-            // Log but don't crash the app
-            Console.WriteLine($"AgentSession.SendAsync error: {ex}");
+            MainThread.BeginInvokeOnMainThread(() => Failed?.Invoke(ex));
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 PendingMessages.Clear();
@@ -220,7 +223,9 @@ public partial class AgentSession : ObservableObject, IAgentSession
 
     public Task<object> WaitForResponse(string key)
     {
-        var tcs = _pendingResponses.GetOrAdd(key, _ => new TaskCompletionSource<object>());
+        // Always create a fresh TCS so each caller gets their own completion.
+        var tcs = new TaskCompletionSource<object>();
+        _pendingResponses.AddOrUpdate(key, tcs, (_, _) => tcs);
         return tcs.Task;
     }
 
@@ -232,9 +237,16 @@ public partial class AgentSession : ObservableObject, IAgentSession
         }
     }
 
-    public void Reset()
+    /// <summary>Cancels the current streaming operation.</summary>
+    public void Cancel()
     {
         _cts?.Cancel();
+    }
+
+    public void Reset()
+    {
+        Cancel();
+        _cts?.Dispose();
         _cts = null;
 
         MainThread.BeginInvokeOnMainThread(() =>
@@ -252,5 +264,27 @@ public partial class AgentSession : ObservableObject, IAgentSession
             kvp.Value.TrySetCanceled();
         }
         _pendingResponses.Clear();
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        Cancel();
+        _cts?.Dispose();
+        _cts = null;
+
+        foreach (var kvp in _pendingResponses)
+        {
+            kvp.Value.TrySetCanceled();
+        }
+        _pendingResponses.Clear();
+
+        if (_client is IDisposable disposableClient)
+            disposableClient.Dispose();
+
+        GC.SuppressFinalize(this);
     }
 }

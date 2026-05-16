@@ -38,6 +38,12 @@ public interface IAgentSession : INotifyPropertyChanged
     /// </summary>
     Task SendAsync(params ChatMessage[] messages);
 
+    /// <summary>Cancels the current streaming operation.</summary>
+    void Cancel();
+
+    /// <summary>Fires when an unhandled error occurs during streaming.</summary>
+    event Action<Exception>? Failed;
+
     /// <summary>
     /// Human-in-the-loop: waits for a user response keyed by <paramref name="key"/>.
     /// </summary>
