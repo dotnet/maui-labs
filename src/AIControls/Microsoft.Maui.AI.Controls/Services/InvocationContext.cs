@@ -1,5 +1,7 @@
 // Copyright (c) Microsoft. All rights reserved.
 
+using System.Text.Json;
+
 namespace Microsoft.Maui.AI;
 
 /// <summary>
@@ -38,8 +40,43 @@ public sealed class InvocationContext
         if (Arguments is null || !Arguments.TryGetValue(name, out object? value))
             return default;
 
+        return CoerceValue<T>(value);
+    }
+
+    /// <summary>Returns the result cast to <typeparamref name="T"/>.</summary>
+    public T? GetResult<T>()
+    {
+        if (!HasResult || Result is null)
+            return default;
+
+        return CoerceValue<T>(Result);
+    }
+
+    /// <summary>Sets the result and fires <see cref="ResultArrived"/>.</summary>
+    public void SetResult(object? result)
+    {
+        Result = result;
+        HasResult = true;
+        ResultArrived?.Invoke();
+    }
+
+    private static T? CoerceValue<T>(object? value)
+    {
         if (value is T typed)
             return typed;
+
+        // JsonElement is the most common type from M.E.AI tool arguments
+        if (value is JsonElement element)
+        {
+            try
+            {
+                return element.Deserialize<T>();
+            }
+            catch
+            {
+                return default;
+            }
+        }
 
         try
         {
@@ -49,32 +86,5 @@ public sealed class InvocationContext
         {
             return default;
         }
-    }
-
-    /// <summary>Returns the result cast to <typeparamref name="T"/>.</summary>
-    public T? GetResult<T>()
-    {
-        if (!HasResult || Result is null)
-            return default;
-
-        if (Result is T typed)
-            return typed;
-
-        try
-        {
-            return (T?)Convert.ChangeType(Result, typeof(T));
-        }
-        catch
-        {
-            return default;
-        }
-    }
-
-    /// <summary>Sets the result and fires <see cref="ResultArrived"/>.</summary>
-    public void SetResult(object? result)
-    {
-        Result = result;
-        HasResult = true;
-        ResultArrived?.Invoke();
     }
 }

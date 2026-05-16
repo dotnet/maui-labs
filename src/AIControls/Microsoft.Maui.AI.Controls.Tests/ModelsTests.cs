@@ -115,7 +115,7 @@ public class ModelsTests
         {
             Op = "replace",
             Path = "/steps/0/status",
-            Value = "completed"
+            Value = JsonSerializer.Deserialize<JsonElement>("\"completed\"")
         };
 
         var json = JsonSerializer.Serialize(op);
@@ -124,6 +124,7 @@ public class ModelsTests
         Assert.NotNull(deserialized);
         Assert.Equal("replace", deserialized.Op);
         Assert.Equal("/steps/0/status", deserialized.Path);
+        Assert.Equal("completed", deserialized.Value?.GetString());
     }
 
     [Fact]
