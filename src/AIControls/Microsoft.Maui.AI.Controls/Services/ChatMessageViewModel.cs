@@ -122,14 +122,25 @@ public partial class ChatMessageViewModel : ObservableObject
         return vm;
     }
 
-    /// <summary>Reconstructs a <see cref="ChatMessage"/> preserving all content types for history.</summary>
+    /// <summary>
+    /// Reconstructs a <see cref="ChatMessage"/> with text and data content only (for history).
+    /// Tool calls and results are handled within a single streaming call by
+    /// <see cref="FunctionInvokingChatClient"/> and must not be resent in history.
+    /// </summary>
     public ChatMessage ToChatMessage()
     {
         var contents = new List<AIContent>();
 
         foreach (var content in Contents)
         {
-            contents.Add(content);
+            switch (content)
+            {
+                case TextContent:
+                case DataContent:
+                    contents.Add(content);
+                    break;
+                // Skip FunctionCallContent, FunctionResultContent — handled by FunctionInvokingChatClient
+            }
         }
 
         if (contents.Count == 0 && !string.IsNullOrEmpty(Text))
