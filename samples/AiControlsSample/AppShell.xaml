@@ -39,5 +39,14 @@
     <FlyoutItem Title="🍳  Shared State" Route="shared-state">
         <ShellContent ContentTemplate="{DataTemplate local:SharedStatePage}" />
     </FlyoutItem>
+    <FlyoutItem Title="🚀  Agentic Gen UI" Route="agentic-genui">
+        <ShellContent ContentTemplate="{DataTemplate local:AgenticGenerativeUIPage}" />
+    </FlyoutItem>
+    <FlyoutItem Title="✍️  Predictive State" Route="predictive-state">
+        <ShellContent ContentTemplate="{DataTemplate local:PredictiveStatePage}" />
+    </FlyoutItem>
+    <FlyoutItem Title="🎋  Haiku Generator" Route="haiku">
+        <ShellContent ContentTemplate="{DataTemplate local:HaikuPage}" />
+    </FlyoutItem>
 
 </Shell>
