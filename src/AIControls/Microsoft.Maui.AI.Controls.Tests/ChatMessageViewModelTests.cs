@@ -22,8 +22,10 @@ public class ChatMessageViewModelTests
     }
 
     [Fact]
-    public void ToChatMessage_PreservesFunctionCallContent()
+    public void ToChatMessage_SkipsFunctionCallContent()
     {
+        // FunctionCallContent is handled by FunctionInvokingChatClient within a single session
+        // and must not be resent in conversation history
         var vm = new ChatMessageViewModel(ChatRole.Assistant);
         var call = new FunctionCallContent("call-1", "get_weather",
             new Dictionary<string, object?> { ["city"] = "Seattle" });
@@ -31,14 +33,12 @@ public class ChatMessageViewModelTests
 
         var msg = vm.ToChatMessage();
 
-        Assert.Single(msg.Contents);
-        var roundTripped = Assert.IsType<FunctionCallContent>(msg.Contents[0]);
-        Assert.Equal("call-1", roundTripped.CallId);
-        Assert.Equal("get_weather", roundTripped.Name);
+        // No content in the message (tool call stripped), but empty contents with no text = empty message
+        Assert.Empty(msg.Contents);
     }
 
     [Fact]
-    public void ToChatMessage_PreservesFunctionResultContent()
+    public void ToChatMessage_SkipsFunctionResultContent()
     {
         var vm = new ChatMessageViewModel(ChatRole.Tool);
         var result = new FunctionResultContent("call-1", "sunny, 72°F");
@@ -46,14 +46,13 @@ public class ChatMessageViewModelTests
 
         var msg = vm.ToChatMessage();
 
-        Assert.Single(msg.Contents);
-        var roundTripped = Assert.IsType<FunctionResultContent>(msg.Contents[0]);
-        Assert.Equal("call-1", roundTripped.CallId);
+        Assert.Empty(msg.Contents);
     }
 
     [Fact]
-    public void ToChatMessage_PreservesMultipleMixedContent()
+    public void ToChatMessage_KeepsTextOnly_WhenMixedWithToolContent()
     {
+        // Only TextContent and DataContent should survive the round-trip
         var vm = new ChatMessageViewModel(ChatRole.Assistant);
         vm.Contents.Add(new TextContent("Here's the weather:"));
         vm.Contents.Add(new FunctionCallContent("c1", "get_weather"));
@@ -62,11 +61,11 @@ public class ChatMessageViewModelTests
 
         var msg = vm.ToChatMessage();
 
-        Assert.Equal(4, msg.Contents.Count);
+        Assert.Equal(2, msg.Contents.Count);
         Assert.IsType<TextContent>(msg.Contents[0]);
-        Assert.IsType<FunctionCallContent>(msg.Contents[1]);
-        Assert.IsType<FunctionResultContent>(msg.Contents[2]);
-        Assert.IsType<TextContent>(msg.Contents[3]);
+        Assert.Equal("Here's the weather:", ((TextContent)msg.Contents[0]).Text);
+        Assert.IsType<TextContent>(msg.Contents[1]);
+        Assert.Equal("It's sunny!", ((TextContent)msg.Contents[1]).Text);
     }
 
     [Fact]
@@ -80,6 +79,23 @@ public class ChatMessageViewModelTests
         Assert.Single(msg.Contents);
         var text = Assert.IsType<TextContent>(msg.Contents[0]);
         Assert.Equal("Hello world", text.Text);
+    }
+
+    [Fact]
+    public void ToChatMessage_PreservesDataContent()
+    {
+        // DataContent (state snapshots, etc.) should be preserved in history
+        var vm = new ChatMessageViewModel(ChatRole.User);
+        var jsonBytes = System.Text.Encoding.UTF8.GetBytes("""{"recipe":"pasta"}""");
+        var data = new DataContent(jsonBytes, "application/json");
+        vm.Contents.Add(new TextContent("Improve this recipe"));
+        vm.Contents.Add(data);
+
+        var msg = vm.ToChatMessage();
+
+        Assert.Equal(2, msg.Contents.Count);
+        Assert.IsType<TextContent>(msg.Contents[0]);
+        Assert.IsType<DataContent>(msg.Contents[1]);
     }
 
     [Fact]

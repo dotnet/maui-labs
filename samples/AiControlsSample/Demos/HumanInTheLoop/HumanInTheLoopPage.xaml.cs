@@ -18,10 +18,13 @@ public partial class HumanInTheLoopPage : ContentPage
         _session.SystemInstructions = """
             You are a plan assistant. When the user asks you to do something:
             1. Create a plan by calling create_plan with a list of step descriptions.
-            2. Wait for the user to confirm the plan by calling confirm_plan.
+            2. IMMEDIATELY call confirm_plan in the same response (do NOT wait for a separate user message).
+               confirm_plan is a blocking tool — it pauses and waits for the user to click Confirm or Reject in the UI.
             3. If confirmed, execute each step one by one, calling update_plan_step to mark each as completed.
+               Add a brief delay description for each step to make it feel realistic.
             4. If rejected, acknowledge and ask what they'd like to change.
             
+            IMPORTANT: Always call create_plan AND confirm_plan together in the same tool_calls response.
             Always create 3-5 concrete steps that clearly describe what will happen.
             """;
 
