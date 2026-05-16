@@ -25,7 +25,6 @@ public partial class HumanInTheLoopPage : ContentPage
             Always create 3-5 concrete steps that clearly describe what will happen.
             """;
 
-        // Register HITL tools
         RegisterTools();
 
         ChatView.Session = _session;
@@ -49,16 +48,22 @@ public partial class HumanInTheLoopPage : ContentPage
                 Steps = steps.Select(s => new Step { Description = s }).ToList()
             };
 
-            MainThread.BeginInvokeOnMainThread(() => ShowPlan(plan));
+            _currentPlan = plan;
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                PlanCard.Plan = plan;
+                PlanCard.IsVisible = true;
+                PlanCard.RefreshSteps();
+            });
             return plan;
         }
 
         [Description("Wait for the user to confirm or reject the plan. Returns whether they confirmed.")]
         async Task<PlanConfirmationResult> confirm_plan()
         {
-            MainThread.BeginInvokeOnMainThread(() => ConfirmPanel.IsVisible = true);
+            MainThread.BeginInvokeOnMainThread(() => PlanCard.ShowConfirmation = true);
             var response = await _session.WaitForResponse("confirm_plan");
-            MainThread.BeginInvokeOnMainThread(() => ConfirmPanel.IsVisible = false);
+            MainThread.BeginInvokeOnMainThread(() => PlanCard.ShowConfirmation = false);
             return response as PlanConfirmationResult ?? new PlanConfirmationResult { Confirmed = false };
         }
 
@@ -71,7 +76,7 @@ public partial class HumanInTheLoopPage : ContentPage
                 if (_currentPlan is not null && step_index < _currentPlan.Steps.Count)
                 {
                     _currentPlan.Steps[step_index].Status = StepStatus.Completed;
-                    RefreshPlanUI();
+                    PlanCard.RefreshSteps();
                 }
             });
             return $"Step {step_index} marked as completed.";
@@ -81,44 +86,6 @@ public partial class HumanInTheLoopPage : ContentPage
             AIFunctionFactory.Create(create_plan),
             AIFunctionFactory.Create(confirm_plan),
             AIFunctionFactory.Create(update_plan_step));
-    }
-
-    private void ShowPlan(Plan plan)
-    {
-        _currentPlan = plan;
-        PlanPanel.IsVisible = true;
-        RefreshPlanUI();
-    }
-
-    private void RefreshPlanUI()
-    {
-        if (_currentPlan is null) return;
-
-        PlanHeader.Text = $"📋 Plan ({_currentPlan.Steps.Count} steps)";
-        PlanProgress.Text = $"{_currentPlan.CompletedCount}/{_currentPlan.Steps.Count}";
-
-        StepsLayout.Children.Clear();
-        for (int i = 0; i < _currentPlan.Steps.Count; i++)
-        {
-            var step = _currentPlan.Steps[i];
-            var row = new HorizontalStackLayout { Spacing = 8 };
-            row.Children.Add(new Label
-            {
-                Text = step.StatusText,
-                FontSize = 14,
-                VerticalOptions = LayoutOptions.Center
-            });
-            row.Children.Add(new Label
-            {
-                Text = step.Description,
-                FontSize = 13,
-                VerticalOptions = LayoutOptions.Center,
-                LineBreakMode = LineBreakMode.WordWrap,
-                TextDecorations = step.IsCompleted ? TextDecorations.Strikethrough : TextDecorations.None,
-                Opacity = step.IsCompleted ? 0.6 : 1.0
-            });
-            StepsLayout.Children.Add(row);
-        }
     }
 
     private void OnConfirmClicked(object? sender, EventArgs e)
@@ -136,7 +103,7 @@ public partial class HumanInTheLoopPage : ContentPage
         base.OnSizeAllocated(width, height);
         if (width > 0 && _currentPlan is not null)
         {
-            PlanPanel.IsVisible = width >= 700;
+            PlanCard.IsVisible = width >= 700;
         }
     }
 }

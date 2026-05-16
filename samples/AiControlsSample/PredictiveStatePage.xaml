@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             x:Class="AiControlsSample.PredictiveStatePage"
+             Title="Predictive State Updates">
+
+    <Grid ColumnDefinitions="*,*" ColumnSpacing="0">
+
+        <!-- LEFT: Document Editor -->
+        <Grid Grid.Column="0" RowDefinitions="Auto,*"
+              BackgroundColor="{AppThemeBinding Light=#FAFAFA, Dark=#1A1A2E}">
+
+            <!-- Header -->
+            <Grid Padding="16,12" ColumnDefinitions="*,Auto"
+                  BackgroundColor="{AppThemeBinding Light=White, Dark=#262640}">
+                <HorizontalStackLayout Spacing="8">
+                    <Label Text="📝" FontSize="18" VerticalOptions="Center" />
+                    <Label Text="Document Editor" FontSize="18" FontAttributes="Bold"
+                           VerticalOptions="Center" />
+                    <Label x:Name="WritingIndicator" Text="✍️ Writing..." FontSize="14"
+                           TextColor="{AppThemeBinding Light=#6366F1, Dark=#818CF8}"
+                           VerticalOptions="Center" IsVisible="False" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Grid.Column="1" Spacing="8" x:Name="ConfirmButtons" IsVisible="False">
+                    <Button Text="✅ Accept" FontSize="12" Padding="10,6" CornerRadius="6"
+                            BackgroundColor="#22C55E" TextColor="White"
+                            Clicked="OnAcceptClicked" />
+                    <Button Text="❌ Reject" FontSize="12" Padding="10,6" CornerRadius="6"
+                            BackgroundColor="#EF4444" TextColor="White"
+                            Clicked="OnRejectClicked" />
+                </HorizontalStackLayout>
+            </Grid>
+
+            <!-- Document content -->
+            <ScrollView Grid.Row="1" Padding="20">
+                <Label x:Name="DocumentLabel" FontSize="14" LineBreakMode="WordWrap"
+                       Text="Ask the AI to write something..."
+                       TextColor="{AppThemeBinding Light=#374151, Dark=#D1D5DB}" />
+            </ScrollView>
+        </Grid>
+
+        <!-- RIGHT: Chat Panel -->
+        <controls:AgentChatView
+            x:Name="ChatView"
+            Grid.Column="1"
+            WelcomeTitle="Document Writer"
+            WelcomeIcon="✍️"
+            WelcomeMessage="I write and edit documents. Ask me to write a story, article, or anything else!"
+            Placeholder="Ask me to write something..."
+            AssistantDisplayName="Writer"
+            AssistantAvatarText="✍️"
+            ShowToolMessages="False" />
+    </Grid>
+</ContentPage>

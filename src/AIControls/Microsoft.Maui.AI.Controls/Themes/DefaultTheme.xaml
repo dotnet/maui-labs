@@ -62,6 +62,16 @@
     <Color x:Key="CopilotChipTextLight">#4338CA</Color>
     <Color x:Key="CopilotChipTextDark">#A5B4FC</Color>
 
+    <!-- ═══════ PLAN CARD ═══════ -->
+    <Color x:Key="CopilotPlanBackgroundLight">#F0FDF4</Color>
+    <Color x:Key="CopilotPlanBackgroundDark">#052E16</Color>
+    <Color x:Key="CopilotPlanStrokeLight">#BBF7D0</Color>
+    <Color x:Key="CopilotPlanStrokeDark">#166534</Color>
+    <Color x:Key="CopilotPlanTitleLight">#166534</Color>
+    <Color x:Key="CopilotPlanTitleDark">#BBF7D0</Color>
+    <Color x:Key="CopilotConfirm">#22C55E</Color>
+    <Color x:Key="CopilotReject">#EF4444</Color>
+
     <!-- ═══════ AVATARS ═══════ -->
     <Color x:Key="CopilotUserAvatarBackgroundLight">#C7D2FE</Color>
     <Color x:Key="CopilotUserAvatarBackgroundDark">#3730A3</Color>
