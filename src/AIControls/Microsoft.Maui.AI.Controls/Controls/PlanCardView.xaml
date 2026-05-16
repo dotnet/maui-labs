@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Microsoft.Maui.AI.Controls.Controls.PlanCardView"
+             x:Name="self">
+
+    <Border BackgroundColor="{AppThemeBinding Light={DynamicResource CopilotPlanBackgroundLight}, Dark={DynamicResource CopilotPlanBackgroundDark}}"
+            Stroke="{AppThemeBinding Light={DynamicResource CopilotPlanStrokeLight}, Dark={DynamicResource CopilotPlanStrokeDark}}"
+            StrokeShape="RoundRectangle 12"
+            StrokeThickness="1"
+            Padding="16">
+        <VerticalStackLayout Spacing="10">
+            <!-- Header -->
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Text="{Binding Source={x:Reference self}, Path=Title}"
+                       FontSize="15" FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light={DynamicResource CopilotPlanTitleLight}, Dark={DynamicResource CopilotPlanTitleDark}}" />
+                <Label Grid.Column="1" FontSize="12" Opacity="0.8"
+                       TextColor="{AppThemeBinding Light={DynamicResource CopilotPlanTitleLight}, Dark={DynamicResource CopilotPlanTitleDark}}">
+                    <Label.Text>
+                        <MultiBinding StringFormat="{}{0}/{1}">
+                            <Binding Source="{x:Reference self}" Path="Plan.CompletedCount" />
+                            <Binding Source="{x:Reference self}" Path="Plan.Steps.Count" />
+                        </MultiBinding>
+                    </Label.Text>
+                </Label>
+            </Grid>
+
+            <!-- Steps list -->
+            <VerticalStackLayout x:Name="StepsLayout" Spacing="6" />
+
+            <!-- Confirm/Reject buttons -->
+            <Grid x:Name="ConfirmPanel" ColumnDefinitions="*,*" ColumnSpacing="8"
+                  IsVisible="{Binding Source={x:Reference self}, Path=ShowConfirmation}">
+                <Button Text="{Binding Source={x:Reference self}, Path=ConfirmText}"
+                        BackgroundColor="{DynamicResource CopilotConfirm}" TextColor="White"
+                        CornerRadius="8" FontSize="13"
+                        Clicked="OnConfirmClicked" />
+                <Button Grid.Column="1"
+                        Text="{Binding Source={x:Reference self}, Path=RejectText}"
+                        BackgroundColor="{DynamicResource CopilotReject}" TextColor="White"
+                        CornerRadius="8" FontSize="13"
+                        Clicked="OnRejectClicked" />
+            </Grid>
+        </VerticalStackLayout>
+    </Border>
+</ContentView>

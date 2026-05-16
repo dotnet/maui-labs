@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             x:Class="AiControlsSample.AgenticGenerativeUIPage"
+             Title="Agentic Generative UI">
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- Chat with footer showing plan progress -->
+        <controls:AgentChatView
+            x:Name="ChatView"
+            WelcomeTitle="Auto-Planner"
+            WelcomeIcon="🚀"
+            WelcomeMessage="I create plans and automatically execute them, showing progress in real-time."
+            Placeholder="Ask me to plan something..."
+            AssistantDisplayName="Planner"
+            AssistantAvatarText="🚀"
+            ShowToolMessages="True" />
+
+        <!-- Plan progress footer -->
+        <controls:PlanCardView x:Name="PlanCard" Grid.Row="1"
+                               IsVisible="False"
+                               ShowConfirmation="False" />
+    </Grid>
+</ContentPage>

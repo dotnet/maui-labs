@@ -18,36 +18,11 @@
             ShowToolMessages="True" />
 
         <!-- Plan card panel (right side) -->
-        <Border x:Name="PlanPanel" Grid.Column="1"
-                IsVisible="False"
-                WidthRequest="320"
-                BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1A1A2E}"
-                Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeShape="Rectangle"
-                StrokeThickness="1"
-                Padding="16">
-            <VerticalStackLayout Spacing="12">
-                <!-- Plan header -->
-                <Grid ColumnDefinitions="*,Auto">
-                    <Label x:Name="PlanHeader" Text="📋 Plan" FontSize="16" FontAttributes="Bold" />
-                    <Label x:Name="PlanProgress" Grid.Column="1" FontSize="12" Opacity="0.7" />
-                </Grid>
-
-                <!-- Steps list -->
-                <VerticalStackLayout x:Name="StepsLayout" Spacing="8" />
-
-                <!-- Confirm / Reject buttons -->
-                <Grid x:Name="ConfirmPanel" ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="False">
-                    <Button x:Name="ConfirmButton" Text="✅ Confirm"
-                            BackgroundColor="#22C55E" TextColor="White"
-                            CornerRadius="8" FontSize="13"
-                            Clicked="OnConfirmClicked" />
-                    <Button x:Name="RejectButton" Grid.Column="1" Text="❌ Reject"
-                            BackgroundColor="#EF4444" TextColor="White"
-                            CornerRadius="8" FontSize="13"
-                            Clicked="OnRejectClicked" />
-                </Grid>
-            </VerticalStackLayout>
-        </Border>
+        <controls:PlanCardView x:Name="PlanCard" Grid.Column="1"
+                               IsVisible="False"
+                               WidthRequest="320"
+                               ShowConfirmation="False"
+                               Confirmed="OnConfirmClicked"
+                               Rejected="OnRejectClicked" />
     </Grid>
 </ContentPage>
