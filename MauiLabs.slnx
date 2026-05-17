@@ -28,7 +28,7 @@
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
   </Folder>
   <Folder Name="/src/AIControls/">
-    <Project Path="src/AIControls/Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
+    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <chat:ContentContextView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
                          xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Controls.Chat;assembly=Microsoft.Maui.AI.Controls"
+                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
                          x:Class="AiControlsSample.WeatherResultView">
 
     <Border StrokeShape="RoundRectangle 12" StrokeThickness="1"

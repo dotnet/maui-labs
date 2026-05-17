@@ -1,4 +1,4 @@
-using Microsoft.Maui.AI.Controls.Chat;
+using Microsoft.Maui.AI.Chat.Controls;
 
 namespace AiControlsSample;
 

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Controls.Chat;
+using Microsoft.Maui.AI.Chat.Controls;
 
 namespace AiControlsSample;
 
