@@ -2,7 +2,7 @@
 
 ## Overview
 
-Shows custom inline rendering of tool results within the chat conversation. A `WeatherResultTemplate` renders a rich weather card when the `get_current_weather` tool returns data, while other tools use the generic `FunctionResultTemplate`.
+Shows custom inline rendering of tool results within the chat conversation. A `WeatherResultTemplate` renders a rich weather card when the `GetCurrentWeather` tool returns data, while other tools use the generic `FunctionResultTemplate`.
 
 ## Features Demonstrated
 
@@ -28,6 +28,6 @@ Shows custom inline rendering of tool results within the chat conversation. A `W
 
 ## Key Code Patterns
 
-- **Custom template selection** — `<local:WeatherResultTemplate ToolName="get_current_weather" ViewType="{x:Type local:WeatherResultView}" />` placed before the generic `FunctionResultTemplate` in the templates list (`ToolRenderingPage.xaml:16-17`)
+- **Custom template selection** — `<local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />` placed before the generic `FunctionResultTemplate` in the templates list (`ToolRenderingPage.xaml:16-17`)
 - **JSON result parsing** — `WeatherResultView.RefreshFromContentContext()` uses `JsonDocument.Parse` to extract fields from `FunctionResultContent.Result` (`WeatherResultView.xaml.cs:15-40`)
 - **Template class** — `WeatherResultTemplate` is a minimal subclass of `FunctionResultTemplate` with no additional logic; filtering is done via the `ToolName` property (`WeatherResultTemplate.cs`)

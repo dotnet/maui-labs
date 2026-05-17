@@ -13,7 +13,7 @@
             <chat:TextContentTemplate Role="User" />
             <chat:TextContentTemplate Role="Assistant" />
             <chat:FunctionCallTemplate />
-            <local:WeatherResultTemplate ToolName="get_current_weather" ViewType="{x:Type local:WeatherResultView}" />
+            <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />
             <chat:FunctionResultTemplate />
             <chat:ErrorContentTemplate />
             <chat:DefaultContentTemplate />
