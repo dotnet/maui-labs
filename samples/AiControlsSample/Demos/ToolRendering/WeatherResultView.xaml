@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<chat:ContentContextView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Controls.Chat;assembly=Microsoft.Maui.AI.Controls"
+                         x:Class="AiControlsSample.WeatherResultView">
+
+    <Border StrokeShape="RoundRectangle 12" StrokeThickness="1"
+            Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
+            BackgroundColor="{AppThemeBinding Light=#F0F9FF, Dark=#1E293B}"
+            Padding="16" Margin="4,8">
+        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*" RowSpacing="8" ColumnSpacing="12">
+
+            <!-- Weather icon -->
+            <Label x:Name="IconLabel" Text="🌡️" FontSize="40"
+                   Grid.RowSpan="2" VerticalOptions="Center" />
+
+            <!-- City and condition -->
+            <VerticalStackLayout Grid.Column="1" Spacing="2">
+                <Label x:Name="CityLabel" Text="--" FontSize="16" FontAttributes="Bold" />
+                <Label x:Name="ConditionLabel" Text="--" FontSize="13" Opacity="0.7" />
+            </VerticalStackLayout>
+
+            <!-- Temperature -->
+            <Label x:Name="TempLabel" Text="--" FontSize="28" FontAttributes="Bold"
+                   Grid.Row="1" Grid.Column="1" />
+
+            <!-- Details row -->
+            <HorizontalStackLayout Grid.Row="2" Grid.ColumnSpan="2" Spacing="16">
+                <HorizontalStackLayout Spacing="4">
+                    <Label Text="💧" FontSize="12" VerticalOptions="Center" />
+                    <Label x:Name="HumidityLabel" Text="--" FontSize="12" Opacity="0.7" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="4">
+                    <Label Text="💨" FontSize="12" VerticalOptions="Center" />
+                    <Label x:Name="WindLabel" Text="--" FontSize="12" Opacity="0.7" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="4">
+                    <Label Text="🌡️" FontSize="12" VerticalOptions="Center" />
+                    <Label Text="Feels like" FontSize="12" Opacity="0.5" VerticalOptions="Center" />
+                    <Label x:Name="FeelsLikeLabel" Text="--" FontSize="12" Opacity="0.7" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </HorizontalStackLayout>
+
+        </Grid>
+    </Border>
+</chat:ContentContextView>

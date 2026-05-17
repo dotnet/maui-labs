@@ -2,7 +2,9 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Controls.Chat;assembly=Microsoft.Maui.AI.Controls"
              x:Class="AiControlsSample.PlaygroundPage"
+             x:Name="ThisPage"
              Title="Playground"
              Shell.NavBarIsVisible="True">
 
@@ -13,20 +15,20 @@
     <Grid x:Name="RootLayout" ColumnDefinitions="*,Auto">
 
         <!-- Chat fills available space -->
-        <controls:AgentChatView
-            x:Name="ChatView"
-            WelcomeTitle="AI Assistant"
-            WelcomeIcon="🤖"
-            WelcomeMessage="I can check the weather, do math, and share fun facts. Try asking!"
-            Placeholder="Ask me anything..."
-            UserDisplayName="You"
-            AssistantDisplayName="Copilot"
-            UserAvatarText="You"
-            AssistantAvatarText="AI"
-            ShowAvatars="True"
-            ShowTimestamps="True" />
+        <controls:ChatPanelControl x:Name="ChatPanel"
+            Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+            <controls:ChatPanelControl.ContentTemplates>
+                <chat:TextContentTemplate Role="User" />
+                <chat:TextContentTemplate Role="Assistant" />
+                <chat:FunctionCallTemplate />
+                <chat:FunctionResultTemplate />
+                <chat:ToolApprovalTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </controls:ChatPanelControl.ContentTemplates>
+        </controls:ChatPanelControl>
 
-        <!-- Settings panel: docked sidebar, auto-hidden on narrow -->
+        <!-- Settings panel: docked sidebar -->
         <Border x:Name="SettingsPanel" Grid.Column="1"
                 IsVisible="True"
                 BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1A1A2E}"
@@ -45,122 +47,25 @@
                 <ScrollView Grid.Row="1" Padding="12,8,12,16">
                     <VerticalStackLayout Spacing="6">
 
-                        <!-- ═══ WELCOME ═══ -->
-                        <Border x:Name="WelcomeSection" StrokeShape="RoundRectangle 8" StrokeThickness="0"
-                                BackgroundColor="Transparent" Padding="4">
-                            <VerticalStackLayout Spacing="8">
-                                <Label Text="▼ WELCOME" FontSize="10" FontAttributes="Bold" Opacity="0.5">
-                                    <Label.GestureRecognizers>
-                                        <TapGestureRecognizer Tapped="OnSectionHeaderTapped" CommandParameter="WelcomeContent" />
-                                    </Label.GestureRecognizers>
-                                </Label>
-                                <VerticalStackLayout x:Name="WelcomeContent" Spacing="6">
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="Icon" FontSize="11" Opacity="0.7" />
-                                        <Entry x:Name="WelcomeIconEntry" Text="🤖" MaxLength="4" FontSize="13" />
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="Title" FontSize="11" Opacity="0.7" />
-                                        <Entry x:Name="WelcomeTitleEntry" Text="AI Assistant" FontSize="13" />
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="Message" FontSize="11" Opacity="0.7" />
-                                        <Entry x:Name="WelcomeMessageEntry" Text="I can check the weather, do math, and share fun facts. Try asking!" FontSize="13" />
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="Placeholder" FontSize="11" Opacity="0.7" />
-                                        <Entry x:Name="PlaceholderEntry" Text="Ask me anything..." FontSize="13" />
-                                    </VerticalStackLayout>
-                                </VerticalStackLayout>
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <BoxView HeightRequest="1" Color="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" />
-
-                        <!-- ═══ IDENTITY ═══ -->
+                        <!-- ═══ SESSION ═══ -->
                         <Border StrokeShape="RoundRectangle 8" StrokeThickness="0"
                                 BackgroundColor="Transparent" Padding="4">
                             <VerticalStackLayout Spacing="8">
-                                <Label Text="▼ IDENTITY" FontSize="10" FontAttributes="Bold" Opacity="0.5">
+                                <Label Text="▼ SESSION" FontSize="10" FontAttributes="Bold" Opacity="0.5">
                                     <Label.GestureRecognizers>
-                                        <TapGestureRecognizer Tapped="OnSectionHeaderTapped" CommandParameter="IdentityContent" />
+                                        <TapGestureRecognizer Tapped="OnSectionHeaderTapped" CommandParameter="SessionContent" />
                                     </Label.GestureRecognizers>
                                 </Label>
-                                <VerticalStackLayout x:Name="IdentityContent" Spacing="6">
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                        <VerticalStackLayout Spacing="2">
-                                            <Label Text="Your Name" FontSize="11" Opacity="0.7" />
-                                            <Entry x:Name="UserNameEntry" Text="You" FontSize="13" />
-                                        </VerticalStackLayout>
-                                        <VerticalStackLayout Grid.Column="1" Spacing="2">
-                                            <Label Text="Avatar" FontSize="11" Opacity="0.7" />
-                                            <Entry x:Name="UserAvatarEntry" Text="You" MaxLength="3" FontSize="13" />
-                                        </VerticalStackLayout>
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                        <VerticalStackLayout Spacing="2">
-                                            <Label Text="Assistant" FontSize="11" Opacity="0.7" />
-                                            <Entry x:Name="AssistantNameEntry" Text="Copilot" FontSize="13" />
-                                        </VerticalStackLayout>
-                                        <VerticalStackLayout Grid.Column="1" Spacing="2">
-                                            <Label Text="Avatar" FontSize="11" Opacity="0.7" />
-                                            <Entry x:Name="AssistantAvatarEntry" Text="AI" MaxLength="3" FontSize="13" />
-                                        </VerticalStackLayout>
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,Auto" Padding="0,2">
-                                        <Label Text="Show Avatars" VerticalOptions="Center" FontSize="13" />
-                                        <Switch x:Name="ShowAvatarsSwitch" IsToggled="True" Grid.Column="1" />
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,Auto" Padding="0,2">
-                                        <Label Text="Show Timestamps" VerticalOptions="Center" FontSize="13" />
-                                        <Switch x:Name="ShowTimestampsSwitch" IsToggled="True" Grid.Column="1" />
-                                    </Grid>
-                                </VerticalStackLayout>
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <BoxView HeightRequest="1" Color="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" />
-
-                        <!-- ═══ APPEARANCE ═══ -->
-                        <Border StrokeShape="RoundRectangle 8" StrokeThickness="0"
-                                BackgroundColor="Transparent" Padding="4">
-                            <VerticalStackLayout Spacing="8">
-                                <Label Text="▼ APPEARANCE" FontSize="10" FontAttributes="Bold" Opacity="0.5">
-                                    <Label.GestureRecognizers>
-                                        <TapGestureRecognizer Tapped="OnSectionHeaderTapped" CommandParameter="AppearanceContent" />
-                                    </Label.GestureRecognizers>
-                                </Label>
-                                <VerticalStackLayout x:Name="AppearanceContent" Spacing="6">
+                                <VerticalStackLayout x:Name="SessionContent" Spacing="6">
                                     <VerticalStackLayout Spacing="2">
-                                        <Label Text="Bubble Style" FontSize="11" Opacity="0.7" />
-                                        <HorizontalStackLayout Spacing="6">
-                                            <Button x:Name="BubbleSharpBtn" Text="Sharp" FontSize="11" Padding="8,4" CornerRadius="4"
-                                                    BackgroundColor="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" Clicked="OnBubbleStyleClicked" />
-                                            <Button x:Name="BubbleRoundedBtn" Text="Rounded" FontSize="11" Padding="8,4" CornerRadius="4"
-                                                    BackgroundColor="{AppThemeBinding Light=#6366F1, Dark=#818CF8}" TextColor="White" Clicked="OnBubbleStyleClicked" />
-                                            <Button x:Name="BubblePillBtn" Text="Pill" FontSize="11" Padding="8,4" CornerRadius="4"
-                                                    BackgroundColor="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" Clicked="OnBubbleStyleClicked" />
-                                        </HorizontalStackLayout>
+                                        <Label Text="System Prompt" FontSize="11" Opacity="0.7" />
+                                        <Editor x:Name="SystemPromptEditor" HeightRequest="80" FontSize="12"
+                                                Text="You are a helpful assistant with access to tools for weather, math, facts, and app info." />
                                     </VerticalStackLayout>
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="Bubble Border" FontSize="11" Opacity="0.7" />
-                                        <HorizontalStackLayout Spacing="6">
-                                            <Button x:Name="StrokeNoneBtn" Text="None" FontSize="11" Padding="8,4" CornerRadius="4"
-                                                    BackgroundColor="{AppThemeBinding Light=#6366F1, Dark=#818CF8}" TextColor="White" Clicked="OnStrokeStyleClicked" />
-                                            <Button x:Name="StrokeThinBtn" Text="Thin" FontSize="11" Padding="8,4" CornerRadius="4"
-                                                    BackgroundColor="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" Clicked="OnStrokeStyleClicked" />
-                                            <Button x:Name="StrokeBoldBtn" Text="Bold" FontSize="11" Padding="8,4" CornerRadius="4"
-                                                    BackgroundColor="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" Clicked="OnStrokeStyleClicked" />
-                                        </HorizontalStackLayout>
-                                    </VerticalStackLayout>
-                                    <Grid ColumnDefinitions="*,Auto" Padding="0,2">
-                                        <Label Text="Show Tool Calls" VerticalOptions="Center" FontSize="13" />
-                                        <Switch x:Name="ShowToolMessagesSwitch" IsToggled="True" Grid.Column="1" />
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,Auto" Padding="0,2">
-                                        <Label Text="Show Reasoning" VerticalOptions="Center" FontSize="13" />
-                                        <Switch x:Name="ShowReasoningSwitch" IsToggled="True" Grid.Column="1" />
-                                    </Grid>
+                                    <Button Text="Apply System Prompt" FontSize="11" Padding="8,4"
+                                            CornerRadius="6" Clicked="OnApplySystemPromptClicked"
+                                            BackgroundColor="{AppThemeBinding Light=#6366F1, Dark=#818CF8}"
+                                            TextColor="White" />
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
                         </Border>
@@ -177,8 +82,9 @@
                                     </Label.GestureRecognizers>
                                 </Label>
                                 <VerticalStackLayout x:Name="ToolsContent" Spacing="6">
+                                    <Label Text="Available tools:" FontSize="12" Opacity="0.7" />
                                     <HorizontalStackLayout Spacing="6">
-                                        <Border StrokeShape="RoundRectangle 12" Padding="10,6" 
+                                        <Border StrokeShape="RoundRectangle 12" Padding="10,6"
                                                 BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}" StrokeThickness="0">
                                             <Label Text="🌤 Weather" FontSize="12" LineBreakMode="NoWrap" />
                                         </Border>
@@ -197,6 +103,38 @@
                                             <Label Text="📱 App Info" FontSize="12" LineBreakMode="NoWrap" />
                                         </Border>
                                     </HorizontalStackLayout>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <BoxView HeightRequest="1" Color="{AppThemeBinding Light=#E2E8F0, Dark=#334155}" />
+
+                        <!-- ═══ QUICK PROMPTS ═══ -->
+                        <Border StrokeShape="RoundRectangle 8" StrokeThickness="0"
+                                BackgroundColor="Transparent" Padding="4">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="▼ QUICK PROMPTS" FontSize="10" FontAttributes="Bold" Opacity="0.5">
+                                    <Label.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnSectionHeaderTapped" CommandParameter="PromptsContent" />
+                                    </Label.GestureRecognizers>
+                                </Label>
+                                <VerticalStackLayout x:Name="PromptsContent" Spacing="6">
+                                    <Button Text="🌤 What's the weather in Tokyo?" FontSize="11" Padding="8,6"
+                                            CornerRadius="8" Clicked="OnQuickPromptClicked"
+                                            BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}"
+                                            TextColor="{AppThemeBinding Light=#4338CA, Dark=#A5B4FC}" />
+                                    <Button Text="🔢 Calculate (42 * 3) + 7" FontSize="11" Padding="8,6"
+                                            CornerRadius="8" Clicked="OnQuickPromptClicked"
+                                            BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}"
+                                            TextColor="{AppThemeBinding Light=#4338CA, Dark=#A5B4FC}" />
+                                    <Button Text="💡 Tell me a random fact" FontSize="11" Padding="8,6"
+                                            CornerRadius="8" Clicked="OnQuickPromptClicked"
+                                            BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}"
+                                            TextColor="{AppThemeBinding Light=#4338CA, Dark=#A5B4FC}" />
+                                    <Button Text="📱 What app am I running?" FontSize="11" Padding="8,6"
+                                            CornerRadius="8" Clicked="OnQuickPromptClicked"
+                                            BackgroundColor="{AppThemeBinding Light=#EEF2FF, Dark=#312E81}"
+                                            TextColor="{AppThemeBinding Light=#4338CA, Dark=#A5B4FC}" />
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
                         </Border>
