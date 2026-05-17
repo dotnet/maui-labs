@@ -1,45 +1,37 @@
-# 📋 Human in the Loop
+# Human in the Loop
 
-## What This Demo Shows
+## Overview
 
-This demo showcases the **human-in-the-loop** pattern where the AI agent creates a plan and **waits for user approval** before executing:
+Demonstrates an AI agent that creates multi-step plans requiring explicit human confirmation before execution. A side panel displays the plan steps, and the user must click Confirm or Reject before the agent proceeds.
 
-1. **Plan Generation**: The agent creates a multi-step plan based on your request
-2. **User Review**: A plan card appears showing all steps with checkboxes
-3. **Confirm/Reject**: You approve or reject the plan before execution begins
-4. **Step-by-Step Execution**: After confirmation, the agent executes each step and marks them complete
+## Features Demonstrated
 
-## How to Interact
+- `create_plan` tool that deserializes a JSON array of step descriptions and displays them in a side panel
+- `update_plan_step` tool that marks individual steps as completed by zero-based index
+- Confirm/Reject buttons that programmatically send messages back to the `ChatSession`
+- `ToolApprovalTemplate` in the content templates for tool approval UI
+- Responsive layout — plan panel hides when window width < 700px
 
-Try asking:
-- "Create a plan to organize my desk"
-- "Create a plan to build a web application with authentication"
-- "Create a plan to throw a surprise birthday party"
+## How to Use
 
-Then:
-1. **Review the plan** that appears in the side panel
-2. Click **✅ Confirm** to approve, or **❌ Reject** to decline
-3. Watch the agent execute each step, marking them as completed
-4. After all steps complete, the agent summarizes what it accomplished
+1. Navigate to **Human in the Loop** from the app shell
+2. Ask something like "Create a plan to organize my desk" or "Plan how to build a web app"
+3. Review the plan that appears in the right-side panel (3-5 steps with ⬜ checkboxes)
+4. Click **✅ Confirm** to approve the plan, or **❌ Reject** to decline
+5. If confirmed, watch each step get marked ✅ as the agent executes them sequentially
+6. If rejected, the agent acknowledges and asks what to change
 
-## What You Should See
+## Expected Behavior
 
-1. **Send a request** — the agent calls `create_plan` with 3-5 steps
-2. A **plan card** appears on the right side showing all steps
-3. The agent calls `confirm_plan` and the **Confirm/Reject buttons** appear
-4. Click **Confirm** — the agent proceeds to execute each step
-5. Steps are **marked completed one by one** with green checkmarks
-6. The agent sends a **summary message** after all steps are done
-7. **Try rejecting** — the agent acknowledges and asks what to change
+- The agent calls `create_plan` with a JSON array of step descriptions → the plan panel becomes visible
+- Confirm/Reject buttons appear below the step list
+- Clicking **Confirm** sends "I confirm the plan. Please proceed with execution." to the chat session
+- The agent then calls `update_plan_step` for each step index (0, 1, 2...) marking them complete
+- Clicking **Reject** sends "I reject this plan. Please suggest changes." — the agent responds conversationally
+- Steps display ⬜ (pending) or ✅ (completed) with reduced opacity for completed items
 
-## Technical Details
+## Key Code Patterns
 
-- Three tools: `create_plan`, `confirm_plan`, `update_plan_step`
-- `confirm_plan` uses `WaitForResponse("confirm_plan")` to block until the user responds
-- `ProvideResponse` sends the user's decision back to the tool
-- The `PlanCardView` control displays steps with status indicators
-- Plan model uses `ObservableObject` for reactive UI updates
-
-## Inspired By
-
-[CopilotKit Human in the Loop Demo](https://dojo.ag-ui.com/microsoft-agent-framework-dotnet/feature/human_in_the_loop) — `renderAndWaitForResponse` with step checkboxes.
+- **Plan state management** — `_currentSteps` list of `PlanStep` objects tracks completion state; `RefreshStepsUI()` rebuilds the visual layout each time (`HumanInTheLoopPage.xaml.cs:70-91`)
+- **Programmatic chat messages** — `ChatSession.SendAsync("I confirm the plan...")` sends user messages on button click without manual typing (`HumanInTheLoopPage.xaml.cs:96, 102`)
+- **Responsive panel visibility** — `OnSizeAllocated` hides the plan panel on narrow windows (`HumanInTheLoopPage.xaml.cs:105-109`)

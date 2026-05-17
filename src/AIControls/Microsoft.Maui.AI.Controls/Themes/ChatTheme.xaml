@@ -24,6 +24,22 @@
     <Color x:Key="ExtensionsAI.Button.Approve">#5B8C5A</Color>
     <Color x:Key="ExtensionsAI.Button.Reject">#C75050</Color>
 
+    <!-- Input area -->
+    <Color x:Key="ExtensionsAI.Input.Background">#F0EBE3</Color>
+    <Color x:Key="ExtensionsAI.Send.Background">#5B8C5A</Color>
+    <Color x:Key="ExtensionsAI.Send.TextColor">White</Color>
+
+    <!-- Suggestion chips -->
+    <Color x:Key="ExtensionsAI.Suggestion.Background">#EEF2FF</Color>
+    <Color x:Key="ExtensionsAI.Suggestion.TextColor">#4338CA</Color>
+
+    <!-- Timestamps -->
+    <Color x:Key="ExtensionsAI.Timestamp.TextColor">#9CA3AF</Color>
+    <x:Double x:Key="ExtensionsAI.Timestamp.FontSize">10</x:Double>
+
+    <!-- Bubble -->
+    <x:Double x:Key="ExtensionsAI.Bubble.MaxWidth">340</x:Double>
+
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- ControlTemplate: ChatMessageView (User + Assistant)           -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -41,6 +57,8 @@
                                     Value="{DynamicResource ExtensionsAI.User.TextColor}" />
                             <Setter TargetName="MessageShape" Property="RoundRectangle.CornerRadius"
                                     Value="16,16,4,16" />
+                            <Setter TargetName="TimestampLabel" Property="Label.HorizontalTextAlignment"
+                                    Value="End" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Assistant">
@@ -53,22 +71,33 @@
                                     Value="{DynamicResource ExtensionsAI.Assistant.TextColor}" />
                             <Setter TargetName="MessageShape" Property="RoundRectangle.CornerRadius"
                                     Value="16,16,16,4" />
+                            <Setter TargetName="TimestampLabel" Property="Label.HorizontalTextAlignment"
+                                    Value="Start" />
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
             </VisualStateManager.VisualStateGroups>
 
-            <Border x:Name="MessageBorder" Padding="12,10" MaximumWidthRequest="340"
-                    HorizontalOptions="Start"
-                    BackgroundColor="{DynamicResource ExtensionsAI.Assistant.Background}"
-                    StrokeThickness="0">
-                <Border.StrokeShape>
-                    <RoundRectangle x:Name="MessageShape" CornerRadius="16,16,16,4" />
-                </Border.StrokeShape>
-                <Label x:Name="MessageLabel"
-                       Text="{TemplateBinding Text}" FontSize="14"
-                       TextColor="{DynamicResource ExtensionsAI.Assistant.TextColor}" />
-            </Border>
+            <VerticalStackLayout Spacing="2">
+                <Border x:Name="MessageBorder" Padding="12,10"
+                        MaximumWidthRequest="{DynamicResource ExtensionsAI.Bubble.MaxWidth}"
+                        HorizontalOptions="Start"
+                        BackgroundColor="{DynamicResource ExtensionsAI.Assistant.Background}"
+                        StrokeThickness="0">
+                    <Border.StrokeShape>
+                        <RoundRectangle x:Name="MessageShape" CornerRadius="16,16,16,4" />
+                    </Border.StrokeShape>
+                    <Label x:Name="MessageLabel"
+                           Text="{TemplateBinding Text}" FontSize="14"
+                           TextColor="{DynamicResource ExtensionsAI.Assistant.TextColor}" />
+                </Border>
+                <Label x:Name="TimestampLabel"
+                       Text="{TemplateBinding TimestampText}"
+                       IsVisible="{TemplateBinding ShowTimestamp}"
+                       FontSize="{DynamicResource ExtensionsAI.Timestamp.FontSize}"
+                       TextColor="{DynamicResource ExtensionsAI.Timestamp.TextColor}"
+                       Margin="4,0" />
+            </VerticalStackLayout>
         </Grid>
     </ControlTemplate>
 
