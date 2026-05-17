@@ -11,7 +11,7 @@ public partial class ToolRenderingPage : ContentPage
         ChatSession = chatSession;
         ChatSession.SystemPrompt = """
             You are a helpful assistant with access to tools.
-            When asked about the weather, use the get_current_weather tool.
+            When asked about the weather, use the GetCurrentWeather tool.
             When asked to calculate something, use the calculate tool.
             Always explain what you found after using a tool.
             """;

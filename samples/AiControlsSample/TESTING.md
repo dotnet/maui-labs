@@ -46,7 +46,7 @@ dotnet workload install maui
 1. Launch the app — Playground is the default page
 2. Observe the settings sidebar (visible on wide windows ≥700px) with system prompt editor, tools list, and quick prompts
 3. Click a quick prompt button (e.g., "🌤 What's the weather in Tokyo?")
-4. Verify the agent calls `get_current_weather` and responds with weather information
+4. Verify the agent calls `GetCurrentWeather` and responds with weather information
 5. Click "🔢 Calculate (42 * 3) + 7" — verify the agent calls `calculate` and returns 133
 6. Click "💡 Tell me a random fact" — verify a fun fact is returned
 7. Click "📱 What app am I running?" — verify app name, version, and platform are shown
@@ -246,7 +246,7 @@ User secrets are missing or incomplete. Run the three `dotnet user-secrets` comm
 
 ### Weather card shows "--" for all fields
 
-The `get_current_weather` tool in `SampleTools.cs` uses deterministic random based on city name hash — it always returns data. If you see "--", the JSON parsing in `WeatherResultView.RefreshFromContentContext()` may be failing. Check that the `FunctionResultContent.Result` is a non-null string.
+The `GetCurrentWeather` tool in `SampleTools.cs` uses deterministic random based on city name hash — it always returns data. If you see "--", the JSON parsing in `WeatherResultView.RefreshFromContentContext()` may be failing. Check that the `FunctionResultContent.Result` is a non-null string.
 
 ### Plan panel not visible (Human in the Loop)
 
