@@ -2,7 +2,9 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Controls.Chat;assembly=Microsoft.Maui.AI.Controls"
              x:Class="AiControlsSample.HaikuPage"
+             x:Name="ThisPage"
              Title="Haiku Generator">
 
     <Grid ColumnDefinitions="*,*" ColumnSpacing="0">
@@ -48,15 +50,16 @@
         </Grid>
 
         <!-- RIGHT: Chat Panel -->
-        <controls:AgentChatView
-            x:Name="ChatView"
-            Grid.Column="1"
-            WelcomeTitle="Haiku Master"
-            WelcomeIcon="🎋"
-            WelcomeMessage="I create beautiful haiku poems in both Japanese and English. Try me!"
-            Placeholder="Ask for a haiku..."
-            AssistantDisplayName="Poet"
-            AssistantAvatarText="🎋"
-            ShowToolMessages="False" />
+        <controls:ChatPanelControl Grid.Column="1"
+            Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+            <controls:ChatPanelControl.ContentTemplates>
+                <chat:TextContentTemplate Role="User" />
+                <chat:TextContentTemplate Role="Assistant" />
+                <chat:FunctionCallTemplate />
+                <chat:FunctionResultTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </controls:ChatPanelControl.ContentTemplates>
+        </controls:ChatPanelControl>
     </Grid>
 </ContentPage>

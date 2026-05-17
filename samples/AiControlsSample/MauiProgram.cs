@@ -4,7 +4,7 @@ using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AiControlsSample;
@@ -29,14 +29,15 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        // Register Azure OpenAI as the default IChatClient
+        // Register Azure OpenAI as IChatClient with function invocation middleware
         builder.AddOpenAIServices();
 
-        // Register the agent session factory
-        builder.Services.AddAgentSession();
-
-        // Register sample tools
+        // Register sample tools as IEnumerable<AITool> for ChatSession
         builder.Services.AddSingleton<SampleTools>();
+        builder.Services.AddSingleton<IEnumerable<AITool>>(sp => sp.GetRequiredService<SampleTools>().GetTools());
+
+        // Register the headless chat engine (transient = new session per page)
+        builder.Services.AddChatSession(ServiceLifetime.Transient);
 
         // Register pages
         builder.Services.AddTransient<PlaygroundPage>();
@@ -88,7 +89,15 @@ public static class MauiProgram
             new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
 
-        builder.Services.AddSingleton<IChatClient>(chatClient.AsIChatClient());
+        builder.Services.AddSingleton<IChatClient>(sp =>
+        {
+            var lf = sp.GetRequiredService<ILoggerFactory>();
+            return chatClient.AsIChatClient()
+                .AsBuilder()
+                .UseLogging(lf)
+                .UseFunctionInvocation()
+                .Build(sp);
+        });
 
         return builder;
     }

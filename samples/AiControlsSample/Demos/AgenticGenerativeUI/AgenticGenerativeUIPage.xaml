@@ -2,24 +2,35 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Controls.Chat;assembly=Microsoft.Maui.AI.Controls"
              x:Class="AiControlsSample.AgenticGenerativeUIPage"
+             x:Name="ThisPage"
              Title="Agentic Generative UI">
 
     <Grid RowDefinitions="*,Auto">
-        <!-- Chat with footer showing plan progress -->
-        <controls:AgentChatView
-            x:Name="ChatView"
-            WelcomeTitle="Auto-Planner"
-            WelcomeIcon="🚀"
-            WelcomeMessage="I create plans and automatically execute them, showing progress in real-time."
-            Placeholder="Ask me to plan something..."
-            AssistantDisplayName="Planner"
-            AssistantAvatarText="🚀"
-            ShowToolMessages="True" />
+        <!-- Chat -->
+        <controls:ChatPanelControl
+            Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+            <controls:ChatPanelControl.ContentTemplates>
+                <chat:TextContentTemplate Role="User" />
+                <chat:TextContentTemplate Role="Assistant" />
+                <chat:FunctionCallTemplate />
+                <chat:FunctionResultTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </controls:ChatPanelControl.ContentTemplates>
+        </controls:ChatPanelControl>
 
         <!-- Plan progress footer -->
-        <controls:PlanCardView x:Name="PlanCard" Grid.Row="1"
-                               IsVisible="False"
-                               ShowConfirmation="False" />
+        <Border x:Name="PlanFooter" Grid.Row="1" IsVisible="False"
+                BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1E293B}"
+                Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
+                StrokeShape="Rectangle" StrokeThickness="0,1,0,0"
+                Padding="16,12">
+            <VerticalStackLayout Spacing="8">
+                <Label Text="🚀 Plan Progress" FontSize="14" FontAttributes="Bold" />
+                <VerticalStackLayout x:Name="StepsLayout" Spacing="6" />
+            </VerticalStackLayout>
+        </Border>
     </Grid>
 </ContentPage>

@@ -1,112 +1,117 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI;
+using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class HumanInTheLoopPage : ContentPage
 {
-    private readonly IAgentSession _session;
-    private Plan? _currentPlan;
+    public ChatSession ChatSession { get; }
 
-    public HumanInTheLoopPage(IAgentSessionFactory sessionFactory, IChatClient chatClient)
+    private List<PlanStep>? _currentSteps;
+
+    public HumanInTheLoopPage(IChatClient chatClient)
     {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(CreatePlan, "create_plan", "Create a plan with the given steps for the user to review."),
+            AIFunctionFactory.Create(UpdatePlanStep, "update_plan_step", "Mark a plan step as completed. Step index is 0-based.")
+        };
+
+        ChatSession = new ChatSession(tools, chatClient)
+        {
+            SystemPrompt = """
+                You are a plan assistant. When the user asks you to do something:
+                1. Create a plan by calling create_plan with a list of step descriptions.
+                2. After the plan is shown, WAIT for the user to confirm or reject. Do NOT proceed until they reply.
+                3. If the user confirms, execute each step one by one, calling update_plan_step to mark each as completed.
+                4. If the user rejects, acknowledge and ask what they'd like to change.
+
+                Always create 3-5 concrete steps that clearly describe what will happen.
+                """
+        };
+
         InitializeComponent();
-
-        _session = sessionFactory.Create(chatClient);
-        _session.SystemInstructions = """
-            You are a plan assistant. When the user asks you to do something:
-            1. Create a plan by calling create_plan with a list of step descriptions.
-            2. IMMEDIATELY call confirm_plan in the same response (do NOT wait for a separate user message).
-               confirm_plan is a blocking tool — it pauses and waits for the user to click Confirm or Reject in the UI.
-            3. If confirmed, execute each step one by one, calling update_plan_step to mark each as completed.
-               Add a brief delay description for each step to make it feel realistic.
-            4. If rejected, acknowledge and ask what they'd like to change.
-            
-            IMPORTANT: Always call create_plan AND confirm_plan together in the same tool_calls response.
-            Always create 3-5 concrete steps that clearly describe what will happen.
-            """;
-
-        RegisterTools();
-
-        ChatView.Session = _session;
-        ChatView.SuggestionPrompts =
-        [
-            new Suggestion("Simple plan", "Create a plan to organize my desk"),
-            new Suggestion("Complex plan", "Create a plan to build a web application with authentication"),
-            new Suggestion("Fun plan", "Create a plan to throw a surprise birthday party"),
-        ];
     }
 
-    private void RegisterTools()
+    [Description("Create a plan with the given steps for the user to review.")]
+    private string CreatePlan(
+        [Description("JSON array of step descriptions, e.g. [\"Step 1\", \"Step 2\"]")] string steps_json)
     {
-        [Description("Create a plan with the given steps for the user to review.")]
-        Plan create_plan(
-            [Description("JSON array of step descriptions, e.g. [\"Step 1\", \"Step 2\"]")] string steps_json)
-        {
-            var steps = JsonSerializer.Deserialize<List<string>>(steps_json) ?? [];
-            var plan = new Plan
-            {
-                Steps = steps.Select(s => new Step { Description = s }).ToList()
-            };
+        var steps = JsonSerializer.Deserialize<List<string>>(steps_json) ?? [];
+        _currentSteps = steps.Select(s => new PlanStep { Description = s }).ToList();
 
-            _currentPlan = plan;
-            MainThread.BeginInvokeOnMainThread(() =>
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            PlanPanel.IsVisible = true;
+            ConfirmButtons.IsVisible = true;
+            RefreshStepsUI();
+        });
+
+        return "Plan created and shown to user. Waiting for confirmation.";
+    }
+
+    [Description("Mark a plan step as completed by zero-based index.")]
+    private string UpdatePlanStep(
+        [Description("Zero-based step index to mark as completed")] int step_index)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (_currentSteps is not null && step_index >= 0 && step_index < _currentSteps.Count)
             {
-                PlanCard.Plan = plan;
-                PlanCard.IsVisible = true;
-                PlanCard.RefreshSteps();
+                _currentSteps[step_index].IsCompleted = true;
+                RefreshStepsUI();
+            }
+        });
+        return $"Step {step_index} marked as completed.";
+    }
+
+    private void RefreshStepsUI()
+    {
+        StepsLayout.Children.Clear();
+        if (_currentSteps is null)
+            return;
+
+        for (int i = 0; i < _currentSteps.Count; i++)
+        {
+            var step = _currentSteps[i];
+            var icon = step.IsCompleted ? "✅" : "⬜";
+            var row = new HorizontalStackLayout { Spacing = 8 };
+            row.Children.Add(new Label { Text = icon, FontSize = 16, VerticalOptions = LayoutOptions.Center });
+            row.Children.Add(new Label
+            {
+                Text = step.Description,
+                FontSize = 14,
+                VerticalOptions = LayoutOptions.Center,
+                Opacity = step.IsCompleted ? 0.6 : 1.0
             });
-            return plan;
+            StepsLayout.Children.Add(row);
         }
-
-        [Description("Wait for the user to confirm or reject the plan. Returns whether they confirmed.")]
-        async Task<PlanConfirmationResult> confirm_plan()
-        {
-            MainThread.BeginInvokeOnMainThread(() => PlanCard.ShowConfirmation = true);
-            var response = await _session.WaitForResponse("confirm_plan");
-            MainThread.BeginInvokeOnMainThread(() => PlanCard.ShowConfirmation = false);
-            return response as PlanConfirmationResult ?? new PlanConfirmationResult { Confirmed = false };
-        }
-
-        [Description("Mark a plan step as completed. Step index is 0-based.")]
-        string update_plan_step(
-            [Description("Zero-based step index to mark as completed")] int step_index)
-        {
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                if (_currentPlan is not null && step_index < _currentPlan.Steps.Count)
-                {
-                    _currentPlan.Steps[step_index].Status = StepStatus.Completed;
-                    PlanCard.RefreshSteps();
-                }
-            });
-            return $"Step {step_index} marked as completed.";
-        }
-
-        _session.RegisterTools(
-            AIFunctionFactory.Create(create_plan),
-            AIFunctionFactory.Create(confirm_plan),
-            AIFunctionFactory.Create(update_plan_step));
     }
 
-    private void OnConfirmClicked(object? sender, EventArgs e)
+    private async void OnConfirmClicked(object? sender, EventArgs e)
     {
-        _session.ProvideResponse("confirm_plan", new PlanConfirmationResult { Confirmed = true });
+        ConfirmButtons.IsVisible = false;
+        await ChatSession.SendAsync("I confirm the plan. Please proceed with execution.");
     }
 
-    private void OnRejectClicked(object? sender, EventArgs e)
+    private async void OnRejectClicked(object? sender, EventArgs e)
     {
-        _session.ProvideResponse("confirm_plan", new PlanConfirmationResult { Confirmed = false });
+        ConfirmButtons.IsVisible = false;
+        await ChatSession.SendAsync("I reject this plan. Please suggest changes.");
     }
 
     protected override void OnSizeAllocated(double width, double height)
     {
         base.OnSizeAllocated(width, height);
-        if (width > 0 && _currentPlan is not null)
-        {
-            PlanCard.IsVisible = width >= 700;
-        }
+        if (width > 0 && _currentSteps is not null)
+            PlanPanel.IsVisible = width >= 700;
+    }
+
+    private sealed class PlanStep
+    {
+        public string Description { get; init; } = string.Empty;
+        public bool IsCompleted { get; set; }
     }
 }
