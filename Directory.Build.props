@@ -22,8 +22,6 @@
     <!-- Disable strong naming: MAUI and Platform.Maui packages are not strong-named -->
     <SignAssembly>false</SignAssembly>
     <NoSwixBuildPlugin>true</NoSwixBuildPlugin>
-    <!-- Skip Xcode version check — allows building with newer Xcode than the workload expects -->
-    <ValidateXcodeVersion>false</ValidateXcodeVersion>
   </PropertyGroup>
 
   <!-- Allow building with newer Xcode than the pinned workload expects.

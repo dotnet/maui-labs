@@ -9,7 +9,7 @@
     <PackageId>Microsoft.Maui.AI.Chat.Controls</PackageId>
     <Description>Drop-in MAUI chat control for AI agents. Priority-based template system for custom tool rendering, tool approval workflow, and theme customization.</Description>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);MEAI001</NoWarn>
+    <NoWarn>$(NoWarn);MEAI001;XC0022</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
