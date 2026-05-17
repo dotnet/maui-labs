@@ -1,41 +1,36 @@
-# 🚀 Agentic Generative UI
+# Agentic Generative UI
 
-## What This Demo Shows
+## Overview
 
-This demo showcases **automatic plan execution** with real-time progress visualization:
+Demonstrates auto-executing plan generation with real-time progress tracking. Unlike the Human-in-the-Loop demo, this agent executes its plan immediately without waiting for user confirmation.
 
-1. **Auto-Planning**: The agent creates a multi-step plan and immediately starts executing
-2. **Live Progress**: A progress card shows steps completing in real-time with status indicators
-3. **No User Intervention**: Unlike Human-in-the-Loop, this demo executes automatically
-4. **Visual Feedback**: Steps transition from pending (⏳) to completed (✅) as the agent works
+## Features Demonstrated
 
-## How to Interact
+- `create_plan` tool that deserializes step descriptions and shows a progress footer
+- `complete_step` tool that marks steps as completed by zero-based index
+- Automatic execution — the system prompt instructs the agent to proceed without waiting
+- Footer-based progress UI with ⏳ (pending) and ✅ (completed) status indicators
+- No confirm/reject buttons — fully autonomous agent behavior
 
-Try asking:
-- "Build a plan to go to Mars in 5 steps"
-- "Build a plan to make pizza from scratch"
-- "Build a plan to learn guitar in a month"
+## How to Use
 
-Then just watch — the agent executes automatically!
+1. Navigate to **Agentic Generative UI** from the app shell
+2. Ask the agent to do something multi-step, e.g., "Build a plan to make pizza from scratch"
+3. Watch the footer appear showing all plan steps as ⏳ pending
+4. Observe each step transition to ✅ completed as the agent executes automatically
+5. Read the agent's summary message after all steps are done
+6. Try another request — a new plan replaces the previous one
 
-## What You Should See
+## Expected Behavior
 
-1. **Send a request** — the agent creates a plan with 3-5 steps
-2. A **progress card** appears at the bottom showing all steps
-3. Steps start as **pending** (⏳ gray)
-4. The agent **executes each step** automatically, calling `complete_step` for each
-5. Each step transitions to **completed** (✅ green) in sequence
-6. The agent sends a **summary message** when all steps are done
-7. **Try another request** — a new plan replaces the old one
+- The agent calls `create_plan` with a JSON array of 3-5 step descriptions → the plan footer becomes visible
+- Without pausing, the agent immediately calls `complete_step(0)`, `complete_step(1)`, etc., in sequence
+- Each step transitions from ⏳ to ✅ with reduced opacity for completed items
+- After all steps complete, the agent sends a conversational summary of what was accomplished
+- A new request creates a fresh plan, replacing the previous steps in the footer
 
-## Technical Details
+## Key Code Patterns
 
-- Two tools: `create_plan` and `complete_step`
-- Unlike HITL, there is no `confirm_plan` tool — execution is automatic
-- The `PlanCardView` is shown in a footer row below the chat
-- `ShowConfirmation="False"` hides the confirm/reject buttons
-- The agent's system prompt instructs it to execute immediately without waiting
-
-## Inspired By
-
-[CopilotKit Agentic Generative UI Demo](https://dojo.ag-ui.com/microsoft-agent-framework-dotnet/feature/agentic_generative_ui) — `useCoAgentStateRender` with auto-executing steps.
+- **No confirmation gate** — compared to HumanInTheLoop, this demo has no confirm/reject mechanism; the system prompt says "Do NOT wait for user confirmation — just execute" (`AgenticGenerativeUIPage.xaml.cs:24-32`)
+- **Footer layout** — the plan progress is displayed in a `Border` at `Grid.Row="1"` below the chat rather than a side panel (`AgenticGenerativeUIPage.xaml:25-35`)
+- **Shared step rendering** — `RefreshStepsUI()` pattern is identical to HumanInTheLoop but uses ⏳/✅ instead of ⬜/✅ (`AgenticGenerativeUIPage.xaml.cs:69-90`)

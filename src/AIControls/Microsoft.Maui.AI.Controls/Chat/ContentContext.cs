@@ -22,6 +22,8 @@ public sealed class ContentContext
 
     public ContentRole Role => Entry.Role;
 
+    public DateTimeOffset Timestamp => Entry.Timestamp;
+
     public string? ToolName => Entry.ToolName;
 
     public ToolApprovalState ApprovalState => Entry.ApprovalState;

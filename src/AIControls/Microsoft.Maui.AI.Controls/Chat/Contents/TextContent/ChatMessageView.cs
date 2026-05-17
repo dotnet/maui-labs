@@ -28,6 +28,24 @@ public class ChatMessageView : ContentContextView
         set => SetValue(MessageRoleProperty, value);
     }
 
+    public static readonly BindableProperty TimestampTextProperty =
+        BindableProperty.Create(nameof(TimestampText), typeof(string), typeof(ChatMessageView));
+
+    public string? TimestampText
+    {
+        get => (string?)GetValue(TimestampTextProperty);
+        set => SetValue(TimestampTextProperty, value);
+    }
+
+    public static readonly BindableProperty ShowTimestampProperty =
+        BindableProperty.Create(nameof(ShowTimestamp), typeof(bool), typeof(ChatMessageView), false);
+
+    public bool ShowTimestamp
+    {
+        get => (bool)GetValue(ShowTimestampProperty);
+        set => SetValue(ShowTimestampProperty, value);
+    }
+
     private VisualElement? _stateRoot;
 
     protected override void RefreshFromContentContext()
@@ -37,6 +55,12 @@ public class ChatMessageView : ContentContextView
 
         Text = (ContentContext.Content as TextContent)?.Text;
         MessageRole = ContentContext.Role.ToString();
+        TimestampText = ContentContext.Timestamp.ToLocalTime().ToString("h:mm tt");
+
+        // Look up ancestor ChatPanelControl for ShowTimestamps setting
+        var panel = FindAncestor<Controls.ChatPanelControl>();
+        ShowTimestamp = panel?.ShowTimestamps ?? false;
+
         ApplyRoleState();
     }
 
@@ -53,5 +77,17 @@ public class ChatMessageView : ContentContextView
             return;
 
         VisualStateManager.GoToState(_stateRoot ?? this, ContentContext.Role.ToString());
+    }
+
+    private T? FindAncestor<T>() where T : Element
+    {
+        Element? current = Parent;
+        while (current is not null)
+        {
+            if (current is T found)
+                return found;
+            current = current.Parent;
+        }
+        return null;
     }
 }

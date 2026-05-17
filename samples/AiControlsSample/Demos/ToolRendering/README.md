@@ -1,36 +1,33 @@
-# 🔧 Backend Tool Rendering
+# Tool Rendering
 
-## What This Demo Shows
+## Overview
 
-This demo showcases **tool call rendering** in the chat interface:
+Shows custom inline rendering of tool results within the chat conversation. A `WeatherResultTemplate` renders a rich weather card when the `get_current_weather` tool returns data, while other tools use the generic `FunctionResultTemplate`.
 
-1. **Tool Invocation Display**: See tool calls and their results rendered inline in the chat
-2. **Structured Tool Results**: Weather data, calculations, and app info shown with structured formatting
-3. **Multi-Tool Conversations**: Ask follow-up questions that trigger different tools
+## Features Demonstrated
 
-## How to Interact
+- Custom `FunctionResultTemplate` subclass filtered by `ToolName` for per-tool rendering
+- `ContentContextView` subclass (`WeatherResultView`) that parses JSON from tool results
+- Template priority ordering — the most specific template (`WeatherResultTemplate`) is listed before the generic `FunctionResultTemplate` so it wins for matching tool names
+- DI-registered `ChatSession` with shared `SampleTools` (weather, calculate, random fact, app info)
 
-Try asking:
-- "What's the weather like in San Francisco?"
-- "Calculate (100 * 3.14) / 2"
-- "Tell me a random fun fact"
-- "What's the weather in Tokyo and then calculate 42 * 7?"
+## How to Use
 
-## What You Should See
+1. Navigate to **Tool Rendering** from the app shell
+2. Ask "What's the weather in Tokyo?" — observe the rich weather card with city, temperature, conditions, humidity, and wind
+3. Ask "Calculate (42 * 3) + 7" — observe the generic function result rendering
+4. Ask "Tell me a random fact" — another generic result display
+5. Compare the visual difference between the custom weather card and generic tool results
 
-1. **Send a weather query** — the assistant calls `get_weather` and shows the tool call in the chat
-2. The **tool result** (weather JSON) appears inline, followed by the assistant's interpretation
-3. **Send a calculation** — the `calculate` tool is invoked and the result is shown
-4. **Multi-turn**: ask follow-up questions — the conversation history is preserved correctly
-5. Tool messages show the function name, arguments, and result with expand/collapse
+## Expected Behavior
 
-## Technical Details
+- Weather queries render as a styled card with emoji icons (☀️/🌧️/etc.), temperature in °C, humidity %, wind speed km/h, and feels-like temperature
+- Non-weather tool results (calculate, random fact, app info) render using the default `FunctionResultTemplate`
+- `FunctionCallTemplate` shows the tool invocation (name + arguments) inline before the result
+- The `WeatherResultView` gracefully handles missing JSON properties by displaying "--"
 
-- Tools are registered from `SampleTools` class: `get_weather`, `calculate`, `get_random_fact`, `get_app_info`
-- The `ShowToolMessages="True"` property makes tool calls visible in the chat
-- Tool results are displayed via the `ToolMessageTemplate` in the control's theme
-- `FunctionCallContent` and `FunctionResultContent` are preserved in chat history
+## Key Code Patterns
 
-## Inspired By
-
-[CopilotKit Backend Tool Rendering Demo](https://dojo.ag-ui.com/microsoft-agent-framework-dotnet/feature/backend_tool_rendering) — rendering agent tool calls with state.
+- **Custom template selection** — `<local:WeatherResultTemplate ToolName="get_current_weather" ViewType="{x:Type local:WeatherResultView}" />` placed before the generic `FunctionResultTemplate` in the templates list (`ToolRenderingPage.xaml:16-17`)
+- **JSON result parsing** — `WeatherResultView.RefreshFromContentContext()` uses `JsonDocument.Parse` to extract fields from `FunctionResultContent.Result` (`WeatherResultView.xaml.cs:15-40`)
+- **Template class** — `WeatherResultTemplate` is a minimal subclass of `FunctionResultTemplate` with no additional logic; filtering is done via the `ToolName` property (`WeatherResultTemplate.cs`)
