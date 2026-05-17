@@ -36,11 +36,49 @@ public partial class PlaygroundPage : ContentPage
         ChatSession.SystemPrompt = SystemPromptEditor.Text;
     }
 
+    private void OnPlaceholderChanged(object? sender, TextChangedEventArgs e)
+    {
+        ChatPanel.Placeholder = e.NewTextValue;
+    }
+
+    private void OnWelcomeMessageChanged(object? sender, TextChangedEventArgs e)
+    {
+        ChatPanel.WelcomeMessage = string.IsNullOrWhiteSpace(e.NewTextValue) ? null : e.NewTextValue;
+    }
+
+    private void OnTimestampsToggled(object? sender, ToggledEventArgs e)
+    {
+        ChatPanel.ShowTimestamps = e.Value;
+    }
+
+    private void OnToolCallsToggled(object? sender, ToggledEventArgs e)
+    {
+        ChatPanel.ShowToolCalls = e.Value;
+    }
+
+    private void OnToolResultsToggled(object? sender, ToggledEventArgs e)
+    {
+        ChatPanel.ShowToolResults = e.Value;
+    }
+
+    private void OnCornerRadiusChanged(object? sender, ValueChangedEventArgs e)
+    {
+        var val = Math.Round(e.NewValue);
+        CornerRadiusValue.Text = val.ToString();
+        ChatPanel.BubbleCornerRadius = val;
+    }
+
+    private void OnMaxWidthChanged(object? sender, ValueChangedEventArgs e)
+    {
+        var val = Math.Round(e.NewValue);
+        MaxWidthValue.Text = val.ToString();
+        ChatPanel.MaxBubbleWidth = val;
+    }
+
     private async void OnQuickPromptClicked(object? sender, EventArgs e)
     {
         if (sender is Button btn && !string.IsNullOrWhiteSpace(btn.Text))
         {
-            // Strip leading emoji + space from button text
             var prompt = btn.Text.Length > 2 ? btn.Text[2..].Trim() : btn.Text;
             await ChatSession.SendAsync(prompt);
         }
