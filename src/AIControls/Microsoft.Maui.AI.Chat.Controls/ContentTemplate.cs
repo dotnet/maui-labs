@@ -4,7 +4,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
 /// Maps a <see cref="ContentContext"/> to a view type via the <see cref="When"/> predicate.
-/// Declare in XAML inside <c>ChatPanelControl.ContentTemplates</c>.
+/// Declare in XAML inside <c>CopilotChatView.ContentTemplates</c>.
 /// </summary>
 public abstract class ContentTemplate : BindableObject
 {

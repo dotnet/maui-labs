@@ -9,8 +9,8 @@
 
     <Grid ColumnDefinitions="*,Auto">
         <!-- Chat panel -->
-        <controls:ChatPanelControl Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
-            <controls:ChatPanelControl.ContentTemplates>
+        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+            <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
@@ -18,15 +18,15 @@
                 <chat:ToolApprovalTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
-            </controls:ChatPanelControl.ContentTemplates>
-        </controls:ChatPanelControl>
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
 
         <!-- Plan card panel (right side) -->
         <Border x:Name="PlanPanel" Grid.Column="1"
                 IsVisible="False"
                 WidthRequest="320"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeShape="Rectangle" StrokeThickness="1,0,0,0"
+                StrokeShape="Rectangle" StrokeThickness="1"
                 Padding="16">
             <Grid RowDefinitions="Auto,*,Auto">
                 <Label Text="📋 Plan" FontSize="18" FontAttributes="Bold" Margin="0,0,0,12" />

@@ -1,16 +1,16 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Bindable customization properties for <see cref="ChatPanelControl"/>.
+/// Bindable customization properties for <see cref="CopilotChatView"/>.
 /// </summary>
-public partial class ChatPanelControl
+public partial class CopilotChatView
 {
     // ═══════════════════════════════════════════════════════════════
     //  INPUT AREA
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty PlaceholderProperty =
-        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(ChatPanelControl), "Type a message...");
+        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(CopilotChatView), "Type a message...");
 
     public string Placeholder
     {
@@ -19,7 +19,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty SendButtonTextProperty =
-        BindableProperty.Create(nameof(SendButtonText), typeof(string), typeof(ChatPanelControl), "\u27A4");
+        BindableProperty.Create(nameof(SendButtonText), typeof(string), typeof(CopilotChatView), "\u27A4");
 
     public string SendButtonText
     {
@@ -28,7 +28,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty SendButtonBackgroundColorProperty =
-        BindableProperty.Create(nameof(SendButtonBackgroundColor), typeof(Color), typeof(ChatPanelControl));
+        BindableProperty.Create(nameof(SendButtonBackgroundColor), typeof(Color), typeof(CopilotChatView));
 
     public Color? SendButtonBackgroundColor
     {
@@ -37,7 +37,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty InputAreaBackgroundColorProperty =
-        BindableProperty.Create(nameof(InputAreaBackgroundColor), typeof(Color), typeof(ChatPanelControl));
+        BindableProperty.Create(nameof(InputAreaBackgroundColor), typeof(Color), typeof(CopilotChatView));
 
     public Color? InputAreaBackgroundColor
     {
@@ -46,7 +46,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty InputAreaCornerRadiusProperty =
-        BindableProperty.Create(nameof(InputAreaCornerRadius), typeof(double), typeof(ChatPanelControl), 14.0);
+        BindableProperty.Create(nameof(InputAreaCornerRadius), typeof(double), typeof(CopilotChatView), 14.0);
 
     public double InputAreaCornerRadius
     {
@@ -59,8 +59,8 @@ public partial class ChatPanelControl
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty WelcomeMessageProperty =
-        BindableProperty.Create(nameof(WelcomeMessage), typeof(string), typeof(ChatPanelControl),
-            propertyChanged: (b, _, _) => ((ChatPanelControl)b).UpdateWelcomeVisibility());
+        BindableProperty.Create(nameof(WelcomeMessage), typeof(string), typeof(CopilotChatView),
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).UpdateWelcomeVisibility());
 
     public string? WelcomeMessage
     {
@@ -69,7 +69,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty WelcomeIconProperty =
-        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(ChatPanelControl), "💬");
+        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(CopilotChatView), "💬");
 
     public string WelcomeIcon
     {
@@ -82,7 +82,7 @@ public partial class ChatPanelControl
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty ShowAvatarsProperty =
-        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(ChatPanelControl), false);
+        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(CopilotChatView), false);
 
     public bool ShowAvatars
     {
@@ -91,7 +91,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty AvatarSizeProperty =
-        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(ChatPanelControl), 28.0);
+        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(CopilotChatView), 28.0);
 
     public double AvatarSize
     {
@@ -100,7 +100,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty UserDisplayNameProperty =
-        BindableProperty.Create(nameof(UserDisplayName), typeof(string), typeof(ChatPanelControl), "You");
+        BindableProperty.Create(nameof(UserDisplayName), typeof(string), typeof(CopilotChatView), "You");
 
     public string UserDisplayName
     {
@@ -109,7 +109,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty AssistantDisplayNameProperty =
-        BindableProperty.Create(nameof(AssistantDisplayName), typeof(string), typeof(ChatPanelControl), "Assistant");
+        BindableProperty.Create(nameof(AssistantDisplayName), typeof(string), typeof(CopilotChatView), "Assistant");
 
     public string AssistantDisplayName
     {
@@ -122,7 +122,7 @@ public partial class ChatPanelControl
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty ShowTimestampsProperty =
-        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(ChatPanelControl), false);
+        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(CopilotChatView), false);
 
     public bool ShowTimestamps
     {
@@ -131,7 +131,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty ShowToolCallsProperty =
-        BindableProperty.Create(nameof(ShowToolCalls), typeof(bool), typeof(ChatPanelControl), true);
+        BindableProperty.Create(nameof(ShowToolCalls), typeof(bool), typeof(CopilotChatView), true);
 
     public bool ShowToolCalls
     {
@@ -140,7 +140,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty ShowToolResultsProperty =
-        BindableProperty.Create(nameof(ShowToolResults), typeof(bool), typeof(ChatPanelControl), true);
+        BindableProperty.Create(nameof(ShowToolResults), typeof(bool), typeof(CopilotChatView), true);
 
     public bool ShowToolResults
     {
@@ -153,7 +153,7 @@ public partial class ChatPanelControl
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty BubbleCornerRadiusProperty =
-        BindableProperty.Create(nameof(BubbleCornerRadius), typeof(double), typeof(ChatPanelControl), 16.0);
+        BindableProperty.Create(nameof(BubbleCornerRadius), typeof(double), typeof(CopilotChatView), 16.0);
 
     public double BubbleCornerRadius
     {
@@ -162,7 +162,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty BubbleStrokeThicknessProperty =
-        BindableProperty.Create(nameof(BubbleStrokeThickness), typeof(double), typeof(ChatPanelControl), 0.0);
+        BindableProperty.Create(nameof(BubbleStrokeThickness), typeof(double), typeof(CopilotChatView), 0.0);
 
     public double BubbleStrokeThickness
     {
@@ -171,7 +171,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty BubbleStrokeColorProperty =
-        BindableProperty.Create(nameof(BubbleStrokeColor), typeof(Color), typeof(ChatPanelControl));
+        BindableProperty.Create(nameof(BubbleStrokeColor), typeof(Color), typeof(CopilotChatView));
 
     public Color? BubbleStrokeColor
     {
@@ -180,7 +180,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty MaxBubbleWidthProperty =
-        BindableProperty.Create(nameof(MaxBubbleWidth), typeof(double), typeof(ChatPanelControl), 340.0);
+        BindableProperty.Create(nameof(MaxBubbleWidth), typeof(double), typeof(CopilotChatView), 340.0);
 
     public double MaxBubbleWidth
     {
@@ -193,7 +193,7 @@ public partial class ChatPanelControl
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty HeaderTemplateProperty =
-        BindableProperty.Create(nameof(HeaderTemplate), typeof(DataTemplate), typeof(ChatPanelControl));
+        BindableProperty.Create(nameof(HeaderTemplate), typeof(DataTemplate), typeof(CopilotChatView));
 
     public DataTemplate? HeaderTemplate
     {
@@ -202,7 +202,7 @@ public partial class ChatPanelControl
     }
 
     public static readonly BindableProperty FooterTemplateProperty =
-        BindableProperty.Create(nameof(FooterTemplate), typeof(DataTemplate), typeof(ChatPanelControl));
+        BindableProperty.Create(nameof(FooterTemplate), typeof(DataTemplate), typeof(CopilotChatView));
 
     public DataTemplate? FooterTemplate
     {
@@ -215,7 +215,7 @@ public partial class ChatPanelControl
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty SuggestionPromptsProperty =
-        BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(ChatPanelControl));
+        BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(CopilotChatView));
 
     public IList<string>? SuggestionPrompts
     {

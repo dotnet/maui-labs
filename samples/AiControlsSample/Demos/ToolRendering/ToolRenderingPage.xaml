@@ -8,8 +8,8 @@
              x:Name="ThisPage"
              Title="Tool Rendering">
 
-    <controls:ChatPanelControl Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
-        <controls:ChatPanelControl.ContentTemplates>
+    <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+        <controls:CopilotChatView.ContentTemplates>
             <chat:TextContentTemplate Role="User" />
             <chat:TextContentTemplate Role="Assistant" />
             <chat:FunctionCallTemplate />
@@ -17,6 +17,6 @@
             <chat:FunctionResultTemplate />
             <chat:ErrorContentTemplate />
             <chat:DefaultContentTemplate />
-        </controls:ChatPanelControl.ContentTemplates>
-    </controls:ChatPanelControl>
+        </controls:CopilotChatView.ContentTemplates>
+    </controls:CopilotChatView>
 </ContentPage>

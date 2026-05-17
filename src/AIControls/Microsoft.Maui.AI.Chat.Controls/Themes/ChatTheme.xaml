@@ -300,4 +300,82 @@
         <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.ToolApprovalTemplate}" />
     </Style>
 
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- ControlTemplate: CopilotChatView (the entire chat surface)    -->
+    <!-- All named parts (PART_*) are optional — omit any to suppress  -->
+    <!-- that section. Replace the whole template to redesign the chat. -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <ControlTemplate x:Key="ExtensionsAI.CopilotChatViewTemplate">
+        <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto" RowSpacing="0">
+
+            <!-- Row 0: Header (optional) -->
+            <ContentView x:Name="PART_Header" Grid.Row="0" IsVisible="False" />
+
+            <!-- Row 1: Welcome + Messages overlay -->
+            <Grid Grid.Row="1">
+                <!-- Welcome panel (shown when no messages) -->
+                <VerticalStackLayout x:Name="PART_WelcomePanel"
+                                     IsVisible="False"
+                                     VerticalOptions="Center" HorizontalOptions="Center"
+                                     Spacing="12" Padding="24">
+                    <Label x:Name="PART_WelcomeIcon" Text="💬" FontSize="48"
+                           HorizontalOptions="Center" />
+                    <Label x:Name="PART_WelcomeMessage" FontSize="16"
+                           HorizontalTextAlignment="Center"
+                           Opacity="0.7" />
+                </VerticalStackLayout>
+
+                <!-- Messages list -->
+                <CollectionView x:Name="PART_Messages"
+                                AutomationId="ChatMessages"
+                                Margin="12,8,12,0" />
+            </Grid>
+
+            <!-- Row 2: Busy indicator -->
+            <ActivityIndicator x:Name="PART_BusyIndicator" Grid.Row="2"
+                               AutomationId="ChatBusyIndicator"
+                               IsRunning="False" IsVisible="False"
+                               Color="{DynamicResource ExtensionsAI.Send.Background}"
+                               Margin="0,6" />
+
+            <!-- Row 3: Suggestion chips -->
+            <FlexLayout x:Name="PART_Suggestions" Grid.Row="3"
+                        IsVisible="False"
+                        Wrap="Wrap" JustifyContent="Center"
+                        Margin="12,4" />
+
+            <!-- Row 4: Footer (optional) -->
+            <ContentView x:Name="PART_Footer" Grid.Row="4" IsVisible="False" />
+
+            <!-- Row 5: Input Area -->
+            <Border x:Name="PART_InputArea" Grid.Row="5" Margin="12,8,12,12" Padding="6"
+                    BackgroundColor="{DynamicResource ExtensionsAI.Input.Background}"
+                    StrokeThickness="0">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="14" />
+                </Border.StrokeShape>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <Entry x:Name="PART_InputEntry"
+                           Placeholder="{TemplateBinding Placeholder}"
+                           AutomationId="ChatInput"
+                           Text="{TemplateBinding Text, Mode=TwoWay}"
+                           FontSize="14"
+                           BackgroundColor="Transparent" />
+                    <Button x:Name="PART_SendButton" Grid.Column="1"
+                            Text="{TemplateBinding SendButtonText}"
+                            AutomationId="SendMessageButton"
+                            BackgroundColor="{DynamicResource ExtensionsAI.Send.Background}"
+                            TextColor="{DynamicResource ExtensionsAI.Send.TextColor}"
+                            FontSize="16"
+                            WidthRequest="42" HeightRequest="42"
+                            CornerRadius="12" Padding="0" />
+                </Grid>
+            </Border>
+        </Grid>
+    </ControlTemplate>
+
+    <Style TargetType="chat:CopilotChatView">
+        <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.CopilotChatViewTemplate}" />
+    </Style>
+
 </ResourceDictionary>

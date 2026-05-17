@@ -15,7 +15,7 @@
     <Grid x:Name="RootLayout" ColumnDefinitions="*,Auto">
 
         <!-- Chat fills available space -->
-        <controls:ChatPanelControl x:Name="ChatPanel"
+        <controls:CopilotChatView x:Name="ChatPanel"
             Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}"
             WelcomeMessage="Hello! I'm your AI assistant. Ask me about the weather, math, random facts, or app info."
             WelcomeIcon="🤖"
@@ -24,13 +24,13 @@
             ShowAvatars="False"
             ShowToolCalls="True"
             ShowToolResults="True">
-            <controls:ChatPanelControl.SuggestionPrompts>
+            <controls:CopilotChatView.SuggestionPrompts>
                 <x:String>What's the weather in Tokyo?</x:String>
                 <x:String>Calculate (42 * 3) + 7</x:String>
                 <x:String>Tell me a random fact</x:String>
                 <x:String>What app am I running?</x:String>
-            </controls:ChatPanelControl.SuggestionPrompts>
-            <controls:ChatPanelControl.ContentTemplates>
+            </controls:CopilotChatView.SuggestionPrompts>
+            <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
@@ -38,8 +38,8 @@
                 <chat:ToolApprovalTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
-            </controls:ChatPanelControl.ContentTemplates>
-        </controls:ChatPanelControl>
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
 
         <!-- Settings panel: docked sidebar -->
         <Border x:Name="SettingsPanel" Grid.Column="1"

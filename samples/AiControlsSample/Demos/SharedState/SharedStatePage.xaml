@@ -11,7 +11,7 @@
         <!-- Left: Recipe editor -->
         <Border Grid.Column="0"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeShape="Rectangle" StrokeThickness="0,0,1,0"
+                StrokeShape="Rectangle" StrokeThickness="1"
                 Padding="16">
             <ScrollView>
                 <VerticalStackLayout Spacing="12">
@@ -69,16 +69,16 @@
         </Border>
 
         <!-- Right: Chat panel -->
-        <controls:ChatPanelControl Grid.Column="1"
+        <controls:CopilotChatView Grid.Column="1"
             Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
-            <controls:ChatPanelControl.ContentTemplates>
+            <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
                 <chat:FunctionResultTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
-            </controls:ChatPanelControl.ContentTemplates>
-        </controls:ChatPanelControl>
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
     </Grid>
 </ContentPage>
