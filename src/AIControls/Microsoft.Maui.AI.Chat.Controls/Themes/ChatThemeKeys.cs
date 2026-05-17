@@ -49,4 +49,7 @@ public static class ChatThemeKeys
 
     // Bubble sizing
     public const string BubbleMaxWidth = "ExtensionsAI.Bubble.MaxWidth";
+
+    // CopilotChatView
+    public const string CopilotChatViewTemplate = "ExtensionsAI.CopilotChatViewTemplate";
 }

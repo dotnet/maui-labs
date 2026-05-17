@@ -3,9 +3,9 @@ using Microsoft.Maui.AI.Chat.Controls.Themes;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
-public class ChatPanelControlPropertyTests
+public class CopilotChatViewPropertyTests
 {
-    private static ChatPanelControl Create() => new();
+    private static CopilotChatView Create() => new();
 
     // ── Input Area Defaults ──
 
@@ -153,13 +153,13 @@ public class ChatPanelControlPropertyTests
     public void Placeholder_BindableProperty_HasCorrectDefault()
     {
         // Verify the default value of the bindable property itself
-        Assert.Equal("Type a message...", ChatPanelControl.PlaceholderProperty.DefaultValue);
+        Assert.Equal("Type a message...", CopilotChatView.PlaceholderProperty.DefaultValue);
     }
 
     [Fact]
     public void Placeholder_BindableProperty_NameIsCorrect()
     {
-        Assert.Equal("Placeholder", ChatPanelControl.PlaceholderProperty.PropertyName);
+        Assert.Equal("Placeholder", CopilotChatView.PlaceholderProperty.PropertyName);
     }
 
     [Fact]

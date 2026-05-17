@@ -57,8 +57,8 @@ public class ChatMessageView : ContentContextView
         MessageRole = ContentContext.Role.ToString();
         TimestampText = ContentContext.Timestamp.ToLocalTime().ToString("h:mm tt");
 
-        // Look up ancestor ChatPanelControl for ShowTimestamps setting
-        var panel = FindAncestor<Controls.ChatPanelControl>();
+        // Look up ancestor CopilotChatView for ShowTimestamps setting
+        var panel = FindAncestor<CopilotChatView>();
         ShowTimestamp = panel?.ShowTimestamps ?? false;
 
         ApplyRoleState();

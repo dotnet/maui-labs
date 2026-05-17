@@ -9,15 +9,15 @@
 
     <Grid x:Name="PageRoot"
           BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E2E}">
-        <controls:ChatPanelControl Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
-            <controls:ChatPanelControl.ContentTemplates>
+        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+            <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
                 <chat:FunctionResultTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
-            </controls:ChatPanelControl.ContentTemplates>
-        </controls:ChatPanelControl>
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
     </Grid>
 </ContentPage>
