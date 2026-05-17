@@ -96,14 +96,25 @@ public partial class CopilotChatView : TemplatedView
         InitializeComponent();
         _contentTemplates.CollectionChanged += (_, _) => RebuildTemplateSelector();
 
-        // Ensure the default theme resources are available so that the implicit
-        // Style (with ControlTemplate) and all DynamicResource keys resolve.
-        if (Application.Current is { } app)
-            ChatThemeLoader.EnsureLoaded(app.Resources);
-
-        // Set the default ControlTemplate directly if none was applied by
-        // an implicit Style (happens when ChatTheme isn't in the resource tree).
+        // Bind the default ControlTemplate via DynamicResource so it resolves
+        // once the theme dictionary is available in the resource tree.
+        // The actual theme loading is done by UseChatControls() at startup
+        // or deferred to OnParentSet to avoid mutating app resources during
+        // XAML parsing (which causes NullRef in the generated InitializeComponent).
         SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.CopilotChatViewTemplate);
+    }
+
+    protected override void OnParentSet()
+    {
+        base.OnParentSet();
+
+        // Deferred theme loading: ensure the ChatTheme resources are merged
+        // into the app-level dictionary when the control joins the visual tree.
+        // We cannot do this in the constructor because modifying
+        // Application.Resources.MergedDictionaries during XAML parsing
+        // triggers resource re-evaluation on partially-constructed pages.
+        if (Parent is not null && Application.Current is { } app)
+            ChatThemeLoader.EnsureLoaded(app.Resources);
     }
 
     // ── Template application ──
