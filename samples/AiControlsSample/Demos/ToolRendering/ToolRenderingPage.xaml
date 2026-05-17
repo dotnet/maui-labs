@@ -2,16 +2,21 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Microsoft.Maui.AI.Controls.Controls;assembly=Microsoft.Maui.AI.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Controls.Chat;assembly=Microsoft.Maui.AI.Controls"
+             xmlns:local="clr-namespace:AiControlsSample"
              x:Class="AiControlsSample.ToolRenderingPage"
+             x:Name="ThisPage"
              Title="Tool Rendering">
 
-    <controls:AgentChatView
-        x:Name="ChatView"
-        WelcomeTitle="Tool Rendering"
-        WelcomeIcon="🔧"
-        WelcomeMessage="Ask about the weather to see tool calls and structured results rendered inline."
-        Placeholder="Try 'What's the weather in San Francisco?'..."
-        AssistantDisplayName="Tools Agent"
-        AssistantAvatarText="🔧"
-        ShowToolMessages="True" />
+    <controls:ChatPanelControl Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+        <controls:ChatPanelControl.ContentTemplates>
+            <chat:TextContentTemplate Role="User" />
+            <chat:TextContentTemplate Role="Assistant" />
+            <chat:FunctionCallTemplate />
+            <local:WeatherResultTemplate ToolName="get_current_weather" ViewType="{x:Type local:WeatherResultView}" />
+            <chat:FunctionResultTemplate />
+            <chat:ErrorContentTemplate />
+            <chat:DefaultContentTemplate />
+        </controls:ChatPanelControl.ContentTemplates>
+    </controls:ChatPanelControl>
 </ContentPage>
