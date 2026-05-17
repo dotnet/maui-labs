@@ -215,11 +215,12 @@ public partial class CopilotChatView
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty SuggestionPromptsProperty =
-        BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(CopilotChatView),
+            defaultValueCreator: _ => new List<string>());
 
-    public IList<string>? SuggestionPrompts
+    public IList<string> SuggestionPrompts
     {
-        get => (IList<string>?)GetValue(SuggestionPromptsProperty);
+        get => (IList<string>)GetValue(SuggestionPromptsProperty);
         set => SetValue(SuggestionPromptsProperty, value);
     }
 }

@@ -141,10 +141,11 @@ public class CopilotChatViewPropertyTests
     // ── Suggestions Default ──
 
     [Fact]
-    public void SuggestionPrompts_DefaultsToNull()
+    public void SuggestionPrompts_DefaultsToEmptyList()
     {
         var control = Create();
-        Assert.Null(control.SuggestionPrompts);
+        Assert.NotNull(control.SuggestionPrompts);
+        Assert.Empty(control.SuggestionPrompts);
     }
 
     // ── Property Change Roundtrip ──
