@@ -1,41 +1,38 @@
-# 🍳 Shared State
+# Shared State
 
-## What This Demo Shows
+## Overview
 
-This demo showcases **bidirectional shared state** between the AI agent and the UI:
+A split-pane recipe editor and chat panel demonstrating bidirectional state synchronization between a UI form and an AI agent. The AI can read the current recipe state and modify it via the `update_recipe` tool.
 
-1. **Recipe Editor**: A form on the left with title, skill level, cooking time, and ingredients
-2. **AI Chat**: A chat panel on the right that can read and modify the recipe
-3. **Bidirectional Updates**: Edit the form manually OR ask the AI to improve it — both directions work
-4. **"Improve with AI" Button**: Sends the current recipe state to the agent for enhancement
+## Features Demonstrated
 
-## How to Interact
+- Split-pane layout with a form editor (left) and `ChatPanelControl` (right)
+- `update_recipe` tool that accepts title, skill level, cooking time, and ingredients JSON
+- "Improve with AI" button that serializes the current form state and sends it to the chat
+- Dynamic ingredient list rendered programmatically from a `List<(string Icon, string Name, string Amount)>`
+- JSON serialization/deserialization for bidirectional state transfer
 
-Try:
-- Click **"✨ Improve with AI"** to send the current recipe to the agent
-- Ask: "Make this recipe healthier with more vegetables"
-- Ask: "Add more protein to this recipe"
-- Ask: "Make this recipe spicier with chili and paprika"
-- Manually edit the recipe title, skill level, or ingredients, then ask the AI to improve it
+## How to Use
 
-## What You Should See
+1. Navigate to **Shared State** from the app shell
+2. Review the default recipe: "Pasta Primavera" with 5 ingredients
+3. Click **"✨ Improve with AI"** — the current recipe is sent as JSON to the agent
+4. The agent responds with suggestions and calls `update_recipe` to modify the form
+5. Observe the form fields (title, skill picker, time picker, ingredients) update automatically
+6. Manually edit the form (change title, add ingredients with "+ Add Ingredient")
+7. Click "Improve with AI" again — the agent sees your manual changes and builds on them
 
-1. The **recipe form** starts with "Pasta Primavera" and default ingredients
-2. **Click "Improve with AI"** — the agent receives the recipe JSON and responds
-3. The agent calls `update_recipe` with improved values
-4. **Form fields update automatically** — title, skill level, cooking time, and ingredients change
-5. **Edit manually** — change the title or add an ingredient
-6. **Ask the AI again** — it sees the updated recipe and builds on your changes
-7. Multiple rounds of editing show the state flowing both directions
+## Expected Behavior
 
-## Technical Details
+- The form starts with "Pasta Primavera", Beginner skill, 30 min cooking time, and 5 ingredients (🍝🫑🧅🧄🫒)
+- "Improve with AI" serializes `{ title, skill_level, cooking_time, ingredients }` as indented JSON
+- The agent calls `update_recipe(title, skill_level, cooking_time, ingredients_json)` with improved values
+- All form fields update on the UI thread: `RecipeTitleEntry.Text`, `SkillPicker.SelectedIndex`, `TimePicker.SelectedIndex`, and the ingredients list
+- Adding ingredients manually via the "+ Add Ingredient" button appends a placeholder row
+- Multiple improvement rounds show cumulative changes
 
-- The agent has an `update_recipe` tool that receives the full recipe as JSON
-- Recipe state is built from the form fields and sent as a `ChatMessage` with `DataContent`
-- The `StateSnapshotReceived` event on `IAgentSession` handles incoming state updates
-- `ApplyRecipe` parses the JSON and updates all form fields on the main thread
-- Ingredients are dynamically rendered as a list of rows
+## Key Code Patterns
 
-## Inspired By
-
-[CopilotKit Shared State Demo](https://dojo.ag-ui.com/microsoft-agent-framework-dotnet/feature/shared_state) — bidirectional recipe form with `useCoAgentStateRender`.
+- **State serialization** — `BuildRecipeJson()` creates a JSON snapshot from form controls for sending to the agent (`SharedStatePage.xaml.cs:118-129`)
+- **Tool-driven form updates** — `UpdateRecipe()` parses skill level/time by matching picker items, and deserializes ingredients from a JSON array of `{icon, name, amount}` objects (`SharedStatePage.xaml.cs:42-91`)
+- **Dynamic UI rendering** — `RefreshIngredientsUI()` clears and rebuilds `IngredientsLayout.Children` from the in-memory list (`SharedStatePage.xaml.cs:93-104`)

@@ -1,41 +1,38 @@
-# 🎋 Tool-Based Generative UI (Haiku)
+# Haiku Generator
 
-## What This Demo Shows
+## Overview
 
-This demo showcases **tool-based generative UI** where the agent creates visual content displayed in a custom panel:
+A creative haiku generator with a carousel display panel. The AI creates haiku poems with both Japanese and English text, plus a custom theme color for each, demonstrating tool-based generative UI that builds a browseable gallery.
 
-1. **Haiku Display**: A colored panel on the left shows haiku poems in Japanese and English
-2. **AI Poet**: Chat with the assistant on the right to request haiku poems
-3. **Visual Theming**: Each haiku gets a unique background color chosen by the AI
-4. **Gallery Navigation**: Browse through multiple generated haikus with prev/next buttons
+## Features Demonstrated
 
-## How to Interact
+- `create_haiku` tool with `japanese_lines`, `english_lines`, and `theme_color` parameters
+- Gallery/carousel navigation (◀ ▶) with position indicator for multiple haikus
+- Dynamic background color per haiku using `Color.FromArgb()` with fallback to a predefined palette
+- Split-pane layout: haiku display (left) with empty state, chat panel (right)
+- JSON array deserialization for the 3-line haiku structure
 
-Try asking:
-- "Write a haiku about nature"
-- "Create a haiku about the ocean"
-- "Generate a haiku about spring"
-- "Write me three haikus about different seasons"
+## How to Use
 
-## What You Should See
+1. Navigate to **Haiku Generator** from the app shell
+2. The left panel shows an empty state: "🎋 Ask for a haiku to get started"
+3. Ask the agent to write a haiku, e.g., "Write a haiku about the ocean"
+4. Observe the haiku appear on the left with Japanese text, a white divider, and English translation
+5. The panel background changes to the AI's chosen theme color
+6. Request more haikus — navigation arrows (◀ ▶) appear when you have 2+ haikus
+7. Browse your haiku collection with the prev/next buttons; note the "N / M" position label
 
-1. Initially, the left panel shows an empty state with "🎋 Ask for a haiku to get started"
-2. **Send a haiku request** — the agent calls `create_haiku` with Japanese and English lines
-3. The **haiku appears** on the left panel with Japanese text, a divider, and English translation
-4. The **background color** changes to the AI's chosen theme color
-5. **Request another haiku** — it gets added to the gallery
-6. **Navigation arrows** appear when you have multiple haikus (◀ ▶)
-7. Browse through your collection with the prev/next buttons
-8. Each haiku has a **position indicator** (e.g., "2 / 3")
+## Expected Behavior
 
-## Technical Details
+- The agent calls `create_haiku(japanese_lines, english_lines, theme_color)` where lines are JSON arrays of 3 strings
+- The haiku is added to `_haikus` list and `_currentIndex` points to the newest
+- Japanese lines render at 28pt white, English lines at 16pt white with 0.9 opacity, separated by a thin white divider
+- The `HaikuPanel.BackgroundColor` changes to the theme color (or a fallback from `GradientColors` if parsing fails)
+- Navigation is disabled at the boundaries (PrevButton disabled at index 0, NextButton disabled at last index)
+- Each new haiku request appends to the collection without removing previous ones
 
-- One tool: `create_haiku` with `japanese_lines`, `english_lines`, and `theme_color` parameters
-- Lines are passed as JSON arrays of 3 strings (5-7-5 mora pattern for Japanese)
-- The haiku panel uses a cycling palette of gradient colors as fallback
-- Navigation state tracks the current index in the haiku collection
-- The layout is split 50/50 between the haiku display and the chat panel
+## Key Code Patterns
 
-## Inspired By
-
-[CopilotKit Tool Based Generative UI Demo](https://dojo.ag-ui.com/microsoft-agent-framework-dotnet/feature/tool_based_generative_ui) — custom tool `render` function for haiku cards.
+- **Gallery state** — `List<HaikuData> _haikus` stores all generated haikus with `_currentIndex` tracking the visible one; navigation buttons adjust the index and call `RefreshHaikuUI()` (`HaikuPage.xaml.cs:12-13, 137-153`)
+- **Color fallback** — `Color.FromArgb(theme_color)` is wrapped in try/catch; on failure, the code falls back to `GradientColors[_haikus.Count % GradientColors.Length]` (`HaikuPage.xaml.cs:63-69`)
+- **Dynamic label generation** — `RefreshHaikuUI()` clears and rebuilds `JapaneseLines` and `EnglishLines` `VerticalStackLayout` children from the haiku data (`HaikuPage.xaml.cs:88-135`)

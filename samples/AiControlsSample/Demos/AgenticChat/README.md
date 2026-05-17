@@ -1,39 +1,35 @@
-# 🎨 Agentic Chat with Frontend Tools
+# Agentic Chat
 
-## What This Demo Shows
+## Overview
 
-This demo showcases the AI chat control's **agentic chat** capabilities with **frontend tool integration**:
+Demonstrates an AI agent that can modify the app's UI in real time. The agent has a `change_background` tool that changes the page background color, showing how AI tool calls can produce immediate visual side effects.
 
-1. **Natural Conversation**: Chat with an AI assistant in a familiar chat interface
-2. **Frontend Tool Execution**: The assistant can directly interact with the UI by calling frontend-registered tools
-3. **Seamless Integration**: Tools defined in C# are automatically discovered and made available to the agent
+## Features Demonstrated
 
-## How to Interact
+- Custom `ChatSession` with inline tool definition via `AIFunctionFactory.Create`
+- AI tool execution that directly mutates MAUI UI elements (`PageRoot.BackgroundColor`)
+- `Color.TryParse()` accepting both named colors ("LightBlue") and hex values ("#ADD8E6")
+- System prompt guiding the agent to be creative with color suggestions
+- `MainThread.BeginInvokeOnMainThread` for thread-safe UI updates from tool callbacks
 
-Try asking the assistant to:
-- "Change the background to light blue"
-- "Set the background to a warm sunset orange"
-- "Change it to a dark slate color"
-- "Make the background salmon"
+## How to Use
 
-You can also chat about other topics — the assistant will respond conversationally while having the ability to use your UI tools when appropriate.
+1. Navigate to **Agentic Chat** from the app shell
+2. Type a message like "Make the background blue" or "Set it to a warm sunset orange"
+3. Observe the page background change immediately after the agent invokes the tool
+4. Try vague requests like "something calming" — the agent picks a creative color
+5. Ask non-color questions to confirm normal conversational responses still work
 
-## What You Should See
+## Expected Behavior
 
-1. **Send a message** requesting a background color change
-2. The assistant calls the `change_background` tool
-3. **The page background changes immediately** to the requested color
-4. The assistant provides a conversational response about the change
-5. **Send another message** with a different color — the background updates again
-6. You can also ask non-tool questions and get normal chat responses
+- The agent calls `change_background` with a color string whenever the user requests a color change
+- The page `Grid` background transitions to the parsed color instantly
+- If a color cannot be parsed directly, the code retries with a `#` prefix (e.g., "ADD8E6" → "#ADD8E6")
+- The assistant describes what it did after each tool invocation
+- Non-color questions receive standard conversational replies without tool calls
 
-## Technical Details
+## Key Code Patterns
 
-- A `change_background` tool is registered via `AIFunctionFactory.Create`
-- The tool uses `Color.TryParse` to set the page's `BackgroundColor`
-- The chat uses streaming responses from Azure OpenAI
-- Multiple color changes in sequence demonstrate stateful tool calling
-
-## Inspired By
-
-[CopilotKit Agentic Chat Demo](https://dojo.ag-ui.com/microsoft-agent-framework-dotnet/feature/agentic_chat) — frontend function exposure via `useCopilotAction`.
+- **Inline tool registration** — the tool lambda is defined directly in the constructor using `AIFunctionFactory.Create` with `[Description]` attributes on parameters (`AgenticChatPage.xaml.cs:13-37`)
+- **Thread-safe UI mutation** — `MainThread.BeginInvokeOnMainThread(() => PageRoot.BackgroundColor = parsed)` ensures the color change runs on the UI thread (`AgenticChatPage.xaml.cs:21-31`)
+- **Custom ChatSession** — the page creates its own `ChatSession` with a dedicated tool list rather than using the DI-registered default session (`AgenticChatPage.xaml.cs:39-47`)

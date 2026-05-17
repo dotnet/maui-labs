@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Controls.Chat;
 
@@ -91,13 +92,18 @@ public partial class ChatPanelControl : ContentView
         if (Session is null)
         {
             IsBusy = false;
+            UpdateWelcomeVisibility();
             return;
         }
 
         foreach (var entry in Session.Messages)
-            _items.Add(new ContentContext(Session, entry));
+        {
+            if (ShouldShowEntry(entry))
+                _items.Add(new ContentContext(Session, entry));
+        }
 
         IsBusy = Session.IsBusy;
+        UpdateWelcomeVisibility();
         ScrollToLatestMessage();
     }
 
@@ -112,19 +118,24 @@ public partial class ChatPanelControl : ContentView
         {
             case ChatSessionChangeKind.Reset:
                 _items.Clear();
+                UpdateWelcomeVisibility();
                 break;
 
             case ChatSessionChangeKind.MessageAdded:
-                if (e.Entry is null)
+                if (e.Entry is null || !ShouldShowEntry(e.Entry))
                     break;
 
                 var addIndex = Math.Clamp(e.Index ?? _items.Count, 0, _items.Count);
                 _items.Insert(addIndex, new ContentContext(session, e.Entry));
+                UpdateWelcomeVisibility();
                 ScrollToLatestMessage();
                 break;
 
             case ChatSessionChangeKind.MessageUpdated:
                 if (e.Entry is null || e.Index is null)
+                    break;
+
+                if (!ShouldShowEntry(e.Entry))
                     break;
 
                 if (e.Index.Value >= 0 && e.Index.Value < _items.Count)
@@ -135,6 +146,116 @@ public partial class ChatPanelControl : ContentView
                 ScrollToLatestMessage();
                 break;
         }
+    }
+
+    private bool ShouldShowEntry(ChatEntry entry)
+    {
+        if (!ShowToolCalls && entry.Content is FunctionCallContent)
+            return false;
+        if (!ShowToolResults && entry.Content is FunctionResultContent)
+            return false;
+        return true;
+    }
+
+    internal void UpdateWelcomeVisibility()
+    {
+        var showWelcome = !string.IsNullOrEmpty(WelcomeMessage) && _items.Count == 0;
+        WelcomePanel.IsVisible = showWelcome;
+        WelcomeIconLabel.Text = WelcomeIcon;
+        WelcomeMessageLabel.Text = WelcomeMessage;
+        ChatMessages.IsVisible = !showWelcome;
+
+        UpdateSuggestionsVisibility();
+    }
+
+    private void UpdateSuggestionsVisibility()
+    {
+        var showSuggestions = SuggestionPrompts is { Count: > 0 } && _items.Count == 0;
+        SuggestionsPanel.IsVisible = showSuggestions;
+
+        if (showSuggestions)
+            BuildSuggestionChips();
+    }
+
+    private void BuildSuggestionChips()
+    {
+        SuggestionsPanel.Children.Clear();
+        if (SuggestionPrompts is null)
+            return;
+
+        foreach (var prompt in SuggestionPrompts)
+        {
+            var chip = new Button
+            {
+                Text = prompt,
+                FontSize = 12,
+                Padding = new Thickness(12, 6),
+                CornerRadius = 16,
+                Margin = new Thickness(4, 2),
+                BackgroundColor = Color.FromArgb("#EEF2FF"),
+                TextColor = Color.FromArgb("#4338CA"),
+            };
+            chip.SetDynamicResource(Button.BackgroundColorProperty, "ExtensionsAI.Suggestion.Background");
+            chip.SetDynamicResource(Button.TextColorProperty, "ExtensionsAI.Suggestion.TextColor");
+            chip.Clicked += async (_, _) =>
+            {
+                if (Session is not null && !IsBusy)
+                    await Session.SendAsync(prompt);
+            };
+            SuggestionsPanel.Children.Add(chip);
+        }
+    }
+
+    private void ApplyHeaderTemplate()
+    {
+        if (HeaderTemplate is not null)
+        {
+            HeaderContent.Content = HeaderTemplate.CreateContent() as View;
+            HeaderContent.IsVisible = true;
+        }
+        else
+        {
+            HeaderContent.Content = null;
+            HeaderContent.IsVisible = false;
+        }
+    }
+
+    private void ApplyFooterTemplate()
+    {
+        if (FooterTemplate is not null)
+        {
+            FooterContent.Content = FooterTemplate.CreateContent() as View;
+            FooterContent.IsVisible = true;
+        }
+        else
+        {
+            FooterContent.Content = null;
+            FooterContent.IsVisible = false;
+        }
+    }
+
+    /// <summary>
+    /// Applies color/radius overrides from bindable properties onto the XAML elements.
+    /// Called when property-changed fires for input/send styling properties.
+    /// </summary>
+    internal void ApplyInputStyling()
+    {
+        if (SendButtonBackgroundColor is not null)
+            SendButton.BackgroundColor = SendButtonBackgroundColor;
+
+        if (InputAreaBackgroundColor is not null)
+            InputAreaBorder.BackgroundColor = InputAreaBackgroundColor;
+
+        InputAreaShape.CornerRadius = new CornerRadius(InputAreaCornerRadius);
+    }
+
+    protected override void OnHandlerChanged()
+    {
+        base.OnHandlerChanged();
+        ApplyInputStyling();
+        ApplyHeaderTemplate();
+        ApplyFooterTemplate();
+        UpdateWelcomeVisibility();
     }
 
     private async void OnSendButtonClicked(object? sender, EventArgs e)
