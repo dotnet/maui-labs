@@ -12,6 +12,9 @@
     <NoWarn>$(NoWarn);MEAI001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Controls.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Maui.Controls" />
   </ItemGroup>
