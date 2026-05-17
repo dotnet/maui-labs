@@ -9,23 +9,23 @@
 
     <Grid RowDefinitions="*,Auto">
         <!-- Chat -->
-        <controls:ChatPanelControl
+        <controls:CopilotChatView
             Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
-            <controls:ChatPanelControl.ContentTemplates>
+            <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
                 <chat:FunctionResultTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
-            </controls:ChatPanelControl.ContentTemplates>
-        </controls:ChatPanelControl>
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
 
         <!-- Plan progress footer -->
         <Border x:Name="PlanFooter" Grid.Row="1" IsVisible="False"
                 BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#1E293B}"
                 Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeShape="Rectangle" StrokeThickness="0,1,0,0"
+                StrokeShape="Rectangle" StrokeThickness="1"
                 Padding="16,12">
             <VerticalStackLayout Spacing="8">
                 <Label Text="🚀 Plan Progress" FontSize="14" FontAttributes="Bold" />

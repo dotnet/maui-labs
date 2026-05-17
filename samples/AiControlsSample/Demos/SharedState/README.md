@@ -6,7 +6,7 @@ A split-pane recipe editor and chat panel demonstrating bidirectional state sync
 
 ## Features Demonstrated
 
-- Split-pane layout with a form editor (left) and `ChatPanelControl` (right)
+- Split-pane layout with a form editor (left) and `CopilotChatView` (right)
 - `update_recipe` tool that accepts title, skill level, cooking time, and ingredients JSON
 - "Improve with AI" button that serializes the current form state and sends it to the chat
 - Dynamic ingredient list rendered programmatically from a `List<(string Icon, string Name, string Amount)>`

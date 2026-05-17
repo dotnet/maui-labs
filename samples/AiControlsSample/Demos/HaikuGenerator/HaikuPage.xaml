@@ -50,16 +50,16 @@
         </Grid>
 
         <!-- RIGHT: Chat Panel -->
-        <controls:ChatPanelControl Grid.Column="1"
+        <controls:CopilotChatView Grid.Column="1"
             Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
-            <controls:ChatPanelControl.ContentTemplates>
+            <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
                 <chat:FunctionResultTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
-            </controls:ChatPanelControl.ContentTemplates>
-        </controls:ChatPanelControl>
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
     </Grid>
 </ContentPage>
