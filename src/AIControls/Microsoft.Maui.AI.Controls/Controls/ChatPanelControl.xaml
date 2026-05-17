@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Microsoft.Maui.AI.Controls.Controls.ChatPanelControl"
+             x:Name="Self">
+
+    <Grid RowDefinitions="*,Auto,Auto" RowSpacing="0">
+        <!-- Messages -->
+        <CollectionView x:Name="ChatMessages"
+                        AutomationId="ChatMessages"
+                        Grid.Row="0"
+                        Margin="12,8,12,0" />
+
+        <!-- Busy indicator -->
+        <ActivityIndicator Grid.Row="1"
+                           AutomationId="ChatBusyIndicator"
+                           IsRunning="{Binding IsBusy, Source={x:Reference Self}}"
+                           IsVisible="{Binding IsBusy, Source={x:Reference Self}}"
+                           Color="#5B8C5A"
+                           Margin="0,6" />
+
+        <!-- Input Area -->
+        <Border Grid.Row="2" Margin="12,8,12,12" Padding="6"
+                BackgroundColor="{AppThemeBinding Light=#F0EBE3, Dark=#33302A}"
+                StrokeThickness="0">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="14" />
+            </Border.StrokeShape>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <Entry Placeholder="Type a message..."
+                       AutomationId="ChatInput"
+                       Text="{Binding Text, Source={x:Reference Self}, Mode=TwoWay}"
+                       Completed="OnInputCompleted"
+                       FontSize="14"
+                       BackgroundColor="Transparent" />
+                <Button Grid.Column="1" Text="&#x27A4;"
+                        AutomationId="SendMessageButton"
+                        Clicked="OnSendButtonClicked"
+                        BackgroundColor="#5B8C5A"
+                        TextColor="White" FontSize="16"
+                        WidthRequest="42" HeightRequest="42"
+                        CornerRadius="12" Padding="0" />
+            </Grid>
+        </Border>
+    </Grid>
+
+</ContentView>
