@@ -1,4 +1,7 @@
 <Solution>
+  <Project Path="Microsoft.Maui.AI.Chat/Microsoft.Maui.AI.Chat.csproj" />
+  <Project Path="Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
   <Project Path="Microsoft.Maui.AI.Controls/Microsoft.Maui.AI.Controls.csproj" />
   <Project Path="Microsoft.Maui.AI.Controls.Tests/Microsoft.Maui.AI.Controls.Tests.csproj" />
+  <Project Path="../../samples/AiControlsSample/AiControlsSample.csproj" />
 </Solution>
