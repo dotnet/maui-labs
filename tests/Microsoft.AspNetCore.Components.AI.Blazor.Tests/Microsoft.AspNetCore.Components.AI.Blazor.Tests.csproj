@@ -30,7 +30,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Baselines\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\tests\Microsoft.AspNetCore.Components.AI.Core.Tests\Baselines\**\*.json"
+             Link="Baselines\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
