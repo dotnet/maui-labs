@@ -20,6 +20,17 @@ internal sealed class TestChatClient : IChatClient
     {
     }
 
+    /// <summary>Creates a client that streams multiple text tokens separately.</summary>
+    public static TestChatClient MultiToken(params string[] tokens)
+    {
+        return new TestChatClient((_, _, _) =>
+        {
+            // Return a response with multiple TextContent items, each will be streamed individually
+            var contents = tokens.Select(t => (AIContent)new TextContent(t)).ToList();
+            return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, contents)]));
+        });
+    }
+
     /// <summary>Creates a client with a custom handler.</summary>
     public TestChatClient(Func<IEnumerable<ChatMessage>, ChatOptions?, CancellationToken, Task<ChatResponse>> handler)
     {
