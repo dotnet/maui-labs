@@ -1,20 +1,27 @@
-using Microsoft.Maui.AI.Chat;
+using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Extensions.AI;
 
 namespace AiControlsSample;
 
 public partial class ToolRenderingPage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
-    public ToolRenderingPage(ChatSession chatSession)
+    public ToolRenderingPage(IChatClient chatClient)
     {
-        ChatSession = chatSession;
-        ChatSession.SystemPrompt = """
-            You are a helpful assistant with access to tools.
-            When asked about the weather, use the GetCurrentWeather tool.
-            When asked to calculate something, use the calculate tool.
-            Always explain what you found after using a tool.
-            """;
+        var tools = new SampleTools().GetTools();
+        var chatOptions = new ChatOptions
+        {
+            Instructions = """
+                You are a helpful assistant with access to tools.
+                When asked about the weather, use the GetCurrentWeather tool.
+                When asked to calculate something, use the calculate tool.
+                Always explain what you found after using a tool.
+                """,
+            Tools = [.. tools]
+        };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
     }

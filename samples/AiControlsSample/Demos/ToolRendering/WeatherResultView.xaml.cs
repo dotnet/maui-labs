@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls;
 
@@ -13,10 +14,10 @@ public partial class WeatherResultView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        if (ContentContext?.Content is not FunctionResultContent result)
+        if (ContentContext?.Block is not FunctionInvocationContentBlock ficb || ficb.Result is not { } resultContent)
             return;
 
-        var json = result.Result?.ToString();
+        var json = resultContent.Result?.ToString();
         if (string.IsNullOrWhiteSpace(json))
             return;
 

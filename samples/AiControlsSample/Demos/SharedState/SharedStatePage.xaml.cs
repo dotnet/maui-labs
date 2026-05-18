@@ -1,13 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class SharedStatePage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
     private readonly List<(string Icon, string Name, string Amount)> _ingredients = [
         ("🍝", "Pasta", "200g"),
@@ -25,15 +25,18 @@ public partial class SharedStatePage : ContentPage
                 "Update the recipe with improved values. Call this to modify the recipe form.")
         };
 
-        ChatSession = new ChatSession(tools, chatClient)
+        var chatOptions = new ChatOptions
         {
-            SystemPrompt = """
+            Instructions = """
                 You are a recipe copilot. The user is editing a recipe and you help improve it.
                 When you want to update the recipe, call the update_recipe tool with the improved values.
                 Always explain what you changed and why.
                 Keep the recipe practical and delicious.
-                """
+                """,
+            Tools = [.. tools]
         };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
         RefreshIngredientsUI();
@@ -112,7 +115,7 @@ public partial class SharedStatePage : ContentPage
     private async void OnImproveClicked(object? sender, EventArgs e)
     {
         var recipeJson = BuildRecipeJson();
-        await ChatSession.SendAsync($"Here is my current recipe, please improve it:\n{recipeJson}");
+        await Session.SendMessageAsync($"Here is my current recipe, please improve it:\n{recipeJson}");
     }
 
     private string BuildRecipeJson()

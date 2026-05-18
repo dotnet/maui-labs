@@ -1,4 +1,5 @@
-using Microsoft.Maui.AI.Chat;
+using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Extensions.AI;
 
 namespace AiControlsSample;
 
@@ -6,16 +7,32 @@ public partial class PlaygroundPage : ContentPage
 {
     private const double SidebarWidth = 300;
 
-    public ChatSession ChatSession { get; }
+    private readonly IChatClient _chatClient;
+    private readonly IList<AITool> _tools;
 
-    public PlaygroundPage(ChatSession chatSession)
+    public AgentContext Session { get; private set; }
+
+    public PlaygroundPage(IChatClient chatClient)
     {
-        ChatSession = chatSession;
-        ChatSession.SystemPrompt = "You are a helpful assistant with access to tools for weather, math, facts, and app info.";
+        _chatClient = chatClient;
+        _tools = new SampleTools().GetTools();
+
+        Session = CreateSession("You are a helpful assistant with access to tools for weather, math, facts, and app info.");
 
         InitializeComponent();
 
         SettingsPanel.WidthRequest = SidebarWidth;
+    }
+
+    private AgentContext CreateSession(string systemPrompt)
+    {
+        var chatOptions = new ChatOptions
+        {
+            Instructions = systemPrompt,
+            Tools = [.. _tools]
+        };
+        var agent = new UIAgent(_chatClient, chatOptions);
+        return new AgentContext(agent);
     }
 
     protected override void OnSizeAllocated(double width, double height)
@@ -29,11 +46,16 @@ public partial class PlaygroundPage : ContentPage
         }
     }
 
-    private void OnClearChatClicked(object? sender, EventArgs e) => ChatSession.Clear();
+    private void OnClearChatClicked(object? sender, EventArgs e)
+    {
+        Session = CreateSession(SystemPromptEditor.Text);
+        ChatPanel.Session = Session;
+    }
 
     private void OnApplySystemPromptClicked(object? sender, EventArgs e)
     {
-        ChatSession.SystemPrompt = SystemPromptEditor.Text;
+        Session = CreateSession(SystemPromptEditor.Text);
+        ChatPanel.Session = Session;
     }
 
     private void OnPlaceholderChanged(object? sender, TextChangedEventArgs e)
@@ -80,7 +102,7 @@ public partial class PlaygroundPage : ContentPage
         if (sender is Button btn && !string.IsNullOrWhiteSpace(btn.Text))
         {
             var prompt = btn.Text.Length > 2 ? btn.Text[2..].Trim() : btn.Text;
-            await ChatSession.SendAsync(prompt);
+            await Session.SendMessageAsync(prompt);
         }
     }
 

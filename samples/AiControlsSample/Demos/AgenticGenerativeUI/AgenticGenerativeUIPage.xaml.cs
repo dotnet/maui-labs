@@ -1,13 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class AgenticGenerativeUIPage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
     private List<PlanStep>? _currentSteps;
 
@@ -19,9 +19,9 @@ public partial class AgenticGenerativeUIPage : ContentPage
             AIFunctionFactory.Create(CompleteStep, "complete_step", "Mark a plan step as completed by zero-based index.")
         };
 
-        ChatSession = new ChatSession(tools, chatClient)
+        var chatOptions = new ChatOptions
         {
-            SystemPrompt = """
+            Instructions = """
                 You are an auto-planner. When the user asks you to do something:
                 1. Create a plan by calling create_plan with step descriptions.
                 2. Immediately start executing each step, calling complete_step for each.
@@ -29,8 +29,11 @@ public partial class AgenticGenerativeUIPage : ContentPage
                 4. After all steps are done, summarize what you accomplished.
 
                 Create 3-5 concrete steps. Execute them one by one.
-                """
+                """,
+            Tools = [.. tools]
         };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
     }
