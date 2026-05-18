@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'src/AIControls/**'
+      - 'tests/Microsoft.AspNetCore.Components.AI.*/**'
+      - 'tests/Microsoft.Maui.AI.Chat.Controls.Tests/**'
+      - 'samples/AiControls*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +19,9 @@ on:
     branches: [main]
     paths:
       - 'src/AIControls/**'
+      - 'tests/Microsoft.AspNetCore.Components.AI.*/**'
+      - 'tests/Microsoft.Maui.AI.Chat.Controls.Tests/**'
+      - 'samples/AiControls*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
