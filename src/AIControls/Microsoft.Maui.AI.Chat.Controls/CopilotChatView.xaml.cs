@@ -254,6 +254,11 @@ public partial class CopilotChatView : TemplatedView
     private void OnStatusChanged(ConversationStatus status)
     {
         IsBusy = status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput;
+
+        if (status == ConversationStatus.Error && Session?.Error is Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CopilotChatView] Error: {ex}");
+        }
     }
 
     private void OnBlockAdded(ConversationTurn turn, ContentBlock block)
