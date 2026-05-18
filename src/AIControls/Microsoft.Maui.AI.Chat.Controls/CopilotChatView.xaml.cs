@@ -260,10 +260,41 @@ public partial class CopilotChatView : TemplatedView
             System.Diagnostics.Debug.WriteLine($"[CopilotChatView] Error: {ex}");
         }
 
+        // Auto-invoke UIActionBlocks when the conversation pauses at AwaitingInput.
+        // This matches the upstream pattern (S10_UIActionsTest) where UIActions are
+        // automatically executed by the UI layer unless a ToolApprovalTemplate intercepts them.
+        if (status == ConversationStatus.AwaitingInput && Session is not null)
+        {
+            AutoInvokeUIActionsAsync();
+        }
+
         // If session was cleared (idle with no turns), rebuild to show welcome state
         if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
         {
             RebuildFromSession();
+        }
+    }
+
+    private async void AutoInvokeUIActionsAsync()
+    {
+        if (Session is null)
+            return;
+
+        var pendingAction = Session.Turns
+            .SelectMany(t => t.ResponseBlocks)
+            .OfType<Microsoft.AspNetCore.Components.AI.UIActionBlock>()
+            .LastOrDefault(b => !b.IsComplete);
+
+        if (pendingAction is not null)
+        {
+            try
+            {
+                await pendingAction.InvokeAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CopilotChatView] UIAction invoke failed: {ex}");
+            }
         }
     }
 
