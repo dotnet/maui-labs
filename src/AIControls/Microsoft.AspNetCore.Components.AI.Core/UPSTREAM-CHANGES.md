@@ -11,7 +11,8 @@ This project contains code copied from [dotnet/aspnetcore](https://github.com/do
 
 | File | Change | Reason |
 |------|--------|--------|
-| (none) | | |
+| `Blocks/ContentBlock.cs` | `Id` setter changed from `internal` to `public` | Source generator emits handlers in consumer assemblies that need to set `Id` from `FunctionCallContent.CallId` |
+| `Engine/AgentContext.cs` | Added `uninvokedToolBlocks.RemoveAll(b => b.Result is not null)` after streaming loop (line ~132) | Prevents double tool invocation when `FunctionInvokingChatClient` middleware already handled the call during streaming |
 
 ## Wanted Upstream
 
