@@ -10,32 +10,29 @@ public partial class AgenticChatPage : ContentPage
 
     public AgenticChatPage(IChatClient chatClient)
     {
-        var tools = new List<AITool>
-        {
-            AIFunctionFactory.Create(
-                [Description("Change the background color of the page. Always use a CSS hex color value like '#FF8C00' or '#ADD8E6'.")]
-                (
-                    [Description("CSS hex color value, e.g. '#FF8C00', '#ADD8E6', '#6366F1'")] string color
-                ) =>
+        // change_background is a UIAction (frontend tool) — the conversation pauses
+        // and the framework renders a UIActionBlock inline. The UI auto-invokes it,
+        // which executes the color change and resumes the conversation.
+        var changeBackground = AIFunctionFactory.Create(
+            [Description("Change the background color of the page. Always use a CSS hex color value like '#FF8C00' or '#ADD8E6'.")]
+            ([Description("CSS hex color value, e.g. '#FF8C00', '#ADD8E6', '#6366F1'")] string color) =>
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
                 {
-                    MainThread.BeginInvokeOnMainThread(() =>
+                    if (!Color.TryParse(color, out var parsed))
                     {
-                        // Try parsing as-is, then with # prefix
-                        if (!Color.TryParse(color, out var parsed))
-                        {
-                            Color.TryParse($"#{color.TrimStart('#')}", out parsed);
-                        }
+                        Color.TryParse($"#{color.TrimStart('#')}", out parsed);
+                    }
 
-                        if (parsed is not null)
-                        {
-                            PageRoot.BackgroundColor = parsed;
-                        }
-                    });
-                    return $"Background changed to {color}.";
-                },
-                "change_background",
-                "Change the background color of the page. Use CSS hex colors like '#FF8C00'.")
-        };
+                    if (parsed is not null)
+                    {
+                        PageRoot.BackgroundColor = parsed;
+                    }
+                });
+                return $"Background changed to {color}.";
+            },
+            "change_background",
+            "Change the background color of the page. Use CSS hex colors like '#FF8C00'.");
 
         var chatOptions = new ChatOptions
         {
@@ -47,9 +44,13 @@ public partial class AgenticChatPage : ContentPage
                 Be creative with color suggestions if the user is vague.
                 After changing the background, briefly describe what you did.
                 """,
-            Tools = [.. tools]
         };
-        var agent = new UIAgent(chatClient, chatOptions);
+
+        var agent = new UIAgent(chatClient, options =>
+        {
+            options.ChatOptions = chatOptions;
+            options.RegisterUIAction(changeBackground);
+        });
         Session = new AgentContext(agent);
 
         InitializeComponent();

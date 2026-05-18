@@ -13,10 +13,14 @@ public partial class AgenticGenerativeUIPage : ContentPage
 
     public AgenticGenerativeUIPage(IChatClient chatClient)
     {
+        // These are backend tools — they auto-execute without approval.
+        // The "generative UI" aspect is the footer updating as steps complete.
         var tools = new List<AITool>
         {
-            AIFunctionFactory.Create(CreatePlan, "create_plan", "Create a plan with the given steps. Returns the plan ID."),
-            AIFunctionFactory.Create(CompleteStep, "complete_step", "Mark a plan step as completed by zero-based index.")
+            AIFunctionFactory.Create(CreatePlan, "create_plan",
+                "Create a plan with the given steps. Returns the plan ID."),
+            AIFunctionFactory.Create(CompleteStep, "complete_step",
+                "Mark a plan step as completed by zero-based index.")
         };
 
         var chatOptions = new ChatOptions
