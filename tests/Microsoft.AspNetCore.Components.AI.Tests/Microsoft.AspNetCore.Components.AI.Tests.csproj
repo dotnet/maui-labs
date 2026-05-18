@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.AspNetCore.Components.AI.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);MEAI001;BL0006</NoWarn>
+  </PropertyGroup>
+
+  <!-- Exclude Azure-dependent integration tests that need Azure.AI.OpenAI -->
+  <ItemGroup>
+    <Compile Remove="Engine\UIAgentRecordedTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Core\Microsoft.AspNetCore.Components.AI.Core.csproj" />
+    <ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Blazor\Microsoft.AspNetCore.Components.AI.Blazor.csproj" />
+    <ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.SourceGenerators\Microsoft.AspNetCore.Components.AI.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Baselines\**\*.recording.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
