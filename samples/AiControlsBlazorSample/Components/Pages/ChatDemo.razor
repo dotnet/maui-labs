@@ -1,0 +1,32 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@inject IChatClient ChatClient
+
+<ChatPage Agent="@_agent" />
+
+@code {
+    private UIAgent _agent = default!;
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(GetWeather, "GetCurrentWeather", "Get the current weather for a location")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Tools = tools
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+    }
+
+    [System.ComponentModel.Description("Get current weather for a city")]
+    private static string GetWeather(
+        [System.ComponentModel.Description("City name")] string city)
+    {
+        return $"The weather in {city} is sunny, 72°F with light clouds.";
+    }
+}
