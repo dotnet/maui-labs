@@ -7,6 +7,10 @@
              x:Name="ThisPage"
              Title="Shared State">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="🗑️" Clicked="OnClearClicked" />
+    </ContentPage.ToolbarItems>
+
     <Grid ColumnDefinitions="*,*" ColumnSpacing="0">
         <!-- Left: Recipe editor -->
         <Border Grid.Column="0"

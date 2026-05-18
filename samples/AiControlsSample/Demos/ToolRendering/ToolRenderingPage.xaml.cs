@@ -30,4 +30,9 @@ public partial class ToolRenderingPage : ContentPage
 
         InitializeComponent();
     }
+
+    private void OnClearClicked(object? sender, EventArgs e)
+    {
+        Session.Clear();
+    }
 }

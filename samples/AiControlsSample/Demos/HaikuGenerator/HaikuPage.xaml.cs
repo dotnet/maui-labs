@@ -155,6 +155,14 @@ public partial class HaikuPage : ContentPage
         }
     }
 
+    private void OnClearClicked(object? sender, EventArgs e)
+    {
+        Session.Clear();
+        _haikus.Clear();
+        _currentIndex = -1;
+        RefreshHaikuUI();
+    }
+
     private sealed class HaikuData
     {
         public List<string> Japanese { get; init; } = [];
