@@ -70,4 +70,11 @@ public partial class PredictiveStatePage : ContentPage
         });
         await Session.SendMessageAsync("I reject the changes, please try again.");
     }
+
+    private void OnClearClicked(object? sender, EventArgs e)
+    {
+        Session.Clear();
+        _currentDocument = "";
+        DocumentLabel.Text = "Ask the AI to write something...";
+    }
 }

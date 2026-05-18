@@ -8,6 +8,10 @@
              x:Name="ThisPage"
              Title="Tool Rendering">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="🗑️" Clicked="OnClearClicked" />
+    </ContentPage.ToolbarItems>
+
     <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
             WelcomeMessage="Ask me about weather, math, facts, or app info. Weather results show a rich card!"
             WelcomeIcon="🔧">

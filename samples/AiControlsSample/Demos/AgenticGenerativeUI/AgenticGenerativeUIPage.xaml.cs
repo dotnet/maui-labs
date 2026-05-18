@@ -92,6 +92,14 @@ public partial class AgenticGenerativeUIPage : ContentPage
         }
     }
 
+    private void OnClearClicked(object? sender, EventArgs e)
+    {
+        Session.Clear();
+        _currentSteps = null;
+        PlanFooter.IsVisible = false;
+        StepsLayout.Children.Clear();
+    }
+
     private sealed class PlanStep
     {
         public string Description { get; init; } = string.Empty;

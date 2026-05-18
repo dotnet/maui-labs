@@ -7,6 +7,10 @@
              x:Name="ThisPage"
              Title="Agentic Generative UI">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="🗑️" Clicked="OnClearClicked" />
+    </ContentPage.ToolbarItems>
+
     <Grid RowDefinitions="*,Auto">
         <!-- Chat -->
         <controls:CopilotChatView

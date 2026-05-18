@@ -259,6 +259,12 @@ public partial class CopilotChatView : TemplatedView
         {
             System.Diagnostics.Debug.WriteLine($"[CopilotChatView] Error: {ex}");
         }
+
+        // If session was cleared (idle with no turns), rebuild to show welcome state
+        if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
+        {
+            RebuildFromSession();
+        }
     }
 
     private void OnBlockAdded(ConversationTurn turn, ContentBlock block)

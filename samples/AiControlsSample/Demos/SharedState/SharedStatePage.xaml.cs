@@ -130,4 +130,9 @@ public partial class SharedStatePage : ContentPage
         };
         return JsonSerializer.Serialize(recipe, new JsonSerializerOptions { WriteIndented = true });
     }
+
+    private void OnClearClicked(object? sender, EventArgs e)
+    {
+        Session.Clear();
+    }
 }
