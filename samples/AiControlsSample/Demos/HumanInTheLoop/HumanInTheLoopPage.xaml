@@ -9,7 +9,14 @@
 
     <Grid ColumnDefinitions="*,Auto">
         <!-- Chat panel -->
-        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="Ask me to create a plan! I'll show the steps and wait for your approval before executing."
+            WelcomeIcon="📋">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Create a plan to organize my desk</x:String>
+                <x:String>Plan how to learn a new language</x:String>
+                <x:String>Help me plan a weekend trip</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

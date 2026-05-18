@@ -10,7 +10,14 @@
     <Grid RowDefinitions="*,Auto">
         <!-- Chat -->
         <controls:CopilotChatView
-            Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="I can generate UI and execute multi-step plans! Watch the progress footer as I work."
+            WelcomeIcon="🚀">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Build a simple landing page</x:String>
+                <x:String>Create a 3-step onboarding flow</x:String>
+                <x:String>Design a color palette for a tech startup</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

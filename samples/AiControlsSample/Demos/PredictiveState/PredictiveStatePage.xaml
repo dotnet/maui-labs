@@ -44,7 +44,14 @@
 
         <!-- RIGHT: Chat Panel -->
         <controls:CopilotChatView Grid.Column="1"
-            Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="I'll write content that appears in the document editor as I type — watch it update live!"
+            WelcomeIcon="📝">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Write a paragraph about space exploration</x:String>
+                <x:String>Draft a short email to a colleague</x:String>
+                <x:String>Write a product description for a smartwatch</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

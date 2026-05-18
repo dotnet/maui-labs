@@ -51,7 +51,14 @@
 
         <!-- RIGHT: Chat Panel -->
         <controls:CopilotChatView Grid.Column="1"
-            Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="I'll compose haiku poetry in both Japanese and English! Each one appears on the left."
+            WelcomeIcon="🎋">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Write a haiku about the ocean</x:String>
+                <x:String>A haiku about cherry blossoms</x:String>
+                <x:String>Something about a quiet mountain morning</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

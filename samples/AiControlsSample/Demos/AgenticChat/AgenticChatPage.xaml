@@ -9,7 +9,14 @@
 
     <Grid x:Name="PageRoot"
           BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E2E}">
-        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="Ask me to change the page background color! I can pick creative colors for any mood."
+            WelcomeIcon="🎨">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Make the background a warm sunset orange</x:String>
+                <x:String>Something calming and peaceful</x:String>
+                <x:String>Surprise me with a bold color</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

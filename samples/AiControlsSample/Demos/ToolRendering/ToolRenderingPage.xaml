@@ -8,7 +8,14 @@
              x:Name="ThisPage"
              Title="Tool Rendering">
 
-    <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+    <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="Ask me about weather, math, facts, or app info. Weather results show a rich card!"
+            WelcomeIcon="🔧">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>What's the weather in Tokyo?</x:String>
+                <x:String>Calculate (42 * 3) + 7</x:String>
+                <x:String>Tell me a random fact</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
         <controls:CopilotChatView.ContentTemplates>
             <chat:TextContentTemplate Role="User" />
             <chat:TextContentTemplate Role="Assistant" />

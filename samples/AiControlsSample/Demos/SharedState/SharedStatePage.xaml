@@ -70,7 +70,14 @@
 
         <!-- Right: Chat panel -->
         <controls:CopilotChatView Grid.Column="1"
-            Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="I'm your recipe assistant! Edit the recipe on the left, then ask me to improve it."
+            WelcomeIcon="🍳">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Can you improve my recipe?</x:String>
+                <x:String>Make it healthier</x:String>
+                <x:String>Suggest a variation for vegetarians</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />
