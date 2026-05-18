@@ -35,6 +35,7 @@
     <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIOpenAIVersion)" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="$(AzureAIOpenAIVersion)" />
+    <PackageVersion Include="Azure.Identity" Version="$(AzureIdentityVersion)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="$(CommunityToolkitMvvmVersion)" />
   </ItemGroup>
 

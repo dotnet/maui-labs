@@ -3,8 +3,9 @@
   <Project Path="Microsoft.AspNetCore.Components.AI.Blazor/Microsoft.AspNetCore.Components.AI.Blazor.csproj" />
   <Project Path="Microsoft.AspNetCore.Components.AI.SourceGenerators/Microsoft.AspNetCore.Components.AI.SourceGenerators.csproj" />
   <Project Path="Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
-  <Project Path="../../tests/Microsoft.AspNetCore.Components.AI.Tests/Microsoft.AspNetCore.Components.AI.Tests.csproj" />
   <Project Path="../../tests/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
+  <Project Path="../../tests/Microsoft.AspNetCore.Components.AI.Core.Tests/Microsoft.AspNetCore.Components.AI.Core.Tests.csproj" />
+  <Project Path="../../tests/Microsoft.AspNetCore.Components.AI.Blazor.Tests/Microsoft.AspNetCore.Components.AI.Blazor.Tests.csproj" />
   <Project Path="../../samples/AiControlsSample/AiControlsSample.csproj" />
   <Project Path="../../samples/AiControlsBlazorSample/AiControlsBlazorSample.csproj" />
 </Solution>

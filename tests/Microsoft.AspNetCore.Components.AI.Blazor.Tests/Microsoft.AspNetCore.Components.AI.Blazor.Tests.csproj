@@ -8,11 +8,6 @@
     <NoWarn>$(NoWarn);MEAI001;BL0006</NoWarn>
   </PropertyGroup>
 
-  <!-- Exclude Azure-dependent integration tests that need Azure.AI.OpenAI -->
-  <ItemGroup>
-    <Compile Remove="Engine\UIAgentRecordedTests.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
@@ -31,13 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Baselines\**\*.recording.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit" />
+    <Content Include="Baselines\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

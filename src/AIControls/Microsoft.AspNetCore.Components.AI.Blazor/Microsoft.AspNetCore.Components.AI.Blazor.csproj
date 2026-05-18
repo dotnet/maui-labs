@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.AspNetCore.Components.AI.Tests" />
+    <InternalsVisibleTo Include="Microsoft.AspNetCore.Components.AI.Blazor.Tests" />
   </ItemGroup>
 
   <ItemGroup>
