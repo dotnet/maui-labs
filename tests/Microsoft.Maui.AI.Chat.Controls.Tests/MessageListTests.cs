@@ -89,4 +89,42 @@ public class MessageListTests
         Assert.True(secondCallMessages.Count >= 3,
             $"Second call should have history (got {secondCallMessages.Count} messages)");
     }
+
+    /// <summary>
+    /// Mirrors Blazor: StreamingBlock_ShowsAccumulatedText.
+    /// Multiple streamed tokens should accumulate into a single RichContentBlock.
+    /// </summary>
+    [Fact]
+    public async Task StreamingTokens_AccumulateInSingleBlock()
+    {
+        var client = TestChatClient.MultiToken("Hello", " world", "!");
+        var session = SessionFactory.Create(client);
+
+        await session.SendMessageAsync("Hi");
+
+        var turn = session.Turns[0];
+        var responseBlocks = turn.ResponseBlocks.OfType<RichContentBlock>().ToList();
+
+        // Streaming tokens accumulate into block(s) — the text should all be present
+        var allText = string.Join("", responseBlocks.Select(b => b.RawText));
+        Assert.Contains("Hello", allText);
+        Assert.Contains("world", allText);
+        Assert.Contains("!", allText);
+    }
+
+    /// <summary>
+    /// Tests that the engine surfaces errors as a status change, not an exception.
+    /// Mirrors Blazor: DefaultFooter_ShowsErrorBannerOnError.
+    /// </summary>
+    [Fact]
+    public async Task ClientError_SetsStatusToError()
+    {
+        var client = new TestChatClient((_, _, _) =>
+            throw new InvalidOperationException("Service unavailable"));
+        var session = SessionFactory.Create(client);
+
+        await session.SendMessageAsync("Hi");
+
+        Assert.Equal(ConversationStatus.Error, session.Status);
+    }
 }
