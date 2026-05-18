@@ -8,73 +8,61 @@ public partial class PredictiveStatePage : ContentPage
 {
     public AgentContext Session { get; }
 
-    private string _currentDocument = string.Empty;
-    private string _pendingDocument = string.Empty;
-
     public PredictiveStatePage(IChatClient chatClient)
     {
-        var tools = new List<AITool>
-        {
-            AIFunctionFactory.Create(WriteDocument, "write_document",
-                "Write or replace the document content. Shows a preview to the user.")
-        };
+        // write_document is a UIAction — the conversation pauses at AwaitingInput
+        // showing a UIActionBlock inline. The UI auto-invokes it, which updates
+        // the document editor and resumes the conversation.
+        var writeDocument = AIFunctionFactory.Create(
+            [Description("Write or replace the document content. The content appears in the document editor.")]
+            ([Description("The full document text in markdown")] string content) =>
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    DocumentLabel.Text = content;
+                    WritingIndicator.IsVisible = false;
+                });
+                return "Document updated successfully.";
+            },
+            "write_document",
+            "Write or replace the document content. Shows it in the document editor.");
 
         var chatOptions = new ChatOptions
         {
             Instructions = """
                 You are a document writer. When the user asks you to write or edit:
                 1. Call write_document with the full document text.
-                2. The user will see the content and can Accept or Reject it.
-                3. If accepted, the document is saved. If rejected, you'll be asked to try again.
+                2. The content will appear in the document editor on the left.
+                3. After writing, briefly describe what you wrote.
 
                 Write in markdown format. Be creative and detailed.
                 When editing, preserve the overall structure but improve the requested parts.
                 """,
-            Tools = [.. tools]
         };
-        var agent = new UIAgent(chatClient, chatOptions);
+
+        var agent = new UIAgent(chatClient, options =>
+        {
+            options.ChatOptions = chatOptions;
+            options.RegisterUIAction(writeDocument);
+        });
         Session = new AgentContext(agent);
 
         InitializeComponent();
-    }
 
-    [Description("Write or replace the document content. Shows a preview to the user.")]
-    private string WriteDocument(
-        [Description("The full document text in markdown")] string content)
-    {
-        _pendingDocument = content;
-        MainThread.BeginInvokeOnMainThread(() =>
+        // Show writing indicator when streaming starts
+        Session.RegisterOnStatusChanged(status =>
         {
-            DocumentLabel.Text = content;
-            WritingIndicator.IsVisible = false;
-            ConfirmButtons.IsVisible = true;
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                WritingIndicator.IsVisible = status == ConversationStatus.Streaming;
+            });
         });
-        return "Document preview shown to user. Waiting for acceptance.";
-    }
-
-    private async void OnAcceptClicked(object? sender, EventArgs e)
-    {
-        _currentDocument = _pendingDocument;
-        ConfirmButtons.IsVisible = false;
-        await Session.SendMessageAsync("I accept the changes.");
-    }
-
-    private async void OnRejectClicked(object? sender, EventArgs e)
-    {
-        ConfirmButtons.IsVisible = false;
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            DocumentLabel.Text = string.IsNullOrEmpty(_currentDocument)
-                ? "Ask the AI to write something..."
-                : _currentDocument;
-        });
-        await Session.SendMessageAsync("I reject the changes, please try again.");
     }
 
     private void OnClearClicked(object? sender, EventArgs e)
     {
         Session.Clear();
-        _currentDocument = "";
         DocumentLabel.Text = "Ask the AI to write something...";
+        WritingIndicator.IsVisible = false;
     }
 }

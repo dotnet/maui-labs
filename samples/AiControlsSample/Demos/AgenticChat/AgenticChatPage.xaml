@@ -26,6 +26,7 @@
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
                 <chat:FunctionResultTemplate />
+                <chat:ToolApprovalTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
             </controls:CopilotChatView.ContentTemplates>

@@ -28,14 +28,6 @@
                            TextColor="{AppThemeBinding Light=#6366F1, Dark=#818CF8}"
                            VerticalOptions="Center" IsVisible="False" />
                 </HorizontalStackLayout>
-                <HorizontalStackLayout Grid.Column="1" Spacing="8" x:Name="ConfirmButtons" IsVisible="False">
-                    <Button Text="✅ Accept" FontSize="12" Padding="10,6" CornerRadius="6"
-                            BackgroundColor="#22C55E" TextColor="White"
-                            Clicked="OnAcceptClicked" />
-                    <Button Text="❌ Reject" FontSize="12" Padding="10,6" CornerRadius="6"
-                            BackgroundColor="#EF4444" TextColor="White"
-                            Clicked="OnRejectClicked" />
-                </HorizontalStackLayout>
             </Grid>
 
             <!-- Document content -->
@@ -49,7 +41,7 @@
         <!-- RIGHT: Chat Panel -->
         <controls:CopilotChatView Grid.Column="1"
             Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
-            WelcomeMessage="I'll write content that appears in the document editor as I type — watch it update live!"
+            WelcomeMessage="I'll write content that appears in the document editor — watch it update as I work!"
             WelcomeIcon="📝">
             <controls:CopilotChatView.SuggestionPrompts>
                 <x:String>Write a paragraph about space exploration</x:String>
@@ -61,6 +53,7 @@
                 <chat:TextContentTemplate Role="Assistant" />
                 <chat:FunctionCallTemplate />
                 <chat:FunctionResultTemplate />
+                <chat:ToolApprovalTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
             </controls:CopilotChatView.ContentTemplates>
