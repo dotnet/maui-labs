@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.AspNetCore.Components.AI</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Description>Headless AI conversation engine extracted from Microsoft.AspNetCore.Components.AI. Provides UIAgent, AgentContext, BlockMappingPipeline, ContentBlock hierarchy, and RichText AST. Zero UI dependencies.</Description>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.AspNetCore.Components.AI.Core</PackageId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress warnings inherited from upstream code -->
+    <NoWarn>$(NoWarn);RS0016;RS0017;RS0026;RS0037;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.AspNetCore.Components.AI.Core.Tests" />
+    <InternalsVisibleTo Include="Microsoft.AspNetCore.Components.AI.Blazor" />
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>
