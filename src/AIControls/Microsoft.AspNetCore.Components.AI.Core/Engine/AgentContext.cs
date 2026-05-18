@@ -129,6 +129,10 @@ public class AgentContext : IDisposable
 
                 currentMessage = null;
 
+                // Remove tool blocks that were already resolved during streaming
+                // (e.g., FunctionInvokingChatClient handled the invocation internally)
+                uninvokedToolBlocks.RemoveAll(b => b.Result is not null);
+
                 if (interactiveBlocks.Count == 0 && uninvokedToolBlocks.Count == 0)
                 {
                     break;
