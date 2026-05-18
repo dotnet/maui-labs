@@ -4,4 +4,5 @@
   <Project Path="Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
   <Project Path="../../tests/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
   <Project Path="../../samples/AiControlsSample/AiControlsSample.csproj" />
+  <Project Path="../../samples/AiControlsBlazorSample/AiControlsBlazorSample.csproj" />
 </Solution>
