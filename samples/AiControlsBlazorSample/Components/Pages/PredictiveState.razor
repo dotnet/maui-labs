@@ -1,0 +1,98 @@
+@page "/predictive-state"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@inject IChatClient ChatClient
+
+<div style="display: flex; gap: 1rem; height: 100%;">
+    <div style="flex: 1;">
+        <ChatPage Agent="@_agent" Suggestions="@_suggestions" Placeholder="Ask me to write something..." />
+    </div>
+    <div style="flex: 0 0 350px; padding: 1rem; border: 1px solid #45475a; border-radius: 8px;">
+        <h4 style="margin-top: 0;">📄 Document</h4>
+        <div style="white-space: pre-wrap; min-height: 200px; font-size: 0.9rem; line-height: 1.5;">
+            @if (string.IsNullOrEmpty(_displayContent))
+            {
+                <em style="opacity: 0.5;">Ask the AI to write something...</em>
+            }
+            else
+            {
+                @_displayContent
+            }
+        </div>
+        @if (_showConfirmButtons)
+        {
+            <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                <button class="btn-confirm" @onclick="OnAccept">✓ Accept</button>
+                <button class="btn-reject" @onclick="OnReject">✗ Reject</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private UIAgent _agent = default!;
+    private AgentContext? _context;
+    private List<Suggestion> _suggestions = default!;
+    private string _currentDocument = string.Empty;
+    private string _pendingDocument = string.Empty;
+    private string _displayContent = string.Empty;
+    private bool _showConfirmButtons;
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(WriteDocument, "write_document",
+                "Write or replace the document content. Shows a preview to the user.")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Instructions = """
+                You are a document writer. When the user asks you to write or edit:
+                1. Call write_document with the full document text.
+                2. The user will see the content and can Accept or Reject it.
+                3. If accepted, the document is saved. If rejected, you'll be asked to try again.
+
+                Write in markdown format. Be creative and detailed.
+                """,
+            Tools = [.. tools]
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+        _context = new AgentContext(_agent);
+        _suggestions =
+        [
+            new() { Label = "Blog post about AI", Prompt = "Write a short blog post about AI" },
+            new() { Label = "Project proposal", Prompt = "Draft a project proposal" },
+            new() { Label = "Haiku about coding", Prompt = "Write a haiku about coding" },
+        ];
+    }
+
+    [System.ComponentModel.Description("Write or replace the document content.")]
+    private string WriteDocument(
+        [System.ComponentModel.Description("The full document text in markdown")] string content)
+    {
+        _pendingDocument = content;
+        _displayContent = content;
+        _showConfirmButtons = true;
+        InvokeAsync(StateHasChanged);
+        return "Document preview shown to user. Waiting for acceptance.";
+    }
+
+    private async Task OnAccept()
+    {
+        _currentDocument = _pendingDocument;
+        _showConfirmButtons = false;
+        if (_context is not null)
+            await _context.SendMessageAsync("I accept the changes.");
+    }
+
+    private async Task OnReject()
+    {
+        _showConfirmButtons = false;
+        _displayContent = string.IsNullOrEmpty(_currentDocument) ? string.Empty : _currentDocument;
+        if (_context is not null)
+            await _context.SendMessageAsync("I reject the changes, please try again.");
+    }
+}

@@ -1,0 +1,56 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@inject IChatClient ChatClient
+
+<ChatPage Agent="@_agent" Suggestions="@_suggestions" Placeholder="Ask about weather or calculate something..." />
+
+@code {
+    private UIAgent _agent = default!;
+    private List<Suggestion> _suggestions = default!;
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(GetWeather, "GetCurrentWeather", "Get the current weather for a location"),
+            AIFunctionFactory.Create(Calculate, "Calculate", "Perform a mathematical calculation")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Instructions = "You are a helpful assistant with access to tools. When asked about weather, use GetCurrentWeather. When asked to calculate, use Calculate. Always explain results.",
+            Tools = tools
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+        _suggestions =
+        [
+            new() { Label = "What's the weather in Tokyo?", Prompt = "What's the weather in Tokyo?" },
+            new() { Label = "Calculate 42 × 17", Prompt = "Calculate 42 * 17" },
+            new() { Label = "Weather in London and Paris?", Prompt = "What's the weather in London and Paris?" },
+        ];
+    }
+
+    [System.ComponentModel.Description("Get current weather for a city")]
+    private static string GetWeather(
+        [System.ComponentModel.Description("City name")] string city)
+    {
+        return $"The weather in {city} is sunny, 72°F with light clouds.";
+    }
+
+    [System.ComponentModel.Description("Perform a math calculation")]
+    private static string Calculate(
+        [System.ComponentModel.Description("Math expression to evaluate")] string expression)
+    {
+        try
+        {
+            var result = new System.Data.DataTable().Compute(expression, null);
+            return $"{expression} = {result}";
+        }
+        catch
+        {
+            return $"Could not evaluate: {expression}";
+        }
+    }
+}

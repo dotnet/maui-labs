@@ -1,0 +1,88 @@
+@page "/haiku"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@using System.Text.Json
+@inject IChatClient ChatClient
+
+<div style="display: flex; gap: 1rem; height: 100%;">
+    <div style="flex: 1;">
+        <ChatPage Agent="@_agent" Suggestions="@_suggestions" Placeholder="Ask for a haiku..." />
+    </div>
+    @if (_haikus.Count > 0)
+    {
+        <div style="flex: 0 0 300px; padding: 1.5rem; border-radius: 12px; background: @_haikus[_currentIndex].ThemeColor; color: white; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+            @foreach (var line in _haikus[_currentIndex].Japanese)
+            {
+                <p style="font-size: 1.5rem; margin: 0.25rem 0;">@line</p>
+            }
+            <hr style="border-color: rgba(255,255,255,0.3); margin: 0.75rem 0;" />
+            @foreach (var line in _haikus[_currentIndex].English)
+            {
+                <p style="font-size: 0.9rem; margin: 0.15rem 0; opacity: 0.9;">@line</p>
+            }
+            @if (_haikus.Count > 1)
+            {
+                <div style="margin-top: 1rem;">
+                    <button disabled="@(_currentIndex == 0)" @onclick="() => _currentIndex--">◀</button>
+                    <span>@(_currentIndex + 1) / @_haikus.Count</span>
+                    <button disabled="@(_currentIndex == _haikus.Count - 1)" @onclick="() => _currentIndex++">▶</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private UIAgent _agent = default!;
+    private List<Suggestion> _suggestions = default!;
+    private readonly List<HaikuData> _haikus = [];
+    private int _currentIndex = 0;
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(CreateHaiku, "create_haiku",
+                "Create a haiku with Japanese and English versions.")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Instructions = """
+                You are a haiku poet. When the user asks for a haiku:
+                1. Create a haiku by calling create_haiku with the Japanese and English versions.
+                2. The Japanese version should be 3 lines following the 5-7-5 mora pattern.
+                3. The English version should be a poetic translation (not literal).
+                4. Also provide a theme color as a CSS hex color (e.g., "#6366F1").
+                5. After creating the haiku, comment briefly on its meaning.
+                """,
+            Tools = [.. tools]
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+        _suggestions =
+        [
+            new() { Label = "Cherry blossoms", Prompt = "Write a haiku about cherry blossoms" },
+            new() { Label = "Ocean at sunset", Prompt = "A haiku about the ocean at sunset" },
+            new() { Label = "About coding", Prompt = "Compose a haiku about coding" },
+        ];
+    }
+
+    [System.ComponentModel.Description("Create a haiku with Japanese and English versions.")]
+    private string CreateHaiku(
+        [System.ComponentModel.Description("JSON array of 3 Japanese lines")] string japanese_lines,
+        [System.ComponentModel.Description("JSON array of 3 English lines")] string english_lines,
+        [System.ComponentModel.Description("CSS hex color for background, e.g. '#6366F1'")] string theme_color)
+    {
+        var japanese = JsonSerializer.Deserialize<List<string>>(japanese_lines) ?? [];
+        var english = JsonSerializer.Deserialize<List<string>>(english_lines) ?? [];
+
+        _haikus.Add(new HaikuData(japanese, english, theme_color));
+        _currentIndex = _haikus.Count - 1;
+        InvokeAsync(StateHasChanged);
+
+        return $"Haiku #{_haikus.Count} displayed.";
+    }
+
+    private record HaikuData(List<string> Japanese, List<string> English, string ThemeColor);
+}
