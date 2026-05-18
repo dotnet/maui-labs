@@ -1,0 +1,89 @@
+@page "/generative-ui"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@using System.Text.Json
+@inject IChatClient ChatClient
+
+<div style="display: flex; gap: 1rem; height: 100%;">
+    <div style="flex: 1;">
+        <ChatPage Agent="@_agent" Suggestions="@_suggestions" Placeholder="Tell me what to do..." />
+    </div>
+    @if (_steps is not null)
+    {
+        <div style="flex: 0 0 280px; padding: 1rem; border: 1px solid #45475a; border-radius: 8px;">
+            <h4 style="margin-top: 0;">⚡ Auto-Executing</h4>
+            @for (int i = 0; i < _steps.Count; i++)
+            {
+                <div style="margin: 0.5rem 0;">
+                    <span>@(_steps[i].IsCompleted ? "✅" : "⏳")</span>
+                    <span style="opacity: @(_steps[i].IsCompleted ? 0.6 : 1)">@_steps[i].Description</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private UIAgent _agent = default!;
+    private List<Suggestion> _suggestions = default!;
+    private List<PlanStep>? _steps;
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(CreatePlan, "create_plan", "Create a plan with the given steps. Returns the plan ID."),
+            AIFunctionFactory.Create(CompleteStep, "complete_step", "Mark a plan step as completed by zero-based index.")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Instructions = """
+                You are an auto-planner. When the user asks you to do something:
+                1. Create a plan by calling create_plan with step descriptions.
+                2. Immediately start executing each step, calling complete_step for each.
+                3. Do NOT wait for user confirmation — just execute.
+                4. After all steps are done, summarize what you accomplished.
+
+                Create 3-5 concrete steps. Execute them one by one.
+                """,
+            Tools = [.. tools]
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+        _suggestions =
+        [
+            new() { Label = "Build a website", Prompt = "Build a simple website" },
+            new() { Label = "Marketing campaign", Prompt = "Create a marketing campaign" },
+            new() { Label = "Dev environment", Prompt = "Set up a dev environment" },
+        ];
+    }
+
+    [System.ComponentModel.Description("Create a plan with the given steps.")]
+    private string CreatePlan(
+        [System.ComponentModel.Description("JSON array of step descriptions")] string steps_json)
+    {
+        var steps = JsonSerializer.Deserialize<List<string>>(steps_json) ?? [];
+        _steps = steps.Select(s => new PlanStep { Description = s }).ToList();
+        InvokeAsync(StateHasChanged);
+        return $"Plan created with {_steps.Count} steps.";
+    }
+
+    [System.ComponentModel.Description("Mark a plan step as completed by zero-based index.")]
+    private string CompleteStep(
+        [System.ComponentModel.Description("Zero-based step index to complete")] int step_index)
+    {
+        if (_steps is not null && step_index >= 0 && step_index < _steps.Count)
+        {
+            _steps[step_index].IsCompleted = true;
+            InvokeAsync(StateHasChanged);
+        }
+        return $"Step {step_index} completed.";
+    }
+
+    private class PlanStep
+    {
+        public string Description { get; init; } = string.Empty;
+        public bool IsCompleted { get; set; }
+    }
+}

@@ -1,0 +1,121 @@
+@page "/shared-state"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@using System.Text.Json
+@inject IChatClient ChatClient
+
+<div style="display: flex; gap: 1rem; height: 100%;">
+    <div style="flex: 1;">
+        <ChatPage Agent="@_agent" Suggestions="@_suggestions" Placeholder="Ask to improve the recipe..." />
+    </div>
+    <div style="flex: 0 0 300px; padding: 1rem; border: 1px solid #45475a; border-radius: 8px;">
+        <h4 style="margin-top: 0;">📝 Recipe</h4>
+        <label>Title:</label>
+        <input @bind="_title" style="width: 100%; margin-bottom: 0.5rem;" />
+        <label>Skill Level:</label>
+        <select @bind="_skillLevel" style="width: 100%; margin-bottom: 0.5rem;">
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+        </select>
+        <label>Cooking Time:</label>
+        <select @bind="_cookingTime" style="width: 100%; margin-bottom: 0.5rem;">
+            <option>15 min</option>
+            <option>30 min</option>
+            <option>45 min</option>
+            <option>1 hour</option>
+        </select>
+        <h5>Ingredients</h5>
+        @foreach (var ing in _ingredients)
+        {
+            <div style="margin: 0.25rem 0;">@ing.Icon @ing.Name — @ing.Amount</div>
+        }
+        <button style="margin-top: 0.75rem;" @onclick="OnImprove">✨ Ask AI to Improve</button>
+    </div>
+</div>
+
+@code {
+    private UIAgent _agent = default!;
+    private AgentContext? _context;
+    private List<Suggestion> _suggestions = default!;
+    private string _title = "Pasta Primavera";
+    private string _skillLevel = "Beginner";
+    private string _cookingTime = "30 min";
+    private List<Ingredient> _ingredients =
+    [
+        new("🍝", "Pasta", "200g"),
+        new("🫑", "Bell Pepper", "1"),
+        new("🧅", "Onion", "1"),
+        new("🧄", "Garlic", "3 cloves"),
+        new("🫒", "Olive Oil", "2 tbsp"),
+    ];
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(UpdateRecipe, "update_recipe",
+                "Update the recipe with improved values.")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Instructions = """
+                You are a recipe copilot. The user is editing a recipe and you help improve it.
+                When you want to update the recipe, call the update_recipe tool with the improved values.
+                Always explain what you changed and why.
+                """,
+            Tools = [.. tools]
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+        _context = new AgentContext(_agent);
+        _suggestions =
+        [
+            new() { Label = "Improve this recipe", Prompt = "Improve this recipe" },
+            new() { Label = "Make it spicier", Prompt = "Make it spicier" },
+            new() { Label = "Vegetarian version", Prompt = "Suggest a vegetarian version" },
+        ];
+    }
+
+    [System.ComponentModel.Description("Update the recipe with improved values.")]
+    private string UpdateRecipe(
+        [System.ComponentModel.Description("Recipe title")] string title,
+        [System.ComponentModel.Description("Skill level: Beginner, Intermediate, or Advanced")] string skill_level,
+        [System.ComponentModel.Description("Cooking time, e.g. '30 min'")] string cooking_time,
+        [System.ComponentModel.Description("JSON array of ingredients: [{\"icon\":\"emoji\",\"name\":\"...\",\"amount\":\"...\"}]")] string ingredients_json)
+    {
+        _title = title;
+        _skillLevel = skill_level;
+        _cookingTime = cooking_time;
+
+        try
+        {
+            var items = JsonSerializer.Deserialize<List<JsonElement>>(ingredients_json) ?? [];
+            _ingredients = items.Select(el => new Ingredient(
+                el.TryGetProperty("icon", out var ic) ? ic.GetString() ?? "🍽️" : "🍽️",
+                el.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                el.TryGetProperty("amount", out var a) ? a.GetString() ?? "" : ""
+            )).ToList();
+        }
+        catch { /* ignore parse errors */ }
+
+        InvokeAsync(StateHasChanged);
+        return "Recipe updated successfully.";
+    }
+
+    private async Task OnImprove()
+    {
+        if (_context is null) return;
+        var json = JsonSerializer.Serialize(new
+        {
+            title = _title,
+            skill_level = _skillLevel,
+            cooking_time = _cookingTime,
+            ingredients = _ingredients.Select(i => new { i.Icon, i.Name, i.Amount })
+        }, new JsonSerializerOptions { WriteIndented = true });
+        await _context.SendMessageAsync($"Here is my current recipe, please improve it:\n{json}");
+    }
+
+    private record Ingredient(string Icon, string Name, string Amount);
+}
