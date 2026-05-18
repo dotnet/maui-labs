@@ -16,7 +16,7 @@
 
         <!-- Chat fills available space -->
         <controls:CopilotChatView x:Name="ChatPanel"
-            Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}"
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
             WelcomeMessage="Hello! I'm your AI assistant. Ask me about the weather, math, random facts, or app info."
             WelcomeIcon="🤖"
             Placeholder="Ask anything..."

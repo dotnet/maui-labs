@@ -1,12 +1,12 @@
 using System.ComponentModel;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class AgenticChatPage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
     public AgenticChatPage(IChatClient chatClient)
     {
@@ -36,15 +36,18 @@ public partial class AgenticChatPage : ContentPage
                 "Change the background color of the page.")
         };
 
-        ChatSession = new ChatSession(tools, chatClient)
+        var chatOptions = new ChatOptions
         {
-            SystemPrompt = """
+            Instructions = """
                 You are a helpful assistant that can change the background color of the app.
                 When the user asks you to change the background, use the change_background tool.
                 Be creative with color suggestions if the user is vague.
                 After changing the background, briefly describe what you did.
-                """
+                """,
+            Tools = [.. tools]
         };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
     }

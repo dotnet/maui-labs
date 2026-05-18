@@ -1,6 +1,6 @@
 <Solution>
-  <Project Path="Microsoft.Maui.AI.Chat/Microsoft.Maui.AI.Chat.csproj" />
-  <Project Path="../../tests/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
+  <Project Path="Microsoft.AspNetCore.Components.AI.Core/Microsoft.AspNetCore.Components.AI.Core.csproj" />
+  <Project Path="Microsoft.AspNetCore.Components.AI.Blazor/Microsoft.AspNetCore.Components.AI.Blazor.csproj" />
   <Project Path="Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
   <Project Path="../../tests/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
   <Project Path="../../samples/AiControlsSample/AiControlsSample.csproj" />

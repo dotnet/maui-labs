@@ -1,12 +1,12 @@
 using System.ComponentModel;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class PredictiveStatePage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
     private string _currentDocument = string.Empty;
     private string _pendingDocument = string.Empty;
@@ -19,9 +19,9 @@ public partial class PredictiveStatePage : ContentPage
                 "Write or replace the document content. Shows a preview to the user.")
         };
 
-        ChatSession = new ChatSession(tools, chatClient)
+        var chatOptions = new ChatOptions
         {
-            SystemPrompt = """
+            Instructions = """
                 You are a document writer. When the user asks you to write or edit:
                 1. Call write_document with the full document text.
                 2. The user will see the content and can Accept or Reject it.
@@ -29,8 +29,11 @@ public partial class PredictiveStatePage : ContentPage
 
                 Write in markdown format. Be creative and detailed.
                 When editing, preserve the overall structure but improve the requested parts.
-                """
+                """,
+            Tools = [.. tools]
         };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
     }
@@ -53,7 +56,7 @@ public partial class PredictiveStatePage : ContentPage
     {
         _currentDocument = _pendingDocument;
         ConfirmButtons.IsVisible = false;
-        await ChatSession.SendAsync("I accept the changes.");
+        await Session.SendMessageAsync("I accept the changes.");
     }
 
     private async void OnRejectClicked(object? sender, EventArgs e)
@@ -65,6 +68,6 @@ public partial class PredictiveStatePage : ContentPage
                 ? "Ask the AI to write something..."
                 : _currentDocument;
         });
-        await ChatSession.SendAsync("I reject the changes, please try again.");
+        await Session.SendMessageAsync("I reject the changes, please try again.");
     }
 }

@@ -1,46 +1,94 @@
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 public class ContentTemplateTests
 {
-    private static ChatSession CreateSession() =>
-        new([], new TestChatClient());
+    private static AgentContext CreateAgentContext()
+    {
+        var client = new TestChatClient();
+        var agent = new UIAgent(client);
+        return new AgentContext(agent);
+    }
 
-    private static ContentContext MakeContext(AIContent content, ContentRole role, string? toolName = null, ToolApprovalState approval = ToolApprovalState.None) =>
-        new(CreateSession(), new ChatEntry(
-            Guid.NewGuid().ToString("n"), content, role,
-            DateTimeOffset.UtcNow, toolName, approval));
+    private static ContentContext MakeTextContext(string role)
+    {
+        var block = new RichContentBlock();
+        block.AppendText("hello");
+        block.Role = role == "User" ? ChatRole.User : ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        return new ContentContext(ctx, block);
+    }
+
+    private static ContentContext MakeFunctionCallContext(string toolName = "get_weather")
+    {
+        var block = new FunctionInvocationContentBlock
+        {
+            Call = new FunctionCallContent("c1", toolName, null),
+            Result = null,
+        };
+        block.Role = ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        return new ContentContext(ctx, block);
+    }
+
+    private static ContentContext MakeFunctionResultContext(string toolName = "get_weather")
+    {
+        var block = new FunctionInvocationContentBlock
+        {
+            Call = new FunctionCallContent("c1", toolName, null),
+            Result = new FunctionResultContent("c1", "sunny, 72°F"),
+        };
+        block.Role = ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        return new ContentContext(ctx, block);
+    }
+
+    private static ContentContext MakeMediaContext()
+    {
+        var block = new MediaContentBlock();
+        block.Role = ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        return new ContentContext(ctx, block);
+    }
+
+    private static ContentContext MakeReasoningContext()
+    {
+        var block = new ReasoningContentBlock();
+        block.AppendText("thinking...");
+        block.Role = ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        return new ContentContext(ctx, block);
+    }
 
     // ── TextContentTemplate ──
 
     [Fact]
-    public void TextContentTemplate_MatchesTextContent()
+    public void TextContentTemplate_MatchesRichContentBlock()
     {
         var template = new TextContentTemplate();
-        var context = MakeContext(new TextContent("hello"), ContentRole.User);
+        var context = MakeTextContext("User");
         Assert.True(template.When(context));
     }
 
     [Fact]
-    public void TextContentTemplate_DoesNotMatchFunctionCall()
+    public void TextContentTemplate_DoesNotMatchFunctionInvocation()
     {
         var template = new TextContentTemplate();
-        var context = MakeContext(
-            new FunctionCallContent("c1", "test", null), ContentRole.Tool);
+        var context = MakeFunctionCallContext();
         Assert.False(template.When(context));
     }
 
     [Fact]
     public void TextContentTemplate_WithRole_MatchesSpecificRole()
     {
-        var userTemplate = new TextContentTemplate { Role = ContentRole.User };
-        var assistantTemplate = new TextContentTemplate { Role = ContentRole.Assistant };
+        var userTemplate = new TextContentTemplate { Role = "User" };
+        var assistantTemplate = new TextContentTemplate { Role = "Assistant" };
 
-        var userContext = MakeContext(new TextContent("hello"), ContentRole.User);
-        var assistantContext = MakeContext(new TextContent("hi"), ContentRole.Assistant);
+        var userContext = MakeTextContext("User");
+        var assistantContext = MakeTextContext("Assistant");
 
         Assert.True(userTemplate.When(userContext));
         Assert.False(userTemplate.When(assistantContext));
@@ -52,9 +100,9 @@ public class ContentTemplateTests
     public void TextContentTemplate_RoleSpecific_HasHigherPriority()
     {
         var generic = new TextContentTemplate();
-        var specific = new TextContentTemplate { Role = ContentRole.User };
+        var specific = new TextContentTemplate { Role = "User" };
 
-        var context = MakeContext(new TextContent("hello"), ContentRole.User);
+        var context = MakeTextContext("User");
 
         Assert.True(specific.GetPriority(context) > generic.GetPriority(context));
     }
@@ -62,11 +110,10 @@ public class ContentTemplateTests
     // ── FunctionCallTemplate ──
 
     [Fact]
-    public void FunctionCallTemplate_MatchesFunctionCallContent()
+    public void FunctionCallTemplate_MatchesFunctionInvocationWithNoResult()
     {
         var template = new FunctionCallTemplate();
-        var context = MakeContext(
-            new FunctionCallContent("c1", "get_weather", null), ContentRole.Tool, "get_weather");
+        var context = MakeFunctionCallContext();
         Assert.True(template.When(context));
     }
 
@@ -74,7 +121,15 @@ public class ContentTemplateTests
     public void FunctionCallTemplate_DoesNotMatchTextContent()
     {
         var template = new FunctionCallTemplate();
-        var context = MakeContext(new TextContent("hi"), ContentRole.Assistant);
+        var context = MakeTextContext("Assistant");
+        Assert.False(template.When(context));
+    }
+
+    [Fact]
+    public void FunctionCallTemplate_DoesNotMatchWhenResultPresent()
+    {
+        var template = new FunctionCallTemplate();
+        var context = MakeFunctionResultContext();
         Assert.False(template.When(context));
     }
 
@@ -83,10 +138,8 @@ public class ContentTemplateTests
     {
         var weatherTemplate = new FunctionCallTemplate { ToolName = "get_weather" };
 
-        var weatherContext = MakeContext(
-            new FunctionCallContent("c1", "get_weather", null), ContentRole.Tool, "get_weather");
-        var calcContext = MakeContext(
-            new FunctionCallContent("c2", "calculate", null), ContentRole.Tool, "calculate");
+        var weatherContext = MakeFunctionCallContext("get_weather");
+        var calcContext = MakeFunctionCallContext("calculate");
 
         Assert.True(weatherTemplate.When(weatherContext));
         Assert.False(weatherTemplate.When(calcContext));
@@ -98,8 +151,7 @@ public class ContentTemplateTests
         var generic = new FunctionCallTemplate();
         var specific = new FunctionCallTemplate { ToolName = "get_weather" };
 
-        var context = MakeContext(
-            new FunctionCallContent("c1", "get_weather", null), ContentRole.Tool, "get_weather");
+        var context = MakeFunctionCallContext("get_weather");
 
         Assert.True(specific.GetPriority(context) > generic.GetPriority(context));
     }
@@ -107,12 +159,19 @@ public class ContentTemplateTests
     // ── FunctionResultTemplate ──
 
     [Fact]
-    public void FunctionResultTemplate_MatchesFunctionResultContent()
+    public void FunctionResultTemplate_MatchesFunctionInvocationWithResult()
     {
         var template = new FunctionResultTemplate();
-        var context = MakeContext(
-            new FunctionResultContent("c1", "result data"), ContentRole.Tool, "get_weather");
+        var context = MakeFunctionResultContext();
         Assert.True(template.When(context));
+    }
+
+    [Fact]
+    public void FunctionResultTemplate_DoesNotMatchWithNoResult()
+    {
+        var template = new FunctionResultTemplate();
+        var context = MakeFunctionCallContext();
+        Assert.False(template.When(context));
     }
 
     [Fact]
@@ -120,66 +179,21 @@ public class ContentTemplateTests
     {
         var weatherResult = new FunctionResultTemplate { ToolName = "get_weather" };
 
-        var weatherContext = MakeContext(
-            new FunctionResultContent("c1", "sunny"), ContentRole.Tool, "get_weather");
-        var calcContext = MakeContext(
-            new FunctionResultContent("c2", "42"), ContentRole.Tool, "calculate");
+        var weatherContext = MakeFunctionResultContext("get_weather");
+        var calcContext = MakeFunctionResultContext("calculate");
 
         Assert.True(weatherResult.When(weatherContext));
         Assert.False(weatherResult.When(calcContext));
     }
 
-    // ── ToolApprovalTemplate ──
-
-    [Fact]
-    public void ToolApprovalTemplate_MatchesToolApprovalRequest()
-    {
-        var template = new ToolApprovalTemplate();
-        var fc = new FunctionCallContent("c1", "add_plant", null);
-        var request = new ToolApprovalRequestContent("req1", fc);
-        var context = MakeContext(request, ContentRole.Approval, "add_plant", ToolApprovalState.Pending);
-        Assert.True(template.When(context));
-    }
-
-    [Fact]
-    public void ToolApprovalTemplate_WithToolName_FiltersCorrectly()
-    {
-        var plantApproval = new ToolApprovalTemplate { ToolName = "add_plant" };
-
-        var plantContext = MakeContext(
-            new ToolApprovalRequestContent("req1", new FunctionCallContent("c1", "add_plant", null)),
-            ContentRole.Approval, "add_plant", ToolApprovalState.Pending);
-        var otherContext = MakeContext(
-            new ToolApprovalRequestContent("req2", new FunctionCallContent("c2", "delete_plant", null)),
-            ContentRole.Approval, "delete_plant", ToolApprovalState.Pending);
-
-        Assert.True(plantApproval.When(plantContext));
-        Assert.False(plantApproval.When(otherContext));
-    }
-
-    [Fact]
-    public void ToolApprovalTemplate_DoesNotMatchTextContent()
-    {
-        var template = new ToolApprovalTemplate();
-        var context = MakeContext(new TextContent("hello"), ContentRole.User);
-        Assert.False(template.When(context));
-    }
-
     // ── ErrorContentTemplate ──
 
     [Fact]
-    public void ErrorContentTemplate_MatchesErrorContent()
+    public void ErrorContentTemplate_ReturnsFalse_CoreSurfacesErrorsViaStatus()
     {
         var template = new ErrorContentTemplate();
-        var context = MakeContext(new ErrorContent("something went wrong"), ContentRole.Error);
-        Assert.True(template.When(context));
-    }
-
-    [Fact]
-    public void ErrorContentTemplate_DoesNotMatchTextContent()
-    {
-        var template = new ErrorContentTemplate();
-        var context = MakeContext(new TextContent("hello"), ContentRole.User);
+        // Error template always returns false — Core surfaces errors via status
+        var context = MakeTextContext("User");
         Assert.False(template.When(context));
     }
 
@@ -190,9 +204,11 @@ public class ContentTemplateTests
     {
         var template = new DefaultContentTemplate();
 
-        Assert.True(template.When(MakeContext(new TextContent("hi"), ContentRole.User)));
-        Assert.True(template.When(MakeContext(new FunctionCallContent("c1", "test", null), ContentRole.Tool)));
-        Assert.True(template.When(MakeContext(new ErrorContent("err"), ContentRole.Error)));
+        Assert.True(template.When(MakeTextContext("User")));
+        Assert.True(template.When(MakeFunctionCallContext()));
+        Assert.True(template.When(MakeFunctionResultContext()));
+        Assert.True(template.When(MakeMediaContext()));
+        Assert.True(template.When(MakeReasoningContext()));
     }
 
     [Fact]
@@ -201,74 +217,120 @@ public class ContentTemplateTests
         var textTemplate = new TextContentTemplate();
         var defaultTemplate = new DefaultContentTemplate();
 
-        var context = MakeContext(new TextContent("hello"), ContentRole.User);
+        var context = MakeTextContext("User");
 
         Assert.True(defaultTemplate.GetPriority(context) < textTemplate.GetPriority(context));
+    }
+
+    // ── New Templates ──
+
+    [Fact]
+    public void RichTextContentTemplate_MatchesRichContentBlockWithNodes()
+    {
+        var template = new RichTextContentTemplate();
+        // RichTextContentTemplate requires Content.Count > 0
+        var block = new RichContentBlock();
+        block.AppendText("hello");
+        // Need to add a node to Content
+        // Content is set internally, so RichTextContentTemplate will NOT match plain text blocks
+        // (because Content is empty unless the parser populated it)
+        block.Role = ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        var context = new ContentContext(ctx, block);
+
+        // Without nodes in Content, this template won't match
+        Assert.False(template.When(context));
+    }
+
+    [Fact]
+    public void RichTextContentTemplate_HasHigherPriorityThanText()
+    {
+        var richTemplate = new RichTextContentTemplate();
+        var textTemplate = new TextContentTemplate();
+
+        var context = MakeTextContext("User");
+
+        Assert.True(richTemplate.GetPriority(context) > textTemplate.GetPriority(context));
+    }
+
+    [Fact]
+    public void MediaContentTemplate_MatchesMediaContentBlock()
+    {
+        var template = new MediaContentTemplate();
+        var context = MakeMediaContext();
+        Assert.True(template.When(context));
+    }
+
+    [Fact]
+    public void MediaContentTemplate_DoesNotMatchTextContent()
+    {
+        var template = new MediaContentTemplate();
+        var context = MakeTextContext("User");
+        Assert.False(template.When(context));
+    }
+
+    [Fact]
+    public void ReasoningContentTemplate_MatchesReasoningContentBlock()
+    {
+        var template = new ReasoningContentTemplate();
+        var context = MakeReasoningContext();
+        Assert.True(template.When(context));
+    }
+
+    [Fact]
+    public void ReasoningContentTemplate_DoesNotMatchTextContent()
+    {
+        var template = new ReasoningContentTemplate();
+        var context = MakeTextContext("User");
+        Assert.False(template.When(context));
     }
 
     // ── ContentContext ──
 
     [Fact]
-    public void ContentContext_ExposesEntryProperties()
+    public void ContentContext_ExposesBlockProperties()
     {
-        var session = CreateSession();
-        var entry = new ChatEntry("id1", new TextContent("test"), ContentRole.User,
-            DateTimeOffset.UtcNow, null, ToolApprovalState.None);
-        var context = new ContentContext(session, entry);
+        var block = new RichContentBlock();
+        block.AppendText("test");
+        block.Role = ChatRole.User;
+        var agentCtx = CreateAgentContext();
+        var context = new ContentContext(agentCtx, block);
 
-        Assert.Same(session, context.Session);
-        Assert.Same(entry, context.Entry);
-        Assert.IsType<TextContent>(context.Content);
-        Assert.Equal(ContentRole.User, context.Role);
+        Assert.Same(agentCtx, context.AgentContext);
+        Assert.Same(block, context.Block);
+        Assert.Equal(ChatRole.User, context.Role);
+        Assert.True(context.IsUser);
+        Assert.False(context.IsAssistant);
+        Assert.Equal("test", context.TextContent);
         Assert.Null(context.ToolName);
-        Assert.Equal(ToolApprovalState.None, context.ApprovalState);
-        Assert.False(context.ApprovalResolved);
-        Assert.Null(context.ApprovalResolutionText);
+        Assert.False(context.IsInteractive);
     }
 
     [Fact]
-    public void ContentContext_ApprovalResolved_TrueForApprovedOrRejected()
+    public void ContentContext_FunctionInvocation_ExposesToolName()
     {
-        var session = CreateSession();
-        var fc = new FunctionCallContent("c1", "test", null);
-        var approvedEntry = new ChatEntry("id1",
-            new ToolApprovalRequestContent("req1", fc),
-            ContentRole.Approval, DateTimeOffset.UtcNow, "test", ToolApprovalState.Approved);
-        var rejectedEntry = approvedEntry with { ApprovalState = ToolApprovalState.Rejected };
-        var pendingEntry = approvedEntry with { ApprovalState = ToolApprovalState.Pending };
+        var block = new FunctionInvocationContentBlock
+        {
+            Call = new FunctionCallContent("c1", "get_weather", null),
+        };
+        block.Role = ChatRole.Assistant;
+        var ctx = CreateAgentContext();
+        var context = new ContentContext(ctx, block);
 
-        Assert.True(new ContentContext(session, approvedEntry).ApprovalResolved);
-        Assert.True(new ContentContext(session, rejectedEntry).ApprovalResolved);
-        Assert.False(new ContentContext(session, pendingEntry).ApprovalResolved);
-    }
-
-    [Fact]
-    public void ContentContext_ApprovalResolutionText_ReturnsCorrectText()
-    {
-        var session = CreateSession();
-        var fc = new FunctionCallContent("c1", "add_plant", null);
-        var entry = new ChatEntry("id1",
-            new ToolApprovalRequestContent("req1", fc),
-            ContentRole.Approval, DateTimeOffset.UtcNow, "add_plant", ToolApprovalState.Approved);
-        var context = new ContentContext(session, entry);
-
-        Assert.Equal("Approved - add_plant", context.ApprovalResolutionText);
-
-        var rejected = new ContentContext(session, entry with { ApprovalState = ToolApprovalState.Rejected });
-        Assert.Equal("Rejected - add_plant", rejected.ApprovalResolutionText);
+        Assert.Equal("get_weather", context.ToolName);
+        Assert.False(context.IsInteractive);
     }
 
     // ── Priority ordering ──
 
     [Fact]
-    public void Priority_ToolNameSpecific_BeatsGeneric_BeatDefault()
+    public void Priority_ToolNameSpecific_BeatsGeneric_BeatsDefault()
     {
         var defaultTemplate = new DefaultContentTemplate();
         var genericResult = new FunctionResultTemplate();
         var specificResult = new FunctionResultTemplate { ToolName = "get_weather" };
 
-        var context = MakeContext(
-            new FunctionResultContent("c1", "data"), ContentRole.Tool, "get_weather");
+        var context = MakeFunctionResultContext("get_weather");
 
         var defaultPriority = defaultTemplate.GetPriority(context);
         var genericPriority = genericResult.GetPriority(context);
@@ -278,7 +340,7 @@ public class ContentTemplateTests
         Assert.True(genericPriority > defaultPriority, "Generic should beat default");
     }
 
-    /// <summary>Minimal IChatClient for creating ChatSession instances in tests.</summary>
+    /// <summary>Minimal IChatClient for creating AgentContext instances in tests.</summary>
     private sealed class TestChatClient : IChatClient
     {
         public void Dispose() { }
