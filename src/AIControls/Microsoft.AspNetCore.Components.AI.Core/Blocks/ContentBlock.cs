@@ -7,7 +7,9 @@ namespace Microsoft.AspNetCore.Components.AI;
 
 public abstract class ContentBlock
 {
-    public string Id { get; internal set; } = string.Empty;
+    // TODO: Upstream change - setter made public for source generator compatibility
+    // (generated handlers in consumer assemblies need to set Id from FunctionCallContent.CallId)
+    public string Id { get; set; } = string.Empty;
 
     public BlockLifecycleState LifecycleState { get; internal set; }
 
