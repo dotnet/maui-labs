@@ -107,6 +107,30 @@ public partial class CopilotChatView : TemplatedView
         // or deferred to OnParentSet to avoid mutating app resources during
         // XAML parsing (which causes NullRef in the generated InitializeComponent).
         SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.CopilotChatViewTemplate);
+
+        // Subscribe to collection changes on the default ObservableCollection so
+        // XAML-added items (via .Add()) trigger suggestion chip rebuilds.
+        if (SuggestionPrompts is System.Collections.Specialized.INotifyCollectionChanged ncc)
+            ncc.CollectionChanged += OnSuggestionPromptsCollectionChanged;
+
+        // XAML child items (SuggestionPrompts) may be added after OnApplyTemplate
+        // due to DynamicResource-based template resolution timing. Re-evaluate once loaded.
+        Loaded += (_, _) =>
+        {
+            // The Loaded event fires after the visual tree is fully constructed
+            // and rendered — guaranteed that template parts are resolved and
+            // all XAML-set collection items have been added.
+            UpdateWelcomeVisibility();
+        };
+    }
+
+    private void OnSuggestionPromptsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        // Items may be added before the template is applied; defer to ensure parts are resolved.
+        if (_suggestionsPart is null)
+            Dispatcher.Dispatch(UpdateSuggestionsVisibility);
+        else
+            UpdateSuggestionsVisibility();
     }
 
     protected override void OnParentSet()

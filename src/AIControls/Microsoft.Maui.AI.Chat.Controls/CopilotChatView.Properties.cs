@@ -219,8 +219,16 @@ public partial class CopilotChatView
 
     public static readonly BindableProperty SuggestionPromptsProperty =
         BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(CopilotChatView),
-            defaultValueCreator: _ => new List<string>(),
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).UpdateSuggestionsVisibility());
+            defaultValueCreator: _ => new System.Collections.ObjectModel.ObservableCollection<string>(),
+            propertyChanged: (b, o, n) =>
+            {
+                var self = (CopilotChatView)b;
+                if (o is System.Collections.Specialized.INotifyCollectionChanged oldNcc)
+                    oldNcc.CollectionChanged -= self.OnSuggestionPromptsCollectionChanged;
+                if (n is System.Collections.Specialized.INotifyCollectionChanged newNcc)
+                    newNcc.CollectionChanged += self.OnSuggestionPromptsCollectionChanged;
+                self.UpdateSuggestionsVisibility();
+            });
 
     public IList<string> SuggestionPrompts
     {
