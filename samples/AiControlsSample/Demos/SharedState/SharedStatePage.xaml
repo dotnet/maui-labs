@@ -70,7 +70,7 @@
 
         <!-- Right: Chat panel -->
         <controls:CopilotChatView Grid.Column="1"
-            Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

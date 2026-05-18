@@ -9,7 +9,7 @@
 
     <Grid ColumnDefinitions="*,Auto">
         <!-- Chat panel -->
-        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=ChatSession}">
+        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}">
             <controls:CopilotChatView.ContentTemplates>
                 <chat:TextContentTemplate Role="User" />
                 <chat:TextContentTemplate Role="Assistant" />

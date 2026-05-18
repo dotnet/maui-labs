@@ -19,6 +19,7 @@
     <InternalsVisibleTo Include="Microsoft.AspNetCore.Components.AI.Core.Tests" />
     <InternalsVisibleTo Include="Microsoft.AspNetCore.Components.AI.Blazor" />
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls" />
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
   </ItemGroup>
 
   <ItemGroup>

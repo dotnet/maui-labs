@@ -1,13 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class HaikuPage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
     private readonly List<HaikuData> _haikus = [];
     private int _currentIndex = -1;
@@ -32,9 +32,9 @@ public partial class HaikuPage : ContentPage
                 "Create a haiku with Japanese and English versions.")
         };
 
-        ChatSession = new ChatSession(tools, chatClient)
+        var chatOptions = new ChatOptions
         {
-            SystemPrompt = """
+            Instructions = """
                 You are a haiku poet. When the user asks for a haiku:
                 1. Create a haiku by calling create_haiku with the Japanese and English versions.
                 2. The Japanese version should be 3 lines following the 5-7-5 mora pattern.
@@ -43,8 +43,11 @@ public partial class HaikuPage : ContentPage
                 5. After creating the haiku, comment briefly on its meaning.
 
                 Be creative and poetic. Each haiku should be unique and beautiful.
-                """
+                """,
+            Tools = [.. tools]
         };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
     }

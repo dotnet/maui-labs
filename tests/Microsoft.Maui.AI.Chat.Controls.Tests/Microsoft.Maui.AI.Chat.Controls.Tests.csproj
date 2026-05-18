@@ -10,7 +10,7 @@
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Core\Microsoft.AspNetCore.Components.AI.Core.csproj" />
     <ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
   </ItemGroup>
   <ItemGroup>

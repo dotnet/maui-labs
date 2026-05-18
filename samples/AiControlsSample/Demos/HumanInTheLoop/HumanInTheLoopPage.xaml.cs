@@ -1,13 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AiControlsSample;
 
 public partial class HumanInTheLoopPage : ContentPage
 {
-    public ChatSession ChatSession { get; }
+    public AgentContext Session { get; }
 
     private List<PlanStep>? _currentSteps;
 
@@ -19,9 +19,9 @@ public partial class HumanInTheLoopPage : ContentPage
             AIFunctionFactory.Create(UpdatePlanStep, "update_plan_step", "Mark a plan step as completed. Step index is 0-based.")
         };
 
-        ChatSession = new ChatSession(tools, chatClient)
+        var chatOptions = new ChatOptions
         {
-            SystemPrompt = """
+            Instructions = """
                 You are a plan assistant. When the user asks you to do something:
                 1. Create a plan by calling create_plan with a list of step descriptions.
                 2. After the plan is shown, WAIT for the user to confirm or reject. Do NOT proceed until they reply.
@@ -29,8 +29,11 @@ public partial class HumanInTheLoopPage : ContentPage
                 4. If the user rejects, acknowledge and ask what they'd like to change.
 
                 Always create 3-5 concrete steps that clearly describe what will happen.
-                """
+                """,
+            Tools = [.. tools]
         };
+        var agent = new UIAgent(chatClient, chatOptions);
+        Session = new AgentContext(agent);
 
         InitializeComponent();
     }
@@ -93,13 +96,13 @@ public partial class HumanInTheLoopPage : ContentPage
     private async void OnConfirmClicked(object? sender, EventArgs e)
     {
         ConfirmButtons.IsVisible = false;
-        await ChatSession.SendAsync("I confirm the plan. Please proceed with execution.");
+        await Session.SendMessageAsync("I confirm the plan. Please proceed with execution.");
     }
 
     private async void OnRejectClicked(object? sender, EventArgs e)
     {
         ConfirmButtons.IsVisible = false;
-        await ChatSession.SendAsync("I reject this plan. Please suggest changes.");
+        await Session.SendMessageAsync("I reject this plan. Please suggest changes.");
     }
 
     protected override void OnSizeAllocated(double width, double height)
