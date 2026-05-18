@@ -54,7 +54,7 @@ public class ContentTemplateSelector : DataTemplateSelector
 
         public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
             value is ContentContext context
-                ? $"No content template registered for {context.Content.GetType().Name}."
+                ? $"No content template registered for {context.Block.GetType().Name}."
                 : "No content template registered.";
 
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>

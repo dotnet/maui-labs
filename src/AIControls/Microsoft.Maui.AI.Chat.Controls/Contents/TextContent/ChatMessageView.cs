@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
@@ -53,9 +54,9 @@ public class ChatMessageView : ContentContextView
         if (ContentContext is null)
             return;
 
-        Text = (ContentContext.Content as TextContent)?.Text;
-        MessageRole = ContentContext.Role.ToString();
-        TimestampText = ContentContext.Timestamp.ToLocalTime().ToString("h:mm tt");
+        Text = ContentContext.Block is RichContentBlock rcb ? rcb.RawText : ContentContext.Block?.ToString();
+        MessageRole = ContentContext.Role?.ToString();
+        TimestampText = DateTimeOffset.Now.ToLocalTime().ToString("h:mm tt");
 
         // Look up ancestor CopilotChatView for ShowTimestamps setting
         var panel = FindAncestor<CopilotChatView>();
@@ -76,7 +77,11 @@ public class ChatMessageView : ContentContextView
         if (ContentContext is null)
             return;
 
-        VisualStateManager.GoToState(_stateRoot ?? this, ContentContext.Role.ToString());
+        var roleName = ContentContext.Role == ChatRole.User ? "User"
+            : ContentContext.Role == ChatRole.Assistant ? "Assistant"
+            : "Tool";
+
+        VisualStateManager.GoToState(_stateRoot ?? this, roleName);
     }
 
     private T? FindAncestor<T>() where T : Element

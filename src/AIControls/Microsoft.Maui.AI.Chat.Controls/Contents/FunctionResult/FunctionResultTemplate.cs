@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
 using Microsoft.Extensions.AI;
 
@@ -7,9 +8,20 @@ public class FunctionResultTemplate : ContentTemplate
 {
     public string? ToolName { get; set; }
 
-    public override bool When(ContentContext context) =>
-        context.Content is FunctionResultContent &&
-        (ToolName is null || string.Equals(context.ToolName, ToolName, StringComparison.OrdinalIgnoreCase));
+    public override bool When(ContentContext context)
+    {
+        if (context.Block is not FunctionInvocationContentBlock ficb)
+            return false;
+
+        // Only match when result IS available
+        if (ficb.Result is null)
+            return false;
+
+        if (ToolName is not null && !string.Equals(ficb.Call?.Name, ToolName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
 
     internal override DataTemplate GetTemplate()
     {

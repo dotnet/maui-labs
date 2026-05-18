@@ -19,6 +19,6 @@
     <PackageReference Include="Microsoft.Maui.Controls" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <ProjectReference Include="..\Microsoft.AspNetCore.Components.AI.Core\Microsoft.AspNetCore.Components.AI.Core.csproj" />
   </ItemGroup>
 </Project>

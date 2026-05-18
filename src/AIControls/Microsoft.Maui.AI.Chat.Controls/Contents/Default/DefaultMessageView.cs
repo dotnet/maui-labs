@@ -2,7 +2,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
 /// Catch-all view for content types that have no specific template.
-/// Displays <c>Content.ToString()</c> via <c>{TemplateBinding DisplayText}</c>.
+/// Displays <c>Block.GetType().Name</c> via <c>{TemplateBinding DisplayText}</c>.
 /// </summary>
 public class DefaultMessageView : ContentContextView
 {
@@ -17,6 +17,6 @@ public class DefaultMessageView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        DisplayText = ContentContext?.Content?.ToString();
+        DisplayText = ContentContext?.Block?.ToString();
     }
 }

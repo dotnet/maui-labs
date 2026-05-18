@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.Controls.Shapes;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
@@ -34,7 +34,7 @@ public partial class CopilotChatView : TemplatedView
     public static readonly BindableProperty SessionProperty =
         BindableProperty.Create(
             nameof(Session),
-            typeof(IChatSession),
+            typeof(AgentContext),
             typeof(CopilotChatView),
             propertyChanged: OnSessionChanged);
 
@@ -54,9 +54,9 @@ public partial class CopilotChatView : TemplatedView
             false,
             propertyChanged: (b, _, _) => ((CopilotChatView)b).OnIsBusyChanged());
 
-    public IChatSession? Session
+    public AgentContext? Session
     {
-        get => (IChatSession?)GetValue(SessionProperty);
+        get => (AgentContext?)GetValue(SessionProperty);
         set => SetValue(SessionProperty, value);
     }
 
@@ -88,6 +88,10 @@ public partial class CopilotChatView : TemplatedView
 
     private readonly ObservableCollection<ContentTemplate> _contentTemplates = [];
     private readonly ObservableCollection<ContentContext> _items = [];
+
+    private IDisposable? _turnAddedReg;
+    private IDisposable? _statusChangedReg;
+    private IDisposable? _blockAddedReg;
 
     public IList<ContentTemplate> ContentTemplates => _contentTemplates;
 
@@ -182,19 +186,76 @@ public partial class CopilotChatView : TemplatedView
     private static void OnSessionChanged(BindableObject bindable, object oldValue, object newValue)
     {
         var control = (CopilotChatView)bindable;
+        control.UnsubscribeFromSession();
 
-        if (oldValue is IChatSession oldSession)
-            oldSession.Changed -= control.OnSessionStateChanged;
-
-        if (newValue is IChatSession newSession)
-            newSession.Changed += control.OnSessionStateChanged;
+        if (newValue is AgentContext ctx)
+            control.SubscribeToSession(ctx);
 
         control.RebuildFromSession();
     }
 
-    private void OnSessionStateChanged(object? sender, ChatSessionChangedEventArgs e)
+    private void SubscribeToSession(AgentContext ctx)
     {
-        Dispatcher.Dispatch(() => ApplySessionChange(sender as IChatSession, e));
+        _turnAddedReg = ctx.RegisterOnTurnAdded(turn =>
+            Dispatcher.Dispatch(() => OnTurnAdded(turn)));
+
+        _statusChangedReg = ctx.RegisterOnStatusChanged(status =>
+            Dispatcher.Dispatch(() => OnStatusChanged(status)));
+
+        _blockAddedReg = ctx.RegisterOnBlockAdded((turn, block) =>
+            Dispatcher.Dispatch(() => OnBlockAdded(turn, block)));
+    }
+
+    private void UnsubscribeFromSession()
+    {
+        _turnAddedReg?.Dispose();
+        _statusChangedReg?.Dispose();
+        _blockAddedReg?.Dispose();
+        _turnAddedReg = null;
+        _statusChangedReg = null;
+        _blockAddedReg = null;
+    }
+
+    private void OnTurnAdded(ConversationTurn turn)
+    {
+        // Blocks will arrive via OnBlockAdded
+    }
+
+    private void OnStatusChanged(ConversationStatus status)
+    {
+        IsBusy = status == ConversationStatus.Streaming;
+    }
+
+    private void OnBlockAdded(ConversationTurn turn, ContentBlock block)
+    {
+        if (Session is null)
+            return;
+
+        if (!ShouldShowBlock(block))
+            return;
+
+        _items.Add(new ContentContext(Session, block));
+        UpdateWelcomeVisibility();
+        ScrollToLatestMessage();
+
+        // Subscribe to block changes for streaming updates
+        block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
+    }
+
+    private void OnBlockChanged(ContentBlock block)
+    {
+        if (Session is null)
+            return;
+
+        for (int i = 0; i < _items.Count; i++)
+        {
+            if (ReferenceEquals(_items[i].Block, block))
+            {
+                _items[i] = new ContentContext(Session, block);
+                ScrollToLatestMessage();
+                return;
+            }
+        }
     }
 
     private void RebuildFromSession()
@@ -208,63 +269,30 @@ public partial class CopilotChatView : TemplatedView
             return;
         }
 
-        foreach (var entry in Session.Messages)
+        foreach (var turn in Session.Turns)
         {
-            if (ShouldShowEntry(entry))
-                _items.Add(new ContentContext(Session, entry));
+            foreach (var block in turn.RequestBlocks)
+            {
+                if (ShouldShowBlock(block))
+                    _items.Add(new ContentContext(Session, block));
+            }
+            foreach (var block in turn.ResponseBlocks)
+            {
+                if (ShouldShowBlock(block))
+                    _items.Add(new ContentContext(Session, block));
+            }
         }
 
-        IsBusy = Session.IsBusy;
+        IsBusy = Session.Status == ConversationStatus.Streaming;
         UpdateWelcomeVisibility();
         ScrollToLatestMessage();
     }
 
-    private void ApplySessionChange(IChatSession? session, ChatSessionChangedEventArgs e)
+    private bool ShouldShowBlock(ContentBlock block)
     {
-        if (session is null)
-            return;
-
-        IsBusy = session.IsBusy;
-
-        switch (e.Kind)
-        {
-            case ChatSessionChangeKind.Reset:
-                _items.Clear();
-                UpdateWelcomeVisibility();
-                break;
-
-            case ChatSessionChangeKind.MessageAdded:
-                if (e.Entry is null || !ShouldShowEntry(e.Entry))
-                    break;
-
-                var addIndex = Math.Clamp(e.Index ?? _items.Count, 0, _items.Count);
-                _items.Insert(addIndex, new ContentContext(session, e.Entry));
-                UpdateWelcomeVisibility();
-                ScrollToLatestMessage();
-                break;
-
-            case ChatSessionChangeKind.MessageUpdated:
-                if (e.Entry is null || e.Index is null)
-                    break;
-
-                if (!ShouldShowEntry(e.Entry))
-                    break;
-
-                if (e.Index.Value >= 0 && e.Index.Value < _items.Count)
-                    _items[e.Index.Value] = new ContentContext(session, e.Entry);
-                else
-                    RebuildFromSession();
-
-                ScrollToLatestMessage();
-                break;
-        }
-    }
-
-    private bool ShouldShowEntry(ChatEntry entry)
-    {
-        if (!ShowToolCalls && entry.Content is FunctionCallContent)
+        if (!ShowToolCalls && block is FunctionInvocationContentBlock ficb && ficb.Result is null)
             return false;
-        if (!ShowToolResults && entry.Content is FunctionResultContent)
+        if (!ShowToolResults && block is FunctionInvocationContentBlock ficbr && ficbr.Result is not null)
             return false;
         return true;
     }
@@ -325,7 +353,7 @@ public partial class CopilotChatView : TemplatedView
             chip.Clicked += async (_, _) =>
             {
                 if (Session is not null && !IsBusy)
-                    await Session.SendAsync(prompt);
+                    await Session.SendMessageAsync(prompt);
             };
             _suggestionsPart.Children.Add(chip);
         }
@@ -414,7 +442,7 @@ public partial class CopilotChatView : TemplatedView
 
         var nextMessage = Text.Trim();
         Text = string.Empty;
-        await Session.SendAsync(nextMessage);
+        await Session.SendMessageAsync(nextMessage);
     }
 
     // ── Scroll ──
