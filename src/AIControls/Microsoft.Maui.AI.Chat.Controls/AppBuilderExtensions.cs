@@ -46,14 +46,9 @@ public static class AppBuilderExtensions
 /// </summary>
 internal static class ChatThemeLoader
 {
-    private static bool _loaded;
-
     public static void EnsureLoaded(ResourceDictionary resources)
     {
-        if (_loaded)
-            return;
-
-        // Check if already merged
+        // Check if already merged (no static flag — supports hot reload and tests)
         foreach (var dict in resources.MergedDictionaries)
         {
             if (dict is ChatTheme)
@@ -61,6 +56,5 @@ internal static class ChatThemeLoader
         }
 
         resources.MergedDictionaries.Add(new ChatTheme());
-        _loaded = true;
     }
 }

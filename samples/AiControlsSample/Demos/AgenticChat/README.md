@@ -6,7 +6,7 @@ Demonstrates an AI agent that can modify the app's UI in real time. The agent ha
 
 ## Features Demonstrated
 
-- Custom `ChatSession` with inline tool definition via `AIFunctionFactory.Create`
+- Custom `AgentContext` with inline tool definition via `AIFunctionFactory.Create`
 - AI tool execution that directly mutates MAUI UI elements (`PageRoot.BackgroundColor`)
 - `Color.TryParse()` accepting both named colors ("LightBlue") and hex values ("#ADD8E6")
 - System prompt guiding the agent to be creative with color suggestions
@@ -32,4 +32,4 @@ Demonstrates an AI agent that can modify the app's UI in real time. The agent ha
 
 - **Inline tool registration** — the tool lambda is defined directly in the constructor using `AIFunctionFactory.Create` with `[Description]` attributes on parameters (`AgenticChatPage.xaml.cs:13-37`)
 - **Thread-safe UI mutation** — `MainThread.BeginInvokeOnMainThread(() => PageRoot.BackgroundColor = parsed)` ensures the color change runs on the UI thread (`AgenticChatPage.xaml.cs:21-31`)
-- **Custom ChatSession** — the page creates its own `ChatSession` with a dedicated tool list rather than using the DI-registered default session (`AgenticChatPage.xaml.cs:39-47`)
+- **Custom AgentContext** — the page creates its own `UIAgent` + `AgentContext` with a dedicated tool list rather than using a shared session (`AgenticChatPage.xaml.cs:39-50`)

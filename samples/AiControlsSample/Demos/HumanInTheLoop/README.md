@@ -8,7 +8,7 @@ Demonstrates an AI agent that creates multi-step plans requiring explicit human 
 
 - `create_plan` tool that deserializes a JSON array of step descriptions and displays them in a side panel
 - `update_plan_step` tool that marks individual steps as completed by zero-based index
-- Confirm/Reject buttons that programmatically send messages back to the `ChatSession`
+- Confirm/Reject buttons that programmatically send messages back to the `AgentContext`
 - `ToolApprovalTemplate` in the content templates for tool approval UI
 - Responsive layout — plan panel hides when window width < 700px
 
@@ -33,5 +33,5 @@ Demonstrates an AI agent that creates multi-step plans requiring explicit human 
 ## Key Code Patterns
 
 - **Plan state management** — `_currentSteps` list of `PlanStep` objects tracks completion state; `RefreshStepsUI()` rebuilds the visual layout each time (`HumanInTheLoopPage.xaml.cs:70-91`)
-- **Programmatic chat messages** — `ChatSession.SendAsync("I confirm the plan...")` sends user messages on button click without manual typing (`HumanInTheLoopPage.xaml.cs:96, 102`)
+- **Programmatic chat messages** — `Session.SendMessageAsync("I confirm the plan...")` sends user messages on button click without manual typing (`HumanInTheLoopPage.xaml.cs:99, 105`)
 - **Responsive panel visibility** — `OnSizeAllocated` hides the plan panel on narrow windows (`HumanInTheLoopPage.xaml.cs:105-109`)

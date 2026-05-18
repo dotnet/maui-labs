@@ -9,7 +9,7 @@ Shows custom inline rendering of tool results within the chat conversation. A `W
 - Custom `FunctionResultTemplate` subclass filtered by `ToolName` for per-tool rendering
 - `ContentContextView` subclass (`WeatherResultView`) that parses JSON from tool results
 - Template priority ordering — the most specific template (`WeatherResultTemplate`) is listed before the generic `FunctionResultTemplate` so it wins for matching tool names
-- DI-registered `ChatSession` with shared `SampleTools` (weather, calculate, random fact, app info)
+- `UIAgent` + `AgentContext` with shared `SampleTools` (weather, calculate, random fact, app info)
 
 ## How to Use
 

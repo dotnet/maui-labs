@@ -11,7 +11,7 @@ This project contains code copied from [dotnet/aspnetcore](https://github.com/do
 
 | File | Change | Reason |
 |------|--------|--------|
-| (none yet) | | |
+| (none) | | |
 
 ## Wanted Upstream
 
@@ -22,3 +22,12 @@ Features we'd like added to the core engine (document only, don't implement here
 - `AgentContext.AutoRejectPendingApprovals()` — Reject pending on new user message
 - `AgentContext.HasPendingApprovals` computed property
 - `UIAgentOptions.AllowMultipleToolCalls` convenience property
+- Thread-safety on `_callbacks` lists (`ContentBlock._callbacks`, `AgentContext._statusChangedCallbacks`, etc.) — use `ImmutableList` or lock
+
+## Porting Notes
+
+- **MAUI uses `ContentTemplate.When()` instead of Blazor's `BlockRenderer<TBlock>`** for per-block-type template selection
+- **MAUI provides richer tool rendering** than Blazor out-of-the-box (FunctionCallTemplate, FunctionResultTemplate with tool-name filtering)
+- **No `AgentBoundary` cascading parameter equivalent** — MAUI uses explicit `Session` property on `CopilotChatView`
+- **Tool invocation ownership**: `UseFunctionInvocation()` middleware handles the tool loop; Core's `UIAgent` does NOT drive tool calls directly when this middleware is present
+
