@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
@@ -19,6 +20,6 @@ public class FunctionCallMessageView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        FunctionName = (ContentContext?.Content as FunctionCallContent)?.Name;
+        FunctionName = (ContentContext?.Block as FunctionInvocationContentBlock)?.Call?.Name;
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
@@ -19,6 +20,6 @@ public class FunctionResultMessageView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        ResultText = (ContentContext?.Content as FunctionResultContent)?.Result?.ToString();
+        ResultText = (ContentContext?.Block as FunctionInvocationContentBlock)?.Result?.Result?.ToString();
     }
 }

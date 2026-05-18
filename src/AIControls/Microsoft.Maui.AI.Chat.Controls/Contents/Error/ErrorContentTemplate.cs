@@ -1,12 +1,15 @@
 using Microsoft.Maui.AI.Chat.Controls.Themes;
-using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 public class ErrorContentTemplate : ContentTemplate
 {
-    public override bool When(ContentContext context) =>
-        context.Content is ErrorContent;
+    public override bool When(ContentContext context)
+    {
+        // Core engine surfaces errors via AgentContext.Status == Error,
+        // not as content blocks. This template remains for future use.
+        return false;
+    }
 
     internal override DataTemplate GetTemplate()
     {

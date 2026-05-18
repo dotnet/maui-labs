@@ -1,9 +1,7 @@
-using Microsoft.Extensions.AI;
-
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Displays an error message from an <see cref="ErrorContent"/> item.
+/// Displays an error message.
 /// Styled via a ControlTemplate that uses <c>{TemplateBinding ErrorMessageText}</c>.
 /// </summary>
 public class ErrorMessageView : ContentContextView
@@ -19,6 +17,6 @@ public class ErrorMessageView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        ErrorMessageText = (ContentContext?.Content as ErrorContent)?.Message;
+        ErrorMessageText = "An error occurred.";
     }
 }

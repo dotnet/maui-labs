@@ -1,10 +1,11 @@
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Matches <see cref="ToolApprovalRequestContent"/> items in the chat.
+/// Matches <see cref="FunctionApprovalBlock"/> items in the chat.
 /// Optionally filters by tool name.
 /// Set <see cref="ContentTemplate.ViewType"/> to a custom inner content view;
 /// leave null for the default arguments display.
@@ -14,9 +15,16 @@ public class ToolApprovalTemplate : ContentTemplate
     /// <summary>Filter to a specific tool name, or null to match all approval requests.</summary>
     public string? ToolName { get; set; }
 
-    public override bool When(ContentContext context) =>
-        context.Content is ToolApprovalRequestContent &&
-        (ToolName is null || string.Equals(context.ToolName, ToolName, StringComparison.OrdinalIgnoreCase));
+    public override bool When(ContentContext context)
+    {
+        if (context.Block is not FunctionApprovalBlock fab)
+            return false;
+
+        if (ToolName is not null && !string.Equals(fab.ToolName, ToolName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
 
     internal override DataTemplate GetTemplate()
     {
