@@ -69,7 +69,8 @@ public partial class CopilotChatView
     }
 
     public static readonly BindableProperty WelcomeIconProperty =
-        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(CopilotChatView), "💬");
+        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(CopilotChatView), "💬",
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).UpdateWelcomeVisibility());
 
     public string WelcomeIcon
     {
@@ -193,7 +194,8 @@ public partial class CopilotChatView
     // ═══════════════════════════════════════════════════════════════
 
     public static readonly BindableProperty HeaderTemplateProperty =
-        BindableProperty.Create(nameof(HeaderTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(HeaderTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).ApplyHeaderTemplate());
 
     public DataTemplate? HeaderTemplate
     {
@@ -202,7 +204,8 @@ public partial class CopilotChatView
     }
 
     public static readonly BindableProperty FooterTemplateProperty =
-        BindableProperty.Create(nameof(FooterTemplate), typeof(DataTemplate), typeof(CopilotChatView));
+        BindableProperty.Create(nameof(FooterTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).ApplyFooterTemplate());
 
     public DataTemplate? FooterTemplate
     {
@@ -216,7 +219,8 @@ public partial class CopilotChatView
 
     public static readonly BindableProperty SuggestionPromptsProperty =
         BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(CopilotChatView),
-            defaultValueCreator: _ => new List<string>());
+            defaultValueCreator: _ => new List<string>(),
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).UpdateSuggestionsVisibility());
 
     public IList<string> SuggestionPrompts
     {
