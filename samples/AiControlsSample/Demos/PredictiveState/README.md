@@ -34,4 +34,4 @@ A document writer with an accept/reject workflow. The AI writes content via the 
 
 - **Pending vs. current state** — `_pendingDocument` holds the proposed text; `_currentDocument` holds the last accepted version. Accept promotes, reject discards (`PredictiveStatePage.xaml.cs:11-12, 53-54, 61-64`)
 - **Tool returns "waiting" status** — `WriteDocument` returns "Document preview shown to user. Waiting for acceptance." so the agent knows to pause (`PredictiveStatePage.xaml.cs:49`)
-- **Programmatic user messages** — Accept/Reject buttons call `ChatSession.SendAsync()` to inform the agent of the user's decision (`PredictiveStatePage.xaml.cs:56, 68`)
+- **Programmatic user messages** — Accept/Reject buttons call `Session.SendMessageAsync()` to inform the agent of the user's decision (`PredictiveStatePage.xaml.cs:59, 71`)

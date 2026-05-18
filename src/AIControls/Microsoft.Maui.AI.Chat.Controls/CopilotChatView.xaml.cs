@@ -92,6 +92,7 @@ public partial class CopilotChatView : TemplatedView
     private IDisposable? _turnAddedReg;
     private IDisposable? _statusChangedReg;
     private IDisposable? _blockAddedReg;
+    private readonly List<IDisposable> _blockSubscriptions = [];
 
     public IList<ContentTemplate> ContentTemplates => _contentTemplates;
 
@@ -214,6 +215,11 @@ public partial class CopilotChatView : TemplatedView
         _turnAddedReg = null;
         _statusChangedReg = null;
         _blockAddedReg = null;
+
+        // Dispose all per-block change subscriptions (Bug 1 fix: memory leak)
+        foreach (var sub in _blockSubscriptions)
+            sub.Dispose();
+        _blockSubscriptions.Clear();
     }
 
     private void OnTurnAdded(ConversationTurn turn)
@@ -223,7 +229,7 @@ public partial class CopilotChatView : TemplatedView
 
     private void OnStatusChanged(ConversationStatus status)
     {
-        IsBusy = status == ConversationStatus.Streaming;
+        IsBusy = status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput;
     }
 
     private void OnBlockAdded(ConversationTurn turn, ContentBlock block)
@@ -232,14 +238,20 @@ public partial class CopilotChatView : TemplatedView
             return;
 
         if (!ShouldShowBlock(block))
+        {
+            // Still subscribe — the block may become visible later (e.g., tool result arrives)
+            var sub = block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
+            _blockSubscriptions.Add(sub);
             return;
+        }
 
         _items.Add(new ContentContext(Session, block));
         UpdateWelcomeVisibility();
         ScrollToLatestMessage();
 
         // Subscribe to block changes for streaming updates
-        block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
+        var subscription = block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
+        _blockSubscriptions.Add(subscription);
     }
 
     private void OnBlockChanged(ContentBlock block)
@@ -247,19 +259,44 @@ public partial class CopilotChatView : TemplatedView
         if (Session is null)
             return;
 
+        // Check if this block is already displayed
         for (int i = 0; i < _items.Count; i++)
         {
             if (ReferenceEquals(_items[i].Block, block))
             {
-                _items[i] = new ContentContext(Session, block);
-                ScrollToLatestMessage();
+                if (!ShouldShowBlock(block))
+                {
+                    // Block should no longer be shown — remove it
+                    _items.RemoveAt(i);
+                    UpdateWelcomeVisibility();
+                }
+                else
+                {
+                    // Update the existing item to trigger UI refresh
+                    _items[i] = new ContentContext(Session, block);
+                    ScrollToLatestMessage();
+                }
                 return;
             }
+        }
+
+        // Block isn't in the list yet — check if it should now be shown
+        // (e.g., tool result arrived when ShowToolResults=true but ShowToolCalls=false)
+        if (ShouldShowBlock(block))
+        {
+            _items.Add(new ContentContext(Session, block));
+            UpdateWelcomeVisibility();
+            ScrollToLatestMessage();
         }
     }
 
     private void RebuildFromSession()
     {
+        // Dispose existing block subscriptions before clearing
+        foreach (var sub in _blockSubscriptions)
+            sub.Dispose();
+        _blockSubscriptions.Clear();
+
         _items.Clear();
 
         if (Session is null)

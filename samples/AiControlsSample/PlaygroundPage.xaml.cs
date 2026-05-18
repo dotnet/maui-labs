@@ -48,14 +48,18 @@ public partial class PlaygroundPage : ContentPage
 
     private void OnClearChatClicked(object? sender, EventArgs e)
     {
+        var old = Session;
         Session = CreateSession(SystemPromptEditor.Text);
         ChatPanel.Session = Session;
+        old?.Dispose();
     }
 
     private void OnApplySystemPromptClicked(object? sender, EventArgs e)
     {
+        var old = Session;
         Session = CreateSession(SystemPromptEditor.Text);
         ChatPanel.Session = Session;
+        old?.Dispose();
     }
 
     private void OnPlaceholderChanged(object? sender, TextChangedEventArgs e)
@@ -99,10 +103,18 @@ public partial class PlaygroundPage : ContentPage
 
     private async void OnQuickPromptClicked(object? sender, EventArgs e)
     {
-        if (sender is Button btn && !string.IsNullOrWhiteSpace(btn.Text))
+        if (sender is Button btn && !string.IsNullOrWhiteSpace(btn.Text)
+            && Session.Status == ConversationStatus.Idle)
         {
             var prompt = btn.Text.Length > 2 ? btn.Text[2..].Trim() : btn.Text;
-            await Session.SendMessageAsync(prompt);
+            try
+            {
+                await Session.SendMessageAsync(prompt);
+            }
+            catch (InvalidOperationException)
+            {
+                // Session was not in a valid state to send
+            }
         }
     }
 
