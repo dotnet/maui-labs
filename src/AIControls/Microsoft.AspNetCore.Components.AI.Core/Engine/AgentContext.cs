@@ -28,6 +28,22 @@ public class AgentContext : IDisposable
 
     public Exception? Error { get; private set; }
 
+    /// <summary>
+    /// Clears all conversation turns and resets the session to idle state.
+    /// The underlying agent and tools remain configured.
+    /// </summary>
+    public void Clear()
+    {
+        _streamingCts?.Cancel();
+        _streamingCts?.Dispose();
+        _streamingCts = null;
+        _turns.Clear();
+        _lastMessage = null;
+        Error = null;
+        Status = ConversationStatus.Idle;
+        NotifyStatusChanged();
+    }
+
     public Task SendMessageAsync(string text, CancellationToken cancellationToken = default)
     {
         return SendMessageAsync(new ChatMessage(ChatRole.User, text), cancellationToken);

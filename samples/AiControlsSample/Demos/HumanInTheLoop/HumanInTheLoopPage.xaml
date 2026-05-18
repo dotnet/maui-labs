@@ -7,51 +7,26 @@
              x:Name="ThisPage"
              Title="Human in the Loop">
 
-    <Grid ColumnDefinitions="*,Auto">
-        <!-- Chat panel -->
-        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
-            WelcomeMessage="Ask me to create a plan! I'll show the steps and wait for your approval before executing."
-            WelcomeIcon="📋">
-            <controls:CopilotChatView.SuggestionPrompts>
-                <x:String>Create a plan to organize my desk</x:String>
-                <x:String>Plan how to learn a new language</x:String>
-                <x:String>Help me plan a weekend trip</x:String>
-            </controls:CopilotChatView.SuggestionPrompts>
-            <controls:CopilotChatView.ContentTemplates>
-                <chat:TextContentTemplate Role="User" />
-                <chat:TextContentTemplate Role="Assistant" />
-                <chat:FunctionCallTemplate />
-                <chat:FunctionResultTemplate />
-                <chat:ToolApprovalTemplate />
-                <chat:ErrorContentTemplate />
-                <chat:DefaultContentTemplate />
-            </controls:CopilotChatView.ContentTemplates>
-        </controls:CopilotChatView>
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="🗑️" Clicked="OnClearClicked" />
+    </ContentPage.ToolbarItems>
 
-        <!-- Plan card panel (right side) -->
-        <Border x:Name="PlanPanel" Grid.Column="1"
-                IsVisible="False"
-                WidthRequest="320"
-                Stroke="{AppThemeBinding Light=#E2E8F0, Dark=#334155}"
-                StrokeShape="Rectangle" StrokeThickness="1"
-                Padding="16">
-            <Grid RowDefinitions="Auto,*,Auto">
-                <Label Text="📋 Plan" FontSize="18" FontAttributes="Bold" Margin="0,0,0,12" />
-
-                <ScrollView Grid.Row="1">
-                    <VerticalStackLayout x:Name="StepsLayout" Spacing="8" />
-                </ScrollView>
-
-                <HorizontalStackLayout x:Name="ConfirmButtons" Grid.Row="2"
-                                       Spacing="8" Margin="0,12,0,0" IsVisible="False">
-                    <Button Text="✅ Confirm" FontSize="12" Padding="10,6" CornerRadius="6"
-                            BackgroundColor="#22C55E" TextColor="White"
-                            Clicked="OnConfirmClicked" />
-                    <Button Text="❌ Reject" FontSize="12" Padding="10,6" CornerRadius="6"
-                            BackgroundColor="#EF4444" TextColor="White"
-                            Clicked="OnRejectClicked" />
-                </HorizontalStackLayout>
-            </Grid>
-        </Border>
-    </Grid>
+    <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+        WelcomeMessage="Ask me to create a plan! I'll show the steps and wait for your approval before executing each one."
+        WelcomeIcon="📋">
+        <controls:CopilotChatView.SuggestionPrompts>
+            <x:String>Create a plan to organize my desk</x:String>
+            <x:String>Plan how to learn a new language</x:String>
+            <x:String>Help me plan a weekend trip</x:String>
+        </controls:CopilotChatView.SuggestionPrompts>
+        <controls:CopilotChatView.ContentTemplates>
+            <chat:TextContentTemplate Role="User" />
+            <chat:TextContentTemplate Role="Assistant" />
+            <chat:FunctionCallTemplate />
+            <chat:FunctionResultTemplate />
+            <chat:ToolApprovalTemplate />
+            <chat:ErrorContentTemplate />
+            <chat:DefaultContentTemplate />
+        </controls:CopilotChatView.ContentTemplates>
+    </controls:CopilotChatView>
 </ContentPage>

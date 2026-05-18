@@ -7,6 +7,10 @@
              x:Name="ThisPage"
              Title="Agentic Chat">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="🗑️" Clicked="OnClearClicked" />
+    </ContentPage.ToolbarItems>
+
     <Grid x:Name="PageRoot"
           BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E2E}">
         <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
