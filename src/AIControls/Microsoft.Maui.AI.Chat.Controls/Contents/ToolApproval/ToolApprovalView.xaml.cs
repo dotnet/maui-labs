@@ -1,7 +1,7 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
@@ -87,8 +87,8 @@ public class ToolApprovalView : ContentContextView
 
     public ToolApprovalView()
     {
-        ApproveCommand = new AsyncRelayCommand(() => RespondAsync(true));
-        RejectCommand = new AsyncRelayCommand(() => RespondAsync(false));
+        ApproveCommand = new RelayCommand(Approve);
+        RejectCommand = new RelayCommand(Reject);
     }
 
     protected override void RefreshFromContentContext()
@@ -110,7 +110,7 @@ public class ToolApprovalView : ContentContextView
 
     private void RefreshApprovalState()
     {
-        IsPending = ContentContext?.ApprovalState == ToolApprovalState.Pending;
+        IsPending = ContentContext?.ApprovalState == ApprovalStatus.Pending;
         IsResolved = ContentContext?.ApprovalResolved ?? false;
         ResolutionText = ContentContext?.ApprovalResolutionText;
 
@@ -163,7 +163,7 @@ public class ToolApprovalView : ContentContextView
             innerView = BuildDefaultArgsView();
         }
 
-        if (ContentContext?.ApprovalResolved == true)
+        if (ContentContext.ApprovalResolved)
             innerView.IsEnabled = false;
 
         Content = innerView;
@@ -185,9 +185,8 @@ public class ToolApprovalView : ContentContextView
 
     private View BuildDefaultArgsView()
     {
-        if (ContentContext?.Content is not ToolApprovalRequestContent approval ||
-            approval.ToolCall is not FunctionCallContent fc ||
-            fc.Arguments is null || fc.Arguments.Count == 0)
+        if (ContentContext?.Block is not FunctionApprovalBlock fab ||
+            fab.Arguments is null || fab.Arguments.Count == 0)
         {
             return ApplyStyleResource(
                 new Label { Text = "(no arguments)" },
@@ -198,7 +197,7 @@ public class ToolApprovalView : ContentContextView
             new VerticalStackLayout(),
             ChatThemeKeys.ToolApprovalArgsStackStyle);
 
-        foreach (var kvp in fc.Arguments)
+        foreach (var kvp in fab.Arguments)
         {
             var row = ApplyStyleResource(
                 new HorizontalStackLayout(),
@@ -224,22 +223,15 @@ public class ToolApprovalView : ContentContextView
         return view;
     }
 
-    private async Task RespondAsync(bool approved)
+    private void Approve()
     {
-        if (ContentContext is null || ContentContext.Content is not ToolApprovalRequestContent request)
-            return;
-
-        var response = ResolveResponseFactory()?.CreateApprovalResponse(request, approved)
-            ?? request.CreateResponse(approved, approved ? null : "User rejected");
-
-        await ContentContext.Session.SubmitApprovalAsync(response);
+        if (ContentContext?.Block is FunctionApprovalBlock fab && fab.Status == ApprovalStatus.Pending)
+            fab.Approve();
     }
 
-    private IToolApprovalResponseFactory? ResolveResponseFactory()
+    private void Reject()
     {
-        if (Content is IToolApprovalResponseFactory viewFactory)
-            return viewFactory;
-
-        return null;
+        if (ContentContext?.Block is FunctionApprovalBlock fab && fab.Status == ApprovalStatus.Pending)
+            fab.Reject();
     }
 }

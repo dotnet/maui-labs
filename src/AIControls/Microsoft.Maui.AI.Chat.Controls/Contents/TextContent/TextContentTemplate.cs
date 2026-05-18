@@ -1,4 +1,4 @@
-using Microsoft.Maui.AI.Chat;
+using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
 using Microsoft.Extensions.AI;
 
@@ -6,11 +6,27 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 
 public class TextContentTemplate : ContentTemplate
 {
-    public ContentRole? Role { get; set; }
+    /// <summary>
+    /// Optional role filter. Use "User" or "Assistant" to restrict matching.
+    /// </summary>
+    public string? Role { get; set; }
 
-    public override bool When(ContentContext context) =>
-        context.Content is TextContent &&
-        (Role is null || context.Role == Role.Value);
+    public override bool When(ContentContext context)
+    {
+        if (context.Block is not RichContentBlock)
+            return false;
+
+        if (Role is not null)
+        {
+            var expectedRole = Role.Equals("User", StringComparison.OrdinalIgnoreCase)
+                ? ChatRole.User
+                : ChatRole.Assistant;
+            if (context.Role != expectedRole)
+                return false;
+        }
+
+        return true;
+    }
 
     internal override DataTemplate GetTemplate()
     {
