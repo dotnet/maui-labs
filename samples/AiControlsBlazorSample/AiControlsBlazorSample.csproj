@@ -46,6 +46,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Core\Microsoft.AspNetCore.Components.AI.Core.csproj" />
 		<ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Blazor\Microsoft.AspNetCore.Components.AI.Blazor.csproj" />
+		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
 
 	<!-- The Blazor library uses FrameworkReference Microsoft.AspNetCore.App which has no

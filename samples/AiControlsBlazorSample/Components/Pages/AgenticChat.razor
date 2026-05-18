@@ -1,0 +1,51 @@
+@page "/agentic-chat"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+@inject IChatClient ChatClient
+
+<div style="background-color: @_bgColor; padding: 1rem; border-radius: 8px; height: 100%;">
+    <ChatPage Agent="@_agent" Suggestions="@_suggestions" Placeholder="Ask me to change the background color..." />
+</div>
+
+@code {
+    private UIAgent _agent = default!;
+    private List<Suggestion> _suggestions = default!;
+    private string _bgColor = "transparent";
+
+    protected override void OnInitialized()
+    {
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(ChangeBackground, "change_background",
+                "Change the background color of the page.")
+        };
+
+        var chatOptions = new ChatOptions
+        {
+            Instructions = """
+                You are a helpful assistant that can change the background color of the app.
+                When the user asks you to change the background, use the change_background tool.
+                Be creative with color suggestions if the user is vague.
+                After changing the background, briefly describe what you did.
+                """,
+            Tools = [.. tools]
+        };
+
+        _agent = new UIAgent(ChatClient, chatOptions);
+        _suggestions =
+        [
+            new() { Label = "Make it light blue", Prompt = "Make the background light blue" },
+            new() { Label = "Warm sunset color", Prompt = "Set a warm sunset color" },
+            new() { Label = "Surprise me!", Prompt = "Surprise me with a color!" },
+        ];
+    }
+
+    [System.ComponentModel.Description("Change the background color of the page")]
+    private string ChangeBackground(
+        [System.ComponentModel.Description("CSS color value, e.g. 'LightBlue', '#FFE0E0', 'Salmon'")] string color)
+    {
+        _bgColor = color;
+        InvokeAsync(StateHasChanged);
+        return $"Background changed to {color}.";
+    }
+}

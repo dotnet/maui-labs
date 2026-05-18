@@ -4,6 +4,7 @@ using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.DevFlow.Agent;
 
 namespace AiControlsBlazorSample;
 
@@ -20,6 +21,7 @@ public static class MauiProgram
             });
 
         builder.Services.AddMauiBlazorWebView();
+        builder.AddMauiDevFlowAgent();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
