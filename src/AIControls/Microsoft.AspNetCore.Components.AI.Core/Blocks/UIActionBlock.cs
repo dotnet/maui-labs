@@ -20,13 +20,24 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
 
     public async Task InvokeAsync(CancellationToken cancellationToken = default)
     {
-        var arguments = Call?.Arguments is not null ? new AIFunctionArguments(Call.Arguments) : null;
-        var result = await _function.InvokeAsync(arguments, cancellationToken);
-        var frc = new FunctionResultContent(Call!.CallId, result);
-        InnerBlock.Result = frc;
-        IsComplete = true;
-        NotifyChanged();
-        _tcs.TrySetResult(frc);
+        try
+        {
+            var arguments = Call?.Arguments is not null ? new AIFunctionArguments(Call.Arguments) : null;
+            var result = await _function.InvokeAsync(arguments, cancellationToken);
+            var frc = new FunctionResultContent(Call!.CallId, result);
+            InnerBlock.Result = frc;
+            IsComplete = true;
+            NotifyChanged();
+            _tcs.TrySetResult(frc);
+        }
+        catch (Exception ex)
+        {
+            IsComplete = true;
+            var errorResult = new FunctionResultContent(Call?.CallId ?? string.Empty, $"Error: {ex.Message}");
+            InnerBlock.Result = errorResult;
+            NotifyChanged();
+            _tcs.TrySetResult(errorResult);
+        }
     }
 
     public Task<AIContent> GetResultAsync(CancellationToken cancellationToken = default)
