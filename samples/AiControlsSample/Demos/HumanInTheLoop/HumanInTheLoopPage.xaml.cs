@@ -35,8 +35,9 @@ public partial class HumanInTheLoopPage : ContentPage
                     You are a plan assistant. When the user asks you to do something:
                     1. Create a plan by calling create_plan with a JSON array of step descriptions.
                     2. The plan will be shown to the user for approval — WAIT for them to approve or reject.
-                    3. If approved, describe executing each step one by one with brief updates.
-                    4. If rejected, acknowledge and ask what they'd like to change.
+                    3. If approved, summarize what was accomplished.
+                    4. If rejected or the tool call was not approved, do NOT repeat or describe the plan.
+                       Simply say "No problem! What would you like me to change?" and wait for new instructions.
 
                     Always create 3-5 concrete, actionable steps.
                     """,
