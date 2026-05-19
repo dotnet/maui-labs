@@ -15,6 +15,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
 | **Essentials.AI** | `Microsoft.Maui.Essentials.AI` | On-device AI for .NET MAUI — semantic search, chat completion, embeddings, and tool use against local models. |
+| **AIExtensions** | `Microsoft.Maui.AI.Attributes` | Source-generated AI tool bindings — turns decorated C# methods into `Microsoft.Extensions.AI`-callable tools using Roslyn, with DI parameter binding and AOT support. |
 | **AppProjectReference** | `Microsoft.Maui.Build.AppProjectReference` | MSBuild SDK extension that enables referencing MAUI app projects from test and tooling projects. |
 | **Linux GTK4** | `Microsoft.Maui.Platforms.Linux.Gtk4` + associated packages | .NET MAUI platform backend for Linux using GTK4 — handler, Essentials, BlazorWebView, and project templates. |
 | **macOS AppKit** | `Microsoft.Maui.Platforms.MacOS` + associated packages | .NET MAUI platform backend for macOS AppKit — handler, Essentials, BlazorWebView, and project templates. |
@@ -108,6 +109,9 @@ maui-labs/
 │   │   └── DevFlow.slnf                          # Solution filter
 │   ├── AI/                               # Essentials.AI product
 │   │   └── Microsoft.Maui.Essentials.AI/ # On-device AI package
+│   ├── AIExtensions/                     # AI Extensions product
+│   │   ├── Microsoft.Maui.AI.Attributes/           # Runtime library (attributes + AIToolContext base class)
+│   │   └── Microsoft.Maui.AI.Attributes.Generators/ # Roslyn incremental source generator
 │   ├── AppProjectReference/              # AppProjectReference product
 │   │   └── Microsoft.Maui.Build.AppProjectReference/ # MSBuild SDK extension
 │   ├── Comet/                            # Comet MVU framework
@@ -171,7 +175,7 @@ Each product has its own workflow file: `.github/workflows/ci-{product}.yml`, ca
 - **`pull_request.types`**: Must always include `[opened, synchronize, reopened, edited]` — the `edited` type ensures CI re-runs when GitHub auto-retargets a PR after a stacked branch merges
 - Steps: restore → build → test → upload test results + packages
 
-Existing workflows: `ci-cli.yml`, `ci-comet.yml`, `ci-devflow.yml`, `ci-essentialsai.yml`, `ci-appprojectreference.yml`, `ci-linux-gtk4.yml`, `ci-macos-appkit.yml`, `ci-wpf.yml`
+Existing workflows: `ci-ai.yml`, `ci-cli.yml`, `ci-comet.yml`, `ci-devflow.yml`, `ci-essentialsai.yml`, `ci-appprojectreference.yml`, `ci-linux-gtk4.yml`, `ci-macos-appkit.yml`, `ci-wpf.yml`
 
 ### Azure DevOps (official builds)
 

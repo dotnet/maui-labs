@@ -14,6 +14,8 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 
 | Product | Test Project | Target |
 |---------|-------------|--------|
+| AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/` | `net10.0` |
 | AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
 | Cli | `src/Cli/Microsoft.Maui.Cli.UnitTests/` | `net10.0` |
 | Comet | `src/Comet/tests/Comet.Tests/` | multi-TFM |
