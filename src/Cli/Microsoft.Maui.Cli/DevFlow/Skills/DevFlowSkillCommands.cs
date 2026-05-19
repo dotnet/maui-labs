@@ -270,6 +270,7 @@ internal static class DevFlowSkillCommands
         console.Write(new Rule("[yellow]Next prompt for your AI agent[/]").LeftJustified());
         console.MarkupLine("  Use the [bold cyan]maui-devflow-onboard[/] skill to add MAUI DevFlow to this project.");
         console.MarkupLine("  Use [bold cyan]maui-devflow-debug[/] after the app is running for build/deploy/inspect/fix loops.");
+        console.MarkupLine("  Use [bold cyan]maui-devflow-session-review[/] to turn long or stuck DevFlow sessions into opt-in product feedback.");
         console.WriteLine();
 
         console.MarkupLine("[yellow]Manual fallback:[/]");

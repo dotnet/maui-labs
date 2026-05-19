@@ -21,6 +21,8 @@ public sealed class DevFlowSkillManagerTests
         Assert.Equal("install", result["action"]?.GetValue<string>());
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-session-review", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-session-review", "references", "friction-rubric.md")));
         Assert.False(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-connect", "SKILL.md")));
         Assert.False(File.Exists(Path.Combine(workspace.Path, ".maui", "devflow-skills.lock.json")));
 
@@ -373,6 +375,7 @@ public sealed class DevFlowSkillManagerTests
         Assert.False(Directory.Exists(legacyDirectory));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-session-review", "SKILL.md")));
         var results = Assert.IsType<JsonArray>(result["results"]);
         var legacyResult = results.OfType<JsonObject>().Single(item => item["skillId"]?.GetValue<string>() == "maui-ai-debugging");
         Assert.Equal("removed", legacyResult["action"]?.GetValue<string>());
@@ -389,6 +392,7 @@ public sealed class DevFlowSkillManagerTests
         Assert.Equal("update", result["action"]?.GetValue<string>());
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-session-review", "SKILL.md")));
         var results = Assert.IsType<JsonArray>(result["results"]);
         Assert.Contains(results.OfType<JsonObject>(), item =>
             item["skillId"]?.GetValue<string>() == "maui-devflow-onboard" &&
@@ -396,6 +400,10 @@ public sealed class DevFlowSkillManagerTests
             item["message"]?.GetValue<string>() == "Installed missing skill files from the current CLI bundle.");
         Assert.Contains(results.OfType<JsonObject>(), item =>
             item["skillId"]?.GetValue<string>() == "maui-devflow-debug" &&
+            item["action"]?.GetValue<string>() == "written" &&
+            item["message"]?.GetValue<string>() == "Installed missing skill files from the current CLI bundle.");
+        Assert.Contains(results.OfType<JsonObject>(), item =>
+            item["skillId"]?.GetValue<string>() == "maui-devflow-session-review" &&
             item["action"]?.GetValue<string>() == "written" &&
             item["message"]?.GetValue<string>() == "Installed missing skill files from the current CLI bundle.");
     }
@@ -416,6 +424,7 @@ public sealed class DevFlowSkillManagerTests
 
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".agent", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".agent", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".agent", "skills", "maui-devflow-session-review", "SKILL.md")));
         Assert.False(Directory.Exists(Path.Combine(workspace.Path, ".claude")));
         var statePath = GetStatePathFromResults(result);
         Assert.StartsWith(Path.Combine(workspace.StateRoot, "workspaces"), statePath, StringComparison.Ordinal);
@@ -438,6 +447,7 @@ public sealed class DevFlowSkillManagerTests
 
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".agents", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".agents", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".agents", "skills", "maui-devflow-session-review", "SKILL.md")));
         Assert.False(Directory.Exists(Path.Combine(workspace.Path, ".claude")));
 
         var results = Assert.IsType<JsonArray>(result["results"]);
@@ -454,6 +464,7 @@ public sealed class DevFlowSkillManagerTests
 
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".agent", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".agent", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".agent", "skills", "maui-devflow-session-review", "SKILL.md")));
         Assert.False(Directory.Exists(Path.Combine(workspace.Path, ".claude")));
     }
 
@@ -466,6 +477,7 @@ public sealed class DevFlowSkillManagerTests
 
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".github", "skills", "maui-devflow-onboard", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".github", "skills", "maui-devflow-debug", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.Path, ".github", "skills", "maui-devflow-session-review", "SKILL.md")));
         Assert.False(Directory.Exists(Path.Combine(workspace.Path, ".claude")));
     }
 
@@ -616,6 +628,7 @@ public sealed class DevFlowSkillManagerTests
         Assert.StartsWith(Path.Combine(workspace.StateRoot, "workspaces"), projectStatePath, StringComparison.Ordinal);
         Assert.Equal(Path.Combine(workspace.StateRoot, "user", "skills", "claude.json"), userStatePath);
         Assert.True(File.Exists(Path.Combine(workspace.UserRoot, ".claude", "skills", "maui-devflow-onboard", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(workspace.UserRoot, ".claude", "skills", "maui-devflow-session-review", "SKILL.md")));
     }
 
     [Fact]

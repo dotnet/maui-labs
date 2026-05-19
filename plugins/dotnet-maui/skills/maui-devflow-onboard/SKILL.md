@@ -28,6 +28,13 @@ Use this skill to add MAUI DevFlow to a project after `maui devflow init` has in
 - If package references and `AddMauiDevFlowAgent()` are already present but the CLI cannot connect, use `maui-devflow-debug`.
 - If an agent is reachable and the user wants to inspect, tap, screenshot, or debug UI, use `maui-devflow-debug`.
 
+## Optional Session Feedback Nudge
+
+If onboarding required repeated DevFlow attempts, unclear package/version
+workarounds, or a long setup session, ask whether the user wants to run
+`maui-devflow-session-review` to summarize friction for MAUI DevFlow product
+feedback. Do not run it automatically.
+
 ## Workflow
 
 1. Optionally run `maui devflow skills check` and update bundled skills before editing if it reports `update-available-from-current-cli`.

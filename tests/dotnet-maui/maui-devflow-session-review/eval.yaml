@@ -1,0 +1,79 @@
+scenarios:
+  - name: "Review repeated broker and agent wait failures"
+    prompt: |
+      I had a MAUI DevFlow debugging session where the agent tried
+      `maui devflow list`, `maui devflow wait`, and `maui devflow ui tree`
+      several times. On Android it also tried direct localhost access, then
+      switched between broker discovery and port forwarding before the workflow
+      finally worked. I do not want to fix the app right now; I want a concise
+      product-feedback report for the DevFlow maintainers.
+    assertions:
+      - type: "output_matches"
+        pattern: "maui devflow (list|wait|ui tree)"
+      - type: "output_matches"
+        pattern: "19223|9223|adb (reverse|forward)|broker"
+      - type: "output_matches"
+        pattern: "(?i)PII|scrub|sanitize"
+      - type: "output_matches"
+        pattern: "(?i)severity|confidence|outcome"
+    rubric:
+      - "Treats the task as a session review/report, not as an app fix"
+      - "Identifies repeated broker/wait/tree attempts as DevFlow friction"
+      - "Calls out Android broker/agent port forwarding as relevant evidence"
+      - "Includes privacy scrubbing and avoids local identifiers"
+      - "Classifies findings with severity, confidence, and outcome"
+    timeout: 240
+
+  - name: "Create markdown report for long Blazor WebView debugging session"
+    prompt: |
+      Please summarize this long MAUI Blazor Hybrid DevFlow session into a
+      markdown-only feedback report. The repeated friction was around
+      `maui_cdp_webviews`, `maui_cdp_source`, `maui devflow ui tree`, and a
+      fallback to screenshots because the WebView list kept coming back empty.
+      Do not file an issue yet.
+    assertions:
+      - type: "output_contains"
+        value: "markdown"
+      - type: "output_contains"
+        value: "## Environment"
+      - type: "output_contains"
+        value: "## Findings"
+      - type: "output_matches"
+        pattern: "maui_cdp_webviews|maui_cdp_source|WebView"
+      - type: "output_not_matches"
+        pattern: "gh issue create"
+    rubric:
+      - "Defaults to markdown output and does not file an issue"
+      - "Uses the report shape with Environment and Findings sections"
+      - "Recognizes CDP/WebView and screenshot fallback as DevFlow-specific friction"
+      - "Captures attempts, workaround, and final outcome"
+      - "Keeps unknown environment fields explicit rather than guessing"
+    timeout: 240
+
+  - name: "Draft scrubbed GitHub issue for dotnet/maui-labs"
+    prompt: |
+      I want to file a GitHub issue from a DevFlow session review. The raw notes
+      mention `/Users/alex/src/MyCustomerApp`, `alex@example.com`, and a private
+      staging URL. The useful product signal is that `maui_query --automationId`
+      failed three times, then the agent dumped the full tree and manually found
+      the element. Draft the issue body and show how you would file it.
+    assertions:
+      - type: "output_contains"
+        value: "dotnet/maui-labs"
+      - type: "output_matches"
+        pattern: "gh issue create|GitHub issue"
+      - type: "output_matches"
+        pattern: "(?i)scrub|remove|sanitize|redact"
+      - type: "output_matches"
+        pattern: "maui_query|AutomationId|full tree"
+      - type: "output_not_contains"
+        value: "/Users/alex/src/MyCustomerApp"
+      - type: "output_not_contains"
+        value: "alex@example.com"
+    rubric:
+      - "Routes issue filing to dotnet/maui-labs"
+      - "Scrubs local paths, email addresses, and private URLs before output"
+      - "Summarizes the product problem as targeted query failure requiring full tree workaround"
+      - "Includes expected behavior, actual behavior, attempts/workarounds, and outcome"
+      - "Mentions filing only after user approval/access rather than silently posting"
+    timeout: 240

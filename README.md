@@ -146,7 +146,7 @@ This repository is also a marketplace for distributable agent skills for .NET MA
 
 | Plugin | Description |
 |--------|-------------|
-| [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics |
+| [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics, session review |
 
 ```bash
 # Install via Copilot CLI
