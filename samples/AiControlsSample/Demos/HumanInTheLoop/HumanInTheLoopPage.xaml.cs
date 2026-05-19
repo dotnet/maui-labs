@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components.AI;
 using Microsoft.Extensions.AI;
@@ -11,18 +12,11 @@ public partial class HumanInTheLoopPage : ContentPage
 
     public HumanInTheLoopPage(IChatClient chatClient)
     {
-        // create_plan is a UIAction — the conversation pauses (AwaitingInput)
-        // and the framework renders a ToolApprovalView inline in the chat.
-        // The user sees the plan arguments and clicks Approve or Reject.
-        var createPlan = AIFunctionFactory.Create(
-            ([Description("JSON array of step descriptions")] string steps_json) =>
-            {
-                var steps = JsonSerializer.Deserialize<List<string>>(steps_json) ?? [];
-                var formatted = string.Join("\n", steps.Select((s, i) => $"{i + 1}. {s}"));
-                return $"Plan approved. Steps:\n{formatted}";
-            },
-            "create_plan",
-            "Create a plan with numbered steps for the user to review and approve before execution.");
+        // Wrap the chat client to require approval for create_plan.
+        // When the LLM calls create_plan, the wrapper emits ToolApprovalRequestContent
+        // instead of auto-executing — the pipeline creates a FunctionApprovalBlock
+        // and the ToolApprovalView renders Approve/Reject buttons inline.
+        var approvalClient = new ToolApprovalChatClient(chatClient, "create_plan");
 
         var chatOptions = new ChatOptions
         {
@@ -35,13 +29,21 @@ public partial class HumanInTheLoopPage : ContentPage
 
                 Always create 3-5 concrete, actionable steps.
                 """,
+            Tools =
+            [
+                AIFunctionFactory.Create(
+                    [Description("Create a plan with numbered steps for the user to review and approve before execution.")]
+                    ([Description("JSON array of step descriptions")] string steps_json) =>
+                    {
+                        var steps = JsonSerializer.Deserialize<List<string>>(steps_json) ?? [];
+                        var formatted = string.Join("\n", steps.Select((s, i) => $"{i + 1}. {s}"));
+                        return $"Plan approved and executing:\n{formatted}";
+                    },
+                    "create_plan")
+            ]
         };
 
-        var agent = new UIAgent(chatClient, options =>
-        {
-            options.ChatOptions = chatOptions;
-            options.RegisterUIAction(createPlan);
-        });
+        var agent = new UIAgent(approvalClient, chatOptions);
         Session = new AgentContext(agent);
 
         InitializeComponent();
@@ -50,5 +52,75 @@ public partial class HumanInTheLoopPage : ContentPage
     private void OnClearClicked(object? sender, EventArgs e)
     {
         Session.Clear();
+    }
+}
+
+/// <summary>
+/// A delegating chat client that intercepts specific tool calls and emits
+/// <see cref="ToolApprovalRequestContent"/> instead of letting them auto-execute.
+/// This triggers the FunctionApprovalBlock flow in the pipeline, showing
+/// Approve/Reject UI to the user.
+/// </summary>
+file sealed class ToolApprovalChatClient : DelegatingChatClient
+{
+    private readonly HashSet<string> _toolsRequiringApproval;
+
+    public ToolApprovalChatClient(IChatClient inner, params string[] toolNames)
+        : base(inner)
+    {
+        _toolsRequiringApproval = new HashSet<string>(toolNames, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var update in base.GetStreamingResponseAsync(messages, options, cancellationToken))
+        {
+            // Check if any content is a function call for a tool requiring approval
+            var hasApprovalCall = false;
+            foreach (var content in update.Contents)
+            {
+                if (content is FunctionCallContent fcc &&
+                    _toolsRequiringApproval.Contains(fcc.Name))
+                {
+                    hasApprovalCall = true;
+                    break;
+                }
+            }
+
+            if (!hasApprovalCall)
+            {
+                yield return update;
+                continue;
+            }
+
+            // Replace function calls with approval requests
+            var newContents = new List<AIContent>();
+            foreach (var content in update.Contents)
+            {
+                if (content is FunctionCallContent fcc &&
+                    _toolsRequiringApproval.Contains(fcc.Name))
+                {
+                    newContents.Add(new ToolApprovalRequestContent(
+                        fcc.CallId ?? Guid.NewGuid().ToString("N"), fcc));
+                }
+                else
+                {
+                    newContents.Add(content);
+                }
+            }
+
+            yield return new ChatResponseUpdate
+            {
+                Role = update.Role,
+                MessageId = update.MessageId,
+                Contents = newContents,
+                FinishReason = update.FinishReason,
+                ResponseId = update.ResponseId,
+                ModelId = update.ModelId,
+            };
+        }
     }
 }

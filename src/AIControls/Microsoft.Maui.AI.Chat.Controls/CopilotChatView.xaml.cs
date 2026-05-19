@@ -280,16 +280,19 @@ public partial class CopilotChatView : TemplatedView
         if (Session is null)
             return;
 
-        var pendingAction = Session.Turns
+        // Invoke ALL pending UIActionBlocks (not just one) to avoid deadlock
+        // when the LLM emits multiple tool calls in a single turn.
+        var pendingActions = Session.Turns
             .SelectMany(t => t.ResponseBlocks)
             .OfType<Microsoft.AspNetCore.Components.AI.UIActionBlock>()
-            .LastOrDefault(b => !b.IsComplete);
+            .Where(b => !b.IsComplete)
+            .ToList();
 
-        if (pendingAction is not null)
+        foreach (var action in pendingActions)
         {
             try
             {
-                await pendingAction.InvokeAsync();
+                await action.InvokeAsync();
             }
             catch (Exception ex)
             {
