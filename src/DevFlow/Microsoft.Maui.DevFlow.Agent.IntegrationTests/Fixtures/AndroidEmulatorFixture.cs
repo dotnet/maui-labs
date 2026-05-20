@@ -196,22 +196,69 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         if (string.IsNullOrWhiteSpace(_serialNumber))
             return;
 
-        var (output, _, exitCode) = await RunProcessAsync(
-            AdbPath(),
-            "forward --list",
-            timeoutSeconds: 5);
-
-        var expectedForward = $"tcp:{AgentPort} tcp:{AgentPort}";
-        var hasForward = exitCode == 0 && output
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Any(line => line.StartsWith(_serialNumber, StringComparison.OrdinalIgnoreCase)
-                && line.Contains(expectedForward, StringComparison.Ordinal));
-
-        if (hasForward)
+        if (await IsAgentForwardEstablishedAsync())
             return;
 
-        Console.WriteLine($"[AndroidFixture] Re-establishing missing ADB forward {expectedForward}.");
+        Console.WriteLine($"[AndroidFixture] Re-establishing missing ADB forward tcp:{AgentPort} tcp:{AgentPort}.");
+
+        // Best-effort remove first so a stale or partial mapping (e.g. left
+        // behind by a previous adb-server crash) doesn't block the re-add.
+        try { await AdbAsync($"forward --remove tcp:{AgentPort}", timeoutSeconds: 5); } catch { }
+
         await AdbCheckedAsync($"forward tcp:{AgentPort} tcp:{AgentPort}", timeoutSeconds: 15);
+
+        // Verify the mapping actually landed - `adb forward` can return 0 while
+        // the daemon is in an inconsistent state, and silently failing here
+        // amplifies into a slow, opaque retry storm in the agent client.
+        if (!await IsAgentForwardEstablishedAsync())
+        {
+            throw new InvalidOperationException(
+                $"adb forward tcp:{AgentPort} tcp:{AgentPort} reported success on '{_serialNumber}' " +
+                "but the mapping is not visible in `adb forward --list`.");
+        }
+    }
+
+    async Task<bool> IsAgentForwardEstablishedAsync()
+    {
+        // Scope the listing to this device so we get the 2-column
+        // `<local> <remote>` form regardless of how many devices are attached.
+        var (output, _, exitCode) = await AdbAsync("forward --list", timeoutSeconds: 5);
+        if (exitCode != 0)
+            return false;
+
+        var expectedLocal = $"tcp:{AgentPort}";
+        var expectedRemote = $"tcp:{AgentPort}";
+
+        foreach (var rawLine in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = rawLine.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            // Tolerate both `<serial> <local> <remote>` and `<local> <remote>`
+            // shapes - older `adb` releases emit the 3-column form even with `-s`.
+            string? local;
+            string? remote;
+            if (parts.Length >= 3)
+            {
+                local = parts[1];
+                remote = parts[2];
+            }
+            else if (parts.Length == 2)
+            {
+                local = parts[0];
+                remote = parts[1];
+            }
+            else
+            {
+                continue;
+            }
+
+            if (string.Equals(local, expectedLocal, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(remote, expectedRemote, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     async Task<string?> TryGetAppPidAsync(int timeoutSeconds = 5)
@@ -333,13 +380,26 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         {
             var (stdout, stderr, _) = await RunProcessAsync(
                 AdbPath(),
-                "forward --list",
+                $"-s {_serialNumber} forward --list",
                 timeoutSeconds: 10);
             await File.WriteAllTextAsync($"{prefix}.forward-list.txt", $"{stdout}{Environment.NewLine}{Environment.NewLine}STDERR:{Environment.NewLine}{stderr}");
         }
         catch (Exception ex)
         {
             await File.WriteAllTextAsync($"{prefix}.forward-list.error.txt", ex.ToString());
+        }
+
+        try
+        {
+            var (stdout, stderr, _) = await RunProcessAsync(
+                AdbPath(),
+                $"-s {_serialNumber} reverse --list",
+                timeoutSeconds: 10);
+            await File.WriteAllTextAsync($"{prefix}.reverse-list.txt", $"{stdout}{Environment.NewLine}{Environment.NewLine}STDERR:{Environment.NewLine}{stderr}");
+        }
+        catch (Exception ex)
+        {
+            await File.WriteAllTextAsync($"{prefix}.reverse-list.error.txt", ex.ToString());
         }
 
         try
