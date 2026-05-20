@@ -23,6 +23,17 @@ public class AgentClient : IDisposable
 
     public string BaseUrl => _baseUrl;
 
+    /// <summary>
+    /// Additional attempts for transient transport failures such as a dropped ADB port
+    /// forward. Defaults to 0 so normal client calls keep their current fail-fast behavior.
+    /// </summary>
+    public int TransientFailureRetryCount { get; set; }
+
+    /// <summary>
+    /// Base delay between transient transport retries.
+    /// </summary>
+    public TimeSpan TransientFailureRetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
+
     public AgentClient(string host = "localhost", int port = 9223)
     {
         _baseUrl = $"http://{host}:{port}";
@@ -84,7 +95,7 @@ public class AgentClient : IDisposable
     public async Task<List<ElementInfo>> QueryCssAsync(string selector)
     {
         var url = $"{_baseUrl}{UiApi}/elements?selector={Uri.EscapeDataString(selector)}";
-        var response = await _http.GetAsync(url);
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
         var body = await response.Content.ReadAsStringAsync();
         var json = DriverJson.ParseElement(body);
         if (json.ValueKind == JsonValueKind.Object &&
@@ -194,8 +205,11 @@ public class AgentClient : IDisposable
             ["actions"] = items
         };
 
-        using var content = DriverJson.CreateJsonContent(body);
-        var response = await _http.PostAsync($"{_baseUrl}{UiApi}/actions/batch", content);
+        using var response = await SendWithTransientRetriesAsync(async () =>
+        {
+            using var content = DriverJson.CreateJsonContent(body);
+            return await _http.PostAsync($"{_baseUrl}{UiApi}/actions/batch", content);
+        });
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -256,11 +270,11 @@ public class AgentClient : IDisposable
                 ? $"{_baseUrl}{UiApi}/screenshot?{string.Join("&", queryParams)}"
                 : $"{_baseUrl}{UiApi}/screenshot";
 
-            var response = await _http.GetAsync(url);
+            using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
             if (!response.IsSuccessStatusCode) return null;
             return await response.Content.ReadAsByteArrayAsync();
         }
-        catch { return null; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
     }
 
     /// <summary>
@@ -281,14 +295,17 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var content = DriverJson.CreateJsonContent(new JsonObject
+            using var response = await SendWithTransientRetriesAsync(async () =>
             {
-                ["value"] = value
+                using var content = DriverJson.CreateJsonContent(new JsonObject
+                {
+                    ["value"] = value
+                });
+                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
             });
-            var response = await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
             return response.IsSuccessStatusCode;
         }
-        catch { return false; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
     }
 
     /// <summary>
@@ -299,7 +316,7 @@ public class AgentClient : IDisposable
         var path = $"{ApiV1}/logs?limit={limit}&skip={skip}";
         if (!string.IsNullOrEmpty(source) && source != "all")
             path += $"&source={Uri.EscapeDataString(source)}";
-        return await _http.GetStringAsync($"{_baseUrl}{path}");
+        return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
     }
 
     /// <summary>
@@ -318,8 +335,11 @@ public class AgentClient : IDisposable
         if (@params != null)
             body["params"] = @params.DeepClone();
 
-        using var content = DriverJson.CreateJsonContent(body);
-        var response = await _http.PostAsync($"{_baseUrl}{path}", content);
+        using var response = await SendWithTransientRetriesAsync(async () =>
+        {
+            using var content = DriverJson.CreateJsonContent(body);
+            return await _http.PostAsync($"{_baseUrl}{path}", content);
+        });
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -337,7 +357,7 @@ public class AgentClient : IDisposable
         var path = $"{WebViewApi}/source";
         if (!string.IsNullOrEmpty(webviewId))
             path += $"?webview={Uri.EscapeDataString(webviewId)}";
-        return await _http.GetStringAsync($"{_baseUrl}{path}");
+        return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
     }
 
     public async Task<bool> NavigateWebViewAsync(string url, string? contextId = null)
@@ -398,7 +418,7 @@ public class AgentClient : IDisposable
         var path = $"{UiApi}/hit-test?x={x}&y={y}";
         if (window.HasValue)
             path += $"&window={window.Value}";
-        return await _http.GetStringAsync($"{_baseUrl}{path}");
+        return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
     }
 
     public async Task<ProfilerCapabilities?> GetProfilerCapabilitiesAsync()
@@ -472,53 +492,59 @@ public class AgentClient : IDisposable
     {
         try
         {
-            var response = await _http.GetStringAsync($"{_baseUrl}{path}");
+            var response = await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
             return DriverJson.Deserialize<T>(response);
         }
-        catch { return null; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
     }
 
     private async Task<JsonElement> GetJsonAsync(string path)
     {
         try
         {
-            using var response = await _http.GetAsync($"{_baseUrl}{path}");
+            using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
             var body = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(body))
                 return default;
 
             return DriverJson.ParseElement(body);
         }
-        catch { return default; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
 
     private async Task<bool> PostActionAsync(string path, JsonNode body)
     {
         try
         {
-            using var content = DriverJson.CreateJsonContent(body);
-            var response = await _http.PostAsync($"{_baseUrl}{path}", content);
+            using var response = await SendWithTransientRetriesAsync(async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(body);
+                return await _http.PostAsync($"{_baseUrl}{path}", content);
+            });
             if (!response.IsSuccessStatusCode) return false;
 
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = DriverJson.Deserialize<ActionResponse>(responseBody);
             return result?.Success == true;
         }
-        catch { return false; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
     }
 
     private async Task<T?> PostJsonAsync<T>(string path, JsonNode body) where T : class
     {
         try
         {
-            using var content = DriverJson.CreateJsonContent(body);
-            var response = await _http.PostAsync($"{_baseUrl}{path}", content);
+            using var response = await SendWithTransientRetriesAsync(async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(body);
+                return await _http.PostAsync($"{_baseUrl}{path}", content);
+            });
             var responseBody = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(responseBody))
                 return null;
             return DriverJson.Deserialize<T>(responseBody);
         }
-        catch
+        catch (Exception ex) when (IsExpectedClientException(ex))
         {
             return null;
         }
@@ -528,13 +554,13 @@ public class AgentClient : IDisposable
     {
         try
         {
-            var response = await _http.DeleteAsync($"{_baseUrl}{path}");
+            using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{path}"));
             if (!response.IsSuccessStatusCode)
                 return null;
             var responseBody = await response.Content.ReadAsStringAsync();
             return DriverJson.Deserialize<T>(responseBody);
         }
-        catch
+        catch (Exception ex) when (IsExpectedClientException(ex))
         {
             return null;
         }
@@ -544,7 +570,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            var response = await _http.DeleteAsync($"{_baseUrl}{path}");
+            using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{path}"));
             if (!response.IsSuccessStatusCode)
                 return false;
 
@@ -552,11 +578,50 @@ public class AgentClient : IDisposable
             var result = DriverJson.Deserialize<ActionResponse>(responseBody);
             return result?.Success == true;
         }
-        catch
+        catch (Exception ex) when (IsExpectedClientException(ex))
         {
             return false;
         }
     }
+
+    private Task<string> GetStringWithTransientRetriesAsync(string url)
+        => SendWithTransientRetriesAsync(() => _http.GetStringAsync(url));
+
+    private async Task<T> SendWithTransientRetriesAsync<T>(Func<Task<T>> send)
+    {
+        var retryCount = Math.Max(0, TransientFailureRetryCount);
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await send();
+            }
+            catch (Exception ex) when (IsTransientTransportException(ex) && attempt < retryCount)
+            {
+                var delay = GetTransientFailureRetryDelay(attempt);
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay);
+            }
+        }
+    }
+
+    private TimeSpan GetTransientFailureRetryDelay(int attempt)
+    {
+        if (TransientFailureRetryDelay <= TimeSpan.Zero)
+            return TimeSpan.Zero;
+
+        var multiplier = Math.Min(attempt + 1, 5);
+        return TimeSpan.FromMilliseconds(TransientFailureRetryDelay.TotalMilliseconds * multiplier);
+    }
+
+    private static bool IsExpectedClientException(Exception ex)
+        => ex is HttpRequestException or TaskCanceledException or IOException or JsonException
+            || (ex.InnerException is not null && IsExpectedClientException(ex.InnerException));
+
+    private static bool IsTransientTransportException(Exception ex)
+        => ex is HttpRequestException or TaskCanceledException or IOException
+            || (ex.InnerException is not null && IsTransientTransportException(ex.InnerException));
 
     // ── DevFlow Actions ──
 
@@ -608,8 +673,11 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrEmpty(type)) body["type"] = type;
         if (!string.IsNullOrEmpty(sharedName)) body["sharedName"] = sharedName;
 
-        using var content = DriverJson.CreateJsonContent(body);
-        var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/preferences/{Uri.EscapeDataString(key)}", content);
+        using var response = await SendWithTransientRetriesAsync(async () =>
+        {
+            using var content = DriverJson.CreateJsonContent(body);
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/preferences/{Uri.EscapeDataString(key)}", content);
+        });
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -619,7 +687,7 @@ public class AgentClient : IDisposable
         var path = $"{StorageApi}/preferences/{Uri.EscapeDataString(key)}";
         if (!string.IsNullOrEmpty(sharedName))
             path += $"?sharedName={Uri.EscapeDataString(sharedName)}";
-        var response = await _http.DeleteAsync($"{_baseUrl}{path}");
+        using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{path}"));
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -641,18 +709,21 @@ public class AgentClient : IDisposable
 
     public async Task<JsonElement> SetSecureStorageAsync(string key, string value)
     {
-        using var content = DriverJson.CreateJsonContent(new JsonObject
+        using var response = await SendWithTransientRetriesAsync(async () =>
         {
-            ["value"] = value
+            using var content = DriverJson.CreateJsonContent(new JsonObject
+            {
+                ["value"] = value
+            });
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}", content);
         });
-        var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}", content);
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
 
     public async Task<JsonElement> DeleteSecureStorageAsync(string key)
     {
-        var response = await _http.DeleteAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}");
+        using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}"));
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -721,14 +792,17 @@ public class AgentClient : IDisposable
             if (!string.IsNullOrWhiteSpace(type))
                 payload["type"] = type;
 
-            using var content = DriverJson.CreateJsonContent(payload);
-            using var response = await _http.PostAsync($"{_baseUrl}{DeviceApi}/jobs/{Uri.EscapeDataString(identifier)}/run", content);
+            using var response = await SendWithTransientRetriesAsync(async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{DeviceApi}/jobs/{Uri.EscapeDataString(identifier)}/run", content);
+            });
             var responseBody = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(responseBody))
                 return default;
             return DriverJson.ParseElement(responseBody);
         }
-        catch { return default; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
 
     // ── Files ──
@@ -756,8 +830,11 @@ public class AgentClient : IDisposable
     public async Task<JsonElement> UploadFileAsync(string path, string contentBase64, string? root = null)
     {
         var body = new JsonObject { ["contentBase64"] = contentBase64 };
-        using var content = DriverJson.CreateJsonContent(body);
-        using var response = await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
+        using var response = await SendWithTransientRetriesAsync(async () =>
+        {
+            using var content = DriverJson.CreateJsonContent(body);
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
+        });
         var responseBody = await response.Content.ReadAsStringAsync();
         if (string.IsNullOrWhiteSpace(responseBody))
             return default;
@@ -802,20 +879,20 @@ public class AgentClient : IDisposable
             if (!string.IsNullOrEmpty(host)) url += $"&host={Uri.EscapeDataString(host)}";
             if (!string.IsNullOrEmpty(method)) url += $"&method={Uri.EscapeDataString(method)}";
 
-            var response = await _http.GetStringAsync(url);
+            var response = await GetStringWithTransientRetriesAsync(url);
             return DriverJson.Deserialize<List<NetworkRequest>>(response) ?? new();
         }
-        catch { return new(); }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return new(); }
     }
 
     public async Task<NetworkRequest?> GetNetworkRequestDetailAsync(string id)
     {
         try
         {
-            var response = await _http.GetStringAsync($"{_baseUrl}{NetworkApi}/requests/{Uri.EscapeDataString(id)}");
+            var response = await GetStringWithTransientRetriesAsync($"{_baseUrl}{NetworkApi}/requests/{Uri.EscapeDataString(id)}");
             return DriverJson.Deserialize<NetworkRequest>(response);
         }
-        catch { return null; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
     }
 
     public async Task<bool> ClearNetworkRequestsAsync()

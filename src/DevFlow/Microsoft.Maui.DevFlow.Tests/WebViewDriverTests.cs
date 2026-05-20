@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Tests;
@@ -32,6 +35,46 @@ public class AgentClientTests
         using var client = new AgentClient("localhost", 19999);
         var tree = await client.GetTreeAsync();
         Assert.Empty(tree);
+    }
+
+    [Fact]
+    public async Task GetStatus_WithTransientRetry_RetriesConnectionRefused()
+    {
+        using var reserved = new TcpListener(IPAddress.Loopback, 0);
+        reserved.Start();
+        var port = ((IPEndPoint)reserved.LocalEndpoint).Port;
+        reserved.Stop();
+
+        var serverTask = Task.Run(async () =>
+        {
+            await Task.Delay(150);
+
+            using var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+
+            using var tcpClient = await listener.AcceptTcpClientAsync();
+            using var stream = tcpClient.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAtLeastAsync(buffer, 1, throwOnEndOfStream: false);
+            Assert.True(read > 0);
+
+            var body = """{"agent":{"name":"test","version":"1.0"},"device":{"platform":"Test"},"app":{"name":"Sample"},"running":true}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var client = new AgentClient("localhost", port)
+        {
+            TransientFailureRetryCount = 10,
+            TransientFailureRetryDelay = TimeSpan.FromMilliseconds(50),
+        };
+
+        var status = await client.GetStatusAsync();
+
+        Assert.NotNull(status);
+        Assert.True(status!.Running);
+
+        await serverTask;
     }
 
     [Fact]

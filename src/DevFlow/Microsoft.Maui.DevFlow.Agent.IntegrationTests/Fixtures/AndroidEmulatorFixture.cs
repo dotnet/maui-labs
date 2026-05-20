@@ -137,21 +137,35 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
     async Task MonitorAppProcessAsync(CancellationToken cancellationToken)
     {
+        var missingProcessChecks = 0;
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
+                await EnsureAgentPortForwardAsync();
+
                 var pid = await TryGetAppPidAsync();
                 if (!string.IsNullOrWhiteSpace(pid))
                 {
                     _appSeenRunning = true;
                     _lastKnownPid = pid.Trim();
+                    missingProcessChecks = 0;
                 }
                 else if (_appSeenRunning)
                 {
-                    _appSeenRunning = false;
-                    var reason = $"App process '{PackageId}' disappeared. Last known pid: {_lastKnownPid ?? "<unknown>"}";
-                    await CaptureCrashDiagnosticsAsync(reason);
+                    missingProcessChecks++;
+                    Console.WriteLine(
+                        $"[AndroidFixture] App process probe missed '{PackageId}' " +
+                        $"({missingProcessChecks}/3). Last known pid: {_lastKnownPid ?? "<unknown>"}");
+
+                    if (missingProcessChecks >= 3)
+                    {
+                        _appSeenRunning = false;
+                        missingProcessChecks = 0;
+                        var reason = $"App process '{PackageId}' disappeared after repeated probes. Last known pid: {_lastKnownPid ?? "<unknown>"}";
+                        await CaptureCrashDiagnosticsAsync(reason);
+                    }
                 }
             }
             catch (Exception ex)
@@ -170,6 +184,29 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         }
     }
 
+    async Task EnsureAgentPortForwardAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_serialNumber))
+            return;
+
+        var (output, _, exitCode) = await RunProcessAsync(
+            AdbPath(),
+            "forward --list",
+            timeoutSeconds: 5);
+
+        var expectedForward = $"tcp:{AgentPort} tcp:{AgentPort}";
+        var hasForward = exitCode == 0 && output
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(line => line.StartsWith(_serialNumber, StringComparison.OrdinalIgnoreCase)
+                && line.Contains(expectedForward, StringComparison.Ordinal));
+
+        if (hasForward)
+            return;
+
+        Console.WriteLine($"[AndroidFixture] Re-establishing missing ADB forward {expectedForward}.");
+        await AdbCheckedAsync($"forward tcp:{AgentPort} tcp:{AgentPort}", timeoutSeconds: 15);
+    }
+
     async Task<string?> TryGetAppPidAsync(int timeoutSeconds = 5)
     {
         if (string.IsNullOrWhiteSpace(_serialNumber))
@@ -180,11 +217,48 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             $"-s {_serialNumber} shell pidof {PackageId}",
             timeoutSeconds: timeoutSeconds);
 
+        if (exitCode == 0)
+        {
+            var pid = output.Trim();
+            if (!string.IsNullOrWhiteSpace(pid))
+                return pid;
+        }
+
+        return await TryGetAppPidFromPsAsync(timeoutSeconds);
+    }
+
+    async Task<string?> TryGetAppPidFromPsAsync(int timeoutSeconds)
+    {
+        if (string.IsNullOrWhiteSpace(_serialNumber))
+            return null;
+
+        var (output, _, exitCode) = await RunProcessAsync(
+            AdbPath(),
+            $"-s {_serialNumber} shell ps -A",
+            timeoutSeconds: timeoutSeconds);
+
         if (exitCode != 0)
             return null;
 
-        var pid = output.Trim();
-        return string.IsNullOrWhiteSpace(pid) ? null : pid;
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var columns = line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (columns.Length < 2)
+                continue;
+
+            var processName = columns[^1];
+            if (!processName.Equals(PackageId, StringComparison.Ordinal)
+                && !line.EndsWith($" {PackageId}", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var pid = columns.FirstOrDefault(column => int.TryParse(column, out _));
+            if (!string.IsNullOrWhiteSpace(pid))
+                return pid;
+        }
+
+        return null;
     }
 
     async Task CaptureCrashDiagnosticsAsync(string reason)
@@ -244,6 +318,30 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         catch (Exception ex)
         {
             await File.WriteAllTextAsync($"{prefix}.activity-top.error.txt", ex.ToString());
+        }
+
+        try
+        {
+            var (stdout, stderr, _) = await RunProcessAsync(
+                AdbPath(),
+                "forward --list",
+                timeoutSeconds: 10);
+            await File.WriteAllTextAsync($"{prefix}.forward-list.txt", $"{stdout}{Environment.NewLine}{Environment.NewLine}STDERR:{Environment.NewLine}{stderr}");
+        }
+        catch (Exception ex)
+        {
+            await File.WriteAllTextAsync($"{prefix}.forward-list.error.txt", ex.ToString());
+        }
+
+        try
+        {
+            using var response = await Http.GetAsync("/api/v1/agent/status");
+            var body = await response.Content.ReadAsStringAsync();
+            await File.WriteAllTextAsync($"{prefix}.agent-status.txt", $"HTTP {(int)response.StatusCode}{Environment.NewLine}{body}");
+        }
+        catch (Exception ex)
+        {
+            await File.WriteAllTextAsync($"{prefix}.agent-status.error.txt", ex.ToString());
         }
 
         Console.WriteLine($"[AndroidFixture] Captured app-loss diagnostics at '{prefix}.*'");
@@ -370,6 +468,18 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             {
                 _weStartedEmulator = false;
                 return requestedSerial;
+            }
+
+            if (!requestedSerial.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase))
+            {
+                var (stateOutput, _, stateExitCode) = await RunProcessAsync(adb,
+                    $"-s {requestedSerial} get-state", timeoutSeconds: 10);
+
+                if (stateExitCode == 0 && stateOutput.Trim().Equals("device", StringComparison.OrdinalIgnoreCase))
+                {
+                    _weStartedEmulator = false;
+                    return requestedSerial;
+                }
             }
 
             throw new InvalidOperationException(
