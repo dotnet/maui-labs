@@ -300,7 +300,8 @@ public class DevFlowCommands
         var treeDepthOption = new Option<int>("--depth") { Description = "Max tree depth (0=unlimited)", DefaultValueFactory = _ => 0 };
         var treeFieldsOption = new Option<string?>("--fields") { Description = "Comma-separated fields to include (e.g. id,type,text,automationId,bounds)" };
         var treeFormatOption = new Option<string?>("--format") { Description = "Output format: compact (id,type,text,automationId,bounds only)" };
-        var mauiTreeCmd = new Command("tree", "Dump visual tree") { treeDepthOption, treeFieldsOption, treeFormatOption, windowOption };
+        var treeLayoutOption = new Option<bool>("--layout") { Description = "Include Yoga layout info for Comet-driven layout nodes (frame, flex direction, per-child flex props)" };
+        var mauiTreeCmd = new Command("tree", "Dump visual tree") { treeDepthOption, treeFieldsOption, treeFormatOption, treeLayoutOption, windowOption };
         mauiTreeCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
@@ -311,7 +312,8 @@ public class DevFlowCommands
             var window = ctx.GetValue(windowOption);
             var fields = ctx.GetValue(treeFieldsOption);
             var format = ctx.GetValue(treeFormatOption);
-            await MauiTreeAsync(host, port, output.ResolveJsonMode(json, noJson), depth, window, fields, format);
+            var layout = ctx.GetValue(treeLayoutOption);
+            await MauiTreeAsync(host, port, output.ResolveJsonMode(json, noJson), depth, window, fields, format, layout);
         });
         mauiCommand.Add(mauiTreeCmd);
 
@@ -2387,12 +2389,12 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static async Task MauiTreeAsync(string host, int port, bool json, int depth, int? window, string? fields, string? format)
+    private static async Task MauiTreeAsync(string host, int port, bool json, int depth, int? window, string? fields, string? format, bool includeLayout = false)
     {
         try
         {
             using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
-            var tree = await client.GetTreeAsync(depth, window);
+            var tree = await client.GetTreeAsync(depth, window, includeLayout);
             if (json)
             {
                 var projected = ProjectElements(tree, fields, format);
@@ -3360,6 +3362,28 @@ public class DevFlowCommands
             if (!el.IsEnabled) info += " [disabled]";
             if (el.Bounds != null) info += $" ({el.Bounds.X:F0},{el.Bounds.Y:F0} {el.Bounds.Width:F0}x{el.Bounds.Height:F0})";
             Console.WriteLine(info);
+            if (el.Layout != null)
+            {
+                var f = el.Layout.Frame;
+                Console.WriteLine(
+                    $"{prefix}  layout: [{f.X:F0},{f.Y:F0} {f.Width:F0}x{f.Height:F0}]" +
+                    $" dir={el.Layout.FlexDirection}" +
+                    $" align={el.Layout.AlignItems}" +
+                    $" justify={el.Layout.JustifyContent}");
+                if (el.Layout.Children is { Count: > 0 } childList)
+                {
+                    foreach (var c in childList)
+                    {
+                        var cf = c.Frame;
+                        var idPart = c.AutomationId != null ? $" automationId=\"{c.AutomationId}\"" : "";
+                        Console.WriteLine(
+                            $"{prefix}    - {c.ViewTypeName}{idPart}" +
+                            $" frame=[{cf.X:F0},{cf.Y:F0} {cf.Width:F0}x{cf.Height:F0}]" +
+                            $" grow={c.FlexGrow:0.##} shrink={c.FlexShrink:0.##}" +
+                            $" alignSelf={c.AlignSelf} pos={c.PositionType}");
+                    }
+                }
+            }
             if (el.Children != null)
                 PrintTree(el.Children, indent + 1);
         }

@@ -19,6 +19,10 @@ public class VisualTreeWalker
     private readonly Dictionary<Guid, string> _elementIdToExternalId = new();
     private readonly ConcurrentDictionary<string, (BoundsInfo Bounds, object Marker)> _syntheticBounds = new();
 
+    // Set per WalkTree call; controls whether CreateElementInfo populates a Yoga
+    // layout snapshot for Comet-driven layouts. Default false keeps payload size down.
+    private bool _includeLayout;
+
     /// <summary>
     /// Marker object representing the navigation back button in Shell or NavigationPage.
     /// </summary>
@@ -33,6 +37,9 @@ public class VisualTreeWalker
     /// Returns IVisualTreeElement, ToolbarItem, or other mapped objects.
     /// </summary>
     public object? GetElementById(string id, Application? app)
+        => GetElementById(id, (IApplication?)app);
+
+    public object? GetElementById(string id, IApplication? app)
     {
         if (app == null || string.IsNullOrEmpty(id)) return null;
 
@@ -93,17 +100,22 @@ public class VisualTreeWalker
     /// Returns elements whose window bounds contain the given point.
     /// </summary>
     public List<VisualElement> HitTestByBounds(double x, double y, Application app, int? windowIndex = null)
+        => HitTestByBounds(x, y, (IApplication)app, windowIndex);
+
+    public List<VisualElement> HitTestByBounds(double x, double y, IApplication app, int? windowIndex = null)
     {
         var hits = new List<VisualElement>();
         var window = windowIndex.HasValue && windowIndex.Value < app.Windows.Count
             ? app.Windows[windowIndex.Value]
             : app.Windows.FirstOrDefault();
-        if (window?.Page == null) return hits;
+        // Page is only available on Window (MAUI Controls), not on all IWindow implementations
+        var page = (window as Window)?.Page;
+        if (page == null) return hits;
 
-        HitTestByBoundsRecursive(window.Page, x, y, hits);
+        HitTestByBoundsRecursive(page, x, y, hits);
 
         // Also check modal pages
-        var modalStack = window.Navigation?.ModalStack;
+        var modalStack = (window as Window)?.Navigation?.ModalStack;
         if (modalStack != null)
         {
             foreach (var modal in modalStack)
@@ -284,40 +296,72 @@ public class VisualTreeWalker
     public BoundsInfo? ResolveWindowBoundsPublic(VisualElement ve) => ResolveWindowBounds(ve);
 
     /// <summary>
+    /// Override in platform-specific subclasses to resolve window-absolute bounds
+    /// for an IView (e.g. Comet views) that are NOT VisualElement.
+    /// Uses the IView's Handler?.PlatformView to get native coordinates.
+    /// </summary>
+    protected virtual BoundsInfo? ResolveIViewWindowBounds(IView iView) => null;
+
+    /// <summary>
+    /// Override in platform-specific subclasses to determine actual visibility
+    /// for an IView by checking its platform native view (e.g. UIView.Hidden, Alpha).
+    /// Returns null if platform visibility cannot be determined.
+    /// </summary>
+    protected virtual bool? ResolveIViewPlatformVisibility(IView iView) => null;
+
+    /// <summary>
+    /// Override in platform-specific subclasses to populate native view info
+    /// for an IView (e.g. Comet views) that are NOT VisualElement.
+    /// </summary>
+    protected virtual void PopulateIViewNativeInfo(ElementInfo info, IView iView) { }
+
+    /// <summary>
     /// Walks the visual tree starting from the application's windows.
     /// When windowIndex is null, walks all windows. Otherwise walks only the specified window.
     /// </summary>
-    public List<ElementInfo> WalkTree(Application app, int maxDepth = 0, int? windowIndex = null)
+    public List<ElementInfo> WalkTree(Application app, int maxDepth = 0, int? windowIndex = null, bool includeLayout = false)
+        => WalkTree((IApplication)app, maxDepth, windowIndex, includeLayout);
+
+    public List<ElementInfo> WalkTree(IApplication app, int maxDepth = 0, int? windowIndex = null, bool includeLayout = false)
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
         _syntheticBounds.Clear();
-        var results = new List<ElementInfo>();
-        if (app is not IVisualTreeElement appElement)
-            return results;
-
-        if (windowIndex != null)
+        var previousIncludeLayout = _includeLayout;
+        _includeLayout = includeLayout;
+        try
         {
-            if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+            var results = new List<ElementInfo>();
+            if (app is not IVisualTreeElement appElement)
                 return results;
-            var window = app.Windows[windowIndex.Value];
-            if (window is IVisualTreeElement windowElement)
+
+            if (windowIndex != null)
             {
-                var info = WalkElement(windowElement, null, 1, maxDepth);
+                if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+                    return results;
+                var window = app.Windows[windowIndex.Value];
+                if (window is IVisualTreeElement windowElement)
+                {
+                    var info = WalkElement(windowElement, null, 1, maxDepth);
+                    if (info != null)
+                        results.Add(info);
+                }
+                return results;
+            }
+
+            foreach (var child in appElement.GetVisualChildren())
+            {
+                var info = WalkElement(child, null, 1, maxDepth);
                 if (info != null)
                     results.Add(info);
             }
+
             return results;
         }
-
-        foreach (var child in appElement.GetVisualChildren())
+        finally
         {
-            var info = WalkElement(child, null, 1, maxDepth);
-            if (info != null)
-                results.Add(info);
+            _includeLayout = previousIncludeLayout;
         }
-
-        return results;
     }
 
     /// <summary>
@@ -406,6 +450,9 @@ public class VisualTreeWalker
     /// Queries elements matching the given criteria.
     /// </summary>
     public List<ElementInfo> Query(Application app, string? type = null, string? automationId = null, string? text = null)
+        => Query((IApplication)app, type, automationId, text);
+
+    public List<ElementInfo> Query(IApplication app, string? type = null, string? automationId = null, string? text = null)
     {
         var results = new List<ElementInfo>();
         if (app is not IVisualTreeElement appElement)
@@ -1258,7 +1305,10 @@ public class VisualTreeWalker
         // Comet views implement IView but NOT VisualElement — extract info from IView + handler
         else if (element is IView iView)
         {
-            info.IsVisible = iView.Visibility != Visibility.Collapsed;
+            // Check platform-native visibility first (handler's UIView.Hidden/Alpha on iOS, etc.)
+            // Falls back to IView.Visibility if platform check is unavailable
+            var platformVisible = ResolveIViewPlatformVisibility(iView);
+            info.IsVisible = platformVisible ?? (iView.Visibility != Visibility.Collapsed);
             info.IsEnabled = iView.IsEnabled;
             info.Opacity = double.IsFinite(iView.Opacity) ? iView.Opacity : 1;
 
@@ -1275,9 +1325,47 @@ public class VisualTreeWalker
                 };
             }
 
-            // Try to extract text from Comet views via IText interface
-            if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
+            // Resolve window-absolute bounds via platform handler (same as VisualElement path)
+            info.WindowBounds = ResolveIViewWindowBounds(iView);
+
+            // If IView.Frame had no bounds but platform handler resolved real bounds,
+            // back-fill Bounds from WindowBounds so the element isn't reported as zero-size
+            if (info.Bounds == null && info.WindowBounds != null)
+            {
+                info.Bounds = new BoundsInfo
+                {
+                    X = info.WindowBounds.X,
+                    Y = info.WindowBounds.Y,
+                    Width = info.WindowBounds.Width,
+                    Height = info.WindowBounds.Height
+                };
+            }
+
+            // Populate native view info from handler (type, accessibility, etc.)
+            PopulateIViewNativeInfo(info, iView);
+
+            // Extract text from MAUI interfaces that Comet generated controls implement
+            if (element is ILabel iLabel && !string.IsNullOrEmpty(iLabel.Text))
+                info.Text = iLabel.Text;
+            else if (element is ITextButton iTextButton && !string.IsNullOrEmpty(iTextButton.Text))
+                info.Text = iTextButton.Text;
+            else if (element is IEntry iEntry && !string.IsNullOrEmpty(iEntry.Text))
+                info.Text = iEntry.Text;
+            else if (element is IEditor iEditor && !string.IsNullOrEmpty(iEditor.Text))
+                info.Text = iEditor.Text;
+            else if (element is ISearchBar iSearchBar && !string.IsNullOrEmpty(iSearchBar.Text))
+                info.Text = iSearchBar.Text;
+            else if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
                 info.Text = iText.Text;
+
+            // Fallback: try extracting text via Comet reflection for views that
+            // don't implement standard MAUI text interfaces directly
+            if (string.IsNullOrEmpty(info.Text) && cometResolved != null)
+            {
+                var cometText = CometViewResolver.TryExtractText(cometResolved.Value.CometView);
+                if (!string.IsNullOrEmpty(cometText))
+                    info.Text = cometText;
+            }
         }
 
         // Extract text from common controls (including Shell elements)
@@ -1379,7 +1467,54 @@ public class VisualTreeWalker
             // }
         }
 
+        // Yoga layout snapshot (--layout / ?layout=1). Comet's AbstractLayout (and
+        // Microsoft.Maui.Controls.Layout) both expose a LayoutManager property; for
+        // Comet-driven layouts that manager implements IYogaLayoutInspector. Use
+        // reflection so this works against either inheritance path without a hard
+        // reference to Comet.
+        if (_includeLayout)
+        {
+            try
+            {
+                var layoutManager = TryGetLayoutManagerViaReflection(element);
+                var layoutInfo = LayoutInspectorAdapter.TryGetLayoutSnapshot(layoutManager);
+                if (layoutInfo != null)
+                    info.Layout = layoutInfo;
+            }
+            catch
+            {
+                // Layout inspection is best-effort; don't fail the tree walk.
+            }
+        }
+
         return info;
+    }
+
+    // Cache the LayoutManager property per element type (key is the runtime Type) —
+    // most apps have only a handful of distinct layout types so this stays bounded.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> s_layoutManagerProps = new();
+
+    private static object? TryGetLayoutManagerViaReflection(object element)
+    {
+        var t = element.GetType();
+        var prop = s_layoutManagerProps.GetOrAdd(t, static type =>
+        {
+            // Walk up the type chain so we pick up protected/internal LayoutManager
+            // exposed on a base type (e.g. Microsoft.Maui.Controls.Layout).
+            for (var cur = type; cur != null; cur = cur.BaseType)
+            {
+                var p = cur.GetProperty(
+                    "LayoutManager",
+                    System.Reflection.BindingFlags.Public
+                        | System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Instance
+                        | System.Reflection.BindingFlags.DeclaredOnly);
+                if (p != null && p.CanRead)
+                    return p;
+            }
+            return null;
+        });
+        return prop?.GetValue(element);
     }
 
     protected virtual void PopulateNativeInfo(ElementInfo info, VisualElement ve)
@@ -1402,6 +1537,9 @@ public class VisualTreeWalker
     /// Walks the full tree, then runs the CSS selector engine against it.
     /// </summary>
     public List<ElementInfo> QueryCss(Application app, string selector)
+        => QueryCss((IApplication)app, selector);
+
+    public List<ElementInfo> QueryCss(IApplication app, string selector)
     {
         var tree = WalkTree(app);
         return CssSelectorEngine.Query(tree, selector);
