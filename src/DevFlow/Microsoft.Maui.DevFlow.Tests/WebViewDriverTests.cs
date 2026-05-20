@@ -41,26 +41,30 @@ public class AgentClientTests
     public async Task GetStatus_WithTransientRetry_RetriesConnectionRefused()
     {
         using var reserved = new TcpListener(IPAddress.Loopback, 0);
+        reserved.ExclusiveAddressUse = false;
         reserved.Start();
         var port = ((IPEndPoint)reserved.LocalEndpoint).Port;
         reserved.Stop();
 
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
         var serverTask = Task.Run(async () =>
         {
-            await Task.Delay(150);
+            await Task.Delay(150, cts.Token);
 
             using var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.ExclusiveAddressUse = false;
             listener.Start();
 
-            using var tcpClient = await listener.AcceptTcpClientAsync();
+            using var tcpClient = await listener.AcceptTcpClientAsync(cts.Token);
             using var stream = tcpClient.GetStream();
             var buffer = new byte[4096];
-            var read = await stream.ReadAtLeastAsync(buffer, 1, throwOnEndOfStream: false);
+            var read = await stream.ReadAtLeastAsync(buffer, 1, throwOnEndOfStream: false, cancellationToken: cts.Token);
             Assert.True(read > 0);
 
             var body = """{"agent":{"name":"test","version":"1.0"},"device":{"platform":"Test"},"app":{"name":"Sample"},"running":true}""";
             var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response), cts.Token);
         });
 
         using var client = new AgentClient("localhost", port)
@@ -69,12 +73,26 @@ public class AgentClientTests
             TransientFailureRetryDelay = TimeSpan.FromMilliseconds(50),
         };
 
-        var status = await client.GetStatusAsync();
+        try
+        {
+            var status = await client.GetStatusAsync();
 
-        Assert.NotNull(status);
-        Assert.True(status!.Running);
-
-        await serverTask;
+            Assert.NotNull(status);
+            Assert.True(status!.Running);
+        }
+        finally
+        {
+            // Guard against a missed accept hanging the test indefinitely.
+            var completed = await Task.WhenAny(serverTask, Task.Delay(2000));
+            if (completed == serverTask)
+            {
+                await serverTask;
+            }
+            else
+            {
+                cts.Cancel();
+            }
+        }
     }
 
     [Fact]

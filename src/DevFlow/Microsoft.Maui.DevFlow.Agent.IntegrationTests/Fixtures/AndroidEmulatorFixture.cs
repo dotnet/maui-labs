@@ -31,7 +31,14 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         _apiLevel = GetTargetApiLevel();
         var avdName = GetTargetAvdName(_apiLevel);
 
-        await EnsureAvdExistsAsync(avdName, _apiLevel);
+        // If the caller pinned a non-emulator (i.e. physical) device that is already
+        // online, skip AVD provisioning entirely so the physical-device path works
+        // even when cmdline-tools / system-images aren't installed locally.
+        var skipAvdSetup = await IsPhysicalDeviceReadyAsync();
+
+        if (!skipAvdSetup)
+            await EnsureAvdExistsAsync(avdName, _apiLevel);
+
         _serialNumber = await EnsureEmulatorRunningAsync(avdName);
 
         await WithBuildLockAsync(async () =>
@@ -253,9 +260,11 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
                 continue;
             }
 
-            var pid = columns.FirstOrDefault(column => int.TryParse(column, out _));
-            if (!string.IsNullOrWhiteSpace(pid))
-                return pid;
+            // Standard `ps -A` output is `USER PID PPID VSZ RSS ...`, so the PID is
+            // always column index 1. Avoid scanning for the first integer-parseable
+            // column because some ROMs use numeric UIDs in the USER column.
+            if (int.TryParse(columns[1], out _))
+                return columns[1];
         }
 
         return null;
@@ -420,6 +429,31 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     static string GetTargetAvdName(int apiLevel) =>
         Environment.GetEnvironmentVariable("DEVFLOW_TEST_ANDROID_AVD")
         ?? $"devflow-tests-api{apiLevel}";
+
+    async Task<bool> IsPhysicalDeviceReadyAsync()
+    {
+        var requestedSerial = Environment.GetEnvironmentVariable("DEVFLOW_TEST_ANDROID_SERIAL");
+        if (string.IsNullOrWhiteSpace(requestedSerial))
+            return false;
+
+        if (requestedSerial.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        try
+        {
+            var (stateOutput, _, stateExitCode) = await RunProcessAsync(
+                AdbPath(),
+                $"-s {requestedSerial} get-state",
+                timeoutSeconds: 10);
+
+            return stateExitCode == 0
+                && stateOutput.Trim().Equals("device", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     async Task EnsureAvdExistsAsync(string avdName, int apiLevel)
     {

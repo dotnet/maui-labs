@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -620,8 +621,18 @@ public class AgentClient : IDisposable
             || (ex.InnerException is not null && IsExpectedClientException(ex.InnerException));
 
     private static bool IsTransientTransportException(Exception ex)
-        => ex is HttpRequestException or TaskCanceledException or IOException
-            || (ex.InnerException is not null && IsTransientTransportException(ex.InnerException));
+    {
+        switch (ex)
+        {
+            case HttpRequestException httpEx when httpEx.InnerException is SocketException:
+                return true;
+            case IOException:
+                return true;
+            case TaskCanceledException tcEx when tcEx.InnerException is not TimeoutException:
+                return true;
+        }
+        return ex.InnerException is not null && IsTransientTransportException(ex.InnerException);
+    }
 
     // ── DevFlow Actions ──
 
