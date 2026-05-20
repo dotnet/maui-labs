@@ -20,6 +20,31 @@ public class CommandConstructionTests
 	}
 
 	[Fact]
+	public void RootCommand_IncludesProjectVersionCommands()
+	{
+		var rootCommand = Program.BuildRootCommand();
+
+		var projectCommand = Assert.Single(rootCommand.Subcommands, command => command.Name == "project");
+		var versionCommand = Assert.Single(projectCommand.Subcommands, command => command.Name == "version");
+		Assert.Contains(versionCommand.Subcommands, command => command.Name == "show");
+		Assert.Contains(versionCommand.Subcommands, command => command.Name == "list");
+		Assert.Contains(versionCommand.Subcommands, command => command.Name == "set");
+		Assert.Contains(versionCommand.Subcommands, command => command.Name == "use-workload");
+
+		var showCommand = Assert.Single(versionCommand.Subcommands, command => command.Name == "show");
+		Assert.Contains("check", showCommand.Aliases);
+	}
+
+	[Fact]
+	public void VersionCommand_RemainsCliVersionCommand()
+	{
+		var rootCommand = Program.BuildRootCommand();
+
+		var versionCommand = Assert.Single(rootCommand.Subcommands, command => command.Name == "version");
+		Assert.Empty(versionCommand.Subcommands);
+	}
+
+	[Fact]
 	public void DevFlowCommand_AllOptionsHaveValidAliases()
 	{
 		var jsonOption = new Option<bool>("--json");
