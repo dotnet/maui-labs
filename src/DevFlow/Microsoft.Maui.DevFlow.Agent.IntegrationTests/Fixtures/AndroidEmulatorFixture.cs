@@ -238,6 +238,13 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             string? remote;
             if (parts.Length >= 3)
             {
+                // Defensive: even though `AdbAsync` already scopes the listing to
+                // this device via `-s {_serialNumber}`, older adb releases can emit
+                // 3-column output. Skip rows whose serial does not match so we
+                // never accept a forward belonging to a different attached device.
+                if (!string.Equals(parts[0], _serialNumber, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 local = parts[1];
                 remote = parts[2];
             }

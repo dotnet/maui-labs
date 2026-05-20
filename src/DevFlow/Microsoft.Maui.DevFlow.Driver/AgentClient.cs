@@ -658,7 +658,12 @@ public class AgentClient : IDisposable
                 return true;
             case IOException:
                 return true;
-            case TaskCanceledException tcEx when tcEx.InnerException is not TimeoutException:
+            // Only retry a TaskCanceledException when it represents a real
+            // transport failure (i.e. wraps another exception that is not the
+            // HttpClient timeout marker). A bare TCE with no inner is almost
+            // always a caller-initiated CancellationToken cancellation, which
+            // must not be retried.
+            case TaskCanceledException tcEx when tcEx.InnerException is not null and not TimeoutException:
                 return true;
         }
         return ex.InnerException is not null && IsTransientTransportException(ex.InnerException);

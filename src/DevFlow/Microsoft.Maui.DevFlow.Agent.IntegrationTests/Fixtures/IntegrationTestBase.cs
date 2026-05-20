@@ -113,7 +113,7 @@ public abstract class IntegrationTestBase
         {
             HttpRequestException { InnerException: SocketException } => true,
             IOException => true,
-            TaskCanceledException tce when tce.InnerException is not TimeoutException => true,
+            TaskCanceledException tce when tce.InnerException is not null and not TimeoutException => true,
             _ => ex.InnerException is not null && IsTransientTransportException(ex.InnerException),
         };
 
