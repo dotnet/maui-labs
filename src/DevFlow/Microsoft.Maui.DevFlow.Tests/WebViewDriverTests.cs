@@ -48,9 +48,15 @@ public class AgentClientTests
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
+        // Generous startup delay so the client is virtually guaranteed to make at
+        // least one connection attempt (which fails with ECONNREFUSED) before the
+        // listener is bound. We additionally assert elapsed wall time below to
+        // prove the retry path actually fired.
+        var startupDelay = TimeSpan.FromMilliseconds(500);
+
         var serverTask = Task.Run(async () =>
         {
-            await Task.Delay(150, cts.Token);
+            await Task.Delay(startupDelay, cts.Token);
 
             using var listener = new TcpListener(IPAddress.Loopback, port);
             listener.ExclusiveAddressUse = false;
@@ -67,18 +73,30 @@ public class AgentClientTests
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response), cts.Token);
         });
 
+        var retryDelay = TimeSpan.FromMilliseconds(50);
         using var client = new AgentClient("localhost", port)
         {
-            TransientFailureRetryCount = 10,
-            TransientFailureRetryDelay = TimeSpan.FromMilliseconds(50),
+            TransientFailureRetryCount = 20,
+            TransientFailureRetryDelay = retryDelay,
         };
 
         try
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var status = await client.GetStatusAsync();
+            sw.Stop();
 
             Assert.NotNull(status);
             Assert.True(status!.Running);
+
+            // If the retry path was not exercised, GetStatusAsync would have returned
+            // either ~immediately (failure) or only after the very first successful
+            // connect. Asserting elapsed >= one retry delay catches the regression
+            // where the test passes without ever hitting the retry loop.
+            Assert.True(
+                sw.Elapsed >= retryDelay,
+                $"Expected GetStatusAsync to take at least one retry delay ({retryDelay.TotalMilliseconds} ms) " +
+                $"due to connection-refused retries, but completed in {sw.Elapsed.TotalMilliseconds:F1} ms.");
         }
         finally
         {

@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -108,8 +109,13 @@ public abstract class IntegrationTestBase
     }
 
     static bool IsTransientTransportException(Exception ex)
-        => ex is HttpRequestException or TaskCanceledException or IOException
-            || (ex.InnerException is not null && IsTransientTransportException(ex.InnerException));
+        => ex switch
+        {
+            HttpRequestException { InnerException: SocketException } => true,
+            IOException => true,
+            TaskCanceledException tce when tce.InnerException is not TimeoutException => true,
+            _ => ex.InnerException is not null && IsTransientTransportException(ex.InnerException),
+        };
 
     protected async Task<ElementInfo> FindElementAsync(string automationId, int timeoutMs = 5000)
     {

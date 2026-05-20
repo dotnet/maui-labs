@@ -28,7 +28,31 @@ public class AgentClient : IDisposable
     /// Additional attempts for transient transport failures such as a dropped ADB port
     /// forward. Defaults to 0 so normal client calls keep their current fail-fast behavior.
     /// </summary>
+    /// <remarks>
+    /// GET requests are idempotent and safe to retry. POST/PUT/DELETE requests, however,
+    /// can produce duplicate side effects on the agent (e.g. double-tap, double-navigate,
+    /// double-invoke of an action) if the transport drops after the agent has received the
+    /// request but before the response makes it back to the client. Retries for mutating
+    /// HTTP methods are gated by <see cref="RetryMutatingRequests"/>; production callers
+    /// that have not accepted that risk should leave <see cref="RetryMutatingRequests"/>
+    /// disabled even when this property is non-zero.
+    /// </remarks>
     public int TransientFailureRetryCount { get; set; }
+
+    /// <summary>
+    /// Whether transient-failure retries (controlled by <see cref="TransientFailureRetryCount"/>)
+    /// also apply to mutating HTTP methods (POST, PUT, DELETE). Defaults to <c>true</c> so
+    /// existing callers that have opted in to retries continue to retry every request type.
+    /// </summary>
+    /// <remarks>
+    /// Retrying mutating requests can duplicate side effects when a response is lost in flight
+    /// (for example, a tap may fire twice, or a Shell navigation may push the same route twice).
+    /// GET requests remain safe to retry because they are idempotent. Production agents that
+    /// have not explicitly accepted the duplicate-side-effect risk should set this to
+    /// <c>false</c>; integration tests that need to ride out an agent process restart can leave
+    /// it at the default.
+    /// </remarks>
+    public bool RetryMutatingRequests { get; set; } = true;
 
     /// <summary>
     /// Base delay between transient transport retries.
@@ -206,7 +230,7 @@ public class AgentClient : IDisposable
             ["actions"] = items
         };
 
-        using var response = await SendWithTransientRetriesAsync(async () =>
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
         {
             using var content = DriverJson.CreateJsonContent(body);
             return await _http.PostAsync($"{_baseUrl}{UiApi}/actions/batch", content);
@@ -296,7 +320,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var response = await SendWithTransientRetriesAsync(async () =>
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
             {
                 using var content = DriverJson.CreateJsonContent(new JsonObject
                 {
@@ -336,7 +360,7 @@ public class AgentClient : IDisposable
         if (@params != null)
             body["params"] = @params.DeepClone();
 
-        using var response = await SendWithTransientRetriesAsync(async () =>
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
         {
             using var content = DriverJson.CreateJsonContent(body);
             return await _http.PostAsync($"{_baseUrl}{path}", content);
@@ -517,7 +541,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var response = await SendWithTransientRetriesAsync(async () =>
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
                 using var content = DriverJson.CreateJsonContent(body);
                 return await _http.PostAsync($"{_baseUrl}{path}", content);
@@ -535,7 +559,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var response = await SendWithTransientRetriesAsync(async () =>
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
                 using var content = DriverJson.CreateJsonContent(body);
                 return await _http.PostAsync($"{_baseUrl}{path}", content);
@@ -555,7 +579,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{path}"));
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{path}"));
             if (!response.IsSuccessStatusCode)
                 return null;
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -571,7 +595,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{path}"));
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{path}"));
             if (!response.IsSuccessStatusCode)
                 return false;
 
@@ -588,9 +612,15 @@ public class AgentClient : IDisposable
     private Task<string> GetStringWithTransientRetriesAsync(string url)
         => SendWithTransientRetriesAsync(() => _http.GetStringAsync(url));
 
-    private async Task<T> SendWithTransientRetriesAsync<T>(Func<Task<T>> send)
+    private Task<T> SendWithTransientRetriesAsync<T>(Func<Task<T>> send)
+        => SendWithTransientRetriesAsync(HttpMethod.Get, send);
+
+    private async Task<T> SendWithTransientRetriesAsync<T>(HttpMethod method, Func<Task<T>> send)
     {
         var retryCount = Math.Max(0, TransientFailureRetryCount);
+        var isMutating = method != HttpMethod.Get;
+        if (isMutating && !RetryMutatingRequests)
+            retryCount = 0;
 
         for (var attempt = 0; ; attempt++)
         {
@@ -684,7 +714,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrEmpty(type)) body["type"] = type;
         if (!string.IsNullOrEmpty(sharedName)) body["sharedName"] = sharedName;
 
-        using var response = await SendWithTransientRetriesAsync(async () =>
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
         {
             using var content = DriverJson.CreateJsonContent(body);
             return await _http.PutAsync($"{_baseUrl}{StorageApi}/preferences/{Uri.EscapeDataString(key)}", content);
@@ -698,7 +728,7 @@ public class AgentClient : IDisposable
         var path = $"{StorageApi}/preferences/{Uri.EscapeDataString(key)}";
         if (!string.IsNullOrEmpty(sharedName))
             path += $"?sharedName={Uri.EscapeDataString(sharedName)}";
-        using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{path}"));
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{path}"));
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -720,7 +750,7 @@ public class AgentClient : IDisposable
 
     public async Task<JsonElement> SetSecureStorageAsync(string key, string value)
     {
-        using var response = await SendWithTransientRetriesAsync(async () =>
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
         {
             using var content = DriverJson.CreateJsonContent(new JsonObject
             {
@@ -734,7 +764,7 @@ public class AgentClient : IDisposable
 
     public async Task<JsonElement> DeleteSecureStorageAsync(string key)
     {
-        using var response = await SendWithTransientRetriesAsync(() => _http.DeleteAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}"));
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}"));
         var responseBody = await response.Content.ReadAsStringAsync();
         return DriverJson.ParseElement(responseBody);
     }
@@ -803,7 +833,7 @@ public class AgentClient : IDisposable
             if (!string.IsNullOrWhiteSpace(type))
                 payload["type"] = type;
 
-            using var response = await SendWithTransientRetriesAsync(async () =>
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
                 using var content = DriverJson.CreateJsonContent(payload);
                 return await _http.PostAsync($"{_baseUrl}{DeviceApi}/jobs/{Uri.EscapeDataString(identifier)}/run", content);
@@ -841,7 +871,7 @@ public class AgentClient : IDisposable
     public async Task<JsonElement> UploadFileAsync(string path, string contentBase64, string? root = null)
     {
         var body = new JsonObject { ["contentBase64"] = contentBase64 };
-        using var response = await SendWithTransientRetriesAsync(async () =>
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
         {
             using var content = DriverJson.CreateJsonContent(body);
             return await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
