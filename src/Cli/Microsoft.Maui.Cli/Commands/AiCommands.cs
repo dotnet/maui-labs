@@ -14,6 +14,7 @@ public static partial class AiCommands
 	private const string DefaultBranch = "main";
 	private const string RepositorySkillsRoot = ".github/skills";
 	private const string RepositorySkillsPluginName = "dotnet-maui-repo";
+	internal static readonly TimeSpan GitHubHttpTimeout = TimeSpan.FromSeconds(30);
 
 	private static readonly HashSet<string> s_devFlowManagedSkills = new(StringComparer.OrdinalIgnoreCase)
 	{
@@ -63,9 +64,12 @@ public static partial class AiCommands
 	/// Creates an <see cref="HttpClient"/> configured for GitHub API access.
 	/// Respects the <c>GITHUB_TOKEN</c> environment variable for authentication.
 	/// </summary>
-	static HttpClient CreateGitHubHttpClient()
+	internal static HttpClient CreateGitHubHttpClient()
 	{
-		var http = new HttpClient();
+		var http = new HttpClient
+		{
+			Timeout = GitHubHttpTimeout
+		};
 		http.DefaultRequestHeaders.UserAgent.Add(
 			new System.Net.Http.Headers.ProductInfoHeaderValue("Microsoft.Maui.Cli", "1.0"));
 		http.DefaultRequestHeaders.Accept.Add(

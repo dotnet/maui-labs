@@ -98,6 +98,7 @@ public static partial class AiCommands
 				// so environments sharing the same skills directory are not updated twice.
 				var updatable = new List<(DetectedEnvironment Env, string SkillDir, string SkillName, InstalledSkillVersion Version)>();
 				var processedPaths = new HashSet<string>(FileSystemPathComparer);
+				var installedSkillFilterMatches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 				var uncheckableCount = 0;
 
 				foreach (var env in environments)
@@ -115,9 +116,14 @@ public static partial class AiCommands
 						if (IsDevFlowManagedSkillName(skillName))
 							continue;
 
-						if (filterSpecified &&
-							!skillFilter!.Any(f => string.Equals(f, skillName, StringComparison.OrdinalIgnoreCase)))
-							continue;
+						if (filterSpecified)
+						{
+							var matchesFilter = skillFilter!.Any(f => string.Equals(f, skillName, StringComparison.OrdinalIgnoreCase));
+							if (!matchesFilter)
+								continue;
+
+							installedSkillFilterMatches.Add(skillName);
+						}
 
 						var version = await SkillVersionStore.ReadAsync(skillDir, ct);
 						if (version is null)
@@ -146,6 +152,16 @@ public static partial class AiCommands
 								updatable.Add((env, skillDir, skillName, version));
 						}
 					}
+				}
+
+				if (!HasUpdateFilterMatches(
+					filterSpecified,
+					devFlowTargets.Count,
+					selectedAgentAssets.Count,
+					installedSkillFilterMatches.Count))
+				{
+					formatter.WriteWarning($"No skills or agents matched filter: {string.Join(", ", skillFilter!)}");
+					return 1;
 				}
 
 				if (updatable.Count == 0 && devFlowTargetsToUpdate.Count == 0 && agentsToUpdate.Count == 0)
@@ -334,6 +350,13 @@ public static partial class AiCommands
 
 	internal static bool HasUpdateInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
 		=> skillFileCounts.Any(files => files <= 0) || assetFileCounts.Any(files => files <= 0);
+
+	internal static bool HasUpdateFilterMatches(
+		bool filterSpecified,
+		int devFlowTargetCount,
+		int selectedAgentAssetCount,
+		int installedSkillMatchCount)
+		=> !filterSpecified || devFlowTargetCount > 0 || selectedAgentAssetCount > 0 || installedSkillMatchCount > 0;
 
 	internal static string GetUpdateStatus(bool hasUpdateFailures)
 		=> hasUpdateFailures ? "partial_failure" : "success";

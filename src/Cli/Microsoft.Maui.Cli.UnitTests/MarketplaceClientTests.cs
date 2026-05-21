@@ -534,7 +534,7 @@ public class MarketplaceClientTests : IDisposable
 	private sealed class OversizedHttpContent : HttpContent
 	{
 		protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
-			=> Task.CompletedTask;
+			=> throw new InvalidOperationException("Oversized responses should be rejected from headers before the body is buffered.");
 
 		protected override bool TryComputeLength(out long length)
 		{

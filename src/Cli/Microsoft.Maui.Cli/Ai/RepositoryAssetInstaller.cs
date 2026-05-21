@@ -84,6 +84,7 @@ internal static class RepositoryAssetInstaller
 		var destinationBase = Path.GetFullPath(destinationRoot) + Path.DirectorySeparatorChar;
 
 		var count = 0;
+		var downloadFailures = 0;
 		foreach (var filePath in asset.Files)
 		{
 			var destinationPath = GetAssetFilePath(projectRoot, asset, filePath);
@@ -91,12 +92,21 @@ internal static class RepositoryAssetInstaller
 			if (!fullDestinationPath.StartsWith(destinationBase, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
 				continue;
 
-			if (File.Exists(fullDestinationPath) && !force)
-				continue;
+			if (IsReparsePoint(fullDestinationPath))
+				return (-1, string.Empty);
+
+			if (File.Exists(fullDestinationPath))
+			{
+				if (!force)
+					continue;
+			}
 
 			var content = await MarketplaceClient.FetchRawBytesAsync(http, repo, branch, filePath, ct).ConfigureAwait(false);
 			if (content is null)
+			{
+				downloadFailures++;
 				continue;
+			}
 
 			var destinationDirectory = Path.GetDirectoryName(fullDestinationPath) ?? destinationRoot;
 			if (!FileSystemPathGuard.IsPathWithinRoot(destinationDirectory, projectRoot))
@@ -106,11 +116,14 @@ internal static class RepositoryAssetInstaller
 			if (!FileSystemPathGuard.IsPathWithinRoot(destinationDirectory, projectRoot))
 				return (-1, string.Empty);
 
-			await File.WriteAllBytesAsync(fullDestinationPath, content, ct).ConfigureAwait(false);
+			if (IsReparsePoint(fullDestinationPath))
+				return (-1, string.Empty);
+
+			await WriteFileAtomicallyAsync(fullDestinationPath, content, ct).ConfigureAwait(false);
 			count++;
 		}
 
-		return (count, destinationRoot);
+		return downloadFailures > 0 ? (-2, destinationRoot) : (count, destinationRoot);
 	}
 
 	/// <summary>
@@ -182,5 +195,36 @@ internal static class RepositoryAssetInstaller
 		var normalized = MarketplaceClient.NormalizePath(path);
 		var slashIndex = normalized.LastIndexOf('/');
 		return slashIndex >= 0 ? normalized[(slashIndex + 1)..] : normalized;
+	}
+
+	static async Task WriteFileAtomicallyAsync(string destinationPath, byte[] content, CancellationToken ct)
+	{
+		var destinationDirectory = Path.GetDirectoryName(destinationPath)!;
+		var tempPath = Path.Combine(
+			destinationDirectory,
+			$".{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.tmp");
+
+		try
+		{
+			await File.WriteAllBytesAsync(tempPath, content, ct).ConfigureAwait(false);
+			File.Move(tempPath, destinationPath, overwrite: true);
+		}
+		finally
+		{
+			if (File.Exists(tempPath))
+				File.Delete(tempPath);
+		}
+	}
+
+	static bool IsReparsePoint(string path)
+	{
+		try
+		{
+			return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+		}
+		catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+		{
+			return false;
+		}
 	}
 }

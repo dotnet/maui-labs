@@ -476,7 +476,7 @@ internal static class MarketplaceClient
 	{
 		try
 		{
-			using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+			using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
 			// Return null only for 404; other HTTP errors propagate to callers.
 			if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -497,7 +497,7 @@ internal static class MarketplaceClient
 	{
 		try
 		{
-			using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+			using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
 			// Return null only for 404; other HTTP errors propagate to callers.
 			if (response.StatusCode == System.Net.HttpStatusCode.NotFound)

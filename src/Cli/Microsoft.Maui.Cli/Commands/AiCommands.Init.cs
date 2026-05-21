@@ -260,8 +260,10 @@ public static partial class AiCommands
 					assetResults.Add((asset.Name, asset.Category, filesInstalled, installPath));
 					if (filesInstalled > 0)
 						formatter.WriteSuccess($"Installed {asset.Name} → {asset.Category} ({filesInstalled} files)");
-					else if (filesInstalled < 0)
+					else if (filesInstalled == -1)
 						formatter.WriteWarning($"Skipped {asset.Name} → {asset.Category} (unsafe install path)");
+					else if (filesInstalled == -2)
+						formatter.WriteWarning($"Failed to download asset files for '{asset.Name}'. Check your network connection.");
 					else
 						formatter.WriteInfo($"Skipped {asset.Name} → {asset.Category} (already installed)");
 				}

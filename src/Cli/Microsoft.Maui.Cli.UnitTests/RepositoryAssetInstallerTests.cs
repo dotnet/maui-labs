@@ -120,6 +120,59 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task InstallAssetAsync_ExistingSymlinkDestination_ReturnsNegativeOne()
+	{
+		var agentsDir = Path.Combine(_tempDir, ".github", "agents");
+		Directory.CreateDirectory(agentsDir);
+		var outsideFile = Path.Combine(_tempDir, "outside-agent.agent.md");
+		await File.WriteAllTextAsync(outsideFile, "outside content");
+		var symlinkPath = Path.Combine(agentsDir, "expert-reviewer.agent.md");
+		if (!TryCreateFileSymlink(symlinkPath, outsideFile))
+			return;
+
+		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>
+		{
+			["expert-reviewer.agent.md"] = "updated agent content"
+		}));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			RemotePath = ".github/agents/expert-reviewer.agent.md",
+			DestinationRoot = ".github/agents",
+			Files = [".github/agents/expert-reviewer.agent.md"]
+		};
+
+		var result = await RepositoryAssetInstaller.InstallAssetAsync(
+			http, asset, _tempDir, "owner/repo", "main", force: true);
+
+		Assert.Equal(-1, result.FilesInstalled);
+		Assert.Equal(string.Empty, result.InstallPath);
+		Assert.Equal("outside content", await File.ReadAllTextAsync(outsideFile));
+	}
+
+	[Fact]
+	public async Task InstallAssetAsync_DownloadFailure_ReturnsNegativeTwo()
+	{
+		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>()));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			RemotePath = ".github/agents/expert-reviewer.agent.md",
+			DestinationRoot = ".github/agents",
+			Files = [".github/agents/expert-reviewer.agent.md"]
+		};
+
+		var result = await RepositoryAssetInstaller.InstallAssetAsync(
+			http, asset, _tempDir, "owner/repo", "main", force: true);
+
+		Assert.Equal(-2, result.FilesInstalled);
+		Assert.Equal(Path.Combine(_tempDir, ".github", "agents"), result.InstallPath);
+		Assert.False(File.Exists(Path.Combine(_tempDir, ".github", "agents", "expert-reviewer.agent.md")));
+	}
+
+	[Fact]
 	public void GetInstalledCopilotAgents_ReturnsOnlyMauiRelatedAgents()
 	{
 		var agentsDir = Path.Combine(_tempDir, ".github", "agents");
@@ -247,6 +300,19 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 		try
 		{
 			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
+		}
+	}
+
+	static bool TryCreateFileSymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			File.CreateSymbolicLink(linkPath, targetPath);
 			return true;
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)

@@ -337,6 +337,7 @@ public class AiCommandsTests
 	[InlineData(new[] { 1, 2 }, new[] { 0 }, false)]
 	[InlineData(new[] { -2, 1 }, new[] { 0 }, true)]
 	[InlineData(new[] { 1 }, new[] { -1 }, true)]
+	[InlineData(new[] { 1 }, new[] { -2 }, true)]
 	public void HasInitInstallFailures_DetectsNegativeFileCounts(int[] skillFileCounts, int[] assetFileCounts, bool expected)
 	{
 		Assert.Equal(expected, AiCommands.HasInitInstallFailures(skillFileCounts, assetFileCounts));
@@ -351,6 +352,36 @@ public class AiCommandsTests
 	public void HasUpdateInstallFailures_DetectsFailedUpdates(int[] skillFileCounts, int[] assetFileCounts, bool expected)
 	{
 		Assert.Equal(expected, AiCommands.HasUpdateInstallFailures(skillFileCounts, assetFileCounts));
+	}
+
+	[Theory]
+	[InlineData(false, 0, 0, 0, true)]
+	[InlineData(true, 1, 0, 0, true)]
+	[InlineData(true, 0, 1, 0, true)]
+	[InlineData(true, 0, 0, 1, true)]
+	[InlineData(true, 0, 0, 0, false)]
+	public void HasUpdateFilterMatches_RequiresAtLeastOneMatchedTargetWhenFiltered(
+		bool filterSpecified,
+		int devFlowTargetCount,
+		int selectedAgentAssetCount,
+		int installedSkillMatchCount,
+		bool expected)
+	{
+		Assert.Equal(
+			expected,
+			AiCommands.HasUpdateFilterMatches(
+				filterSpecified,
+				devFlowTargetCount,
+				selectedAgentAssetCount,
+				installedSkillMatchCount));
+	}
+
+	[Fact]
+	public void CreateGitHubHttpClient_ConfiguresTimeout()
+	{
+		using var http = AiCommands.CreateGitHubHttpClient();
+
+		Assert.Equal(AiCommands.GitHubHttpTimeout, http.Timeout);
 	}
 
 	[Theory]
