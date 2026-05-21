@@ -68,7 +68,7 @@ internal static class FileSystemPathGuard
 
 		try
 		{
-			Directory.CreateDirectory(tempDirectory);
+			CreatePrivateDirectory(tempDirectory);
 			if (IsReparsePoint(tempDirectory) || !IsPathWithinRoot(tempDirectory, root))
 				return false;
 
@@ -124,4 +124,17 @@ internal static class FileSystemPathGuard
 			IsPathWithinRoot(destinationPath, root) &&
 			!IsReparsePoint(destinationDirectory) &&
 			!IsReparsePoint(destinationPath);
+
+	static void CreatePrivateDirectory(string path)
+	{
+		if (OperatingSystem.IsWindows())
+		{
+			Directory.CreateDirectory(path);
+			return;
+		}
+
+		Directory.CreateDirectory(
+			path,
+			UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+	}
 }

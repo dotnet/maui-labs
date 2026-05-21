@@ -57,10 +57,7 @@ public static partial class AiCommands
 				var installedSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 				foreach (var env in environments)
 				{
-					if (!Directory.Exists(env.SkillsDirectory))
-						continue;
-
-					foreach (var skillDir in Directory.GetDirectories(env.SkillsDirectory))
+					foreach (var skillDir in EnumerateSkillDirectories(env))
 					{
 						var version = await SkillVersionStore.ReadAsync(skillDir, ct);
 						if (version is not null)

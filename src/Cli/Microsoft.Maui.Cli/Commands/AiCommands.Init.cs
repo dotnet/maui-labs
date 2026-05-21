@@ -86,7 +86,7 @@ public static partial class AiCommands
 						// In CI or force mode, create .claude/ by default
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
-						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(currentDir), envFilter);
+						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(workingDir), envFilter);
 					}
 					else if (!canCreateDefaultClaudeEnvironment || useJson || isCi || force)
 					{
@@ -107,7 +107,7 @@ public static partial class AiCommands
 
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
-						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(currentDir), envFilter);
+						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(workingDir), envFilter);
 					}
 				}
 

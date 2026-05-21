@@ -349,7 +349,7 @@ internal static class MarketplaceClient
 		if (!trimmed.StartsWith("---", StringComparison.Ordinal))
 			return (name, description);
 
-		var endIndex = trimmed.IndexOf("---", 3, StringComparison.Ordinal);
+		var endIndex = FindFrontmatterEnd(trimmed);
 		if (endIndex < 0)
 			return (name, description);
 
@@ -392,6 +392,25 @@ internal static class MarketplaceClient
 		}
 
 		return (name, description);
+	}
+
+	static int FindFrontmatterEnd(string content)
+	{
+		var searchIndex = 3;
+		while (true)
+		{
+			var newlineIndex = content.IndexOf('\n', searchIndex);
+			if (newlineIndex < 0)
+				return -1;
+
+			var lineStart = newlineIndex + 1;
+			var nextNewlineIndex = content.IndexOf('\n', lineStart);
+			var lineEnd = nextNewlineIndex < 0 ? content.Length : nextNewlineIndex;
+			if (content[lineStart..lineEnd].Trim() == "---")
+				return lineStart;
+
+			searchIndex = lineEnd;
+		}
 	}
 
 	/// <summary>

@@ -171,6 +171,24 @@ public class MarketplaceClientTests : IDisposable
 		Assert.Equal("Case insensitive keys", description);
 	}
 
+	[Fact]
+	public void ParseFrontmatter_EmbeddedDelimiterText_DoesNotEndFrontmatter()
+	{
+		var content = """
+			---
+			name: delimiter-skill
+			description: >-
+			  Uses --- inside the description text.
+			---
+			# Skill
+			""";
+
+		var (name, description) = MarketplaceClient.ParseFrontmatter(content);
+
+		Assert.Equal("delimiter-skill", name);
+		Assert.Equal("Uses --- inside the description text.", description);
+	}
+
 	[Theory]
 	[InlineData("---\nname: a\ndescription: b\n---", "a", "b")]
 	[InlineData("---\nname:   spaced  \ndescription:   also spaced  \n---", "spaced", "also spaced")]
