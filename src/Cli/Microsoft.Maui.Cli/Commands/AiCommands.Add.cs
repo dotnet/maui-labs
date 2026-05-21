@@ -140,15 +140,14 @@ public static partial class AiCommands
 				}
 
 				// Configure MCP
+				var mcpResults = new List<(string Environment, bool Configured, string? BackupPath)>();
 				if (!noMcp)
 				{
 					foreach (var env in environments)
 					{
-						var ok = await McpConfigurator.ConfigureAsync(env, workingDir, ct);
-						if (ok)
-							formatter.WriteSuccess($"MCP configured for {env.Kind}");
-						else
-							formatter.WriteWarning($"Could not configure MCP for {env.Kind}");
+						var result = await McpConfigurator.ConfigureWithResultAsync(env, workingDir, ct);
+						mcpResults.Add((env.Kind.ToString(), result.Success, result.BackupPath));
+						WriteMcpConfigurationMessage(formatter, env.Kind, result, useJson);
 					}
 				}
 
@@ -164,6 +163,12 @@ public static partial class AiCommands
 							["environment"] = r.Env,
 							["files"] = r.Files,
 							["path"] = r.Path
+						}).ToArray()),
+						["mcp"] = new JsonArray(mcpResults.Select(r => (JsonNode)new JsonObject
+						{
+							["environment"] = r.Environment,
+							["configured"] = r.Configured,
+							["backupPath"] = r.BackupPath
 						}).ToArray())
 					};
 					formatter.Write(jsonResult);

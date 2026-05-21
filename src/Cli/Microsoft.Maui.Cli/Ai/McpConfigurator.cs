@@ -40,21 +40,31 @@ internal static class McpConfigurator
 		=> ConfigureAsync(env, projectRoot: null, ct);
 
 	public static async Task<bool> ConfigureAsync(DetectedEnvironment env, string? projectRoot, CancellationToken ct = default)
+		=> (await ConfigureWithResultAsync(env, projectRoot, ct).ConfigureAwait(false)).Success;
+
+	public static async Task<McpConfigurationResult> ConfigureWithResultAsync(
+		DetectedEnvironment env,
+		string? projectRoot,
+		CancellationToken ct = default)
 	{
 		try
 		{
 			var configPath = env.McpConfigPath;
 			var configDir = Path.GetDirectoryName(configPath);
+			var writeRoot = GetConfigWriteRoot(configPath, projectRoot, env.Kind);
+			if (writeRoot is null)
+				return McpConfigurationResult.Failure;
+
 			if (!string.IsNullOrEmpty(configDir))
 			{
-				if (projectRoot is not null &&
-					env.Kind != AgentEnvironmentKind.CopilotCli &&
-					!FileSystemPathGuard.IsPathWithinRoot(configDir, projectRoot))
+				if (!FileSystemPathGuard.IsPathWithinRoot(configDir, writeRoot))
 				{
-					return false;
+					return McpConfigurationResult.Failure;
 				}
 
 				Directory.CreateDirectory(configDir);
+				if (!FileSystemPathGuard.IsPathWithinRoot(configDir, writeRoot))
+					return McpConfigurationResult.Failure;
 			}
 
 			JsonObject root;
@@ -64,7 +74,7 @@ internal static class McpConfigurator
 			{
 				existingJson = await File.ReadAllTextAsync(configPath, ct).ConfigureAwait(false);
 				if (JsonNode.Parse(existingJson, documentOptions: s_jsonDocumentOptions) is not JsonObject existingRoot)
-					return false;
+					return McpConfigurationResult.Failure;
 
 				root = existingRoot;
 				backupExistingConfig = ContainsJsonComments(existingJson);
@@ -85,29 +95,36 @@ internal static class McpConfigurator
 				: EnsureStandardEntry(root, serverEntry);
 
 			if (configureResult == ConfigureResult.AlreadyConfigured)
-				return true;
+				return McpConfigurationResult.SuccessResult;
 			if (configureResult == ConfigureResult.IncompatibleSchema)
-				return false;
+				return McpConfigurationResult.Failure;
 
 			var options = new JsonSerializerOptions { WriteIndented = true };
+			string? backupPath = null;
 			if (backupExistingConfig && existingJson is not null)
-				await WriteBackupAsync(configPath, existingJson, projectRoot, ct).ConfigureAwait(false);
+			{
+				backupPath = await WriteBackupAsync(configPath, existingJson, writeRoot, ct).ConfigureAwait(false);
+				if (backupPath is null)
+					return McpConfigurationResult.Failure;
+			}
 
-			await WriteAtomicAsync(configPath, root.ToJsonString(options), ct).ConfigureAwait(false);
+			var wroteConfig = await WriteAtomicAsync(configPath, root.ToJsonString(options), writeRoot, ct).ConfigureAwait(false);
 
-			return true;
+			return wroteConfig
+				? new McpConfigurationResult(true, backupPath)
+				: McpConfigurationResult.Failure;
 		}
 		catch (IOException)
 		{
-			return false;
+			return McpConfigurationResult.Failure;
 		}
 		catch (UnauthorizedAccessException)
 		{
-			return false;
+			return McpConfigurationResult.Failure;
 		}
 		catch (JsonException)
 		{
-			return false;
+			return McpConfigurationResult.Failure;
 		}
 	}
 
@@ -180,38 +197,44 @@ internal static class McpConfigurator
 			args[1]?.GetValue<string>() == "mcp";
 	}
 
-	static async Task WriteAtomicAsync(string configPath, string contents, CancellationToken ct)
-	{
-		var configDir = Path.GetDirectoryName(configPath);
-		var tempDir = string.IsNullOrEmpty(configDir) ? Directory.GetCurrentDirectory() : configDir;
-		var tempPath = Path.Combine(tempDir, $".{Path.GetFileName(configPath)}.{Guid.NewGuid():N}.tmp");
+	static Task<bool> WriteAtomicAsync(string configPath, string contents, string writeRoot, CancellationToken ct)
+		=> FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+			configPath,
+			writeRoot,
+			Encoding.UTF8.GetBytes(contents),
+			ct);
 
-		try
-		{
-			await File.WriteAllTextAsync(tempPath, contents, ct).ConfigureAwait(false);
-			File.Move(tempPath, configPath, overwrite: true);
-		}
-		finally
-		{
-			if (File.Exists(tempPath))
-				TryDeleteFile(tempPath);
-		}
-	}
-
-	static async Task WriteBackupAsync(string configPath, string contents, string? projectRoot, CancellationToken ct)
+	static async Task<string?> WriteBackupAsync(string configPath, string contents, string writeRoot, CancellationToken ct)
 	{
 		var backupPath = GetBackupPath(configPath);
-		var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath));
-		var configRoot = string.IsNullOrEmpty(configDir) ? Directory.GetCurrentDirectory() : configDir;
-		var backupRoot = projectRoot is not null && FileSystemPathGuard.IsPathWithinRoot(configRoot, projectRoot)
-			? projectRoot
-			: configRoot;
-
-		await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+		var wroteBackup = await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
 			backupPath,
-			backupRoot,
+			writeRoot,
 			Encoding.UTF8.GetBytes(contents),
 			ct).ConfigureAwait(false);
+
+		return wroteBackup ? backupPath : null;
+	}
+
+	static string? GetConfigWriteRoot(string configPath, string? projectRoot, AgentEnvironmentKind kind)
+	{
+		var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath));
+		var configRoot = string.IsNullOrEmpty(configDir) ? Directory.GetCurrentDirectory() : configDir;
+
+		if (projectRoot is not null && kind != AgentEnvironmentKind.CopilotCli)
+			return projectRoot;
+
+		if (projectRoot is not null && FileSystemPathGuard.IsPathWithinRoot(configRoot, projectRoot))
+			return projectRoot;
+
+		var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		if (!string.IsNullOrWhiteSpace(userHome) &&
+			FileSystemPathGuard.IsPathWithinRoot(configRoot, userHome))
+		{
+			return userHome;
+		}
+
+		return projectRoot is null ? configRoot : null;
 	}
 
 	static string GetBackupPath(string configPath)
@@ -236,19 +259,10 @@ internal static class McpConfigurator
 		return false;
 	}
 
-	static void TryDeleteFile(string path)
-	{
-		try
-		{
-			File.Delete(path);
-		}
-		catch (IOException)
-		{
-			// Best-effort temp cleanup should not hide the config write result.
-		}
-		catch (UnauthorizedAccessException)
-		{
-			// Best-effort temp cleanup should not hide the config write result.
-		}
-	}
+}
+
+internal sealed record McpConfigurationResult(bool Success, string? BackupPath)
+{
+	public static McpConfigurationResult SuccessResult { get; } = new(true, null);
+	public static McpConfigurationResult Failure { get; } = new(false, null);
 }

@@ -269,15 +269,14 @@ public static partial class AiCommands
 				}
 
 				// Step 9: Configure MCP
+				var mcpResults = new List<(string Environment, bool Configured, string? BackupPath)>();
 				if (!noMcp)
 				{
 					foreach (var env in environments)
 					{
-						var ok = await McpConfigurator.ConfigureAsync(env, workingDir, ct);
-						if (ok)
-							formatter.WriteSuccess($"MCP configured for {env.Kind}");
-						else
-							formatter.WriteWarning($"Could not configure MCP for {env.Kind}");
+						var result = await McpConfigurator.ConfigureWithResultAsync(env, workingDir, ct);
+						mcpResults.Add((env.Kind.ToString(), result.Success, result.BackupPath));
+						WriteMcpConfigurationMessage(formatter, env.Kind, result, useJson);
 					}
 
 					if (!useJson)
@@ -316,6 +315,12 @@ public static partial class AiCommands
 							["type"] = r.Type,
 							["files"] = r.Files,
 							["path"] = r.Path
+						}).ToArray()),
+						["mcp"] = new JsonArray(mcpResults.Select(r => (JsonNode)new JsonObject
+						{
+							["environment"] = r.Environment,
+							["configured"] = r.Configured,
+							["backupPath"] = r.BackupPath
 						}).ToArray())
 					};
 					formatter.Write(jsonResult);
@@ -361,6 +366,30 @@ public static partial class AiCommands
 		var skills = await FetchAllSkillsAsync(http, repo, branch, treeEntries, ct);
 		var agentAssets = await RepositoryAssetInstaller.GetCopilotAgentsAsync(http, repo, branch, treeEntries, ct);
 		return (skills, agentAssets);
+	}
+
+	static void WriteMcpConfigurationMessage(
+		IOutputFormatter formatter,
+		AgentEnvironmentKind environment,
+		McpConfigurationResult result,
+		bool useJson)
+	{
+		if (useJson)
+			return;
+
+		if (result.Success)
+		{
+			formatter.WriteSuccess($"MCP configured for {environment}");
+			if (!string.IsNullOrEmpty(result.BackupPath))
+			{
+				formatter.WriteWarning(
+					$"Existing JSONC comments in the MCP config for {environment} were removed; original saved to {result.BackupPath}");
+			}
+		}
+		else
+		{
+			formatter.WriteWarning($"Could not configure MCP for {environment}");
+		}
 	}
 
 	static List<SkillInfo> SelectSkills(

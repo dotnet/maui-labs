@@ -40,7 +40,8 @@ internal static class SkillInstaller
 		bool force,
 		CancellationToken ct = default)
 	{
-		if (skill.Name is "." or ".." ||
+		if (string.IsNullOrWhiteSpace(skill.Name) ||
+			skill.Name is "." or ".." ||
 			skill.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
 			skill.Name.Contains("..") ||
 			skill.Name.Contains('/') ||

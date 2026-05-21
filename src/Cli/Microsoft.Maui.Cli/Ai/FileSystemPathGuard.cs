@@ -73,11 +73,15 @@ internal static class FileSystemPathGuard
 				return false;
 
 			await File.WriteAllBytesAsync(tempPath, content, ct).ConfigureAwait(false);
-			if (!IsPathWithinRoot(tempPath, root) ||
-				!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
+			if (!IsPathWithinRoot(tempPath, root))
 			{
 				return false;
 			}
+
+			// Re-evaluate the destination immediately before the replace so a symlink
+			// swap between directory creation and the final move cannot redirect writes.
+			if (!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
+				return false;
 
 			File.Move(tempPath, fullDestinationPath, overwrite: true);
 			return true;
@@ -118,5 +122,6 @@ internal static class FileSystemPathGuard
 	static bool IsSafeDestination(string destinationPath, string destinationDirectory, string root)
 		=> IsPathWithinRoot(destinationDirectory, root) &&
 			IsPathWithinRoot(destinationPath, root) &&
+			!IsReparsePoint(destinationDirectory) &&
 			!IsReparsePoint(destinationPath);
 }

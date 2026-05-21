@@ -59,6 +59,8 @@ public class SkillInstallerTests : IDisposable
 	}
 
 	[Theory]
+	[InlineData("")]
+	[InlineData(" ")]
 	[InlineData(".")]
 	[InlineData("bad/name")]
 	[InlineData("bad\\name")]

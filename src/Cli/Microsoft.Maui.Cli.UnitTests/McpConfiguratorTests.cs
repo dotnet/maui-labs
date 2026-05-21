@@ -137,10 +137,11 @@ public class McpConfiguratorTests : IDisposable
 			SkillsDirectory = Path.Combine(_tempDir, ".github", "skills")
 		};
 
-		var result = await McpConfigurator.ConfigureAsync(env);
+		var result = await McpConfigurator.ConfigureWithResultAsync(env, projectRoot: null);
 
-		Assert.True(result);
+		Assert.True(result.Success);
 		var backupPath = Path.Combine(configDir, "mcp.json.bak");
+		Assert.Equal(backupPath, result.BackupPath);
 		Assert.True(File.Exists(backupPath));
 		var backup = await File.ReadAllTextAsync(backupPath);
 		Assert.Contains("// Existing user MCP server.", backup);
@@ -215,8 +216,9 @@ public class McpConfiguratorTests : IDisposable
 
 		var result = await McpConfigurator.ConfigureAsync(env);
 
-		Assert.True(result);
+		Assert.False(result);
 		Assert.Equal("outside content", await File.ReadAllTextAsync(outsideFile));
+		Assert.Contains("// Existing user MCP server.", await File.ReadAllTextAsync(configPath));
 	}
 
 	[Fact]
