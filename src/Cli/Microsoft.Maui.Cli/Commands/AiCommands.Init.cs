@@ -212,6 +212,7 @@ public static partial class AiCommands
 
 				// Step 6: Install DevFlow skills through the DevFlow-owned bundled installer.
 				var devFlowResults = new List<(string Skill, string Target, string Action, string Path)>();
+				var devFlowInstallFailed = false;
 				foreach (var target in devFlowTargets)
 				{
 					var result = await DevFlowSkillManager.InstallRecommendedAsync(
@@ -223,7 +224,14 @@ public static partial class AiCommands
 						confirm: null,
 						ct);
 
-					foreach (var row in GetDevFlowResultRows(result, target))
+					var targetRows = GetDevFlowResultRows(result, target).ToList();
+					if (targetRows.Count == 0)
+					{
+						devFlowInstallFailed = true;
+						formatter.WriteWarning($"Could not install DevFlow skills for {target.DisplayName}");
+					}
+
+					foreach (var row in targetRows)
 					{
 						devFlowResults.Add(row);
 						formatter.WriteSuccess($"DevFlow {row.Action} {row.Skill} → {row.Target}");
@@ -294,7 +302,10 @@ public static partial class AiCommands
 				summaryRows.AddRange(devFlowResults.Select(r => (r.Skill, "DevFlow", r.Target, r.Action, r.Path)));
 				summaryRows.AddRange(skillResults.Select(r => (r.Skill, "Skill", r.Env, FormatFileResult(r.Files), r.Path)));
 				summaryRows.AddRange(assetResults.Select(r => (r.Asset, r.Type, "GitHub Copilot", FormatFileResult(r.Files), r.Path)));
-				var hasInstallFailures = HasInitInstallFailures(skillResults.Select(r => r.Files), assetResults.Select(r => r.Files));
+				var hasInstallFailures = HasInitInstallFailures(
+					skillResults.Select(r => r.Files),
+					assetResults.Select(r => r.Files),
+					devFlowInstallFailed);
 
 				if (useJson)
 				{
@@ -536,8 +547,11 @@ public static partial class AiCommands
 			_ => files.ToString()
 		};
 
-	internal static bool HasInitInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
-		=> HasSkillInstallFailures(skillFileCounts) || assetFileCounts.Any(files => files < 0);
+	internal static bool HasInitInstallFailures(
+		IEnumerable<int> skillFileCounts,
+		IEnumerable<int> assetFileCounts,
+		bool devFlowInstallFailed = false)
+		=> devFlowInstallFailed || HasSkillInstallFailures(skillFileCounts) || assetFileCounts.Any(files => files < 0);
 
 	internal static string GetInitStatus(bool hasInstallFailures)
 		=> hasInstallFailures ? "partial" : "success";

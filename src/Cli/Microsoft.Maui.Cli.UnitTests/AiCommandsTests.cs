@@ -343,6 +343,12 @@ public class AiCommandsTests
 		Assert.Equal(expected, AiCommands.HasInitInstallFailures(skillFileCounts, assetFileCounts));
 	}
 
+	[Fact]
+	public void HasInitInstallFailures_DevFlowFailure_ReturnsTrue()
+	{
+		Assert.True(AiCommands.HasInitInstallFailures([], [], devFlowInstallFailed: true));
+	}
+
 	[Theory]
 	[InlineData(new[] { 1, 2 }, new[] { 1 }, false)]
 	[InlineData(new[] { -2, 1 }, new[] { 1 }, true)]

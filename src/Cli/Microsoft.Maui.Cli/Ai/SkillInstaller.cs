@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.ExceptionServices;
 using Microsoft.Maui.Cli.Ai.Models;
 
 namespace Microsoft.Maui.Cli.Ai;
@@ -150,23 +149,28 @@ internal static class SkillInstaller
 		var backupDirectory = $"{destinationDirectory}.{Guid.NewGuid():N}.bak";
 		TryDeleteDirectoryIfExists(backupDirectory);
 
+		var movedExistingDirectory = false;
+		var succeeded = false;
 		if (Directory.Exists(destinationDirectory))
+		{
 			Directory.Move(destinationDirectory, backupDirectory);
+			movedExistingDirectory = true;
+		}
 
 		try
 		{
 			Directory.Move(sourceDirectory, destinationDirectory);
+			succeeded = true;
 			TryDeleteDirectoryIfExists(backupDirectory);
 		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		finally
 		{
-			RestoreBackupDirectory(backupDirectory, destinationDirectory, ex);
-			ExceptionDispatchInfo.Capture(ex).Throw();
-			throw;
+			if (!succeeded && movedExistingDirectory)
+				RestoreBackupDirectory(backupDirectory, destinationDirectory);
 		}
 	}
 
-	static void RestoreBackupDirectory(string backupDirectory, string destinationDirectory, Exception originalException)
+	static void RestoreBackupDirectory(string backupDirectory, string destinationDirectory)
 	{
 		if (!Directory.Exists(backupDirectory) || Directory.Exists(destinationDirectory))
 			return;
@@ -179,7 +183,7 @@ internal static class SkillInstaller
 		{
 			throw new InvalidOperationException(
 				$"Could not replace skill directory '{destinationDirectory}' and could not restore the previous installation.",
-				new AggregateException(originalException, restoreException));
+				restoreException);
 		}
 	}
 
