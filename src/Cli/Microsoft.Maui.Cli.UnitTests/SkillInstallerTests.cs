@@ -115,6 +115,29 @@ public class SkillInstallerTests : IDisposable
 		Assert.Empty(Directory.EnumerateFileSystemEntries(skillsDir));
 	}
 
+	[Fact]
+	public async Task InstallSkillAsync_DownloadThrows_RemovesTempInstallDirectory()
+	{
+		var skill = new SkillInfo
+		{
+			Name = "throwing-skill",
+			RemotePath = ".github/skills/throwing-skill",
+			Files = [".github/skills/throwing-skill/SKILL.md"]
+		};
+		var skillsDir = Path.Combine(_tempDir, "skills");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = skillsDir
+		};
+		using var http = new HttpClient(new ThrowingHandler());
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() => SkillInstaller.InstallSkillAsync(
+			http, skill, env, _tempDir, "owner/repo", "main", force: false));
+
+		Assert.Empty(Directory.EnumerateFileSystemEntries(skillsDir));
+	}
+
 	private sealed class NotFoundHandler : HttpMessageHandler
 	{
 		protected override Task<HttpResponseMessage> SendAsync(
@@ -138,6 +161,15 @@ public class SkillInstallerTests : IDisposable
 			}
 
 			return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+		}
+	}
+
+	private sealed class ThrowingHandler : HttpMessageHandler
+	{
+		protected override Task<HttpResponseMessage> SendAsync(
+			HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			throw new InvalidOperationException("download failed");
 		}
 	}
 }

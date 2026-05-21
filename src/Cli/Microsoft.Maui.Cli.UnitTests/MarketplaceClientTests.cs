@@ -418,6 +418,56 @@ public class MarketplaceClientTests : IDisposable
 		Assert.Contains("SKILL%23.md", url);
 	}
 
+	[Theory]
+	[InlineData("")]
+	[InlineData("owner")]
+	[InlineData("owner/")]
+	[InlineData("/repo")]
+	[InlineData("owner/repo/extra")]
+	[InlineData("owner/repo?foo=bar")]
+	[InlineData("owner/re po")]
+	public void EncodeRepoPath_InvalidRepo_Throws(string repo)
+	{
+		var exception = Assert.Throws<InvalidOperationException>(() => MarketplaceClient.EncodeRepoPath(repo));
+		Assert.Contains("owner/repo", exception.Message);
+	}
+
+	[Fact]
+	public async Task FetchRawStringAsync_InvalidRepo_ThrowsBeforeHttpCall()
+	{
+		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new StringContent("content")
+		});
+		using var http = new HttpClient(handler);
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() => MarketplaceClient.FetchRawStringAsync(
+			http,
+			"owner/repo?foo=bar",
+			"main",
+			"README.md"));
+
+		Assert.Equal(0, handler.Calls);
+	}
+
+	[Fact]
+	public async Task GetRemoteCommitShaAsync_InvalidRepo_ThrowsBeforeHttpCall()
+	{
+		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new StringContent("[]")
+		});
+		using var http = new HttpClient(handler);
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() => MarketplaceClient.GetRemoteCommitShaAsync(
+			http,
+			"owner/repo/extra",
+			"main",
+			"README.md"));
+
+		Assert.Equal(0, handler.Calls);
+	}
+
 	/// <summary>
 	/// Minimal HttpMessageHandler that returns a fixed response for every request.
 	/// </summary>

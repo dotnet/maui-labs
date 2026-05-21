@@ -65,11 +65,12 @@ internal static class MarketplaceClient
 	public static async Task<List<(string Path, string Type)>?> FetchTreeEntriesAsync(
 		HttpClient http, string repo, string branch, CancellationToken ct = default)
 	{
+		var encodedRepo = EncodeRepoPath(repo);
 		var treeSha = await ResolveTreeShaAsync(http, repo, branch, ct).ConfigureAwait(false);
 		if (treeSha is null)
 			return null;
 
-		var treeUrl = $"{GitHubApiBase}/repos/{repo}/git/trees/{treeSha}?recursive=1";
+		var treeUrl = $"{GitHubApiBase}/repos/{encodedRepo}/git/trees/{Uri.EscapeDataString(treeSha)}?recursive=1";
 		var treeJson = await FetchStringAsync(http, treeUrl, ct).ConfigureAwait(false);
 		if (treeJson is null)
 			return null;
@@ -222,8 +223,9 @@ internal static class MarketplaceClient
 	/// <returns>The commit SHA, or <c>null</c> on failure.</returns>
 	public static async Task<string?> GetRemoteCommitShaAsync(HttpClient http, string repo, string branch, string path, CancellationToken ct = default)
 	{
+		var encodedRepo = EncodeRepoPath(repo);
 		var normalizedPath = NormalizePath(path);
-		var url = $"{GitHubApiBase}/repos/{repo}/commits?sha={Uri.EscapeDataString(branch)}&path={Uri.EscapeDataString(normalizedPath)}&per_page=1";
+		var url = $"{GitHubApiBase}/repos/{encodedRepo}/commits?sha={Uri.EscapeDataString(branch)}&path={Uri.EscapeDataString(normalizedPath)}&per_page=1";
 		var json = await FetchStringAsync(http, url, ct).ConfigureAwait(false);
 		if (json is null)
 			return null;
@@ -257,7 +259,8 @@ internal static class MarketplaceClient
 	/// </summary>
 	private static async Task<string?> ResolveTreeShaAsync(HttpClient http, string repo, string branch, CancellationToken ct = default)
 	{
-		var url = $"{GitHubApiBase}/repos/{repo}/commits/{Uri.EscapeDataString(branch)}";
+		var encodedRepo = EncodeRepoPath(repo);
+		var url = $"{GitHubApiBase}/repos/{encodedRepo}/commits/{Uri.EscapeDataString(branch)}";
 		var json = await FetchStringAsync(http, url, ct).ConfigureAwait(false);
 		if (json is null)
 			return null;
@@ -430,9 +433,37 @@ internal static class MarketplaceClient
 
 	static string BuildRawUrl(string repo, string branch, string path)
 	{
+		var encodedRepo = EncodeRepoPath(repo);
 		var normalizedPath = NormalizePath(path);
 		var encodedPath = string.Join("/", normalizedPath.Split('/').Select(Uri.EscapeDataString));
-		return $"{GitHubRawBase}/{repo}/{Uri.EscapeDataString(branch)}/{encodedPath}";
+		return $"{GitHubRawBase}/{encodedRepo}/{Uri.EscapeDataString(branch)}/{encodedPath}";
+	}
+
+	internal static string EncodeRepoPath(string repo)
+	{
+		var segments = repo.Split('/');
+		if (segments.Length != 2 ||
+			!IsValidRepoSegment(segments[0]) ||
+			!IsValidRepoSegment(segments[1]))
+		{
+			throw new InvalidOperationException($"GitHub repository '{repo}' must use the format 'owner/repo' and contain only letters, numbers, '.', '_', or '-'.");
+		}
+
+		return $"{Uri.EscapeDataString(segments[0])}/{Uri.EscapeDataString(segments[1])}";
+	}
+
+	static bool IsValidRepoSegment(string segment)
+	{
+		if (segment.Length == 0)
+			return false;
+
+		foreach (var ch in segment)
+		{
+			if (!char.IsAsciiLetterOrDigit(ch) && ch is not '.' and not '_' and not '-')
+				return false;
+		}
+
+		return true;
 	}
 
 	static StringComparison PathComparison =>

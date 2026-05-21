@@ -61,35 +61,38 @@ internal static class SkillInstaller
 		var tempInstallPath = Path.Combine(skillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
 		Directory.CreateDirectory(tempInstallPath);
 
-		var filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
-			http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
+		try
+		{
+			var filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
+				http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
 
-		if (skill.Files.Count == 0 || filesInstalled != skill.Files.Count)
+			if (skill.Files.Count == 0 || filesInstalled != skill.Files.Count)
+				return (-2, installPath);
+
+			// Resolve the latest commit SHA for version tracking.
+			var commitSha = await MarketplaceClient.GetRemoteCommitShaAsync(
+				http, repo, branch, skill.RemotePath, ct).ConfigureAwait(false);
+
+			var version = new InstalledSkillVersion
+			{
+				Name = skill.Name,
+				Commit = commitSha,
+				Branch = branch,
+				UpdatedAt = DateTime.UtcNow.ToString("o"),
+				Source = repo,
+				PluginPath = skill.RemotePath
+			};
+
+			await SkillVersionStore.WriteAsync(tempInstallPath, version, ct).ConfigureAwait(false);
+
+			CopyDirectory(tempInstallPath, installPath);
+
+			return (filesInstalled, installPath);
+		}
+		finally
 		{
 			DeleteDirectoryIfExists(tempInstallPath);
-			return (-2, installPath);
 		}
-
-		// Resolve the latest commit SHA for version tracking.
-		var commitSha = await MarketplaceClient.GetRemoteCommitShaAsync(
-			http, repo, branch, skill.RemotePath, ct).ConfigureAwait(false);
-
-		var version = new InstalledSkillVersion
-		{
-			Name = skill.Name,
-			Commit = commitSha,
-			Branch = branch,
-			UpdatedAt = DateTime.UtcNow.ToString("o"),
-			Source = repo,
-			PluginPath = skill.RemotePath
-		};
-
-		await SkillVersionStore.WriteAsync(tempInstallPath, version, ct).ConfigureAwait(false);
-
-		CopyDirectory(tempInstallPath, installPath);
-		DeleteDirectoryIfExists(tempInstallPath);
-
-		return (filesInstalled, installPath);
 	}
 
 	static void CopyDirectory(string sourceDirectory, string destinationDirectory)
