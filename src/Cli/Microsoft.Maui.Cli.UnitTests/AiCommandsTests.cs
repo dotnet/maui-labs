@@ -262,6 +262,23 @@ public class AiCommandsTests
 		Assert.Equal(OperatingSystem.IsWindows() ? 1 : 2, paths.Count);
 	}
 
+	[Theory]
+	[InlineData(false, "success")]
+	[InlineData(true, "partial")]
+	public void GetInitStatus_ReflectsInstallFailures(bool hasInstallFailures, string expected)
+	{
+		Assert.Equal(expected, AiCommands.GetInitStatus(hasInstallFailures));
+	}
+
+	[Theory]
+	[InlineData(new[] { 1, 2 }, new[] { 0 }, false)]
+	[InlineData(new[] { -2, 1 }, new[] { 0 }, true)]
+	[InlineData(new[] { 1 }, new[] { -1 }, true)]
+	public void HasInitInstallFailures_DetectsNegativeFileCounts(int[] skillFileCounts, int[] assetFileCounts, bool expected)
+	{
+		Assert.Equal(expected, AiCommands.HasInitInstallFailures(skillFileCounts, assetFileCounts));
+	}
+
 	private static void AssertNoWhitespaceAliases(Command command)
 	{
 		foreach (var option in command.Options)

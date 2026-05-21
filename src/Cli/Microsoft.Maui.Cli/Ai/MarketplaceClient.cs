@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text;
 using Microsoft.Maui.Cli.Ai.Models;
 
 namespace Microsoft.Maui.Cli.Ai;
@@ -15,6 +16,7 @@ internal static class MarketplaceClient
 {
 	private const string GitHubApiBase = "https://api.github.com";
 	private const string GitHubRawBase = "https://raw.githubusercontent.com";
+	private const int MaxResponseBytes = 10 * 1024 * 1024;
 
 	/// <summary>
 	/// Fetches and deserializes the marketplace.json manifest from the repository.
@@ -481,7 +483,8 @@ internal static class MarketplaceClient
 
 			response.EnsureSuccessStatusCode();
 
-			return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+			var bytes = await ReadBytesWithLimitAsync(response.Content, ct).ConfigureAwait(false);
+			return bytes is null ? null : Encoding.UTF8.GetString(bytes);
 		}
 		catch (TaskCanceledException) when (!ct.IsCancellationRequested)
 		{
@@ -501,11 +504,34 @@ internal static class MarketplaceClient
 
 			response.EnsureSuccessStatusCode();
 
-			return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+			return await ReadBytesWithLimitAsync(response.Content, ct).ConfigureAwait(false);
 		}
 		catch (TaskCanceledException) when (!ct.IsCancellationRequested)
 		{
 			return null; // real HTTP timeout
 		}
+	}
+
+	static async Task<byte[]?> ReadBytesWithLimitAsync(HttpContent content, CancellationToken ct)
+	{
+		if (content.Headers.ContentLength > MaxResponseBytes)
+			return null;
+
+		await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+		using var buffer = new MemoryStream();
+		var readBuffer = new byte[81920];
+		while (true)
+		{
+			var read = await stream.ReadAsync(readBuffer, ct).ConfigureAwait(false);
+			if (read == 0)
+				break;
+
+			if (buffer.Length + read > MaxResponseBytes)
+				return null;
+
+			buffer.Write(readBuffer, 0, read);
+		}
+
+		return buffer.ToArray();
 	}
 }

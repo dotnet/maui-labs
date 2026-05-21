@@ -210,4 +210,16 @@ public class AgentEnvironmentDetectorTests : IDisposable
 
 		Assert.Equal(_tempDir, projectRoot);
 	}
+
+	[Fact]
+	public void Detect_NoGitRoot_DoesNotScanAncestorDirectories()
+	{
+		Directory.CreateDirectory(Path.Combine(_tempDir, ".vscode"));
+		var subDir = Path.Combine(_tempDir, "src", "project");
+		Directory.CreateDirectory(subDir);
+
+		var environments = AgentEnvironmentDetector.Detect(subDir);
+
+		Assert.DoesNotContain(environments, e => e.Kind == AgentEnvironmentKind.VsCode);
+	}
 }

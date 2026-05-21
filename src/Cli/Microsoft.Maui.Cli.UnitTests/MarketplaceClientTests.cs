@@ -468,6 +468,34 @@ public class MarketplaceClientTests : IDisposable
 		Assert.Equal(0, handler.Calls);
 	}
 
+	[Fact]
+	public async Task FetchRawStringAsync_OversizedResponse_ReturnsNull()
+	{
+		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new OversizedHttpContent()
+		});
+		using var http = new HttpClient(handler);
+
+		var result = await MarketplaceClient.FetchRawStringAsync(http, "owner/repo", "main", "README.md");
+
+		Assert.Null(result);
+	}
+
+	[Fact]
+	public async Task FetchRawBytesAsync_OversizedResponse_ReturnsNull()
+	{
+		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new OversizedHttpContent()
+		});
+		using var http = new HttpClient(handler);
+
+		var result = await MarketplaceClient.FetchRawBytesAsync(http, "owner/repo", "main", "README.md");
+
+		Assert.Null(result);
+	}
+
 	/// <summary>
 	/// Minimal HttpMessageHandler that returns a fixed response for every request.
 	/// </summary>
@@ -504,6 +532,18 @@ public class MarketplaceClientTests : IDisposable
 		{
 			var handler = handlers[_index++];
 			return Task.FromResult(handler(request));
+		}
+	}
+
+	private sealed class OversizedHttpContent : HttpContent
+	{
+		protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+			=> Task.CompletedTask;
+
+		protected override bool TryComputeLength(out long length)
+		{
+			length = 11L * 1024 * 1024;
+			return true;
 		}
 	}
 }

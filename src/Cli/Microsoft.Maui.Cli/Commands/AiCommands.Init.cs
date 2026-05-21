@@ -87,18 +87,17 @@ public static partial class AiCommands
 
 				if (environments.Count == 0)
 				{
-					if (useJson)
-					{
-						formatter.WriteWarning("No agent environments detected.");
-						return 1;
-					}
-
 					if (isCi || force)
 					{
 						// In CI or force mode, create .claude/ by default
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
 						environments = AgentEnvironmentDetector.Detect(currentDir);
+					}
+					else if (useJson)
+					{
+						formatter.WriteWarning("No agent environments detected.");
+						return 1;
 					}
 					else
 					{
@@ -292,6 +291,7 @@ public static partial class AiCommands
 				summaryRows.AddRange(devFlowResults.Select(r => (r.Skill, "DevFlow", r.Target, r.Action, r.Path)));
 				summaryRows.AddRange(skillResults.Select(r => (r.Skill, "Skill", r.Env, FormatFileResult(r.Files), r.Path)));
 				summaryRows.AddRange(assetResults.Select(r => (r.Asset, r.Type, "GitHub Copilot", FormatFileResult(r.Files), r.Path)));
+				var hasInstallFailures = HasInitInstallFailures(skillResults.Select(r => r.Files), assetResults.Select(r => r.Files));
 
 				formatter.WriteTable(
 					summaryRows,
@@ -305,7 +305,7 @@ public static partial class AiCommands
 				{
 					var jsonResult = new JsonObject
 					{
-						["status"] = "success",
+						["status"] = GetInitStatus(hasInstallFailures),
 						["devFlowSkills"] = new JsonArray(devFlowResults.Select(r => (JsonNode)new JsonObject
 						{
 							["skill"] = r.Skill,
@@ -340,7 +340,7 @@ public static partial class AiCommands
 					AnsiConsole.MarkupLine("[dim]  Run [green]maui devflow skills check[/] to check bundled DevFlow skills.[/]");
 				}
 
-				return 0;
+				return hasInstallFailures ? 1 : 0;
 			}
 			catch (HttpRequestException ex)
 			{
@@ -475,6 +475,12 @@ public static partial class AiCommands
 			0 => "skipped",
 			_ => files.ToString()
 		};
+
+	internal static bool HasInitInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
+		=> skillFileCounts.Any(files => files < 0) || assetFileCounts.Any(files => files < 0);
+
+	internal static string GetInitStatus(bool hasInstallFailures)
+		=> hasInstallFailures ? "partial" : "success";
 
 	/// <summary>
 	/// Fetches all skills from every plugin listed in the marketplace manifest,

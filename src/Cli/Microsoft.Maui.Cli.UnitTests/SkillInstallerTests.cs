@@ -167,6 +167,7 @@ public class SkillInstallerTests : IDisposable
 		Assert.Equal("new content", await File.ReadAllTextAsync(Path.Combine(installPath, "SKILL.md")));
 		Assert.True(File.Exists(Path.Combine(installPath, ".skill-version")));
 		Assert.False(File.Exists(Path.Combine(installPath, "references", "old-guide.md")));
+		Assert.Empty(Directory.EnumerateDirectories(skillsDir, "*.bak"));
 		Assert.DoesNotContain(Directory.EnumerateDirectories(skillsDir), path => Path.GetFileName(path).StartsWith($".{skill.Name}.", StringComparison.Ordinal));
 	}
 
