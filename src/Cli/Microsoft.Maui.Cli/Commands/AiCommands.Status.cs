@@ -54,6 +54,7 @@ public static partial class AiCommands
 					var agentAssets = await RepositoryAssetInstaller.GetCopilotAgentsAsync(http, repo, branch, treeEntries, ct);
 					var agentRows = await GetRemoteAgentStatusRowsAsync(http, agentAssets, workingDir, repo, branch, ct);
 					rows.AddRange(agentRows.Select(row => row.Row));
+					rows.AddRange(GetLocalOnlyAgentStatusRows(agentAssets, GetInstalledAgentStatusRows(workingDir)));
 				}
 				else
 				{
@@ -97,6 +98,10 @@ public static partial class AiCommands
 			{
 				formatter.WriteError(new Exception($"Network error: {ex.Message}. Check your connection or set GITHUB_TOKEN for higher rate limits."));
 				return 1;
+			}
+			catch (GitHubTreeTruncatedException ex)
+			{
+				return HandleGitHubTreeTruncatedException(formatter, ex);
 			}
 			catch (Exception ex)
 			{

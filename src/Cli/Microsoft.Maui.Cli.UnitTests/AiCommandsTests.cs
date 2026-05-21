@@ -406,6 +406,95 @@ public class AiCommandsTests
 		}
 	}
 
+	[Fact]
+	public async Task GetRemoteAgentStatusRowsAsync_UnsafeLocalPath_ReturnsUnknown()
+	{
+		using var http = new HttpClient(new StaticContentHandler("remote content"));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			DestinationRoot = ".github/agents",
+			Files = ["../outside.agent.md"]
+		};
+
+		var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		try
+		{
+			Directory.CreateDirectory(tempDir);
+			var rows = await AiCommands.GetRemoteAgentStatusRowsAsync(
+				http,
+				[asset],
+				tempDir,
+				"owner/repo",
+				"main",
+				CancellationToken.None);
+
+			var row = Assert.Single(rows);
+			Assert.Equal("Unknown", row.Row.Status);
+		}
+		finally
+		{
+			if (Directory.Exists(tempDir))
+				Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
+	public async Task GetMarketplaceSkillStatusRowsAsync_SymlinkedSkillDirectory_Skips()
+	{
+		var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		try
+		{
+			var skillsDir = Path.Combine(tempDir, "skills");
+			var outsideDir = Path.Combine(tempDir, "outside");
+			Directory.CreateDirectory(skillsDir);
+			Directory.CreateDirectory(outsideDir);
+
+			if (!TryCreateDirectorySymlink(Path.Combine(skillsDir, "evil-skill"), outsideDir))
+				return;
+
+			var env = new DetectedEnvironment
+			{
+				Kind = AgentEnvironmentKind.Claude,
+				SkillsDirectory = skillsDir
+			};
+
+			var rows = await AiCommands.GetMarketplaceSkillStatusRowsAsync(
+				[env],
+				checkUpdates: false,
+				http: null,
+				"owner/repo",
+				"main",
+				CancellationToken.None);
+
+			Assert.Empty(rows);
+		}
+		finally
+		{
+			if (Directory.Exists(tempDir))
+				Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
+	public void GetLocalOnlyAgentStatusRows_ExcludesRemoteAgents()
+	{
+		var remoteAssets = new[]
+		{
+			new RepositoryAssetInfo { Name = "current-agent", Category = "agent" }
+		};
+		var installedRows = new[]
+		{
+			new AiCommands.AiAssetStatusRow("current-agent", "agent", "GitHub Copilot", "Yes", "Installed", ".github/agents/current-agent.agent.md"),
+			new AiCommands.AiAssetStatusRow("legacy-agent", "agent", "GitHub Copilot", "Yes", "Installed", ".github/agents/legacy-agent.agent.md")
+		};
+
+		var row = Assert.Single(AiCommands.GetLocalOnlyAgentStatusRows(remoteAssets, installedRows));
+
+		Assert.Equal("legacy-agent", row.Item);
+	}
+
 	[Theory]
 	[InlineData(false, 0, 0, 0, true)]
 	[InlineData(true, 1, 0, 0, true)]
@@ -473,5 +562,18 @@ public class AiCommandsTests
 			{
 				Content = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(content))
 			});
+	}
+
+	static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
+		}
 	}
 }

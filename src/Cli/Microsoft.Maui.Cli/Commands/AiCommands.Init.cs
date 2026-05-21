@@ -111,6 +111,12 @@ public static partial class AiCommands
 					}
 				}
 
+				if (environments.Count == 0)
+				{
+					formatter.WriteWarning("Failed to detect an agent environment after creating .claude/.");
+					return 1;
+				}
+
 				var envWord = environments.Count == 1 ? "environment" : "environments";
 				formatter.WriteInfo($"Detected {environments.Count} {envWord}: {string.Join(", ", environments.Select(e => e.Kind))}");
 
@@ -350,6 +356,10 @@ public static partial class AiCommands
 				formatter.WriteError(new Exception($"Network error: {ex.Message}. Check your connection or set GITHUB_TOKEN for higher rate limits."));
 				return 1;
 			}
+			catch (GitHubTreeTruncatedException ex)
+			{
+				return HandleGitHubTreeTruncatedException(formatter, ex);
+			}
 			catch (Exception ex)
 			{
 				return Program.HandleCommandException(formatter, ex);
@@ -390,6 +400,12 @@ public static partial class AiCommands
 		{
 			formatter.WriteWarning($"Could not configure MCP for {environment}");
 		}
+	}
+
+	static int HandleGitHubTreeTruncatedException(IOutputFormatter formatter, GitHubTreeTruncatedException exception)
+	{
+		formatter.WriteError(new Exception(exception.Message));
+		return 1;
 	}
 
 	static List<SkillInfo> SelectSkills(

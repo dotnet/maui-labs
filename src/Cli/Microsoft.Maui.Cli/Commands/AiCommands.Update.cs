@@ -331,6 +331,10 @@ public static partial class AiCommands
 				formatter.WriteError(new Exception($"Network error: {ex.Message}. Check your connection or set GITHUB_TOKEN for higher rate limits."));
 				return 1;
 			}
+			catch (GitHubTreeTruncatedException ex)
+			{
+				return HandleGitHubTreeTruncatedException(formatter, ex);
+			}
 			catch (Exception ex)
 			{
 				return Program.HandleCommandException(formatter, ex);

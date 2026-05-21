@@ -59,7 +59,7 @@ public static partial class AiCommands
 		}
 	}
 
-	static async Task<List<AiAssetStatusRow>> GetMarketplaceSkillStatusRowsAsync(
+	internal static async Task<List<AiAssetStatusRow>> GetMarketplaceSkillStatusRowsAsync(
 		IEnumerable<DetectedEnvironment> environments,
 		bool checkUpdates,
 		HttpClient? http,
@@ -75,6 +75,9 @@ public static partial class AiCommands
 
 			foreach (var skillDir in Directory.GetDirectories(env.SkillsDirectory).OrderBy(path => path, StringComparer.Ordinal))
 			{
+				if (FileSystemPathGuard.IsReparsePoint(skillDir))
+					continue;
+
 				var skillName = Path.GetFileName(skillDir);
 				if (IsDevFlowManagedSkillName(skillName))
 					continue;
@@ -145,6 +148,17 @@ public static partial class AiCommands
 				Path.Combine(workingDir, asset.DestinationRoot)))
 			.ToList();
 
+	internal static IEnumerable<AiAssetStatusRow> GetLocalOnlyAgentStatusRows(
+		IEnumerable<RepositoryAssetInfo> remoteAssets,
+		IEnumerable<AiAssetStatusRow> installedRows)
+	{
+		var remoteNames = new HashSet<string>(
+			remoteAssets.Select(asset => asset.Name),
+			StringComparer.OrdinalIgnoreCase);
+
+		return installedRows.Where(row => !remoteNames.Contains(row.Item));
+	}
+
 	internal static async Task<List<(RepositoryAssetInfo Asset, AiAssetStatusRow Row)>> GetRemoteAgentStatusRowsAsync(
 		HttpClient http,
 		IEnumerable<RepositoryAssetInfo> assets,
@@ -159,7 +173,12 @@ public static partial class AiCommands
 			var status = "Up to date";
 			foreach (var filePath in asset.Files)
 			{
-				var localPath = RepositoryAssetInstaller.GetAssetFilePath(workingDir, asset, filePath);
+				if (!TryGetContainedAssetFilePath(workingDir, asset, filePath, out var localPath))
+				{
+					status = "Unknown";
+					break;
+				}
+
 				if (!File.Exists(localPath))
 				{
 					status = "Missing";
@@ -197,6 +216,24 @@ public static partial class AiCommands
 		}
 
 		return rows;
+	}
+
+	static bool TryGetContainedAssetFilePath(
+		string workingDir,
+		RepositoryAssetInfo asset,
+		string filePath,
+		out string localPath)
+	{
+		localPath = string.Empty;
+		try
+		{
+			localPath = RepositoryAssetInstaller.GetAssetFilePath(workingDir, asset, filePath);
+			return FileSystemPathGuard.IsPathWithinRoot(localPath, workingDir);
+		}
+		catch (InvalidOperationException)
+		{
+			return false;
+		}
 	}
 
 	static async Task<byte[]?> TryReadLocalAssetBytesAsync(string localPath, CancellationToken ct)

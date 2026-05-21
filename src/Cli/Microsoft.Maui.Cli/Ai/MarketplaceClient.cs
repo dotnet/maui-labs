@@ -79,7 +79,7 @@ internal static class MarketplaceClient
 
 		var treeNode = JsonNode.Parse(treeJson);
 		if (treeNode?["truncated"]?.GetValue<bool>() == true)
-			throw new InvalidOperationException($"GitHub tree for '{repo}@{branch}' is truncated; cannot safely discover all MAUI AI assets.");
+			throw new GitHubTreeTruncatedException(repo, branch);
 
 		var treeArray = treeNode?["tree"]?.AsArray();
 		if (treeArray is null)
@@ -533,4 +533,10 @@ internal static class MarketplaceClient
 
 		return buffer.ToArray();
 	}
+}
+
+internal sealed class GitHubTreeTruncatedException(string repo, string branch) : InvalidOperationException(
+	$"GitHub tree for '{repo}@{branch}' is truncated; cannot safely discover all MAUI AI assets. " +
+	"Use a smaller --repo/--branch asset source or split the AI assets into a smaller repository, because installing from a truncated tree could miss files.")
+{
 }

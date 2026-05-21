@@ -414,10 +414,11 @@ public class MarketplaceClientTests : IDisposable
 			});
 		using var http = new HttpClient(handler);
 
-		var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+		var exception = await Assert.ThrowsAsync<GitHubTreeTruncatedException>(
 			() => MarketplaceClient.FetchTreeEntriesAsync(http, "owner/repo", "main"));
 
 		Assert.Contains("truncated", exception.Message);
+		Assert.Contains("Use a smaller --repo/--branch", exception.Message);
 	}
 
 	[Fact]
