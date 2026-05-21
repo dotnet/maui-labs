@@ -27,8 +27,8 @@ internal static class SkillInstaller
 	/// A tuple of (filesInstalled, installPath) where filesInstalled is the number
 	/// of files written and installPath is the absolute path to the skill directory.
 	/// Returns (0, installPath) if the skill is already installed and <paramref name="force"/> is <c>false</c>.
-		/// Returns (-1, string.Empty) if the skill name contains invalid characters or targets an unsafe path.
-	/// Returns (-2, installPath) if the download produced zero files (network or remote failure).
+	/// Returns (-1, string.Empty) if the skill name contains invalid characters or targets an unsafe path.
+	/// Returns (-2, string.Empty) if the download produced no valid installation (network or remote failure).
 	/// </returns>
 	public static async Task<(int FilesInstalled, string InstallPath)> InstallSkillAsync(
 		HttpClient http,
@@ -66,15 +66,19 @@ internal static class SkillInstaller
 		}
 
 		Directory.CreateDirectory(skillsDir);
+		if (!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
+			return (-1, string.Empty);
+
 		var tempInstallPath = Path.Combine(skillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
 		Directory.CreateDirectory(tempInstallPath);
 
 		try
 		{
+			var expectedFileCount = GetExpectedDownloadableFileCount(skill);
 			var filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
 				http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
 
-			if (skill.Files.Count == 0 || filesInstalled != skill.Files.Count)
+			if (expectedFileCount == 0 || filesInstalled != expectedFileCount)
 				return (-2, string.Empty);
 
 			// Resolve the latest commit SHA for version tracking.
@@ -101,6 +105,35 @@ internal static class SkillInstaller
 		{
 			TryDeleteDirectoryIfExists(tempInstallPath);
 		}
+	}
+
+	internal static int GetExpectedDownloadableFileCount(SkillInfo skill)
+	{
+		var count = 0;
+		string remotePrefix;
+		try
+		{
+			remotePrefix = MarketplaceClient.NormalizePath(skill.RemotePath) + "/";
+		}
+		catch (InvalidOperationException)
+		{
+			return 0;
+		}
+
+		foreach (var filePath in skill.Files)
+		{
+			try
+			{
+				if (MarketplaceClient.NormalizePath(filePath).StartsWith(remotePrefix, StringComparison.Ordinal))
+					count++;
+			}
+			catch (InvalidOperationException)
+			{
+				// Invalid repository paths are intentionally skipped by the downloader.
+			}
+		}
+
+		return count;
 	}
 
 	static void ReplaceDirectory(string sourceDirectory, string destinationDirectory)

@@ -168,6 +168,54 @@ public class SkillInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task InstallSkillAsync_FileOutsideRemotePath_DoesNotCountSkippedFileAsFailure()
+	{
+		var skill = new SkillInfo
+		{
+			Name = "filtered-skill",
+			RemotePath = ".github/skills/filtered-skill",
+			Files =
+			[
+				".github/skills/filtered-skill/SKILL.md",
+				".github/skills/other-skill/SKILL.md"
+			]
+		};
+		var skillsDir = Path.Combine(_tempDir, "skills");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = skillsDir
+		};
+		using var http = new HttpClient(new SuccessfulInstallHandler());
+
+		var (filesInstalled, installPath) = await SkillInstaller.InstallSkillAsync(
+			http, skill, env, _tempDir, "owner/repo", "main", force: false);
+
+		Assert.Equal(1, filesInstalled);
+		Assert.Equal(Path.Combine(skillsDir, skill.Name), installPath);
+		Assert.True(File.Exists(Path.Combine(installPath, "SKILL.md")));
+	}
+
+	[Fact]
+	public void GetExpectedDownloadableFileCount_CountsOnlyFilesUnderRemotePath()
+	{
+		var skill = new SkillInfo
+		{
+			Name = "filtered-skill",
+			RemotePath = ".github/skills/filtered-skill",
+			Files =
+			[
+				".github/skills/filtered-skill/SKILL.md",
+				".github/skills/filtered-skill/references/setup.md",
+				".github/skills/other-skill/SKILL.md",
+				"../escape.md"
+			]
+		};
+
+		Assert.Equal(2, SkillInstaller.GetExpectedDownloadableFileCount(skill));
+	}
+
+	[Fact]
 	public async Task InstallSkillAsync_DownloadThrows_RemovesTempInstallDirectory()
 	{
 		var skill = new SkillInfo

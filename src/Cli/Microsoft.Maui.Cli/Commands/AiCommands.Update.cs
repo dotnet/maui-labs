@@ -333,7 +333,7 @@ public static partial class AiCommands
 		OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
 	internal static bool HasUpdateInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
-		=> skillFileCounts.Any(files => files < 0) || assetFileCounts.Any(files => files <= 0);
+		=> skillFileCounts.Any(files => files <= 0) || assetFileCounts.Any(files => files <= 0);
 
 	internal static string GetUpdateStatus(bool hasUpdateFailures)
 		=> hasUpdateFailures ? "partial_failure" : "success";

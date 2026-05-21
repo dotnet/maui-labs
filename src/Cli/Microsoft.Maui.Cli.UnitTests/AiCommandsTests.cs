@@ -345,6 +345,7 @@ public class AiCommandsTests
 	[Theory]
 	[InlineData(new[] { 1, 2 }, new[] { 1 }, false)]
 	[InlineData(new[] { -2, 1 }, new[] { 1 }, true)]
+	[InlineData(new[] { 0, 1 }, new[] { 1 }, true)]
 	[InlineData(new[] { 1 }, new[] { -1 }, true)]
 	[InlineData(new[] { 1 }, new[] { 0 }, true)]
 	public void HasUpdateInstallFailures_DetectsFailedUpdates(int[] skillFileCounts, int[] assetFileCounts, bool expected)

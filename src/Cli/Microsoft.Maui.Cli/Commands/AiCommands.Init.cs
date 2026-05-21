@@ -289,14 +289,6 @@ public static partial class AiCommands
 				summaryRows.AddRange(assetResults.Select(r => (r.Asset, r.Type, "GitHub Copilot", FormatFileResult(r.Files), r.Path)));
 				var hasInstallFailures = HasInitInstallFailures(skillResults.Select(r => r.Files), assetResults.Select(r => r.Files));
 
-				formatter.WriteTable(
-					summaryRows,
-					("Item", r => r.Item),
-					("Type", r => r.Type),
-					("Target", r => r.Target),
-					("Result", r => r.Result),
-					("Path", r => r.Path));
-
 				if (useJson)
 				{
 					var jsonResult = new JsonObject
@@ -328,6 +320,14 @@ public static partial class AiCommands
 				}
 				else
 				{
+					formatter.WriteTable(
+						summaryRows,
+						("Item", r => r.Item),
+						("Type", r => r.Type),
+						("Target", r => r.Target),
+						("Result", r => r.Result),
+						("Path", r => r.Path));
+
 					AnsiConsole.WriteLine();
 					AnsiConsole.MarkupLine("[dim]Next steps:[/]");
 					AnsiConsole.MarkupLine("[dim]  Open your AI agent and ask it to use the installed .NET MAUI skills.[/]");

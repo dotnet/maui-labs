@@ -83,19 +83,11 @@ internal static class AgentEnvironmentDetector
 		}
 
 		// Copilot CLI is detected at the user level.
-		var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		var copilotDir = Path.Combine(userHome, ".copilot");
-		if (Directory.Exists(copilotDir))
-		{
-			var mcpPath = Path.Combine(copilotDir, "mcp.json");
-			environments.Add(new DetectedEnvironment
-			{
-				Kind = AgentEnvironmentKind.CopilotCli,
-				SkillsDirectory = Path.Combine(searchRoot, ".github", "skills"),
-				McpConfigPath = mcpPath,
-				McpConfigExists = File.Exists(mcpPath)
-			});
-		}
+		var copilotCliEnvironment = GetCopilotCliEnvironment(
+			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+			searchRoot);
+		if (copilotCliEnvironment is not null)
+			environments.Add(copilotCliEnvironment);
 
 		return environments;
 	}
@@ -124,6 +116,25 @@ internal static class AgentEnvironmentDetector
 	{
 		var gitPath = Path.Combine(directory, ".git");
 		return Directory.Exists(gitPath) || File.Exists(gitPath);
+	}
+
+	internal static DetectedEnvironment? GetCopilotCliEnvironment(string userHome, string searchRoot)
+	{
+		if (string.IsNullOrEmpty(userHome))
+			return null;
+
+		var copilotDir = Path.Combine(userHome, ".copilot");
+		if (!Directory.Exists(copilotDir))
+			return null;
+
+		var mcpPath = Path.Combine(copilotDir, "mcp.json");
+		return new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.CopilotCli,
+			SkillsDirectory = Path.Combine(searchRoot, ".github", "skills"),
+			McpConfigPath = mcpPath,
+			McpConfigExists = File.Exists(mcpPath)
+		};
 	}
 
 	static StringComparison PathComparison =>

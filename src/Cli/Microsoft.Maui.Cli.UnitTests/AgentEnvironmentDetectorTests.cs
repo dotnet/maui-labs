@@ -222,4 +222,28 @@ public class AgentEnvironmentDetectorTests : IDisposable
 
 		Assert.DoesNotContain(environments, e => e.Kind == AgentEnvironmentKind.VsCode);
 	}
+
+	[Fact]
+	public void GetCopilotCliEnvironment_EmptyUserHome_ReturnsNull()
+	{
+		Directory.CreateDirectory(Path.Combine(_tempDir, ".copilot"));
+
+		var environment = AgentEnvironmentDetector.GetCopilotCliEnvironment(string.Empty, _tempDir);
+
+		Assert.Null(environment);
+	}
+
+	[Fact]
+	public void GetCopilotCliEnvironment_ValidUserHome_ReturnsCopilotCliEnvironment()
+	{
+		var userHome = Path.Combine(_tempDir, "home");
+		Directory.CreateDirectory(Path.Combine(userHome, ".copilot"));
+
+		var environment = AgentEnvironmentDetector.GetCopilotCliEnvironment(userHome, _tempDir);
+
+		Assert.NotNull(environment);
+		Assert.Equal(AgentEnvironmentKind.CopilotCli, environment.Kind);
+		Assert.Equal(Path.Combine(_tempDir, ".github", "skills"), environment.SkillsDirectory);
+		Assert.Equal(Path.Combine(userHome, ".copilot", "mcp.json"), environment.McpConfigPath);
+	}
 }
