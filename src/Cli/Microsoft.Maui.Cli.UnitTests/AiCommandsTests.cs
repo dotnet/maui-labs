@@ -348,10 +348,26 @@ public class AiCommandsTests
 	[InlineData(new[] { -2, 1 }, new[] { 1 }, true)]
 	[InlineData(new[] { 0, 1 }, new[] { 1 }, true)]
 	[InlineData(new[] { 1 }, new[] { -1 }, true)]
-	[InlineData(new[] { 1 }, new[] { 0 }, true)]
+	[InlineData(new[] { 1 }, new[] { 0 }, false)]
 	public void HasUpdateInstallFailures_DetectsFailedUpdates(int[] skillFileCounts, int[] assetFileCounts, bool expected)
 	{
 		Assert.Equal(expected, AiCommands.HasUpdateInstallFailures(skillFileCounts, assetFileCounts));
+	}
+
+	[Fact]
+	public async Task TryGetRemoteCommitShaAsync_InvalidPath_ReturnsUncheckable()
+	{
+		using var http = new HttpClient();
+
+		var result = await AiCommands.TryGetRemoteCommitShaAsync(
+			http,
+			"owner/repo",
+			"main",
+			"../bad-path",
+			CancellationToken.None);
+
+		Assert.False(result.IsCheckable);
+		Assert.Null(result.RemoteSha);
 	}
 
 	[Theory]

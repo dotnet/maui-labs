@@ -76,13 +76,7 @@ internal static class FileSystemPathGuard
 				return false;
 			}
 
-			if (File.Exists(fullDestinationPath))
-				File.Delete(fullDestinationPath);
-
-			if (!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
-				return false;
-
-			File.Move(tempPath, fullDestinationPath, overwrite: false);
+			File.Move(tempPath, fullDestinationPath, overwrite: true);
 			return true;
 		}
 		finally

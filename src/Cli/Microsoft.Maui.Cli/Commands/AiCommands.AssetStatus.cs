@@ -89,14 +89,21 @@ public static partial class AiCommands
 
 				if (checkUpdates && http is not null && version.PluginPath is not null)
 				{
-					var remoteSha = await MarketplaceClient.GetRemoteCommitShaAsync(
+					var (isCheckable, remoteSha) = await TryGetRemoteCommitShaAsync(
 						http, repo, branch, version.PluginPath, ct).ConfigureAwait(false);
 
-					status = remoteSha is not null && version.Commit is not null
-						? string.Equals(remoteSha, version.Commit, StringComparison.OrdinalIgnoreCase)
-							? "Up to date"
-							: "Update available"
-						: "Unknown";
+					if (!isCheckable)
+					{
+						status = "Error";
+					}
+					else
+					{
+						status = remoteSha is not null && version.Commit is not null
+							? string.Equals(remoteSha, version.Commit, StringComparison.OrdinalIgnoreCase)
+								? "Up to date"
+								: "Update available"
+							: "Unknown";
+					}
 				}
 
 				rows.Add(new AiAssetStatusRow(skillName, "Skill", env.Kind.ToString(), installed, status, skillDir));
@@ -104,6 +111,25 @@ public static partial class AiCommands
 		}
 
 		return rows;
+	}
+
+	internal static async Task<(bool IsCheckable, string? RemoteSha)> TryGetRemoteCommitShaAsync(
+		HttpClient http,
+		string repo,
+		string branch,
+		string path,
+		CancellationToken ct)
+	{
+		try
+		{
+			var remoteSha = await MarketplaceClient.GetRemoteCommitShaAsync(
+				http, repo, branch, path, ct).ConfigureAwait(false);
+			return (true, remoteSha);
+		}
+		catch (InvalidOperationException)
+		{
+			return (false, null);
+		}
 	}
 
 	internal static List<AiAssetStatusRow> GetInstalledAgentStatusRows(string workingDir)

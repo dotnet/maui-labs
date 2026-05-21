@@ -81,17 +81,9 @@ internal static class RepositoryAssetInstaller
 		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
 			return (-1, string.Empty);
 
-		var count = 0;
-		var downloadFailures = 0;
+		var filesToInstall = new List<(string RemotePath, string DestinationPath)>();
 		foreach (var filePath in asset.Files)
 		{
-			var content = await MarketplaceClient.FetchRawBytesAsync(http, repo, branch, filePath, ct).ConfigureAwait(false);
-			if (content is null)
-			{
-				downloadFailures++;
-				continue;
-			}
-
 			var destinationPath = GetAssetFilePath(projectRoot, asset, filePath);
 			var fullDestinationPath = Path.GetFullPath(destinationPath);
 			if (FileSystemPathGuard.IsReparsePoint(fullDestinationPath))
@@ -106,8 +98,33 @@ internal static class RepositoryAssetInstaller
 					continue;
 			}
 
+			filesToInstall.Add((filePath, fullDestinationPath));
+		}
+
+		var fileContents = new List<(string DestinationPath, byte[] Content)>();
+		foreach (var (remotePath, destinationPath) in filesToInstall)
+		{
+			var content = await MarketplaceClient.FetchRawBytesAsync(http, repo, branch, remotePath, ct).ConfigureAwait(false);
+			if (content is null)
+				return (-2, destinationRoot);
+
+			fileContents.Add((destinationPath, content));
+		}
+
+		foreach (var (destinationPath, _) in fileContents)
+		{
+			if (FileSystemPathGuard.IsReparsePoint(destinationPath) ||
+				!FileSystemPathGuard.IsPathWithinRoot(destinationPath, destinationRoot))
+			{
+				return (-1, string.Empty);
+			}
+		}
+
+		var count = 0;
+		foreach (var (destinationPath, content) in fileContents)
+		{
 			if (!await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
-				fullDestinationPath,
+				destinationPath,
 				projectRoot,
 				content,
 				ct).ConfigureAwait(false))
@@ -118,7 +135,7 @@ internal static class RepositoryAssetInstaller
 			count++;
 		}
 
-		return downloadFailures > 0 ? (-2, destinationRoot) : (count, destinationRoot);
+		return (count, destinationRoot);
 	}
 
 	/// <summary>

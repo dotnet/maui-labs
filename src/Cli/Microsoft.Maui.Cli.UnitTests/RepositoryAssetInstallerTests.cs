@@ -173,6 +173,34 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task InstallAssetAsync_PartialDownloadFailureWritesNoFiles()
+	{
+		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>
+		{
+			["ios/expert-reviewer.agent.md"] = "ios agent"
+		}));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			RemotePath = ".github/agents/ios/expert-reviewer.agent.md",
+			DestinationRoot = ".github/agents",
+			Files =
+			[
+				".github/agents/ios/expert-reviewer.agent.md",
+				".github/agents/android/expert-reviewer.agent.md"
+			]
+		};
+
+		var result = await RepositoryAssetInstaller.InstallAssetAsync(
+			http, asset, _tempDir, "owner/repo", "main", force: true);
+
+		Assert.Equal(-2, result.FilesInstalled);
+		Assert.False(File.Exists(Path.Combine(_tempDir, ".github", "agents", "ios", "expert-reviewer.agent.md")));
+		Assert.False(File.Exists(Path.Combine(_tempDir, ".github", "agents", "android", "expert-reviewer.agent.md")));
+	}
+
+	[Fact]
 	public void GetInstalledCopilotAgents_ReturnsOnlyMauiRelatedAgents()
 	{
 		var agentsDir = Path.Combine(_tempDir, ".github", "agents");

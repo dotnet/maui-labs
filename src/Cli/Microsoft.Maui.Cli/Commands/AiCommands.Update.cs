@@ -132,10 +132,10 @@ public static partial class AiCommands
 						// Check if update is available
 						if (version.PluginPath is not null)
 						{
-							var remoteSha = await MarketplaceClient.GetRemoteCommitShaAsync(
+							var (isCheckable, remoteSha) = await TryGetRemoteCommitShaAsync(
 								http, repo, branch, version.PluginPath, ct);
 
-							if (remoteSha is null)
+							if (!isCheckable || remoteSha is null)
 							{
 								uncheckableCount++;
 								if (force)
@@ -349,7 +349,7 @@ public static partial class AiCommands
 		OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
 	internal static bool HasUpdateInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
-		=> skillFileCounts.Any(files => files <= 0) || assetFileCounts.Any(files => files <= 0);
+		=> skillFileCounts.Any(files => files <= 0) || assetFileCounts.Any(files => files < 0);
 
 	internal static bool HasUpdateFilterMatches(
 		bool filterSpecified,
