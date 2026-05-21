@@ -70,14 +70,8 @@ public static partial class AiCommands
 		var rows = new List<AiAssetStatusRow>();
 		foreach (var env in GetUniqueSkillInstallEnvironments(environments))
 		{
-			if (!Directory.Exists(env.SkillsDirectory))
-				continue;
-
-			foreach (var skillDir in Directory.GetDirectories(env.SkillsDirectory).OrderBy(path => path, StringComparer.Ordinal))
+			foreach (var skillDir in EnumerateSkillDirectories(env))
 			{
-				if (FileSystemPathGuard.IsReparsePoint(skillDir))
-					continue;
-
 				var skillName = Path.GetFileName(skillDir);
 				if (IsDevFlowManagedSkillName(skillName))
 					continue;
@@ -116,6 +110,22 @@ public static partial class AiCommands
 		}
 
 		return rows;
+	}
+
+	internal static IEnumerable<string> EnumerateSkillDirectories(DetectedEnvironment env)
+	{
+		if (FileSystemPathGuard.IsReparsePoint(env.SkillsDirectory) ||
+			!Directory.Exists(env.SkillsDirectory) ||
+			FileSystemPathGuard.IsReparsePoint(env.SkillsDirectory))
+		{
+			yield break;
+		}
+
+		foreach (var skillDir in Directory.GetDirectories(env.SkillsDirectory).OrderBy(path => path, StringComparer.Ordinal))
+		{
+			if (!FileSystemPathGuard.IsReparsePoint(skillDir))
+				yield return skillDir;
+		}
 	}
 
 	internal static async Task<(bool IsCheckable, string? RemoteSha)> TryGetRemoteCommitShaAsync(

@@ -103,10 +103,7 @@ public static partial class AiCommands
 
 				foreach (var env in environments)
 				{
-					if (!Directory.Exists(env.SkillsDirectory))
-						continue;
-
-					foreach (var skillDir in Directory.GetDirectories(env.SkillsDirectory))
+					foreach (var skillDir in EnumerateSkillDirectories(env))
 					{
 						var resolvedPath = Path.GetFullPath(skillDir);
 						if (!processedPaths.Add(resolvedPath))

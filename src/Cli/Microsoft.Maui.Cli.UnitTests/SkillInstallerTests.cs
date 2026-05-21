@@ -113,6 +113,38 @@ public class SkillInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task InstallSkillAsync_SymlinkedSkillsDirectory_ReturnsNegativeOne()
+	{
+		var projectRoot = Path.Combine(_tempDir, "project");
+		var outsideRoot = Path.Combine(_tempDir, "outside");
+		Directory.CreateDirectory(projectRoot);
+		Directory.CreateDirectory(outsideRoot);
+
+		if (!TryCreateDirectorySymlink(Path.Combine(projectRoot, "skills"), outsideRoot))
+			return;
+
+		var skill = new SkillInfo
+		{
+			Name = "safe-name",
+			RemotePath = ".github/skills/safe-name",
+			Files = [".github/skills/safe-name/SKILL.md"]
+		};
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = Path.Combine(projectRoot, "skills")
+		};
+		using var http = new HttpClient(new SuccessfulInstallHandler());
+
+		var (filesInstalled, installPath) = await SkillInstaller.InstallSkillAsync(
+			http, skill, env, projectRoot, "owner/repo", "main", force: true);
+
+		Assert.Equal(-1, filesInstalled);
+		Assert.Equal(string.Empty, installPath);
+		Assert.False(File.Exists(Path.Combine(outsideRoot, "SKILL.md")));
+	}
+
+	[Fact]
 	public async Task InstallSkillAsync_ValidName_DoesNotReturnNegativeOne()
 	{
 		var skill = new SkillInfo

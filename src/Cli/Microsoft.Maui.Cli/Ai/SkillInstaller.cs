@@ -56,21 +56,29 @@ internal static class SkillInstaller
 		if (!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
 			return (-1, string.Empty);
 
-		var installPath = Path.Combine(skillsDir, skill.Name);
+		Directory.CreateDirectory(skillsDir);
+		if (FileSystemPathGuard.IsReparsePoint(skillsDir) ||
+			!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
+		{
+			return (-1, string.Empty);
+		}
+
+		var canonicalSkillsDir = FileSystemPathGuard.ResolveCanonicalPath(skillsDir);
+		if (!FileSystemPathGuard.IsPathWithinRoot(canonicalSkillsDir, projectRoot))
+			return (-1, string.Empty);
+
+		var installPath = Path.Combine(canonicalSkillsDir, skill.Name);
+		var displayInstallPath = Path.Combine(skillsDir, skill.Name);
 
 		// Skip if already installed and not forcing.
 		if (!force)
 		{
 			var existing = await SkillVersionStore.ReadAsync(installPath, ct).ConfigureAwait(false);
 			if (existing is not null)
-				return (0, installPath);
+				return (0, displayInstallPath);
 		}
 
-		Directory.CreateDirectory(skillsDir);
-		if (!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
-			return (-1, string.Empty);
-
-		var tempInstallPath = Path.Combine(skillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
+		var tempInstallPath = Path.Combine(canonicalSkillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
 		Directory.CreateDirectory(tempInstallPath);
 
 		try
@@ -100,7 +108,7 @@ internal static class SkillInstaller
 
 			ReplaceDirectory(tempInstallPath, installPath);
 
-			return (filesInstalled, installPath);
+			return (filesInstalled, displayInstallPath);
 		}
 		finally
 		{

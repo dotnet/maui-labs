@@ -478,6 +478,34 @@ public class AiCommandsTests
 	}
 
 	[Fact]
+	public void EnumerateSkillDirectories_SymlinkedSkillsDirectory_Skips()
+	{
+		var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		try
+		{
+			var outsideDir = Path.Combine(tempDir, "outside");
+			var skillsDir = Path.Combine(tempDir, "skills");
+			Directory.CreateDirectory(outsideDir);
+
+			if (!TryCreateDirectorySymlink(skillsDir, outsideDir))
+				return;
+
+			var env = new DetectedEnvironment
+			{
+				Kind = AgentEnvironmentKind.Claude,
+				SkillsDirectory = skillsDir
+			};
+
+			Assert.Empty(AiCommands.EnumerateSkillDirectories(env));
+		}
+		finally
+		{
+			if (Directory.Exists(tempDir))
+				Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
 	public void GetLocalOnlyAgentStatusRows_ExcludesRemoteAgents()
 	{
 		var remoteAssets = new[]
