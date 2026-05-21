@@ -273,6 +273,7 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 
 		var asset = Assert.Single(assets);
 		Assert.Equal("expert-reviewer", asset.Name);
+		Assert.Equal(Path.Combine(agentsDir, "expert-reviewer.agent.md"), Assert.Single(asset.Files));
 	}
 
 	sealed class MapHttpMessageHandler(Dictionary<string, string> responses) : HttpMessageHandler

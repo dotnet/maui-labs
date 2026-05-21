@@ -81,26 +81,10 @@ internal static class RepositoryAssetInstaller
 		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
 			return (-1, string.Empty);
 
-		var destinationBase = Path.GetFullPath(destinationRoot) + Path.DirectorySeparatorChar;
-
 		var count = 0;
 		var downloadFailures = 0;
 		foreach (var filePath in asset.Files)
 		{
-			var destinationPath = GetAssetFilePath(projectRoot, asset, filePath);
-			var fullDestinationPath = Path.GetFullPath(destinationPath);
-			if (!fullDestinationPath.StartsWith(destinationBase, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-				continue;
-
-			if (IsReparsePoint(fullDestinationPath))
-				return (-1, string.Empty);
-
-			if (File.Exists(fullDestinationPath))
-			{
-				if (!force)
-					continue;
-			}
-
 			var content = await MarketplaceClient.FetchRawBytesAsync(http, repo, branch, filePath, ct).ConfigureAwait(false);
 			if (content is null)
 			{
@@ -108,18 +92,29 @@ internal static class RepositoryAssetInstaller
 				continue;
 			}
 
-			var destinationDirectory = Path.GetDirectoryName(fullDestinationPath) ?? destinationRoot;
-			if (!FileSystemPathGuard.IsPathWithinRoot(destinationDirectory, projectRoot))
+			var destinationPath = GetAssetFilePath(projectRoot, asset, filePath);
+			var fullDestinationPath = Path.GetFullPath(destinationPath);
+			if (FileSystemPathGuard.IsReparsePoint(fullDestinationPath))
 				return (-1, string.Empty);
 
-			Directory.CreateDirectory(destinationDirectory);
-			if (!FileSystemPathGuard.IsPathWithinRoot(destinationDirectory, projectRoot))
-				return (-1, string.Empty);
+			if (!FileSystemPathGuard.IsPathWithinRoot(fullDestinationPath, destinationRoot))
+				continue;
 
-			if (IsReparsePoint(fullDestinationPath))
-				return (-1, string.Empty);
+			if (File.Exists(fullDestinationPath))
+			{
+				if (!force)
+					continue;
+			}
 
-			await WriteFileAtomicallyAsync(fullDestinationPath, content, ct).ConfigureAwait(false);
+			if (!await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+				fullDestinationPath,
+				projectRoot,
+				content,
+				ct).ConfigureAwait(false))
+			{
+				return (-1, string.Empty);
+			}
+
 			count++;
 		}
 
@@ -153,7 +148,7 @@ internal static class RepositoryAssetInstaller
 				Description = description,
 				RemotePath = string.Empty,
 				DestinationRoot = CopilotAgentsDestinationRoot,
-				Files = [Path.Combine(destinationRoot, fileName)]
+				Files = [filePath]
 			});
 		}
 
@@ -197,34 +192,4 @@ internal static class RepositoryAssetInstaller
 		return slashIndex >= 0 ? normalized[(slashIndex + 1)..] : normalized;
 	}
 
-	static async Task WriteFileAtomicallyAsync(string destinationPath, byte[] content, CancellationToken ct)
-	{
-		var destinationDirectory = Path.GetDirectoryName(destinationPath)!;
-		var tempPath = Path.Combine(
-			destinationDirectory,
-			$".{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.tmp");
-
-		try
-		{
-			await File.WriteAllBytesAsync(tempPath, content, ct).ConfigureAwait(false);
-			File.Move(tempPath, destinationPath, overwrite: true);
-		}
-		finally
-		{
-			if (File.Exists(tempPath))
-				File.Delete(tempPath);
-		}
-	}
-
-	static bool IsReparsePoint(string path)
-	{
-		try
-		{
-			return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-		}
-		catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-		{
-			return false;
-		}
-	}
 }

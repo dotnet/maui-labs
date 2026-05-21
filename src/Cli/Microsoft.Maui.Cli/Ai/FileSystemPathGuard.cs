@@ -45,6 +45,65 @@ internal static class FileSystemPathGuard
 		return Path.GetFullPath(current);
 	}
 
+	internal static async Task<bool> WriteFileAtomicallyWithinRootAsync(
+		string destinationPath,
+		string root,
+		byte[] content,
+		CancellationToken ct)
+	{
+		var fullDestinationPath = Path.GetFullPath(destinationPath);
+		var destinationDirectory = Path.GetDirectoryName(fullDestinationPath);
+		if (destinationDirectory is null)
+			return false;
+
+		if (!IsPathWithinRoot(destinationDirectory, root))
+			return false;
+
+		Directory.CreateDirectory(destinationDirectory);
+		if (!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
+			return false;
+
+		var tempPath = Path.Combine(
+			destinationDirectory,
+			$".{Path.GetFileName(fullDestinationPath)}.{Guid.NewGuid():N}.tmp");
+
+		try
+		{
+			await File.WriteAllBytesAsync(tempPath, content, ct).ConfigureAwait(false);
+			if (!IsPathWithinRoot(tempPath, root) ||
+				!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
+			{
+				return false;
+			}
+
+			if (File.Exists(fullDestinationPath))
+				File.Delete(fullDestinationPath);
+
+			if (!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
+				return false;
+
+			File.Move(tempPath, fullDestinationPath, overwrite: false);
+			return true;
+		}
+		finally
+		{
+			if (File.Exists(tempPath))
+				File.Delete(tempPath);
+		}
+	}
+
+	internal static bool IsReparsePoint(string path)
+	{
+		try
+		{
+			return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+		}
+		catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+		{
+			return false;
+		}
+	}
+
 	static string ResolveExistingFileSystemEntry(string path)
 	{
 		FileSystemInfo? info = Directory.Exists(path)
@@ -58,4 +117,9 @@ internal static class FileSystemPathGuard
 
 		return info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? info.FullName;
 	}
+
+	static bool IsSafeDestination(string destinationPath, string destinationDirectory, string root)
+		=> IsPathWithinRoot(destinationDirectory, root) &&
+			IsPathWithinRoot(destinationPath, root) &&
+			!IsReparsePoint(destinationPath);
 }

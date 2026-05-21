@@ -140,7 +140,8 @@ public class McpConfiguratorTests : IDisposable
 		var result = await McpConfigurator.ConfigureAsync(env);
 
 		Assert.True(result);
-		var backupPath = Assert.Single(Directory.GetFiles(configDir, "mcp.json.*.bak"));
+		var backupPath = Path.Combine(configDir, "mcp.json.bak");
+		Assert.True(File.Exists(backupPath));
 		var backup = await File.ReadAllTextAsync(backupPath);
 		Assert.Contains("// Existing user MCP server.", backup);
 
@@ -149,6 +150,43 @@ public class McpConfiguratorTests : IDisposable
 		Assert.NotNull(servers);
 		Assert.NotNull(servers["other-server"]);
 		Assert.NotNull(servers["maui-devflow"]);
+	}
+
+	[Fact]
+	public async Task ConfigureAsync_JsoncBackupUsesStablePath()
+	{
+		var configDir = Path.Combine(_tempDir, ".vscode");
+		Directory.CreateDirectory(configDir);
+		var configPath = Path.Combine(configDir, "mcp.json");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.VsCode,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(_tempDir, ".github", "skills")
+		};
+
+		await File.WriteAllTextAsync(configPath, """
+			{
+			  // First backup.
+			  "mcpServers": {}
+			}
+			""");
+		await McpConfigurator.ConfigureAsync(env);
+
+		await File.WriteAllTextAsync(configPath, """
+			{
+			  // Second backup.
+			  "mcpServers": {
+			    "maui-devflow": { "command": "wrong" }
+			  }
+			}
+			""");
+		await McpConfigurator.ConfigureAsync(env);
+
+		var backupPath = Path.Combine(configDir, "mcp.json.bak");
+		var backup = await File.ReadAllTextAsync(backupPath);
+		Assert.Contains("// Second backup.", backup);
+		Assert.Single(Directory.GetFiles(configDir, "mcp.json*.bak"));
 	}
 
 	[Fact]

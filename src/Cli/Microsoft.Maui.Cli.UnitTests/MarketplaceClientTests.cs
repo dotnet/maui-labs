@@ -326,6 +326,35 @@ public class MarketplaceClientTests : IDisposable
 	}
 
 	[Fact]
+	public async Task DownloadSkillFilesAsync_SymlinkedDestinationDirectoryOutsideRoot_SkipsWrite()
+	{
+		var outsideRoot = Path.Combine(_tempDir, "outside");
+		var destinationRoot = Path.Combine(_tempDir, "destination");
+		Directory.CreateDirectory(outsideRoot);
+		Directory.CreateDirectory(destinationRoot);
+		if (!TryCreateDirectorySymlink(Path.Combine(destinationRoot, "references"), outsideRoot))
+			return;
+
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new ByteArrayContent("safe content"u8.ToArray())
+		});
+		using var http = new HttpClient(handler);
+		var skill = new SkillInfo
+		{
+			Name = "good-skill",
+			RemotePath = "plugins/good",
+			Files = ["plugins/good/references/setup.md"]
+		};
+
+		var count = await MarketplaceClient.DownloadSkillFilesAsync(
+			http, skill, destinationRoot, "owner/repo", "main");
+
+		Assert.Equal(0, count);
+		Assert.False(File.Exists(Path.Combine(outsideRoot, "setup.md")));
+	}
+
+	[Fact]
 	public async Task DownloadSkillFilesAsync_RejectsFilesOutsideRemotePath()
 	{
 		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
@@ -540,6 +569,19 @@ public class MarketplaceClientTests : IDisposable
 		{
 			length = 11L * 1024 * 1024;
 			return true;
+		}
+	}
+
+	private static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
 		}
 	}
 }

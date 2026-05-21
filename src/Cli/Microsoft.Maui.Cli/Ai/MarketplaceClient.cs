@@ -172,7 +172,6 @@ internal static class MarketplaceClient
 		HttpClient http, SkillInfo skill, string destDir, string repo, string branch, CancellationToken ct = default)
 	{
 		var count = 0;
-		var fullBase = Path.GetFullPath(destDir) + Path.DirectorySeparatorChar;
 
 		foreach (var filePath in skill.Files)
 		{
@@ -195,20 +194,22 @@ internal static class MarketplaceClient
 
 			var destPath = Path.Combine(destDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
-			// Validate the resolved path stays under the destination directory.
-			var fullDest = Path.GetFullPath(destPath);
-			if (!fullDest.StartsWith(fullBase, PathComparison))
+			if (!FileSystemPathGuard.IsPathWithinRoot(destPath, destDir))
 				continue;
 
 			var content = await FetchRawBytesAsync(http, repo, branch, normalizedFilePath, ct).ConfigureAwait(false);
 			if (content is null)
 				continue;
 
-			var destFileDir = Path.GetDirectoryName(destPath);
-			if (destFileDir is not null)
-				Directory.CreateDirectory(destFileDir);
+			if (!await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+				destPath,
+				destDir,
+				content,
+				ct).ConfigureAwait(false))
+			{
+				continue;
+			}
 
-			await File.WriteAllBytesAsync(destPath, content, ct).ConfigureAwait(false);
 			count++;
 		}
 
@@ -468,9 +469,6 @@ internal static class MarketplaceClient
 
 		return true;
 	}
-
-	static StringComparison PathComparison =>
-		OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
 	private static async Task<string?> FetchStringAsync(HttpClient http, string url, CancellationToken ct = default)
 	{

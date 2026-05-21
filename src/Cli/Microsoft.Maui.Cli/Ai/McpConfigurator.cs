@@ -204,7 +204,7 @@ internal static class McpConfigurator
 	}
 
 	static string GetBackupPath(string configPath)
-		=> $"{configPath}.{Guid.NewGuid():N}.bak";
+		=> $"{configPath}.bak";
 
 	static bool ContainsJsonComments(string contents)
 	{
