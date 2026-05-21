@@ -78,9 +78,13 @@
     <PlatformMauiMacOSBlazorWebViewVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSBlazorWebViewVersion>
     <PlatformMauiMacOSEssentialsVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSEssentialsVersion>
   </PropertyGroup>
-  <!-- EssentialsAI preview iteration (bump for each new preview drop when DotNetFinalVersionKind=release) -->
+  <!-- EssentialsAI package version (continues the NuGet line that existed before moving into this repo). -->
   <PropertyGroup Label="EssentialsAI">
-    <EssentialsAIPreviewVersionIteration>1</EssentialsAIPreviewVersionIteration>
+    <EssentialsAIMajorVersion>11</EssentialsAIMajorVersion>
+    <EssentialsAIMinorVersion>0</EssentialsAIMinorVersion>
+    <EssentialsAIPatchVersion>0</EssentialsAIPatchVersion>
+    <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
+    <EssentialsAIPreviewVersionIteration>5</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
     <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->

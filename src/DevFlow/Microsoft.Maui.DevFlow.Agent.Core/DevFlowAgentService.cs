@@ -57,6 +57,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     private int _uiHookGeneration = 1;
     private int _uiHookScanInFlight;
     private DateTime _lastUiHookScanTsUtc = DateTime.MinValue;
+    private const int NativeUiProbeTimeoutMs = 1500;
+    // Tracks a previously-dispatched UI capture task that timed out. If still
+    // pending when a new CaptureUiOrNativeAsync arrives we skip enqueuing another
+    // uiCallback to avoid unbounded queueing on a blocked dispatcher.
+    private Task? _pendingCaptureUiTask;
+    private readonly object _pendingCaptureUiGate = new();
     private Shell? _hookedShell;
     private DateTime? _navigationStartedAtUtc;
     private string? _navigationTargetRoute;
@@ -700,7 +706,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             int.TryParse(depthStr, out maxDepth);
 
         var windowIndex = ParseWindowIndex(request);
-        var tree = await DispatchAsync(() => _treeWalker.WalkTree(_app, maxDepth, windowIndex));
+        var tree = await CaptureUiOrNativeAsync(
+            () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
+            hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
+            windowIndex);
         return HttpResponse.Json(tree);
     }
 
@@ -709,6 +718,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
+
+        if (IsNativeElementId(id) && _treeWalker.SupportsNativeElements)
+        {
+            var nativeElement = await Task.Run(() => _treeWalker.GetNativeElementInfoById(id));
+            return nativeElement != null ? HttpResponse.Json(nativeElement) : HttpResponse.NotFound($"Element '{id}' not found");
+        }
 
         var element = await DispatchAsync(() =>
         {
@@ -735,7 +750,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         {
             try
             {
-                var results = await DispatchAsync(() => _treeWalker.QueryCss(_app, selector));
+                var results = await CaptureUiOrNativeAsync(
+                    () => _treeWalker.QueryCss(_app, selector),
+                    hwnds => _treeWalker.QueryNative(hwnds, selector: selector));
                 return HttpResponse.Json(results);
             }
             catch (FormatException ex)
@@ -751,9 +768,169 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (type == null && automationId == null && text == null)
             return HttpResponse.Error("At least one query parameter required: type, automationId, text, or selector");
 
-        var simpleResults = await DispatchAsync(() => _treeWalker.Query(_app, type, automationId, text));
+        var simpleResults = await CaptureUiOrNativeAsync(
+            () => _treeWalker.Query(_app, type, automationId, text),
+            hwnds => _treeWalker.QueryNative(hwnds, type, automationId, text));
         return HttpResponse.Json(simpleResults);
     }
+
+    private async Task<List<ElementInfo>> CaptureUiOrNativeAsync(
+        Func<List<ElementInfo>> uiCallback,
+        Func<IReadOnlyList<IntPtr>, List<ElementInfo>> nativeCallback,
+        int? windowIndex = null)
+    {
+        if (!_treeWalker.SupportsNativeElements)
+            return await DispatchAsync(uiCallback);
+
+        // Gate: if a previous CaptureUiOrNativeAsync's UI dispatch is still
+        // pending (the dispatcher is blocked), skip enqueuing another one and
+        // go native-only. Otherwise repeated tree/query calls while the UI
+        // thread is blocked would accumulate unbounded queued work.
+        Task? priorPending;
+        lock (_pendingCaptureUiGate)
+            priorPending = _pendingCaptureUiTask;
+
+        if (priorPending is not null && !priorPending.IsCompleted)
+        {
+            try
+            {
+                var hwnds = _app is null
+                    ? Array.Empty<IntPtr>()
+                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex);
+                return await Task.Run(() =>
+                {
+                    try { return nativeCallback(hwnds); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native UI probe failed (gated): {ex.GetBaseException().Message}");
+                        return new List<ElementInfo>();
+                    }
+                }).ConfigureAwait(false);
+            }
+            catch
+            {
+                return new List<ElementInfo>();
+            }
+        }
+
+        var hwndSource = new TaskCompletionSource<IReadOnlyList<IntPtr>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Shared CTS so the surviving Task.Delay timers can be cancelled once a race
+        // is decided. Without this, every CaptureUiOrNativeAsync call leaves up to
+        // two timers running for the full NativeUiProbeTimeoutMs window, which under
+        // automation throughput accumulates uncancelled timers per second.
+        using var probeCts = new CancellationTokenSource();
+        var uiTask = DispatchAsync(() =>
+        {
+            try
+            {
+                hwndSource.TrySetResult(_app is null
+                    ? Array.Empty<IntPtr>()
+                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native HWND discovery failed: {ex.GetBaseException().Message}");
+                hwndSource.TrySetResult(Array.Empty<IntPtr>());
+            }
+
+            return uiCallback();
+        });
+
+        var nativeTask = Task.Run(async () =>
+        {
+            Task delayTask;
+            try
+            {
+                delayTask = Task.Delay(NativeUiProbeTimeoutMs, probeCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                delayTask = Task.CompletedTask;
+            }
+
+            var winner = await Task.WhenAny(hwndSource.Task, delayTask).ConfigureAwait(false);
+            var hwnds = winner == hwndSource.Task
+                ? await hwndSource.Task.ConfigureAwait(false)
+                : Array.Empty<IntPtr>();
+
+            try
+            {
+                return nativeCallback(hwnds);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native UI probe failed: {ex.GetBaseException().Message}");
+                return [];
+            }
+        });
+
+        Task uiDelay;
+        try
+        {
+            uiDelay = Task.Delay(NativeUiProbeTimeoutMs, probeCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            uiDelay = Task.CompletedTask;
+        }
+
+        var uiWinner = await Task.WhenAny(uiTask, uiDelay).ConfigureAwait(false);
+        if (uiWinner != uiTask)
+        {
+            // Record this pending uiTask so concurrent callers can detect the
+            // dispatcher is blocked and avoid enqueuing additional UI work.
+            lock (_pendingCaptureUiGate)
+                _pendingCaptureUiTask = uiTask;
+
+            hwndSource.TrySetResult(Array.Empty<IntPtr>());
+            // The UI dispatcher is blocked (the exact scenario this code path targets).
+            // Observe any later fault on the abandoned uiTask so it doesn't trigger
+            // TaskScheduler.UnobservedTaskException when it eventually completes.
+            _ = uiTask.ContinueWith(
+                t =>
+                {
+                    lock (_pendingCaptureUiGate)
+                    {
+                        if (ReferenceEquals(_pendingCaptureUiTask, t))
+                            _pendingCaptureUiTask = null;
+                    }
+
+                    if (t.IsFaulted)
+                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Abandoned uiTask faulted: {t.Exception?.GetBaseException().Message}");
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            // Also bound the native await: NativeUiProbeTimeoutMs only guards the HWND
+            // discovery wait inside nativeTask; nativeCallback itself (a UIA tree walk)
+            // is unbounded and can block for minutes on a frozen app.
+            var nativeWinner = await Task.WhenAny(nativeTask, Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
+            probeCts.Cancel();
+            return nativeWinner == nativeTask
+                ? await nativeTask.ConfigureAwait(false)
+                : new List<ElementInfo>();
+        }
+
+        probeCts.Cancel();
+
+        var uiResult = await uiTask.ConfigureAwait(false);
+        // Bound the final native await for the same reason as above.
+        var finalNativeWinner = await Task.WhenAny(nativeTask, Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
+        var nativeResult = finalNativeWinner == nativeTask
+            ? await nativeTask.ConfigureAwait(false)
+            : new List<ElementInfo>();
+        if (nativeResult.Count == 0)
+            return uiResult;
+
+        var merged = new List<ElementInfo>(uiResult.Count + nativeResult.Count);
+        merged.AddRange(uiResult);
+        merged.AddRange(nativeResult);
+        return merged;
+    }
+
+    private static bool IsNativeElementId(string? elementId)
+        => elementId?.StartsWith("native:", StringComparison.Ordinal) == true;
 
     private async Task<HttpResponse> HandleHitTest(HttpRequest request)
     {
@@ -1429,6 +1606,19 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementTap(body.ElementId!));
+            PublishUiOperationSpan(
+                "action.tap",
+                startedAtUtc,
+                nativeResult == "ok",
+                nativeResult == "ok" ? null : nativeResult,
+                body.ElementId);
+
+            return nativeResult == "ok" ? HttpResponse.Ok("Tapped") : HttpResponse.Error(nativeResult);
+        }
+
         var result = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -1437,10 +1627,14 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             switch (el)
             {
                 case Button btn:
+                    if (TryScheduleNativeTapFirst(btn))
+                        return "ok";
                     try { btn.SendClicked(); }
                     catch { if (btn is VisualElement ve && !TryNativeTap(ve)) return $"Native tap failed on Button"; }
                     return "ok";
                 case ImageButton imgBtn:
+                    if (TryScheduleNativeTapFirst(imgBtn))
+                        return "ok";
                     try { imgBtn.SendClicked(); }
                     catch { if (imgBtn is VisualElement ve && !TryNativeTap(ve)) return $"Native tap failed on ImageButton"; }
                     return "ok";
@@ -1646,6 +1840,24 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     }
 
     /// <summary>
+    /// Allows platforms whose native click handlers may open synchronous modal loops to schedule
+    /// a native tap before MAUI invokes the managed click event inline.
+    /// </summary>
+    /// <remarks>
+    /// When an override returns <c>true</c>, the native invocation is typically queued onto the
+    /// platform dispatcher (e.g. <c>BeginInvoke</c>/<c>TryEnqueue</c>) rather than completed
+    /// synchronously. The HTTP caller receives <c>"ok"</c> as soon as the work is queued, so any
+    /// follow-up command (a screenshot or another query) may race against the dialog actually
+    /// appearing. Tests should use <c>maui_wait</c> or explicit polling after a tap that is
+    /// expected to surface a dialog. Faults inside the dispatched invocation are silent from the
+    /// caller's perspective and only surface in the agent's debug output.
+    /// </remarks>
+    protected virtual bool TryScheduleNativeTapFirst(VisualElement ve)
+    {
+        return false;
+    }
+
+    /// <summary>
     /// Attempts to tap a native platform view via handler for non-VisualElement IView types (e.g. Comet views).
     /// Uses reflection to get the PlatformView from the handler and invoke SendAccessibilityAction or performClick.
     /// Override in platform-specific subclasses for richer support.
@@ -1700,6 +1912,32 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId and text are required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementSetValue(body.ElementId!, body.Text!));
+            PublishUiOperationSpan(
+                "action.fill",
+                startedAtUtc,
+                nativeResult == "ok",
+                nativeResult == "ok" ? null : nativeResult,
+                body.ElementId,
+                new { textLength = body.Text.Length });
+
+            if (nativeResult == "ok")
+            {
+                PublishUiEvent("treeChange", new
+                {
+                    changeType = "modified",
+                    elementId = body.ElementId,
+                    elementType = "input",
+                    parentId = (string?)null,
+                    timestamp = DateTimeOffset.UtcNow.ToString("O")
+                });
+            }
+
+            return nativeResult == "ok" ? HttpResponse.Ok("Text set") : HttpResponse.Error(nativeResult);
+        }
+
         var result = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -1756,6 +1994,32 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementSetValue(body.ElementId!, string.Empty));
+            var nativeSuccess = nativeResult == "ok";
+            PublishUiOperationSpan(
+                "action.clear",
+                startedAtUtc,
+                nativeSuccess,
+                nativeSuccess ? null : nativeResult,
+                body.ElementId);
+
+            if (nativeSuccess)
+            {
+                PublishUiEvent("treeChange", new
+                {
+                    changeType = "modified",
+                    elementId = body.ElementId,
+                    elementType = "input",
+                    parentId = (string?)null,
+                    timestamp = DateTimeOffset.UtcNow.ToString("O")
+                });
+            }
+
+            return nativeSuccess ? HttpResponse.Ok("Cleared") : HttpResponse.Error(nativeResult);
+        }
+
         var success = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -1808,6 +2072,20 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementFocus(body.ElementId!));
+            var nativeSuccess = nativeResult == "ok";
+            PublishUiOperationSpan(
+                "action.focus",
+                startedAtUtc,
+                nativeSuccess,
+                nativeSuccess ? null : nativeResult,
+                body.ElementId);
+
+            return nativeSuccess ? HttpResponse.Ok("Focused") : HttpResponse.Error(nativeResult);
+        }
+
         var success = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -2327,6 +2605,20 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         var position = ParseScrollToPosition(body.ScrollToPosition);
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementScroll(body.ElementId!, body.DeltaX, body.DeltaY));
+            PublishUiOperationSpan(
+                "action.scroll",
+                startedAtUtc,
+                nativeResult == "ok",
+                nativeResult == "ok" ? null : nativeResult,
+                body.ElementId,
+                new { body.DeltaX, body.DeltaY, body.Animated });
+
+            return nativeResult == "ok" ? HttpResponse.Ok("Scrolled") : HttpResponse.Error(nativeResult);
+        }
+
         var result = await DispatchAsync(async () =>
         {
             // Priority 1: Scroll by item index on a specific ItemsView

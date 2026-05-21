@@ -49,6 +49,7 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
+  DOTNET_WORKLOAD_VERSION: 10.0.203
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
@@ -118,8 +119,8 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Install Android MAUI workload
-        run: dotnet workload install maui-android
+      - name: Install MAUI workloads
+        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -182,7 +183,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # .NET 10's Apple workloads currently require Xcode 26.3 on hosted runners.
+          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
             if [[ -d "$candidate" ]]; then
@@ -215,7 +216,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        run: dotnet workload install maui ios macos
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: List available iOS simulators
         run: xcrun simctl list devices available
@@ -248,7 +249,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # .NET 10's Apple workloads currently require Xcode 26.3 on hosted runners.
+          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
           COMPATIBLE="${COMPATIBLE:-}"
           for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
             if [[ -d "$candidate" ]]; then
@@ -281,7 +282,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        run: dotnet workload install maui maccatalyst macos
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -315,7 +316,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh

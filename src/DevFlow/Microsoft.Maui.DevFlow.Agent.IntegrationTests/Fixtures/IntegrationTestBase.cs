@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -32,20 +33,22 @@ public abstract class IntegrationTestBase
 
     protected async Task<JsonElement> GetJsonAsync(string path)
     {
-        var response = await Http.GetAsync(path);
+        using var response = await SendHttpWithTransportRetryAsync(() => Http.GetAsync(path));
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(body, JsonOptions);
     }
 
-    protected Task<HttpResponseMessage> GetRawAsync(string path) => Http.GetAsync(path);
+    protected Task<HttpResponseMessage> GetRawAsync(string path)
+        => SendHttpWithTransportRetryAsync(() => Http.GetAsync(path));
 
     protected async Task<JsonElement> PostJsonAsync(string path, object? body = null)
     {
-        var content = body != null
-            ? new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
-            : null;
-        var response = await Http.PostAsync(path, content);
+        using var response = await SendHttpWithTransportRetryAsync(async () =>
+        {
+            using var content = CreateJsonContent(body);
+            return await Http.PostAsync(path, content);
+        });
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
@@ -53,32 +56,66 @@ public abstract class IntegrationTestBase
 
     protected Task<HttpResponseMessage> PostRawAsync(string path, object? body = null)
     {
-        var content = body != null
-            ? new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
-            : null;
-        return Http.PostAsync(path, content);
+        return SendHttpWithTransportRetryAsync(async () =>
+        {
+            using var content = CreateJsonContent(body);
+            return await Http.PostAsync(path, content);
+        });
     }
 
     protected async Task<JsonElement> PutJsonAsync(string path, object? body = null)
     {
-        var content = body != null
-            ? new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
-            : null;
-        var response = await Http.PutAsync(path, content);
+        using var response = await SendHttpWithTransportRetryAsync(async () =>
+        {
+            using var content = CreateJsonContent(body);
+            return await Http.PutAsync(path, content);
+        });
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
     }
 
-    protected Task<HttpResponseMessage> DeleteRawAsync(string path) => Http.DeleteAsync(path);
+    protected Task<HttpResponseMessage> DeleteRawAsync(string path)
+        => SendHttpWithTransportRetryAsync(() => Http.DeleteAsync(path));
 
     protected async Task<JsonElement> DeleteJsonAsync(string path)
     {
-        var response = await Http.DeleteAsync(path);
+        using var response = await SendHttpWithTransportRetryAsync(() => Http.DeleteAsync(path));
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
     }
+
+    static StringContent? CreateJsonContent(object? body)
+        => body != null
+            ? new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
+            : null;
+
+    async Task<T> SendHttpWithTransportRetryAsync<T>(Func<Task<T>> send)
+    {
+        var retryCount = Platform == "android" ? 8 : 0;
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await send();
+            }
+            catch (Exception ex) when (IsTransientTransportException(ex) && attempt < retryCount)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * Math.Min(attempt + 1, 5)));
+            }
+        }
+    }
+
+    static bool IsTransientTransportException(Exception ex)
+        => ex switch
+        {
+            HttpRequestException { InnerException: SocketException } => true,
+            IOException => true,
+            TaskCanceledException tce when tce.InnerException is not null and not TimeoutException => true,
+            _ => ex.InnerException is not null && IsTransientTransportException(ex.InnerException),
+        };
 
     protected async Task<ElementInfo> FindElementAsync(string automationId, int timeoutMs = 5000)
     {

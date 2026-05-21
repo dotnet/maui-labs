@@ -321,6 +321,127 @@ public class VisualTreeWalker
     }
 
     /// <summary>
+    /// Indicates whether this walker can discover native platform elements that are not
+    /// represented in the MAUI visual tree.
+    /// </summary>
+    public virtual bool SupportsNativeElements => false;
+
+    /// <summary>
+    /// Returns native top-level window handles already represented by the MAUI tree so
+    /// native probes can avoid duplicating them.
+    /// </summary>
+    public virtual IReadOnlyList<IntPtr> GetKnownNativeWindowHandles(Application app, int? windowIndex = null)
+        => Array.Empty<IntPtr>();
+
+    /// <summary>
+    /// Captures native platform elements, typically on a worker thread.
+    /// </summary>
+    public virtual List<ElementInfo> WalkNativeTree(IReadOnlyList<IntPtr> knownWindowHandles, int maxDepth = 0)
+        => [];
+
+    /// <summary>
+    /// Resolves a native platform object by DevFlow element id.
+    /// </summary>
+    public virtual object? GetNativeElementById(string id)
+        => null;
+
+    /// <summary>
+    /// Resolves native element details by DevFlow element id.
+    /// </summary>
+    public virtual ElementInfo? GetNativeElementInfoById(string id)
+        => FlattenElementInfos(WalkNativeTree(Array.Empty<IntPtr>()))
+            .FirstOrDefault(e => e.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Queries native platform elements using the same filter shape as MAUI tree queries.
+    /// </summary>
+    public virtual List<ElementInfo> QueryNative(
+        IReadOnlyList<IntPtr> knownWindowHandles,
+        string? type = null,
+        string? automationId = null,
+        string? text = null,
+        string? selector = null)
+    {
+        var tree = WalkNativeTree(knownWindowHandles);
+        if (!string.IsNullOrWhiteSpace(selector))
+        {
+            return CssSelectorEngine.Query(tree, selector)
+                .Where(e => MatchesElementInfo(e, type, automationId, text))
+                .ToList();
+        }
+
+        return FlattenElementInfos(tree)
+            .Where(e => MatchesElementInfo(e, type, automationId, text))
+            .OrderByDescending(e => e.AutomationId is not null)
+            .ThenByDescending(e => e.Traits?.Contains("actionable") == true)
+            .ThenBy(e => e.Id, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Performs a native tap/invoke action for a native element id.
+    /// </summary>
+    public virtual string TryNativeElementTap(string elementId)
+        => "Native element actions are not supported on this platform";
+
+    /// <summary>
+    /// Sets native element text/value for a native element id.
+    /// </summary>
+    public virtual string TryNativeElementSetValue(string elementId, string value)
+        => "Native element value actions are not supported on this platform";
+
+    /// <summary>
+    /// Sets native keyboard focus for a native element id.
+    /// </summary>
+    public virtual string TryNativeElementFocus(string elementId)
+        => "Native element focus is not supported on this platform";
+
+    /// <summary>
+    /// Scrolls or scrolls into view a native element id.
+    /// </summary>
+    public virtual string TryNativeElementScroll(string elementId, double deltaX, double deltaY)
+        => "Native element scrolling is not supported on this platform";
+
+    public static IEnumerable<ElementInfo> FlattenElementInfos(IEnumerable<ElementInfo> roots)
+    {
+        foreach (var root in roots)
+        {
+            yield return root;
+            if (root.Children is not null)
+            {
+                foreach (var child in FlattenElementInfos(root.Children))
+                    yield return child;
+            }
+        }
+    }
+
+    private static bool MatchesElementInfo(ElementInfo info, string? type, string? automationId, string? text)
+    {
+        if (!string.IsNullOrWhiteSpace(type) &&
+            !info.Type.Equals(type, StringComparison.OrdinalIgnoreCase) &&
+            !(info.FullType?.EndsWith(type, StringComparison.OrdinalIgnoreCase) == true))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(automationId) &&
+            !string.Equals(info.AutomationId, automationId, StringComparison.OrdinalIgnoreCase) &&
+            !info.Id.Equals(automationId, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(text) &&
+            !(info.Text?.Contains(text, StringComparison.OrdinalIgnoreCase) == true) &&
+            !(info.Value?.Contains(text, StringComparison.OrdinalIgnoreCase) == true))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Walks from a specific element.
     /// </summary>
     public ElementInfo? WalkElement(IVisualTreeElement element, string? parentId, int currentDepth, int maxDepth)

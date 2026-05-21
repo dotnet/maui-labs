@@ -2,9 +2,11 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
+using Microsoft.Maui.DevFlow.Agent.Windows;
 
 namespace Microsoft.Maui.DevFlow.Agent.WPF;
 
@@ -13,6 +15,10 @@ namespace Microsoft.Maui.DevFlow.Agent.WPF;
 /// </summary>
 public class WpfVisualTreeWalker : VisualTreeWalker
 {
+    private readonly NativeWindowProbe _nativeProbe = new();
+    private readonly object _nativeObjectsLock = new();
+    private Dictionary<string, object> _nativeObjects = new(StringComparer.OrdinalIgnoreCase);
+
     protected override BoundsInfo? ResolveWindowBounds(VisualElement ve)
     {
         try
@@ -148,5 +154,135 @@ public class WpfVisualTreeWalker : VisualTreeWalker
         }
         catch { }
         return null;
+    }
+
+    public override bool SupportsNativeElements => true;
+
+    public override IReadOnlyList<IntPtr> GetKnownNativeWindowHandles(Microsoft.Maui.Controls.Application app, int? windowIndex = null)
+    {
+        var handles = new List<IntPtr>();
+
+        if (windowIndex is not null)
+        {
+            var window = windowIndex.Value >= 0 && windowIndex.Value < app.Windows.Count
+                ? app.Windows[windowIndex.Value]
+                : null;
+            var handle = GetWindowHandle(window);
+            if (handle != IntPtr.Zero)
+                handles.Add(handle);
+            return handles;
+        }
+
+        foreach (var window in app.Windows)
+        {
+            var handle = GetWindowHandle(window);
+            if (handle != IntPtr.Zero)
+                handles.Add(handle);
+        }
+
+        return handles;
+    }
+
+    public override List<ElementInfo> WalkNativeTree(IReadOnlyList<IntPtr> knownWindowHandles, int maxDepth = 0)
+    {
+        var roots = new List<ElementInfo>();
+        var nativeObjects = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        _nativeProbe.AppendNativeWindows(roots, nativeObjects, knownWindowHandles, maxDepth);
+
+        lock (_nativeObjectsLock)
+            _nativeObjects = nativeObjects;
+
+        return roots;
+    }
+
+    public override object? GetNativeElementById(string id)
+    {
+        lock (_nativeObjectsLock)
+        {
+            if (NativeWindowProbe.TryGetAutomationElement(_nativeObjects, id) is { } cached)
+                return cached;
+        }
+
+        // Preserve native ID stability on cache miss: re-walk with the same HWND
+        // the id was originally produced under. A plain Array.Empty<IntPtr>() walk
+        // would skip AppendKnownWindowDialogSubtrees entirely, so ":dialog:{n}"
+        // prefixes from a previous tree/query would never be regenerated.
+        var seedHwnds = NativeWindowProbe.ExtractHwndsFromId(id);
+        WalkNativeTree(seedHwnds);
+        lock (_nativeObjectsLock)
+            return NativeWindowProbe.TryGetAutomationElement(_nativeObjects, id);
+    }
+
+    public override ElementInfo? GetNativeElementInfoById(string id)
+    {
+        // Cache-first: avoid a full UIA tree walk (which calls EnumerateProcessTopLevels
+        // and enumerates every same-process window) when the requested id was already
+        // resolved by a recent tree/query call.
+        Dictionary<string, object> cache;
+        lock (_nativeObjectsLock)
+            cache = _nativeObjects;
+
+        if (NativeWindowProbe.TryBuildCachedElementInfo(cache, id) is { } cached)
+            return cached;
+
+        var seedHwnds = NativeWindowProbe.ExtractHwndsFromId(id);
+        return FlattenElementInfos(WalkNativeTree(seedHwnds))
+            .FirstOrDefault(e => e.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public override string TryNativeElementTap(string elementId)
+    {
+        var element = GetNativeAutomationElement(elementId);
+        if (element is null)
+            return $"Native element '{elementId}' was not found";
+
+        return NativeWindowProbe.TryInvoke(element)
+            ? "ok"
+            : $"Native element '{elementId}' does not support invoke, toggle, selection, or expand/collapse";
+    }
+
+    public override string TryNativeElementSetValue(string elementId, string value)
+    {
+        var element = GetNativeAutomationElement(elementId);
+        if (element is null)
+            return $"Native element '{elementId}' was not found";
+
+        return NativeWindowProbe.TrySetValue(element, value)
+            ? "ok"
+            : $"Native element '{elementId}' does not support writable value";
+    }
+
+    public override string TryNativeElementFocus(string elementId)
+    {
+        var element = GetNativeAutomationElement(elementId);
+        if (element is null)
+            return $"Native element '{elementId}' was not found";
+
+        return NativeWindowProbe.TryFocus(element)
+            ? "ok"
+            : $"Native element '{elementId}' could not be focused";
+    }
+
+    public override string TryNativeElementScroll(string elementId, double deltaX, double deltaY)
+    {
+        var element = GetNativeAutomationElement(elementId);
+        if (element is null)
+            return $"Native element '{elementId}' was not found";
+
+        return NativeWindowProbe.TryScroll(element, deltaX, deltaY)
+            ? "ok"
+            : $"Native element '{elementId}' does not support scrolling";
+    }
+
+    private System.Windows.Automation.AutomationElement? GetNativeAutomationElement(string id)
+        => GetNativeElementById(id) as System.Windows.Automation.AutomationElement;
+
+    private static IntPtr GetWindowHandle(Microsoft.Maui.Controls.Window? window)
+    {
+        if (window?.Handler?.PlatformView is not FrameworkElement frameworkElement)
+            return IntPtr.Zero;
+
+        var nativeWindow = System.Windows.Window.GetWindow(frameworkElement);
+        return nativeWindow is null ? IntPtr.Zero : new WindowInteropHelper(nativeWindow).Handle;
     }
 }

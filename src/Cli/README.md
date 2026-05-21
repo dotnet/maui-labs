@@ -28,7 +28,29 @@ maui doctor
 maui device list
 ```
 
-### 3. Set up Android development
+### 3. Manage a project's .NET MAUI version
+
+```bash
+# Show the effective MAUI version for the current project
+maui project version
+maui project version --project ./src/MyApp/MyApp.csproj
+
+# List available versions
+maui project version list
+maui project version list --channel nightly --take 20
+
+# Pin a specific version and restore
+maui project version set 10.0.60
+
+# Use the latest stable or nightly package version
+maui project version set --latest
+maui project version set --latest-nightly --nuget-config
+
+# Switch back to the installed workload version
+maui project version use-workload
+```
+
+### 4. Set up Android development
 
 ```bash
 # Full interactive Android setup (JDK + SDK + emulator)
@@ -46,7 +68,7 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
-### 4. Set up Apple development (macOS only)
+### 5. Set up Apple development (macOS only)
 
 ```bash
 # List installed Xcode versions
@@ -69,6 +91,10 @@ maui apple simulator delete "iPhone 16 Pro"
 |---------|-------------|
 | `maui doctor` | Run environment diagnostics and auto-fix issues |
 | `maui device list` | List connected devices and emulators |
+| `maui project version` | Show the effective .NET MAUI version for a project |
+| `maui project version list` | List available .NET MAUI package versions |
+| `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
+| `maui project version use-workload` | Use the installed MAUI workload version instead of a pinned project version |
 | `maui version` | Display version information |
 | **Android** | |
 | `maui android install` | Full interactive Android environment setup |
