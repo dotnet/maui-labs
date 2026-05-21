@@ -80,7 +80,9 @@
   </PropertyGroup>
   <!-- EssentialsAI package version (continues the NuGet line that existed before moving into this repo). -->
   <PropertyGroup Label="EssentialsAI">
-    <EssentialsAIVersionPrefix>11.0.0</EssentialsAIVersionPrefix>
+    <EssentialsAIMajorVersion>11</EssentialsAIMajorVersion>
+    <EssentialsAIMinorVersion>0</EssentialsAIMinorVersion>
+    <EssentialsAIPatchVersion>0</EssentialsAIPatchVersion>
     <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
     <EssentialsAIPreviewVersionIteration>5</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->

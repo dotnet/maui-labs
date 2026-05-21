@@ -17,11 +17,11 @@
     <IsShipping>true</IsShipping>
     <IsPackable>true</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
-    <!-- Keep this package always preview on its independent NuGet version line.
+    <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->
-    <MajorVersion>$(EssentialsAIVersionPrefix.Split('.')[0])</MajorVersion>
-    <MinorVersion>$(EssentialsAIVersionPrefix.Split('.')[1])</MinorVersion>
-    <PatchVersion>$(EssentialsAIVersionPrefix.Split('.')[2])</PatchVersion>
+    <MajorVersion>$(EssentialsAIMajorVersion)</MajorVersion>
+    <MinorVersion>$(EssentialsAIMinorVersion)</MinorVersion>
+    <PatchVersion>$(EssentialsAIPatchVersion)</PatchVersion>
     <SuppressFinalPackageVersion>true</SuppressFinalPackageVersion>
     <PreReleaseVersionLabel>$(EssentialsAIPreReleaseVersionLabel)</PreReleaseVersionLabel>
     <PreReleaseVersionIteration>$(EssentialsAIPreviewVersionIteration)</PreReleaseVersionIteration>
