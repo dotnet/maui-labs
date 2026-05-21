@@ -119,8 +119,8 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Install Android MAUI workload
-        run: dotnet workload install maui-android --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+      - name: Install MAUI workloads
+        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Cache AVD
         uses: actions/cache@v4
@@ -216,7 +216,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        run: dotnet workload install maui ios macos --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: List available iOS simulators
         run: xcrun simctl list devices available
@@ -282,7 +282,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        run: dotnet workload install maui maccatalyst macos --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
@@ -316,7 +316,7 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh

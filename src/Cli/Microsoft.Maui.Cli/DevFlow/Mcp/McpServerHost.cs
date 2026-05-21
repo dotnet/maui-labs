@@ -48,7 +48,8 @@ public static class McpServerHost
 			.WithTools<JobTools>()
 			.WithTools<FileTools>()
 			.WithTools<BatchTools>()
-			.WithTools<InvokeTools>();
+			.WithTools<InvokeTools>()
+			.WithTools<ExtensionTools>();
 
 		await builder.Build().RunAsync();
 	}

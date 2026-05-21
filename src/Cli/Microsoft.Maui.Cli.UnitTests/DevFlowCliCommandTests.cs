@@ -21,6 +21,70 @@ public class DevFlowCliCommandTests
         return (server, cli);
     }
 
+    // ========== extensions ==========
+
+    [Fact]
+    public async Task ExtensionsList_ReturnsRegisteredExtensions()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "extensions", "list", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var json = result.ParseJsonOutput();
+        Assert.True(json.GetProperty("extensions").TryGetProperty("com.example.diagnostics", out var extension));
+        Assert.Equal("1.0.0", extension.GetProperty("version").GetString());
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/agent/capabilities");
+    }
+
+    [Fact]
+    public async Task ExtensionsCall_PostsToolParameters()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow", "extensions", "call",
+            "com.example.diagnostics", "echo", """{"message":"hello"}""",
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var json = result.ParseJsonOutput();
+        Assert.Equal("hello", json.GetProperty("body").GetProperty("message").GetString());
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ext/com.example.diagnostics/echo");
+        Assert.Equal("POST", req.Method);
+        Assert.Contains("hello", req.Body);
+    }
+
+    [Fact]
+    public async Task ExtensionsDescribe_MissingExtension_WritesStructuredError()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "extensions", "describe", "com.example.missing", "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        Assert.Equal("InvocationError", document.RootElement.GetProperty("type").GetString());
+        Assert.Contains("was not found", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task ExtensionsCall_MissingTool_WritesStructuredError()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "extensions", "call", "com.example.diagnostics", "missing", "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        Assert.Equal("InvocationError", document.RootElement.GetProperty("type").GetString());
+        Assert.Contains("was not found", document.RootElement.GetProperty("error").GetString());
+    }
+
     // ========== ui status / tree / query / element / hit-test ==========
 
     [Fact]

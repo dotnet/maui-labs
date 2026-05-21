@@ -2,84 +2,299 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-capabilities.json",
   "title": "AgentCapabilities",
-  "description": "Flat capability discovery response describing what the agent supports.",
+  "description": "Capability discovery response describing what the agent supports.",
   "type": "object",
-  "additionalProperties": {
-    "$ref": "#/$defs/Capability"
-  },
+  "required": [
+    "agent",
+    "capabilities"
+  ],
   "properties": {
-    "ui": {
-      "$ref": "#/$defs/Capability",
-      "description": "UI automation capabilities."
+    "agent": {
+      "type": "object",
+      "description": "Information about the DevFlow agent itself.",
+      "required": [
+        "name",
+        "version",
+        "framework",
+        "frameworkVersion"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the DevFlow agent implementation."
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version of the agent."
+        },
+        "framework": {
+          "type": "string",
+          "description": "The UI framework the agent is instrumented for."
+        },
+        "frameworkVersion": {
+          "type": "string",
+          "description": "Version of the UI framework."
+        }
+      }
     },
-    "webview": {
-      "$ref": "#/$defs/Capability",
-      "description": "Blazor WebView/CDP capabilities."
+    "capabilities": {
+      "type": "object",
+      "description": "Map of capability namespaces to their details. Keys are dot-separated namespaces.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "version",
+          "features"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "Capability version number.",
+            "minimum": 1
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of supported features within this capability namespace."
+          }
+        },
+        "additionalProperties": true,
+        "description": "Capability details including version, features, and optional extra fields."
+      },
+      "examples": [
+        {
+          "ui.tree": {
+            "version": 1,
+            "features": [
+              "find",
+              "query",
+              "snapshot"
+            ]
+          },
+          "ui.actions": {
+            "version": 1,
+            "features": [
+              "tap",
+              "fill",
+              "scroll",
+              "gesture"
+            ]
+          },
+          "ui.screenshot": {
+            "version": 1,
+            "features": [
+              "fullPage",
+              "element"
+            ]
+          },
+          "webview": {
+            "version": 1,
+            "features": [
+              "evaluate",
+              "dom",
+              "navigate"
+            ]
+          },
+          "profiler": {
+            "version": 1,
+            "features": [
+              "samples",
+              "spans",
+              "markers"
+            ]
+          },
+          "network": {
+            "version": 1,
+            "features": [
+              "capture",
+              "detail"
+            ]
+          },
+          "logs": {
+            "version": 1,
+            "features": [
+              "stream",
+              "query"
+            ]
+          },
+          "device.info": {
+            "version": 1,
+            "features": [
+              "display",
+              "battery",
+              "connectivity"
+            ]
+          },
+          "device.sensors": {
+            "version": 1,
+            "features": [
+              "accelerometer",
+              "gyroscope",
+              "compass"
+            ]
+          },
+          "device.jobs": {
+            "version": 1,
+            "features": [
+              "list",
+              "run"
+            ],
+            "supported": true
+          },
+          "storage.preferences": {
+            "version": 1,
+            "features": [
+              "get",
+              "set",
+              "delete"
+            ]
+          },
+          "storage.secure": {
+            "version": 1,
+            "features": [
+              "get",
+              "set",
+              "delete"
+            ]
+          },
+          "storage.files": {
+            "version": 1,
+            "features": [
+              "roots",
+              "list",
+              "download",
+              "upload",
+              "delete"
+            ]
+          },
+          "theme": {
+            "version": 1,
+            "features": [
+              "get",
+              "set"
+            ],
+            "supported": true
+          },
+          "app.theme": {
+            "version": 1,
+            "features": [
+              "get",
+              "set"
+            ],
+            "supported": true
+          }
+        }
+      ]
     },
-    "network": {
-      "$ref": "#/$defs/Capability",
-      "description": "Network capture capabilities."
-    },
-    "logs": {
-      "$ref": "#/$defs/Capability",
-      "description": "Log retrieval capabilities."
-    },
-    "sensors": {
-      "$ref": "#/$defs/Capability",
-      "description": "Device sensor capabilities."
-    },
-    "storage": {
-      "$ref": "#/$defs/Capability",
-      "description": "Preferences, secure storage, and app file capabilities."
-    },
-    "profiler": {
-      "$ref": "#/$defs/Capability",
-      "description": "Profiling capabilities."
-    },
-    "jobs": {
-      "$ref": "#/$defs/Capability",
-      "description": "Background job capabilities."
-    },
-    "theme": {
-      "$ref": "#/$defs/Capability",
-      "description": "Application theme switching capabilities."
-    },
-    "app.theme": {
-      "$ref": "#/$defs/Capability",
-      "description": "Application theme switching capability namespace."
-    },
-    "invoke": {
-      "$ref": "#/$defs/Capability",
-      "description": "Registered action invocation capabilities."
+    "extensions": {
+      "type": "object",
+      "description": "Map of extension namespaces (reverse-domain notation) to their self-describing tool registrations. Each extension is discoverable and invocable by CLI and MCP clients without hardcoded extension-specific code.",
+      "additionalProperties": {
+        "$ref": "#/$defs/ExtensionDescriptor"
+      }
     }
   },
   "$defs": {
-    "Capability": {
+    "ExtensionDescriptor": {
       "type": "object",
-      "description": "Capability details.",
       "required": [
-        "supported",
-        "features"
+        "version",
+        "description",
+        "tools"
       ],
       "properties": {
-        "supported": {
-          "type": "boolean",
-          "description": "Whether this capability is available in the running app."
+        "version": {
+          "type": "string",
+          "description": "Semantic version of this extension. Changes to this value signal clients to refresh cached tool definitions.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
         },
-        "features": {
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this extension provides."
+        },
+        "tools": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/ExtensionTool"
           },
-          "description": "List of supported features within this capability."
-        },
-        "version": {
-          "type": "integer",
-          "description": "Optional capability version number.",
-          "minimum": 1
+          "description": "Self-describing tools exposed by this extension. Each tool maps to an HTTP endpoint under /api/v1/ext/{namespace}/."
         }
       },
-      "additionalProperties": true
+      "description": "Extension descriptor with version, description, and self-describing tools."
+    },
+    "ExtensionTool": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "method",
+        "path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Machine-readable tool name, unique within the extension (e.g. 'build_info', 'capture_message').",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this tool does. Used by extension discovery clients."
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE"
+          ],
+          "description": "HTTP method for this tool's endpoint."
+        },
+        "path": {
+          "type": "string",
+          "description": "Full URL path for this tool (e.g. '/api/v1/ext/com.example.diagnostics/build-info')."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "JSON Schema describing the tool's input parameters. For GET requests, parameters are query strings. For POST, PUT, and DELETE, parameters are the JSON request body.",
+          "additionalProperties": true
+        },
+        "returns": {
+          "type": "object",
+          "description": "JSON Schema describing the tool's response body.",
+          "additionalProperties": true
+        },
+        "annotations": {
+          "$ref": "#/$defs/ExtensionToolAnnotations"
+        }
+      }
+    },
+    "ExtensionToolAnnotations": {
+      "type": "object",
+      "description": "Hints about the tool's behavior, modeled after MCP tool annotations.",
+      "properties": {
+        "readOnly": {
+          "type": "boolean",
+          "description": "True if the tool only reads data and has no side effects.",
+          "default": false
+        },
+        "idempotent": {
+          "type": "boolean",
+          "description": "True if calling the tool multiple times with the same input has the same effect as calling it once.",
+          "default": false
+        },
+        "destructive": {
+          "type": "boolean",
+          "description": "True if the tool may delete data or cause irreversible changes.",
+          "default": false
+        },
+        "category": {
+          "type": "string",
+          "description": "Optional grouping category (e.g. 'diagnostics', 'testing')."
+        }
+      }
     }
   }
 }

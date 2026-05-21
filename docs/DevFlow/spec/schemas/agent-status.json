@@ -138,6 +138,26 @@
       "type": "string",
       "description": "Agent uptime as an ISO 8601 duration (e.g. 'PT1H30M15S').",
       "pattern": "^P"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Lightweight marker indicating registered extensions. Allows clients to skip the heavier capabilities fetch when no extensions are present or when cached extension descriptors are still current.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "description": "Number of registered extensions. When 0, clients can skip the capabilities call for extension discovery.",
+          "minimum": 0
+        },
+        "hash": {
+          "type": "string",
+          "description": "SHA-256 hash of the serialized extensions map from the capabilities response. Clients cache extension metadata keyed by this hash and only re-fetch capabilities when it changes.",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "count",
+        "hash"
+      ]
     }
   }
 }

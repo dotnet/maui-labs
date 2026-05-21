@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.DevFlow.Skills;
 using Microsoft.Maui.Cli.Utils;
@@ -22,6 +23,8 @@ public class DevFlowCommands
     private static IDevFlowOutputWriter? s_output;
     internal static Func<Task<int?>> ResolveRunningBrokerPortAsync { get; set; } = Broker.BrokerClient.GetRunningBrokerPortAsync;
     internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
+    internal static Func<AndroidDevFlowPortForwarder> CreateAndroidPortForwarder { get; set; } = AndroidDevFlowPortForwarder.CreateDefault;
+    internal static Func<bool> IsAndroidAdbLikelyAvailable { get; set; } = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
 
     private static IDevFlowOutputWriter Output => s_output ?? throw new InvalidOperationException("DevFlowCommands not initialized. Call CreateDevFlowCommand first.");
 
@@ -29,6 +32,8 @@ public class DevFlowCommands
     {
         ResolveRunningBrokerPortAsync = Broker.BrokerClient.GetRunningBrokerPortAsync;
         ListBrokerAgentsAsync = Broker.BrokerClient.ListAgentsAsync;
+        CreateAndroidPortForwarder = AndroidDevFlowPortForwarder.CreateDefault;
+        IsAndroidAdbLikelyAvailable = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
     }
 
     /// <summary>
@@ -47,6 +52,7 @@ public class DevFlowCommands
         // Global agent connection options (available on all subcommands)
         var agentPortOption = new Option<int>("--agent-port", "-ap") { Description = "Agent HTTP port (auto-discovered via broker, .mauidevflow, or default 9223)", DefaultValueFactory = _ => ResolveAgentPort() };
         var agentHostOption = new Option<string>("--agent-host", "-ah") { Description = "Agent HTTP host", DefaultValueFactory = _ => "localhost" };
+        var deviceOption = new Option<string?>("--device") { Description = "Device/emulator/simulator identifier for platform-specific DevFlow setup (currently used as an Android serial for ADB forwarding)" };
         var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform (maccatalyst, android, ios, windows)", DefaultValueFactory = _ => "maccatalyst" };
         var noJsonOption = new Option<bool>("--no-json") { Description = "Force human-readable output even when piped", DefaultValueFactory = _ => false };
 
@@ -55,6 +61,8 @@ public class DevFlowCommands
         devflowCommand.Add(agentPortOption);
         agentHostOption.Recursive = true;
         devflowCommand.Add(agentHostOption);
+        deviceOption.Recursive = true;
+        devflowCommand.Add(deviceOption);
         platformOption.Recursive = true;
         devflowCommand.Add(platformOption);
         noJsonOption.Recursive = true;
@@ -1368,7 +1376,8 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), ct);
+            var deviceId = ctx.GetValue(deviceOption);
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), deviceId, ct);
         });
         devflowCommand.Add(listCmd);
 
@@ -1378,7 +1387,8 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), ct);
+            var deviceId = ctx.GetValue(deviceOption);
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), deviceId, ct);
         });
         devflowCommand.Add(diagnoseCmd);
 
@@ -1397,7 +1407,8 @@ public class DevFlowCommands
             var waitPlatform = ctx.GetValue(waitPlatformOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), ct);
+            var deviceId = ctx.GetValue(deviceOption);
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), deviceId, ct);
         });
         devflowCommand.Add(waitCmd);
 
@@ -1422,7 +1433,8 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), ct);
+            var deviceId = ctx.GetValue(deviceOption);
+            await ListAgentsCommandAsync(output.ResolveJsonMode(json, noJson), deviceId, ct);
         });
         agentCommand.Add(agentListCmd);
 
@@ -1440,7 +1452,8 @@ public class DevFlowCommands
             var waitPlatform = ctx.GetValue(agentWaitPlatformOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), ct);
+            var deviceId = ctx.GetValue(deviceOption);
+            await WaitForAgentCommandAsync(timeout, project, waitPlatform, output.ResolveJsonMode(json, noJson), deviceId, ct);
         });
         agentCommand.Add(agentWaitCmd);
 
@@ -1449,11 +1462,58 @@ public class DevFlowCommands
         {
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), ct);
+            var deviceId = ctx.GetValue(deviceOption);
+            await DiagnoseCommandAsync(output.ResolveJsonMode(json, noJson), deviceId, ct);
         });
         agentCommand.Add(agentDiagnoseCmd);
 
         devflowCommand.Add(agentCommand);
+
+        // ===== extensions command (agent extension discovery + invocation) =====
+        var extensionsCommand = new Command("extensions", "Discover and call DevFlow agent extensions");
+
+        var extListCmd = new Command("list", "List all registered extensions on the connected agent");
+        extListCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await ExtensionsListAsync(host, port, output.ResolveJsonMode(json, noJson));
+        });
+        extensionsCommand.Add(extListCmd);
+
+        var extDescribeNamespaceArg = new Argument<string>("namespace") { Description = "Extension namespace in reverse-domain notation" };
+        var extDescribeCmd = new Command("describe", "Describe extension tools") { extDescribeNamespaceArg };
+        extDescribeCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var ns = ctx.GetValue(extDescribeNamespaceArg)!;
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await ExtensionsDescribeAsync(host, port, ns, output.ResolveJsonMode(json, noJson));
+        });
+        extensionsCommand.Add(extDescribeCmd);
+
+        var extCallNamespaceArg = new Argument<string>("namespace") { Description = "Extension namespace in reverse-domain notation" };
+        var extToolArg = new Argument<string>("tool") { Description = "Tool name within the extension" };
+        var extParametersArg = new Argument<string?>("parameters") { Description = "Optional JSON parameters", DefaultValueFactory = _ => null };
+        var extCallCmd = new Command("call", "Call an extension tool") { extCallNamespaceArg, extToolArg, extParametersArg };
+        extCallCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var ns = ctx.GetValue(extCallNamespaceArg)!;
+            var tool = ctx.GetValue(extToolArg)!;
+            var parameters = ctx.GetValue(extParametersArg);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await ExtensionsCallAsync(host, port, ns, tool, parameters, output.ResolveJsonMode(json, noJson));
+        });
+        extensionsCommand.Add(extCallCmd);
+
+        devflowCommand.Add(extensionsCommand);
 
         // ===== batch command (interactive stdin/stdout) =====
         var batchDelayOption = new Option<int>("--delay") { Description = "Delay in ms between commands", DefaultValueFactory = _ => 250 };
@@ -1512,12 +1572,157 @@ public class DevFlowCommands
 
         return devflowCommand;
     }
+
+    private static async Task ExtensionsListAsync(string host, int port, bool json)
+    {
+        try
+        {
+            using var client = new AgentClient(host, port);
+            var extensions = await client.GetExtensionsAsync();
+            if (json)
+            {
+                var result = new JsonObject
+                {
+                    ["extensions"] = JsonSerializer.SerializeToNode(
+                        extensions,
+                        typeof(Dictionary<string, ExtensionDescriptor>),
+                        DevFlowCliJsonContext.Default)
+                };
+                Output.WriteResult(result, json);
+                return;
+            }
+
+            if (extensions.Count == 0)
+            {
+                Console.WriteLine("No extensions registered on the connected agent.");
+                return;
+            }
+
+            Console.WriteLine($"{"Namespace",-35} {"Version",-10} {"Tools",-5} Description");
+            Console.WriteLine(new string('-', 90));
+            foreach (var (ns, extension) in extensions.OrderBy(e => e.Key, StringComparer.Ordinal))
+                Console.WriteLine($"{ns,-35} {extension.Version,-10} {extension.Tools.Count,-5} {extension.Description}");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+    }
+
+    private static async Task ExtensionsDescribeAsync(string host, int port, string ns, bool json)
+    {
+        try
+        {
+            using var client = new AgentClient(host, port);
+            var extensions = await client.GetExtensionsAsync();
+            if (!extensions.TryGetValue(ns, out var extension))
+            {
+                Output.WriteError($"Extension '{ns}' was not found.", json, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            if (json)
+            {
+                Output.WriteResult(extension, json);
+                return;
+            }
+
+            Console.WriteLine($"{ns} {extension.Version}");
+            Console.WriteLine(extension.Description);
+            Console.WriteLine();
+            Console.WriteLine($"{"Tool",-24} {"Method",-7} Path");
+            Console.WriteLine(new string('-', 80));
+            foreach (var tool in extension.Tools.OrderBy(t => t.Name, StringComparer.Ordinal))
+                Console.WriteLine($"{tool.Name,-24} {tool.Method,-7} {tool.Path}");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+    }
+
+    private static async Task ExtensionsCallAsync(string host, int port, string ns, string toolName, string? parameters, bool json)
+    {
+        try
+        {
+            using var client = new AgentClient(host, port);
+            var extensions = await client.GetExtensionsAsync();
+            if (!extensions.TryGetValue(ns, out var extension))
+            {
+                Output.WriteError($"Extension '{ns}' was not found.", json, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            var tool = extension.Tools.FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
+            if (tool == null)
+            {
+                Output.WriteError($"Tool '{toolName}' was not found in extension '{ns}'.", json, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            JsonElement? parameterJson = null;
+            if (!string.IsNullOrWhiteSpace(parameters))
+                parameterJson = CliJson.ParseElement(parameters);
+
+            var result = await client.CallExtensionToolAsync(tool.Method, tool.Path, parameterJson);
+            if (json)
+            {
+                Console.WriteLine(result);
+                return;
+            }
+
+            Console.WriteLine(TryFormatJson(result));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+    }
+
+    private static string TryFormatJson(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "{}";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(value);
+            return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException)
+        {
+            return value;
+        }
+    }
     
     // ===== CDP Helper: Send command via AgentClient =====
 
+    private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
+    {
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            var brokerPort = await ResolveRunningBrokerPortAsync();
+            if (brokerPort.HasValue)
+            {
+                var agents = await ListBrokerAgentsAsync(brokerPort.Value);
+                var agent = agents?.FirstOrDefault(a => a.Port == port);
+                if (agent is not null && IsAndroidAgent(agent))
+                    await EnsureAndroidForwardingForAgentsAsync([agent], deviceId: null, repair: true, emitWarnings: false, CancellationToken.None, brokerPort: brokerPort.Value);
+            }
+        }
+
+        return new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+    }
+
     private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
     {
-        using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+        using var client = await CreateAgentClientAsync(host, port);
         var result = await client.SendCdpCommandAsync(method, parameters, webview);
         return result;
     }
@@ -1779,7 +1984,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var result = await client.GetCdpWebViewsAsync();
             var body = result.ToString();
 
@@ -1820,7 +2025,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var source = await client.GetCdpSourceAsync(webview);
             Console.WriteLine(source);
         }
@@ -2194,7 +2399,7 @@ public class DevFlowCommands
 
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var results = await client.QueryAsync(type, automationId, text);
 
             if (results.Count == 0)
@@ -2277,7 +2482,7 @@ public class DevFlowCommands
             var resolvedId = await ResolveElementIdAsync(host, port, json, elementId, automationId, null, null, 0);
             if (resolvedId == null) return;
 
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var actualValue = await client.GetPropertyAsync(resolvedId, propertyName);
 
             var passed = string.Equals(actualValue, expectedValue, StringComparison.Ordinal);
@@ -2405,7 +2610,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync(window);
             if (status == null)
             {
@@ -2428,7 +2633,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var result = await client.GetThemeAsync();
             if (result == null)
             {
@@ -2472,7 +2677,7 @@ public class DevFlowCommands
 
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync();
 
             var platformName = status?.Platform ?? platform;
@@ -2525,7 +2730,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var tree = await client.GetTreeAsync(depth, window);
             if (json)
             {
@@ -2544,7 +2749,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
 
             if (!string.IsNullOrWhiteSpace(waitUntil))
             {
@@ -2626,7 +2831,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var result = await client.HitTestAsync(x, y, window);
             if (json)
                 Console.WriteLine(result);
@@ -2640,7 +2845,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.TapAsync(elementId);
             Output.WriteActionResult(success, "Tapped", elementId, json,
                 success ? $"Tapped: {elementId}" : $"Failed to tap: {elementId}");
@@ -2653,7 +2858,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.FillAsync(elementId, text);
             Output.WriteActionResult(success, "Filled", elementId, json,
                 success ? $"Filled: {elementId}" : $"Failed to fill: {elementId}");
@@ -2666,7 +2871,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.ClearAsync(elementId);
             Output.WriteActionResult(success, "Cleared", elementId, json,
                 success ? $"Cleared: {elementId}" : $"Failed to clear: {elementId}");
@@ -2690,7 +2895,7 @@ public class DevFlowCommands
             byte[]? data = null;
             bool fromSimctl = false;
 
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
 
             // For full-screen captures (no element scoping), try simctl io screenshot first
             // when connected to an iOS simulator. This captures everything on the simulator
@@ -2888,7 +3093,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var value = await client.GetPropertyAsync(elementId, propertyName);
             if (json)
             {
@@ -2910,7 +3115,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.SetPropertyAsync(elementId, propertyName, value);
             if (success)
             {
@@ -2930,7 +3135,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var el = await client.GetElementAsync(elementId);
             if (el == null)
             {
@@ -2948,7 +3153,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.NavigateAsync(route);
             Output.WriteActionResult(success, "Navigated", route, json,
                 success ? $"Navigated to: {route}" : $"Failed to navigate to: {route}");
@@ -2961,7 +3166,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.ScrollAsync(elementId, dx, dy, animated, window, itemIndex, groupIndex, scrollToPosition);
             if (json)
             {
@@ -2985,7 +3190,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.FocusAsync(elementId);
             Output.WriteActionResult(success, "Focused", elementId, json,
                 success ? $"Focused: {elementId}" : $"Failed to focus: {elementId}");
@@ -2998,7 +3203,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var success = await client.ResizeAsync(width, height, window);
             if (json)
                 Output.WriteActionResult(success, "Resized", $"{width}x{height}", json);
@@ -3013,7 +3218,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var body = await client.GetLogsAsync(limit, skip, source);
 
             if (json)
@@ -3276,7 +3481,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var requests = await client.GetNetworkRequestsAsync(limit, filterHost, filterMethod);
 
             if (json)
@@ -3309,7 +3514,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var req = await client.GetNetworkRequestDetailAsync(id);
 
             if (req == null)
@@ -3366,7 +3571,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var result = await client.ClearNetworkRequestsAsync();
             Output.WriteActionResult(result, "NetworkCleared", null, json,
                 result ? "Network request buffer cleared." : "Failed to clear.");
@@ -3631,7 +3836,7 @@ public class DevFlowCommands
         // Auto-detect from connected agent
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync();
             if (status?.Platform != null)
             {
@@ -3688,7 +3893,7 @@ public class DevFlowCommands
         // Try to find the PID by checking what's listening on the agent port
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync();
             var appName = status?.App?.Name ?? status?.AppName;
             if (!string.IsNullOrWhiteSpace(appName))
@@ -3711,7 +3916,7 @@ public class DevFlowCommands
 
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync();
             var appName = status?.App?.Name ?? status?.AppName;
             if (!string.IsNullOrWhiteSpace(appName))
@@ -3935,33 +4140,155 @@ public class DevFlowCommands
     {
         try
         {
-            var port = Broker.BrokerClient.ResolveAgentPortForProjectAsync().GetAwaiter().GetResult();
-            if (port.HasValue) return port.Value;
+            var brokerPort = Broker.BrokerClient.GetRunningBrokerPort();
+            if (brokerPort.HasValue)
+            {
+                Broker.AgentRegistration? agent = null;
+                var csproj = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj").FirstOrDefault();
+                if (csproj is not null)
+                    agent = Broker.BrokerClient.ResolveAgent(brokerPort.Value, Path.GetFullPath(csproj));
+
+                agent ??= Broker.BrokerClient.ResolveAgent(brokerPort.Value);
+                if (agent is not null)
+                    return agent.Port;
+
+                // Multiple agents, can't disambiguate — show them so the caller
+                // (human or AI agent) can re-run with --agent-port
+                var agents = Broker.BrokerClient.ListAgents(brokerPort.Value);
+                if (agents != null && agents.Length > 1)
+                {
+                    Console.Error.WriteLine("Multiple agents connected. Use --agent-port to specify which one:");
+                    Console.Error.WriteLine();
+                    Console.Error.WriteLine($"{"ID",-15}{"App",-20}{"Platform",-15}{"TFM",-25}{"Port",-7}");
+                    Console.Error.WriteLine(new string('-', 82));
+                    foreach (var a in agents)
+                        Console.Error.WriteLine($"{a.Id,-15}{a.AppName,-20}{a.Platform,-15}{a.Tfm,-25}{a.Port,-7}");
+                    Console.Error.WriteLine();
+                    Console.Error.WriteLine("Example: maui devflow ui status --agent-port <port>");
+                }
+            }
 
             // No single match — check config file fallback
             var configPort = Broker.BrokerClient.ReadConfigPort();
-            if (configPort.HasValue) return configPort.Value;
-
-            // Multiple agents, can't disambiguate — show them so the caller
-            // (human or AI agent) can re-run with --agent-port
-            var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic() ?? Broker.BrokerServer.DefaultPort;
-            var agents = Broker.BrokerClient.ListAgentsAsync(brokerPort).GetAwaiter().GetResult();
-            if (agents != null && agents.Length > 1)
-            {
-                Console.Error.WriteLine("Multiple agents connected. Use --agent-port to specify which one:");
-                Console.Error.WriteLine();
-                Console.Error.WriteLine($"{"ID",-15}{"App",-20}{"Platform",-15}{"TFM",-25}{"Port",-7}");
-                Console.Error.WriteLine(new string('-', 82));
-                foreach (var a in agents)
-                    Console.Error.WriteLine($"{a.Id,-15}{a.AppName,-20}{a.Platform,-15}{a.Tfm,-25}{a.Port,-7}");
-                Console.Error.WriteLine();
-                Console.Error.WriteLine("Example: maui devflow ui status --agent-port <port>");
-            }
+            if (configPort.HasValue)
+                return configPort.Value;
         }
         catch { /* broker unavailable, fall through */ }
 
         return Broker.BrokerClient.ReadConfigPort() ?? 9223;
     }
+
+    private static async Task<AndroidDevFlowForwardingReport?> EnsureAndroidForwardingForAgentsAsync(
+        IEnumerable<Broker.AgentRegistration> agents,
+        string? deviceId,
+        bool repair,
+        bool emitWarnings,
+        CancellationToken cancellationToken,
+        int? brokerPort = null)
+    {
+        var androidPorts = agents
+            .Where(IsAndroidAgent)
+            .Select(static a => a.Port)
+            .Distinct()
+            .ToArray();
+
+        if (androidPorts.Length == 0)
+            return null;
+
+        return await EnsureAndroidForwardingForPortsAsync(
+            androidPorts,
+            ensureBrokerReverse: true,
+            deviceId,
+            repair,
+            emitWarnings,
+            cancellationToken,
+            brokerPort: brokerPort);
+    }
+
+    private static async Task<AndroidDevFlowForwardingReport?> EnsureAndroidForwardingForPortsAsync(
+        int[] agentPorts,
+        bool ensureBrokerReverse,
+        string? deviceId,
+        bool repair,
+        bool emitWarnings,
+        CancellationToken cancellationToken,
+        int? brokerPort = null)
+    {
+        // Short-circuit on machines without an Android SDK so we don't pay the
+        // cost of instantiating AndroidProvider / building env vars on every
+        // devflow list/wait/diagnose invocation on desktop-only dev boxes.
+        if (!IsAndroidAdbLikelyAvailable())
+            return null;
+
+        try
+        {
+            var report = await CreateAndroidPortForwarder().EnsureAsync(new AndroidDevFlowForwardingRequest
+            {
+                AgentPorts = agentPorts,
+                EnsureBrokerReverse = ensureBrokerReverse,
+                BrokerPort = brokerPort ?? Broker.BrokerClient.ReadBrokerPortPublic() ?? Broker.BrokerServer.DefaultPort,
+                Repair = repair,
+                DeviceSerial = deviceId
+            }, cancellationToken);
+
+            if (emitWarnings)
+                WriteAndroidForwardingWarning(report);
+
+            return report;
+        }
+        catch (Exception ex)
+        {
+            if (emitWarnings)
+                Console.Error.WriteLine($"Android DevFlow forwarding check failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static void WriteAndroidForwardingWarning(AndroidDevFlowForwardingReport report)
+    {
+        if (report.IsReady || report.Status is AndroidDevFlowForwardingStatus.NoDevice or AndroidDevFlowForwardingStatus.AdbNotFound)
+            return;
+
+        Console.Error.WriteLine($"Android DevFlow forwarding: {report.Message ?? report.Status.ToString()}");
+        foreach (var suggestion in report.Suggestions)
+            Console.Error.WriteLine($"  {suggestion}");
+    }
+
+    private static void PrintAndroidForwardingDiagnostics(AndroidDevFlowForwardingReport? report)
+    {
+        if (report is null)
+            return;
+
+        Console.WriteLine("Android forwarding:");
+        Console.WriteLine($"   ADB:              {(report.AdbAvailable ? "available" : "not found")}");
+        if (!string.IsNullOrWhiteSpace(report.SelectedSerial))
+            Console.WriteLine($"   Device:           {report.SelectedSerial}");
+        else if (report.Devices.Length > 0)
+            Console.WriteLine($"   Devices:          {report.Devices.Length} Android device(s), {report.Devices.Count(static d => d.IsOnline)} online");
+        else
+            Console.WriteLine("   Devices:          none online");
+
+        var brokerReverseStatus = report.BrokerReverseChecked
+            ? (report.BrokerReversePresent ? "ready" : "missing")
+            : "not checked";
+        Console.WriteLine($"   Broker reverse:   {brokerReverseStatus} (tcp:{report.BrokerPort})");
+
+        if (report.AgentForwards.Length > 0)
+        {
+            foreach (var forward in report.AgentForwards)
+                Console.WriteLine($"   Agent forward:    {(forward.PresentAfter ? "ready" : "missing")} (tcp:{forward.Port})");
+        }
+
+        if (!string.IsNullOrWhiteSpace(report.Message))
+            Console.WriteLine($"   Status:           {report.Message}");
+
+        foreach (var suggestion in report.Suggestions)
+            Console.WriteLine($"   Suggestion:       {suggestion}");
+    }
+
+    private static bool IsAndroidAgent(Broker.AgentRegistration agent)
+        => agent.Platform.Contains("Android", StringComparison.OrdinalIgnoreCase)
+           || agent.Tfm.Contains("-android", StringComparison.OrdinalIgnoreCase);
 
     // ===== Broker Commands =====
 
@@ -4074,7 +4401,7 @@ public class DevFlowCommands
             Console.WriteLine(lines[i]);
     }
 
-    private static async Task ListAgentsCommandAsync(bool json, CancellationToken cancellationToken)
+    private static async Task ListAgentsCommandAsync(bool json, string? deviceId, CancellationToken cancellationToken)
     {
         await WriteSkillFreshnessHintAsync(json, cancellationToken);
 
@@ -4129,6 +4456,8 @@ public class DevFlowCommands
             return;
         }
 
+        await EnsureAndroidForwardingForAgentsAsync(agents, deviceId, repair: true, emitWarnings: !json, cancellationToken, brokerPort: port.Value);
+
         if (json)
         {
             Output.WriteResult(agents, json);
@@ -4149,7 +4478,7 @@ public class DevFlowCommands
         }
     }
 
-    private static async Task DiagnoseCommandAsync(bool json, CancellationToken cancellationToken)
+    private static async Task DiagnoseCommandAsync(bool json, string? deviceId, CancellationToken cancellationToken)
     {
         await WriteSkillFreshnessHintAsync(json, cancellationToken);
 
@@ -4172,6 +4501,24 @@ public class DevFlowCommands
             foreach (var agent in agents)
                 agentsJson.Add(CliJson.ParseNode(CliJson.SerializeUntyped(agent, indented: false)));
         }
+
+        var androidAgentPorts = agents?
+            .Where(IsAndroidAgent)
+            .Select(static a => a.Port)
+            .Distinct()
+            .ToArray() ?? [];
+        AndroidDevFlowForwardingReport? androidForwarding = null;
+        if (androidAgentPorts.Length > 0 || !string.IsNullOrWhiteSpace(deviceId))
+        {
+            androidForwarding = await EnsureAndroidForwardingForPortsAsync(
+                androidAgentPorts,
+                ensureBrokerReverse: true,
+                deviceId,
+                repair: false,
+                emitWarnings: false,
+                cancellationToken,
+                brokerPort: brokerPort);
+        }
         
         // Scan for devflow-enabled projects
         var projects = ScanForDevFlowProjects();
@@ -4190,6 +4537,8 @@ public class DevFlowCommands
             };
             if (brokerPort is not null)
                 diagnostics["broker_port"] = brokerPort;
+            if (androidForwarding is not null)
+                diagnostics["android"] = CliJson.ParseNode(CliJson.SerializeUntyped(androidForwarding, indented: false));
             Output.WriteResult(diagnostics, json);
             return;
         }
@@ -4227,9 +4576,12 @@ public class DevFlowCommands
         {
             Console.WriteLine("⚠️  No agents connected");
         }
-        
+
         Console.WriteLine();
-        
+        PrintAndroidForwardingDiagnostics(androidForwarding);
+
+        Console.WriteLine();
+
         if (projects.Length > 0)
         {
             Console.WriteLine("📦 DevFlow-enabled projects:");
@@ -4253,7 +4605,7 @@ public class DevFlowCommands
         }
     }
 
-    private static async Task WaitForAgentCommandAsync(int timeoutSeconds, string? projectFilter, string? platformFilter, bool json, CancellationToken cancellationToken)
+    private static async Task WaitForAgentCommandAsync(int timeoutSeconds, string? projectFilter, string? platformFilter, bool json, string? deviceId, CancellationToken cancellationToken)
     {
         await WriteSkillFreshnessHintAsync(json, cancellationToken);
 
@@ -4264,6 +4616,9 @@ public class DevFlowCommands
             Environment.ExitCode = 1;
             return;
         }
+
+        if (ShouldPrepareAndroidBrokerReverse(platformFilter))
+            await EnsureAndroidForwardingForPortsAsync([], ensureBrokerReverse: true, deviceId, repair: true, emitWarnings: !json, cancellationToken, brokerPort: brokerPort.Value);
 
         // Resolve project filter to full path for matching
         string? resolvedProject = null;
@@ -4296,6 +4651,9 @@ public class DevFlowCommands
             return;
         }
 
+        if (IsAndroidAgent(matched))
+            await EnsureAndroidForwardingForAgentsAsync([matched], deviceId, repair: true, emitWarnings: !json, cancellationToken, brokerPort: brokerPort.Value);
+
         if (json)
         {
             Console.WriteLine(CliJson.SerializeUntyped(matched, indented: false));
@@ -4305,6 +4663,10 @@ public class DevFlowCommands
             Console.WriteLine(matched.Port);
         }
     }
+
+    private static bool ShouldPrepareAndroidBrokerReverse(string? platformFilter)
+        => string.IsNullOrWhiteSpace(platformFilter)
+           || platformFilter.Contains("Android", StringComparison.OrdinalIgnoreCase);
 
     private static Broker.AgentRegistration? FindMatchingAgent(Broker.AgentRegistration[] agents, string? projectFilter, string? platformFilter)
     {

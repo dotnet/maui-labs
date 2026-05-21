@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
+using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
@@ -330,6 +331,31 @@ public class UiActionTests : IntegrationTestBase
         await Client.ClearAsync(descEntry.Id);
     }
 
+    [Fact]
+    public async Task Tap_WindowsNativeAlertButton_DismissesDialog()
+    {
+        if (!Platform.Equals("windows", StringComparison.OrdinalIgnoreCase))
+        {
+            Output.WriteLine("Windows native dialog action test skipped on non-Windows platform.");
+            return;
+        }
+
+        await NavigateToPageAsync("//dialogs", "AlertOkOnlyBtn");
+
+        var trigger = await FindElementAsync("AlertOkOnlyBtn");
+        var triggered = await Client.TapAsync(trigger.Id).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(triggered);
+
+        var okButton = await WaitForNativeButtonAsync("OK");
+        Assert.True(await Client.TapAsync(okButton.Id));
+
+        await WaitForAsync(async () =>
+        {
+            var status = await FindElementAsync("DialogStatusLabel");
+            return status.Text?.Contains("OK dismissed", StringComparison.OrdinalIgnoreCase) == true;
+        }, timeoutMs: 5000);
+    }
+
     async Task CleanupAddedTodoAsync(string todoTitle)
     {
         try
@@ -346,5 +372,20 @@ public class UiActionTests : IntegrationTestBase
         {
             Output.WriteLine($"Cleanup warning: Could not delete todo '{todoTitle}': {ex.Message}");
         }
+    }
+
+    async Task<ElementInfo> WaitForNativeButtonAsync(string text)
+    {
+        ElementInfo? match = null;
+        await WaitForAsync(async () =>
+        {
+            var buttons = await Client.QueryAsync(type: "Button", text: text);
+            match = buttons.FirstOrDefault(e =>
+                e.Id.StartsWith("native:", StringComparison.Ordinal) &&
+                string.Equals(e.Text, text, StringComparison.OrdinalIgnoreCase));
+            return match is not null;
+        }, timeoutMs: 5000);
+
+        return match!;
     }
 }

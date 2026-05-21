@@ -64,6 +64,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         RegisterStorageEndpoints(_app);
         RegisterWebViewEndpoints(_app);
         RegisterNetworkEndpoints(_app);
+        RegisterExtensionEndpoints(_app);
 
         await _app.StartAsync();
         Port = _app.Urls.Select(url => new Uri(url).Port).First();
@@ -88,6 +89,18 @@ public sealed class MockAgentServer : IAsyncDisposable
     {
         app.MapGet("/api/v1/agent/status", () => Results.Content(MockAgentResponses.AgentStatus, "application/json"));
         app.MapGet("/api/v1/agent/capabilities", () => Results.Content(MockAgentResponses.AgentCapabilities, "application/json"));
+    }
+
+    private static void RegisterExtensionEndpoints(WebApplication app)
+    {
+        app.MapGet("/api/v1/ext/com.example.diagnostics/build-info", () =>
+            Results.Content("""{"app":"TestApp","version":"1.0.0","build":"42"}""", "application/json"));
+        app.MapPost("/api/v1/ext/com.example.diagnostics/echo", async (HttpContext context) =>
+        {
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+            var body = await reader.ReadToEndAsync();
+            return Results.Content($$"""{"body":{{body}}}""", "application/json");
+        });
     }
 
     private static void RegisterUiEndpoints(WebApplication app)

@@ -34,23 +34,77 @@ internal static class MockAgentResponses
             "logs": true,
             "sensors": true,
             "storage": true,
-            "profiler": true
+            "profiler": true,
+            "theme": true
           },
           "running": true,
           "cdpReady": true,
-          "cdpWebViewCount": 1
+          "cdpWebViewCount": 1,
+          "extensions": {
+            "count": 1,
+            "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
         }
         """;
 
     public const string AgentCapabilities = """
         {
-          "ui": { "supported": true, "features": ["tree", "query", "tap", "fill", "batch"] },
-          "webview": { "supported": true, "features": ["contexts", "evaluate", "source"] },
-          "network": { "supported": true, "features": ["list", "detail", "clear"] },
-          "logs": { "supported": true, "features": ["list", "stream"] },
-          "sensors": { "supported": true, "features": ["list", "start", "stop"] },
-          "storage": { "supported": true, "features": ["preferences", "secure-storage", "roots", "files"] },
-          "profiler": { "supported": true, "features": ["capabilities", "sessions", "samples"] }
+          "agent": {
+            "name": "Microsoft.Maui.DevFlow.Agent",
+            "version": "0.1.0-test",
+            "framework": "maui",
+            "frameworkVersion": "10.0.0"
+          },
+          "capabilities": {
+            "ui.tree": { "version": 1, "features": ["tree", "query"] },
+            "ui.actions": { "version": 1, "features": ["tap", "fill", "batch"] },
+            "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
+            "network": { "version": 1, "features": ["list", "detail", "clear"] },
+            "logs": { "version": 1, "features": ["list", "stream"] },
+            "device.sensors": { "version": 1, "features": ["list", "start", "stop"] },
+            "storage.preferences": { "version": 1, "features": ["list", "get", "set", "delete", "clear"] },
+            "storage.secure": { "version": 1, "features": ["get", "set", "delete", "clear"] },
+            "storage.files": { "version": 1, "features": ["roots", "list", "download", "upload", "delete"] },
+            "profiler": { "version": 1, "features": ["capabilities", "sessions", "samples"] },
+            "theme": { "version": 1, "supported": true, "features": ["get", "set"] },
+            "app.theme": { "version": 1, "supported": true, "features": ["get", "set"] },
+            "com.example.diagnostics": { "version": 1, "features": ["build_info", "echo"] }
+          },
+          "extensions": {
+            "com.example.diagnostics": {
+              "version": "1.0.0",
+              "description": "Sample diagnostics extension",
+              "tools": [
+                {
+                  "name": "build_info",
+                  "description": "Returns build information.",
+                  "method": "GET",
+                  "path": "/api/v1/ext/com.example.diagnostics/build-info",
+                  "returns": { "type": "object" },
+                  "annotations": {
+                    "readOnly": true,
+                    "idempotent": true,
+                    "destructive": false,
+                    "category": "diagnostics"
+                  }
+                },
+                {
+                  "name": "echo",
+                  "description": "Echoes request parameters.",
+                  "method": "POST",
+                  "path": "/api/v1/ext/com.example.diagnostics/echo",
+                  "parameters": { "type": "object" },
+                  "returns": { "type": "object" },
+                  "annotations": {
+                    "readOnly": false,
+                    "idempotent": true,
+                    "destructive": false,
+                    "category": "diagnostics"
+                  }
+                }
+              ]
+            }
+          }
         }
         """;
 

@@ -113,6 +113,7 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 - **Device Introspection** — battery, connectivity, geolocation, display, permissions, and sensor data
 - **Dialog Handling** — detect and dismiss alerts/action sheets programmatically
 - **Batch Operations** — execute command sequences from stdin for scripting
+- **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
 
 ## CLI Commands
@@ -128,6 +129,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | `network` | Monitor and inspect HTTP requests |
 | `storage` | Read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `agent` | Discover and inspect connected agents (status, list, wait, diagnose) |
+| `extensions` | List, describe, and call app-specific DevFlow extension tools |
 | `broker` | Manage the agent broker (start, stop, status, log) |
 | `batch` | Execute command sequences from stdin |
 | `commands` | List all available commands (schema discovery) |

@@ -214,4 +214,56 @@ public class UiInspectionTests : IntegrationTestBase
 
         Assert.True(bytes.Length > 0);
     }
+
+    [Fact]
+    public async Task Tree_WindowsNativeDialog_IncludesNativeElements()
+    {
+        if (!Platform.Equals("windows", StringComparison.OrdinalIgnoreCase))
+        {
+            Output.WriteLine("Windows native dialog inspection test skipped on non-Windows platform.");
+            return;
+        }
+
+        await NavigateToPageAsync("//dialogs", "AlertOkOnlyBtn");
+
+        var trigger = await FindElementAsync("AlertOkOnlyBtn");
+        Assert.True(await Client.TapAsync(trigger.Id).WaitAsync(TimeSpan.FromSeconds(5)));
+
+        var okButton = await WaitForNativeButtonAsync("OK");
+        var tree = await Client.GetTreeAsync(maxDepth: 8);
+        var flattened = Flatten(tree).ToList();
+
+        Assert.Contains(flattened, e => e.Id.StartsWith("native:", StringComparison.Ordinal));
+        Assert.Contains(flattened, e => e.Id.StartsWith("native:", StringComparison.Ordinal) && e.Traits?.Contains("dialog") == true);
+
+        Assert.True(await Client.TapAsync(okButton.Id));
+    }
+
+    async Task<ElementInfo> WaitForNativeButtonAsync(string text)
+    {
+        ElementInfo? match = null;
+        await WaitForAsync(async () =>
+        {
+            var buttons = await Client.QueryAsync(type: "Button", text: text);
+            match = buttons.FirstOrDefault(e =>
+                e.Id.StartsWith("native:", StringComparison.Ordinal) &&
+                string.Equals(e.Text, text, StringComparison.OrdinalIgnoreCase));
+            return match is not null;
+        }, timeoutMs: 5000);
+
+        return match!;
+    }
+
+    static IEnumerable<ElementInfo> Flatten(IEnumerable<ElementInfo> elements)
+    {
+        foreach (var element in elements)
+        {
+            yield return element;
+            if (element.Children is not null)
+            {
+                foreach (var child in Flatten(element.Children))
+                    yield return child;
+            }
+        }
+    }
 }
