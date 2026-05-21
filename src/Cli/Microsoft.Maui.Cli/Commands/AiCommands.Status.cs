@@ -3,11 +3,8 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Ai;
-using Microsoft.Maui.Cli.Ai.Models;
-using Microsoft.Maui.Cli.Output;
 
 namespace Microsoft.Maui.Cli.Commands;
 
@@ -18,7 +15,7 @@ public static partial class AiCommands
 	/// </summary>
 	static Command CreateStatusCommand()
 	{
-		var command = new Command("status", "Show status of installed AI agent skills")
+		var command = new Command("status", "Show status of installed AI development assets")
 		{
 			CreateRepoOption(),
 			CreateBranchOption(),
@@ -46,54 +43,25 @@ public static partial class AiCommands
 
 				using var http = checkUpdates ? CreateGitHubHttpClient() : null;
 
-				var rows = new List<(string Skill, string Env, string Installed, string Status)>();
+				var rows = new List<AiAssetStatusRow>();
+				rows.AddRange(await GetDevFlowStatusRowsAsync(GetDevFlowBootstrapTargets(environments), ct));
+				rows.AddRange(await GetMarketplaceSkillStatusRowsAsync(environments, checkUpdates, http, repo, branch, ct));
 
-				foreach (var env in environments)
+				if (checkUpdates && http is not null)
 				{
-					if (!Directory.Exists(env.SkillsDirectory))
-						continue;
-
-					foreach (var skillDir in Directory.GetDirectories(env.SkillsDirectory))
-					{
-						var skillName = Path.GetFileName(skillDir);
-						var version = await SkillVersionStore.ReadAsync(skillDir, ct);
-
-						if (version is null)
-						{
-							rows.Add((skillName, env.Kind.ToString(), "Unknown", "Unknown"));
-							continue;
-						}
-
-						var installed = version.UpdatedAt is not null
-							? (DateTime.TryParse(version.UpdatedAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt) ? dt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : version.UpdatedAt)
-							: "Unknown";
-
-						var status = "Installed";
-
-						if (checkUpdates && http is not null && version.PluginPath is not null)
-						{
-							var remoteSha = await MarketplaceClient.GetRemoteCommitShaAsync(
-								http, repo, branch, version.PluginPath, ct);
-
-							if (remoteSha is not null && version.Commit is not null)
-							{
-								status = string.Equals(remoteSha, version.Commit, StringComparison.OrdinalIgnoreCase)
-									? "Up to date"
-									: "Update available";
-							}
-							else
-							{
-								status = "Unknown";
-							}
-						}
-
-						rows.Add((skillName, env.Kind.ToString(), installed, status));
-					}
+					var treeEntries = await MarketplaceClient.FetchTreeEntriesAsync(http, repo, branch, ct);
+					var agentAssets = await RepositoryAssetInstaller.GetCopilotAgentsAsync(http, repo, branch, treeEntries, ct);
+					var agentRows = await GetRemoteAgentStatusRowsAsync(http, agentAssets, workingDir, repo, branch, ct);
+					rows.AddRange(agentRows.Select(row => row.Row));
+				}
+				else
+				{
+					rows.AddRange(GetInstalledAgentStatusRows(workingDir));
 				}
 
 				if (rows.Count == 0)
 				{
-					formatter.WriteInfo("No skills installed. Run 'maui ai init' to get started.");
+					formatter.WriteInfo("No AI development assets found. Run 'maui ai init' to get started.");
 					return 0;
 				}
 
@@ -101,10 +69,12 @@ public static partial class AiCommands
 				{
 					var jsonArray = new JsonArray(rows.Select(r => (JsonNode)new JsonObject
 					{
-						["skill"] = r.Skill,
-						["environment"] = r.Env,
+						["item"] = r.Item,
+						["type"] = r.Type,
+						["target"] = r.Target,
 						["installed"] = r.Installed,
-						["status"] = r.Status
+						["status"] = r.Status,
+						["path"] = r.Path
 					}).ToArray());
 					formatter.Write(jsonArray);
 				}
@@ -112,10 +82,12 @@ public static partial class AiCommands
 				{
 					formatter.WriteTable(
 						rows,
-						("Skill", r => r.Skill),
-						("Environment", r => r.Env),
+						("Item", r => r.Item),
+						("Type", r => r.Type),
+						("Target", r => r.Target),
 						("Installed", r => r.Installed),
-						("Status", r => r.Status));
+						("Status", r => r.Status),
+						("Path", r => r.Path));
 				}
 
 				return 0;

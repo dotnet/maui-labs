@@ -10,8 +10,8 @@ namespace Microsoft.Maui.Cli.Ai;
 /// </summary>
 internal static class RepositoryAssetInstaller
 {
-	const string CopilotAgentsRoot = ".github/agents";
-	const string CopilotAgentsDestinationRoot = ".github/agents";
+	internal const string CopilotAgentsRoot = ".github/agents";
+	internal const string CopilotAgentsDestinationRoot = ".github/agents";
 
 	/// <summary>
 	/// Discovers MAUI-related Copilot agent definitions from <c>.github/agents</c>.
@@ -73,17 +73,14 @@ internal static class RepositoryAssetInstaller
 		bool force,
 		CancellationToken ct = default)
 	{
-		var destinationRoot = Path.Combine(
-			projectRoot,
-			MarketplaceClient.NormalizePath(asset.DestinationRoot).Replace('/', Path.DirectorySeparatorChar));
+		var destinationRoot = GetDestinationRoot(projectRoot, asset.DestinationRoot);
 		var destinationBase = Path.GetFullPath(destinationRoot) + Path.DirectorySeparatorChar;
 		Directory.CreateDirectory(destinationRoot);
 
 		var count = 0;
 		foreach (var filePath in asset.Files)
 		{
-			var relativePath = GetRemoteFileName(filePath);
-			var destinationPath = Path.Combine(destinationRoot, relativePath);
+			var destinationPath = GetAssetFilePath(projectRoot, asset, filePath);
 			var fullDestinationPath = Path.GetFullPath(destinationPath);
 			if (!fullDestinationPath.StartsWith(destinationBase, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
 				continue;
@@ -102,6 +99,51 @@ internal static class RepositoryAssetInstaller
 		return (count, destinationRoot);
 	}
 
+	/// <summary>
+	/// Discovers MAUI-related Copilot agent definitions already present in the target project.
+	/// </summary>
+	public static List<RepositoryAssetInfo> GetInstalledCopilotAgents(string projectRoot)
+	{
+		var destinationRoot = GetDestinationRoot(projectRoot, CopilotAgentsDestinationRoot);
+		var assets = new List<RepositoryAssetInfo>();
+		if (!Directory.Exists(destinationRoot))
+			return assets;
+
+		foreach (var filePath in Directory.GetFiles(destinationRoot, "*.agent.md", SearchOption.TopDirectoryOnly)
+			.OrderBy(path => path, StringComparer.Ordinal))
+		{
+			var content = File.ReadAllText(filePath);
+			var (name, description) = MarketplaceClient.ParseFrontmatter(content);
+			var fileName = Path.GetFileName(filePath);
+			var assetName = name ?? fileName[..^".agent.md".Length];
+			if (!IsMauiRelatedAgent(assetName, description, content))
+				continue;
+
+			assets.Add(new RepositoryAssetInfo
+			{
+				Name = assetName,
+				Category = "agent",
+				Description = description,
+				RemotePath = string.Empty,
+				DestinationRoot = CopilotAgentsDestinationRoot,
+				Files = [Path.Combine(destinationRoot, fileName)]
+			});
+		}
+
+		return assets;
+	}
+
+	internal static string GetAssetFilePath(string projectRoot, RepositoryAssetInfo asset, string filePath)
+	{
+		var destinationRoot = GetDestinationRoot(projectRoot, asset.DestinationRoot);
+		return Path.Combine(destinationRoot, GetRemoteFileName(filePath));
+	}
+
+	static string GetDestinationRoot(string projectRoot, string destinationRoot)
+		=> Path.Combine(
+			projectRoot,
+			MarketplaceClient.NormalizePath(destinationRoot).Replace('/', Path.DirectorySeparatorChar));
+
 	static bool IsMauiRelatedAgent(string name, string? description, string content)
 	{
 		var haystack = string.Join('\n', name, description, content);
@@ -109,7 +151,7 @@ internal static class RepositoryAssetInstaller
 			haystack.Contains("comet", StringComparison.OrdinalIgnoreCase);
 	}
 
-	static string GetRemoteFileName(string path)
+	internal static string GetRemoteFileName(string path)
 	{
 		var normalized = MarketplaceClient.NormalizePath(path);
 		var slashIndex = normalized.LastIndexOf('/');

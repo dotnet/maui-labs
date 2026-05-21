@@ -6,6 +6,7 @@ using System.CommandLine.Parsing;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Ai;
 using Microsoft.Maui.Cli.Ai.Models;
+using Microsoft.Maui.Cli.DevFlow.Skills;
 using Microsoft.Maui.Cli.Output;
 using Spectre.Console;
 
@@ -20,11 +21,11 @@ public static partial class AiCommands
 	{
 		var skillOption = new Option<string[]>("--skill")
 		{
-			Description = "Update only specific skills (repeatable)",
+			Description = "Update only specific skills or agents (repeatable)",
 			AllowMultipleArgumentsPerToken = true
 		};
 
-		var command = new Command("update", "Update installed AI agent skills to the latest version")
+		var command = new Command("update", "Update installed AI development assets to the latest version")
 		{
 			CreateRepoOption(),
 			CreateBranchOption(),
@@ -56,7 +57,43 @@ public static partial class AiCommands
 
 				using var http = CreateGitHubHttpClient();
 
-				// Scan installed skills and check for updates; de-duplicate by resolved path
+				List<SkillInfo> allSkills;
+				List<RepositoryAssetInfo> allAgentAssets;
+				if (!useJson && formatter is SpectreOutputFormatter spectre)
+				{
+					(allSkills, allAgentAssets) = await spectre.StatusAsync("Fetching AI assets...", async () =>
+						await FetchBootstrapAssetsAsync(http, repo, branch, ct));
+				}
+				else
+				{
+					(allSkills, allAgentAssets) = await FetchBootstrapAssetsAsync(http, repo, branch, ct);
+				}
+
+				var filterSpecified = skillFilter is { Length: > 0 };
+				var includeDevFlowSkills = filterSpecified
+					? skillFilter!.Any(IsDevFlowManagedSkillName)
+					: true;
+				var devFlowTargets = includeDevFlowSkills
+					? GetDevFlowBootstrapTargets(environments)
+					: [];
+				var selectedAgentAssets = filterSpecified
+					? allAgentAssets
+						.Where(asset => skillFilter!.Any(filter => string.Equals(filter, asset.Name, StringComparison.OrdinalIgnoreCase)))
+						.ToList()
+					: allAgentAssets;
+
+				var devFlowStatusRows = await GetDevFlowStatusRowsAsync(devFlowTargets, ct);
+				var devFlowTargetsToUpdate = devFlowTargets
+					.Where(target => devFlowStatusRows
+						.Where(row => row.Type == "DevFlow" && row.Target == target.DisplayName)
+						.Any(row => NeedsUpdate(row, force)))
+					.ToList();
+				var agentStatusRows = await GetRemoteAgentStatusRowsAsync(http, selectedAgentAssets, workingDir, repo, branch, ct);
+				var agentsToUpdate = agentStatusRows
+					.Where(row => NeedsUpdate(row.Row, force))
+					.ToList();
+
+				// Scan installed marketplace/repository skills and check for updates; de-duplicate by resolved path
 				// so environments sharing the same skills directory are not updated twice.
 				var updatable = new List<(DetectedEnvironment Env, string SkillDir, string SkillName, InstalledSkillVersion Version)>();
 				var processedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -74,9 +111,11 @@ public static partial class AiCommands
 							continue;
 
 						var skillName = Path.GetFileName(skillDir);
+						if (IsDevFlowManagedSkillName(skillName))
+							continue;
 
-						if (skillFilter is { Length: > 0 } &&
-							!skillFilter.Any(f => string.Equals(f, skillName, StringComparison.OrdinalIgnoreCase)))
+						if (filterSpecified &&
+							!skillFilter!.Any(f => string.Equals(f, skillName, StringComparison.OrdinalIgnoreCase)))
 							continue;
 
 						var version = await SkillVersionStore.ReadAsync(skillDir, ct);
@@ -108,24 +147,51 @@ public static partial class AiCommands
 					}
 				}
 
-				if (updatable.Count == 0)
+				if (updatable.Count == 0 && devFlowTargetsToUpdate.Count == 0 && agentsToUpdate.Count == 0)
 				{
-					formatter.WriteSuccess("All skills are up to date.");
+					formatter.WriteSuccess(filterSpecified ? "All selected AI development assets are up to date." : "All AI development assets are up to date.");
+					if (uncheckableCount > 0)
+					{
+						var skillWord = uncheckableCount == 1 ? "skill" : "skill(s)";
+						formatter.WriteWarning($"Could not check {uncheckableCount} {skillWord} — GitHub may be unreachable.");
+						if (isCi)
+							return 1;
+					}
+
 					return 0;
 				}
 
-				var updateWord = updatable.Count == 1 ? "skill" : "skills";
-				formatter.WriteInfo($"Found {updatable.Count} {updateWord} with updates available.");
+				var totalUpdates = updatable.Count + devFlowTargetsToUpdate.Count + agentsToUpdate.Count;
+				var updateWord = totalUpdates == 1 ? "AI asset group" : "AI asset groups";
+				formatter.WriteInfo($"Found {totalUpdates} {updateWord} with updates available.");
+
+				var updateRows = new List<AiAssetStatusRow>();
+				updateRows.AddRange(devFlowTargetsToUpdate.Select(target => new AiAssetStatusRow(
+					"recommended DevFlow skills",
+					"DevFlow",
+					target.DisplayName,
+					"",
+					"Update",
+					target.SkillsDirectory)));
+				updateRows.AddRange(updatable.Select(u => new AiAssetStatusRow(
+					u.SkillName,
+					"Skill",
+					u.Env.Kind.ToString(),
+					ShortCommit(u.Version.Commit),
+					"Update available",
+					u.SkillDir)));
+				updateRows.AddRange(agentsToUpdate.Select(row => row.Row));
 
 				if (dryRun)
 				{
-					formatter.WriteInfo("[Dry run] Would update the following skills:");
+					formatter.WriteInfo("[Dry run] Would update the following AI development assets:");
 					formatter.WriteTable(
-						updatable,
-						("Skill", u => u.SkillName),
-						("Environment", u => u.Env.Kind.ToString()),
-						("Current Commit", u => (u.Version.Commit ?? "unknown")[..Math.Min(u.Version.Commit?.Length ?? 7, 7)]),
-						("Path", u => u.SkillDir));
+						updateRows,
+						("Item", r => r.Item),
+						("Type", r => r.Type),
+						("Target", r => r.Target),
+						("Status", r => r.Status),
+						("Path", r => r.Path));
 					return 0;
 				}
 
@@ -133,10 +199,12 @@ public static partial class AiCommands
 				if (!force && !isCi && !useJson)
 				{
 					formatter.WriteTable(
-						updatable,
-						("Skill", u => u.SkillName),
-						("Environment", u => u.Env.Kind.ToString()),
-						("Path", u => u.SkillDir));
+						updateRows,
+						("Item", r => r.Item),
+						("Type", r => r.Type),
+						("Target", r => r.Target),
+						("Status", r => r.Status),
+						("Path", r => r.Path));
 
 					if (!AnsiConsole.Confirm("Proceed with update?", defaultValue: true))
 					{
@@ -145,19 +213,27 @@ public static partial class AiCommands
 					}
 				}
 
-				// Fetch marketplace to get skill metadata for re-download
-				List<SkillInfo> allSkills;
-				if (!useJson && formatter is SpectreOutputFormatter spectre)
-				{
-					allSkills = await spectre.StatusAsync("Fetching marketplace...", async () =>
-						await FetchAllSkillsAsync(http, repo, branch, ct));
-				}
-				else
-				{
-					allSkills = await FetchAllSkillsAsync(http, repo, branch, ct);
-				}
-
+				var devFlowResults = new List<(string Skill, string Target, string Action, string Path)>();
 				var results = new List<(string Skill, string Env, int Files)>();
+				var assetResults = new List<(string Asset, string Type, int Files, string Path)>();
+
+				foreach (var target in devFlowTargetsToUpdate)
+				{
+					var result = await DevFlowSkillManager.UpdateAsync(
+						target.Scope,
+						target.Target,
+						target.CustomPath,
+						force,
+						allowDowngrade: false,
+						confirm: null,
+						ct);
+
+					foreach (var row in GetDevFlowResultRows(result, target))
+					{
+						devFlowResults.Add(row);
+						formatter.WriteSuccess($"DevFlow {row.Action} {row.Skill} → {row.Target}");
+					}
+				}
 
 				foreach (var (env, skillDir, skillName, _) in updatable)
 				{
@@ -185,16 +261,42 @@ public static partial class AiCommands
 						formatter.WriteInfo($"Skipped {skillName} → {env.Kind} (no files downloaded)");
 				}
 
+				foreach (var (asset, _) in agentsToUpdate)
+				{
+					var (filesInstalled, installPath) = await RepositoryAssetInstaller.InstallAssetAsync(
+						http, asset, workingDir, repo, branch, force: true, ct);
+
+					assetResults.Add((asset.Name, asset.Category, filesInstalled, installPath));
+					if (filesInstalled > 0)
+						formatter.WriteSuccess($"Updated {asset.Name} → {asset.Category} ({filesInstalled} files)");
+					else
+						formatter.WriteWarning($"Could not update {asset.Name} → {asset.Category}");
+				}
+
 				if (useJson)
 				{
 					var jsonResult = new JsonObject
 					{
 						["status"] = "success",
+						["devFlowSkills"] = new JsonArray(devFlowResults.Select(r => (JsonNode)new JsonObject
+						{
+							["skill"] = r.Skill,
+							["target"] = r.Target,
+							["action"] = r.Action,
+							["path"] = r.Path
+						}).ToArray()),
 						["updated"] = new JsonArray(results.Select(r => (JsonNode)new JsonObject
 						{
 							["skill"] = r.Skill,
 							["environment"] = r.Env,
 							["files"] = r.Files
+						}).ToArray()),
+						["assets"] = new JsonArray(assetResults.Select(r => (JsonNode)new JsonObject
+						{
+							["asset"] = r.Asset,
+							["type"] = r.Type,
+							["files"] = r.Files,
+							["path"] = r.Path
 						}).ToArray())
 					};
 					formatter.Write(jsonResult);
@@ -223,4 +325,9 @@ public static partial class AiCommands
 
 		return command;
 	}
+
+	static string ShortCommit(string? commit)
+		=> string.IsNullOrEmpty(commit)
+			? "unknown"
+			: commit[..Math.Min(commit.Length, 7)];
 }

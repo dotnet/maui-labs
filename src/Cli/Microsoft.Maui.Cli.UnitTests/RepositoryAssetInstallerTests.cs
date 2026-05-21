@@ -86,6 +86,60 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 		Assert.Equal(Path.Combine(_tempDir, ".github", "agents"), first.InstallPath);
 	}
 
+	[Fact]
+	public void GetInstalledCopilotAgents_ReturnsOnlyMauiRelatedAgents()
+	{
+		var agentsDir = Path.Combine(_tempDir, ".github", "agents");
+		Directory.CreateDirectory(agentsDir);
+		File.WriteAllText(Path.Combine(agentsDir, "expert-reviewer.agent.md"), """
+			---
+			name: expert-reviewer
+			description: Expert .NET MAUI DevFlow code reviewer.
+			---
+			# Expert Reviewer
+			""");
+		File.WriteAllText(Path.Combine(agentsDir, "generic.agent.md"), """
+			---
+			name: generic
+			description: Generic workflow helper.
+			---
+			# Generic
+			""");
+
+		var assets = RepositoryAssetInstaller.GetInstalledCopilotAgents(_tempDir);
+
+		var asset = Assert.Single(assets);
+		Assert.Equal("expert-reviewer", asset.Name);
+		Assert.Equal("agent", asset.Category);
+		Assert.Equal(".github/agents", asset.DestinationRoot);
+	}
+
+	[Fact]
+	public async Task InstallAssetAsync_ForceOverwritesExistingAgent()
+	{
+		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>
+		{
+			["expert-reviewer.agent.md"] = "updated agent content"
+		}));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			RemotePath = ".github/agents/expert-reviewer.agent.md",
+			DestinationRoot = ".github/agents",
+			Files = [".github/agents/expert-reviewer.agent.md"]
+		};
+		var localPath = Path.Combine(_tempDir, ".github", "agents", "expert-reviewer.agent.md");
+		Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
+		await File.WriteAllTextAsync(localPath, "old content");
+
+		var result = await RepositoryAssetInstaller.InstallAssetAsync(
+			http, asset, _tempDir, "owner/repo", "main", force: true);
+
+		Assert.Equal(1, result.FilesInstalled);
+		Assert.Equal("updated agent content", await File.ReadAllTextAsync(localPath));
+	}
+
 	sealed class MapHttpMessageHandler(Dictionary<string, string> responses) : HttpMessageHandler
 	{
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

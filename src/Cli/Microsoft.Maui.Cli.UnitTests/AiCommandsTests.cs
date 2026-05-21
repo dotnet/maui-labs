@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Ai.Models;
 using Microsoft.Maui.Cli.Commands;
 using Xunit;
@@ -202,6 +203,51 @@ public class AiCommandsTests
 
 		Assert.Equal("auto", target.Target);
 		Assert.Equal(Path.Combine(".opencode", "skills"), target.CustomPath);
+	}
+
+	[Fact]
+	public void GetDevFlowStatusRows_MapsBundledSkillStatus()
+	{
+		var result = new JsonObject
+		{
+			["skills"] = new JsonArray(new JsonObject
+			{
+				["skillId"] = "maui-devflow-debug",
+				["installedVersion"] = "1.0.0",
+				["status"] = "up-to-date",
+				["path"] = ".github/skills/maui-devflow-debug"
+			})
+		};
+		var target = new AiDevFlowBootstrapTarget(
+			"project",
+			"github",
+			null,
+			"VsCode",
+			Path.Combine("repo", ".github", "skills"));
+
+		var row = Assert.Single(AiCommands.GetDevFlowStatusRows(result, target));
+
+		Assert.Equal("maui-devflow-debug", row.Item);
+		Assert.Equal("DevFlow", row.Type);
+		Assert.Equal("VsCode", row.Target);
+		Assert.Equal("1.0.0", row.Installed);
+		Assert.Equal("up-to-date", row.Status);
+		Assert.Equal(".github/skills/maui-devflow-debug", row.Path);
+	}
+
+	[Theory]
+	[InlineData("up-to-date", false, false)]
+	[InlineData("Missing", false, true)]
+	[InlineData("missing", false, true)]
+	[InlineData("Update available", false, true)]
+	[InlineData("update-available-from-current-cli", false, true)]
+	[InlineData("installed-from-newer-cli", false, true)]
+	[InlineData("up-to-date", true, true)]
+	public void NeedsUpdate_RecognizesActionableStatuses(string status, bool force, bool expected)
+	{
+		var row = new AiCommands.AiAssetStatusRow("item", "Skill", "Claude", "", status, "path");
+
+		Assert.Equal(expected, AiCommands.NeedsUpdate(row, force));
 	}
 
 	private static void AssertNoWhitespaceAliases(Command command)

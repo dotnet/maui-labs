@@ -28,7 +28,23 @@ maui doctor
 maui device list
 ```
 
-### 3. Manage a project's .NET MAUI version
+### 3. Bootstrap AI-powered development
+
+```bash
+# See which skills, Copilot agents, and MCP configs would be installed
+maui ai init --dry-run
+
+# Install MAUI/Copilot skills, bundled DevFlow skills, repo agents, and MCP config
+maui ai init
+
+# Check and refresh everything later
+maui ai status --check-updates
+maui ai update
+```
+
+`maui ai init` detects Claude Code, VS Code, Copilot CLI, and OpenCode environments. It delegates DevFlow-owned skills to the bundled DevFlow installer, then installs broader MAUI skills and Copilot agent definitions from this repository.
+
+### 4. Manage a project's .NET MAUI version
 
 ```bash
 # Show the effective MAUI version for the current project
@@ -50,7 +66,7 @@ maui project version set --latest-nightly --nuget-config
 maui project version use-workload
 ```
 
-### 4. Set up Android development
+### 5. Set up Android development
 
 ```bash
 # Full interactive Android setup (JDK + SDK + emulator)
@@ -68,7 +84,7 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
-### 5. Set up Apple development (macOS only)
+### 6. Set up Apple development (macOS only)
 
 ```bash
 # List installed Xcode versions
@@ -96,6 +112,12 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
 | `maui project version use-workload` | Use the installed MAUI workload version instead of a pinned project version |
 | `maui version` | Display version information |
+| **AI** | |
+| `maui ai init` | Bootstrap MAUI/Copilot skills, bundled DevFlow skills, Copilot agents, and MCP configuration |
+| `maui ai list` | List available marketplace and repository skills |
+| `maui ai status` | Show installed AI development asset status, including DevFlow skills and Copilot agents |
+| `maui ai update` | Update installed AI development assets, including DevFlow skills and Copilot agents |
+| `maui ai add` | Install a specific marketplace or repository skill |
 | **Android** | |
 | `maui android install` | Full interactive Android environment setup |
 | `maui android sdk list` | List available and installed Android SDK packages |
