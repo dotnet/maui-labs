@@ -12,6 +12,7 @@ internal static class RepositoryAssetInstaller
 {
 	internal const string CopilotAgentsRoot = ".github/agents";
 	internal const string CopilotAgentsDestinationRoot = ".github/agents";
+	const long MaxLocalAgentBytes = 1024 * 1024;
 
 	/// <summary>
 	/// Discovers MAUI-related Copilot agent definitions from <c>.github/agents</c>.
@@ -74,11 +75,13 @@ internal static class RepositoryAssetInstaller
 		CancellationToken ct = default)
 	{
 		var destinationRoot = GetDestinationRoot(projectRoot, asset.DestinationRoot);
-		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
+		if (FileSystemPathGuard.IsReparsePoint(destinationRoot) ||
+			!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
 			return (-1, string.Empty);
 
 		Directory.CreateDirectory(destinationRoot);
-		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
+		if (FileSystemPathGuard.IsReparsePoint(destinationRoot) ||
+			!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
 			return (-1, string.Empty);
 
 		var filesToInstall = new List<(string RemotePath, string DestinationPath)>();
@@ -148,10 +151,19 @@ internal static class RepositoryAssetInstaller
 		if (!Directory.Exists(destinationRoot))
 			return assets;
 
-		foreach (var filePath in Directory.GetFiles(destinationRoot, "*.agent.md", SearchOption.AllDirectories)
+		var options = new EnumerationOptions
+		{
+			RecurseSubdirectories = true,
+			IgnoreInaccessible = true,
+			AttributesToSkip = FileAttributes.ReparsePoint
+		};
+
+		foreach (var filePath in Directory.GetFiles(destinationRoot, "*.agent.md", options)
 			.OrderBy(path => path, StringComparer.Ordinal))
 		{
-			var content = File.ReadAllText(filePath);
+			if (!TryReadAgentFile(filePath, out var content))
+				continue;
+
 			var (name, description) = MarketplaceClient.ParseFrontmatter(content);
 			var fileName = Path.GetFileName(filePath);
 			var assetName = name ?? fileName[..^".agent.md".Length];
@@ -170,6 +182,31 @@ internal static class RepositoryAssetInstaller
 		}
 
 		return assets;
+	}
+
+	static bool TryReadAgentFile(string filePath, out string content)
+	{
+		content = string.Empty;
+		try
+		{
+			if (FileSystemPathGuard.IsReparsePoint(filePath))
+				return false;
+
+			var info = new FileInfo(filePath);
+			if (!info.Exists || info.Length > MaxLocalAgentBytes)
+				return false;
+
+			content = File.ReadAllText(filePath);
+			return true;
+		}
+		catch (IOException)
+		{
+			return false;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return false;
+		}
 	}
 
 	internal static string GetAssetFilePath(string projectRoot, RepositoryAssetInfo asset, string filePath)

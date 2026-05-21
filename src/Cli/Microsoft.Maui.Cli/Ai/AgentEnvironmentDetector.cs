@@ -75,8 +75,7 @@ internal static class AgentEnvironmentDetector
 			if (rootFullPath is null)
 				break;
 
-			if (rootFullPath is not null &&
-				string.Equals(current.FullName, rootFullPath, PathComparison))
+			if (string.Equals(current.FullName, rootFullPath, PathComparison))
 				break;
 
 			current = current.Parent;

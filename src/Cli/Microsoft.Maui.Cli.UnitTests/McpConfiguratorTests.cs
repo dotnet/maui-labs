@@ -190,6 +190,36 @@ public class McpConfiguratorTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ConfigureAsync_SymlinkedBackupPath_DoesNotOverwriteTarget()
+	{
+		var configDir = Path.Combine(_tempDir, ".vscode");
+		Directory.CreateDirectory(configDir);
+		var configPath = Path.Combine(configDir, "mcp.json");
+		var outsideFile = Path.Combine(_tempDir, "outside.txt");
+		await File.WriteAllTextAsync(outsideFile, "outside content");
+		if (!TryCreateFileSymlink(Path.Combine(configDir, "mcp.json.bak"), outsideFile))
+			return;
+
+		await File.WriteAllTextAsync(configPath, """
+			{
+			  // Existing user MCP server.
+			  "mcpServers": {}
+			}
+			""");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.VsCode,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(_tempDir, ".github", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env);
+
+		Assert.True(result);
+		Assert.Equal("outside content", await File.ReadAllTextAsync(outsideFile));
+	}
+
+	[Fact]
 	public async Task ConfigureAsync_Idempotent_DoesNotDuplicateEntry()
 	{
 		var configDir = Path.Combine(_tempDir, ".claude");
@@ -484,6 +514,19 @@ public class McpConfiguratorTests : IDisposable
 		try
 		{
 			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
+		}
+	}
+
+	static bool TryCreateFileSymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			File.CreateSymbolicLink(linkPath, targetPath);
 			return true;
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)

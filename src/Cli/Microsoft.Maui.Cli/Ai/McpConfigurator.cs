@@ -200,7 +200,14 @@ internal static class McpConfigurator
 
 	static async Task WriteBackupAsync(string configPath, string contents, CancellationToken ct)
 	{
-		await File.WriteAllTextAsync(GetBackupPath(configPath), contents, ct).ConfigureAwait(false);
+		var backupPath = GetBackupPath(configPath);
+		var backupDir = Path.GetDirectoryName(backupPath);
+		var backupRoot = string.IsNullOrEmpty(backupDir) ? Directory.GetCurrentDirectory() : backupDir;
+		await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+			backupPath,
+			backupRoot,
+			Encoding.UTF8.GetBytes(contents),
+			ct).ConfigureAwait(false);
 	}
 
 	static string GetBackupPath(string configPath)

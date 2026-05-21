@@ -230,6 +230,49 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public void GetInstalledCopilotAgents_SkipsOversizedAgentFiles()
+	{
+		var agentsDir = Path.Combine(_tempDir, ".github", "agents");
+		Directory.CreateDirectory(agentsDir);
+		File.WriteAllText(Path.Combine(agentsDir, "expert-reviewer.agent.md"), """
+			---
+			name: expert-reviewer
+			description: Expert .NET MAUI DevFlow code reviewer.
+			---
+			# Expert Reviewer
+			""");
+		File.WriteAllText(
+			Path.Combine(agentsDir, "maui-oversized.agent.md"),
+			new string('x', 1024 * 1024 + 1));
+
+		var assets = RepositoryAssetInstaller.GetInstalledCopilotAgents(_tempDir);
+
+		var asset = Assert.Single(assets);
+		Assert.Equal("expert-reviewer", asset.Name);
+	}
+
+	[Fact]
+	public void GetInstalledCopilotAgents_SkipsSymlinkedAgentFiles()
+	{
+		var agentsDir = Path.Combine(_tempDir, ".github", "agents");
+		Directory.CreateDirectory(agentsDir);
+		var outsideFile = Path.Combine(_tempDir, "outside-agent.agent.md");
+		File.WriteAllText(outsideFile, """
+			---
+			name: symlinked-maui-agent
+			description: .NET MAUI symlinked agent.
+			---
+			# Symlinked
+			""");
+		if (!TryCreateFileSymlink(Path.Combine(agentsDir, "symlinked-maui-agent.agent.md"), outsideFile))
+			return;
+
+		var assets = RepositoryAssetInstaller.GetInstalledCopilotAgents(_tempDir);
+
+		Assert.Empty(assets);
+	}
+
+	[Fact]
 	public async Task InstallAssetAsync_ForceOverwritesExistingAgent()
 	{
 		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>
