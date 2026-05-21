@@ -271,7 +271,7 @@ public static partial class AiCommands
 				{
 					foreach (var env in environments)
 					{
-						var ok = await McpConfigurator.ConfigureAsync(env, ct);
+						var ok = await McpConfigurator.ConfigureAsync(env, workingDir, ct);
 						if (ok)
 							formatter.WriteSuccess($"MCP configured for {env.Kind}");
 						else

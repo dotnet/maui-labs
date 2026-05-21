@@ -36,11 +36,25 @@ internal static class McpConfigurator
 	/// <param name="env">Target agent environment.</param>
 	/// <param name="ct">Cancellation token.</param>
 	/// <returns><c>true</c> if the configuration is in place; <c>false</c> on failure.</returns>
-	public static async Task<bool> ConfigureAsync(DetectedEnvironment env, CancellationToken ct = default)
+	public static Task<bool> ConfigureAsync(DetectedEnvironment env, CancellationToken ct = default)
+		=> ConfigureAsync(env, projectRoot: null, ct);
+
+	public static async Task<bool> ConfigureAsync(DetectedEnvironment env, string? projectRoot, CancellationToken ct = default)
 	{
 		try
 		{
 			var configPath = env.McpConfigPath;
+			var configDir = Path.GetDirectoryName(configPath);
+			if (!string.IsNullOrEmpty(configDir))
+			{
+				Directory.CreateDirectory(configDir);
+				if (projectRoot is not null &&
+					env.Kind != AgentEnvironmentKind.CopilotCli &&
+					!FileSystemPathGuard.IsPathWithinRoot(configDir, projectRoot))
+				{
+					return false;
+				}
+			}
 
 			JsonObject root;
 			string? existingJson = null;
@@ -73,11 +87,6 @@ internal static class McpConfigurator
 				return true;
 			if (configureResult == ConfigureResult.IncompatibleSchema)
 				return false;
-
-			// Ensure the config directory exists before writing.
-			var configDir = Path.GetDirectoryName(configPath);
-			if (!string.IsNullOrEmpty(configDir))
-				Directory.CreateDirectory(configDir);
 
 			var options = new JsonSerializerOptions { WriteIndented = true };
 			if (backupExistingConfig && existingJson is not null)
@@ -194,18 +203,7 @@ internal static class McpConfigurator
 	}
 
 	static string GetBackupPath(string configPath)
-	{
-		var backupPath = configPath + ".bak";
-		if (!File.Exists(backupPath))
-			return backupPath;
-
-		for (var i = 1; ; i++)
-		{
-			var candidate = $"{configPath}.{i}.bak";
-			if (!File.Exists(candidate))
-				return candidate;
-		}
-	}
+		=> $"{configPath}.{Guid.NewGuid():N}.bak";
 
 	static bool ContainsJsonComments(string contents)
 	{

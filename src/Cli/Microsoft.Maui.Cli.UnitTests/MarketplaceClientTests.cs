@@ -224,7 +224,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task GetSkillsFromDirectoryAsync_DiscoversRepositorySkills()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new StringContent("""
 				---
@@ -255,7 +255,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task DownloadSkillFilesAsync_RejectsPathTraversal()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new ByteArrayContent("malicious"u8.ToArray())
 		});
@@ -280,7 +280,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task DownloadSkillFilesAsync_RejectsPathTraversal_InRelativePath()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new ByteArrayContent("malicious"u8.ToArray())
 		});
@@ -304,7 +304,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task DownloadSkillFilesAsync_AllowsSafeRelativePath()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new ByteArrayContent("safe content"u8.ToArray())
 		});
@@ -328,7 +328,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task DownloadSkillFilesAsync_RejectsFilesOutsideRemotePath()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new ByteArrayContent("wrong skill"u8.ToArray())
 		});
@@ -436,7 +436,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task FetchRawStringAsync_InvalidRepo_ThrowsBeforeHttpCall()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new StringContent("content")
 		});
@@ -454,7 +454,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task GetRemoteCommitShaAsync_InvalidRepo_ThrowsBeforeHttpCall()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new StringContent("[]")
 		});
@@ -472,7 +472,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task FetchRawStringAsync_OversizedResponse_ReturnsNull()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new OversizedHttpContent()
 		});
@@ -486,7 +486,7 @@ public class MarketplaceClientTests : IDisposable
 	[Fact]
 	public async Task FetchRawBytesAsync_OversizedResponse_ReturnsNull()
 	{
-		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
 		{
 			Content = new OversizedHttpContent()
 		});
@@ -498,24 +498,19 @@ public class MarketplaceClientTests : IDisposable
 	}
 
 	/// <summary>
-	/// Minimal HttpMessageHandler that returns a fixed response for every request.
+	/// Minimal HttpMessageHandler that returns a fresh response for every request.
 	/// </summary>
 	private sealed class FakeHttpMessageHandler : HttpMessageHandler
 	{
-		private readonly HttpResponseMessage _response;
+		private readonly Func<HttpResponseMessage> _responseFactory;
 		public int Calls { get; private set; }
 
-		public FakeHttpMessageHandler(HttpResponseMessage response) => _response = response;
+		public FakeHttpMessageHandler(Func<HttpResponseMessage> responseFactory) => _responseFactory = responseFactory;
 
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 		{
 			Calls++;
-			return Task.FromResult(_response);
-		}
-
-		protected override void Dispose(bool disposing)
-		{
-			// Don't dispose _response — the caller owns it via the test scope
+			return Task.FromResult(_responseFactory());
 		}
 	}
 

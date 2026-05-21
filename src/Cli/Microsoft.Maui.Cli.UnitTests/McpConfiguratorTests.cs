@@ -140,7 +140,8 @@ public class McpConfiguratorTests : IDisposable
 		var result = await McpConfigurator.ConfigureAsync(env);
 
 		Assert.True(result);
-		var backup = await File.ReadAllTextAsync(configPath + ".bak");
+		var backupPath = Assert.Single(Directory.GetFiles(configDir, "mcp.json.*.bak"));
+		var backup = await File.ReadAllTextAsync(backupPath);
 		Assert.Contains("// Existing user MCP server.", backup);
 
 		var json = JsonNode.Parse(await File.ReadAllTextAsync(configPath));
@@ -344,6 +345,31 @@ public class McpConfiguratorTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ConfigureAsync_SymlinkedProjectConfigDirectoryOutsideProject_ReturnsFalse()
+	{
+		var projectRoot = Path.Combine(_tempDir, "project");
+		var outsideRoot = Path.Combine(_tempDir, "outside");
+		Directory.CreateDirectory(projectRoot);
+		Directory.CreateDirectory(outsideRoot);
+
+		if (!TryCreateDirectorySymlink(Path.Combine(projectRoot, ".claude"), outsideRoot))
+			return;
+
+		var configPath = Path.Combine(projectRoot, ".claude", "mcp.json");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(projectRoot, ".claude", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env, projectRoot);
+
+		Assert.False(result);
+		Assert.False(File.Exists(Path.Combine(outsideRoot, "mcp.json")));
+	}
+
+	[Fact]
 	public async Task ConfigureAsync_IncompatibleOpenCodeSchema_ReturnsFalseAndLeavesConfigUnchanged()
 	{
 		var configDir = Path.Combine(_tempDir, ".opencode");
@@ -393,5 +419,18 @@ public class McpConfiguratorTests : IDisposable
 		// Second call should also return true (already configured)
 		var second = await McpConfigurator.ConfigureAsync(env);
 		Assert.True(second);
+	}
+
+	static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
+		}
 	}
 }

@@ -58,6 +58,26 @@ public class SkillInstallerTests : IDisposable
 		Assert.Equal(string.Empty, installPath);
 	}
 
+	[Theory]
+	[InlineData(".")]
+	[InlineData("bad/name")]
+	[InlineData("bad\\name")]
+	public async Task InstallSkillAsync_InvalidName_EdgeCase_ReturnsNegativeOne(string skillName)
+	{
+		var skill = new SkillInfo { Name = skillName };
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = Path.Combine(_tempDir, "skills")
+		};
+
+		var (filesInstalled, installPath) = await SkillInstaller.InstallSkillAsync(
+			new HttpClient(), skill, env, _tempDir, "owner/repo", "main", force: false);
+
+		Assert.Equal(-1, filesInstalled);
+		Assert.Equal(string.Empty, installPath);
+	}
+
 	[Fact]
 	public async Task InstallSkillAsync_SymlinkedSkillsDirectoryOutsideProject_ReturnsNegativeOne()
 	{
@@ -143,7 +163,7 @@ public class SkillInstallerTests : IDisposable
 			http, skill, env, _tempDir, "owner/repo", "main", force: false);
 
 		Assert.Equal(-2, filesInstalled);
-		Assert.False(Directory.Exists(installPath));
+		Assert.Equal(string.Empty, installPath);
 		Assert.Empty(Directory.EnumerateFileSystemEntries(skillsDir));
 	}
 

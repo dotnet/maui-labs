@@ -40,7 +40,11 @@ internal static class SkillInstaller
 		bool force,
 		CancellationToken ct = default)
 	{
-		if (skill.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || skill.Name.Contains(".."))
+		if (skill.Name is "." or ".." ||
+			skill.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+			skill.Name.Contains("..") ||
+			skill.Name.Contains('/') ||
+			skill.Name.Contains('\\'))
 			return (-1, string.Empty);
 
 		// If the skills directory is not rooted, resolve it relative to the project root.
@@ -71,7 +75,7 @@ internal static class SkillInstaller
 				http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
 
 			if (skill.Files.Count == 0 || filesInstalled != skill.Files.Count)
-				return (-2, installPath);
+				return (-2, string.Empty);
 
 			// Resolve the latest commit SHA for version tracking.
 			var commitSha = await MarketplaceClient.GetRemoteCommitShaAsync(

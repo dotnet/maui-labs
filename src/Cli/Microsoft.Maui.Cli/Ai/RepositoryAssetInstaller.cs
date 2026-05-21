@@ -77,8 +77,11 @@ internal static class RepositoryAssetInstaller
 		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
 			return (-1, string.Empty);
 
-		var destinationBase = Path.GetFullPath(destinationRoot) + Path.DirectorySeparatorChar;
 		Directory.CreateDirectory(destinationRoot);
+		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
+			return (-1, string.Empty);
+
+		var destinationBase = Path.GetFullPath(destinationRoot) + Path.DirectorySeparatorChar;
 
 		var count = 0;
 		foreach (var filePath in asset.Files)
@@ -94,6 +97,9 @@ internal static class RepositoryAssetInstaller
 			var content = await MarketplaceClient.FetchRawBytesAsync(http, repo, branch, filePath, ct).ConfigureAwait(false);
 			if (content is null)
 				continue;
+
+			if (!FileSystemPathGuard.IsPathWithinRoot(Path.GetDirectoryName(fullDestinationPath) ?? destinationRoot, projectRoot))
+				return (-1, string.Empty);
 
 			await File.WriteAllBytesAsync(fullDestinationPath, content, ct).ConfigureAwait(false);
 			count++;
