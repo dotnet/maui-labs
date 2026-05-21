@@ -114,6 +114,40 @@ public class McpConfiguratorTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ConfigureAsync_MergesIntoJsoncConfig()
+	{
+		var configDir = Path.Combine(_tempDir, ".vscode");
+		Directory.CreateDirectory(configDir);
+		var configPath = Path.Combine(configDir, "mcp.json");
+		await File.WriteAllTextAsync(configPath, """
+			{
+			  // Existing user MCP server.
+			  "mcpServers": {
+			    "other-server": {
+			      "command": "other",
+			    },
+			  },
+			}
+			""");
+
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.VsCode,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(_tempDir, ".github", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env);
+
+		Assert.True(result);
+		var json = JsonNode.Parse(await File.ReadAllTextAsync(configPath));
+		var servers = json?["mcpServers"]?.AsObject();
+		Assert.NotNull(servers);
+		Assert.NotNull(servers["other-server"]);
+		Assert.NotNull(servers["maui-devflow"]);
+	}
+
+	[Fact]
 	public async Task ConfigureAsync_Idempotent_DoesNotDuplicateEntry()
 	{
 		var configDir = Path.Combine(_tempDir, ".claude");

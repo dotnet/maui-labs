@@ -198,4 +198,16 @@ public class AgentEnvironmentDetectorTests : IDisposable
 
 		Assert.Equal(Path.Combine(_tempDir, ".github", "skills"), vscode.SkillsDirectory);
 	}
+
+	[Fact]
+	public void ResolveProjectRoot_ReturnsGitRootFromSubdirectory()
+	{
+		File.WriteAllText(Path.Combine(_tempDir, ".git"), "gitdir: ../repo/.git/worktrees/project");
+		var subDir = Path.Combine(_tempDir, "src", "project");
+		Directory.CreateDirectory(subDir);
+
+		var projectRoot = AgentEnvironmentDetector.ResolveProjectRoot(subDir);
+
+		Assert.Equal(_tempDir, projectRoot);
+	}
 }

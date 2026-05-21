@@ -138,6 +138,38 @@ public class SkillInstallerTests : IDisposable
 		Assert.Empty(Directory.EnumerateFileSystemEntries(skillsDir));
 	}
 
+	[Fact]
+	public async Task InstallSkillAsync_Force_ReplacesExistingDirectory()
+	{
+		var skill = new SkillInfo
+		{
+			Name = "replaced-skill",
+			RemotePath = ".github/skills/replaced-skill",
+			Files = [".github/skills/replaced-skill/SKILL.md"]
+		};
+		var skillsDir = Path.Combine(_tempDir, "skills");
+		var installPath = Path.Combine(skillsDir, skill.Name);
+		Directory.CreateDirectory(Path.Combine(installPath, "references"));
+		await File.WriteAllTextAsync(Path.Combine(installPath, "SKILL.md"), "old content");
+		await File.WriteAllTextAsync(Path.Combine(installPath, "references", "old-guide.md"), "stale content");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = skillsDir
+		};
+		using var http = new HttpClient(new SuccessfulInstallHandler());
+
+		var (filesInstalled, resultPath) = await SkillInstaller.InstallSkillAsync(
+			http, skill, env, _tempDir, "owner/repo", "main", force: true);
+
+		Assert.Equal(1, filesInstalled);
+		Assert.Equal(installPath, resultPath);
+		Assert.Equal("new content", await File.ReadAllTextAsync(Path.Combine(installPath, "SKILL.md")));
+		Assert.True(File.Exists(Path.Combine(installPath, ".skill-version")));
+		Assert.False(File.Exists(Path.Combine(installPath, "references", "old-guide.md")));
+		Assert.DoesNotContain(Directory.EnumerateDirectories(skillsDir), path => Path.GetFileName(path).StartsWith($".{skill.Name}.", StringComparison.Ordinal));
+	}
+
 	private sealed class NotFoundHandler : HttpMessageHandler
 	{
 		protected override Task<HttpResponseMessage> SendAsync(
@@ -170,6 +202,26 @@ public class SkillInstallerTests : IDisposable
 			HttpRequestMessage request, CancellationToken cancellationToken)
 		{
 			throw new InvalidOperationException("download failed");
+		}
+	}
+
+	private sealed class SuccessfulInstallHandler : HttpMessageHandler
+	{
+		protected override Task<HttpResponseMessage> SendAsync(
+			HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			if (request.RequestUri?.Host == "api.github.com")
+			{
+				return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+				{
+					Content = new StringContent("""[{ "sha": "abc123" }]""")
+				});
+			}
+
+			return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+			{
+				Content = new ByteArrayContent("new content"u8.ToArray())
+			});
 		}
 	}
 }

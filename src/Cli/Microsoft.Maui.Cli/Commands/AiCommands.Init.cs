@@ -72,8 +72,9 @@ public static partial class AiCommands
 				}
 
 				// Step 2: Detect agent environments
-				var workingDir = Directory.GetCurrentDirectory();
-				var environments = AgentEnvironmentDetector.Detect(workingDir);
+				var currentDir = Directory.GetCurrentDirectory();
+				var workingDir = AgentEnvironmentDetector.ResolveProjectRoot(currentDir);
+				var environments = AgentEnvironmentDetector.Detect(currentDir);
 
 				// Filter environments if --env specified
 				if (envFilter is { Length: > 0 })
@@ -97,7 +98,7 @@ public static partial class AiCommands
 						// In CI or force mode, create .claude/ by default
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
-						environments = AgentEnvironmentDetector.Detect(workingDir);
+						environments = AgentEnvironmentDetector.Detect(currentDir);
 					}
 					else
 					{
@@ -113,7 +114,7 @@ public static partial class AiCommands
 
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
-						environments = AgentEnvironmentDetector.Detect(workingDir);
+						environments = AgentEnvironmentDetector.Detect(currentDir);
 					}
 				}
 

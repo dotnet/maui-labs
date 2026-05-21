@@ -14,6 +14,12 @@ namespace Microsoft.Maui.Cli.Ai;
 internal static class McpConfigurator
 {
 	private const string ServerName = "maui-devflow";
+	private static readonly JsonDocumentOptions s_jsonDocumentOptions = new()
+	{
+		AllowTrailingCommas = true,
+		CommentHandling = JsonCommentHandling.Skip
+	};
+
 	enum ConfigureResult
 	{
 		AlreadyConfigured,
@@ -39,7 +45,7 @@ internal static class McpConfigurator
 			if (File.Exists(configPath))
 			{
 				var existingJson = await File.ReadAllTextAsync(configPath, ct).ConfigureAwait(false);
-				if (JsonNode.Parse(existingJson) is not JsonObject existingRoot)
+				if (JsonNode.Parse(existingJson, documentOptions: s_jsonDocumentOptions) is not JsonObject existingRoot)
 					return false;
 
 				root = existingRoot;
@@ -157,7 +163,23 @@ internal static class McpConfigurator
 		finally
 		{
 			if (File.Exists(tempPath))
-				File.Delete(tempPath);
+				TryDeleteFile(tempPath);
+		}
+	}
+
+	static void TryDeleteFile(string path)
+	{
+		try
+		{
+			File.Delete(path);
+		}
+		catch (IOException)
+		{
+			// Best-effort temp cleanup should not hide the config write result.
+		}
+		catch (UnauthorizedAccessException)
+		{
+			// Best-effort temp cleanup should not hide the config write result.
 		}
 	}
 }

@@ -85,32 +85,20 @@ internal static class SkillInstaller
 
 			await SkillVersionStore.WriteAsync(tempInstallPath, version, ct).ConfigureAwait(false);
 
-			CopyDirectory(tempInstallPath, installPath);
+			ReplaceDirectory(tempInstallPath, installPath);
 
 			return (filesInstalled, installPath);
 		}
 		finally
 		{
-			DeleteDirectoryIfExists(tempInstallPath);
+			TryDeleteDirectoryIfExists(tempInstallPath);
 		}
 	}
 
-	static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+	static void ReplaceDirectory(string sourceDirectory, string destinationDirectory)
 	{
-		Directory.CreateDirectory(destinationDirectory);
-		foreach (var directoryPath in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
-		{
-			var relativePath = Path.GetRelativePath(sourceDirectory, directoryPath);
-			Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
-		}
-
-		foreach (var filePath in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
-		{
-			var relativePath = Path.GetRelativePath(sourceDirectory, filePath);
-			var destinationPath = Path.Combine(destinationDirectory, relativePath);
-			Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-			File.Copy(filePath, destinationPath, overwrite: true);
-		}
+		DeleteDirectoryIfExists(destinationDirectory);
+		Directory.Move(sourceDirectory, destinationDirectory);
 	}
 
 	static void DeleteDirectoryIfExists(string path)
@@ -129,6 +117,18 @@ internal static class SkillInstaller
 		catch (UnauthorizedAccessException ex)
 		{
 			throw new InvalidOperationException($"Could not clean up temporary skill installation directory '{path}'.", ex);
+		}
+	}
+
+	static void TryDeleteDirectoryIfExists(string path)
+	{
+		try
+		{
+			DeleteDirectoryIfExists(path);
+		}
+		catch (InvalidOperationException)
+		{
+			// Best-effort cleanup: do not hide the actual install result or root exception.
 		}
 	}
 }

@@ -32,8 +32,9 @@ public static partial class AiCommands
 
 			try
 			{
-				var workingDir = Directory.GetCurrentDirectory();
-				var environments = AgentEnvironmentDetector.Detect(workingDir);
+				var currentDir = Directory.GetCurrentDirectory();
+				var workingDir = AgentEnvironmentDetector.ResolveProjectRoot(currentDir);
+				var environments = AgentEnvironmentDetector.Detect(currentDir);
 
 				if (environments.Count == 0)
 				{

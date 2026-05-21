@@ -22,7 +22,7 @@ internal static class AgentEnvironmentDetector
 	{
 		var environments = new List<DetectedEnvironment>();
 		var gitRoot = FindGitRoot(workingDir);
-		var searchRoot = gitRoot ?? workingDir;
+		var searchRoot = gitRoot ?? Path.GetFullPath(workingDir);
 		var foundKinds = new HashSet<AgentEnvironmentKind>();
 
 		var current = new DirectoryInfo(workingDir);
@@ -73,7 +73,7 @@ internal static class AgentEnvironmentDetector
 
 			// Stop at the Git root.
 			if (rootFullPath is not null &&
-				string.Equals(current.FullName, rootFullPath, StringComparison.OrdinalIgnoreCase))
+				string.Equals(current.FullName, rootFullPath, PathComparison))
 				break;
 
 			current = current.Parent;
@@ -97,10 +97,13 @@ internal static class AgentEnvironmentDetector
 		return environments;
 	}
 
+	internal static string ResolveProjectRoot(string workingDir)
+		=> FindGitRoot(workingDir) ?? Path.GetFullPath(workingDir);
+
 	/// <summary>
 	/// Walks up from <paramref name="startDir"/> looking for a <c>.git</c> directory.
 	/// </summary>
-	private static string? FindGitRoot(string startDir)
+	internal static string? FindGitRoot(string startDir)
 	{
 		var current = new DirectoryInfo(startDir);
 		while (current is not null)
@@ -119,4 +122,7 @@ internal static class AgentEnvironmentDetector
 		var gitPath = Path.Combine(directory, ".git");
 		return Directory.Exists(gitPath) || File.Exists(gitPath);
 	}
+
+	static StringComparison PathComparison =>
+		OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }

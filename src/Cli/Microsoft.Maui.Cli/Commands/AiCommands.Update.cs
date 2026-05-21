@@ -46,8 +46,9 @@ public static partial class AiCommands
 
 			try
 			{
-				var workingDir = Directory.GetCurrentDirectory();
-				var environments = AgentEnvironmentDetector.Detect(workingDir);
+				var currentDir = Directory.GetCurrentDirectory();
+				var workingDir = AgentEnvironmentDetector.ResolveProjectRoot(currentDir);
+				var environments = AgentEnvironmentDetector.Detect(currentDir);
 
 				if (environments.Count == 0)
 				{
@@ -96,7 +97,7 @@ public static partial class AiCommands
 				// Scan installed marketplace/repository skills and check for updates; de-duplicate by resolved path
 				// so environments sharing the same skills directory are not updated twice.
 				var updatable = new List<(DetectedEnvironment Env, string SkillDir, string SkillName, InstalledSkillVersion Version)>();
-				var processedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				var processedPaths = new HashSet<string>(FileSystemPathComparer);
 				var uncheckableCount = 0;
 
 				foreach (var env in environments)
@@ -154,8 +155,6 @@ public static partial class AiCommands
 					{
 						var skillWord = uncheckableCount == 1 ? "skill" : "skill(s)";
 						formatter.WriteWarning($"Could not check {uncheckableCount} {skillWord} — GitHub may be unreachable.");
-						if (isCi)
-							return 1;
 					}
 
 					return 0;
@@ -306,8 +305,6 @@ public static partial class AiCommands
 				{
 					var skillWord = uncheckableCount == 1 ? "skill" : "skill(s)";
 					formatter.WriteWarning($"⚠ Could not check {uncheckableCount} {skillWord} — GitHub may be unreachable.");
-					if (isCi)
-						return 1;
 				}
 
 				return 0;
@@ -330,4 +327,7 @@ public static partial class AiCommands
 		=> string.IsNullOrEmpty(commit)
 			? "unknown"
 			: commit[..Math.Min(commit.Length, 7)];
+
+	internal static StringComparer FileSystemPathComparer =>
+		OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }

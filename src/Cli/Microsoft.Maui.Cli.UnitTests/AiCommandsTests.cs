@@ -250,6 +250,18 @@ public class AiCommandsTests
 		Assert.Equal(expected, AiCommands.NeedsUpdate(row, force));
 	}
 
+	[Fact]
+	public void FileSystemPathComparer_MatchesCurrentPlatformSemantics()
+	{
+		var paths = new HashSet<string>(AiCommands.FileSystemPathComparer)
+		{
+			Path.Combine("repo", ".github", "skills", "Foo"),
+			Path.Combine("repo", ".github", "skills", "foo")
+		};
+
+		Assert.Equal(OperatingSystem.IsWindows() ? 1 : 2, paths.Count);
+	}
+
 	private static void AssertNoWhitespaceAliases(Command command)
 	{
 		foreach (var option in command.Options)
