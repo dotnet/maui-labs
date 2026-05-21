@@ -59,6 +59,38 @@ public class SkillInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task InstallSkillAsync_SymlinkedSkillsDirectoryOutsideProject_ReturnsNegativeOne()
+	{
+		var projectRoot = Path.Combine(_tempDir, "project");
+		var outsideRoot = Path.Combine(_tempDir, "outside");
+		Directory.CreateDirectory(projectRoot);
+		Directory.CreateDirectory(outsideRoot);
+
+		if (!TryCreateDirectorySymlink(Path.Combine(projectRoot, ".claude"), outsideRoot))
+			return;
+
+		var skill = new SkillInfo
+		{
+			Name = "safe-name",
+			RemotePath = ".github/skills/safe-name",
+			Files = [".github/skills/safe-name/SKILL.md"]
+		};
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = Path.Combine(projectRoot, ".claude", "skills")
+		};
+		using var http = new HttpClient(new SuccessfulInstallHandler());
+
+		var (filesInstalled, installPath) = await SkillInstaller.InstallSkillAsync(
+			http, skill, env, projectRoot, "owner/repo", "main", force: true);
+
+		Assert.Equal(-1, filesInstalled);
+		Assert.Equal(string.Empty, installPath);
+		Assert.False(Directory.Exists(Path.Combine(outsideRoot, "skills")));
+	}
+
+	[Fact]
 	public async Task InstallSkillAsync_ValidName_DoesNotReturnNegativeOne()
 	{
 		var skill = new SkillInfo
@@ -223,6 +255,19 @@ public class SkillInstallerTests : IDisposable
 			{
 				Content = new ByteArrayContent("new content"u8.ToArray())
 			});
+		}
+	}
+
+	static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
 		}
 	}
 }

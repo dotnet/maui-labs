@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Ai.Models;
@@ -42,13 +43,16 @@ internal static class McpConfigurator
 			var configPath = env.McpConfigPath;
 
 			JsonObject root;
+			string? existingJson = null;
+			var backupExistingConfig = false;
 			if (File.Exists(configPath))
 			{
-				var existingJson = await File.ReadAllTextAsync(configPath, ct).ConfigureAwait(false);
+				existingJson = await File.ReadAllTextAsync(configPath, ct).ConfigureAwait(false);
 				if (JsonNode.Parse(existingJson, documentOptions: s_jsonDocumentOptions) is not JsonObject existingRoot)
 					return false;
 
 				root = existingRoot;
+				backupExistingConfig = ContainsJsonComments(existingJson);
 			}
 			else
 			{
@@ -76,6 +80,9 @@ internal static class McpConfigurator
 				Directory.CreateDirectory(configDir);
 
 			var options = new JsonSerializerOptions { WriteIndented = true };
+			if (backupExistingConfig && existingJson is not null)
+				await WriteBackupAsync(configPath, existingJson, ct).ConfigureAwait(false);
+
 			await WriteAtomicAsync(configPath, root.ToJsonString(options), ct).ConfigureAwait(false);
 
 			return true;
@@ -165,6 +172,44 @@ internal static class McpConfigurator
 			if (File.Exists(tempPath))
 				TryDeleteFile(tempPath);
 		}
+	}
+
+	static async Task WriteBackupAsync(string configPath, string contents, CancellationToken ct)
+	{
+		await File.WriteAllTextAsync(GetBackupPath(configPath), contents, ct).ConfigureAwait(false);
+	}
+
+	static string GetBackupPath(string configPath)
+	{
+		var backupPath = configPath + ".bak";
+		if (!File.Exists(backupPath))
+			return backupPath;
+
+		for (var i = 1; ; i++)
+		{
+			var candidate = $"{configPath}.{i}.bak";
+			if (!File.Exists(candidate))
+				return candidate;
+		}
+	}
+
+	static bool ContainsJsonComments(string contents)
+	{
+		var reader = new Utf8JsonReader(
+			Encoding.UTF8.GetBytes(contents),
+			new JsonReaderOptions
+			{
+				AllowTrailingCommas = true,
+				CommentHandling = JsonCommentHandling.Allow
+			});
+
+		while (reader.Read())
+		{
+			if (reader.TokenType == JsonTokenType.Comment)
+				return true;
+		}
+
+		return false;
 	}
 
 	static void TryDeleteFile(string path)

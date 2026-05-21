@@ -413,7 +413,8 @@ public class MarketplaceClientTests : IDisposable
 
 		Assert.NotNull(requestUri);
 		var url = requestUri!.AbsoluteUri;
-		Assert.Contains("feature%2Ftest", url);
+		Assert.Contains("/owner/repo/feature/test/.github/", url);
+		Assert.DoesNotContain("feature%2Ftest", url);
 		Assert.Contains("my%20skill", url);
 		Assert.Contains("SKILL%23.md", url);
 	}

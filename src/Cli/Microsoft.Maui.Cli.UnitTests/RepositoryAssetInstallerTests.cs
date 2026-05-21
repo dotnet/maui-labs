@@ -87,6 +87,38 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 	}
 
 	[Fact]
+	public async Task InstallAssetAsync_SymlinkedDestinationRootOutsideProject_ReturnsNegativeOne()
+	{
+		var projectRoot = Path.Combine(_tempDir, "project");
+		var outsideRoot = Path.Combine(_tempDir, "outside");
+		Directory.CreateDirectory(projectRoot);
+		Directory.CreateDirectory(outsideRoot);
+
+		if (!TryCreateDirectorySymlink(Path.Combine(projectRoot, ".github"), outsideRoot))
+			return;
+
+		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>
+		{
+			["expert-reviewer.agent.md"] = "agent content"
+		}));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			RemotePath = ".github/agents/expert-reviewer.agent.md",
+			DestinationRoot = ".github/agents",
+			Files = [".github/agents/expert-reviewer.agent.md"]
+		};
+
+		var result = await RepositoryAssetInstaller.InstallAssetAsync(
+			http, asset, projectRoot, "owner/repo", "main", force: true);
+
+		Assert.Equal(-1, result.FilesInstalled);
+		Assert.Equal(string.Empty, result.InstallPath);
+		Assert.False(File.Exists(Path.Combine(outsideRoot, "agents", "expert-reviewer.agent.md")));
+	}
+
+	[Fact]
 	public void GetInstalledCopilotAgents_ReturnsOnlyMauiRelatedAgents()
 	{
 		var agentsDir = Path.Combine(_tempDir, ".github", "agents");
@@ -157,6 +189,19 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 			}
 
 			return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+		}
+	}
+
+	static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
+	{
+		try
+		{
+			Directory.CreateSymbolicLink(linkPath, targetPath);
+			return true;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+		{
+			return false;
 		}
 	}
 }

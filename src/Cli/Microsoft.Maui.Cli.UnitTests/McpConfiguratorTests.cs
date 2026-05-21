@@ -140,6 +140,9 @@ public class McpConfiguratorTests : IDisposable
 		var result = await McpConfigurator.ConfigureAsync(env);
 
 		Assert.True(result);
+		var backup = await File.ReadAllTextAsync(configPath + ".bak");
+		Assert.Contains("// Existing user MCP server.", backup);
+
 		var json = JsonNode.Parse(await File.ReadAllTextAsync(configPath));
 		var servers = json?["mcpServers"]?.AsObject();
 		Assert.NotNull(servers);

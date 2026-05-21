@@ -27,7 +27,7 @@ internal static class SkillInstaller
 	/// A tuple of (filesInstalled, installPath) where filesInstalled is the number
 	/// of files written and installPath is the absolute path to the skill directory.
 	/// Returns (0, installPath) if the skill is already installed and <paramref name="force"/> is <c>false</c>.
-	/// Returns (-1, string.Empty) if the skill name contains invalid characters.
+		/// Returns (-1, string.Empty) if the skill name contains invalid characters or targets an unsafe path.
 	/// Returns (-2, installPath) if the download produced zero files (network or remote failure).
 	/// </returns>
 	public static async Task<(int FilesInstalled, string InstallPath)> InstallSkillAsync(
@@ -47,6 +47,9 @@ internal static class SkillInstaller
 		var skillsDir = Path.IsPathRooted(env.SkillsDirectory)
 			? env.SkillsDirectory
 			: Path.GetFullPath(Path.Combine(projectRoot, env.SkillsDirectory));
+
+		if (!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
+			return (-1, string.Empty);
 
 		var installPath = Path.Combine(skillsDir, skill.Name);
 

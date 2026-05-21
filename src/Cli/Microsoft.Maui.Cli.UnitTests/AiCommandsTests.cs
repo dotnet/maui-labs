@@ -251,6 +251,48 @@ public class AiCommandsTests
 	}
 
 	[Fact]
+	public void FilterEnvironments_NoFilter_ReturnsAllEnvironments()
+	{
+		var environments = new[]
+		{
+			new DetectedEnvironment { Kind = AgentEnvironmentKind.Claude },
+			new DetectedEnvironment { Kind = AgentEnvironmentKind.VsCode }
+		};
+
+		Assert.Equal(2, AiCommands.FilterEnvironments(environments, envFilter: null).Count);
+	}
+
+	[Fact]
+	public void FilterEnvironments_EnvFilter_ReturnsMatchingEnvironment()
+	{
+		var environments = new[]
+		{
+			new DetectedEnvironment { Kind = AgentEnvironmentKind.Claude },
+			new DetectedEnvironment { Kind = AgentEnvironmentKind.VsCode }
+		};
+
+		var env = Assert.Single(AiCommands.FilterEnvironments(environments, ["VsCode"]));
+
+		Assert.Equal(AgentEnvironmentKind.VsCode, env.Kind);
+	}
+
+	[Fact]
+	public void ShouldCreateDefaultClaudeEnvironment_NoFilter_ReturnsTrue()
+	{
+		Assert.True(AiCommands.ShouldCreateDefaultClaudeEnvironment(envFilter: null));
+	}
+
+	[Theory]
+	[InlineData("Claude", true)]
+	[InlineData("claude", true)]
+	[InlineData("VsCode", false)]
+	[InlineData("CopilotCli", false)]
+	public void ShouldCreateDefaultClaudeEnvironment_RespectsEnvFilter(string envFilter, bool expected)
+	{
+		Assert.Equal(expected, AiCommands.ShouldCreateDefaultClaudeEnvironment([envFilter]));
+	}
+
+	[Fact]
 	public void FileSystemPathComparer_MatchesCurrentPlatformSemantics()
 	{
 		var paths = new HashSet<string>(AiCommands.FileSystemPathComparer)

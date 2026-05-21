@@ -76,25 +76,19 @@ public static partial class AiCommands
 				var workingDir = AgentEnvironmentDetector.ResolveProjectRoot(currentDir);
 				var environments = AgentEnvironmentDetector.Detect(currentDir);
 
-				// Filter environments if --env specified
-				if (envFilter is { Length: > 0 })
-				{
-					environments = environments
-						.Where(e => envFilter.Any(f =>
-							string.Equals(f, e.Kind.ToString(), StringComparison.OrdinalIgnoreCase)))
-						.ToList();
-				}
+				environments = FilterEnvironments(environments, envFilter);
 
 				if (environments.Count == 0)
 				{
-					if (isCi || force)
+					var canCreateDefaultClaudeEnvironment = ShouldCreateDefaultClaudeEnvironment(envFilter);
+					if ((isCi || force) && canCreateDefaultClaudeEnvironment)
 					{
 						// In CI or force mode, create .claude/ by default
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
-						environments = AgentEnvironmentDetector.Detect(currentDir);
+						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(currentDir), envFilter);
 					}
-					else if (useJson)
+					else if (!canCreateDefaultClaudeEnvironment || useJson || isCi || force)
 					{
 						formatter.WriteWarning("No agent environments detected.");
 						return 1;
@@ -113,7 +107,7 @@ public static partial class AiCommands
 
 						var claudeDir = Path.Combine(workingDir, ".claude");
 						Directory.CreateDirectory(claudeDir);
-						environments = AgentEnvironmentDetector.Detect(currentDir);
+						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(currentDir), envFilter);
 					}
 				}
 
@@ -243,7 +237,7 @@ public static partial class AiCommands
 
 						if (filesInstalled == -1)
 						{
-							formatter.WriteWarning($"Skill '{skill.Name}' has an invalid name and cannot be installed.");
+							formatter.WriteWarning($"Skill '{skill.Name}' has an invalid name or unsafe install path and cannot be installed.");
 						}
 						else if (filesInstalled == -2)
 						{
@@ -266,6 +260,8 @@ public static partial class AiCommands
 					assetResults.Add((asset.Name, asset.Category, filesInstalled, installPath));
 					if (filesInstalled > 0)
 						formatter.WriteSuccess($"Installed {asset.Name} → {asset.Category} ({filesInstalled} files)");
+					else if (filesInstalled < 0)
+						formatter.WriteWarning($"Skipped {asset.Name} → {asset.Category} (unsafe install path)");
 					else
 						formatter.WriteInfo($"Skipped {asset.Name} → {asset.Category} (already installed)");
 				}
@@ -405,6 +401,23 @@ public static partial class AiCommands
 		string.IsNullOrEmpty(skill.Description)
 			? skill.Name
 			: $"{skill.Name} - {skill.Description}";
+
+	internal static List<DetectedEnvironment> FilterEnvironments(
+		IEnumerable<DetectedEnvironment> environments,
+		string[]? envFilter)
+	{
+		if (envFilter is not { Length: > 0 })
+			return environments.ToList();
+
+		return environments
+			.Where(e => envFilter.Any(f =>
+				string.Equals(f, e.Kind.ToString(), StringComparison.OrdinalIgnoreCase)))
+			.ToList();
+	}
+
+	internal static bool ShouldCreateDefaultClaudeEnvironment(string[]? envFilter)
+		=> envFilter is not { Length: > 0 } ||
+			envFilter.Any(f => string.Equals(f, AgentEnvironmentKind.Claude.ToString(), StringComparison.OrdinalIgnoreCase));
 
 	internal static List<AiDevFlowBootstrapTarget> GetDevFlowBootstrapTargets(IEnumerable<DetectedEnvironment> environments)
 	{

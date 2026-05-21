@@ -436,9 +436,10 @@ internal static class MarketplaceClient
 	static string BuildRawUrl(string repo, string branch, string path)
 	{
 		var encodedRepo = EncodeRepoPath(repo);
+		var encodedBranch = string.Join("/", branch.Split('/').Select(Uri.EscapeDataString));
 		var normalizedPath = NormalizePath(path);
 		var encodedPath = string.Join("/", normalizedPath.Split('/').Select(Uri.EscapeDataString));
-		return $"{GitHubRawBase}/{encodedRepo}/{Uri.EscapeDataString(branch)}/{encodedPath}";
+		return $"{GitHubRawBase}/{encodedRepo}/{encodedBranch}/{encodedPath}";
 	}
 
 	internal static string EncodeRepoPath(string repo)

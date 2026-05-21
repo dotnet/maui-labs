@@ -74,6 +74,9 @@ internal static class RepositoryAssetInstaller
 		CancellationToken ct = default)
 	{
 		var destinationRoot = GetDestinationRoot(projectRoot, asset.DestinationRoot);
+		if (!FileSystemPathGuard.IsPathWithinRoot(destinationRoot, projectRoot))
+			return (-1, string.Empty);
+
 		var destinationBase = Path.GetFullPath(destinationRoot) + Path.DirectorySeparatorChar;
 		Directory.CreateDirectory(destinationRoot);
 
