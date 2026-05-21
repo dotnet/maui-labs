@@ -47,13 +47,14 @@ internal static class McpConfigurator
 			var configDir = Path.GetDirectoryName(configPath);
 			if (!string.IsNullOrEmpty(configDir))
 			{
-				Directory.CreateDirectory(configDir);
 				if (projectRoot is not null &&
 					env.Kind != AgentEnvironmentKind.CopilotCli &&
 					!FileSystemPathGuard.IsPathWithinRoot(configDir, projectRoot))
 				{
 					return false;
 				}
+
+				Directory.CreateDirectory(configDir);
 			}
 
 			JsonObject root;

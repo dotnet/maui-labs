@@ -44,7 +44,7 @@ internal static class RepositoryAssetInstaller
 
 			var (name, description) = MarketplaceClient.ParseFrontmatter(content);
 			var assetName = name ?? GetRemoteFileName(entryPath)[..^".agent.md".Length];
-			if (!IsMauiRelatedAgent(assetName, description, content))
+			if (!IsMauiRelatedAgent(assetName, description))
 				continue;
 
 			assets.Add(new RepositoryAssetInfo
@@ -125,7 +125,7 @@ internal static class RepositoryAssetInstaller
 			var (name, description) = MarketplaceClient.ParseFrontmatter(content);
 			var fileName = Path.GetFileName(filePath);
 			var assetName = name ?? fileName[..^".agent.md".Length];
-			if (!IsMauiRelatedAgent(assetName, description, content))
+			if (!IsMauiRelatedAgent(assetName, description))
 				continue;
 
 			assets.Add(new RepositoryAssetInfo
@@ -153,9 +153,9 @@ internal static class RepositoryAssetInstaller
 			projectRoot,
 			MarketplaceClient.NormalizePath(destinationRoot).Replace('/', Path.DirectorySeparatorChar));
 
-	static bool IsMauiRelatedAgent(string name, string? description, string content)
+	static bool IsMauiRelatedAgent(string name, string? description)
 	{
-		var haystack = string.Join('\n', name, description, content);
+		var haystack = string.Join('\n', name, description);
 		return haystack.Contains("maui", StringComparison.OrdinalIgnoreCase) ||
 			haystack.Contains("comet", StringComparison.OrdinalIgnoreCase);
 	}

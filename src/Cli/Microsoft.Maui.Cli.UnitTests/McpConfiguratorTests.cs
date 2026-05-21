@@ -370,6 +370,26 @@ public class McpConfiguratorTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ConfigureAsync_PathOutsideProject_DoesNotCreateDirectory()
+	{
+		var projectRoot = Path.Combine(_tempDir, "project");
+		var outsideRoot = Path.Combine(_tempDir, "outside");
+		Directory.CreateDirectory(projectRoot);
+		var configPath = Path.Combine(outsideRoot, ".claude", "mcp.json");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(projectRoot, ".claude", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env, projectRoot);
+
+		Assert.False(result);
+		Assert.False(Directory.Exists(Path.Combine(outsideRoot, ".claude")));
+	}
+
+	[Fact]
 	public async Task ConfigureAsync_IncompatibleOpenCodeSchema_ReturnsFalseAndLeavesConfigUnchanged()
 	{
 		var configDir = Path.Combine(_tempDir, ".opencode");

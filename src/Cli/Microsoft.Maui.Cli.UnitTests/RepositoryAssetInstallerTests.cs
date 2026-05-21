@@ -42,6 +42,7 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 				description: Generic workflow helper.
 				---
 				# Generic
+				This agent does not cover maui-specific logic.
 				"""
 		}));
 		var treeEntries = new List<(string Path, string Type)>
@@ -136,6 +137,7 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 			description: Generic workflow helper.
 			---
 			# Generic
+			This agent does not cover maui-specific logic.
 			""");
 
 		var assets = RepositoryAssetInstaller.GetInstalledCopilotAgents(_tempDir);
