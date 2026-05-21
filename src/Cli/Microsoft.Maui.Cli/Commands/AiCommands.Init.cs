@@ -73,7 +73,7 @@ public static partial class AiCommands
 
 				// Step 2: Detect agent environments
 				var currentDir = Directory.GetCurrentDirectory();
-				var workingDir = AgentEnvironmentDetector.ResolveProjectRoot(currentDir);
+				var workingDir = GetAiCommandWorkingDirectory(currentDir);
 				var environments = AgentEnvironmentDetector.Detect(currentDir);
 
 				environments = FilterEnvironments(environments, envFilter);
@@ -490,10 +490,16 @@ public static partial class AiCommands
 		};
 
 	internal static bool HasInitInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
-		=> skillFileCounts.Any(files => files < 0) || assetFileCounts.Any(files => files < 0);
+		=> HasSkillInstallFailures(skillFileCounts) || assetFileCounts.Any(files => files < 0);
 
 	internal static string GetInitStatus(bool hasInstallFailures)
 		=> hasInstallFailures ? "partial" : "success";
+
+	internal static bool HasSkillInstallFailures(IEnumerable<int> skillFileCounts)
+		=> skillFileCounts.Any(files => files < 0);
+
+	internal static string GetAiCommandWorkingDirectory(string currentDir)
+		=> AgentEnvironmentDetector.ResolveProjectRoot(currentDir);
 
 	/// <summary>
 	/// Fetches all skills from every plugin listed in the marketplace manifest,

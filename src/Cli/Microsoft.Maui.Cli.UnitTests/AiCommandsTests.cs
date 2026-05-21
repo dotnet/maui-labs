@@ -293,6 +293,27 @@ public class AiCommandsTests
 	}
 
 	[Fact]
+	public void GetAiCommandWorkingDirectory_SubdirectoryUnderGitRoot_ReturnsGitRoot()
+	{
+		var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		try
+		{
+			var subdirectory = Path.Combine(tempDir, "src", "MyApp");
+			Directory.CreateDirectory(Path.Combine(tempDir, ".git"));
+			Directory.CreateDirectory(subdirectory);
+
+			var workingDir = AiCommands.GetAiCommandWorkingDirectory(subdirectory);
+
+			Assert.Equal(Path.GetFullPath(tempDir), workingDir);
+		}
+		finally
+		{
+			if (Directory.Exists(tempDir))
+				Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
 	public void FileSystemPathComparer_MatchesCurrentPlatformSemantics()
 	{
 		var paths = new HashSet<string>(AiCommands.FileSystemPathComparer)
@@ -319,6 +340,24 @@ public class AiCommandsTests
 	public void HasInitInstallFailures_DetectsNegativeFileCounts(int[] skillFileCounts, int[] assetFileCounts, bool expected)
 	{
 		Assert.Equal(expected, AiCommands.HasInitInstallFailures(skillFileCounts, assetFileCounts));
+	}
+
+	[Theory]
+	[InlineData(new[] { 1, 2 }, new[] { 1 }, false)]
+	[InlineData(new[] { -2, 1 }, new[] { 1 }, true)]
+	[InlineData(new[] { 1 }, new[] { -1 }, true)]
+	[InlineData(new[] { 1 }, new[] { 0 }, true)]
+	public void HasUpdateInstallFailures_DetectsFailedUpdates(int[] skillFileCounts, int[] assetFileCounts, bool expected)
+	{
+		Assert.Equal(expected, AiCommands.HasUpdateInstallFailures(skillFileCounts, assetFileCounts));
+	}
+
+	[Theory]
+	[InlineData(false, "success")]
+	[InlineData(true, "partial_failure")]
+	public void GetUpdateStatus_ReflectsUpdateFailures(bool hasUpdateFailures, string expected)
+	{
+		Assert.Equal(expected, AiCommands.GetUpdateStatus(hasUpdateFailures));
 	}
 
 	private static void AssertNoWhitespaceAliases(Command command)

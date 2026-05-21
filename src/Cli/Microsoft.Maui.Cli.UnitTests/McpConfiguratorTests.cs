@@ -175,6 +175,43 @@ public class McpConfiguratorTests : IDisposable
 		Assert.Equal(contentAfterFirst, contentAfterSecond);
 	}
 
+	[Theory]
+	[InlineData("\"broken\"")]
+	[InlineData("""{ "command": "wrong" }""")]
+	[InlineData("""{ "command": "maui", "args": ["wrong"] }""")]
+	public async Task ConfigureAsync_RepairsMalformedStandardServerEntry(string malformedEntry)
+	{
+		var configDir = Path.Combine(_tempDir, ".claude");
+		Directory.CreateDirectory(configDir);
+		var configPath = Path.Combine(configDir, "mcp.json");
+		await File.WriteAllTextAsync(configPath, $$"""
+			{
+			  "mcpServers": {
+			    "maui-devflow": {{malformedEntry}}
+			  }
+			}
+			""");
+
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(_tempDir, ".claude", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env);
+
+		Assert.True(result);
+		var json = JsonNode.Parse(await File.ReadAllTextAsync(configPath));
+		var server = json?["mcpServers"]?["maui-devflow"];
+		Assert.NotNull(server);
+		Assert.Equal("maui", server["command"]?.GetValue<string>());
+		var args = server["args"]?.AsArray();
+		Assert.NotNull(args);
+		Assert.Equal("devflow", args[0]?.GetValue<string>());
+		Assert.Equal("mcp", args[1]?.GetValue<string>());
+	}
+
 	[Fact]
 	public async Task ConfigureAsync_OpenCode_UsesNestedMcpServersKey()
 	{

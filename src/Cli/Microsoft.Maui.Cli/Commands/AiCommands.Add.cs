@@ -82,16 +82,11 @@ public static partial class AiCommands
 				}
 
 				// Detect environments
-				var workingDir = Directory.GetCurrentDirectory();
-				var environments = AgentEnvironmentDetector.Detect(workingDir);
+				var currentDir = Directory.GetCurrentDirectory();
+				var workingDir = GetAiCommandWorkingDirectory(currentDir);
+				var environments = AgentEnvironmentDetector.Detect(currentDir);
 
-				if (envFilter is { Length: > 0 })
-				{
-					environments = environments
-						.Where(e => envFilter.Any(f =>
-							string.Equals(f, e.Kind.ToString(), StringComparison.OrdinalIgnoreCase)))
-						.ToList();
-				}
+				environments = FilterEnvironments(environments, envFilter);
 
 				if (environments.Count == 0)
 				{
@@ -132,7 +127,7 @@ public static partial class AiCommands
 
 					if (filesInstalled == -1)
 					{
-						formatter.WriteWarning($"Skill '{skill.Name}' has an invalid name and cannot be installed.");
+						formatter.WriteWarning($"Skill '{skill.Name}' has an invalid name or unsafe install path and cannot be installed.");
 					}
 					else if (filesInstalled == -2)
 					{
@@ -159,9 +154,10 @@ public static partial class AiCommands
 
 				if (useJson)
 				{
+					var hasInstallFailures = HasSkillInstallFailures(results.Select(r => r.Files));
 					var jsonResult = new JsonObject
 					{
-						["status"] = "success",
+						["status"] = GetInitStatus(hasInstallFailures),
 						["skill"] = skill.Name,
 						["installations"] = new JsonArray(results.Select(r => (JsonNode)new JsonObject
 						{
@@ -173,7 +169,7 @@ public static partial class AiCommands
 					formatter.Write(jsonResult);
 				}
 
-				return 0;
+				return HasSkillInstallFailures(results.Select(r => r.Files)) ? 1 : 0;
 			}
 			catch (HttpRequestException ex)
 			{

@@ -272,11 +272,12 @@ public static partial class AiCommands
 						formatter.WriteWarning($"Could not update {asset.Name} → {asset.Category}");
 				}
 
+				var hasUpdateFailures = HasUpdateInstallFailures(results.Select(r => r.Files), assetResults.Select(r => r.Files));
 				if (useJson)
 				{
 					var jsonResult = new JsonObject
 					{
-						["status"] = "success",
+						["status"] = GetUpdateStatus(hasUpdateFailures),
 						["devFlowSkills"] = new JsonArray(devFlowResults.Select(r => (JsonNode)new JsonObject
 						{
 							["skill"] = r.Skill,
@@ -307,7 +308,7 @@ public static partial class AiCommands
 					formatter.WriteWarning($"⚠ Could not check {uncheckableCount} {skillWord} — GitHub may be unreachable.");
 				}
 
-				return 0;
+				return hasUpdateFailures ? 1 : 0;
 			}
 			catch (HttpRequestException ex)
 			{
@@ -330,4 +331,10 @@ public static partial class AiCommands
 
 	internal static StringComparer FileSystemPathComparer =>
 		OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+	internal static bool HasUpdateInstallFailures(IEnumerable<int> skillFileCounts, IEnumerable<int> assetFileCounts)
+		=> skillFileCounts.Any(files => files < 0) || assetFileCounts.Any(files => files <= 0);
+
+	internal static string GetUpdateStatus(bool hasUpdateFailures)
+		=> hasUpdateFailures ? "partial_failure" : "success";
 }

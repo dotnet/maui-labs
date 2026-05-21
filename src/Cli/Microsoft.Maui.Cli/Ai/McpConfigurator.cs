@@ -117,7 +117,7 @@ internal static class McpConfigurator
 			root["mcpServers"] = mcpServers;
 		}
 
-		if (mcpServers[ServerName] is not null)
+		if (IsExpectedServerEntry(mcpServers[ServerName]))
 			return ConfigureResult.AlreadyConfigured;
 
 		mcpServers[ServerName] = serverEntry;
@@ -149,11 +149,25 @@ internal static class McpConfigurator
 			mcp["servers"] = servers;
 		}
 
-		if (servers[ServerName] is not null)
+		if (IsExpectedServerEntry(servers[ServerName]))
 			return ConfigureResult.AlreadyConfigured;
 
 		servers[ServerName] = serverEntry;
 		return ConfigureResult.Updated;
+	}
+
+	static bool IsExpectedServerEntry(JsonNode? server)
+	{
+		if (server is not JsonObject serverObject)
+			return false;
+
+		if (serverObject["command"]?.GetValue<string>() != "maui")
+			return false;
+
+		var args = serverObject["args"] as JsonArray;
+		return args is { Count: 2 } &&
+			args[0]?.GetValue<string>() == "devflow" &&
+			args[1]?.GetValue<string>() == "mcp";
 	}
 
 	static async Task WriteAtomicAsync(string configPath, string contents, CancellationToken ct)
