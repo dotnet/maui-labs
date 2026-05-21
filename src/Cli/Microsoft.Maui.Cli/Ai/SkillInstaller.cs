@@ -57,15 +57,16 @@ internal static class SkillInstaller
 				return (0, installPath);
 		}
 
-		Directory.CreateDirectory(installPath);
+		Directory.CreateDirectory(skillsDir);
+		var tempInstallPath = Path.Combine(skillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
+		Directory.CreateDirectory(tempInstallPath);
 
 		var filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
-			http, skill, installPath, repo, branch, ct).ConfigureAwait(false);
+			http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
 
-		if (filesInstalled == 0)
+		if (skill.Files.Count == 0 || filesInstalled != skill.Files.Count)
 		{
-			// Clean up empty directory
-			try { if (Directory.Exists(installPath) && !Directory.EnumerateFileSystemEntries(installPath).Any()) Directory.Delete(installPath); } catch { }
+			DeleteDirectoryIfExists(tempInstallPath);
 			return (-2, installPath);
 		}
 
@@ -83,8 +84,48 @@ internal static class SkillInstaller
 			PluginPath = skill.RemotePath
 		};
 
-		await SkillVersionStore.WriteAsync(installPath, version, ct).ConfigureAwait(false);
+		await SkillVersionStore.WriteAsync(tempInstallPath, version, ct).ConfigureAwait(false);
+
+		CopyDirectory(tempInstallPath, installPath);
+		DeleteDirectoryIfExists(tempInstallPath);
 
 		return (filesInstalled, installPath);
+	}
+
+	static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+	{
+		Directory.CreateDirectory(destinationDirectory);
+		foreach (var directoryPath in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+		{
+			var relativePath = Path.GetRelativePath(sourceDirectory, directoryPath);
+			Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
+		}
+
+		foreach (var filePath in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+		{
+			var relativePath = Path.GetRelativePath(sourceDirectory, filePath);
+			var destinationPath = Path.Combine(destinationDirectory, relativePath);
+			Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+			File.Copy(filePath, destinationPath, overwrite: true);
+		}
+	}
+
+	static void DeleteDirectoryIfExists(string path)
+	{
+		if (!Directory.Exists(path))
+			return;
+
+		try
+		{
+			Directory.Delete(path, recursive: true);
+		}
+		catch (IOException ex)
+		{
+			throw new InvalidOperationException($"Could not clean up temporary skill installation directory '{path}'.", ex);
+		}
+		catch (UnauthorizedAccessException ex)
+		{
+			throw new InvalidOperationException($"Could not clean up temporary skill installation directory '{path}'.", ex);
+		}
 	}
 }

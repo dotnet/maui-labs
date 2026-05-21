@@ -25,7 +25,7 @@ internal static class MarketplaceClient
 	/// <returns>The deserialized manifest, or <c>null</c> on failure.</returns>
 	public static async Task<MarketplaceManifest?> GetMarketplaceAsync(HttpClient http, string repo, string branch, CancellationToken ct = default)
 	{
-		var url = $"{GitHubRawBase}/{repo}/{branch}/.github/plugin/marketplace.json";
+		var url = BuildRawUrl(repo, branch, ".github/plugin/marketplace.json");
 		var json = await FetchStringAsync(http, url, ct).ConfigureAwait(false);
 		if (json is null)
 			return null;
@@ -44,7 +44,7 @@ internal static class MarketplaceClient
 	public static async Task<PluginManifest?> GetPluginAsync(HttpClient http, string repo, string branch, string pluginSourcePath, CancellationToken ct = default)
 	{
 		var path = NormalizePath($"{pluginSourcePath}/plugin.json");
-		var url = $"{GitHubRawBase}/{repo}/{branch}/{path}";
+		var url = BuildRawUrl(repo, branch, path);
 		var json = await FetchStringAsync(http, url, ct).ConfigureAwait(false);
 		if (json is null)
 			return null;
@@ -75,6 +75,9 @@ internal static class MarketplaceClient
 			return null;
 
 		var treeNode = JsonNode.Parse(treeJson);
+		if (treeNode?["truncated"]?.GetValue<bool>() == true)
+			throw new InvalidOperationException($"GitHub tree for '{repo}@{branch}' is truncated; cannot safely discover all MAUI AI assets.");
+
 		var treeArray = treeNode?["tree"]?.AsArray();
 		if (treeArray is null)
 			return null;
@@ -170,21 +173,32 @@ internal static class MarketplaceClient
 
 		foreach (var filePath in skill.Files)
 		{
-			// Compute the path relative to the skill's remote root.
-			var relativePath = filePath;
-			var remotePrefix = skill.RemotePath + "/";
-			if (filePath.StartsWith(remotePrefix, StringComparison.Ordinal))
-				relativePath = filePath[remotePrefix.Length..];
-
-			var content = await FetchRawBytesAsync(http, repo, branch, filePath, ct).ConfigureAwait(false);
-			if (content is null)
+			string normalizedFilePath;
+			string remotePrefix;
+			try
+			{
+				normalizedFilePath = NormalizePath(filePath);
+				remotePrefix = NormalizePath(skill.RemotePath) + "/";
+			}
+			catch (InvalidOperationException)
+			{
 				continue;
+			}
+
+			if (!normalizedFilePath.StartsWith(remotePrefix, StringComparison.Ordinal))
+				continue;
+
+			var relativePath = normalizedFilePath[remotePrefix.Length..];
 
 			var destPath = Path.Combine(destDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
 			// Validate the resolved path stays under the destination directory.
 			var fullDest = Path.GetFullPath(destPath);
-			if (!fullDest.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase))
+			if (!fullDest.StartsWith(fullBase, PathComparison))
+				continue;
+
+			var content = await FetchRawBytesAsync(http, repo, branch, normalizedFilePath, ct).ConfigureAwait(false);
+			if (content is null)
 				continue;
 
 			var destFileDir = Path.GetDirectoryName(destPath);
@@ -208,7 +222,8 @@ internal static class MarketplaceClient
 	/// <returns>The commit SHA, or <c>null</c> on failure.</returns>
 	public static async Task<string?> GetRemoteCommitShaAsync(HttpClient http, string repo, string branch, string path, CancellationToken ct = default)
 	{
-		var url = $"{GitHubApiBase}/repos/{repo}/commits?sha={Uri.EscapeDataString(branch)}&path={Uri.EscapeDataString(path)}&per_page=1";
+		var normalizedPath = NormalizePath(path);
+		var url = $"{GitHubApiBase}/repos/{repo}/commits?sha={Uri.EscapeDataString(branch)}&path={Uri.EscapeDataString(normalizedPath)}&per_page=1";
 		var json = await FetchStringAsync(http, url, ct).ConfigureAwait(false);
 		if (json is null)
 			return null;
@@ -223,8 +238,7 @@ internal static class MarketplaceClient
 	internal static async Task<string?> FetchRawStringAsync(
 		HttpClient http, string repo, string branch, string path, CancellationToken ct = default)
 	{
-		var normalizedPath = NormalizePath(path);
-		var url = $"{GitHubRawBase}/{repo}/{branch}/{normalizedPath}";
+		var url = BuildRawUrl(repo, branch, path);
 		return await FetchStringAsync(http, url, ct).ConfigureAwait(false);
 	}
 
@@ -234,8 +248,7 @@ internal static class MarketplaceClient
 	internal static async Task<byte[]?> FetchRawBytesAsync(
 		HttpClient http, string repo, string branch, string path, CancellationToken ct = default)
 	{
-		var normalizedPath = NormalizePath(path);
-		var url = $"{GitHubRawBase}/{repo}/{branch}/{normalizedPath}";
+		var url = BuildRawUrl(repo, branch, path);
 		return await FetchBytesAsync(http, url, ct).ConfigureAwait(false);
 	}
 
@@ -404,8 +417,26 @@ internal static class MarketplaceClient
 			normalized = normalized[2..];
 		while (normalized.Contains("//"))
 			normalized = normalized.Replace("//", "/");
-		return normalized.TrimEnd('/');
+		normalized = normalized.TrimEnd('/');
+
+		if (normalized.StartsWith("/", StringComparison.Ordinal) ||
+			normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(segment => segment == ".."))
+		{
+			throw new InvalidOperationException($"Repository path '{path}' must be relative and cannot contain '..' segments.");
+		}
+
+		return normalized;
 	}
+
+	static string BuildRawUrl(string repo, string branch, string path)
+	{
+		var normalizedPath = NormalizePath(path);
+		var encodedPath = string.Join("/", normalizedPath.Split('/').Select(Uri.EscapeDataString));
+		return $"{GitHubRawBase}/{repo}/{Uri.EscapeDataString(branch)}/{encodedPath}";
+	}
+
+	static StringComparison PathComparison =>
+		OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
 	private static async Task<string?> FetchStringAsync(HttpClient http, string url, CancellationToken ct = default)
 	{

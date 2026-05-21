@@ -14,6 +14,12 @@ namespace Microsoft.Maui.Cli.Ai;
 internal static class McpConfigurator
 {
 	private const string ServerName = "maui-devflow";
+	enum ConfigureResult
+	{
+		AlreadyConfigured,
+		Updated,
+		IncompatibleSchema
+	}
 
 	/// <summary>
 	/// Ensures the <c>maui-devflow</c> MCP server entry exists in the
@@ -33,7 +39,10 @@ internal static class McpConfigurator
 			if (File.Exists(configPath))
 			{
 				var existingJson = await File.ReadAllTextAsync(configPath, ct).ConfigureAwait(false);
-				root = JsonNode.Parse(existingJson) as JsonObject ?? new JsonObject();
+				if (JsonNode.Parse(existingJson) is not JsonObject existingRoot)
+					return false;
+
+				root = existingRoot;
 			}
 			else
 			{
@@ -46,26 +55,22 @@ internal static class McpConfigurator
 				["args"] = new JsonArray("devflow", "mcp")
 			};
 
-			bool alreadyConfigured;
-			if (env.Kind == AgentEnvironmentKind.OpenCode)
-			{
-				alreadyConfigured = EnsureOpenCodeEntry(root, serverEntry);
-			}
-			else
-			{
-				alreadyConfigured = EnsureStandardEntry(root, serverEntry);
-			}
+			var configureResult = env.Kind == AgentEnvironmentKind.OpenCode
+				? EnsureOpenCodeEntry(root, serverEntry)
+				: EnsureStandardEntry(root, serverEntry);
 
-			if (alreadyConfigured)
+			if (configureResult == ConfigureResult.AlreadyConfigured)
 				return true;
+			if (configureResult == ConfigureResult.IncompatibleSchema)
+				return false;
 
 			// Ensure the config directory exists before writing.
 			var configDir = Path.GetDirectoryName(configPath);
-			if (configDir is not null)
+			if (!string.IsNullOrEmpty(configDir))
 				Directory.CreateDirectory(configDir);
 
 			var options = new JsonSerializerOptions { WriteIndented = true };
-			await File.WriteAllTextAsync(configPath, root.ToJsonString(options), ct).ConfigureAwait(false);
+			await WriteAtomicAsync(configPath, root.ToJsonString(options), ct).ConfigureAwait(false);
 
 			return true;
 		}
@@ -87,12 +92,11 @@ internal static class McpConfigurator
 	/// Adds the server entry under the standard <c>mcpServers</c> key used by
 	/// Claude, VS Code, and Copilot CLI.
 	/// </summary>
-	/// <returns><c>true</c> if the entry already exists (no changes needed).</returns>
-	private static bool EnsureStandardEntry(JsonObject root, JsonObject serverEntry)
+	private static ConfigureResult EnsureStandardEntry(JsonObject root, JsonObject serverEntry)
 	{
 		var existing = root["mcpServers"];
 		if (existing is not null and not JsonObject)
-			return false;
+			return ConfigureResult.IncompatibleSchema;
 
 		if (existing is not JsonObject mcpServers)
 		{
@@ -101,21 +105,20 @@ internal static class McpConfigurator
 		}
 
 		if (mcpServers[ServerName] is not null)
-			return true;
+			return ConfigureResult.AlreadyConfigured;
 
 		mcpServers[ServerName] = serverEntry;
-		return false;
+		return ConfigureResult.Updated;
 	}
 
 	/// <summary>
 	/// Adds the server entry under the OpenCode-specific <c>mcp.servers</c> key.
 	/// </summary>
-	/// <returns><c>true</c> if the entry already exists (no changes needed).</returns>
-	private static bool EnsureOpenCodeEntry(JsonObject root, JsonObject serverEntry)
+	private static ConfigureResult EnsureOpenCodeEntry(JsonObject root, JsonObject serverEntry)
 	{
 		var existingMcp = root["mcp"];
 		if (existingMcp is not null and not JsonObject)
-			return false;
+			return ConfigureResult.IncompatibleSchema;
 
 		if (existingMcp is not JsonObject mcp)
 		{
@@ -125,7 +128,7 @@ internal static class McpConfigurator
 
 		var existingServers = mcp["servers"];
 		if (existingServers is not null and not JsonObject)
-			return false;
+			return ConfigureResult.IncompatibleSchema;
 
 		if (existingServers is not JsonObject servers)
 		{
@@ -134,9 +137,27 @@ internal static class McpConfigurator
 		}
 
 		if (servers[ServerName] is not null)
-			return true;
+			return ConfigureResult.AlreadyConfigured;
 
 		servers[ServerName] = serverEntry;
-		return false;
+		return ConfigureResult.Updated;
+	}
+
+	static async Task WriteAtomicAsync(string configPath, string contents, CancellationToken ct)
+	{
+		var configDir = Path.GetDirectoryName(configPath);
+		var tempDir = string.IsNullOrEmpty(configDir) ? Directory.GetCurrentDirectory() : configDir;
+		var tempPath = Path.Combine(tempDir, $".{Path.GetFileName(configPath)}.{Guid.NewGuid():N}.tmp");
+
+		try
+		{
+			await File.WriteAllTextAsync(tempPath, contents, ct).ConfigureAwait(false);
+			File.Move(tempPath, configPath, overwrite: true);
+		}
+		finally
+		{
+			if (File.Exists(tempPath))
+				File.Delete(tempPath);
+		}
 	}
 }

@@ -14,6 +14,10 @@ namespace Microsoft.Maui.Cli.Ai;
 internal static class SkillVersionStore
 {
 	private const string VersionFileName = ".skill-version";
+	private static readonly AiJsonContext s_indentedJsonContext = new(new JsonSerializerOptions(AiJsonContext.Default.Options)
+	{
+		WriteIndented = true
+	});
 
 	/// <summary>
 	/// Reads the <c>.skill-version</c> file from the specified skill directory.
@@ -54,12 +58,7 @@ internal static class SkillVersionStore
 		Directory.CreateDirectory(skillDir);
 		var path = Path.Combine(skillDir, VersionFileName);
 
-		var json = JsonSerializer.Serialize(version, AiJsonContext.Default.InstalledSkillVersion);
-
-		// Re-format as indented JSON for human readability.
-		var node = JsonNode.Parse(json);
-		var indented = node?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? json;
-
-		await File.WriteAllTextAsync(path, indented, ct).ConfigureAwait(false);
+		var json = JsonSerializer.Serialize(version, s_indentedJsonContext.InstalledSkillVersion);
+		await File.WriteAllTextAsync(path, json, ct).ConfigureAwait(false);
 	}
 }

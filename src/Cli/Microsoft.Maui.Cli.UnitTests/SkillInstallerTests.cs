@@ -85,11 +85,58 @@ public class SkillInstallerTests : IDisposable
 		Assert.NotEqual(-1, filesInstalled);
 	}
 
+	[Fact]
+	public async Task InstallSkillAsync_PartialDownload_RollsBackAndReturnsNegativeTwo()
+	{
+		var skill = new SkillInfo
+		{
+			Name = "partial-skill",
+			RemotePath = ".github/skills/partial-skill",
+			Files =
+			[
+				".github/skills/partial-skill/SKILL.md",
+				".github/skills/partial-skill/references/setup.md"
+			]
+		};
+		var skillsDir = Path.Combine(_tempDir, "skills");
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			SkillsDirectory = skillsDir
+		};
+		var handler = new SelectiveNotFoundHandler("SKILL.md");
+		using var http = new HttpClient(handler);
+
+		var (filesInstalled, installPath) = await SkillInstaller.InstallSkillAsync(
+			http, skill, env, _tempDir, "owner/repo", "main", force: false);
+
+		Assert.Equal(-2, filesInstalled);
+		Assert.False(Directory.Exists(installPath));
+		Assert.Empty(Directory.EnumerateFileSystemEntries(skillsDir));
+	}
+
 	private sealed class NotFoundHandler : HttpMessageHandler
 	{
 		protected override Task<HttpResponseMessage> SendAsync(
 			HttpRequestMessage request, CancellationToken cancellationToken)
 		{
+			return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+		}
+	}
+
+	private sealed class SelectiveNotFoundHandler(string successfulFileName) : HttpMessageHandler
+	{
+		protected override Task<HttpResponseMessage> SendAsync(
+			HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			if (request.RequestUri?.AbsolutePath.EndsWith(successfulFileName, StringComparison.Ordinal) == true)
+			{
+				return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+				{
+					Content = new ByteArrayContent("content"u8.ToArray())
+				});
+			}
+
 			return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
 		}
 	}

@@ -243,6 +243,62 @@ public class McpConfiguratorTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ConfigureAsync_IncompatibleStandardSchema_ReturnsFalseAndLeavesConfigUnchanged()
+	{
+		var configDir = Path.Combine(_tempDir, ".claude");
+		Directory.CreateDirectory(configDir);
+		var configPath = Path.Combine(configDir, "mcp.json");
+		var originalContent = """
+			{
+			  "mcpServers": []
+			}
+			""";
+		await File.WriteAllTextAsync(configPath, originalContent);
+
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.Claude,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(_tempDir, ".claude", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env);
+
+		Assert.False(result);
+		Assert.Equal(originalContent, await File.ReadAllTextAsync(configPath));
+		Assert.Empty(Directory.EnumerateFiles(configDir, "*.tmp"));
+	}
+
+	[Fact]
+	public async Task ConfigureAsync_IncompatibleOpenCodeSchema_ReturnsFalseAndLeavesConfigUnchanged()
+	{
+		var configDir = Path.Combine(_tempDir, ".opencode");
+		Directory.CreateDirectory(configDir);
+		var configPath = Path.Combine(configDir, "config.json");
+		var originalContent = """
+			{
+			  "mcp": {
+			    "servers": []
+			  }
+			}
+			""";
+		await File.WriteAllTextAsync(configPath, originalContent);
+
+		var env = new DetectedEnvironment
+		{
+			Kind = AgentEnvironmentKind.OpenCode,
+			McpConfigPath = configPath,
+			SkillsDirectory = Path.Combine(_tempDir, ".opencode", "skills")
+		};
+
+		var result = await McpConfigurator.ConfigureAsync(env);
+
+		Assert.False(result);
+		Assert.Equal(originalContent, await File.ReadAllTextAsync(configPath));
+		Assert.Empty(Directory.EnumerateFiles(configDir, "*.tmp"));
+	}
+
+	[Fact]
 	public async Task ConfigureAsync_ReturnsTrue_WhenEntryAlreadyExists()
 	{
 		var configDir = Path.Combine(_tempDir, ".claude");

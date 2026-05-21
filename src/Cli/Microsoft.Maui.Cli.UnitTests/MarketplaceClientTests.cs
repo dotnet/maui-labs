@@ -274,6 +274,7 @@ public class MarketplaceClientTests : IDisposable
 		Assert.Equal(0, count);
 		// Verify no file was written outside the dest directory
 		Assert.Empty(Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories));
+		Assert.Equal(0, handler.Calls);
 	}
 
 	[Fact]
@@ -297,6 +298,7 @@ public class MarketplaceClientTests : IDisposable
 
 		Assert.Equal(0, count);
 		Assert.Empty(Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories));
+		Assert.Equal(0, handler.Calls);
 	}
 
 	[Fact]
@@ -320,6 +322,100 @@ public class MarketplaceClientTests : IDisposable
 
 		Assert.Equal(1, count);
 		Assert.True(File.Exists(Path.Combine(_tempDir, "SKILL.md")));
+		Assert.Equal(1, handler.Calls);
+	}
+
+	[Fact]
+	public async Task DownloadSkillFilesAsync_RejectsFilesOutsideRemotePath()
+	{
+		var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new ByteArrayContent("wrong skill"u8.ToArray())
+		});
+		using var http = new HttpClient(handler);
+
+		var skill = new SkillInfo
+		{
+			Name = "good-skill",
+			RemotePath = "plugins/good",
+			Files = ["plugins/other/SKILL.md"]
+		};
+
+		var count = await MarketplaceClient.DownloadSkillFilesAsync(
+			http, skill, _tempDir, "owner/repo", "main");
+
+		Assert.Equal(0, count);
+		Assert.Empty(Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories));
+		Assert.Equal(0, handler.Calls);
+	}
+
+	[Theory]
+	[InlineData("plugins/evil/../SKILL.md")]
+	[InlineData("../plugins/evil/SKILL.md")]
+	[InlineData("/plugins/evil/SKILL.md")]
+	[InlineData("plugins\\evil\\..\\SKILL.md")]
+	public void NormalizePath_UnsafePath_Throws(string path)
+	{
+		var exception = Assert.Throws<InvalidOperationException>(() => MarketplaceClient.NormalizePath(path));
+		Assert.Contains("cannot contain '..' segments", exception.Message);
+	}
+
+	[Fact]
+	public async Task FetchTreeEntriesAsync_TruncatedTree_Throws()
+	{
+		var handler = new SequenceHttpMessageHandler(
+			_ => new HttpResponseMessage(HttpStatusCode.OK)
+			{
+				Content = new StringContent("""
+					{
+					  "commit": {
+					    "tree": { "sha": "tree-sha" }
+					  }
+					}
+					""")
+			},
+			_ => new HttpResponseMessage(HttpStatusCode.OK)
+			{
+				Content = new StringContent("""
+					{
+					  "truncated": true,
+					  "tree": []
+					}
+					""")
+			});
+		using var http = new HttpClient(handler);
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+			() => MarketplaceClient.FetchTreeEntriesAsync(http, "owner/repo", "main"));
+
+		Assert.Contains("truncated", exception.Message);
+	}
+
+	[Fact]
+	public async Task FetchRawStringAsync_EncodesRawUrlPathSegments()
+	{
+		Uri? requestUri = null;
+		var handler = new DelegateHttpMessageHandler(request =>
+		{
+			requestUri = request.RequestUri;
+			return new HttpResponseMessage(HttpStatusCode.OK)
+			{
+				Content = new StringContent("content")
+			};
+		});
+		using var http = new HttpClient(handler);
+
+		await MarketplaceClient.FetchRawStringAsync(
+			http,
+			"owner/repo",
+			"feature/test",
+			".github/skills/my skill/SKILL#.md");
+
+		Assert.NotNull(requestUri);
+		var url = requestUri!.AbsoluteUri;
+		Assert.Contains("feature%2Ftest", url);
+		Assert.Contains("my%20skill", url);
+		Assert.Contains("SKILL%23.md", url);
 	}
 
 	/// <summary>
@@ -328,15 +424,36 @@ public class MarketplaceClientTests : IDisposable
 	private sealed class FakeHttpMessageHandler : HttpMessageHandler
 	{
 		private readonly HttpResponseMessage _response;
+		public int Calls { get; private set; }
 
 		public FakeHttpMessageHandler(HttpResponseMessage response) => _response = response;
 
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-			=> Task.FromResult(_response);
+		{
+			Calls++;
+			return Task.FromResult(_response);
+		}
 
 		protected override void Dispose(bool disposing)
 		{
 			// Don't dispose _response — the caller owns it via the test scope
+		}
+	}
+
+	private sealed class DelegateHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+	{
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+			=> Task.FromResult(handler(request));
+	}
+
+	private sealed class SequenceHttpMessageHandler(params Func<HttpRequestMessage, HttpResponseMessage>[] handlers) : HttpMessageHandler
+	{
+		private int _index;
+
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			var handler = handlers[_index++];
+			return Task.FromResult(handler(request));
 		}
 	}
 }
