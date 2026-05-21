@@ -11,6 +11,8 @@ namespace Microsoft.Maui.Cli.Commands;
 
 public static partial class AiCommands
 {
+	const long MaxLocalAgentStatusBytes = 1024 * 1024;
+
 	internal sealed record AiAssetStatusRow(
 		string Item,
 		string Type,
@@ -171,7 +173,13 @@ public static partial class AiCommands
 					break;
 				}
 
-				var localBytes = await File.ReadAllBytesAsync(localPath, ct).ConfigureAwait(false);
+				var localBytes = await TryReadLocalAssetBytesAsync(localPath, ct).ConfigureAwait(false);
+				if (localBytes is null)
+				{
+					status = "Unknown";
+					break;
+				}
+
 				if (!remoteBytes.SequenceEqual(localBytes))
 				{
 					status = "Update available";
@@ -189,6 +197,29 @@ public static partial class AiCommands
 		}
 
 		return rows;
+	}
+
+	static async Task<byte[]?> TryReadLocalAssetBytesAsync(string localPath, CancellationToken ct)
+	{
+		try
+		{
+			if (FileSystemPathGuard.IsReparsePoint(localPath))
+				return null;
+
+			var info = new FileInfo(localPath);
+			if (!info.Exists || info.Length > MaxLocalAgentStatusBytes)
+				return null;
+
+			return await File.ReadAllBytesAsync(localPath, ct).ConfigureAwait(false);
+		}
+		catch (IOException)
+		{
+			return null;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return null;
+		}
 	}
 
 	internal static bool NeedsUpdate(AiAssetStatusRow row, bool force)

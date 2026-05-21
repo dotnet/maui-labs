@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text;
 using Microsoft.Maui.Cli.Ai.Models;
 
 namespace Microsoft.Maui.Cli.Ai;
@@ -59,6 +60,12 @@ internal static class SkillVersionStore
 		var path = Path.Combine(skillDir, VersionFileName);
 
 		var json = JsonSerializer.Serialize(version, s_indentedJsonContext.InstalledSkillVersion);
-		await File.WriteAllTextAsync(path, json, ct).ConfigureAwait(false);
+		var written = await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+			path,
+			skillDir,
+			Encoding.UTF8.GetBytes(json),
+			ct).ConfigureAwait(false);
+		if (!written)
+			throw new IOException($"Could not write skill version metadata to '{path}'.");
 	}
 }

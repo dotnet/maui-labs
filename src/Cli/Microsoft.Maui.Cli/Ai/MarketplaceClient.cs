@@ -487,7 +487,7 @@ internal static class MarketplaceClient
 		}
 		catch (TaskCanceledException) when (!ct.IsCancellationRequested)
 		{
-			return null; // real HTTP timeout
+			throw new HttpRequestException("GitHub request timed out.", null, System.Net.HttpStatusCode.RequestTimeout);
 		}
 	}
 
@@ -507,7 +507,7 @@ internal static class MarketplaceClient
 		}
 		catch (TaskCanceledException) when (!ct.IsCancellationRequested)
 		{
-			return null; // real HTTP timeout
+			throw new HttpRequestException("GitHub request timed out.", null, System.Net.HttpStatusCode.RequestTimeout);
 		}
 	}
 

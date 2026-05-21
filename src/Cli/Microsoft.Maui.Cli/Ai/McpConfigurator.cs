@@ -91,7 +91,7 @@ internal static class McpConfigurator
 
 			var options = new JsonSerializerOptions { WriteIndented = true };
 			if (backupExistingConfig && existingJson is not null)
-				await WriteBackupAsync(configPath, existingJson, ct).ConfigureAwait(false);
+				await WriteBackupAsync(configPath, existingJson, projectRoot, ct).ConfigureAwait(false);
 
 			await WriteAtomicAsync(configPath, root.ToJsonString(options), ct).ConfigureAwait(false);
 
@@ -198,11 +198,15 @@ internal static class McpConfigurator
 		}
 	}
 
-	static async Task WriteBackupAsync(string configPath, string contents, CancellationToken ct)
+	static async Task WriteBackupAsync(string configPath, string contents, string? projectRoot, CancellationToken ct)
 	{
 		var backupPath = GetBackupPath(configPath);
-		var backupDir = Path.GetDirectoryName(backupPath);
-		var backupRoot = string.IsNullOrEmpty(backupDir) ? Directory.GetCurrentDirectory() : backupDir;
+		var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath));
+		var configRoot = string.IsNullOrEmpty(configDir) ? Directory.GetCurrentDirectory() : configDir;
+		var backupRoot = projectRoot is not null && FileSystemPathGuard.IsPathWithinRoot(configRoot, projectRoot)
+			? projectRoot
+			: configRoot;
+
 		await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
 			backupPath,
 			backupRoot,

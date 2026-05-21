@@ -170,6 +170,22 @@ public class SkillVersionStoreTests : IDisposable
 	}
 
 	[Fact]
+	public async Task WriteAsync_RemovesTemporaryWriteDirectory()
+	{
+		var skillDir = Path.Combine(_tempDir, "atomic-skill");
+		var version = new InstalledSkillVersion
+		{
+			Name = "test-skill",
+			Commit = "abc123"
+		};
+
+		await SkillVersionStore.WriteAsync(skillDir, version);
+
+		Assert.Empty(Directory.GetDirectories(skillDir, ".maui-ai-write.*.tmp"));
+		Assert.True(File.Exists(Path.Combine(skillDir, ".skill-version")));
+	}
+
+	[Fact]
 	public async Task WriteAsync_NullProperties_AreOmitted()
 	{
 		var skillDir = Path.Combine(_tempDir, "nulls-skill");

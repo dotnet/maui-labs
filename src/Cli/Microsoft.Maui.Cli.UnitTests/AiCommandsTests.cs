@@ -346,7 +346,7 @@ public class AiCommandsTests
 	[Theory]
 	[InlineData(new[] { 1, 2 }, new[] { 1 }, false)]
 	[InlineData(new[] { -2, 1 }, new[] { 1 }, true)]
-	[InlineData(new[] { 0, 1 }, new[] { 1 }, true)]
+	[InlineData(new[] { 0, 1 }, new[] { 1 }, false)]
 	[InlineData(new[] { 1 }, new[] { -1 }, true)]
 	[InlineData(new[] { 1 }, new[] { 0 }, false)]
 	public void HasUpdateInstallFailures_DetectsFailedUpdates(int[] skillFileCounts, int[] assetFileCounts, bool expected)
@@ -368,6 +368,42 @@ public class AiCommandsTests
 
 		Assert.False(result.IsCheckable);
 		Assert.Null(result.RemoteSha);
+	}
+
+	[Fact]
+	public async Task GetRemoteAgentStatusRowsAsync_OversizedLocalAgent_ReturnsUnknown()
+	{
+		var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		try
+		{
+			var localAgentPath = Path.Combine(tempDir, ".github", "agents", "expert-reviewer.agent.md");
+			Directory.CreateDirectory(Path.GetDirectoryName(localAgentPath)!);
+			await File.WriteAllTextAsync(localAgentPath, new string('x', 1024 * 1024 + 1));
+			using var http = new HttpClient(new StaticContentHandler("remote content"));
+			var asset = new RepositoryAssetInfo
+			{
+				Name = "expert-reviewer",
+				Category = "agent",
+				DestinationRoot = ".github/agents",
+				Files = [".github/agents/expert-reviewer.agent.md"]
+			};
+
+			var rows = await AiCommands.GetRemoteAgentStatusRowsAsync(
+				http,
+				[asset],
+				tempDir,
+				"owner/repo",
+				"main",
+				CancellationToken.None);
+
+			var row = Assert.Single(rows);
+			Assert.Equal("Unknown", row.Row.Status);
+		}
+		finally
+		{
+			if (Directory.Exists(tempDir))
+				Directory.Delete(tempDir, recursive: true);
+		}
 	}
 
 	[Theory]
@@ -428,5 +464,14 @@ public class AiCommandsTests
 		{
 			AssertNoWhitespaceAliases(subcommand);
 		}
+	}
+
+	sealed class StaticContentHandler(string content) : HttpMessageHandler
+	{
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+			=> Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+			{
+				Content = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(content))
+			});
 	}
 }

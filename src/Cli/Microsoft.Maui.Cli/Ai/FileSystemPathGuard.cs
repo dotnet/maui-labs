@@ -63,12 +63,15 @@ internal static class FileSystemPathGuard
 		if (!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
 			return false;
 
-		var tempPath = Path.Combine(
-			destinationDirectory,
-			$".{Path.GetFileName(fullDestinationPath)}.{Guid.NewGuid():N}.tmp");
+		var tempDirectory = Path.Combine(root, $".maui-ai-write.{Guid.NewGuid():N}.tmp");
+		var tempPath = Path.Combine(tempDirectory, Path.GetFileName(fullDestinationPath));
 
 		try
 		{
+			Directory.CreateDirectory(tempDirectory);
+			if (IsReparsePoint(tempDirectory) || !IsPathWithinRoot(tempDirectory, root))
+				return false;
+
 			await File.WriteAllBytesAsync(tempPath, content, ct).ConfigureAwait(false);
 			if (!IsPathWithinRoot(tempPath, root) ||
 				!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
@@ -81,8 +84,8 @@ internal static class FileSystemPathGuard
 		}
 		finally
 		{
-			if (File.Exists(tempPath))
-				File.Delete(tempPath);
+			if (Directory.Exists(tempDirectory))
+				Directory.Delete(tempDirectory, recursive: true);
 		}
 	}
 

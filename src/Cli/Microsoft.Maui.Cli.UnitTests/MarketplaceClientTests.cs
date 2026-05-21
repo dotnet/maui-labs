@@ -526,6 +526,24 @@ public class MarketplaceClientTests : IDisposable
 		Assert.Null(result);
 	}
 
+	[Fact]
+	public async Task FetchRawStringAsync_Timeout_ThrowsHttpRequestException()
+	{
+		using var http = new HttpClient(new TimeoutHttpMessageHandler());
+
+		await Assert.ThrowsAsync<HttpRequestException>(() =>
+			MarketplaceClient.FetchRawStringAsync(http, "owner/repo", "main", "README.md"));
+	}
+
+	[Fact]
+	public async Task FetchRawBytesAsync_Timeout_ThrowsHttpRequestException()
+	{
+		using var http = new HttpClient(new TimeoutHttpMessageHandler());
+
+		await Assert.ThrowsAsync<HttpRequestException>(() =>
+			MarketplaceClient.FetchRawBytesAsync(http, "owner/repo", "main", "README.md"));
+	}
+
 	/// <summary>
 	/// Minimal HttpMessageHandler that returns a fresh response for every request.
 	/// </summary>
@@ -570,6 +588,12 @@ public class MarketplaceClientTests : IDisposable
 			length = 11L * 1024 * 1024;
 			return true;
 		}
+	}
+
+	private sealed class TimeoutHttpMessageHandler : HttpMessageHandler
+	{
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+			=> throw new TaskCanceledException("Simulated timeout");
 	}
 
 	private static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
