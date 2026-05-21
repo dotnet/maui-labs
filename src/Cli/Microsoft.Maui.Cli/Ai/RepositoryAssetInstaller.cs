@@ -98,7 +98,12 @@ internal static class RepositoryAssetInstaller
 			if (content is null)
 				continue;
 
-			if (!FileSystemPathGuard.IsPathWithinRoot(Path.GetDirectoryName(fullDestinationPath) ?? destinationRoot, projectRoot))
+			var destinationDirectory = Path.GetDirectoryName(fullDestinationPath) ?? destinationRoot;
+			if (!FileSystemPathGuard.IsPathWithinRoot(destinationDirectory, projectRoot))
+				return (-1, string.Empty);
+
+			Directory.CreateDirectory(destinationDirectory);
+			if (!FileSystemPathGuard.IsPathWithinRoot(destinationDirectory, projectRoot))
 				return (-1, string.Empty);
 
 			await File.WriteAllBytesAsync(fullDestinationPath, content, ct).ConfigureAwait(false);
@@ -118,7 +123,7 @@ internal static class RepositoryAssetInstaller
 		if (!Directory.Exists(destinationRoot))
 			return assets;
 
-		foreach (var filePath in Directory.GetFiles(destinationRoot, "*.agent.md", SearchOption.TopDirectoryOnly)
+		foreach (var filePath in Directory.GetFiles(destinationRoot, "*.agent.md", SearchOption.AllDirectories)
 			.OrderBy(path => path, StringComparer.Ordinal))
 		{
 			var content = File.ReadAllText(filePath);
@@ -145,7 +150,19 @@ internal static class RepositoryAssetInstaller
 	internal static string GetAssetFilePath(string projectRoot, RepositoryAssetInfo asset, string filePath)
 	{
 		var destinationRoot = GetDestinationRoot(projectRoot, asset.DestinationRoot);
-		return Path.Combine(destinationRoot, GetRemoteFileName(filePath));
+		return Path.Combine(
+			destinationRoot,
+			GetAssetRelativePath(asset, filePath).Replace('/', Path.DirectorySeparatorChar));
+	}
+
+	internal static string GetAssetRelativePath(RepositoryAssetInfo asset, string filePath)
+	{
+		var normalizedFilePath = MarketplaceClient.NormalizePath(filePath);
+		var destinationPrefix = MarketplaceClient.NormalizePath(asset.DestinationRoot) + "/";
+
+		return normalizedFilePath.StartsWith(destinationPrefix, StringComparison.Ordinal)
+			? normalizedFilePath[destinationPrefix.Length..]
+			: GetRemoteFileName(normalizedFilePath);
 	}
 
 	static string GetDestinationRoot(string projectRoot, string destinationRoot)

@@ -174,6 +174,54 @@ public sealed class RepositoryAssetInstallerTests : IDisposable
 		Assert.Equal("updated agent content", await File.ReadAllTextAsync(localPath));
 	}
 
+	[Fact]
+	public async Task InstallAssetAsync_PreservesRelativePathsToAvoidFileNameCollisions()
+	{
+		using var http = new HttpClient(new MapHttpMessageHandler(new Dictionary<string, string>
+		{
+			[".github/agents/ios/expert-reviewer.agent.md"] = "ios agent",
+			[".github/agents/android/expert-reviewer.agent.md"] = "android agent"
+		}));
+		var asset = new RepositoryAssetInfo
+		{
+			Name = "expert-reviewer",
+			Category = "agent",
+			RemotePath = ".github/agents/ios/expert-reviewer.agent.md",
+			DestinationRoot = ".github/agents",
+			Files =
+			[
+				".github/agents/ios/expert-reviewer.agent.md",
+				".github/agents/android/expert-reviewer.agent.md"
+			]
+		};
+
+		var result = await RepositoryAssetInstaller.InstallAssetAsync(
+			http, asset, _tempDir, "owner/repo", "main", force: true);
+
+		Assert.Equal(2, result.FilesInstalled);
+		Assert.Equal("ios agent", await File.ReadAllTextAsync(Path.Combine(_tempDir, ".github", "agents", "ios", "expert-reviewer.agent.md")));
+		Assert.Equal("android agent", await File.ReadAllTextAsync(Path.Combine(_tempDir, ".github", "agents", "android", "expert-reviewer.agent.md")));
+	}
+
+	[Fact]
+	public void GetInstalledCopilotAgents_IncludesNestedAgents()
+	{
+		var agentsDir = Path.Combine(_tempDir, ".github", "agents", "nested");
+		Directory.CreateDirectory(agentsDir);
+		File.WriteAllText(Path.Combine(agentsDir, "expert-reviewer.agent.md"), """
+			---
+			name: expert-reviewer
+			description: Expert .NET MAUI DevFlow code reviewer.
+			---
+			# Expert Reviewer
+			""");
+
+		var assets = RepositoryAssetInstaller.GetInstalledCopilotAgents(_tempDir);
+
+		var asset = Assert.Single(assets);
+		Assert.Equal("expert-reviewer", asset.Name);
+	}
+
 	sealed class MapHttpMessageHandler(Dictionary<string, string> responses) : HttpMessageHandler
 	{
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
