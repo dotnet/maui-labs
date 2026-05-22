@@ -1568,6 +1568,47 @@ public class DevFlowCommands
         mcpCmd.SetAction(async (ctx, ct) => { await Mcp.McpServerHost.RunAsync(); });
         devflowCommand.Add(mcpCmd);
 
+        // ===== Inspector command =====
+        var inspectorPortOption = new Option<int>("--port") { Description = "Inspector server port", DefaultValueFactory = _ => 5223 };
+        var inspectorCmd = new Command("inspector", "Start web inspector — serves the app as an interactive HTML page");
+        inspectorCmd.Add(inspectorPortOption);
+        inspectorCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var inspectorPort = ctx.GetValue(inspectorPortOption);
+
+            var server = new Inspector.InspectorServer(inspectorPort, host, port);
+            server.Start();
+
+            var url = $"http://localhost:{inspectorPort}";
+            Console.WriteLine($"DevFlow Inspector running at {url}");
+            Console.WriteLine($"Proxying to agent at {host}:{port}");
+            Console.WriteLine("Press Ctrl+C to stop.");
+
+            // Try to open browser
+            try
+            {
+                if (OperatingSystem.IsMacOS())
+                    System.Diagnostics.Process.Start("open", url);
+                else if (OperatingSystem.IsWindows())
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                else if (OperatingSystem.IsLinux())
+                    System.Diagnostics.Process.Start("xdg-open", url);
+            }
+            catch { }
+
+            // Wait until cancelled
+            var tcs = new TaskCompletionSource();
+            ct.Register(() => tcs.TrySetResult());
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; tcs.TrySetResult(); };
+            await tcs.Task;
+
+            await server.StopAsync();
+            server.Dispose();
+        });
+        devflowCommand.Add(inspectorCmd);
+
         _devflowCommand = devflowCommand;
 
         return devflowCommand;
