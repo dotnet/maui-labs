@@ -15,31 +15,13 @@ public static class HtmlRenderer
 {
     private static string? _templateCache;
 
-    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0)
+    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0, double density = 1, double elementScale = 1)
     {
         var template = GetTemplate();
+        var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);
 
-        // Use screenshot dimensions as viewport size (most reliable),
-        // fall back to root element bounds, then default
-        double viewportWidth, viewportHeight;
-        if (screenshotWidth > 0 && screenshotHeight > 0)
-        {
-            viewportWidth = screenshotWidth;
-            viewportHeight = screenshotHeight;
-        }
-        else
-        {
-            var rootBounds = tree.Count > 0 ? tree[0].Bounds : null;
-            viewportWidth = rootBounds is { Width: > 0 } ? rootBounds.Width : 800;
-            viewportHeight = rootBounds is { Height: > 0 } ? rootBounds.Height : 600;
-        }
-
-        // Build the elements HTML
-        var elements = new StringBuilder();
-        foreach (var element in tree)
-        {
-            RenderElement(elements, element, 4);
-        }
+        // Build the elements HTML (flat list — all elements use window-absolute bounds)
+        var elementsHtml = RenderElements(tree, elementScale);
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
@@ -50,10 +32,37 @@ public static class HtmlRenderer
         var html = template
             .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("F0"))
             .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("F0"))
+            .Replace("{{DENSITY}}", density.ToString("F1"))
+            .Replace("{{ELEMENT_SCALE}}", elementScale.ToString("F4"))
             .Replace("{{SCREENSHOT}}", screenshotHtml)
-            .Replace("{{ELEMENTS}}", elements.ToString());
+            .Replace("{{ELEMENTS}}", elementsHtml);
 
         return html;
+    }
+
+    /// <summary>
+    /// Renders just the element divs (no template wrapping) for AJAX state updates.
+    /// </summary>
+    public static string RenderElements(List<ElementInfo> tree, double elementScale = 1)
+    {
+        var sb = new StringBuilder();
+        foreach (var element in tree)
+        {
+            RenderElementsFlat(sb, element, elementScale);
+        }
+        return sb.ToString();
+    }
+
+    private static (double width, double height) ComputeViewportSize(List<ElementInfo> tree, int screenshotWidth, int screenshotHeight)
+    {
+        if (screenshotWidth > 0 && screenshotHeight > 0)
+            return (screenshotWidth, screenshotHeight);
+
+        var rootBounds = tree.Count > 0 ? tree[0].Bounds : null;
+        return (
+            rootBounds is { Width: > 0 } ? rootBounds.Width : 800,
+            rootBounds is { Height: > 0 } ? rootBounds.Height : 600
+        );
     }
 
     private static string GetTemplate()
@@ -69,19 +78,30 @@ public static class HtmlRenderer
         return _templateCache;
     }
 
-    private static void RenderElement(StringBuilder sb, ElementInfo element, int indent)
+    /// <summary>
+    /// Renders all elements as flat siblings (no nesting) using window-absolute bounds.
+    /// </summary>
+    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale)
     {
-        var pad = new string(' ', indent);
-
-        // Build style for positioning
-        var style = new StringBuilder("position:absolute;");
-        if (element.Bounds != null)
+        RenderSingleElement(sb, element, scale);
+        if (element.Children != null)
         {
-            style.Append($"left:{element.Bounds.X:F0}px;");
-            style.Append($"top:{element.Bounds.Y:F0}px;");
-            style.Append($"width:{element.Bounds.Width:F0}px;");
-            style.Append($"height:{element.Bounds.Height:F0}px;");
+            foreach (var child in element.Children)
+            {
+                RenderElementsFlat(sb, child, scale);
+            }
         }
+    }
+
+    private static void RenderSingleElement(StringBuilder sb, ElementInfo element, double scale)
+    {
+        // Build style for positioning using window-absolute bounds
+        // (windowBounds is absolute within the window; bounds is relative to parent)
+        var bounds = element.WindowBounds ?? element.Bounds;
+        if (bounds == null || (bounds.Width <= 0 && bounds.Height <= 0))
+            return; // Skip elements with no meaningful bounds
+
+        var style = $"position:absolute;left:{bounds.X * scale:F0}px;top:{bounds.Y * scale:F0}px;width:{bounds.Width * scale:F0}px;height:{bounds.Height * scale:F0}px;";
 
         // Build data attributes
         var attrs = new StringBuilder();
@@ -115,23 +135,7 @@ public static class HtmlRenderer
         if (!string.IsNullOrEmpty(element.NativeType))
             attrs.Append($" data-nativeType=\"{Escape(element.NativeType)}\"");
 
-        var hasChildren = element.Children is { Count: > 0 };
-
-        sb.Append($"{pad}<div class=\"devflow-element\"{attrs} style=\"{style}\">");
-
-        if (hasChildren)
-        {
-            sb.AppendLine();
-            foreach (var child in element.Children!)
-            {
-                RenderElement(sb, child, indent + 2);
-            }
-            sb.AppendLine($"{pad}</div>");
-        }
-        else
-        {
-            sb.AppendLine("</div>");
-        }
+        sb.AppendLine($"    <div class=\"devflow-element\"{attrs} style=\"{style}\"></div>");
     }
 
     private static string Escape(string value) => HttpUtility.HtmlAttributeEncode(value);

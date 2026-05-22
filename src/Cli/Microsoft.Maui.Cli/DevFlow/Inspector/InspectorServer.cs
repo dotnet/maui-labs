@@ -22,6 +22,7 @@ public sealed class InspectorServer : IDisposable
     private readonly int _agentPort;
     private byte[]? _cachedScreenshot;
     private DateTime _screenshotCacheTime;
+    private string? _rootPageId;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
 
     public int Port => _port;
@@ -199,6 +200,7 @@ public sealed class InspectorServer : IDisposable
                 "GET" => request.Path switch
                 {
                     "/" or "" => await HandleRootAsync(),
+                    "/api/state" => await HandleStateAsync(),
                     "/screenshot.png" => await HandleScreenshotAsync(),
                     "/devflow.js" => HandleEmbeddedFile("devflow.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
@@ -227,27 +229,77 @@ public sealed class InspectorServer : IDisposable
     {
         using var client = new AgentClient(_agentHost, _agentPort);
         var tree = await client.GetTreeAsync();
-        var screenshot = await GetCachedScreenshotAsync(client);
+
+        // Find the root page element (first child of Window with content).
+        // On Mac Catalyst, the default screenshot captures the full screen but element
+        // bounds are relative to the page content. By screenshotting the page element
+        // directly we get a 1:1 match between pixel coordinates and element bounds.
+        var rootPageId = FindRootPageId(tree);
+        _rootPageId = rootPageId;
+        var screenshot = await GetCachedScreenshotAsync(client, rootPageId);
         var hasScreenshot = screenshot?.Length > 0;
 
-        // Get viewport size from agent status (window logical size)
-        var status = await client.GetStatusAsync();
-        var viewportWidth = status?.Device?.WindowWidth ?? 0;
-        var viewportHeight = status?.Device?.WindowHeight ?? 0;
-
-        // Fallback to screenshot dimensions if status didn't provide window size
-        if (viewportWidth <= 0 || viewportHeight <= 0)
+        double viewportWidth = 800, viewportHeight = 600;
+        if (hasScreenshot)
         {
-            if (hasScreenshot)
-            {
-                var (pw, ph) = GetPngDimensions(screenshot!);
-                viewportWidth = pw;
-                viewportHeight = ph;
-            }
+            var (pw, ph) = GetPngDimensions(screenshot!);
+            viewportWidth = pw;
+            viewportHeight = ph;
         }
 
-        var html = HtmlRenderer.Render(tree, hasScreenshot, (int)viewportWidth, (int)viewportHeight);
+        var html = HtmlRenderer.Render(tree, hasScreenshot, (int)viewportWidth, (int)viewportHeight, 1, 1);
         return (200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
+    }
+
+    /// <summary>
+    /// Returns JSON state for AJAX polling: screenshot (as timestamped URL) + element divs HTML.
+    /// This avoids full page reload flash.
+    /// </summary>
+    private async Task<(int, string, byte[])> HandleStateAsync()
+    {
+        using var client = new AgentClient(_agentHost, _agentPort);
+        var tree = await client.GetTreeAsync();
+
+        var rootPageId = FindRootPageId(tree);
+        _rootPageId = rootPageId;
+        _cachedScreenshot = null; // force fresh screenshot
+        var screenshot = await GetCachedScreenshotAsync(client, rootPageId);
+        var hasScreenshot = screenshot?.Length > 0;
+
+        double viewportWidth = 800, viewportHeight = 600;
+        if (hasScreenshot)
+        {
+            var (pw, ph) = GetPngDimensions(screenshot!);
+            viewportWidth = pw;
+            viewportHeight = ph;
+        }
+
+        var elementsHtml = HtmlRenderer.RenderElements(tree, 1);
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var json = JsonSerializer.Serialize(new
+        {
+            screenshotUrl = $"screenshot.png?t={timestamp}",
+            elements = elementsHtml,
+            viewportWidth,
+            viewportHeight
+        });
+
+        return (200, "application/json", Encoding.UTF8.GetBytes(json));
+    }
+
+    /// <summary>
+    /// Finds the ID of the topmost page element in the tree.
+    /// When a modal page is showing, it appears as a later child of the Window,
+    /// so we take the last child which is the topmost visible page.
+    /// </summary>
+    private static string? FindRootPageId(List<ElementInfo> tree)
+    {
+        if (tree.Count == 0) return null;
+        var window = tree[0];
+        if (window.Children is not { Count: > 0 }) return null;
+        // Last child is the topmost (modal pages are added after the shell)
+        return window.Children[^1].Id;
     }
 
     /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23).</summary>
@@ -262,7 +314,7 @@ public sealed class InspectorServer : IDisposable
     private async Task<(int, string, byte[])> HandleScreenshotAsync()
     {
         using var client = new AgentClient(_agentHost, _agentPort);
-        var png = await GetCachedScreenshotAsync(client);
+        var png = await GetCachedScreenshotAsync(client, _rootPageId);
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
@@ -281,12 +333,12 @@ public sealed class InspectorServer : IDisposable
         return (200, contentType, ms.ToArray());
     }
 
-    private async Task<byte[]?> GetCachedScreenshotAsync(AgentClient client)
+    private async Task<byte[]?> GetCachedScreenshotAsync(AgentClient client, string? elementId = null)
     {
         if (_cachedScreenshot != null && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
             return _cachedScreenshot;
 
-        _cachedScreenshot = await client.ScreenshotAsync();
+        _cachedScreenshot = await client.ScreenshotAsync(elementId: elementId);
         _screenshotCacheTime = DateTime.UtcNow;
         return _cachedScreenshot;
     }
@@ -310,21 +362,27 @@ public sealed class InspectorServer : IDisposable
             using var client = new AgentClient(_agentHost, _agentPort);
             var hitResult = await client.HitTestAsync(x, y);
 
-            // Parse hit-test result to get element ID
+            // Parse hit-test result — response is { elements: [{ id, ... }, ...] }
             using var hitDoc = JsonDocument.Parse(hitResult);
-            if (hitDoc.RootElement.TryGetProperty("id", out var idProp))
+            var elements = hitDoc.RootElement.GetProperty("elements");
+            if (elements.GetArrayLength() > 0)
             {
-                var elementId = idProp.GetString();
-                if (!string.IsNullOrEmpty(elementId))
+                // Try elements from most specific to most general until one accepts tap
+                for (int i = 0; i < elements.GetArrayLength(); i++)
                 {
-                    var success = await client.TapAsync(elementId);
-                    _cachedScreenshot = null; // invalidate cache
-                    return success
-                        ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
-                        : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+                    var elementId = elements[i].GetProperty("id").GetString();
+                    if (!string.IsNullOrEmpty(elementId))
+                    {
+                        var success = await client.TapAsync(elementId);
+                        if (success)
+                        {
+                            _cachedScreenshot = null;
+                            return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                        }
+                    }
                 }
             }
-            return (404, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"No element at coordinates\"}"));
+            return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"reason\":\"No tappable element at coordinates\"}"));
         }
 
         // Support elementId-based tap
@@ -355,24 +413,40 @@ public sealed class InspectorServer : IDisposable
 
         var deltaX = root.TryGetProperty("deltaX", out var dxProp) ? dxProp.GetDouble() : 0;
         var deltaY = root.TryGetProperty("deltaY", out var dyProp) ? dyProp.GetDouble() : 0;
-        string? elementId = null;
 
-        // If coordinates provided, hit-test to find the scrollable element
+        // If coordinates provided, hit-test and try each element for scroll
         if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
         {
-            using var hitClient = new AgentClient(_agentHost, _agentPort);
-            var hitResult = await hitClient.HitTestAsync(xProp.GetDouble(), yProp.GetDouble());
+            using var client = new AgentClient(_agentHost, _agentPort);
+            var hitResult = await client.HitTestAsync(xProp.GetDouble(), yProp.GetDouble());
             using var hitDoc = JsonDocument.Parse(hitResult);
-            if (hitDoc.RootElement.TryGetProperty("id", out var idProp))
-                elementId = idProp.GetString();
+            var elements = hitDoc.RootElement.GetProperty("elements");
+
+            // Try each element from most specific to general until one accepts scroll
+            for (int i = 0; i < elements.GetArrayLength(); i++)
+            {
+                var elementId = elements[i].GetProperty("id").GetString();
+                if (!string.IsNullOrEmpty(elementId))
+                {
+                    var success = await client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
+                    if (success)
+                    {
+                        _cachedScreenshot = null;
+                        return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                    }
+                }
+            }
         }
 
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var success = await client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
-        _cachedScreenshot = null;
-        return success
-            ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
-            : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+        // Fallback: scroll without element target
+        {
+            using var client = new AgentClient(_agentHost, _agentPort);
+            var success = await client.ScrollAsync(deltaX: deltaX, deltaY: deltaY);
+            _cachedScreenshot = null;
+            return success
+                ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
+                : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+        }
     }
 
     private async Task<(int, string, byte[])> HandleProxyGestureAsync(string? body)

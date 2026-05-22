@@ -12,31 +12,62 @@
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
-  let currentScale = 1;
+  let refreshInProgress = false;
 
-  // ── Zoom to fit ──
-  function zoomToFit() {
-    const appW = parseFloat(viewport.dataset.width) || viewport.offsetWidth;
-    const appH = parseFloat(viewport.dataset.height) || viewport.offsetHeight;
-    const winW = window.innerWidth;
-    const winH = window.innerHeight;
-
-    const scaleX = winW / appW;
-    const scaleY = winH / appH;
-    currentScale = Math.min(scaleX, scaleY, 1); // never upscale
-
-    viewport.style.transform = `scale(${currentScale})`;
-  }
-
-  zoomToFit();
-  window.addEventListener('resize', zoomToFit);
-
-  // Convert browser coordinates to app logical coordinates (accounting for zoom)
+  // Convert browser coordinates to app logical coordinates
   function toAppCoords(clientX, clientY) {
     const rect = viewport.getBoundingClientRect();
-    const x = (clientX - rect.left) / currentScale;
-    const y = (clientY - rect.top) / currentScale;
-    return { x, y };
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  // Refresh state via AJAX (no full page reload — avoids flash)
+  async function refreshState() {
+    if (refreshInProgress) return;
+    refreshInProgress = true;
+    try {
+      const resp = await fetch(`${basePath}/api/state`);
+      if (!resp.ok) return;
+      const state = await resp.json();
+
+      // Update screenshot without flash
+      if (screenshot && state.screenshotUrl) {
+        screenshot.src = state.screenshotUrl;
+      }
+
+      // Update viewport size if changed
+      if (state.viewportWidth && state.viewportHeight) {
+        viewport.style.width = state.viewportWidth + 'px';
+        viewport.style.height = state.viewportHeight + 'px';
+        viewport.dataset.width = state.viewportWidth;
+        viewport.dataset.height = state.viewportHeight;
+      }
+
+      // Replace element divs (remove old, insert new)
+      const oldElements = viewport.querySelectorAll('.devflow-element');
+      oldElements.forEach(el => el.remove());
+
+      if (state.elements) {
+        const temp = document.createElement('div');
+        temp.innerHTML = state.elements;
+        while (temp.firstChild) {
+          viewport.appendChild(temp.firstChild);
+        }
+      }
+    } catch (err) {
+      console.error('State refresh failed:', err);
+    } finally {
+      refreshInProgress = false;
+    }
+  }
+
+  // Debounced refresh — coalesce rapid calls
+  let refreshTimer = null;
+  function scheduleRefresh(delayMs) {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      refreshState();
+    }, delayMs || 300);
   }
 
   // ── Click → Tap ──
@@ -51,27 +82,43 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ x, y })
       });
-      await refreshScreenshot();
+      scheduleRefresh(400);
     } catch (err) {
       console.error('Tap failed:', err);
     }
   });
 
   // ── Wheel → Scroll ──
-  viewport.addEventListener('wheel', async (e) => {
-    e.preventDefault();
-    const { x, y } = toAppCoords(e.clientX, e.clientY);
+  let scrollAccumX = 0, scrollAccumY = 0;
+  let scrollFlushTimer = null;
+  let lastScrollX = 0, lastScrollY = 0;
 
-    try {
-      await fetch(`${basePath}/api/scroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x, y, deltaX: e.deltaX, deltaY: e.deltaY })
-      });
-      await refreshScreenshot();
-    } catch (err) {
-      console.error('Scroll failed:', err);
-    }
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    scrollAccumX += e.deltaX;
+    scrollAccumY += e.deltaY;
+    lastScrollX = e.clientX;
+    lastScrollY = e.clientY;
+
+    if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
+    scrollFlushTimer = setTimeout(async () => {
+      const { x, y } = toAppCoords(lastScrollX, lastScrollY);
+      const dx = scrollAccumX, dy = scrollAccumY;
+      scrollAccumX = 0;
+      scrollAccumY = 0;
+      scrollFlushTimer = null;
+
+      try {
+        await fetch(`${basePath}/api/scroll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x, y, deltaX: dx, deltaY: dy })
+        });
+        scheduleRefresh(300);
+      } catch (err) {
+        console.error('Scroll failed:', err);
+      }
+    }, 100);
   }, { passive: false });
 
   // ── Pointer Drag → Gesture ──
@@ -106,7 +153,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ points: gesturePoints })
           });
-          await refreshScreenshot();
+          scheduleRefresh(300);
         } catch (err) {
           console.error('Gesture failed:', err);
         }
@@ -117,41 +164,21 @@
     setTimeout(() => { isDragging = false; }, 50);
   });
 
-  // ── Screenshot refresh ──
-  async function refreshScreenshot() {
-    await sleep(100);
-    if (screenshot) {
-      screenshot.src = `${basePath}/screenshot.png?t=` + Date.now();
+  // ── Periodic refresh for app-side changes (AJAX, no flash) ──
+  let pollInterval = setInterval(() => {
+    if (!document.hidden && !refreshTimer) {
+      refreshState();
     }
-  }
+  }, 3000);
 
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // ── WebSocket for live updates ──
-  function connectWebSocket() {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}${basePath}/ws/events`);
-
-    ws.onmessage = (e) => {
-      try {
-        const event = JSON.parse(e.data);
-        if (event.type === 'treeChange' || event.type === 'navigation') {
-          clearTimeout(ws._refreshTimer);
-          ws._refreshTimer = setTimeout(() => location.reload(), 200);
-        }
-      } catch { }
-    };
-
-    ws.onclose = () => {
-      setTimeout(connectWebSocket, 2000);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
-  }
-
-  connectWebSocket();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    } else if (!pollInterval) {
+      pollInterval = setInterval(() => {
+        if (!refreshTimer) refreshState();
+      }, 3000);
+    }
+  });
 })();

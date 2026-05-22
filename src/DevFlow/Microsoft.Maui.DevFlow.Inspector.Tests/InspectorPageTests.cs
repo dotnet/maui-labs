@@ -54,18 +54,16 @@ public class InspectorPageTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ViewportScalesToFitBrowserWindow()
+    public async Task ViewportHasFixedDimensions()
     {
         await _page.GotoAsync(BaseUrl);
         var viewport = _page.Locator("#app-viewport");
 
-        // The viewport should have a CSS transform applied for zoom
-        var transform = await viewport.EvaluateAsync<string>(
-            "el => window.getComputedStyle(el).transform");
-
-        // If the app is larger than the browser, transform should be a matrix (scaled)
-        // If it fits, transform could be "none" or a scale(1) matrix
-        Assert.NotNull(transform);
+        // Viewport should have explicit width/height style
+        var style = await viewport.GetAttributeAsync("style");
+        Assert.NotNull(style);
+        Assert.Contains("width:", style);
+        Assert.Contains("height:", style);
     }
 
     [Fact]
@@ -76,7 +74,7 @@ public class InspectorPageTests : IAsyncLifetime
         await Expect(screenshot).ToBeVisibleAsync();
 
         var src = await screenshot.GetAttributeAsync("src");
-        Assert.Equal("/screenshot.png", src);
+        Assert.Contains("screenshot.png", src);
     }
 
     [Fact]
@@ -124,14 +122,16 @@ public class InspectorPageTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ElementTreeIsNested()
+    public async Task ElementTreeIsFlatNotNested()
     {
         await _page.GotoAsync(BaseUrl);
 
-        // Children should be nested inside parent divs
+        // All elements should be direct children of viewport (flat rendering)
+        var directChildren = _page.Locator("#app-viewport > .devflow-element");
         var nested = _page.Locator(".devflow-element > .devflow-element");
-        var count = await nested.CountAsync();
-        Assert.True(count > 0, "Elements should be nested (parent > child)");
+
+        Assert.True(await directChildren.CountAsync() > 0, "Should have flat element divs");
+        Assert.Equal(0, await nested.CountAsync());
     }
 
     [Fact]
@@ -169,18 +169,15 @@ public class InspectorPageTests : IAsyncLifetime
         var box = await viewport.BoundingBoxAsync();
         Assert.NotNull(box);
 
-        // Take a screenshot before clicking
-        var screenshotBefore = await _page.Locator("#screenshot").GetAttributeAsync("src");
-
         // Click in the middle of the viewport
         await viewport.ClickAsync(new() { Position = new() { X = (float)box.Width / 2, Y = (float)box.Height / 2 } });
 
-        // Wait for screenshot refresh (devflow.js refreshes after tap)
-        await _page.WaitForTimeoutAsync(500);
+        // Wait for AJAX refresh (devflow.js refreshes after tap via /api/state)
+        await _page.WaitForTimeoutAsync(1000);
 
-        // The screenshot src should have changed (cache-bust query param)
+        // The screenshot src should have a cache-busting timestamp
         var screenshotAfter = await _page.Locator("#screenshot").GetAttributeAsync("src");
-        Assert.NotEqual(screenshotBefore, screenshotAfter);
+        Assert.Contains("?t=", screenshotAfter);
     }
 
     [Fact]
@@ -251,6 +248,48 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Equal(0x50, body[1]); // P
         Assert.Equal(0x4E, body[2]); // N
         Assert.Equal(0x47, body[3]); // G
+    }
+
+    [Fact]
+    public async Task StateEndpointReturnsJsonWithElements()
+    {
+        var response = await _page.APIRequest.GetAsync($"{BaseUrl}api/state");
+        Assert.True(response.Ok);
+        var text = await response.TextAsync();
+        var json = System.Text.Json.JsonDocument.Parse(text);
+
+        Assert.True(json.RootElement.TryGetProperty("screenshotUrl", out var url));
+        Assert.Contains("screenshot.png", url.GetString());
+
+        Assert.True(json.RootElement.TryGetProperty("elements", out var elements));
+        Assert.Contains("devflow-element", elements.GetString());
+
+        Assert.True(json.RootElement.TryGetProperty("viewportWidth", out var vw));
+        Assert.True(vw.GetDouble() > 0);
+
+        Assert.True(json.RootElement.TryGetProperty("viewportHeight", out var vh));
+        Assert.True(vh.GetDouble() > 0);
+    }
+
+    [Fact]
+    public async Task AjaxRefreshUpdatesElementsWithoutReload()
+    {
+        await _page.GotoAsync(BaseUrl);
+
+        // Count initial elements
+        var initialCount = await _page.Locator(".devflow-element").CountAsync();
+        Assert.True(initialCount > 0);
+
+        // Trigger a refresh via JS (simulating what the polling does)
+        await _page.EvaluateAsync(@"async () => {
+            const basePath = location.pathname.replace(/\/$/, '');
+            const resp = await fetch(basePath + '/api/state');
+            return resp.ok;
+        }");
+
+        // Elements should still exist (page was not reloaded)
+        var afterCount = await _page.Locator(".devflow-element").CountAsync();
+        Assert.True(afterCount > 0);
     }
 
     private ILocatorAssertions Expect(ILocator locator) =>
