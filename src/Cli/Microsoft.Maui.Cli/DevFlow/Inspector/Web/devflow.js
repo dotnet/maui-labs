@@ -42,21 +42,94 @@
         viewport.dataset.height = state.viewportHeight;
       }
 
-      // Replace element divs (remove old, insert new)
-      const oldElements = viewport.querySelectorAll('.devflow-element');
-      oldElements.forEach(el => el.remove());
-
+      // Smart DOM diff — only update elements that changed, preserving hover/selection
       if (state.elements) {
-        const temp = document.createElement('div');
-        temp.innerHTML = state.elements;
-        while (temp.firstChild) {
-          viewport.appendChild(temp.firstChild);
-        }
+        patchElements(state.elements);
       }
     } catch (err) {
       console.error('State refresh failed:', err);
     } finally {
       refreshInProgress = false;
+    }
+  }
+
+  // Keyed DOM diff: match elements by data-id, update in-place if changed
+  function patchElements(newHtml) {
+    // Parse new elements into a temp container
+    const temp = document.createElement('div');
+    temp.innerHTML = newHtml;
+
+    // Build map of new elements by data-id
+    const newEls = temp.querySelectorAll('.devflow-element');
+    const newMap = new Map();
+    const newOrder = [];
+    newEls.forEach(el => {
+      const id = el.getAttribute('data-id');
+      if (id) {
+        newMap.set(id, el);
+        newOrder.push(id);
+      }
+    });
+
+    // Build map of existing elements
+    const oldEls = viewport.querySelectorAll('.devflow-element');
+    const oldMap = new Map();
+    oldEls.forEach(el => {
+      const id = el.getAttribute('data-id');
+      if (id) oldMap.set(id, el);
+    });
+
+    // Remove elements that no longer exist
+    oldMap.forEach((el, id) => {
+      if (!newMap.has(id)) {
+        el.remove();
+      }
+    });
+
+    // Update existing elements in-place or insert new ones
+    let prevEl = screenshot; // insert after screenshot
+    for (const id of newOrder) {
+      const newEl = newMap.get(id);
+      const oldEl = oldMap.get(id);
+
+      if (oldEl) {
+        // Update only if style or attributes changed
+        if (oldEl.getAttribute('style') !== newEl.getAttribute('style')) {
+          oldEl.setAttribute('style', newEl.getAttribute('style'));
+        }
+        // Sync data attributes
+        syncDataAttrs(oldEl, newEl);
+        // Ensure correct order
+        if (prevEl && prevEl.nextSibling !== oldEl) {
+          prevEl.after(oldEl);
+        }
+        prevEl = oldEl;
+      } else {
+        // New element — insert after previous
+        const clone = newEl.cloneNode(true);
+        if (prevEl) {
+          prevEl.after(clone);
+        } else {
+          viewport.appendChild(clone);
+        }
+        prevEl = clone;
+      }
+    }
+  }
+
+  // Sync data-* attributes from src to dst without replacing the element
+  function syncDataAttrs(dst, src) {
+    // Remove old data attrs not in src
+    for (const attr of [...dst.attributes]) {
+      if (attr.name.startsWith('data-') && !src.hasAttribute(attr.name)) {
+        dst.removeAttribute(attr.name);
+      }
+    }
+    // Set/update from src
+    for (const attr of src.attributes) {
+      if (attr.name.startsWith('data-') && dst.getAttribute(attr.name) !== attr.value) {
+        dst.setAttribute(attr.name, attr.value);
+      }
     }
   }
 
