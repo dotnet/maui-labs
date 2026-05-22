@@ -43,7 +43,7 @@ public static class HtmlRenderer
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
-            ? "<img id=\"screenshot\" src=\"/screenshot.png\" alt=\"App screenshot\">"
+            ? "<img id=\"screenshot\" src=\"screenshot.png\" alt=\"App screenshot\">"
             : "";
 
         // Replace template placeholders

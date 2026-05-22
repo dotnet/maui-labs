@@ -6,6 +6,9 @@
   const viewport = document.getElementById('app-viewport');
   const screenshot = document.getElementById('screenshot');
 
+  // Determine base path for API calls (handles being served under /inspector/{id}/)
+  const basePath = location.pathname.replace(/\/$/, '');
+
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
@@ -43,7 +46,7 @@
     const { x, y } = toAppCoords(e.clientX, e.clientY);
 
     try {
-      await fetch('/api/tap', {
+      await fetch(`${basePath}/api/tap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ x, y })
@@ -60,7 +63,7 @@
     const { x, y } = toAppCoords(e.clientX, e.clientY);
 
     try {
-      await fetch('/api/scroll', {
+      await fetch(`${basePath}/api/scroll`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ x, y, deltaX: e.deltaX, deltaY: e.deltaY })
@@ -98,7 +101,7 @@
 
       if (dist > 20) {
         try {
-          await fetch('/api/gesture', {
+          await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ points: gesturePoints })
@@ -118,7 +121,7 @@
   async function refreshScreenshot() {
     await sleep(100);
     if (screenshot) {
-      screenshot.src = '/screenshot.png?t=' + Date.now();
+      screenshot.src = `${basePath}/screenshot.png?t=` + Date.now();
     }
   }
 
@@ -129,7 +132,7 @@
   // ── WebSocket for live updates ──
   function connectWebSocket() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
+    const ws = new WebSocket(`${protocol}//${location.host}${basePath}/ws/events`);
 
     ws.onmessage = (e) => {
       try {

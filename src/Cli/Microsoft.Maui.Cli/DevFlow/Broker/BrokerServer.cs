@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.Maui.Cli.DevFlow.Inspector;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
@@ -98,6 +99,13 @@ public class BrokerServer : IDisposable
                 return;
             }
 
+            // WebSocket upgrade for inspector event relay
+            if (context.Request.IsWebSocketRequest && path.StartsWith("/inspector", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleInspectorRoute(context, path);
+                return;
+            }
+
             // HTTP endpoints for CLI
             var (statusCode, body) = (method, path) switch
             {
@@ -108,11 +116,21 @@ public class BrokerServer : IDisposable
                 }, indented: false)),
                 ("GET", "/api/agents") => (200, HandleListAgents()),
                 ("POST", "/api/shutdown") => HandleShutdown(),
-                _ => (404, CliJson.SerializeUntyped(new JsonObject
-                {
-                    ["error"] = "Not found"
-                }, indented: false))
+                _ => (0, "") // handled below for inspector routes
             };
+
+            // Inspector routes — serve the web inspector for connected agents
+            if (statusCode == 0)
+            {
+                if (path.StartsWith("/inspector", StringComparison.OrdinalIgnoreCase))
+                {
+                    await HandleInspectorRoute(context, path);
+                    return;
+                }
+
+                statusCode = 404;
+                body = CliJson.SerializeUntyped(new JsonObject { ["error"] = "Not found" }, indented: false);
+            }
 
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/json";
@@ -251,6 +269,8 @@ public class BrokerServer : IDisposable
             if (_agents.TryRemove(connection.Registration.Id, out _))
             {
                 ReleasePort(connection.Registration.Port);
+                if (_inspectors.TryRemove(connection.Registration.Id, out var inspector))
+                    inspector.Dispose();
                 Log($"Agent disconnected: {connection.Registration.AppName}|{connection.Registration.Tfm}");
             }
         }
@@ -409,4 +429,97 @@ public class BrokerServer : IDisposable
         _cts?.Dispose();
     }
     private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket);
+
+    // ── Inspector integration ──
+
+    private readonly ConcurrentDictionary<string, InspectorServer> _inspectors = new();
+
+    private async Task HandleInspectorRoute(HttpListenerContext context, string path)
+    {
+        // Routes:
+        //   /inspector          → list agents with inspector links
+        //   /inspector/{id}     → serve inspector HTML for that agent
+        //   /inspector/{id}/... → proxy sub-routes to the per-agent InspectorServer
+
+        var segments = path.TrimStart('/').Split('/', 3);
+
+        if (segments.Length == 1 || (segments.Length == 2 && string.IsNullOrEmpty(segments[1])))
+        {
+            // List agents with inspector links
+            await ServeAgentListPage(context);
+            return;
+        }
+
+        var agentId = segments[1];
+        var subPath = segments.Length > 2 ? "/" + segments[2] : "/";
+
+        // Find the agent
+        if (!_agents.TryGetValue(agentId, out var connection))
+        {
+            // Try partial match
+            connection = _agents.Values.FirstOrDefault(a =>
+                a.Registration.Id.StartsWith(agentId, StringComparison.OrdinalIgnoreCase));
+            if (connection == null)
+            {
+                // If only one agent connected, use it
+                if (_agents.Count == 1)
+                    connection = _agents.Values.First();
+            }
+        }
+
+        if (connection == null)
+        {
+            context.Response.StatusCode = 404;
+            context.Response.ContentType = "text/plain";
+            var msg = Encoding.UTF8.GetBytes($"Agent '{agentId}' not found. Connected agents: {_agents.Count}");
+            await context.Response.OutputStream.WriteAsync(msg);
+            context.Response.Close();
+            return;
+        }
+
+        // Get or create inspector server for this agent
+        var inspector = _inspectors.GetOrAdd(connection.Registration.Id, _ =>
+        {
+            var server = new InspectorServer(0, "localhost", connection.Registration.Port);
+            Log($"Inspector created for agent: {connection.Registration.AppName} (port {connection.Registration.Port})");
+            return server;
+        });
+
+        // Proxy the request through the inspector's route handler
+        await inspector.HandleBrokerRequestAsync(context, subPath);
+    }
+
+    private async Task ServeAgentListPage(HttpListenerContext context)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'><title>DevFlow Inspector</title>");
+        sb.AppendLine("<style>body{font-family:system-ui;background:#1e1e1e;color:#fff;padding:20px}");
+        sb.AppendLine("a{color:#4ec9b0;text-decoration:none}a:hover{text-decoration:underline}");
+        sb.AppendLine(".agent{padding:12px;margin:8px 0;background:#2d2d2d;border-radius:6px}</style></head><body>");
+        sb.AppendLine("<h1>DevFlow Inspector</h1>");
+
+        if (_agents.IsEmpty)
+        {
+            sb.AppendLine("<p>No agents connected. Start a MAUI app with DevFlow enabled.</p>");
+        }
+        else
+        {
+            foreach (var agent in _agents.Values)
+            {
+                var reg = agent.Registration;
+                sb.AppendLine($"<div class='agent'>");
+                sb.AppendLine($"<a href='/inspector/{reg.Id}/'><strong>{reg.AppName}</strong></a>");
+                sb.AppendLine($" — {reg.Platform} ({reg.Tfm}) on port {reg.Port}");
+                sb.AppendLine($"</div>");
+            }
+        }
+
+        sb.AppendLine("</body></html>");
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = "text/html; charset=utf-8";
+        var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+        context.Response.ContentLength64 = bytes.Length;
+        await context.Response.OutputStream.WriteAsync(bytes);
+        context.Response.Close();
+    }
 }

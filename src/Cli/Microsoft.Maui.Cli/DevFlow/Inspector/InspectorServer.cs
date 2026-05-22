@@ -33,6 +33,99 @@ public sealed class InspectorServer : IDisposable
         _agentPort = agentPort;
     }
 
+    /// <summary>
+    /// Handles an HTTP request from the broker, routing it through the inspector logic.
+    /// This allows the broker to serve inspector pages without a separate listener.
+    /// </summary>
+    public async Task HandleBrokerRequestAsync(HttpListenerContext context, string path)
+    {
+        try
+        {
+            // Handle WebSocket upgrade for /ws/events
+            if (context.Request.IsWebSocketRequest && path.TrimEnd('/') == "/ws/events")
+            {
+                await HandleBrokerWebSocketProxy(context);
+                return;
+            }
+
+            var method = context.Request.HttpMethod;
+            string? body = null;
+            if (method == "POST" && context.Request.HasEntityBody)
+            {
+                using var reader = new System.IO.StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
+                body = await reader.ReadToEndAsync();
+            }
+
+            var request = new HttpRequestInfo { Method = method, Path = path, Body = body };
+            var (statusCode, contentType, responseBody) = await RouteAsync(request);
+
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = contentType;
+            context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            context.Response.ContentLength64 = responseBody.Length;
+            await context.Response.OutputStream.WriteAsync(responseBody);
+            context.Response.Close();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                context.Response.StatusCode = 500;
+                var msg = Encoding.UTF8.GetBytes($"Inspector error: {ex.Message}");
+                await context.Response.OutputStream.WriteAsync(msg);
+                context.Response.Close();
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Proxies a WebSocket connection from the broker to the agent's /ws/events endpoint.
+    /// </summary>
+    private async Task HandleBrokerWebSocketProxy(HttpListenerContext context)
+    {
+        var wsContext = await context.AcceptWebSocketAsync(null);
+        var clientWs = wsContext.WebSocket;
+
+        using var agentWs = new System.Net.WebSockets.ClientWebSocket();
+        var agentUri = new Uri($"ws://{_agentHost}:{_agentPort}/ws/events");
+
+        try
+        {
+            await agentWs.ConnectAsync(agentUri, CancellationToken.None);
+        }
+        catch
+        {
+            await clientWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.EndpointUnavailable,
+                "Agent not reachable", CancellationToken.None);
+            return;
+        }
+
+        // Relay messages from agent to browser
+        var buffer = new byte[4096];
+        try
+        {
+            while (agentWs.State == System.Net.WebSockets.WebSocketState.Open &&
+                   clientWs.State == System.Net.WebSockets.WebSocketState.Open)
+            {
+                var result = await agentWs.ReceiveAsync(buffer, CancellationToken.None);
+                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
+
+                await clientWs.SendAsync(
+                    new ArraySegment<byte>(buffer, 0, result.Count),
+                    result.MessageType, result.EndOfMessage, CancellationToken.None);
+            }
+        }
+        catch { }
+        finally
+        {
+            if (clientWs.State == System.Net.WebSockets.WebSocketState.Open)
+                try { await clientWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); } catch { }
+            if (agentWs.State == System.Net.WebSockets.WebSocketState.Open)
+                try { await agentWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); } catch { }
+        }
+    }
+
     public void Start()
     {
         _cts = new CancellationTokenSource();
@@ -528,7 +621,7 @@ public sealed class InspectorServer : IDisposable
         await stream.FlushAsync(ct);
     }
 
-    private sealed class HttpRequestInfo
+    internal sealed class HttpRequestInfo
     {
         public string Method { get; init; } = "";
         public string Path { get; init; } = "";

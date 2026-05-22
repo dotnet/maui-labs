@@ -5,8 +5,9 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 
 /// <summary>
 /// Playwright integration tests for the DevFlow Web Inspector.
-/// Requires a running inspector (maui devflow inspector) and a connected MAUI app.
-/// Set INSPECTOR_URL environment variable to override the default http://localhost:5223.
+/// Requires the broker running with a connected MAUI app.
+/// The inspector is available at http://localhost:19223/inspector/.
+/// Set INSPECTOR_URL environment variable to override the default URL.
 /// </summary>
 [Collection("Inspector")]
 public class InspectorPageTests : IAsyncLifetime
@@ -16,7 +17,7 @@ public class InspectorPageTests : IAsyncLifetime
     private IBrowserContext _context = null!;
     private IPage _page = null!;
 
-    private string BaseUrl => Environment.GetEnvironmentVariable("INSPECTOR_URL") ?? "http://localhost:5223";
+    private string BaseUrl => Environment.GetEnvironmentVariable("INSPECTOR_URL") ?? "http://localhost:19223/inspector/";
 
     public async Task InitializeAsync()
     {
