@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Web;
 using Microsoft.Maui.DevFlow.Driver;
@@ -6,70 +7,66 @@ namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 
 /// <summary>
 /// Generates an interactive HTML page from the DevFlow visual tree.
+/// Uses inspector.html as a template and injects the element tree.
 /// Each element becomes a positioned div with data-* attributes matching
 /// the DevFlow ElementInfo property names (camelCase).
 /// </summary>
 public static class HtmlRenderer
 {
-    public static string Render(List<ElementInfo> tree, bool hasScreenshot)
+    private static string? _templateCache;
+
+    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html>");
-        sb.AppendLine("<html>");
-        sb.AppendLine("<head>");
-        sb.AppendLine("  <meta charset=\"utf-8\">");
-        sb.AppendLine("  <title>DevFlow Inspector</title>");
-        sb.AppendLine("  <style>");
-        sb.AppendLine("    * { margin: 0; padding: 0; box-sizing: border-box; }");
-        sb.AppendLine("    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e1e; color: #fff; }");
-        sb.AppendLine("    #devflow-toolbar { height: 40px; background: #2d2d2d; display: flex; align-items: center; padding: 0 12px; gap: 8px; border-bottom: 1px solid #444; }");
-        sb.AppendLine("    #devflow-toolbar button { background: #3c3c3c; border: 1px solid #555; color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; }");
-        sb.AppendLine("    #devflow-toolbar button:hover { background: #4c4c4c; }");
-        sb.AppendLine("    #devflow-toolbar #connection-status { margin-left: auto; font-size: 12px; color: #4ec9b0; }");
-        sb.AppendLine("    #app-viewport { position: relative; margin: 0 auto; overflow: hidden; }");
-        sb.AppendLine("    #screenshot { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; }");
-        sb.AppendLine("    .devflow-element { position: absolute; box-sizing: border-box; }");
-        sb.AppendLine("    .devflow-element:hover { outline: 2px solid rgba(78, 201, 176, 0.5); }");
-        sb.AppendLine("  </style>");
-        sb.AppendLine("</head>");
-        sb.AppendLine("<body>");
+        var template = GetTemplate();
 
-        // Toolbar
-        sb.AppendLine("  <nav id=\"devflow-toolbar\">");
-        sb.AppendLine("    <button id=\"btn-back\" title=\"Navigate back\">←</button>");
-        sb.AppendLine("    <button id=\"btn-refresh\" title=\"Refresh\">↻</button>");
-        sb.AppendLine("    <span id=\"connection-status\">● Connected</span>");
-        sb.AppendLine("  </nav>");
-
-        // Determine viewport size from root element bounds
-        double viewportWidth = 390;
-        double viewportHeight = 844;
-        var rootBounds = tree.Count > 0 ? tree[0].Bounds : null;
-        if (rootBounds != null)
+        // Use screenshot dimensions as viewport size (most reliable),
+        // fall back to root element bounds, then default
+        double viewportWidth, viewportHeight;
+        if (screenshotWidth > 0 && screenshotHeight > 0)
         {
-            viewportWidth = rootBounds.Width;
-            viewportHeight = rootBounds.Height;
+            viewportWidth = screenshotWidth;
+            viewportHeight = screenshotHeight;
+        }
+        else
+        {
+            var rootBounds = tree.Count > 0 ? tree[0].Bounds : null;
+            viewportWidth = rootBounds is { Width: > 0 } ? rootBounds.Width : 800;
+            viewportHeight = rootBounds is { Height: > 0 } ? rootBounds.Height : 600;
         }
 
-        sb.AppendLine($"  <div id=\"app-viewport\" style=\"width:{viewportWidth}px; height:{viewportHeight}px;\">");
-
-        if (hasScreenshot)
-        {
-            sb.AppendLine("    <img id=\"screenshot\" src=\"/screenshot.png\" alt=\"App screenshot\">");
-        }
-
-        // Render element tree as nested divs
+        // Build the elements HTML
+        var elements = new StringBuilder();
         foreach (var element in tree)
         {
-            RenderElement(sb, element, 4);
+            RenderElement(elements, element, 4);
         }
 
-        sb.AppendLine("  </div>");
-        sb.AppendLine("  <script src=\"/devflow.js\"></script>");
-        sb.AppendLine("</body>");
-        sb.AppendLine("</html>");
+        // Build screenshot tag
+        var screenshotHtml = hasScreenshot
+            ? "<img id=\"screenshot\" src=\"/screenshot.png\" alt=\"App screenshot\">"
+            : "";
 
-        return sb.ToString();
+        // Replace template placeholders
+        var html = template
+            .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("F0"))
+            .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("F0"))
+            .Replace("{{SCREENSHOT}}", screenshotHtml)
+            .Replace("{{ELEMENTS}}", elements.ToString());
+
+        return html;
+    }
+
+    private static string GetTemplate()
+    {
+        if (_templateCache != null) return _templateCache;
+
+        var assembly = Assembly.GetExecutingAssembly();
+        var resourceName = "Microsoft.Maui.Cli.DevFlow.Inspector.Web.inspector.html";
+        using var stream = assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded resource not found: {resourceName}");
+        using var reader = new StreamReader(stream);
+        _templateCache = reader.ReadToEnd();
+        return _templateCache;
     }
 
     private static void RenderElement(StringBuilder sb, ElementInfo element, int indent)

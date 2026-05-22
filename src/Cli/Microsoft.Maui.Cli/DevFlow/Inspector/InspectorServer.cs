@@ -108,6 +108,7 @@ public sealed class InspectorServer : IDisposable
                     "/" or "" => await HandleRootAsync(),
                     "/screenshot.png" => await HandleScreenshotAsync(),
                     "/devflow.js" => HandleEmbeddedFile("devflow.js", "application/javascript"),
+                    "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
                 "POST" => request.Path switch
@@ -134,8 +135,27 @@ public sealed class InspectorServer : IDisposable
         using var client = new AgentClient(_agentHost, _agentPort);
         var tree = await client.GetTreeAsync();
         var screenshot = await GetCachedScreenshotAsync(client);
-        var html = HtmlRenderer.Render(tree, screenshot?.Length > 0);
+        var hasScreenshot = screenshot?.Length > 0;
+
+        // Get screenshot dimensions for accurate viewport sizing
+        int width = 0, height = 0;
+        if (hasScreenshot)
+        {
+            (width, height) = GetPngDimensions(screenshot!);
+        }
+
+        var html = HtmlRenderer.Render(tree, hasScreenshot, width, height);
         return (200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
+    }
+
+    /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23).</summary>
+    private static (int width, int height) GetPngDimensions(byte[] png)
+    {
+        if (png.Length < 24) return (0, 0);
+        // PNG IHDR: width at offset 16 (4 bytes big-endian), height at offset 20
+        int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
+        int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
+        return (w, h);
     }
 
     private async Task<(int, string, byte[])> HandleScreenshotAsync()

@@ -5,9 +5,6 @@
 
   const viewport = document.getElementById('app-viewport');
   const screenshot = document.getElementById('screenshot');
-  const btnBack = document.getElementById('btn-back');
-  const btnRefresh = document.getElementById('btn-refresh');
-  const statusEl = document.getElementById('connection-status');
 
   let gesturePoints = [];
   let isGesturing = false;
@@ -15,8 +12,7 @@
 
   // ── Click → Tap ──
   viewport.addEventListener('click', async (e) => {
-    if (isDragging) return; // don't tap if we just finished a drag
-    if (e.target.closest('#devflow-toolbar')) return;
+    if (isDragging) return;
 
     const rect = viewport.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -55,7 +51,6 @@
 
   // ── Pointer Drag → Gesture ──
   viewport.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#devflow-toolbar')) return;
     gesturePoints = [{ x: e.offsetX, y: e.offsetY, t: Date.now() }];
     isGesturing = true;
     isDragging = false;
@@ -72,7 +67,6 @@
     if (!isGesturing) return;
     isGesturing = false;
 
-    // Only send gesture if there was meaningful movement (> 20px)
     if (gesturePoints.length >= 2) {
       const first = gesturePoints[0];
       const last = gesturePoints[gesturePoints.length - 1];
@@ -93,38 +87,15 @@
     }
 
     gesturePoints = [];
-    // Reset isDragging after a short delay so the click handler can check it
     setTimeout(() => { isDragging = false; }, 50);
-  });
-
-  // ── Toolbar: Back ──
-  btnBack.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    try {
-      await fetch('/api/back', { method: 'POST' });
-      await refreshPage();
-    } catch (err) {
-      console.error('Back failed:', err);
-    }
-  });
-
-  // ── Toolbar: Refresh ──
-  btnRefresh.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await refreshPage();
   });
 
   // ── Screenshot refresh ──
   async function refreshScreenshot() {
-    // Wait for app to settle
     await sleep(100);
     if (screenshot) {
       screenshot.src = '/screenshot.png?t=' + Date.now();
     }
-  }
-
-  async function refreshPage() {
-    location.reload();
   }
 
   function sleep(ms) {
@@ -136,25 +107,17 @@
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
 
-    ws.onopen = () => {
-      statusEl.textContent = '● Connected';
-      statusEl.style.color = '#4ec9b0';
-    };
-
     ws.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
         if (event.type === 'treeChange' || event.type === 'navigation') {
-          // Debounce rapid updates
           clearTimeout(ws._refreshTimer);
-          ws._refreshTimer = setTimeout(() => refreshPage(), 200);
+          ws._refreshTimer = setTimeout(() => location.reload(), 200);
         }
       } catch { }
     };
 
     ws.onclose = () => {
-      statusEl.textContent = '○ Disconnected';
-      statusEl.style.color = '#f44747';
       setTimeout(connectWebSocket, 2000);
     };
 

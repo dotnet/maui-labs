@@ -1,0 +1,31 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #1e1e1e;
+  color: #fff;
+}
+
+#app-viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+#screenshot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.devflow-element {
+  position: absolute;
+  box-sizing: border-box;
+}

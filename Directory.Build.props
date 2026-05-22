@@ -22,6 +22,8 @@
     <!-- Disable strong naming: MAUI and Platform.Maui packages are not strong-named -->
     <SignAssembly>false</SignAssembly>
     <NoSwixBuildPlugin>true</NoSwixBuildPlugin>
+    <!-- Allow building with newer Xcode than workload expects -->
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
   </PropertyGroup>
 
   <!-- Import shared packaging properties for NuGet packages -->
