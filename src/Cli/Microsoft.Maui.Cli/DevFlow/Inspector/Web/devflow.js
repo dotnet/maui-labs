@@ -9,14 +9,38 @@
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
+  let currentScale = 1;
+
+  // ── Zoom to fit ──
+  function zoomToFit() {
+    const appW = parseFloat(viewport.dataset.width) || viewport.offsetWidth;
+    const appH = parseFloat(viewport.dataset.height) || viewport.offsetHeight;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    const scaleX = winW / appW;
+    const scaleY = winH / appH;
+    currentScale = Math.min(scaleX, scaleY, 1); // never upscale
+
+    viewport.style.transform = `scale(${currentScale})`;
+  }
+
+  zoomToFit();
+  window.addEventListener('resize', zoomToFit);
+
+  // Convert browser coordinates to app logical coordinates (accounting for zoom)
+  function toAppCoords(clientX, clientY) {
+    const rect = viewport.getBoundingClientRect();
+    const x = (clientX - rect.left) / currentScale;
+    const y = (clientY - rect.top) / currentScale;
+    return { x, y };
+  }
 
   // ── Click → Tap ──
   viewport.addEventListener('click', async (e) => {
     if (isDragging) return;
 
-    const rect = viewport.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { x, y } = toAppCoords(e.clientX, e.clientY);
 
     try {
       await fetch('/api/tap', {
@@ -33,9 +57,7 @@
   // ── Wheel → Scroll ──
   viewport.addEventListener('wheel', async (e) => {
     e.preventDefault();
-    const rect = viewport.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { x, y } = toAppCoords(e.clientX, e.clientY);
 
     try {
       await fetch('/api/scroll', {
@@ -51,7 +73,8 @@
 
   // ── Pointer Drag → Gesture ──
   viewport.addEventListener('pointerdown', (e) => {
-    gesturePoints = [{ x: e.offsetX, y: e.offsetY, t: Date.now() }];
+    const { x, y } = toAppCoords(e.clientX, e.clientY);
+    gesturePoints = [{ x, y, t: Date.now() }];
     isGesturing = true;
     isDragging = false;
     viewport.setPointerCapture(e.pointerId);
@@ -59,7 +82,8 @@
 
   viewport.addEventListener('pointermove', (e) => {
     if (!isGesturing) return;
-    gesturePoints.push({ x: e.offsetX, y: e.offsetY, t: Date.now() });
+    const { x, y } = toAppCoords(e.clientX, e.clientY);
+    gesturePoints.push({ x, y, t: Date.now() });
     if (gesturePoints.length > 3) isDragging = true;
   });
 

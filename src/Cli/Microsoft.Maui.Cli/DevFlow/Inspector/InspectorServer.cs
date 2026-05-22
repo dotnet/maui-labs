@@ -137,14 +137,23 @@ public sealed class InspectorServer : IDisposable
         var screenshot = await GetCachedScreenshotAsync(client);
         var hasScreenshot = screenshot?.Length > 0;
 
-        // Get screenshot dimensions for accurate viewport sizing
-        int width = 0, height = 0;
-        if (hasScreenshot)
+        // Get viewport size from agent status (window logical size)
+        var status = await client.GetStatusAsync();
+        var viewportWidth = status?.Device?.WindowWidth ?? 0;
+        var viewportHeight = status?.Device?.WindowHeight ?? 0;
+
+        // Fallback to screenshot dimensions if status didn't provide window size
+        if (viewportWidth <= 0 || viewportHeight <= 0)
         {
-            (width, height) = GetPngDimensions(screenshot!);
+            if (hasScreenshot)
+            {
+                var (pw, ph) = GetPngDimensions(screenshot!);
+                viewportWidth = pw;
+                viewportHeight = ph;
+            }
         }
 
-        var html = HtmlRenderer.Render(tree, hasScreenshot, width, height);
+        var html = HtmlRenderer.Render(tree, hasScreenshot, (int)viewportWidth, (int)viewportHeight);
         return (200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
     }
 
@@ -152,7 +161,6 @@ public sealed class InspectorServer : IDisposable
     private static (int width, int height) GetPngDimensions(byte[] png)
     {
         if (png.Length < 24) return (0, 0);
-        // PNG IHDR: width at offset 16 (4 bytes big-endian), height at offset 20
         int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
         int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
         return (w, h);
