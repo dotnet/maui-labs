@@ -1,8 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Maui;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
@@ -44,11 +47,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     public SensorManager Sensors { get; }
 
-    /// <summary>
-    /// Monitors BLE scan results, connections, reads, writes, and notifications.
-    /// </summary>
-    public BleMonitor Ble { get; }
-
     private readonly IProfilerCollector _profilerCollector;
     private readonly ProfilerSessionStore _profilerSessions;
     private readonly SemaphoreSlim _profilerStateGate = new(1, 1);
@@ -62,6 +60,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     private int _uiHookGeneration = 1;
     private int _uiHookScanInFlight;
     private DateTime _lastUiHookScanTsUtc = DateTime.MinValue;
+    private const int NativeUiProbeTimeoutMs = 1500;
+    // Tracks a previously-dispatched UI capture task that timed out. If still
+    // pending when a new CaptureUiOrNativeAsync arrives we skip enqueuing another
+    // uiCallback to avoid unbounded queueing on a blocked dispatcher.
+    private Task? _pendingCaptureUiTask;
+    private readonly object _pendingCaptureUiGate = new();
     private Shell? _hookedShell;
     private DateTime? _navigationStartedAtUtc;
     private string? _navigationTargetRoute;
@@ -254,8 +258,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _treeWalker = CreateTreeWalker();
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         Sensors = new SensorManager();
-        Ble = CreateBleMonitor();
-        BleMonitor.Instance = Ble;
         _profilerCollector = CreateProfilerCollector();
         _profilerSessions = new ProfilerSessionStore(
             Math.Max(1, _options.MaxProfilerSamples),
@@ -301,12 +303,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// to provide native frame/CPU integrations.
     /// </summary>
     protected virtual IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
-
-    /// <summary>
-    /// Creates the BLE monitor. Override in platform-specific subclasses
-    /// to provide native scan and connection monitoring.
-    /// </summary>
-    protected virtual BleMonitor CreateBleMonitor() => new BleMonitor();
 
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
     protected virtual string PlatformName => DeviceInfo.Current.Platform.ToString();
@@ -531,13 +527,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         _server.MapGet("/api/v1/device/jobs", HandleJobsList);
         _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleJobRun);
-        _server.MapGet("/api/v1/device/ble", HandleBleStatus);
-        _server.MapGet("/api/v1/device/ble/events", HandleBleEvents);
-        _server.MapPost("/api/v1/device/ble/scan/start", HandleBleScanStart);
-        _server.MapPost("/api/v1/device/ble/scan/stop", HandleBleScanStop);
-        _server.MapDelete("/api/v1/device/ble/events", HandleBleClearEvents);
-        _server.MapWebSocket("/ws/v1/ble", HandleBleWebSocket);
 
+        _server.MapGet("/api/v1/device/app/theme", HandleThemeGet);
+        _server.MapPut("/api/v1/device/app/theme", HandleThemeSet);
         _server.MapGet("/api/v1/storage/preferences", HandlePreferencesList);
         _server.MapGet("/api/v1/storage/preferences/{key}", HandlePreferencesGet);
         _server.MapPut("/api/v1/storage/preferences/{key}", HandlePreferencesSet);
@@ -557,6 +549,44 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         // Invoke / reflection
         _server.MapGet("/api/v1/invoke/actions", HandleListActions);
         _server.MapPost("/api/v1/invoke/actions/{name}", HandleInvokeAction);
+
+        RegisterExtensionRoutes();
+    }
+
+    private void RegisterExtensionRoutes()
+    {
+        var namespaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var extension in _options.Extensions)
+        {
+            if (!namespaces.Add(extension.Namespace))
+                throw new InvalidOperationException($"Duplicate extension namespace registration: {extension.Namespace}");
+
+            foreach (var route in extension.Routes)
+            {
+                var key = $"{route.Method} {route.Path}";
+                if (!seen.Add(key))
+                    throw new InvalidOperationException($"Duplicate extension route registration: {key}");
+
+                switch (route.Method)
+                {
+                    case "GET":
+                        _server.MapGet(route.Path, route.Handler);
+                        break;
+                    case "POST":
+                        _server.MapPost(route.Path, route.Handler);
+                        break;
+                    case "PUT":
+                        _server.MapPut(route.Path, route.Handler);
+                        break;
+                    case "DELETE":
+                        _server.MapDelete(route.Path, route.Handler);
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
+                }
+            }
+        }
     }
 
     private async Task<HttpResponse> HandleStatus(HttpRequest request)
@@ -619,16 +649,17 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     network = true,
                     logs = true,
                     sensors = true,
-                    ble = true,
                     storage = true,
                     profiler = IsProfilerFeatureAvailable,
                     jobs = IsJobsSupported,
+                    theme = true,
                 },
                 running = _app != null,
                 cdpReady = _cdpWebViews.Any(v => v.IsReady),
                 cdpWebViewCount = _cdpWebViews.Count,
                 profiler = BuildProfilerCapabilitiesPayload(),
-                profilerSession = _profilerSessions.CurrentSession
+                profilerSession = _profilerSessions.CurrentSession,
+                extensions = BuildExtensionsMarker()
             };
         });
 
@@ -653,67 +684,145 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private Task<HttpResponse> HandleCapabilities(HttpRequest request)
     {
-        var result = new
+        var version = typeof(DevFlowAgentService).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+
+        var capabilities = new Dictionary<string, object>();
+
+        capabilities["ui.tree"] = new { version = 1, features = new[] { "css-selector", "type", "text", "accessibility-id" } };
+        capabilities["ui.actions"] = new { version = 1, features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties" } };
+        capabilities["ui.screenshot"] = new { version = 1, features = new[] { "element", "fullscreen", "selector" } };
+
+        if (_cdpWebViews.Count > 0)
+            capabilities["webview"] = new { version = 1, features = new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" } };
+
+        capabilities["profiler"] = new { version = 1, features = BuildProfilerFeatureList() };
+        capabilities["network"] = new { version = 1, features = new[] { "list", "detail", "clear", "stream" } };
+        capabilities["logs"] = new { version = 1, features = new[] { "list", "stream" } };
+        capabilities["device.info"] = new { version = 1, features = new[] { "app", "device", "display", "battery", "connectivity" } };
+        capabilities["device.sensors"] = new { version = 1, features = new[] { "list", "start", "stop", "stream" } };
+        capabilities["device.jobs"] = new
         {
-            ui = new
+            version = 1,
+            features = IsJobsSupported
+                ? IsJobRunSupported ? new[] { "list", "run" } : new[] { "list" }
+                : Array.Empty<string>(),
+            supported = IsJobsSupported
+        };
+        capabilities["storage.preferences"] = new { version = 1, features = new[] { "list", "get", "set", "delete", "clear" } };
+        capabilities["storage.secure"] = new { version = 1, features = new[] { "get", "set", "delete", "clear" } };
+        capabilities["storage.files"] = new { version = 1, features = new[] { "roots", "list", "download", "upload", "delete" } };
+        capabilities["invoke"] = new { version = 1, features = new[] { "actions" } };
+        var themeCapability = new { version = 1, supported = true, features = new[] { "get", "set" } };
+        capabilities["theme"] = themeCapability;
+        capabilities["app.theme"] = themeCapability;
+
+        var result = new Dictionary<string, object?>
+        {
+            ["agent"] = new
             {
-                supported = true,
-                features = new[] { "tree", "query", "hit-test", "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties", "screenshot" }
+                name = "Microsoft.Maui.DevFlow.Agent",
+                version,
+                framework = "maui",
+                frameworkVersion = typeof(Microsoft.Maui.Controls.Application).Assembly
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown"
             },
-            webview = new
-            {
-                supported = _cdpWebViews.Any(v => v.IsReady),
-                features = _cdpWebViews.Any(v => v.IsReady)
-                    ? new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" }
-                    : Array.Empty<string>()
-            },
-            network = new
-            {
-                supported = true,
-                features = new[] { "list", "detail", "clear", "stream" }
-            },
-            logs = new
-            {
-                supported = true,
-                features = new[] { "list", "stream" }
-            },
-            sensors = new
-            {
-                supported = true,
-                features = new[] { "list", "start", "stop", "stream" }
-            },
-            ble = new
-            {
-                supported = Ble.SupportedFeatures.Count > 0,
-                features = Ble.SupportedFeatures
-            },
-            storage = new
-            {
-                supported = true,
-                features = new[] { "preferences", "secure-storage", "roots", "files" }
-            },
-            profiler = new
-            {
-                supported = IsProfilerFeatureAvailable,
-                features = IsProfilerFeatureAvailable
-                    ? new[] { "capabilities", "sessions", "samples", "markers", "spans", "hotspots" }
-                    : Array.Empty<string>()
-            },
-            jobs = new
-            {
-                supported = IsJobsSupported,
-                features = IsJobsSupported
-                    ? IsJobRunSupported ? new[] { "list", "run" } : new[] { "list" }
-                    : Array.Empty<string>()
-            },
-            invoke = new
-            {
-                supported = true,
-                features = new[] { "actions" }
-            }
+            ["capabilities"] = capabilities
         };
 
+        if (_options.Extensions.Count > 0)
+        {
+            var extensions = BuildExtensionMetadata();
+            foreach (var extension in _options.Extensions)
+            {
+                capabilities[extension.Namespace] = new
+                {
+                    version = GetCapabilityVersion(extension.Version),
+                    features = extension.Features.Count > 0
+                        ? extension.Features
+                        : extension.Tools.Select(tool => tool.Name).ToArray()
+                };
+            }
+
+            result["extensions"] = extensions;
+        }
+
         return Task.FromResult(HttpResponse.Json(result));
+    }
+
+    private object BuildExtensionsMarker()
+    {
+        var metadata = BuildExtensionMetadata();
+        return new
+        {
+            count = metadata.Count,
+            hash = ComputeExtensionHash(metadata)
+        };
+    }
+
+    private Dictionary<string, object> BuildExtensionMetadata()
+    {
+        var extensions = new Dictionary<string, object>(StringComparer.Ordinal);
+
+        foreach (var extension in _options.Extensions.OrderBy(e => e.Namespace, StringComparer.Ordinal))
+        {
+            extensions[extension.Namespace] = new
+            {
+                version = extension.Version,
+                description = extension.Description,
+                tools = extension.Tools.Select(tool => new
+                {
+                    name = tool.Name,
+                    description = tool.Description,
+                    method = tool.Method,
+                    path = tool.Path,
+                    parameters = tool.Parameters,
+                    returns = tool.Returns,
+                    annotations = tool.Annotations is null ? null : new
+                    {
+                        readOnly = tool.Annotations.ReadOnly,
+                        idempotent = tool.Annotations.Idempotent,
+                        destructive = tool.Annotations.Destructive,
+                        category = tool.Annotations.Category
+                    }
+                }).ToArray()
+            };
+        }
+
+        return extensions;
+    }
+
+    private static string ComputeExtensionHash(Dictionary<string, object> metadata)
+    {
+        var json = JsonSerializer.Serialize(metadata);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static int GetCapabilityVersion(string version)
+    {
+        var dot = version.IndexOf('.');
+        var major = dot >= 0 ? version[..dot] : version;
+        return int.TryParse(major, out var parsed) && parsed > 0 ? parsed : 1;
+    }
+
+    private string[] BuildProfilerFeatureList()
+    {
+        if (!IsProfilerFeatureAvailable)
+            return Array.Empty<string>();
+
+        var features = new List<string> { "capabilities", "sessions", "samples", "markers", "spans", "hotspots" };
+        var capabilities = _profilerCollector.GetCapabilities();
+        if (capabilities.ManagedMemorySupported)
+            features.Add("managed-memory");
+        if (capabilities.NativeMemorySupported)
+            features.Add("native-memory");
+        if (capabilities.CpuPercentSupported)
+            features.Add("cpu");
+        if (capabilities.FpsSupported)
+            features.Add("fps");
+
+        return features.ToArray();
     }
 
     private async Task<HttpResponse> HandleTree(HttpRequest request)
@@ -725,7 +834,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             int.TryParse(depthStr, out maxDepth);
 
         var windowIndex = ParseWindowIndex(request);
-        var tree = await DispatchAsync(() => _treeWalker.WalkTree(_app, maxDepth, windowIndex));
+        var tree = await CaptureUiOrNativeAsync(
+            () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
+            hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
+            windowIndex);
         return HttpResponse.Json(tree);
     }
 
@@ -734,6 +846,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
+
+        if (IsNativeElementId(id) && _treeWalker.SupportsNativeElements)
+        {
+            var nativeElement = await Task.Run(() => _treeWalker.GetNativeElementInfoById(id));
+            return nativeElement != null ? HttpResponse.Json(nativeElement) : HttpResponse.NotFound($"Element '{id}' not found");
+        }
 
         var element = await DispatchAsync(() =>
         {
@@ -760,7 +878,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         {
             try
             {
-                var results = await DispatchAsync(() => _treeWalker.QueryCss(_app, selector));
+                var results = await CaptureUiOrNativeAsync(
+                    () => _treeWalker.QueryCss(_app, selector),
+                    hwnds => _treeWalker.QueryNative(hwnds, selector: selector));
                 return HttpResponse.Json(results);
             }
             catch (FormatException ex)
@@ -776,9 +896,169 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (type == null && automationId == null && text == null)
             return HttpResponse.Error("At least one query parameter required: type, automationId, text, or selector");
 
-        var simpleResults = await DispatchAsync(() => _treeWalker.Query(_app, type, automationId, text));
+        var simpleResults = await CaptureUiOrNativeAsync(
+            () => _treeWalker.Query(_app, type, automationId, text),
+            hwnds => _treeWalker.QueryNative(hwnds, type, automationId, text));
         return HttpResponse.Json(simpleResults);
     }
+
+    private async Task<List<ElementInfo>> CaptureUiOrNativeAsync(
+        Func<List<ElementInfo>> uiCallback,
+        Func<IReadOnlyList<IntPtr>, List<ElementInfo>> nativeCallback,
+        int? windowIndex = null)
+    {
+        if (!_treeWalker.SupportsNativeElements)
+            return await DispatchAsync(uiCallback);
+
+        // Gate: if a previous CaptureUiOrNativeAsync's UI dispatch is still
+        // pending (the dispatcher is blocked), skip enqueuing another one and
+        // go native-only. Otherwise repeated tree/query calls while the UI
+        // thread is blocked would accumulate unbounded queued work.
+        Task? priorPending;
+        lock (_pendingCaptureUiGate)
+            priorPending = _pendingCaptureUiTask;
+
+        if (priorPending is not null && !priorPending.IsCompleted)
+        {
+            try
+            {
+                var hwnds = _app is null
+                    ? Array.Empty<IntPtr>()
+                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex);
+                return await Task.Run(() =>
+                {
+                    try { return nativeCallback(hwnds); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native UI probe failed (gated): {ex.GetBaseException().Message}");
+                        return new List<ElementInfo>();
+                    }
+                }).ConfigureAwait(false);
+            }
+            catch
+            {
+                return new List<ElementInfo>();
+            }
+        }
+
+        var hwndSource = new TaskCompletionSource<IReadOnlyList<IntPtr>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Shared CTS so the surviving Task.Delay timers can be cancelled once a race
+        // is decided. Without this, every CaptureUiOrNativeAsync call leaves up to
+        // two timers running for the full NativeUiProbeTimeoutMs window, which under
+        // automation throughput accumulates uncancelled timers per second.
+        using var probeCts = new CancellationTokenSource();
+        var uiTask = DispatchAsync(() =>
+        {
+            try
+            {
+                hwndSource.TrySetResult(_app is null
+                    ? Array.Empty<IntPtr>()
+                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native HWND discovery failed: {ex.GetBaseException().Message}");
+                hwndSource.TrySetResult(Array.Empty<IntPtr>());
+            }
+
+            return uiCallback();
+        });
+
+        var nativeTask = Task.Run(async () =>
+        {
+            Task delayTask;
+            try
+            {
+                delayTask = Task.Delay(NativeUiProbeTimeoutMs, probeCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                delayTask = Task.CompletedTask;
+            }
+
+            var winner = await Task.WhenAny(hwndSource.Task, delayTask).ConfigureAwait(false);
+            var hwnds = winner == hwndSource.Task
+                ? await hwndSource.Task.ConfigureAwait(false)
+                : Array.Empty<IntPtr>();
+
+            try
+            {
+                return nativeCallback(hwnds);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native UI probe failed: {ex.GetBaseException().Message}");
+                return [];
+            }
+        });
+
+        Task uiDelay;
+        try
+        {
+            uiDelay = Task.Delay(NativeUiProbeTimeoutMs, probeCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            uiDelay = Task.CompletedTask;
+        }
+
+        var uiWinner = await Task.WhenAny(uiTask, uiDelay).ConfigureAwait(false);
+        if (uiWinner != uiTask)
+        {
+            // Record this pending uiTask so concurrent callers can detect the
+            // dispatcher is blocked and avoid enqueuing additional UI work.
+            lock (_pendingCaptureUiGate)
+                _pendingCaptureUiTask = uiTask;
+
+            hwndSource.TrySetResult(Array.Empty<IntPtr>());
+            // The UI dispatcher is blocked (the exact scenario this code path targets).
+            // Observe any later fault on the abandoned uiTask so it doesn't trigger
+            // TaskScheduler.UnobservedTaskException when it eventually completes.
+            _ = uiTask.ContinueWith(
+                t =>
+                {
+                    lock (_pendingCaptureUiGate)
+                    {
+                        if (ReferenceEquals(_pendingCaptureUiTask, t))
+                            _pendingCaptureUiTask = null;
+                    }
+
+                    if (t.IsFaulted)
+                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Abandoned uiTask faulted: {t.Exception?.GetBaseException().Message}");
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            // Also bound the native await: NativeUiProbeTimeoutMs only guards the HWND
+            // discovery wait inside nativeTask; nativeCallback itself (a UIA tree walk)
+            // is unbounded and can block for minutes on a frozen app.
+            var nativeWinner = await Task.WhenAny(nativeTask, Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
+            probeCts.Cancel();
+            return nativeWinner == nativeTask
+                ? await nativeTask.ConfigureAwait(false)
+                : new List<ElementInfo>();
+        }
+
+        probeCts.Cancel();
+
+        var uiResult = await uiTask.ConfigureAwait(false);
+        // Bound the final native await for the same reason as above.
+        var finalNativeWinner = await Task.WhenAny(nativeTask, Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
+        var nativeResult = finalNativeWinner == nativeTask
+            ? await nativeTask.ConfigureAwait(false)
+            : new List<ElementInfo>();
+        if (nativeResult.Count == 0)
+            return uiResult;
+
+        var merged = new List<ElementInfo>(uiResult.Count + nativeResult.Count);
+        merged.AddRange(uiResult);
+        merged.AddRange(nativeResult);
+        return merged;
+    }
+
+    private static bool IsNativeElementId(string? elementId)
+        => elementId?.StartsWith("native:", StringComparison.Ordinal) == true;
 
     private async Task<HttpResponse> HandleHitTest(HttpRequest request)
     {
@@ -1454,6 +1734,19 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementTap(body.ElementId!));
+            PublishUiOperationSpan(
+                "action.tap",
+                startedAtUtc,
+                nativeResult == "ok",
+                nativeResult == "ok" ? null : nativeResult,
+                body.ElementId);
+
+            return nativeResult == "ok" ? HttpResponse.Ok("Tapped") : HttpResponse.Error(nativeResult);
+        }
+
         var result = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -1462,10 +1755,14 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             switch (el)
             {
                 case Button btn:
+                    if (TryScheduleNativeTapFirst(btn))
+                        return "ok";
                     try { btn.SendClicked(); }
                     catch { if (btn is VisualElement ve && !TryNativeTap(ve)) return $"Native tap failed on Button"; }
                     return "ok";
                 case ImageButton imgBtn:
+                    if (TryScheduleNativeTapFirst(imgBtn))
+                        return "ok";
                     try { imgBtn.SendClicked(); }
                     catch { if (imgBtn is VisualElement ve && !TryNativeTap(ve)) return $"Native tap failed on ImageButton"; }
                     return "ok";
@@ -1671,6 +1968,24 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     }
 
     /// <summary>
+    /// Allows platforms whose native click handlers may open synchronous modal loops to schedule
+    /// a native tap before MAUI invokes the managed click event inline.
+    /// </summary>
+    /// <remarks>
+    /// When an override returns <c>true</c>, the native invocation is typically queued onto the
+    /// platform dispatcher (e.g. <c>BeginInvoke</c>/<c>TryEnqueue</c>) rather than completed
+    /// synchronously. The HTTP caller receives <c>"ok"</c> as soon as the work is queued, so any
+    /// follow-up command (a screenshot or another query) may race against the dialog actually
+    /// appearing. Tests should use <c>maui_wait</c> or explicit polling after a tap that is
+    /// expected to surface a dialog. Faults inside the dispatched invocation are silent from the
+    /// caller's perspective and only surface in the agent's debug output.
+    /// </remarks>
+    protected virtual bool TryScheduleNativeTapFirst(VisualElement ve)
+    {
+        return false;
+    }
+
+    /// <summary>
     /// Attempts to tap a native platform view via handler for non-VisualElement IView types (e.g. Comet views).
     /// Uses reflection to get the PlatformView from the handler and invoke SendAccessibilityAction or performClick.
     /// Override in platform-specific subclasses for richer support.
@@ -1725,6 +2040,32 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId and text are required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementSetValue(body.ElementId!, body.Text!));
+            PublishUiOperationSpan(
+                "action.fill",
+                startedAtUtc,
+                nativeResult == "ok",
+                nativeResult == "ok" ? null : nativeResult,
+                body.ElementId,
+                new { textLength = body.Text.Length });
+
+            if (nativeResult == "ok")
+            {
+                PublishUiEvent("treeChange", new
+                {
+                    changeType = "modified",
+                    elementId = body.ElementId,
+                    elementType = "input",
+                    parentId = (string?)null,
+                    timestamp = DateTimeOffset.UtcNow.ToString("O")
+                });
+            }
+
+            return nativeResult == "ok" ? HttpResponse.Ok("Text set") : HttpResponse.Error(nativeResult);
+        }
+
         var result = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -1781,6 +2122,32 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementSetValue(body.ElementId!, string.Empty));
+            var nativeSuccess = nativeResult == "ok";
+            PublishUiOperationSpan(
+                "action.clear",
+                startedAtUtc,
+                nativeSuccess,
+                nativeSuccess ? null : nativeResult,
+                body.ElementId);
+
+            if (nativeSuccess)
+            {
+                PublishUiEvent("treeChange", new
+                {
+                    changeType = "modified",
+                    elementId = body.ElementId,
+                    elementType = "input",
+                    parentId = (string?)null,
+                    timestamp = DateTimeOffset.UtcNow.ToString("O")
+                });
+            }
+
+            return nativeSuccess ? HttpResponse.Ok("Cleared") : HttpResponse.Error(nativeResult);
+        }
+
         var success = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -1833,6 +2200,20 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("elementId is required");
 
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementFocus(body.ElementId!));
+            var nativeSuccess = nativeResult == "ok";
+            PublishUiOperationSpan(
+                "action.focus",
+                startedAtUtc,
+                nativeSuccess,
+                nativeSuccess ? null : nativeResult,
+                body.ElementId);
+
+            return nativeSuccess ? HttpResponse.Ok("Focused") : HttpResponse.Error(nativeResult);
+        }
+
         var success = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
@@ -2352,6 +2733,20 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         var position = ParseScrollToPosition(body.ScrollToPosition);
         var startedAtUtc = DateTime.UtcNow;
+        if (IsNativeElementId(body.ElementId))
+        {
+            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementScroll(body.ElementId!, body.DeltaX, body.DeltaY));
+            PublishUiOperationSpan(
+                "action.scroll",
+                startedAtUtc,
+                nativeResult == "ok",
+                nativeResult == "ok" ? null : nativeResult,
+                body.ElementId,
+                new { body.DeltaX, body.DeltaY, body.Animated });
+
+            return nativeResult == "ok" ? HttpResponse.Ok("Scrolled") : HttpResponse.Error(nativeResult);
+        }
+
         var result = await DispatchAsync(async () =>
         {
             // Priority 1: Scroll by item index on a specific ItemsView
@@ -4080,7 +4475,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
         StopAutoUiHooks();
         Sensors.Dispose();
-        Ble.Dispose();
 
         var cts = _profilerLoopCts;
         var loopTask = _profilerLoopTask;
@@ -5798,6 +6192,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     private const string PlatformErrorReasonUnknown = "unknown";
     private const string PlatformErrorReasonInvalidRequest = "invalid_request";
     private static readonly Regex AndroidPermissionRegex = new(@"android\.permission\.[A-Z0-9_\.]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly string[] SupportedThemeNames = ["light", "dark", "system"];
 
     private static HttpResponse CreatePlatformError(string message, Exception ex, int statusCode = 400, Dictionary<string, object?>? details = null)
     {
@@ -5901,13 +6296,18 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 var info = AppInfo.Current;
+                var theme = BuildThemeInfoPayload(Application.Current ?? _app);
                 return HttpResponse.Json(new
                 {
                     name = info.Name,
                     packageName = info.PackageName,
                     version = info.VersionString,
                     buildNumber = info.BuildString,
+                    theme = theme.Theme,
                     requestedTheme = info.RequestedTheme.ToString(),
+                    requestedThemeValue = theme.RequestedTheme,
+                    userAppTheme = theme.UserAppTheme,
+                    effectiveTheme = theme.EffectiveTheme,
                     requestedLayoutDirection = info.RequestedLayoutDirection.ToString(),
                 });
             });
@@ -5917,6 +6317,151 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return CreatePlatformError($"Failed to get app info: {ex.Message}", ex);
         }
     }
+
+    private async Task<HttpResponse> HandleThemeGet(HttpRequest request)
+    {
+        try
+        {
+            var app = Application.Current ?? _app;
+            if (app == null)
+                return HttpResponse.Error("Agent not bound to app", reason: "agent-not-bound");
+
+            var theme = await DispatchAsync(() => BuildThemeInfoPayload(app));
+            return HttpResponse.Json(theme);
+        }
+        catch (Exception ex)
+        {
+            return CreatePlatformError($"Failed to get app theme: {ex.Message}", ex);
+        }
+    }
+
+    private async Task<HttpResponse> HandleThemeSet(HttpRequest request)
+    {
+        var body = request.BodyAs<ThemeSetRequest>();
+        if (string.IsNullOrWhiteSpace(body?.Theme))
+            return HttpResponse.Error("theme is required", reason: "invalid-argument");
+
+        if (!TryParseTheme(body.Theme, out var appTheme))
+        {
+            return HttpResponse.Error(
+                $"Theme '{body.Theme}' is not supported. Use light, dark, or system.",
+                reason: "invalid-argument",
+                details: new { supportedThemes = SupportedThemeNames });
+        }
+
+        try
+        {
+            var app = Application.Current ?? _app;
+            if (app == null)
+                return HttpResponse.Error("Agent not bound to app", reason: "agent-not-bound");
+
+            var theme = await DispatchAsync(() =>
+            {
+                app.UserAppTheme = appTheme;
+                return BuildThemeInfoPayload(app);
+            });
+
+            PublishUiEvent("themeChange", new
+            {
+                theme = theme.Theme,
+                requestedTheme = theme.RequestedTheme,
+                userAppTheme = theme.UserAppTheme,
+                effectiveTheme = theme.EffectiveTheme,
+                source = theme.Source,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
+            });
+
+            return HttpResponse.Json(theme);
+        }
+        catch (Exception ex)
+        {
+            return CreatePlatformError($"Failed to set app theme: {ex.Message}", ex);
+        }
+    }
+
+    private static ThemeInfoPayload BuildThemeInfoPayload(Application? app, string source = "app", string? message = null)
+    {
+        var requestedTheme = SafeGetRequestedTheme(app);
+        var userAppTheme = SafeGetUserAppTheme(app);
+        var effectiveTheme = userAppTheme == AppTheme.Unspecified ? requestedTheme : userAppTheme;
+
+        return new ThemeInfoPayload(
+            ThemeToProtocolString(effectiveTheme),
+            ThemeToProtocolString(requestedTheme),
+            ThemeToProtocolString(userAppTheme),
+            ThemeToProtocolString(effectiveTheme),
+            SupportedThemeNames,
+            source,
+            message);
+    }
+
+    private static AppTheme SafeGetRequestedTheme(Application? app)
+    {
+        if (app == null)
+            return AppTheme.Unspecified;
+
+        try
+        {
+            return app.RequestedTheme;
+        }
+        catch
+        {
+            return AppTheme.Unspecified;
+        }
+    }
+
+    private static AppTheme SafeGetUserAppTheme(Application? app)
+    {
+        if (app == null)
+            return AppTheme.Unspecified;
+
+        try
+        {
+            return app.UserAppTheme;
+        }
+        catch
+        {
+            return AppTheme.Unspecified;
+        }
+    }
+
+    private static bool TryParseTheme(string value, out AppTheme theme)
+    {
+        switch (value.Trim().ToLowerInvariant())
+        {
+            case "light":
+                theme = AppTheme.Light;
+                return true;
+            case "dark":
+                theme = AppTheme.Dark;
+                return true;
+            case "system":
+            case "default":
+            case "unspecified":
+            case "unset":
+                theme = AppTheme.Unspecified;
+                return true;
+            default:
+                theme = AppTheme.Unspecified;
+                return false;
+        }
+    }
+
+    private static string ThemeToProtocolString(AppTheme theme) => theme switch
+    {
+        AppTheme.Light => "light",
+        AppTheme.Dark => "dark",
+        _ => "system"
+    };
+
+    private sealed record ThemeInfoPayload(
+        [property: JsonPropertyName("theme")] string Theme,
+        [property: JsonPropertyName("requestedTheme")] string RequestedTheme,
+        [property: JsonPropertyName("userAppTheme")] string UserAppTheme,
+        [property: JsonPropertyName("effectiveTheme")] string EffectiveTheme,
+        [property: JsonPropertyName("supportedThemes")] IReadOnlyList<string> SupportedThemes,
+        [property: JsonPropertyName("source")] string Source,
+        [property: JsonPropertyName("message")] string? Message);
 
     private Task<HttpResponse> HandlePlatformDeviceInfo(HttpRequest request)
     {
@@ -6330,170 +6875,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         return HttpResponse.Json(result);
     }
-
-    // ── BLE endpoints ──
-
-    private Task<HttpResponse> HandleBleStatus(HttpRequest request)
-    {
-        return Task.FromResult(HttpResponse.Json(Ble.GetStatus()));
-    }
-
-    private Task<HttpResponse> HandleBleEvents(HttpRequest request)
-    {
-        var limit = 100;
-        if (request.QueryParams.TryGetValue("limit", out var limitStr))
-        {
-            if (!int.TryParse(limitStr, out limit) || limit < 0)
-            {
-                return Task.FromResult(HttpResponse.Error(
-                    "BLE event limit must be a non-negative integer",
-                    400,
-                    "invalid_limit",
-                    new { limit = limitStr }));
-            }
-        }
-
-        var type = request.QueryParams.GetValueOrDefault("type");
-        var events = Ble.GetEvents(limit, type);
-        return Task.FromResult(HttpResponse.Json(new { count = events.Count, events }));
-    }
-
-    private Task<HttpResponse> HandleBleScanStart(HttpRequest request)
-    {
-        var error = Ble.StartScanning();
-        return Task.FromResult(error != null
-            ? HttpResponse.Error(error)
-            : HttpResponse.Ok("BLE scan started"));
-    }
-
-    private Task<HttpResponse> HandleBleScanStop(HttpRequest request)
-    {
-        var error = Ble.StopScanning();
-        return Task.FromResult(error != null
-            ? HttpResponse.Error(error)
-            : HttpResponse.Ok("BLE scan stopped"));
-    }
-
-    private Task<HttpResponse> HandleBleClearEvents(HttpRequest request)
-    {
-        Ble.ClearEvents();
-        return Task.FromResult(HttpResponse.Ok("BLE events cleared"));
-    }
-
-    private async Task HandleBleWebSocket(
-        System.Net.Sockets.TcpClient client,
-        System.Net.Sockets.NetworkStream stream,
-        HttpRequest request,
-        CancellationToken ct)
-    {
-        var autoScan = request.QueryParams.GetValueOrDefault("scan", "false")
-            .Equals("true", StringComparison.OrdinalIgnoreCase);
-
-        var replay = 100;
-        if (request.QueryParams.TryGetValue("replay", out var replayStr) &&
-            (!int.TryParse(replayStr, out replay) || replay < 0))
-        {
-            await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
-                {
-                    type = "error",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    error = "BLE stream replay must be a non-negative integer"
-                }), ct);
-            return;
-        }
-
-        var type = request.QueryParams.GetValueOrDefault("type");
-        List<BleEvent> replayEvents = replay > 0 ? Ble.GetEvents(replay, type) : [];
-        var queue = Ble.Subscribe(type);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-        var startedScan = false;
-
-        try
-        {
-            if (autoScan)
-            {
-                startedScan = Ble.TryStartScanning(out var error);
-                if (error != null)
-                {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream,
-                        JsonSerializer.Serialize(new
-                        {
-                            type = "error",
-                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                            error
-                        }), ct);
-                    return;
-                }
-            }
-
-            await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
-                {
-                    type = "subscribed",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    scanning = Ble.IsScanning,
-                    replay,
-                    eventType = type
-                }), ct);
-
-            if (replay > 0)
-            {
-                await AgentHttpServer.WebSocketSendTextAsync(stream,
-                    JsonSerializer.Serialize(new
-                    {
-                        type = "replay",
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                        count = replayEvents.Count,
-                        events = replayEvents
-                    }), ct);
-            }
-
-            var readTask = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
-                    if (msg == null) { await cts.CancelAsync(); break; }
-                }
-            }, cts.Token);
-
-            var lastPing = DateTime.UtcNow;
-            while (!cts.Token.IsCancellationRequested)
-            {
-                while (queue.TryDequeue(out var evt))
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendTextAsync(stream, evt, cts.Token);
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
-                        lastPing = DateTime.UtcNow;
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                try { await Task.Delay(20, cts.Token); }
-                catch { break; }
-            }
-
-            await readTask;
-        }
-        finally
-        {
-            Ble.Unsubscribe(queue);
-            if (startedScan)
-                Ble.StopScanning();
-        }
-    }
 }
 
 // Request DTOs
@@ -6564,6 +6945,11 @@ public class PreferenceSetRequest
     public object? Value { get; set; }
     public string? Type { get; set; }
     public string? SharedName { get; set; }
+}
+
+public class ThemeSetRequest
+{
+    public string? Theme { get; set; }
 }
 
 public class SecureStorageSetRequest

@@ -71,6 +71,18 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 | `Microsoft.Maui.DevFlow.Driver` | Platform driver library |
 | `Microsoft.Maui.DevFlow.Logging` | Buffered JSONL file logger |
 
+### AI Extensions
+
+AI integration packages for `Microsoft.Extensions.AI` and .NET MAUI apps.
+
+#### AI Attributes
+
+Source-generated AI tool discovery — annotate methods or property accessors with `[ExportAIFunction]` to create AI-callable tools. Composed or auto-generated tool contexts, DI-aware parameter binding, approval gates, AOT-friendly.
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.AI.Attributes` | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
+
 ### macOS AppKit Backend
 
 A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit apps with NSWindow, NSButton, NSScrollView, native menu bar, sidebar flyout, and more. An alternative to Mac Catalyst.
@@ -142,7 +154,7 @@ This repository is also a marketplace for distributable agent skills for .NET MA
 
 | Plugin | Description |
 |--------|-------------|
-| [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics |
+| [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics, session review |
 
 ```bash
 # Install via Copilot CLI
@@ -175,6 +187,8 @@ These are CI builds from `main` only — PR builds are not published. Use wildca
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
+
+For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md) and [`samples/AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
 

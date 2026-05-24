@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Pages.MainPage"
+             x:DataType="vm:MainViewModel"
+             Title="Garden AI Chat"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackgroundLight}, Dark={StaticResource PageBackgroundDark}}">
+
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto" ColumnSpacing="0" RowSpacing="0"
+          SafeAreaEdges="None">
+
+        <!-- ═══ Green header background — spans both columns ═══ -->
+        <Border Grid.Row="0" Grid.ColumnSpan="2"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0" />
+
+        <!-- Header content — standard: [icon] [title] ... [actions] -->
+        <Grid Grid.Row="0" Grid.ColumnSpan="2"
+              ColumnDefinitions="*,Auto"
+              Padding="16,8" ColumnSpacing="8"
+              SafeAreaEdges="Container">
+            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                <Label Text="&#xE76C;"
+                       FontFamily="FluentFilled"
+                       FontSize="{StaticResource FontSizeTitle}"
+                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+                <Label Text="Sage"
+                       FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Grid.Column="1" Spacing="6"
+                                   HorizontalOptions="End" VerticalOptions="Center">
+                <!-- Products -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="&#xF788;" FontFamily="FluentFilled" FontSize="16"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Clicked="OnProductsClicked" />
+                </Border>
+                <!-- Orders -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="&#xEA07;" FontFamily="FluentFilled" FontSize="16"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Clicked="OnOrdersClicked" />
+                </Border>
+                <!-- Cart -->
+                <Border x:Name="CartHeaderBtn"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36"
+                        IsVisible="False">
+                    <Button Text="&#xF26B;" FontFamily="FluentFilled" FontSize="16"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Command="{Binding ShowCartCommand}" />
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border"
+                                     Binding="{Binding Source={x:Reference CartSidebar}, Path=IsVisible}"
+                                     Value="False">
+                            <Setter Property="IsVisible" Value="True" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                </Border>
+                <!-- New Chat -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="&#xF7ED;" FontFamily="FluentFilled" FontSize="16"
+                            AutomationId="NewChatButton"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Command="{Binding StartNewSessionCommand}" />
+                </Border>
+            </HorizontalStackLayout>
+        </Grid>
+
+        <!-- ═══ Chat — fills col 0, scrollbar at edge, content centered ═══ -->
+        <views:ChatView Grid.Row="1" Grid.Column="0"
+                        HorizontalOptions="Fill" />
+
+        <!-- ═══ Cart sidebar — col 1, visible on wide only ═══ -->
+        <Border Grid.Row="1" Grid.Column="1"
+                x:Name="CartSidebar"
+                WidthRequest="300"
+                Margin="0,12,12,12"
+                BackgroundColor="{AppThemeBinding Light={StaticResource InputBackgroundLight}, Dark={StaticResource InputBackgroundDark}}"
+                StrokeShape="RoundRectangle 16"
+                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                StrokeThickness="1">
+            <Border.Shadow>
+                <Shadow Brush="Black" Offset="0,2" Radius="8" Opacity="0.12" />
+            </Border.Shadow>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup>
+                    <VisualState x:Name="SidebarWide">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowWidth="800" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Property="IsVisible" Value="True" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="SidebarNarrow">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowWidth="0" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Property="IsVisible" Value="False" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+
+            <views:CartPane />
+        </Border>
+
+    </Grid>
+
+</ContentPage>

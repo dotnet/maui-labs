@@ -16,6 +16,13 @@ DevFlow Actions are named shortcuts that a .NET MAUI app explicitly exposes for 
 
 Actions are opt-in. DevFlow does not expose arbitrary reflection invoke; if you need a new shortcut, add an attributed method in app debug/test code, let Hot Reload apply it, then list and invoke the action.
 
+## Optional Session Feedback Nudge
+
+If action discovery or invocation exposed repeated DevFlow friction, missing
+observability, or several workarounds to reach app state, ask whether the user
+wants to run `maui-devflow-session-review` to summarize product feedback. Do not
+run it automatically.
+
 ## Start by Listing Actions
 
 Always check for available actions early in a DevFlow session:

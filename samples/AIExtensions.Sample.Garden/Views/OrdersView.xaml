@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Views.OrdersView"
+             x:DataType="vm:OrdersViewModel"
+             local:ViewModelBinder.Type="{x:Type vm:OrdersViewModel}"
+             BackgroundColor="Transparent">
+
+    <CollectionView ItemsSource="{Binding Orders}"
+                    SelectionMode="None"
+                    BackgroundColor="Transparent">
+        <CollectionView.EmptyView>
+            <VerticalStackLayout Padding="24" Spacing="6"
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center">
+                <Label Text="&#xE1D0;" FontFamily="FluentFilled"
+                       FontSize="{StaticResource FontSizeDisplay}" HorizontalOptions="Center"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="No past orders yet."
+                       FontSize="{StaticResource FontSizeBody}" HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                <Label Text="Check out a cart to see it here."
+                       FontSize="{StaticResource FontSizeCaption}" HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}" />
+            </VerticalStackLayout>
+        </CollectionView.EmptyView>
+        <CollectionView.ItemTemplate>
+            <DataTemplate x:DataType="vm:OrderViewModel">
+                <Border Margin="12,6"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="16,14">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnOrderTapped"
+                                              CommandParameter="{Binding OrderId}" />
+                    </Border.GestureRecognizers>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <VerticalStackLayout Spacing="4" VerticalOptions="Center">
+                            <Label Text="{Binding PlacedAt}"
+                                   FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold" />
+                            <Label Text="{Binding ItemCountLabel}"
+                                   FontSize="{StaticResource FontSizeBody}"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center"
+                                             HorizontalOptions="End" Spacing="2">
+                            <Label Text="{Binding Total}"
+                                   FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold"
+                                   HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                            <Label Text="&#xF2B0;"
+                                   FontFamily="FluentFilled"
+                                   FontSize="{StaticResource FontSizeTitle}"
+                                   HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </CollectionView.ItemTemplate>
+    </CollectionView>
+
+</ContentView>

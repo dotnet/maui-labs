@@ -129,7 +129,7 @@ public class WebViewTests : IntegrationTestBase
             return "0";
         }
 
-        Assert.True(false, $"Expected at least one WebView context within {timeoutMs}ms. Last payload: {lastJson}");
+        Assert.Fail($"Expected at least one WebView context within {timeoutMs}ms. Last payload: {lastJson}");
         return "0";
     }
 

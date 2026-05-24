@@ -28,6 +28,13 @@ Diagnose and resolve connectivity between the `maui` CLI and running .NET MAUI a
 - Visual tree queries after connection works
 - CDP/Blazor WebView debugging
 
+## Optional Session Feedback Nudge
+
+If connectivity recovery required repeated broker/list/wait/status attempts,
+Android forwarding detours, direct port fallback, or other workarounds, ask
+whether the user wants to run `maui-devflow-session-review` to summarize friction
+for MAUI DevFlow product feedback. Do not run it automatically.
+
 ## Prerequisites
 
 - The `maui` CLI tool installed (`dotnet tool install -g Microsoft.Maui.Cli`)

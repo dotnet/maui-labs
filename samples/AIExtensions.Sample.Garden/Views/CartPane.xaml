@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Views.CartPane"
+             x:DataType="vm:CartViewModel"
+             local:ViewModelBinder.Type="{x:Type vm:CartViewModel}"
+             BackgroundColor="Transparent">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+        <Grid Padding="14,10"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="8"
+              BackgroundColor="{StaticResource Primary}">
+            <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                <Label Text="&#xF26B;"
+                       FontFamily="FluentFilled"
+                       FontSize="{StaticResource FontSizeBody}"
+                       TextColor="{StaticResource White}"
+                       VerticalOptions="Center" />
+                <Label Text="Cart"
+                       FontSize="{StaticResource FontSizeBody}"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource White}"
+                       VerticalOptions="Center" />
+            </HorizontalStackLayout>
+
+            <Border Grid.Column="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 13"
+                    Padding="0"
+                    HeightRequest="26">
+                <Button Text="{Binding CartModeLabel}"
+                        FontSize="{StaticResource FontSizeCaption}"
+                        Padding="14,0"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                        FontAttributes="Bold"
+                        BorderWidth="0"
+                        VerticalOptions="Center"
+                        Command="{Binding CycleCartModeCommand}" />
+            </Border>
+        </Grid>
+
+        <views:CartView Grid.Row="1"
+                        BindingContext="{Binding .}" />
+    </Grid>
+
+</ContentView>

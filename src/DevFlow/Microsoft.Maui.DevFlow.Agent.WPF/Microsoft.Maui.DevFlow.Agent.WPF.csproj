@@ -20,4 +20,8 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Microsoft.Maui.DevFlow.Agent\Windows\NativeWindowProbe.cs" Link="Windows\NativeWindowProbe.cs" />
+  </ItemGroup>
+
 </Project>

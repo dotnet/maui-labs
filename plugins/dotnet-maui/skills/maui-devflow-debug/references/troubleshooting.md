@@ -1,11 +1,39 @@
 # Troubleshooting
 
 ## Table of Contents
+- [Machine-readable output and error envelope](#machine-readable-output-and-error-envelope)
 - [Connection Refused](#connection-refused--cannot-connect)
 - [Android UI Thread Exceptions](#android-ui-thread-exceptions)
 - [Build Failures](#build-failures)
 - [CDP Not Connecting](#cdp-not-connecting-blazor-hybrid)
 - [Mac Catalyst Permission Dialogs](#mac-catalyst-repeated-permission-dialogs-on-rebuild)
+
+## Machine-readable output and error envelope <a name="machine-readable-output-and-error-envelope"></a>
+
+Always pass `--json` to any `maui` command an agent will parse, and `--ci` for
+non-interactive failure-fast runs.
+
+The full `--json` error envelope contract (schema, code categories, worked examples, PowerShell and Bash consumers) is documented in
+[`src/Cli/README.md` — Error envelope](../../../../../src/Cli/README.md#error-envelope).
+
+**Quick reference** — when a non-DevFlow command fails with `--json`, stdout is a top-level JSON object (no `"error"` wrapper). Note: `maui devflow ...` uses a different JSON error shape and writes errors to stderr.
+
+```json
+{
+  "code": "E2103",
+  "category": "platform",
+  "severity": "error",
+  "message": "Android SDK licenses have not been accepted.",
+  "remediation": {
+    "type": "autofixable",
+    "command": "maui android sdk accept-licenses"
+  }
+}
+```
+
+Optional fields (`remediation`, `context`, `native_error`, `docs_url`, `correlation_id`) are **omitted entirely** when null.
+When `remediation.type` is `autofixable`, run `remediation.command` then retry the original command.
+When `remediation` is absent, surface `message` and stop retrying.
 
 ## Connection Refused / Cannot Connect
 

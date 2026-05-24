@@ -15,9 +15,11 @@ namespace Microsoft.Maui.Cli.Providers.Android;
 public class AndroidProvider : IAndroidProvider
 {
 	readonly SdkManager _sdkManager;
-	readonly AvdManager _avdManager;
-	readonly Adb _adb;
 	readonly IJdkManager _jdkManager;
+	readonly bool _adbInjected;
+	readonly bool _avdInjected;
+	Adb _adb;
+	AvdManager _avdManager;
 
 	string? _sdkPath;
 	string? _jdkPath;
@@ -42,6 +44,8 @@ public class AndroidProvider : IAndroidProvider
 	{
 		_jdkManager = jdkManager ?? throw new ArgumentNullException(nameof(jdkManager));
 		_sdkManager = sdkManager ?? new SdkManager(() => SdkPath, () => JdkPath);
+		_adbInjected = adb != null;
+		_avdInjected = avdManager != null;
 		var env = AndroidEnvironment.BuildEnvironmentVariables(SdkPath, JdkPath);
 		_adb = adb ?? new Adb(() => SdkPath, env);
 		_avdManager = avdManager ?? new AvdManager(() => SdkPath, () => JdkPath, _adb);
@@ -442,6 +446,33 @@ public class AndroidProvider : IAndroidProvider
 			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
 			cancellationToken);
 		_sdkPath = targetPath;
+	}
+
+	public void OverrideSdkPath(string path)
+	{
+		_sdkPath = path;
+		RebuildToolWrappers();
+	}
+
+	public void OverrideJdkPath(string path)
+	{
+		_jdkPath = path;
+		RebuildToolWrappers();
+	}
+
+	/// <summary>
+	/// Reconstructs Adb and AvdManager so they pick up the current SDK/JDK paths.
+	/// Skipped for tool wrappers that were externally injected (e.g. in tests).
+	/// </summary>
+	void RebuildToolWrappers()
+	{
+		if (!_adbInjected)
+		{
+			var env = AndroidEnvironment.BuildEnvironmentVariables(SdkPath, JdkPath);
+			_adb = new Adb(() => SdkPath, env);
+		}
+		if (!_avdInjected)
+			_avdManager = new AvdManager(() => SdkPath, () => JdkPath, _adb);
 	}
 
 }

@@ -89,14 +89,20 @@ public class InformationalOnlyToolCallLoggingTests
 		var logs = new LogCollector(LogLevel.Trace);
 		var loggerFactory = new SingleLoggerFactory(logs);
 
-		var mockClient = new MockToolCallClient(informationalOnly: true);
-		mockClient.AddFunctionCallContent("GetWeather", "call-1",
-			new Dictionary<string, object?> { ["location"] = "NYC" });
-		mockClient.AddFunctionCallContent("GetTime", "call-2",
-			new Dictionary<string, object?> { ["timezone"] = "EST" });
-		mockClient.AddFunctionResultContent("call-1", "Cloudy");
-		mockClient.AddFunctionResultContent("call-2", "3:00 PM");
-		mockClient.AddTextContent("Done.");
+		var mockClient = new MockToolCallClient();
+		// Explicitly mark as InformationalOnly — this simulates an on-device model (e.g. Apple
+		// Intelligence) that invokes tools itself and returns call+result together. Do not rely
+		// on M.E.AI's auto-detection of paired call+result, which is an internal behaviour that
+		// could change across versions.
+		mockClient.AddFirstRoundContent(
+			new FunctionCallContent("call-1", "GetWeather",
+				new Dictionary<string, object?> { ["location"] = "NYC" }) { InformationalOnly = true });
+		mockClient.AddFirstRoundContent(
+			new FunctionCallContent("call-2", "GetTime",
+				new Dictionary<string, object?> { ["timezone"] = "EST" }) { InformationalOnly = true });
+		mockClient.AddFirstRoundContent(new FunctionResultContent("call-1", "Cloudy"));
+		mockClient.AddFirstRoundContent(new FunctionResultContent("call-2", "3:00 PM"));
+		mockClient.AddFirstRoundContent(new TextContent("Done."));
 
 		using var pipeline = new ChatClientBuilder(mockClient)
 			.UseFunctionInvocation(loggerFactory)
@@ -117,7 +123,7 @@ public class InformationalOnlyToolCallLoggingTests
 	{
 		var logs = new LogCollector(LogLevel.Trace);
 		var loggerFactory = new SingleLoggerFactory(logs);
-		var mockClient = new MockToolCallClient(informationalOnly: true);
+		var mockClient = new MockToolCallClient();
 		mockClient.AddTextContent("Hello there!");
 
 		using var pipeline = new ChatClientBuilder(mockClient)

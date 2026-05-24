@@ -23,7 +23,7 @@ public static partial class AndroidCommands
 
 		var command = new Command("install", "Set up Android development environment")
 		{
-			new Option<string>("--sdk-path") { Description = "Custom SDK installation path" },
+			new Option<string>("--sdk-install-path") { Description = "Target path for new SDK installation (not the same as --sdk)" },
 			new Option<string>("--jdk-path") { Description = "Custom JDK installation path" },
 			new Option<int>("--jdk-version") { Description = "JDK version to install (17 or 21)", DefaultValueFactory = _ => JdkManager.DefaultJdkVersion },
 			new Option<bool>("--accept-licenses") { Description = "Non-interactively accept all SDK licenses" },
@@ -32,11 +32,11 @@ public static partial class AndroidCommands
 
 		command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
-			var sdkPath = parseResult.GetOption<string>("sdk-path");
+			var sdkPath = parseResult.GetOption<string>("sdk-install-path");
 			var jdkPath = parseResult.GetOption<string>("jdk-path");
 			var jdkVersion = parseResult.GetOption<int>("jdk-version");
 			var rawPackages = parseResult.GetOption<string[]>("packages");

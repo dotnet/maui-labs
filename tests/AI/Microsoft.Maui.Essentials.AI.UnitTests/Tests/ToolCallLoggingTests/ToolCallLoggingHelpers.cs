@@ -21,18 +21,37 @@ internal static class ToolCallLoggingHelpers
 		var logs = new LogCollector(level);
 		var loggerFactory = new SingleLoggerFactory(logs);
 
-		var mockClient = new MockToolCallClient(informationalOnly);
-		mockClient.AddFunctionCallContent("GetWeather", "call-1",
-			new Dictionary<string, object?> { ["location"] = "Seattle" });
-		mockClient.AddFunctionResultContent("call-1", "Sunny, 72°F");
-		mockClient.AddTextContent("The weather is sunny.");
+		var mockClient = new MockToolCallClient();
+
+		if (informationalOnly)
+		{
+			// Informational-only scenario: the model (e.g. Apple Intelligence on-device)
+			// invoked the tool itself and returns call + result + summary in one response.
+			// FICC sees InformationalOnly=true and skips local invocation.
+			mockClient.AddFirstRoundContent(
+				new FunctionCallContent("call-1", "GetWeather",
+					new Dictionary<string, object?> { ["location"] = "Seattle" }) { InformationalOnly = true });
+			mockClient.AddFirstRoundContent(new FunctionResultContent("call-1", "Sunny, 72°F"));
+			mockClient.AddFirstRoundContent(new TextContent("The weather is sunny."));
+		}
+		else
+		{
+			// Invocable scenario: the model asks FICC to call the tool.
+			// Round 1 — LLM returns only the function call; it has no result yet.
+			mockClient.AddFirstRoundContent(
+				new FunctionCallContent("call-1", "GetWeather",
+					new Dictionary<string, object?> { ["location"] = "Seattle" }));
+
+			// Round 2 — after FICC invokes the tool and appends the result to history,
+			// the LLM gets called again and now produces the final text summary.
+			mockClient.AddSecondRoundContent(new TextContent("The weather is sunny."));
+		}
 
 		var pipeline = new ChatClientBuilder(mockClient)
 			.UseFunctionInvocation(loggerFactory)
 			.UseLogging(loggerFactory)
 			.Build();
 
-		// For invocable tools, register the tool in ChatOptions so FICC can find it
 		var options = new ChatOptions();
 		if (!informationalOnly)
 		{
@@ -86,78 +105,80 @@ internal class SingleLoggerFactory : ILoggerFactory
 }
 
 /// <summary>
-/// Mock chat client that returns predefined content.
-/// When informationalOnly=false, FunctionCallContent is invocable by FICC,
-/// and a matching tool is registered in ChatOptions.
+/// Mock chat client that simulates two-round LLM function-calling behaviour.
+/// Round 1: returns <see cref="AddFirstRoundContent"/> items (the initial LLM response).
+/// Round 2: when the conversation history contains a Tool message (i.e. FICC has already
+///           invoked a function and appended its result), returns <see cref="AddSecondRoundContent"/> items.
+/// This mirrors how real models work: the LLM never produces a text summary until it
+/// actually receives the function result back from the caller.
 /// </summary>
 internal class MockToolCallClient : IChatClient
 {
-	private readonly bool _informationalOnly;
-	private readonly List<AIContent> _content = [];
-
-	public MockToolCallClient(bool informationalOnly) => _informationalOnly = informationalOnly;
+	private readonly List<AIContent> _firstRound = [];
+	private readonly List<AIContent> _secondRound = [];
 
 	public ChatClientMetadata Metadata => new("MockToolCallClient");
 
-	public void AddTextContent(string text) =>
-		_content.Add(new TextContent(text));
+	public void AddFirstRoundContent(AIContent content) => _firstRound.Add(content);
+	public void AddSecondRoundContent(AIContent content) => _secondRound.Add(content);
 
+	// Keep these helpers for tests that build their own MockToolCallClient directly
+	// (e.g. MultipleFunctionCalls_AllLoggedAtTrace).
+	public void AddTextContent(string text) => _firstRound.Add(new TextContent(text));
 	public void AddFunctionCallContent(string name, string callId, Dictionary<string, object?>? arguments = null) =>
-		_content.Add(new FunctionCallContent(callId, name, arguments) { InformationalOnly = _informationalOnly });
-
+		_firstRound.Add(new FunctionCallContent(callId, name, arguments));
 	public void AddFunctionResultContent(string callId, object? result) =>
-		_content.Add(new FunctionResultContent(callId, result));
+		_firstRound.Add(new FunctionResultContent(callId, result));
 
 	public Task<ChatResponse> GetResponseAsync(
 		IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
 	{
-		// When FICC invokes tools and re-calls us, return just the text
-		if (messages.Any(m => m.Role == ChatRole.Tool))
-			return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Weather result processed.")]));
-
-		var responseMessages = new List<ChatMessage>();
-		var currentContents = new List<AIContent>();
-
-		foreach (var content in _content)
-		{
-			if (content is FunctionResultContent)
-			{
-				if (currentContents.Count > 0)
-				{
-					responseMessages.Add(new ChatMessage(ChatRole.Assistant, [.. currentContents]));
-					currentContents.Clear();
-				}
-				responseMessages.Add(new ChatMessage(ChatRole.Tool, [content]));
-			}
-			else
-			{
-				currentContents.Add(content);
-			}
-		}
-
-		if (currentContents.Count > 0)
-			responseMessages.Add(new ChatMessage(ChatRole.Assistant, [.. currentContents]));
-
-		return Task.FromResult(new ChatResponse(responseMessages));
+		var content = messages.Any(m => m.Role == ChatRole.Tool) ? _secondRound : _firstRound;
+		return Task.FromResult(new ChatResponse(BuildMessages(content)));
 	}
 
 	public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
 		IEnumerable<ChatMessage> messages, ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
-		// When FICC re-calls after invocation, return processed text
-		if (messages.Any(m => m.Role == ChatRole.Tool))
-		{
-			yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [new TextContent("Weather result processed.")] };
-			yield break;
-		}
-
-		foreach (var content in _content)
+		var content = messages.Any(m => m.Role == ChatRole.Tool) ? _secondRound : _firstRound;
+		foreach (var item in content)
 		{
 			await Task.Yield();
-			var role = content is FunctionResultContent ? ChatRole.Tool : ChatRole.Assistant;
-			yield return new ChatResponseUpdate { Role = role, Contents = [content] };
+			yield return new ChatResponseUpdate
+			{
+				Role = item is FunctionResultContent ? ChatRole.Tool : ChatRole.Assistant,
+				Contents = [item]
+			};
 		}
+	}
+
+	private static List<ChatMessage> BuildMessages(List<AIContent> content)
+	{
+		var messages = new List<ChatMessage>();
+		var assistantBuffer = new List<AIContent>();
+
+		foreach (var item in content)
+		{
+			if (item is FunctionResultContent)
+			{
+				if (assistantBuffer.Count > 0)
+				{
+					messages.Add(new ChatMessage(ChatRole.Assistant, [.. assistantBuffer]));
+					assistantBuffer.Clear();
+				}
+				messages.Add(new ChatMessage(ChatRole.Tool, [item]));
+			}
+			else
+			{
+				assistantBuffer.Add(item);
+			}
+		}
+
+		if (assistantBuffer.Count > 0)
+			messages.Add(new ChatMessage(ChatRole.Assistant, [.. assistantBuffer]));
+
+		return messages;
 	}
 
 	public object? GetService(Type serviceType, object? serviceKey = null) => null;

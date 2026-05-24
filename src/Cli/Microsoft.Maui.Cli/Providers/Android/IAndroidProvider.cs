@@ -139,6 +139,18 @@ public interface IAndroidProvider : IDisposable
 	/// </summary>
 	Task InstallSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
 
+	/// <summary>
+	/// Overrides the Android SDK path for the current session.
+	/// Rebuilds downstream tool wrappers (SdkManager, AvdManager, Adb) to use the new path.
+	/// </summary>
+	void OverrideSdkPath(string path);
+
+	/// <summary>
+	/// Overrides the JDK path for the current session.
+	/// Rebuilds downstream tool wrappers so JAVA_HOME reflects the new path.
+	/// </summary>
+	void OverrideJdkPath(string path);
+
 }
 
 /// <summary>

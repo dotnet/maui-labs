@@ -36,6 +36,10 @@ parameters:
   displayName: 'Publish macOS AppKit packages to NuGet.org'
   type: boolean
   default: false
+- name: publishAIExtensionsNuget
+  displayName: 'Publish AI Extensions packages to NuGet.org'
+  type: boolean
+  default: false
 - name: publishEssentialsAINuget
   displayName: 'Publish EssentialsAI packages to NuGet.org'
   type: boolean
@@ -144,6 +148,30 @@ extends:
                 -projects $(Build.SourcesDirectory)\src\Cli\Cli.slnf
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
+
+          - job: AI
+            displayName: AI Extensions - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                version: 10.0.105
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\AIExtensions\AIExtensions.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test AI Extensions
 
           - job: AppProjectReference
             displayName: AppProjectReference - Windows
@@ -614,6 +642,61 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/LinuxGtk4Packages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/LinuxGtk4Packages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish AI Extensions packages to NuGet.org
+    - ${{ if eq(parameters.publishAIExtensionsNuget, true) }}:
+      - stage: publish_ai_extensions_nuget
+        displayName: 'Publish AI Extensions to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare AI Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish AI Packages
+              targetPath: '$(Pipeline.Workspace)/AIPackages'
+              artifactName: AIPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/AIPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.AI.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
+            displayName: Filter AI packages
+
+        - job: PublishNuGet
+          displayName: 'Push AI to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: AIPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/AIPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push AI to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/AIPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/AIPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 

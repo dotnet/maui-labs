@@ -28,7 +28,29 @@ maui doctor
 maui device list
 ```
 
-### 3. Set up Android development
+### 3. Manage a project's .NET MAUI version
+
+```bash
+# Show the effective MAUI version for the current project
+maui project version
+maui project version --project ./src/MyApp/MyApp.csproj
+
+# List available versions
+maui project version list
+maui project version list --channel nightly --take 20
+
+# Pin a specific version and restore
+maui project version set 10.0.60
+
+# Use the latest stable or nightly package version
+maui project version set --latest
+maui project version set --latest-nightly --nuget-config
+
+# Switch back to the installed workload version
+maui project version use-workload
+```
+
+### 4. Set up Android development
 
 ```bash
 # Full interactive Android setup (JDK + SDK + emulator)
@@ -46,7 +68,7 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
-### 4. Set up Apple development (macOS only)
+### 5. Set up Apple development (macOS only)
 
 ```bash
 # List installed Xcode versions
@@ -69,6 +91,10 @@ maui apple simulator delete "iPhone 16 Pro"
 |---------|-------------|
 | `maui doctor` | Run environment diagnostics and auto-fix issues |
 | `maui device list` | List connected devices and emulators |
+| `maui project version` | Show the effective .NET MAUI version for a project |
+| `maui project version list` | List available .NET MAUI package versions |
+| `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
+| `maui project version use-workload` | Use the installed MAUI workload version instead of a pinned project version |
 | `maui version` | Display version information |
 | **Android** | |
 | `maui android install` | Full interactive Android environment setup |
@@ -153,6 +179,118 @@ maui doctor
 # JSON output for scripting
 maui doctor --json | jq '.checks[] | select(.status == "failed")'
 ```
+
+### `--json` flag
+
+Most commands accept `--json` for structured output. Some commands may emit multiple JSON objects to stdout (JSONL / newline-delimited JSON) — for example, progress or status records before the final result. The final JSON object is the command result, whose shape is command-specific (see per-command `--help` and examples below). When a non-DevFlow command **fails** and the exception is handled by `HandleCommandException`, it emits the canonical error envelope described in the next section. This applies to both recognized `MauiToolException` errors (which produce specific error codes) and unexpected exceptions (which become `E1001`/`InternalError` via `ErrorResult.FromException`). Note: unrecognized parse errors (e.g. invalid flags) do not use this envelope, `OperationCanceledException` produces a status message with exit code 130 rather than the error envelope, and `maui devflow ...` uses a different JSON contract and writes structured errors to stderr rather than stdout.
+
+Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts. Parse the output as a stream of JSON objects rather than assuming a single top-level document.
+
+### Error envelope <a name="error-envelope"></a>
+
+For non-DevFlow `maui` commands, when a command throws an exception that is handled by `HandleCommandException` and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`. Note: some commands may return non-zero exit codes without throwing (e.g. validation paths), and `OperationCanceledException` is treated as a cancellation (exit code 130) rather than an error envelope. This section does not apply to `maui devflow ...`, which uses a different JSON error shape and writes structured errors to stderr.
+
+```json
+{
+  "code": "E2106",          // stable error code — see the error code table below
+  "category": "platform",   // tool | platform | user | network | permission
+  "severity": "error",      // always "error" today (info | warning reserved for future use)
+  "message": "Android emulator not installed",
+
+  // OPTIONAL — omitted entirely when null (never serialized as JSON null)
+
+  "native_error": "...",    // raw error text from the underlying tool, when available
+  "context": { ... },       // command-specific diagnostics bag
+  "remediation": {
+    "type": "autofixable",              // autofixable | useraction | terminal | unknown
+    "command": "maui android sdk install emulator",  // present when type == autofixable
+    "manual_steps": ["...", "..."]      // present when type == useraction
+  },
+  "docs_url": "https://...",          // reserved — not yet populated by any command
+  "correlation_id": "..."
+}
+```
+
+**Contract guarantees** (verified line-by-line against `Models/ErrorResult.cs`):
+
+- Property names are `snake_case` — enforced by `[JsonPropertyName]` attributes on `ErrorResult`.
+- `remediation.type` values are **lowercase** strings — serialized via `.ToString().ToLowerInvariant()`.
+- Optional fields (`native_error`, `context`, `remediation`, `docs_url`, `correlation_id`) are **omitted entirely** when null — enforced by `[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]`.
+- There is **no** outer `"error"` wrapper — all fields are top-level.
+- `code`, `category`, `severity`, and `message` are always present.
+- The CLI intends to keep this envelope shape consistent; future changes are expected to be additive (e.g. new optional fields) rather than changing existing field names or types.
+
+### Error code categories
+
+| Prefix | `category` value | Examples |
+|--------|-----------------|---------|
+| `E1xxx` | `tool` | `E1001` InternalError, `E1004` InvalidArgument, `E1006` DeviceNotFound, `E1007` PlatformNotSupported |
+| `E20xx` | `platform` | `E2001` JdkNotFound, `E2002` JdkVersionUnsupported, `E2003` JdkInstallFailed |
+| `E21xx` | `platform` | `E2101` AndroidSdkNotFound, `E2102` AndroidSdkManagerNotFound, `E2103` AndroidLicensesNotAccepted, `E2105` AndroidPackageInstallFailed, `E2106` AndroidEmulatorNotFound, `E2108` AndroidAvdCreateFailed, `E2110` AndroidAdbNotFound, `E2111` AndroidDeviceNotFound, `E2112` AndroidAvdDeleteFailed |
+| `E22xx` | `platform` | `E2201` AppleXcodeNotFound, `E2202` AppleCltNotFound, `E2203` AppleSimctlFailed, `E2204` AppleSimulatorNotFound, `E2205` AppleXcodeLicenseNotAccepted, `E2206` AppleSetupFailed, `E2207` AppleSimulatorCreateFailed, `E2208` AppleSimulatorEraseFailed |
+| `E23xx` | `platform` | `E2301` WindowsSdkNotFound |
+| `E24xx` | `platform` | `E2401` DotNetNotFound, `E2402` MauiWorkloadMissing, `E2403` DiagnosticsToolNotFound |
+| `E3xxx` | `user` | User action required (wrong arguments, missing inputs) |
+| `E4xxx` | `network` | Download / connectivity failures |
+| `E5xxx` | `permission` | Privacy / OS permission issues |
+
+A `maui errors list` command is planned (issue [#197](https://github.com/dotnet/maui-labs/issues/197)) to expose this catalogue at runtime. The table above is the authoritative list until then.
+
+### Consuming the error envelope
+
+**Bash / jq:**
+
+```bash
+if ! out=$(maui android sdk install emulator --json 2>&1); then
+  # Output may contain multiple JSONL lines; extract the error envelope (has a "code" field)
+  err=$(echo "$out" | jq -s '[.[] | select(.code)] | last')
+  rem_type=$(echo "$err" | jq -r '.remediation.type // "unknown"')
+  rem_cmd=$(echo "$err" | jq -r '.remediation.command // empty')
+  if [[ "$rem_type" == "autofixable" && -n "$rem_cmd" ]]; then
+    # Run the remediation command directly (never pass untrusted input to eval)
+    $rem_cmd
+  fi
+fi
+```
+
+**PowerShell:**
+
+```powershell
+$lines = maui android sdk install emulator --json
+if ($LASTEXITCODE -ne 0) {
+    # Output may contain multiple JSONL lines; pick the error envelope (has a "code" property)
+    $err = $lines | ForEach-Object { $_ | ConvertFrom-Json } |
+           Where-Object { $_.code } | Select-Object -Last 1
+    if ($err.remediation.type -eq 'autofixable' -and $err.remediation.command) {
+        # Split and invoke directly (avoid Invoke-Expression with untrusted input)
+        $parts = $err.remediation.command -split ' '
+        & $parts[0] $parts[1..($parts.Length-1)]
+    }
+}
+```
+
+### Worked example: `E2106` AndroidEmulatorNotFound
+
+`maui android emulator start <name>` emits `E2106` with an `autofixable` remediation when the Android emulator binary is not installed:
+
+```bash
+maui android emulator start Pixel8 --json
+# → { "code": "E2106",
+#     "category": "platform",
+#     "severity": "error",
+#     "message": "Android emulator not installed",
+#     "remediation": { "type": "autofixable",
+#                      "command": "maui android sdk install emulator" } }
+
+# Auto-fix path:
+maui android sdk install emulator --json
+maui android emulator start Pixel8 --json   # retry original
+```
+
+Other `E2106` throw sites (e.g., "no AVD with that name") emit the same code **without** a `remediation` block — surface `message` and stop retrying.
+
+> For agent-facing usage examples and remediation patterns used by AI coding agents, see
+> [`plugins/dotnet-maui/skills/maui-devflow-debug/references/troubleshooting.md`](../../plugins/dotnet-maui/skills/maui-devflow-debug/references/troubleshooting.md).
 
 ## Platform Support
 

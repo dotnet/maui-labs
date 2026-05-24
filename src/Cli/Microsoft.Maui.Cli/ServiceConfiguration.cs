@@ -41,6 +41,9 @@ public static class ServiceConfiguration
 		// Core services
 		services.AddSingleton<IDoctorService, DoctorService>();
 		services.AddSingleton<IDeviceManager, DeviceManager>();
+		services.AddSingleton<HttpClient>();
+		services.AddSingleton<IMauiVersionFeedService, MauiVersionFeedService>();
+		services.AddSingleton<IMauiProjectVersionService, MauiProjectVersionService>();
 
 		// DevFlow output
 		services.AddSingleton<IDevFlowOutputWriter, DevFlowOutputWriter>();
@@ -59,7 +62,9 @@ public static class ServiceConfiguration
 		IJdkManager? jdkManager = null,
 		IDoctorService? doctorService = null,
 		IDeviceManager? deviceManager = null,
-		IDevFlowOutputWriter? devFlowOutputWriter = null)
+		IDevFlowOutputWriter? devFlowOutputWriter = null,
+		IMauiVersionFeedService? mauiVersionFeedService = null,
+		IMauiProjectVersionService? mauiProjectVersionService = null)
 	{
 		var services = new ServiceCollection();
 
@@ -93,6 +98,18 @@ public static class ServiceConfiguration
 			services.AddSingleton(devFlowOutputWriter);
 		else
 			services.AddSingleton<IDevFlowOutputWriter, DevFlowOutputWriter>();
+
+		services.AddSingleton<HttpClient>();
+
+		if (mauiVersionFeedService != null)
+			services.AddSingleton(mauiVersionFeedService);
+		else
+			services.AddSingleton<IMauiVersionFeedService, MauiVersionFeedService>();
+
+		if (mauiProjectVersionService != null)
+			services.AddSingleton(mauiProjectVersionService);
+		else
+			services.AddSingleton<IMauiProjectVersionService, MauiProjectVersionService>();
 
 		return services.BuildServiceProvider();
 	}

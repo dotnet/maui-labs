@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Pages.OrdersPage"
+             x:DataType="vm:OrdersViewModel"
+             Title="Past Orders"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="Auto,*"
+          local:ViewModelBinder.Type="{x:Type vm:OrdersViewModel}"
+          BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
+        <!-- Header: [back] [icon] [title] ... [clear all] -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0"
+                Padding="16,8"
+                SafeAreaEdges="Container">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                    <Button Text="&#xF36A;"
+                            FontFamily="FluentFilled"
+                            FontSize="{StaticResource FontSizeTitle}"
+                            Padding="8,4"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource White}"
+                            VerticalOptions="Center"
+                            Clicked="OnBackClicked" />
+                    <Label Text="&#xEA07;"
+                           FontFamily="FluentFilled"
+                           FontSize="{StaticResource FontSizeTitle}"
+                           TextColor="{StaticResource White}" VerticalOptions="Center" />
+                    <Label Text="Orders"
+                           FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                           TextColor="{StaticResource White}"
+                           VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Button Grid.Column="1"
+                        Text="Clear All"
+                        FontSize="{StaticResource FontSizeBody}"
+                        FontAttributes="Bold"
+                        Padding="12,4"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                        CornerRadius="14"
+                        VerticalOptions="Center"
+                        Command="{Binding ClearCommand}" />
+            </Grid>
+        </Border>
+
+        <views:OrdersView Grid.Row="1" />
+    </Grid>
+
+</ContentPage>

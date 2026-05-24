@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Pages.ProductReviewPage"
+             x:DataType="vm:ProductReviewViewModel"
+             Title="Write Review"
+             Shell.PresentationMode="ModalAnimated"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="Auto,*"
+          BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
+        <!-- Header -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0"
+                Padding="16,8"
+                SafeAreaEdges="Container">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Button Text="&#xF36A;"
+                        FontFamily="FluentFilled"
+                        FontSize="{StaticResource FontSizeTitle}"
+                        Padding="8,4"
+                        BackgroundColor="Transparent"
+                        TextColor="{StaticResource White}"
+                        VerticalOptions="Center"
+                        Command="{Binding CancelCommand}" />
+                <Label Grid.Column="1"
+                       Text="Write Review"
+                       FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                       TextColor="{StaticResource White}"
+                       VerticalOptions="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Review form -->
+        <ScrollView Grid.Row="1" Padding="16">
+            <VerticalStackLayout Spacing="16" MaximumWidthRequest="500"
+                                 HorizontalOptions="Center">
+
+                <Label Text="{Binding ProductName}"
+                       FontSize="{StaticResource FontSizeTitle}"
+                       FontAttributes="Bold"
+                       HorizontalTextAlignment="Center" />
+
+                <!-- Rating -->
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Rating"
+                           FontSize="{StaticResource FontSizeBody}"
+                           FontAttributes="Bold" />
+                    <Slider Minimum="1" Maximum="5"
+                            Value="{Binding Rating}"
+                            MinimumTrackColor="{StaticResource Primary}"
+                            ThumbColor="{StaticResource Primary}" />
+                    <Label FontSize="{StaticResource FontSizeSubtitle}"
+                           HorizontalTextAlignment="Center"
+                           TextColor="#E5A100">
+                        <Label.Text>
+                            <MultiBinding StringFormat="{}{0} / 5 ★">
+                                <Binding Path="Rating" />
+                            </MultiBinding>
+                        </Label.Text>
+                    </Label>
+                </VerticalStackLayout>
+
+                <!-- Comment -->
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Comment (optional)"
+                           FontSize="{StaticResource FontSizeBody}"
+                           FontAttributes="Bold" />
+                    <Border BackgroundColor="{AppThemeBinding Light={StaticResource InputBackgroundLight}, Dark={StaticResource InputBackgroundDark}}"
+                            Stroke="{AppThemeBinding Light={StaticResource InputStrokeLight}, Dark={StaticResource InputStrokeDark}}"
+                            StrokeThickness="1"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="12">
+                        <Editor Text="{Binding Comment}"
+                                Placeholder="Share your experience..."
+                                HeightRequest="120"
+                                AutoSize="TextChanges" />
+                    </Border>
+                </VerticalStackLayout>
+
+                <!-- Submit -->
+                <Button Text="Submit Review"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="{StaticResource White}"
+                        FontAttributes="Bold"
+                        CornerRadius="12"
+                        Command="{Binding SubmitCommand}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+
+</ContentPage>

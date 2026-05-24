@@ -296,9 +296,12 @@ public class AgentHttpServerTests : IDisposable
 
             var body = """
             {
-              "ui": { "supported": true, "features": ["tree", "tap", "batch"] },
-              "webview": { "supported": true, "features": ["contexts", "evaluate"] },
-              "network": { "supported": true, "features": ["list", "clear"] }
+              "agent": { "name": "Microsoft.Maui.DevFlow.Agent", "version": "1.0.0", "framework": "maui", "frameworkVersion": "10.0.0" },
+              "capabilities": {
+                "ui.actions": { "version": 1, "features": ["tap", "batch"] },
+                "webview": { "version": 1, "features": ["contexts", "evaluate"] },
+                "network": { "version": 1, "features": ["list", "clear"] }
+              }
             }
             """;
             var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
@@ -308,8 +311,8 @@ public class AgentHttpServerTests : IDisposable
         using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
         var capabilities = await agentClient.GetCapabilitiesAsync();
 
-        Assert.True(capabilities.GetProperty("ui").GetProperty("supported").GetBoolean());
-        Assert.Contains("batch", capabilities.GetProperty("ui").GetProperty("features").EnumerateArray().Select(x => x.GetString()));
+        Assert.Equal("maui", capabilities.GetProperty("agent").GetProperty("framework").GetString());
+        Assert.Contains("batch", capabilities.GetProperty("capabilities").GetProperty("ui.actions").GetProperty("features").EnumerateArray().Select(x => x.GetString()));
 
         await acceptTask;
         listener.Stop();

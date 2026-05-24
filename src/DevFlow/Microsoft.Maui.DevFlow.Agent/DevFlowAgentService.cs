@@ -494,21 +494,6 @@ public class PlatformAgentService : DevFlowAgentService
     }
 #endif
 
-    protected override BleMonitor CreateBleMonitor()
-    {
-#if ANDROID
-        return new Ble.AndroidBleMonitor();
-#elif IOS || MACCATALYST
-        return new Ble.AppleBleMonitor();
-#elif WINDOWS
-        return new Ble.WindowsBleMonitor();
-#elif MACOS
-        return new Ble.MacOsBleMonitor();
-#else
-        return base.CreateBleMonitor();
-#endif
-    }
-
     protected override bool TryNativeTap(VisualElement ve)
     {
         try
@@ -542,6 +527,41 @@ public class PlatformAgentService : DevFlowAgentService
 #endif
         }
         catch { }
+        return false;
+    }
+
+    protected override bool TryScheduleNativeTapFirst(VisualElement ve)
+    {
+        try
+        {
+#if WINDOWS
+            if (ve.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase buttonBase)
+            {
+                var peer =
+                    Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(buttonBase) ??
+                    Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(buttonBase);
+                if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
+                {
+                    // Wrap the dispatched lambda so a stale/disabled element doesn't
+                    // surface as CoreApplication.UnhandledErrorDetected and crash the
+                    // host app. The TryEnqueue bool only reports whether the work
+                    // item was queued, not whether the invoke itself succeeded.
+                    return buttonBase.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        try { invokeProvider.Invoke(); }
+                        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
+                                                      or InvalidOperationException
+                                                      or UnauthorizedAccessException)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WinUI native invoke skipped: {ex.GetBaseException().Message}");
+                        }
+                    });
+                }
+            }
+#endif
+        }
+        catch { }
+
         return false;
     }
 

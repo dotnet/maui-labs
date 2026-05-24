@@ -610,19 +610,27 @@ public static class GoCommands
 
 	static Command CreateUpgradeCommand()
 	{
-		var command = new Command("upgrade", "Graduate a Comet Go app to a full MAUI project");
+		var forceOpt = new Option<bool>("--force") { Description = "Overwrite known-generated files if they already exist" };
+		var dryRunOpt = new Option<bool>("--dry-run") { Description = "Print planned actions without writing any files" };
+		var buildOpt = new Option<bool>("--build") { Description = "Run `dotnet build` after scaffolding to verify the upgrade" };
+		var keepBackupOpt = new Option<bool>("--keep-backup") { Description = "Back up the original .cs (and any overwritten files) under .maui-go-backup/<timestamp>/", DefaultValueFactory = _ => true };
 
-		command.SetAction((ParseResult _, CancellationToken __) =>
+		var command = new Command("upgrade", "Graduate a Comet Go file-based program to a full MAUI project")
 		{
-			Console.WriteLine("[maui go upgrade] Not implemented yet.");
-			Console.WriteLine();
-			Console.WriteLine("  When implemented, this will:");
-			Console.WriteLine("  1. Keep all Comet views (they work in full MAUI too)");
-			Console.WriteLine("  2. Add platform-specific project structure (Platforms/)");
-			Console.WriteLine("  3. Update .csproj with full MAUI workload references");
-			Console.WriteLine("  4. Generate App.cs with CometApp subclass");
+			forceOpt, dryRunOpt, buildOpt, keepBackupOpt,
+		};
 
-			return Task.FromResult(0);
+		command.SetAction(async (ParseResult parseResult, CancellationToken ct) =>
+		{
+			var options = new Go.GoUpgradeOptions(
+				Cwd: Directory.GetCurrentDirectory(),
+				Force: parseResult.GetValue(forceOpt),
+				DryRun: parseResult.GetValue(dryRunOpt),
+				Build: parseResult.GetValue(buildOpt),
+				KeepBackup: parseResult.GetValue(keepBackupOpt));
+
+			var result = await Go.GoUpgradeRunner.RunAsync(options, line => Console.WriteLine(line), ct);
+			return result.ExitCode;
 		});
 
 		return command;

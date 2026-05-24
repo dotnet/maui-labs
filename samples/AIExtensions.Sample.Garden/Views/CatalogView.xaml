@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Views.CatalogView"
+             x:DataType="vm:CatalogViewModel"
+             local:ViewModelBinder.Type="{x:Type vm:CatalogViewModel}"
+             BackgroundColor="Transparent">
+
+    <CollectionView ItemsSource="{Binding Groups}"
+                    IsGrouped="True"
+                    BackgroundColor="Transparent">
+        <CollectionView.ItemsLayout>
+            <LinearItemsLayout Orientation="Vertical" ItemSpacing="0" />
+        </CollectionView.ItemsLayout>
+
+        <CollectionView.GroupHeaderTemplate>
+            <DataTemplate x:DataType="vm:CatalogGroupViewModel">
+                <Label Text="{Binding CategoryName}"
+                       FontSize="{StaticResource FontSizeTitle}"
+                       FontAttributes="Bold"
+                       Padding="16,16,16,6"
+                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+            </DataTemplate>
+        </CollectionView.GroupHeaderTemplate>
+
+        <CollectionView.ItemTemplate>
+            <DataTemplate x:DataType="vm:CatalogItemViewModel">
+                <Border Margin="12,4"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="12">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnProductTapped"
+                                              CommandParameter="{Binding Sku}" />
+                    </Border.GestureRecognizers>
+                    <Grid ColumnDefinitions="64,*" ColumnSpacing="12">
+                        <Border BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SurfaceDark}}"
+                                StrokeThickness="0"
+                                StrokeShape="RoundRectangle 10"
+                                WidthRequest="64" HeightRequest="64"
+                                HorizontalOptions="Center" VerticalOptions="Center">
+                            <Label Text="{Binding Emoji}"
+                                   FontFamily="FluentFilled"
+                                   FontSize="32"
+                                   TextColor="{StaticResource Primary}"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center" />
+                        </Border>
+                        <Grid Grid.Column="1" RowDefinitions="*,Auto" RowSpacing="4">
+                            <Label Text="{Binding Name}"
+                                   FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold"
+                                   VerticalOptions="End"
+                                   LineBreakMode="WordWrap" />
+                            <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                <Label Text="{Binding PriceLabel}"
+                                       FontSize="{StaticResource FontSizeBody}"
+                                       VerticalOptions="Center"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                                <Button Grid.Column="1"
+                                        Text="Details"
+                                        FontSize="{StaticResource FontSizeCaption}"
+                                        Padding="12,6"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource ChipBackgroundLight}, Dark={StaticResource ChipBackgroundDark}}"
+                                        TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                                        CornerRadius="8"
+                                        VerticalOptions="Center"
+                                        Clicked="OnProductDetailClicked"
+                                        CommandParameter="{Binding Sku}" />
+                                <Button Grid.Column="2"
+                                        Text="Add to Cart"
+                                        FontSize="{StaticResource FontSizeCaption}"
+                                        Padding="12,6"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        TextColor="{StaticResource White}"
+                                        CornerRadius="8"
+                                        VerticalOptions="Center"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:CatalogViewModel}}, Path=AddToCartCommand}"
+                                        CommandParameter="{Binding Sku}" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </CollectionView.ItemTemplate>
+    </CollectionView>
+
+</ContentView>

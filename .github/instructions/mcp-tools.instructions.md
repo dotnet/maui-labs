@@ -75,18 +75,22 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 
 | File | Tools | Pattern |
 |------|-------|---------|
-| `AgentTools.cs` | `maui_list_agents`, `maui_select_agent`, `maui_wait` | Agent discovery |
-| `TreeTool.cs` | `maui_tree` | Visual tree inspection |
-| `QueryTools.cs` | `maui_query`, `maui_query_css` | Element search |
-| `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_scroll` | User interactions |
-| `NavigationTools.cs` | `maui_navigate`, `maui_focus`, `maui_resize` | Navigation & window |
-| `ScreenshotTool.cs` | `maui_screenshot` | Image capture |
+| `AgentTools.cs` | `maui_list_agents`, `maui_select_agent`, `maui_wait`, `maui_status`, `maui_capabilities` | Agent discovery |
 | `AssertTool.cs` | `maui_assert` | Property assertions |
-| `PropertyTools.cs` | `maui_get_property`, `maui_set_property` | Property read/write |
-| `LogsTool.cs` | `maui_logs` | Log retrieval |
-| `NetworkTool.cs` | `maui_network`, `maui_network_detail`, `maui_network_clear` | Network inspection |
+| `BatchTools.cs` | `maui_batch` | Batch actions |
 | `CdpTools.cs` | `maui_cdp_evaluate`, `maui_cdp_screenshot`, `maui_cdp_source`, `maui_cdp_webviews` | Blazor WebView CDP |
-| `RecordingTools.cs` | `maui_recording_start`, `maui_recording_stop`, `maui_recording_status` | Screen recording |
-| `SensorTools.cs` | `maui_sensors_list`, `maui_sensors_start`, `maui_sensors_stop` | Device sensors |
-| `PlatformTools.cs` | `maui_app_info`, `maui_device_info`, `maui_display_info`, `maui_battery_info`, `maui_connectivity`, `maui_geolocation`, `maui_status` | Device/app info |
+| `FileTools.cs` | `maui_storage_roots`, `maui_files_list`, `maui_files_download`, `maui_files_upload`, `maui_files_delete` | File storage |
+| `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_key`, `maui_gesture`, `maui_scroll` | User interactions |
+| `InvokeTools.cs` | `maui_list_actions`, `maui_invoke_action` | DevFlow Actions |
+| `JobTools.cs` | `maui_jobs_list`, `maui_jobs_run` | Background jobs |
+| `LogsTool.cs` | `maui_logs` | Log retrieval |
+| `NavigationTools.cs` | `maui_navigate`, `maui_back`, `maui_focus`, `maui_resize` | Navigation & window |
+| `NetworkTool.cs` | `maui_network`, `maui_network_detail`, `maui_network_clear` | Network inspection |
+| `PlatformTools.cs` | `maui_app_info`, `maui_device_info`, `maui_display_info`, `maui_battery_info`, `maui_connectivity`, `maui_geolocation` | Device/app info |
 | `PreferencesTools.cs` | `maui_preferences_list`, `maui_preferences_get`, `maui_preferences_set`, `maui_preferences_delete`, `maui_preferences_clear`, `maui_secure_storage_get`, `maui_secure_storage_set`, `maui_secure_storage_delete`, `maui_secure_storage_clear` | Storage |
+| `PropertyTools.cs` | `maui_get_property`, `maui_set_property` | Property read/write |
+| `QueryTools.cs` | `maui_query`, `maui_query_css`, `maui_element`, `maui_hittest` | Element search |
+| `RecordingTools.cs` | `maui_recording_start`, `maui_recording_stop`, `maui_recording_status` | Screen recording |
+| `ScreenshotTool.cs` | `maui_screenshot` | Image capture |
+| `SensorTools.cs` | `maui_sensors_list`, `maui_sensors_start`, `maui_sensors_stop` | Device sensors |
+| `TreeTool.cs` | `maui_tree` | Visual tree inspection |

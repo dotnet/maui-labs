@@ -21,7 +21,7 @@ public static partial class AndroidCommands
 		var checkCommand = new Command("check", "Check Android SDK installation status");
 		checkCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var formatter = Program.GetFormatter(parseResult);
@@ -67,7 +67,7 @@ public static partial class AndroidCommands
 		};
 		installCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
@@ -270,7 +270,7 @@ public static partial class AndroidCommands
 		};
 		listCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var showAvailable = parseResult.GetOption<bool>("available");
@@ -388,7 +388,7 @@ public static partial class AndroidCommands
 		var acceptLicensesCommand = new Command("accept-licenses", "Accept Android SDK licenses interactively");
 		acceptLicensesCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var formatter = Program.GetFormatter(parseResult);
@@ -490,7 +490,7 @@ public static partial class AndroidCommands
 
 		command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
 		{
-			var androidProvider = Program.AndroidProvider;
+			var androidProvider = GetAndroidProvider(parseResult);
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);

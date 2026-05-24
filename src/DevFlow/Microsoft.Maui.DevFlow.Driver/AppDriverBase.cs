@@ -28,19 +28,39 @@ public abstract class AppDriverBase : IAppDriver
     public Task<AgentStatus?> GetStatusAsync()
         => EnsureClient().GetStatusAsync();
 
+    public Task<ThemeResult?> GetThemeAsync()
+        => EnsureClient().GetThemeAsync();
+
+    public virtual Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
+    {
+        if (scope == ThemeSetScope.System)
+        {
+            return Task.FromResult(new ThemeResult
+            {
+                Theme = theme,
+                RequestedTheme = theme,
+                Source = "system",
+                Success = false,
+                Message = $"System theme switching is not supported on {Platform}. Use app scope instead.",
+            });
+        }
+
+        return EnsureClient().SetThemeAsync(theme);
+    }
+
     public Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0)
         => EnsureClient().GetTreeAsync(maxDepth);
 
     public Task<List<ElementInfo>> QueryAsync(string? type = null, string? automationId = null, string? text = null)
         => EnsureClient().QueryAsync(type, automationId, text);
 
-    public Task<bool> TapAsync(string elementId)
+    public virtual Task<bool> TapAsync(string elementId)
         => EnsureClient().TapAsync(elementId);
 
-    public Task<bool> FillAsync(string elementId, string text)
+    public virtual Task<bool> FillAsync(string elementId, string text)
         => EnsureClient().FillAsync(elementId, text);
 
-    public Task<bool> ClearAsync(string elementId)
+    public virtual Task<bool> ClearAsync(string elementId)
         => EnsureClient().ClearAsync(elementId);
 
     public virtual Task<byte[]?> ScreenshotAsync()

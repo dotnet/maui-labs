@@ -6,7 +6,7 @@
     <PatchVersion>0</PatchVersion>
     <VersionPrefix>$(MajorVersion).$(MinorVersion).$(PatchVersion)</VersionPrefix>
     <PreReleaseVersionLabel>preview</PreReleaseVersionLabel>
-    <PreReleaseVersionIteration>8</PreReleaseVersionIteration>
+    <PreReleaseVersionIteration>10</PreReleaseVersionIteration>
     <StabilizePackageVersion>false</StabilizePackageVersion>
     <!-- Arcade features -->
     <UsingToolXliff>false</UsingToolXliff>
@@ -29,15 +29,26 @@
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
     <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingConsoleVersion>10.0.5</MicrosoftExtensionsLoggingConsoleVersion>
     <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
+    <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
+    <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
     <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="AI">
+    <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
+    <MicrosoftExtensionsAIOpenAIVersion>10.4.1</MicrosoftExtensionsAIOpenAIVersion>
+    <AzureAIOpenAIVersion>2.1.0</AzureAIOpenAIVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="Roslyn">
+    <MicrosoftCodeAnalysisAnalyzersVersion>3.11.0</MicrosoftCodeAnalysisAnalyzersVersion>
   </PropertyGroup>
   <!-- Pinned dependencies (third party, not flowing via maestro) -->
   <PropertyGroup Label="Third Party">
     <AathifMahirMauiIconsCupertinoVersion>5.0.0</AathifMahirMauiIconsCupertinoVersion>
+    <CommunityToolkitMvvmVersion>8.4.2</CommunityToolkitMvvmVersion>
     <FizzlerVersion>1.3.1</FizzlerVersion>
-    <MicrosoftCodeAnalysisCSharpVersion>4.12.0</MicrosoftCodeAnalysisCSharpVersion>
     <SkiaSharpVersion>3.119.2</SkiaSharpVersion>
     <SpectreConsoleVersion>0.54.0</SpectreConsoleVersion>
     <SystemCommandLineStableVersion>2.0.5</SystemCommandLineStableVersion>
@@ -51,7 +62,7 @@
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
-    <XamarinAndroidToolsAndroidSdkVersion>1.0.143-preview.10</XamarinAndroidToolsAndroidSdkVersion>
+    <XamarinAndroidToolsAndroidSdkVersion>1.0.155-preview.137</XamarinAndroidToolsAndroidSdkVersion>
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">
@@ -67,12 +78,15 @@
     <PlatformMauiMacOSBlazorWebViewVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSBlazorWebViewVersion>
     <PlatformMauiMacOSEssentialsVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSEssentialsVersion>
   </PropertyGroup>
-  <!-- EssentialsAI preview iteration (bump for each new preview drop when DotNetFinalVersionKind=release) -->
+  <!-- EssentialsAI package version (continues the NuGet line that existed before moving into this repo). -->
   <PropertyGroup Label="EssentialsAI">
-    <EssentialsAIPreviewVersionIteration>1</EssentialsAIPreviewVersionIteration>
+    <EssentialsAIMajorVersion>11</EssentialsAIMajorVersion>
+    <EssentialsAIMinorVersion>0</EssentialsAIMinorVersion>
+    <EssentialsAIPatchVersion>0</EssentialsAIPatchVersion>
+    <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
+    <EssentialsAIPreviewVersionIteration>5</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
-    <MicrosoftExtensionsAIVersion>10.3.0</MicrosoftExtensionsAIVersion>
-    <MicrosoftExtensionsAIAbstractionsVersion>10.3.0</MicrosoftExtensionsAIAbstractionsVersion>
+    <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->
     <MicrosoftAgentsAIVersion>1.0.0-rc2</MicrosoftAgentsAIVersion>
     <MicrosoftAgentsAIWorkflowsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsVersion>
@@ -86,6 +100,8 @@
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVisualstudioVersion>3.1.5</XunitRunnerVisualstudioVersion>
     <CoverletCollectorVersion>8.0.0</CoverletCollectorVersion>
+    <VerifyXunitVersion>28.15.0</VerifyXunitVersion>
+    <VerifySourceGeneratorsVersion>2.5.0</VerifySourceGeneratorsVersion>
   </PropertyGroup>
   <PropertyGroup Label="SourceLink">
     <MicrosoftSourceLinkGitHubVersion>10.0.201</MicrosoftSourceLinkGitHubVersion>

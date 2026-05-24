@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Pages.ProductDetailPage"
+             x:DataType="vm:ProductDetailViewModel"
+             Title="{Binding Name}"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="Auto,*"
+          BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
+        <!-- Header -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0"
+                Padding="16,8"
+                SafeAreaEdges="Container">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Button Text="&#xF36A;"
+                        FontFamily="FluentFilled"
+                        FontSize="{StaticResource FontSizeTitle}"
+                        Padding="8,4"
+                        BackgroundColor="Transparent"
+                        TextColor="{StaticResource White}"
+                        VerticalOptions="Center"
+                        Clicked="OnBackClicked" />
+                <Label Grid.Column="1"
+                       Text="{Binding Name}"
+                       FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                       TextColor="{StaticResource White}"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation" />
+            </Grid>
+        </Border>
+
+        <!-- Product detail content -->
+        <ScrollView Grid.Row="1" Padding="16">
+            <VerticalStackLayout Spacing="16" MaximumWidthRequest="600"
+                                 HorizontalOptions="Center">
+
+                <!-- Hero card -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 16"
+                        Padding="24">
+                    <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
+                        <Border BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SurfaceDark}}"
+                                StrokeThickness="0"
+                                StrokeShape="RoundRectangle 16"
+                                WidthRequest="120" HeightRequest="120"
+                                HorizontalOptions="Center">
+                            <Label Text="{Binding Emoji}"
+                                   FontFamily="FluentFilled"
+                                   FontSize="56"
+                                   TextColor="{StaticResource Primary}"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center" />
+                        </Border>
+                        <Label Text="{Binding Name}"
+                               FontSize="{StaticResource FontSizeTitle}"
+                               FontAttributes="Bold"
+                               HorizontalTextAlignment="Center" />
+                        <Label Text="{Binding Category}"
+                               FontSize="{StaticResource FontSizeBody}"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                        <Label Text="{Binding PriceLabel}"
+                               FontSize="{StaticResource FontSizeDisplay}"
+                               FontAttributes="Bold"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{StaticResource Primary}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Actions -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Button Text="Add to Cart"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="{StaticResource White}"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            Command="{Binding AddToCartCommand}" />
+                    <Button Grid.Column="1"
+                            Text="Write Review"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource ChipBackgroundLight}, Dark={StaticResource ChipBackgroundDark}}"
+                            TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            Command="{Binding WriteReviewCommand}" />
+                </Grid>
+
+                <!-- Reviews section -->
+                <Label Text="{Binding RatingLabel}"
+                       FontSize="{StaticResource FontSizeSubtitle}"
+                       FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Reviews}" Spacing="8">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ReviewViewModel">
+                            <Border BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                                    Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 10"
+                                    Padding="12">
+                                <VerticalStackLayout Spacing="4">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Text="{Binding Stars}"
+                                               FontSize="{StaticResource FontSizeBody}"
+                                               TextColor="#E5A100" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding Date}"
+                                               FontSize="{StaticResource FontSizeCaption}"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}" />
+                                    </Grid>
+                                    <Label Text="{Binding Comment}"
+                                           FontSize="{StaticResource FontSizeBody}"
+                                           IsVisible="{Binding HasComment}"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+
+</ContentPage>

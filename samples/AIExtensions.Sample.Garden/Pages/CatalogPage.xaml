@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             x:Class="AIExtensions.Sample.Garden.Pages.CatalogPage"
+             Title="Catalog"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="Auto,*"
+          BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
+        <!-- Header: [back] [icon] [title] -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0"
+                Padding="16,8"
+                SafeAreaEdges="Container">
+            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                <Button Text="&#xF36A;"
+                        FontFamily="FluentFilled"
+                        FontSize="{StaticResource FontSizeTitle}"
+                        Padding="8,4"
+                        BackgroundColor="Transparent"
+                        TextColor="{StaticResource White}"
+                        VerticalOptions="Center"
+                        Clicked="OnBackClicked" />
+                <Label Text="&#xF788;"
+                       FontFamily="FluentFilled"
+                       FontSize="{StaticResource FontSizeTitle}"
+                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+                <Label Text="Products"
+                       FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                       TextColor="{StaticResource White}"
+                       VerticalOptions="Center" />
+            </HorizontalStackLayout>
+        </Border>
+
+        <views:CatalogView Grid.Row="1" />
+    </Grid>
+
+</ContentPage>
