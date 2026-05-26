@@ -10,7 +10,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 | Product | Package / Tool | Description |
 |---------|---------------|-------------|
-| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`) | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, and the `maui devflow` automation surface. |
+| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`) | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, and the `maui devflow` automation surface. |
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
@@ -221,7 +221,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 63 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -240,6 +240,8 @@ DevFlow exposes 63 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_device_info` | Device manufacturer, model, OS |
 | `maui_display_info` | Screen density, size, orientation |
 | `maui_element` | Get full element details |
+| `maui_extension_call` | Call an extension tool on the connected DevFlow agent |
+| `maui_extension_list` | List all extensions registered on the connected DevFlow agent |
 | `maui_files_delete` | Delete a file from an advertised app storage root |
 | `maui_files_download` | Download a file from an advertised app storage root |
 | `maui_files_list` | List files and directories under an advertised app storage root |
@@ -249,6 +251,7 @@ DevFlow exposes 63 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_geolocation` | GPS coordinates |
 | `maui_gesture` | Perform a touch gesture on the app |
 | `maui_get_property` | Read any element property |
+| `maui_get_theme` | Get the current app-scoped light/dark theme |
 | `maui_hittest` | Find elements at screen coordinates |
 | `maui_invoke_action` | Invoke a registered DevFlow Action by name |
 | `maui_jobs_list` | List background jobs registered on the device |
@@ -283,6 +286,7 @@ DevFlow exposes 63 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_sensors_start` | Start a sensor |
 | `maui_sensors_stop` | Stop a sensor |
 | `maui_set_property` | Live-edit element properties |
+| `maui_set_theme` | Set the app or emulator/simulator to light, dark, or system theme |
 | `maui_status` | Agent connection status, platform, app name |
 | `maui_storage_roots` | List file storage roots advertised by the app |
 | `maui_tap` | Tap a UI element |
