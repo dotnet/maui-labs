@@ -22,7 +22,15 @@
     <!-- Disable strong naming: MAUI and Platform.Maui packages are not strong-named -->
     <SignAssembly>false</SignAssembly>
     <NoSwixBuildPlugin>true</NoSwixBuildPlugin>
-    <!-- Allow building with newer Xcode than workload expects -->
+  </PropertyGroup>
+
+  <!-- Allow building with newer Xcode than the pinned workload expects.
+       Scoped to Apple TFMs so non-Apple products still get full validation. -->
+  <PropertyGroup Condition="
+      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' or
+      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst' or
+      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos' or
+      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tvos'">
     <ValidateXcodeVersion>false</ValidateXcodeVersion>
   </PropertyGroup>
 

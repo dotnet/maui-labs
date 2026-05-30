@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Playwright;
 using Xunit;
 
@@ -8,6 +9,9 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 /// Requires the broker running with a connected MAUI app.
 /// The inspector is available at http://localhost:19223/inspector/.
 /// Set INSPECTOR_URL environment variable to override the default URL.
+///
+/// The default URL points to the broker's single-agent fallback route
+/// (the broker uses the only connected agent when the id segment doesn't match).
 /// </summary>
 [Collection("Inspector")]
 public class InspectorPageTests : IAsyncLifetime
@@ -17,7 +21,11 @@ public class InspectorPageTests : IAsyncLifetime
     private IBrowserContext _context = null!;
     private IPage _page = null!;
 
-    private string BaseUrl => Environment.GetEnvironmentVariable("INSPECTOR_URL") ?? "http://localhost:19223/inspector/";
+    private Uri BaseUri => new(Environment.GetEnvironmentVariable("INSPECTOR_URL") ?? "http://localhost:19223/inspector/default/");
+
+    private string BaseUrl => BaseUri.ToString();
+
+    private string ResolveUrl(string relativePath) => new Uri(BaseUri, relativePath).ToString();
 
     public async Task InitializeAsync()
     {
@@ -45,8 +53,8 @@ public class InspectorPageTests : IAsyncLifetime
         var height = await viewport.GetAttributeAsync("data-height");
 
         // Window dimensions should be positive and NOT the old iPhone defaults
-        var w = double.Parse(width!);
-        var h = double.Parse(height!);
+        var w = double.Parse(width!, CultureInfo.InvariantCulture);
+        var h = double.Parse(height!, CultureInfo.InvariantCulture);
         Assert.True(w > 0, "Viewport width should be positive");
         Assert.True(h > 0, "Viewport height should be positive");
         Assert.NotEqual(390, w); // Not hardcoded iPhone width
@@ -150,7 +158,7 @@ public class InspectorPageTests : IAsyncLifetime
     [Fact]
     public async Task CssServedSeparately()
     {
-        var response = await _page.APIRequest.GetAsync($"{BaseUrl}/devflow.css");
+        var response = await _page.APIRequest.GetAsync(ResolveUrl("devflow.css"));
         Assert.True(response.Ok);
         var text = await response.TextAsync();
         Assert.Contains("#app-viewport", text);
@@ -239,7 +247,7 @@ public class InspectorPageTests : IAsyncLifetime
     [Fact]
     public async Task ScreenshotEndpointReturnsPng()
     {
-        var response = await _page.APIRequest.GetAsync($"{BaseUrl}/screenshot.png");
+        var response = await _page.APIRequest.GetAsync(ResolveUrl("screenshot.png"));
         Assert.True(response.Ok);
         var body = await response.BodyAsync();
 
@@ -253,7 +261,7 @@ public class InspectorPageTests : IAsyncLifetime
     [Fact]
     public async Task StateEndpointReturnsJsonWithElements()
     {
-        var response = await _page.APIRequest.GetAsync($"{BaseUrl}api/state");
+        var response = await _page.APIRequest.GetAsync(ResolveUrl("api/state"));
         Assert.True(response.Ok);
         var text = await response.TextAsync();
         var json = System.Text.Json.JsonDocument.Parse(text);

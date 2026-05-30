@@ -20,10 +20,18 @@ public sealed class InspectorServer : IDisposable
     private readonly int _port;
     private readonly string _agentHost;
     private readonly int _agentPort;
+    private readonly AgentClient _client;
+    private readonly object _cacheLock = new();
+    // Lifetime cancellation source; cancelled in Dispose() so broker-mode WS proxies
+    // (which never call Start() to create _cts) still see shutdown.
+    private readonly CancellationTokenSource _lifetimeCts = new();
     private byte[]? _cachedScreenshot;
     private DateTime _screenshotCacheTime;
     private string? _rootPageId;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
+
+    // Cap request bodies to avoid local DoS via huge POST payloads.
+    private const long MaxRequestBodyBytes = 1_048_576; // 1 MB
 
     public int Port => _port;
 
@@ -32,6 +40,15 @@ public sealed class InspectorServer : IDisposable
         _port = port;
         _agentHost = agentHost;
         _agentPort = agentPort;
+        _client = new AgentClient(agentHost, agentPort);
+    }
+
+    private void InvalidateScreenshotCache()
+    {
+        lock (_cacheLock)
+        {
+            _cachedScreenshot = null;
+        }
     }
 
     /// <summary>
@@ -45,16 +62,58 @@ public sealed class InspectorServer : IDisposable
             // Handle WebSocket upgrade for /ws/events
             if (context.Request.IsWebSocketRequest && path.TrimEnd('/') == "/ws/events")
             {
+                // Reject cross-origin WebSocket subscriptions (any web page can open a
+                // WebSocket regardless of same-origin policy — the server must enforce).
+                var origin = context.Request.Headers["Origin"];
+                if (!LocalOriginValidator.IsAllowed(origin))
+                {
+                    context.Response.StatusCode = 403;
+                    context.Response.Close();
+                    return;
+                }
                 await HandleBrokerWebSocketProxy(context);
                 return;
             }
 
             var method = context.Request.HttpMethod;
+
+            // Mitigate CSRF on state-mutating endpoints: a browser can dispatch a "simple"
+            // cross-origin POST (text/plain or form-encoded) without a preflight, even
+            // though it cannot read the response. Reject non-loopback Origins on POST.
+            if (method == "POST")
+            {
+                var origin = context.Request.Headers["Origin"];
+                if (!LocalOriginValidator.IsAllowed(origin))
+                {
+                    context.Response.StatusCode = 403;
+                    context.Response.Close();
+                    return;
+                }
+            }
+
             string? body = null;
             if (method == "POST" && context.Request.HasEntityBody)
             {
-                using var reader = new System.IO.StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
-                body = await reader.ReadToEndAsync();
+                // Reject oversize bodies to prevent local DoS.
+                var contentLength = context.Request.ContentLength64;
+                if (contentLength > MaxRequestBodyBytes)
+                {
+                    context.Response.StatusCode = 413;
+                    context.Response.Close();
+                    return;
+                }
+
+                body = await ReadBoundedBodyAsync(
+                    context.Request.InputStream,
+                    contentLength >= 0 ? contentLength : MaxRequestBodyBytes,
+                    _lifetimeCts.Token);
+
+                if (body == null)
+                {
+                    context.Response.StatusCode = 413;
+                    context.Response.Close();
+                    return;
+                }
             }
 
             var request = new HttpRequestInfo { Method = method, Path = path, Body = body };
@@ -62,7 +121,8 @@ public sealed class InspectorServer : IDisposable
 
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = contentType;
-            context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            // No CORS headers: the inspector UI is served same-origin from the broker.
+            // Allowing cross-origin would let any web page drive the locally connected app.
             context.Response.ContentLength64 = responseBody.Length;
             await context.Response.OutputStream.WriteAsync(responseBody);
             context.Response.Close();
@@ -81,7 +141,7 @@ public sealed class InspectorServer : IDisposable
     }
 
     /// <summary>
-    /// Proxies a WebSocket connection from the broker to the agent's /ws/events endpoint.
+    /// Proxies a WebSocket connection from the broker to the agent's /ws/v1/ui/events endpoint.
     /// </summary>
     private async Task HandleBrokerWebSocketProxy(HttpListenerContext context)
     {
@@ -89,16 +149,29 @@ public sealed class InspectorServer : IDisposable
         var clientWs = wsContext.WebSocket;
 
         using var agentWs = new System.Net.WebSockets.ClientWebSocket();
-        var agentUri = new Uri($"ws://{_agentHost}:{_agentPort}/ws/events");
+        // The agent's WebSocket route is /ws/v1/ui/events (see DevFlowAgentService route map).
+        var agentUri = new Uri($"ws://{_agentHost}:{_agentPort}/ws/v1/ui/events");
+
+        // Tie the proxy lifetime to the inspector so Dispose() unblocks ReceiveAsync.
+        // _lifetimeCts is always non-null (broker mode never calls Start()), and is
+        // optionally linked to the listener's _cts when running in standalone mode.
+        using var linkedCts = _cts != null
+            ? CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token, _cts.Token)
+            : CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+        var ct = linkedCts.Token;
 
         try
         {
-            await agentWs.ConnectAsync(agentUri, CancellationToken.None);
+            await agentWs.ConnectAsync(agentUri, ct);
         }
         catch
         {
-            await clientWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.EndpointUnavailable,
-                "Agent not reachable", CancellationToken.None);
+            try
+            {
+                await clientWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.EndpointUnavailable,
+                    "Agent not reachable", CancellationToken.None);
+            }
+            catch { }
             return;
         }
 
@@ -106,15 +179,16 @@ public sealed class InspectorServer : IDisposable
         var buffer = new byte[4096];
         try
         {
-            while (agentWs.State == System.Net.WebSockets.WebSocketState.Open &&
+            while (!ct.IsCancellationRequested &&
+                   agentWs.State == System.Net.WebSockets.WebSocketState.Open &&
                    clientWs.State == System.Net.WebSockets.WebSocketState.Open)
             {
-                var result = await agentWs.ReceiveAsync(buffer, CancellationToken.None);
+                var result = await agentWs.ReceiveAsync(buffer, ct);
                 if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
 
                 await clientWs.SendAsync(
                     new ArraySegment<byte>(buffer, 0, result.Count),
-                    result.MessageType, result.EndOfMessage, CancellationToken.None);
+                    result.MessageType, result.EndOfMessage, ct);
             }
         }
         catch { }
@@ -145,9 +219,12 @@ public sealed class InspectorServer : IDisposable
 
     public void Dispose()
     {
+        try { _lifetimeCts.Cancel(); } catch { }
         _cts?.Cancel();
         _listener?.Stop();
         _cts?.Dispose();
+        _lifetimeCts.Dispose();
+        _client.Dispose();
     }
 
     private async Task AcceptLoop(CancellationToken ct)
@@ -172,7 +249,15 @@ public sealed class InspectorServer : IDisposable
             using (client)
             {
                 var stream = client.GetStream();
-                var request = await ReadRequestAsync(stream, ct);
+                var (request, oversized) = await ReadRequestAsync(stream, ct);
+
+                if (oversized)
+                {
+                    await WriteResponseAsync(stream, 413, "text/plain",
+                        Encoding.UTF8.GetBytes("Payload Too Large"), ct);
+                    return;
+                }
+
                 if (request == null) return;
 
                 // Check for WebSocket upgrade on /ws/events
@@ -227,16 +312,15 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleRootAsync()
     {
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var tree = await client.GetTreeAsync();
+        var tree = await _client.GetTreeAsync();
 
         // Find the root page element (first child of Window with content).
         // On Mac Catalyst, the default screenshot captures the full screen but element
         // bounds are relative to the page content. By screenshotting the page element
         // directly we get a 1:1 match between pixel coordinates and element bounds.
         var rootPageId = FindRootPageId(tree);
-        _rootPageId = rootPageId;
-        var screenshot = await GetCachedScreenshotAsync(client, rootPageId);
+        lock (_cacheLock) { _rootPageId = rootPageId; }
+        var screenshot = await GetCachedScreenshotAsync(rootPageId);
         var hasScreenshot = screenshot?.Length > 0;
 
         double viewportWidth = 800, viewportHeight = 600;
@@ -257,13 +341,15 @@ public sealed class InspectorServer : IDisposable
     /// </summary>
     private async Task<(int, string, byte[])> HandleStateAsync()
     {
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var tree = await client.GetTreeAsync();
+        var tree = await _client.GetTreeAsync();
 
         var rootPageId = FindRootPageId(tree);
-        _rootPageId = rootPageId;
-        _cachedScreenshot = null; // force fresh screenshot
-        var screenshot = await GetCachedScreenshotAsync(client, rootPageId);
+        lock (_cacheLock)
+        {
+            _rootPageId = rootPageId;
+            _cachedScreenshot = null; // force fresh screenshot
+        }
+        var screenshot = await GetCachedScreenshotAsync(rootPageId);
         var hasScreenshot = screenshot?.Length > 0;
 
         double viewportWidth = 800, viewportHeight = 600;
@@ -302,19 +388,24 @@ public sealed class InspectorServer : IDisposable
         return window.Children[^1].Id;
     }
 
-    /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23).</summary>
+    /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23) after validating PNG signature.</summary>
     private static (int width, int height) GetPngDimensions(byte[] png)
     {
-        if (png.Length < 24) return (0, 0);
+        // PNG magic: 137 80 78 71 13 10 26 10
+        ReadOnlySpan<byte> pngSig = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(pngSig))
+            return (0, 0);
         int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
         int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
+        if (w < 0 || h < 0) return (0, 0);
         return (w, h);
     }
 
     private async Task<(int, string, byte[])> HandleScreenshotAsync()
     {
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var png = await GetCachedScreenshotAsync(client, _rootPageId);
+        string? rootPageId;
+        lock (_cacheLock) { rootPageId = _rootPageId; }
+        var png = await GetCachedScreenshotAsync(rootPageId);
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
@@ -333,14 +424,21 @@ public sealed class InspectorServer : IDisposable
         return (200, contentType, ms.ToArray());
     }
 
-    private async Task<byte[]?> GetCachedScreenshotAsync(AgentClient client, string? elementId = null)
+    private async Task<byte[]?> GetCachedScreenshotAsync(string? elementId = null)
     {
-        if (_cachedScreenshot != null && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
-            return _cachedScreenshot;
+        lock (_cacheLock)
+        {
+            if (_cachedScreenshot != null && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
+                return _cachedScreenshot;
+        }
 
-        _cachedScreenshot = await client.ScreenshotAsync(elementId: elementId);
-        _screenshotCacheTime = DateTime.UtcNow;
-        return _cachedScreenshot;
+        var fresh = await _client.ScreenshotAsync(elementId: elementId);
+        lock (_cacheLock)
+        {
+            _cachedScreenshot = fresh;
+            _screenshotCacheTime = DateTime.UtcNow;
+        }
+        return fresh;
     }
 
     // ── Proxy handlers ──
@@ -359,8 +457,7 @@ public sealed class InspectorServer : IDisposable
             var x = xProp.GetDouble();
             var y = yProp.GetDouble();
 
-            using var client = new AgentClient(_agentHost, _agentPort);
-            var hitResult = await client.HitTestAsync(x, y);
+            var hitResult = await _client.HitTestAsync(x, y);
 
             // Parse hit-test result — response is { elements: [{ id, ... }, ...] }
             using var hitDoc = JsonDocument.Parse(hitResult);
@@ -373,10 +470,10 @@ public sealed class InspectorServer : IDisposable
                     var elementId = elements[i].GetProperty("id").GetString();
                     if (!string.IsNullOrEmpty(elementId))
                     {
-                        var success = await client.TapAsync(elementId);
+                        var success = await _client.TapAsync(elementId);
                         if (success)
                         {
-                            _cachedScreenshot = null;
+                            InvalidateScreenshotCache();
                             return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
                         }
                     }
@@ -391,9 +488,8 @@ public sealed class InspectorServer : IDisposable
             var elementId = elIdProp.GetString();
             if (!string.IsNullOrEmpty(elementId))
             {
-                using var client = new AgentClient(_agentHost, _agentPort);
-                var success = await client.TapAsync(elementId);
-                _cachedScreenshot = null;
+                var success = await _client.TapAsync(elementId);
+                InvalidateScreenshotCache();
                 return success
                     ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
                     : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -417,8 +513,7 @@ public sealed class InspectorServer : IDisposable
         // If coordinates provided, hit-test and try each element for scroll
         if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
         {
-            using var client = new AgentClient(_agentHost, _agentPort);
-            var hitResult = await client.HitTestAsync(xProp.GetDouble(), yProp.GetDouble());
+            var hitResult = await _client.HitTestAsync(xProp.GetDouble(), yProp.GetDouble());
             using var hitDoc = JsonDocument.Parse(hitResult);
             var elements = hitDoc.RootElement.GetProperty("elements");
 
@@ -428,10 +523,10 @@ public sealed class InspectorServer : IDisposable
                 var elementId = elements[i].GetProperty("id").GetString();
                 if (!string.IsNullOrEmpty(elementId))
                 {
-                    var success = await client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
+                    var success = await _client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
                     if (success)
                     {
-                        _cachedScreenshot = null;
+                        InvalidateScreenshotCache();
                         return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
                     }
                 }
@@ -440,9 +535,8 @@ public sealed class InspectorServer : IDisposable
 
         // Fallback: scroll without element target
         {
-            using var client = new AgentClient(_agentHost, _agentPort);
-            var success = await client.ScrollAsync(deltaX: deltaX, deltaY: deltaY);
-            _cachedScreenshot = null;
+            var success = await _client.ScrollAsync(deltaX: deltaX, deltaY: deltaY);
+            InvalidateScreenshotCache();
             return success
                 ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
                 : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -471,9 +565,8 @@ public sealed class InspectorServer : IDisposable
 
             var distance = Math.Sqrt(dx * dx + dy * dy);
 
-            using var client = new AgentClient(_agentHost, _agentPort);
-            var success = await client.GestureAsync("swipe", direction: direction, distance: distance);
-            _cachedScreenshot = null;
+            var success = await _client.GestureAsync("swipe", direction: direction, distance: distance);
+            InvalidateScreenshotCache();
             return success
                 ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
                 : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -484,9 +577,8 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
     {
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var success = await client.BackAsync();
-        _cachedScreenshot = null;
+        var success = await _client.BackAsync();
+        InvalidateScreenshotCache();
         return success
             ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
             : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -506,9 +598,8 @@ public sealed class InspectorServer : IDisposable
         if (string.IsNullOrEmpty(elementId) || text == null)
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"elementId and text required\"}"));
 
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var success = await client.FillAsync(elementId, text);
-        _cachedScreenshot = null;
+        var success = await _client.FillAsync(elementId, text);
+        InvalidateScreenshotCache();
         return success
             ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
             : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -528,9 +619,8 @@ public sealed class InspectorServer : IDisposable
         if (string.IsNullOrEmpty(key))
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"key required\"}"));
 
-        using var client = new AgentClient(_agentHost, _agentPort);
-        var success = await client.KeyAsync(key, elementId);
-        _cachedScreenshot = null;
+        var success = await _client.KeyAsync(key, elementId);
+        InvalidateScreenshotCache();
         return success
             ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
             : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -606,7 +696,34 @@ public sealed class InspectorServer : IDisposable
 
     // ── HTTP parsing helpers ──
 
-    private static async Task<HttpRequestInfo?> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
+    /// <summary>
+    /// Reads a request body from a stream up to <paramref name="maxBytes"/>, decoding as UTF-8.
+    /// Returns null if the body exceeds the cap. Decoding once at the end avoids splitting
+    /// multi-byte UTF-8 sequences across chunk reads. A per-read timeout prevents slow-drip
+    /// clients from holding the handler open.
+    /// </summary>
+    private static async Task<string?> ReadBoundedBodyAsync(Stream input, long maxBytes, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        var buffer = new byte[8192];
+        long total = 0;
+        while (true)
+        {
+            using var perReadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            perReadCts.CancelAfter(TimeSpan.FromSeconds(10));
+            int read;
+            try { read = await input.ReadAsync(buffer.AsMemory(), perReadCts.Token); }
+            catch { return null; }
+            if (read <= 0) break;
+            total += read;
+            if (total > maxBytes)
+                return null;
+            ms.Write(buffer, 0, read);
+        }
+        return Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
+    }
+
+    private static async Task<(HttpRequestInfo? Request, bool Oversized)> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
     {
         var buffer = new byte[8192];
         int read;
@@ -616,22 +733,23 @@ public sealed class InspectorServer : IDisposable
         try
         {
             read = await stream.ReadAsync(buffer, timeoutCts.Token);
-            if (read == 0) return null;
+            if (read == 0) return (null, false);
         }
-        catch { return null; }
+        catch { return (null, false); }
 
-        var raw = Encoding.UTF8.GetString(buffer, 0, read);
+        // Parse headers from the ASCII portion. The body is read as raw bytes below
+        // to avoid splitting multi-byte UTF-8 sequences across buffer boundaries.
+        var raw = Encoding.ASCII.GetString(buffer, 0, read);
         var headerEnd = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-        if (headerEnd < 0) return null;
+        if (headerEnd < 0) return (null, false);
 
         var headerSection = raw[..headerEnd];
-        var bodySection = raw[(headerEnd + 4)..];
 
         var lines = headerSection.Split("\r\n");
-        if (lines.Length == 0) return null;
+        if (lines.Length == 0) return (null, false);
 
         var requestLine = lines[0].Split(' ');
-        if (requestLine.Length < 2) return null;
+        if (requestLine.Length < 2) return (null, false);
 
         var method = requestLine[0].ToUpperInvariant();
         var path = requestLine[1].Split('?')[0].TrimEnd('/');
@@ -649,25 +767,44 @@ public sealed class InspectorServer : IDisposable
             }
         }
 
-        // Read remaining body if Content-Length indicates more
-        var body = bodySection;
-        if (headers.TryGetValue("content-length", out var clStr) && int.TryParse(clStr, out var contentLength))
+        // Read body as raw bytes, then decode as UTF-8 once.
+        string? body = null;
+        if (headers.TryGetValue("content-length", out var clStr) && int.TryParse(clStr, out var contentLength) && contentLength > 0)
         {
-            while (Encoding.UTF8.GetByteCount(body) < contentLength)
+            if (contentLength > MaxRequestBodyBytes)
+                return (null, true);
+
+            var bodyStart = headerEnd + 4;
+            var bytesAlreadyRead = read - bodyStart;
+            var bodyBytes = new byte[contentLength];
+
+            if (bytesAlreadyRead > 0)
             {
-                var extraRead = await stream.ReadAsync(buffer, ct);
-                if (extraRead == 0) break;
-                body += Encoding.UTF8.GetString(buffer, 0, extraRead);
+                var copy = Math.Min(bytesAlreadyRead, contentLength);
+                Buffer.BlockCopy(buffer, bodyStart, bodyBytes, 0, copy);
             }
+
+            int totalBodyRead = Math.Min(Math.Max(0, bytesAlreadyRead), contentLength);
+            while (totalBodyRead < contentLength)
+            {
+                using var perReadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                perReadCts.CancelAfter(TimeSpan.FromSeconds(10));
+                int extra;
+                try { extra = await stream.ReadAsync(bodyBytes.AsMemory(totalBodyRead, contentLength - totalBodyRead), perReadCts.Token); }
+                catch { return (null, false); }
+                if (extra == 0) break;
+                totalBodyRead += extra;
+            }
+            body = Encoding.UTF8.GetString(bodyBytes, 0, totalBodyRead);
         }
 
-        return new HttpRequestInfo
+        return (new HttpRequestInfo
         {
             Method = method,
             Path = path,
             Headers = headers,
             Body = body
-        };
+        }, false);
     }
 
     private static async Task WriteResponseAsync(NetworkStream stream, int statusCode, string contentType, byte[] body, CancellationToken ct)
@@ -678,16 +815,16 @@ public sealed class InspectorServer : IDisposable
             400 => "Bad Request",
             404 => "Not Found",
             405 => "Method Not Allowed",
+            413 => "Payload Too Large",
             500 => "Internal Server Error",
             _ => "Unknown"
         };
 
+        // No CORS headers: the inspector UI is served same-origin; allowing
+        // cross-origin would let any web page drive the locally connected app.
         var header = $"HTTP/1.1 {statusCode} {statusText}\r\n" +
                      $"Content-Type: {contentType}\r\n" +
                      $"Content-Length: {body.Length}\r\n" +
-                     "Access-Control-Allow-Origin: *\r\n" +
-                     "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
-                     "Access-Control-Allow-Headers: Content-Type\r\n" +
                      "Connection: close\r\n\r\n";
 
         await stream.WriteAsync(Encoding.UTF8.GetBytes(header), ct);

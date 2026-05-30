@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Web;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
@@ -107,6 +108,21 @@ public class BrokerServer : IDisposable
             }
 
             // HTTP endpoints for CLI
+            // Block state-mutating endpoints from non-loopback origins BEFORE dispatching
+            // the handler — otherwise a cross-origin POST to /api/shutdown would still
+            // tear down the broker even though we return 403.
+            var origin = context.Request.Headers["Origin"];
+            if (method == "POST" && !LocalOriginValidator.IsAllowed(origin))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "application/json";
+                var forbidden = Encoding.UTF8.GetBytes(CliJson.SerializeUntyped(new JsonObject { ["error"] = "Forbidden origin" }, indented: false));
+                context.Response.ContentLength64 = forbidden.Length;
+                await context.Response.OutputStream.WriteAsync(forbidden);
+                context.Response.Close();
+                return;
+            }
+
             var (statusCode, body) = (method, path) switch
             {
                 ("GET", "/api/health") => (200, CliJson.SerializeUntyped(new JsonObject
@@ -134,7 +150,15 @@ public class BrokerServer : IDisposable
 
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/json";
-            context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+
+            // Mirror Origin only for loopback callers; the previous wildcard let any web
+            // page read /api/agents (leaking IDs) and POST /api/shutdown.
+            if (LocalOriginValidator.IsAllowed(origin) && !string.IsNullOrEmpty(origin) && origin != "null")
+            {
+                context.Response.Headers.Add("Access-Control-Allow-Origin", origin);
+                context.Response.Headers.Add("Vary", "Origin");
+            }
+
             var responseBytes = Encoding.UTF8.GetBytes(body);
             context.Response.ContentLength64 = responseBytes.Length;
             await context.Response.OutputStream.WriteAsync(responseBytes);
@@ -149,6 +173,16 @@ public class BrokerServer : IDisposable
 
     private async Task HandleAgentWebSocket(HttpListenerContext context)
     {
+        // Reject cross-origin WebSocket connections; only the local agent process
+        // or CLI tools (no Origin header) may register.
+        var origin = context.Request.Headers["Origin"];
+        if (!LocalOriginValidator.IsAllowed(origin))
+        {
+            context.Response.StatusCode = 403;
+            context.Response.Close();
+            return;
+        }
+
         WebSocketContext wsContext;
         try
         {
@@ -426,6 +460,11 @@ public class BrokerServer : IDisposable
         _cts?.Cancel();
         _idleTimer?.Dispose();
         try { _listener?.Close(); } catch { }
+        foreach (var inspector in _inspectors.Values)
+        {
+            try { inspector.Dispose(); } catch { }
+        }
+        _inspectors.Clear();
         _cts?.Dispose();
     }
     private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket);
@@ -508,8 +547,8 @@ public class BrokerServer : IDisposable
             {
                 var reg = agent.Registration;
                 sb.AppendLine($"<div class='agent'>");
-                sb.AppendLine($"<a href='/inspector/{reg.Id}/'><strong>{reg.AppName}</strong></a>");
-                sb.AppendLine($" — {reg.Platform} ({reg.Tfm}) on port {reg.Port}");
+                sb.AppendLine($"<a href='/inspector/{HttpUtility.UrlEncode(reg.Id)}/'><strong>{HttpUtility.HtmlEncode(reg.AppName)}</strong></a>");
+                sb.AppendLine($" — {HttpUtility.HtmlEncode(reg.Platform)} ({HttpUtility.HtmlEncode(reg.Tfm)}) on port {reg.Port}");
                 sb.AppendLine($"</div>");
             }
         }
