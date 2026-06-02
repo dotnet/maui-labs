@@ -1,6 +1,6 @@
 # DevFlow Web Inspector
 
-> **Status**: Design spec — V1 implementation in progress
+> **Status**: Mixed — the broker-hosted inspector at `http://localhost:19223/inspector/` is implemented and shipping in `maui devflow broker`. Sections that describe a standalone `maui devflow inspector` command, a `<nav id="devflow-toolbar">`, deep-link routing via URL paths, or a nested element tree are **future design** and are kept here for reference. See the [Usage](#usage) section for the current concrete commands.
 
 ## Overview
 
@@ -13,31 +13,32 @@ This enables any HTML-based inspector tool to work with a native MAUI app withou
 ```
 ┌─────────────────────┐         ┌──────────────────────────┐         ┌─────────────────────┐
 │  Inspector Tool /   │  HTTP   │  CLI Inspector Server     │  HTTP   │  DevFlow Agent      │
-│  Browser            │ ◄─────► │  (localhost:5223)         │ ◄─────► │  (device:9223)      │
-│                     │         │                          │         │                     │
+│  Browser            │ ◄─────► │  (localhost:19223)       │ ◄─────► │  (device:9223+)     │
+│                     │         │  (broker-hosted)         │         │                     │
 │  Sees: HTML page    │         │  - Generates HTML        │         │  - Visual tree API  │
 │  Does: Click/scroll │         │  - Proxies API calls     │         │  - Screenshot API   │
 │                     │         │  - WebSocket relay       │         │  - Action endpoints │
 └─────────────────────┘         └──────────────────────────┘         └─────────────────────┘
 ```
 
-The inspector server runs on the **developer's machine** (as part of the `maui` CLI). The DevFlow agent runs **inside the native app** on any platform (device, emulator, simulator, desktop). The CLI handles agent discovery, ADB port forwarding, and all the connection plumbing.
+The inspector is currently served by the **DevFlow broker** running on the developer's machine. The DevFlow agent runs **inside the native app** on any platform (device, emulator, simulator, desktop). The broker handles agent discovery, ADB port forwarding, and all the connection plumbing.
 
 ## Usage
 
 ```bash
-# Start the inspector server (opens at http://localhost:5223)
-maui devflow inspector
+# Start the broker (the inspector is served at http://localhost:19223/inspector/)
+maui devflow broker start
 
-# Custom port
-maui devflow inspector --port 8080
-
-# Target a specific agent
-maui devflow inspector --agent-port 9223
-
-# Target an Android device
-maui devflow inspector --device emulator-5554
+# Then connect any MAUI app with the DevFlow agent — it will auto-register.
+# Open the agent list at:
+#   http://localhost:19223/inspector/
+# Or jump straight to the only connected agent:
+#   http://localhost:19223/inspector/default/
+# Or by agent id:
+#   http://localhost:19223/inspector/{agentId}/
 ```
+
+> The standalone `maui devflow inspector` command (with `--port`, `--agent-port`, `--device` flags) shown in earlier drafts is **future work**; today the inspector lives inside the broker.
 
 ## Generated HTML Structure
 
