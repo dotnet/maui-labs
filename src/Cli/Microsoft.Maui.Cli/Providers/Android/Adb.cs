@@ -60,7 +60,15 @@ public class Adb
 			// AdbRunner.ListDevicesAsync already queries AVD names for online emulators
 			// via getprop ro.boot.qemu.avd_name + emu avd name fallback
 			var devices = await runner.ListDevicesAsync(cancellationToken);
-			return devices.Select(MapToMauiDevice).ToList();
+			var mapped = devices.Select(MapToMauiDevice).ToList();
+
+			// Enrich addressable devices with `adb shell getprop` so physical
+			// USB devices surface architecture/version/manufacturer/model the
+			// same way the legacy ServiceHub PopulateDeviceAsync did.
+			return await AndroidDeviceEnricher.EnrichAsync(
+				mapped,
+				(serial, prop, ct) => runner.GetShellPropertyAsync(serial, prop, ct),
+				cancellationToken);
 		}
 		catch (InvalidOperationException ex)
 		{
