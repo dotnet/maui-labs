@@ -74,9 +74,14 @@ internal static class AndroidDeviceEnricher
 		GetPropertyAsync getProperty,
 		CancellationToken cancellationToken)
 	{
-		// Read every property in parallel — they are independent and adb
-		// serialises commands per-device internally, so the wall-clock cost is
-		// roughly one round-trip plus per-property processing overhead.
+		// Read every property in parallel — they are independent, and the per-device
+		// property set is small and fixed (≤10 props), so the wall-clock cost is
+		// dominated by a few adb round-trips rather than process spawn overhead.
+		// Note: adb does NOT serialise commands per-device — each ReadPropAsync
+		// spawns its own `adb -s <serial> shell getprop` subprocess. A future
+		// optimisation could issue a single `adb shell getprop` and parse the
+		// `[key]: [value]` dump, eliminating per-property process overhead; see
+		// https://github.com/dotnet/android-tools/issues/384.
 		var abi = ReadPropAsync(getProperty, device.Id, "ro.product.cpu.abi", cancellationToken);
 		var abiList = ReadPropAsync(getProperty, device.Id, "ro.product.cpu.abilist", cancellationToken);
 		var sdk = ReadPropAsync(getProperty, device.Id, "ro.build.version.sdk", cancellationToken);
