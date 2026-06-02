@@ -126,10 +126,12 @@ internal static class AndroidDeviceEnricher
 			var raw = await getProperty(serial, property, cancellationToken);
 			return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
 		}
-		catch (OperationCanceledException)
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 		{
-			// Cancellation must propagate so callers can react to Ctrl+C; only
-			// per-property transport errors should be swallowed.
+			// Caller-initiated cancellation (Ctrl+C, etc.) must propagate so the
+			// whole enrichment aborts. Cancellation originating elsewhere — e.g. a
+			// future internal timeout CTS inside AdbRunner — falls through to the
+			// general catch below so a single slow device doesn't kill the batch.
 			throw;
 		}
 		catch (Exception ex)

@@ -166,6 +166,36 @@ public class AndroidDeviceEnricherTests
 	}
 
 	[Fact]
+	public async Task EnrichAsync_SwallowsForeignCancellation()
+	{
+		// An OperationCanceledException whose token is NOT the caller's (e.g. a
+		// future internal timeout CTS inside AdbRunner) must be treated like any
+		// other per-property failure — swallowed so one slow device doesn't
+		// abort enrichment for the whole batch.
+		using var foreign = new CancellationTokenSource();
+		foreign.Cancel();
+
+		AndroidDeviceEnricher.GetPropertyAsync getter = (serial, name, ct) =>
+		{
+			if (name == "ro.product.manufacturer")
+				throw new OperationCanceledException("simulated internal timeout", foreign.Token);
+			return Task.FromResult<string?>(name switch
+			{
+				"ro.product.cpu.abi" => "arm64-v8a",
+				"ro.build.version.sdk" => "36",
+				_ => null,
+			});
+		};
+
+		var result = await AndroidDeviceEnricher.EnrichAsync(new[] { PhysicalConnected() }, getter, CancellationToken.None);
+
+		var device = Assert.Single(result);
+		Assert.Equal("arm64", device.Architecture);
+		Assert.Equal("36", device.Version);
+		Assert.Null(device.Manufacturer);
+	}
+
+	[Fact]
 	public async Task EnrichAsync_SwallowsPerPropertyFailures()
 	{
 		// A failing property (e.g. transport error) should not drop the entire

@@ -9,9 +9,9 @@ namespace Microsoft.Maui.Cli.Providers.Android;
 internal static class AndroidEnvironment
 {
 	// Map Android ABI strings to .NET architecture names (arm/arm64/x86/x64).
-	// These are the values consumers like the VS Code MAUI debugger expect for
-	// the per-ABI native asset path (assets/<arch>/), so they must match the
-	// .NET RID arch component, not the Android kernel arch names.
+	// Used to populate Device.Architecture and to compute runtime identifiers
+	// (android-<arch>). Device.PlatformArchitecture retains the raw ABI string
+	// (e.g. "arm64-v8a") for callers that need the on-device asset folder name.
 	static readonly Dictionary<string, string> AbiToArchMap = new(StringComparer.OrdinalIgnoreCase)
 	{
 		["armeabi-v7a"] = "arm",
