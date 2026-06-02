@@ -175,21 +175,17 @@ public sealed class InspectorServer : IDisposable
             return;
         }
 
-        // Relay messages from agent to browser
-        var buffer = new byte[4096];
+        // Bidirectional relay. The agent→browser direction is what matters
+        // (events flow that way); the browser→agent direction exists purely
+        // to observe browser-side close frames so a closed tab unblocks this
+        // loop instead of leaking a task until the agent next sends data (or
+        // _lifetimeCts is cancelled). Without the monitor task, every closed
+        // inspector tab leaves a hanging relay task on the broker.
         try
         {
-            while (!ct.IsCancellationRequested &&
-                   agentWs.State == System.Net.WebSockets.WebSocketState.Open &&
-                   clientWs.State == System.Net.WebSockets.WebSocketState.Open)
-            {
-                var result = await agentWs.ReceiveAsync(buffer, ct);
-                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
-
-                await clientWs.SendAsync(
-                    new ArraySegment<byte>(buffer, 0, result.Count),
-                    result.MessageType, result.EndOfMessage, ct);
-            }
+            var agentToClient = RelayLoopAsync(agentWs, clientWs, ct);
+            var clientToAgent = RelayLoopAsync(clientWs, agentWs, ct);
+            await Task.WhenAny(agentToClient, clientToAgent);
         }
         catch { }
         finally
@@ -199,6 +195,29 @@ public sealed class InspectorServer : IDisposable
             if (agentWs.State == System.Net.WebSockets.WebSocketState.Open)
                 try { await agentWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); } catch { }
         }
+    }
+
+    private static async Task RelayLoopAsync(
+        System.Net.WebSockets.WebSocket source,
+        System.Net.WebSockets.WebSocket destination,
+        CancellationToken ct)
+    {
+        var buffer = new byte[4096];
+        try
+        {
+            while (!ct.IsCancellationRequested &&
+                   source.State == System.Net.WebSockets.WebSocketState.Open &&
+                   destination.State == System.Net.WebSockets.WebSocketState.Open)
+            {
+                var result = await source.ReceiveAsync(buffer, ct);
+                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
+
+                await destination.SendAsync(
+                    new ArraySegment<byte>(buffer, 0, result.Count),
+                    result.MessageType, result.EndOfMessage, ct);
+            }
+        }
+        catch { }
     }
 
     public void Start()

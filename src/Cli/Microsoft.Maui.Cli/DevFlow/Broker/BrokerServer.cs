@@ -93,6 +93,28 @@ public class BrokerServer : IDisposable
             var path = context.Request.Url?.AbsolutePath ?? "/";
             var method = context.Request.HttpMethod;
 
+            // Defense-in-depth: the broker is designed to be reachable only on
+            // loopback, but HttpListener falls back to binding on all interfaces
+            // (http://+:port/) when localhost reservation fails — see line 56-60
+            // below. In that fallback, non-browser HTTP clients on the LAN (curl,
+            // scripts, attacker) can reach this port without sending an Origin
+            // header, so the Origin check alone (further down) doesn't help.
+            // Reject any caller whose RemoteEndPoint isn't a loopback address.
+            // Legitimate uses (CLI tool, inspector UI in a local browser, MAUI
+            // agent running on the same machine, Android emulator port-forwarded
+            // back to host loopback) all use 127.0.0.1 or ::1.
+            var remoteIp = context.Request.RemoteEndPoint?.Address;
+            if (remoteIp == null || !IPAddress.IsLoopback(remoteIp))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "text/plain";
+                var msg = Encoding.UTF8.GetBytes("Forbidden: loopback required");
+                context.Response.ContentLength64 = msg.Length;
+                await context.Response.OutputStream.WriteAsync(msg);
+                context.Response.Close();
+                return;
+            }
+
             // WebSocket upgrade for agents
             if (context.Request.IsWebSocketRequest && path == "/ws/agent")
             {
@@ -516,13 +538,24 @@ public class BrokerServer : IDisposable
             return;
         }
 
-        // Get or create inspector server for this agent
-        var inspector = _inspectors.GetOrAdd(connection.Registration.Id, _ =>
+        // Get or create inspector server for this agent.
+        // ConcurrentDictionary.GetOrAdd may invoke the factory delegate concurrently
+        // for the same key, so we use TryGetValue + GetOrAdd and dispose the loser
+        // if two threads race. Otherwise the discarded InspectorServer leaks its
+        // AgentClient (HttpClient), CTS, and (in standalone mode) its TCP listener.
+        if (!_inspectors.TryGetValue(connection.Registration.Id, out var inspector))
         {
-            var server = new InspectorServer(0, "localhost", connection.Registration.Port);
-            Log($"Inspector created for agent: {connection.Registration.AppName} (port {connection.Registration.Port})");
-            return server;
-        });
+            var created = new InspectorServer(0, "localhost", connection.Registration.Port);
+            inspector = _inspectors.GetOrAdd(connection.Registration.Id, created);
+            if (!ReferenceEquals(inspector, created))
+            {
+                created.Dispose();
+            }
+            else
+            {
+                Log($"Inspector created for agent: {connection.Registration.AppName} (port {connection.Registration.Port})");
+            }
+        }
 
         // Proxy the request through the inspector's route handler
         await inspector.HandleBrokerRequestAsync(context, subPath);
