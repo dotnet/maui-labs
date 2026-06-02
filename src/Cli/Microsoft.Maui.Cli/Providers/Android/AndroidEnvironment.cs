@@ -8,12 +8,16 @@ namespace Microsoft.Maui.Cli.Providers.Android;
 /// </summary>
 internal static class AndroidEnvironment
 {
+	// Map Android ABI strings to .NET architecture names (arm/arm64/x86/x64).
+	// These are the values consumers like the VS Code MAUI debugger expect for
+	// the per-ABI native asset path (assets/<arch>/), so they must match the
+	// .NET RID arch component, not the Android kernel arch names.
 	static readonly Dictionary<string, string> AbiToArchMap = new(StringComparer.OrdinalIgnoreCase)
 	{
 		["armeabi-v7a"] = "arm",
-		["arm64-v8a"] = "aarch64",
+		["arm64-v8a"] = "arm64",
 		["x86"] = "x86",
-		["x86_64"] = "x86_64",
+		["x86_64"] = "x64",
 	};
 
 	/// <summary>
@@ -47,7 +51,7 @@ internal static class AndroidEnvironment
 		return architecture switch
 		{
 			"aarch64" or "arm64" => ["android-arm64"],
-			"x86_64" => ["android-x64"],
+			"x86_64" or "x64" => ["android-x64"],
 			"x86" => ["android-x86"],
 			"arm" => ["android-arm"],
 			_ => null,
