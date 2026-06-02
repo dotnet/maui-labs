@@ -260,10 +260,24 @@ public sealed class InspectorServer : IDisposable
 
                 if (request == null) return;
 
+                // Origin enforcement for standalone-listener mode. Broker mode applies the
+                // same check in HandleBrokerRequestAsync; without this, a cross-origin web
+                // page could POST to /api/tap, /api/scroll, etc. (CSRF) or open /ws/events
+                // (WebSocket hijack) when the inspector runs outside the broker.
+                var requestOrigin = request.Headers.TryGetValue("origin", out var o) ? o : null;
+                var isWebSocketUpgrade = request.Path == "/ws/events" &&
+                    request.Headers.TryGetValue("upgrade", out var upgradeHdr) &&
+                    upgradeHdr.Equals("websocket", StringComparison.OrdinalIgnoreCase);
+                if ((request.Method == "POST" || isWebSocketUpgrade) &&
+                    !LocalOriginValidator.IsAllowed(requestOrigin))
+                {
+                    await WriteResponseAsync(stream, 403, "text/plain",
+                        Encoding.UTF8.GetBytes("Forbidden"), ct);
+                    return;
+                }
+
                 // Check for WebSocket upgrade on /ws/events
-                if (request.Path == "/ws/events" &&
-                    request.Headers.TryGetValue("upgrade", out var upgrade) &&
-                    upgrade.Equals("websocket", StringComparison.OrdinalIgnoreCase))
+                if (isWebSocketUpgrade)
                 {
                     await HandleWebSocketProxy(client, stream, request, ct);
                     return;

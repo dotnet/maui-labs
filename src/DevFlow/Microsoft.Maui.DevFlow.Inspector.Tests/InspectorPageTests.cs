@@ -52,13 +52,25 @@ public class InspectorPageTests : IAsyncLifetime
         var width = await viewport.GetAttributeAsync("data-width");
         var height = await viewport.GetAttributeAsync("data-height");
 
-        // Window dimensions should be positive and NOT the old iPhone defaults
         var w = double.Parse(width!, CultureInfo.InvariantCulture);
         var h = double.Parse(height!, CultureInfo.InvariantCulture);
         Assert.True(w > 0, "Viewport width should be positive");
         Assert.True(h > 0, "Viewport height should be positive");
-        Assert.NotEqual(390, w); // Not hardcoded iPhone width
-        Assert.NotEqual(844, h); // Not hardcoded iPhone height
+
+        // Correlate with the live /api/state values to prove the DOM is wired to the
+        // agent-reported window dimensions rather than a hardcoded fallback. Using a
+        // hardcoded "not iPhone size" assertion would false-positive on a real iPhone.
+        var stateResponse = await _page.APIRequest.GetAsync(ResolveUrl("api/state"));
+        Assert.True(stateResponse.Ok);
+        var stateJson = System.Text.Json.JsonDocument.Parse(await stateResponse.TextAsync());
+        var apiW = stateJson.RootElement.GetProperty("viewportWidth").GetDouble();
+        var apiH = stateJson.RootElement.GetProperty("viewportHeight").GetDouble();
+
+        // Allow 1px slack for fractional rounding between layout passes.
+        Assert.True(Math.Abs(apiW - w) <= 1.0,
+            $"DOM data-width {w} should match /api/state viewportWidth {apiW}");
+        Assert.True(Math.Abs(apiH - h) <= 1.0,
+            $"DOM data-height {h} should match /api/state viewportHeight {apiH}");
     }
 
     [Fact]
@@ -145,14 +157,19 @@ public class InspectorPageTests : IAsyncLifetime
     [Fact]
     public async Task DataAttributesUseCamelCase()
     {
-        await _page.GotoAsync(BaseUrl);
+        // CSS attribute selectors like [data-isVisible] are case-insensitive in HTML,
+        // so a Locator-based assertion would also match the lowercased serialization
+        // that we are guarding against. Fetch the raw HTML and assert the byte-level
+        // serialization preserves camelCase as advertised.
+        var response = await _page.APIRequest.GetAsync(BaseUrl);
+        Assert.True(response.Ok);
+        var html = await response.TextAsync();
 
         // DevFlow properties use camelCase: isVisible, isEnabled, fullType
-        var withVisibility = _page.Locator(".devflow-element[data-isVisible]");
-        Assert.True(await withVisibility.CountAsync() > 0);
-
-        var withEnabled = _page.Locator(".devflow-element[data-isEnabled]");
-        Assert.True(await withEnabled.CountAsync() > 0);
+        Assert.Contains("data-isVisible", html);
+        Assert.Contains("data-isEnabled", html);
+        Assert.DoesNotContain("data-isvisible", html);
+        Assert.DoesNotContain("data-isenabled", html);
     }
 
     [Fact]

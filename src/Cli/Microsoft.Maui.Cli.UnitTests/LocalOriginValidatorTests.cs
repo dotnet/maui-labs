@@ -8,7 +8,6 @@ public class LocalOriginValidatorTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    [InlineData("null")]
     [InlineData("http://localhost")]
     [InlineData("http://localhost:19223")]
     [InlineData("http://LOCALHOST:80")]
@@ -21,6 +20,7 @@ public class LocalOriginValidatorTests
     }
 
     [Theory]
+    [InlineData("null")] // browsers send this for file:// pages, sandboxed iframes, data: URLs
     [InlineData("http://evil.com")]
     [InlineData("https://attacker.example/")]
     [InlineData("http://localhost.evil.com")] // not actually localhost

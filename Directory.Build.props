@@ -25,12 +25,18 @@
   </PropertyGroup>
 
   <!-- Allow building with newer Xcode than the pinned workload expects.
-       Scoped to Apple TFMs so non-Apple products still get full validation. -->
+       Scoped to Apple TFMs so non-Apple products still get full validation.
+       Restricted to non-CI builds: official builds and PR CI run on pinned
+       toolchains and should keep the guardrail so newer-Xcode-only APIs are
+       caught. Set ContinuousIntegrationBuild=true (Arcade's cibuild sets this
+       automatically) to keep validation on; local dev with newer Xcode is
+       still unblocked. -->
   <PropertyGroup Condition="
-      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' or
-      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst' or
-      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos' or
-      $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tvos'">
+      '$(ContinuousIntegrationBuild)' != 'true' and (
+        $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' or
+        $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst' or
+        $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos' or
+        $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tvos')">
     <ValidateXcodeVersion>false</ValidateXcodeVersion>
   </PropertyGroup>
 

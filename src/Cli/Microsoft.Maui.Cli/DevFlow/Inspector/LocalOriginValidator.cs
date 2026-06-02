@@ -11,12 +11,19 @@ internal static class LocalOriginValidator
     /// <summary>
     /// Returns true if the origin is either absent (non-browser client) or a
     /// loopback HTTP/HTTPS URI (http://localhost*, http://127.0.0.1*, http://[::1]*).
+    /// The literal Origin "null" — sent by browsers for file:// pages, sandboxed
+    /// iframes, data: URLs, and other opaque origins — is rejected.
     /// </summary>
     public static bool IsAllowed(string? origin)
     {
-        // No Origin header: non-browser client (e.g. CLI tool, curl). Permit.
-        if (string.IsNullOrEmpty(origin) || origin == "null")
+        // No Origin header at all: non-browser client (e.g. CLI tool, curl). Permit.
+        if (string.IsNullOrEmpty(origin))
             return true;
+
+        // Browsers send literal "null" for file:// pages, sandboxed iframes, data:
+        // URLs, and other opaque origins. These are not loopback — treat as foreign.
+        if (origin == "null")
+            return false;
 
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
             return false;
