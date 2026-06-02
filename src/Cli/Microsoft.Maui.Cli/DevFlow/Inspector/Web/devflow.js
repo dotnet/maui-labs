@@ -143,9 +143,116 @@
     }, delayMs || 300);
   }
 
-  // ── Click → Tap ──
+  // ── Click → Tap (with text-input awareness) ──
+  // Element types that should open a text editor instead of just tapping.
+  const TEXT_INPUT_TYPES = new Set([
+    'Entry', 'Editor', 'SearchBar', 'SearchHandler',
+    'TextField', 'TextBox', 'TextArea', 'TextView',
+    'UITextField', 'UITextView',
+    'EditText', 'NSTextField',
+  ]);
+
+  function isTextInput(el) {
+    if (!el || !el.classList || !el.classList.contains('devflow-element')) return false;
+    const type = el.dataset.type || '';
+    if (TEXT_INPUT_TYPES.has(type)) return true;
+    // Heuristic: traits often expose "TextInput" / "Editable"
+    const traits = (el.dataset.traits || '').toLowerCase();
+    return traits.includes('textinput') || traits.includes('editable');
+  }
+
+  // Overlay editor that we float on top of the clicked text element.
+  let activeEditor = null;
+  function closeEditor(commit) {
+    if (!activeEditor) return;
+    const editor = activeEditor;
+    activeEditor = null;
+    if (commit) {
+      const elementId = editor.dataset.elementId;
+      const text = editor.value;
+      fetch(`${basePath}/api/fill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ elementId, text }),
+      }).then(() => scheduleRefresh(300)).catch(err => console.error('Fill failed:', err));
+    }
+    editor.remove();
+  }
+
+  function openEditor(targetEl) {
+    closeEditor(false);
+    const elementId = targetEl.getAttribute('data-id');
+    if (!elementId) return;
+
+    const rect = targetEl.getBoundingClientRect();
+    const vpRect = viewport.getBoundingClientRect();
+    const isMultiline = ['Editor', 'TextArea', 'TextView', 'UITextView'].includes(targetEl.dataset.type || '');
+    const editor = document.createElement(isMultiline ? 'textarea' : 'input');
+    if (!isMultiline) editor.type = 'text';
+    editor.value = targetEl.dataset.text || targetEl.dataset.value || '';
+    editor.dataset.elementId = elementId;
+    Object.assign(editor.style, {
+      position: 'absolute',
+      left: (rect.left - vpRect.left) + 'px',
+      top: (rect.top - vpRect.top) + 'px',
+      width: rect.width + 'px',
+      height: rect.height + 'px',
+      zIndex: '10000',
+      background: 'rgba(255,255,255,0.97)',
+      color: '#000',
+      border: '2px solid #4ec9b0',
+      borderRadius: '2px',
+      padding: '2px 4px',
+      font: 'inherit',
+      fontSize: Math.max(11, Math.min(20, rect.height * 0.5)) + 'px',
+      outline: 'none',
+      boxSizing: 'border-box',
+      resize: 'none',
+    });
+
+    editor.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closeEditor(false);
+      } else if (ev.key === 'Enter' && !isMultiline) {
+        ev.preventDefault();
+        closeEditor(true);
+      }
+    });
+    editor.addEventListener('blur', () => closeEditor(true));
+
+    viewport.appendChild(editor);
+    activeEditor = editor;
+    // Use a microtask so the click that opened us doesn't immediately blur it.
+    setTimeout(() => { editor.focus(); editor.select(); }, 0);
+  }
+
   viewport.addEventListener('click', async (e) => {
     if (isDragging) return;
+    // If the user clicks back into the active editor, ignore.
+    if (activeEditor && (e.target === activeEditor || activeEditor.contains(e.target))) return;
+
+    // setPointerCapture(viewport) makes e.target be the viewport itself for real
+    // mouse clicks, so use elementFromPoint to find the actual element under the
+    // cursor. Temporarily hide any active editor so it doesn't shadow the click.
+    let underCursor = document.elementFromPoint(e.clientX, e.clientY);
+    if (underCursor === viewport || underCursor === screenshot) {
+      // Both are pointer-events:none / non-interactive overlays; fall back to e.target.
+      underCursor = e.target;
+    }
+    let textEl = underCursor;
+    while (textEl && textEl !== viewport && !isTextInput(textEl)) textEl = textEl.parentElement;
+    if (textEl && textEl !== viewport && isTextInput(textEl)) {
+      // Still send a tap so the native control gets focus on the app side.
+      const { x: tx, y: ty } = toAppCoords(e.clientX, e.clientY);
+      fetch(`${basePath}/api/tap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: tx, y: ty }),
+      }).catch(err => console.error('Tap failed:', err));
+      openEditor(textEl);
+      return;
+    }
 
     const { x, y } = toAppCoords(e.clientX, e.clientY);
 
