@@ -128,11 +128,11 @@ stages:
         ${{ else }}:
           ${{ if eq(parameters.is1ESPipeline, true) }}:
             name: $(DncEngInternalBuildPool)
-            image: windows.vs2026preview.scout.amd64
+            image: windows.amd64.vs2026
             os: windows
           ${{ else }}:
             name: $(DncEngInternalBuildPool)
-            demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            demands: ImageOverride -equals windows.amd64.vs2026
 
       steps:
         - template: /eng/common/core-templates/post-build/setup-maestro-vars.yml
@@ -190,7 +190,7 @@ stages:
             os: windows
           ${{ else }}:
             name: $(DncEngInternalBuildPool)
-            demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            demands: ImageOverride -equals windows.amd64.vs2026
       steps:
         - template: /eng/common/core-templates/post-build/setup-maestro-vars.yml
           parameters:
@@ -265,7 +265,7 @@ stages:
             os: windows
           ${{ else }}:
             name: $(DncEngInternalBuildPool)
-            demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            demands: ImageOverride -equals windows.amd64.vs2026
       steps:
         - template: /eng/common/core-templates/post-build/setup-maestro-vars.yml
           parameters:
