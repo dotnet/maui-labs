@@ -53,6 +53,15 @@ public static class ErrorCodes
 	public const string AppleSimulatorTerminateFailed = "E2212";
 	public const string AppleSimulatorGetContainerFailed = "E2213";
 	public const string AppleSimulatorUnavailable = "E2214";
+	public const string AppleSimulatorPrivacyFailed = "E2215";
+	public const string AppleSimulatorAppearanceFailed = "E2216";
+	public const string AppleSimulatorStatusBarFailed = "E2217";
+	public const string AppleSimulatorOpenUrlFailed = "E2218";
+	public const string AppleSimulatorPushFailed = "E2219";
+	public const string AppleSimulatorLocationFailed = "E2220";
+	public const string AppleSimulatorAddMediaFailed = "E2221";
+	public const string AppleSimulatorScreenshotFailed = "E2222";
+	public const string AppleSimulatorRecordVideoFailed = "E2223";
 
 	// Platform/SDK errors - Windows (E23xx)
 	public const string WindowsSdkNotFound = "E2301";

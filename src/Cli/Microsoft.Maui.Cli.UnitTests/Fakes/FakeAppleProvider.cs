@@ -3,6 +3,7 @@
 
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Apple;
+using Xamarin.MacDev;
 
 namespace Microsoft.Maui.Cli.UnitTests.Fakes;
 
@@ -36,6 +37,20 @@ public class FakeAppleProvider : IAppleProvider
 	public bool TerminateAppResult { get; set; } = true;
 	public string? GetAppContainerResult { get; set; } = "/path/to/container";
 
+	public bool SetPrivacyResult { get; set; } = true;
+	public bool SetAppearanceResult { get; set; } = true;
+	public SimulatorAppearance? GetAppearanceResult { get; set; } = SimulatorAppearance.Light;
+	public bool OverrideStatusBarResult { get; set; } = true;
+	public bool ClearStatusBarResult { get; set; } = true;
+	public bool OpenUrlResult { get; set; } = true;
+	public bool PushNotificationResult { get; set; } = true;
+	public bool SetLocationResult { get; set; } = true;
+	public bool ClearLocationResult { get; set; } = true;
+	public bool RunLocationResult { get; set; } = true;
+	public bool AddMediaResult { get; set; } = true;
+	public bool ScreenshotResult { get; set; } = true;
+	public IDisposable? StartRecordingResult { get; set; } = new NoopDisposable();
+
 	// --- Call tracking ---
 
 	public List<string> SelectedXcodePaths { get; } = new();
@@ -50,6 +65,19 @@ public class FakeAppleProvider : IAppleProvider
 	public List<(string Udid, string BundleId, string[] Args)> LaunchedApps { get; } = new();
 	public List<(string Udid, string BundleId)> TerminatedApps { get; } = new();
 	public List<(string Udid, string BundleId, string? ContainerType)> GetAppContainerCalls { get; } = new();
+	public List<(string Action, string Udid, PrivacyPermission Permission, string? BundleId)> PrivacyCalls { get; } = new();
+	public List<(string Udid, SimulatorAppearance Appearance)> SetAppearanceCalls { get; } = new();
+	public List<string> GetAppearanceCalls { get; } = new();
+	public List<(string Udid, StatusBarOverrides Overrides)> StatusBarOverrideCalls { get; } = new();
+	public List<string> StatusBarClearCalls { get; } = new();
+	public List<(string Udid, string Url)> OpenUrlCalls { get; } = new();
+	public List<(string Udid, string BundleId, string Payload)> PushCalls { get; } = new();
+	public List<(string Udid, double Lat, double Lng)> SetLocationCalls { get; } = new();
+	public List<string> ClearLocationCalls { get; } = new();
+	public List<(string Udid, string GpxPath)> RunLocationCalls { get; } = new();
+	public List<(string Udid, List<string> Paths)> AddMediaCalls { get; } = new();
+	public List<(string Udid, string OutputPath, ScreenshotFormat Format)> ScreenshotCalls { get; } = new();
+	public List<(string Udid, string OutputPath, RecordingOptions? Options)> StartRecordingCalls { get; } = new();
 
 	// --- IAppleProvider implementation ---
 
@@ -142,6 +170,84 @@ public class FakeAppleProvider : IAppleProvider
 		return GetAppContainerResult;
 	}
 
+	public bool SetPrivacy(string action, string udid, PrivacyPermission permission, string? bundleIdentifier = null)
+	{
+		PrivacyCalls.Add((action, udid, permission, bundleIdentifier));
+		return SetPrivacyResult;
+	}
+
+	public bool SetAppearance(string udid, SimulatorAppearance appearance)
+	{
+		SetAppearanceCalls.Add((udid, appearance));
+		return SetAppearanceResult;
+	}
+
+	public SimulatorAppearance? GetAppearance(string udid)
+	{
+		GetAppearanceCalls.Add(udid);
+		return GetAppearanceResult;
+	}
+
+	public bool OverrideStatusBar(string udid, StatusBarOverrides overrides)
+	{
+		StatusBarOverrideCalls.Add((udid, overrides));
+		return OverrideStatusBarResult;
+	}
+
+	public bool ClearStatusBar(string udid)
+	{
+		StatusBarClearCalls.Add(udid);
+		return ClearStatusBarResult;
+	}
+
+	public bool OpenUrl(string udid, string url)
+	{
+		OpenUrlCalls.Add((udid, url));
+		return OpenUrlResult;
+	}
+
+	public bool PushNotification(string udid, string bundleIdentifier, string payloadJsonOrPath)
+	{
+		PushCalls.Add((udid, bundleIdentifier, payloadJsonOrPath));
+		return PushNotificationResult;
+	}
+
+	public bool SetLocation(string udid, double latitude, double longitude)
+	{
+		SetLocationCalls.Add((udid, latitude, longitude));
+		return SetLocationResult;
+	}
+
+	public bool ClearLocation(string udid)
+	{
+		ClearLocationCalls.Add(udid);
+		return ClearLocationResult;
+	}
+
+	public bool RunLocation(string udid, string gpxPath)
+	{
+		RunLocationCalls.Add((udid, gpxPath));
+		return RunLocationResult;
+	}
+
+	public bool AddMedia(string udid, IEnumerable<string> paths)
+	{
+		AddMediaCalls.Add((udid, paths.ToList()));
+		return AddMediaResult;
+	}
+
+	public bool Screenshot(string udid, string outputPath, ScreenshotFormat format = ScreenshotFormat.Png)
+	{
+		ScreenshotCalls.Add((udid, outputPath, format));
+		return ScreenshotResult;
+	}
+
+	public IDisposable? StartRecording(string udid, string outputPath, RecordingOptions? options = null)
+	{
+		StartRecordingCalls.Add((udid, outputPath, options));
+		return StartRecordingResult;
+	}
+
 	public List<HealthCheck> CheckHealth() => HealthChecks;
 
 	public Task<AppleInstallResult> InstallEnvironmentAsync(IEnumerable<string>? platforms = null, bool dryRun = false, CancellationToken cancellationToken = default)
@@ -151,4 +257,9 @@ public class FakeAppleProvider : IAppleProvider
 	}
 
 	public List<Device> GetDevices() => Devices;
+
+	sealed class NoopDisposable : IDisposable
+	{
+		public void Dispose() { }
+	}
 }

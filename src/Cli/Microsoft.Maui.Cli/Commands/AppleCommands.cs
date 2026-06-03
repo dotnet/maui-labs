@@ -7,6 +7,7 @@ using System.CommandLine.Parsing;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
+using Xamarin.MacDev;
 
 namespace Microsoft.Maui.Cli.Commands;
 
@@ -352,6 +353,15 @@ public static class AppleCommands
 		simCommand.Add(CreateSimulatorLaunchCommand());
 		simCommand.Add(CreateSimulatorTerminateCommand());
 		simCommand.Add(CreateSimulatorGetAppContainerCommand());
+		simCommand.Add(CreateSimulatorPrivacyCommand());
+		simCommand.Add(CreateSimulatorAppearanceCommand());
+		simCommand.Add(CreateSimulatorStatusBarCommand());
+		simCommand.Add(CreateSimulatorOpenUrlCommand());
+		simCommand.Add(CreateSimulatorPushCommand());
+		simCommand.Add(CreateSimulatorLocationCommand());
+		simCommand.Add(CreateSimulatorAddMediaCommand());
+		simCommand.Add(CreateSimulatorScreenshotCommand());
+		simCommand.Add(CreateSimulatorRecordVideoCommand());
 		return simCommand;
 	}
 
@@ -722,6 +732,665 @@ public static class AppleCommands
 		});
 
 		return containerCommand;
+	}
+
+	static Command CreateSimulatorPrivacyCommand()
+	{
+		var privacyCommand = new Command("privacy", "Grant, revoke, or reset simulator privacy permissions");
+
+		foreach (var action in new[] { "grant", "revoke", "reset" })
+		{
+			var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+			var permissionArg = new Argument<string>("permission") { Description = $"Privacy service ({SimulatorEnumParsing.PrivacyPermissionNames})" };
+			var bundleIdOption = new Option<string?>("--bundle-id") { Description = "App bundle identifier to scope the change (applies to all apps if omitted)" };
+
+			var description = action switch
+			{
+				"grant" => "Grant a privacy permission (no dialog will appear)",
+				"revoke" => "Revoke a privacy permission",
+				_ => "Reset a privacy permission (the app will be prompted again)",
+			};
+
+			var actionCommand = new Command(action, description) { udidArg, permissionArg, bundleIdOption };
+			actionCommand.SetAction((ParseResult parseResult) =>
+			{
+				var formatter = Program.GetFormatter(parseResult);
+
+				if (!PlatformDetector.IsMacOS)
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+					return 1;
+				}
+
+				var appleProvider = Program.AppleProvider;
+				var udid = parseResult.GetValue(udidArg)!;
+				var permissionText = parseResult.GetValue(permissionArg)!;
+				var bundleId = parseResult.GetValue(bundleIdOption);
+
+				if (!SimulatorEnumParsing.TryParsePrivacyPermission(permissionText, out var permission))
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown privacy service '{permissionText}'. Valid services: {SimulatorEnumParsing.PrivacyPermissionNames}."));
+					return 1;
+				}
+
+				if (!ValidateSimulator(appleProvider, udid, formatter))
+					return 1;
+
+				var success = appleProvider.SetPrivacy(action, udid, permission, bundleId);
+				if (!success)
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorPrivacyFailed, $"Failed to {action} '{permissionText}' on simulator '{udid}'. Ensure the simulator is booted."));
+					return 1;
+				}
+
+				var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+				if (useJson)
+					formatter.Write(new SimulatorPrivacyResult { Udid = udid, Action = action, Service = SimulatorPrivacy.ToSimctlServiceName(permission), BundleIdentifier = bundleId, Success = true });
+				else
+					formatter.WriteSuccess($"Permission '{permissionText}' {action}ed on simulator '{udid}'" + (bundleId != null ? $" for {bundleId}." : "."));
+				return 0;
+			});
+
+			privacyCommand.Add(actionCommand);
+		}
+
+		return privacyCommand;
+	}
+
+	static Command CreateSimulatorAppearanceCommand()
+	{
+		var modeArg = new Argument<string>("mode") { Description = "Appearance to set ('light' or 'dark') or 'get' to read the current value" };
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+
+		var appearanceCommand = new Command("appearance", "Get or set the simulator UI appearance (light/dark)") { modeArg, udidArg };
+		appearanceCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var mode = parseResult.GetValue(modeArg)!;
+			var udid = parseResult.GetValue(udidArg)!;
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var normalized = mode.Trim().ToLowerInvariant();
+			if (normalized == "get")
+			{
+				var current = appleProvider.GetAppearance(udid);
+				if (current is null)
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAppearanceFailed, $"Failed to read appearance for simulator '{udid}'. Ensure the simulator is booted."));
+					return 1;
+				}
+
+				var value = current.Value == SimulatorAppearance.Dark ? "dark" : "light";
+				if (useJson)
+					formatter.Write(new SimulatorAppearanceResult { Udid = udid, Appearance = value, Action = "get" });
+				else
+					formatter.WriteSuccess(value);
+				return 0;
+			}
+
+			SimulatorAppearance appearance;
+			if (normalized == "light")
+				appearance = SimulatorAppearance.Light;
+			else if (normalized == "dark")
+				appearance = SimulatorAppearance.Dark;
+			else
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown appearance '{mode}'. Use 'light', 'dark', or 'get'."));
+				return 1;
+			}
+
+			var success = appleProvider.SetAppearance(udid, appearance);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAppearanceFailed, $"Failed to set appearance '{normalized}' on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			if (useJson)
+				formatter.Write(new SimulatorAppearanceResult { Udid = udid, Appearance = normalized, Action = "set" });
+			else
+				formatter.WriteSuccess($"Appearance set to '{normalized}' on simulator '{udid}'.");
+			return 0;
+		});
+
+		return appearanceCommand;
+	}
+
+	static Command CreateSimulatorStatusBarCommand()
+	{
+		var statusBarCommand = new Command("status-bar", "Override or clear simulator status-bar values");
+
+		// override
+		var ovUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var timeOption = new Option<string?>("--time") { Description = "Time string to display (e.g. '9:41')" };
+		var batteryLevelOption = new Option<int?>("--battery-level") { Description = "Battery level percentage (0-100)" };
+		var batteryStateOption = new Option<string?>("--battery-state") { Description = "Battery state: charging, charged, discharging" };
+		var dataNetworkOption = new Option<string?>("--data-network") { Description = "Data network: wifi, 3g, 4g, lte, lte-a, lte+, 5g, 5g+, 5g-uc, 5g-a" };
+		var cellularBarsOption = new Option<int?>("--cellular-bars") { Description = "Number of cellular signal bars (0-4)" };
+		var wifiBarsOption = new Option<int?>("--wifi-bars") { Description = "Number of Wi-Fi signal bars (0-3)" };
+		var operatorNameOption = new Option<string?>("--operator-name") { Description = "Carrier/operator name to display" };
+
+		var overrideCommand = new Command("override", "Override status-bar values")
+		{
+			ovUdidArg, timeOption, batteryLevelOption, batteryStateOption, dataNetworkOption, cellularBarsOption, wifiBarsOption, operatorNameOption
+		};
+		overrideCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(ovUdidArg)!;
+
+			var time = parseResult.GetValue(timeOption);
+			var batteryLevel = parseResult.GetValue(batteryLevelOption);
+			var cellularBars = parseResult.GetValue(cellularBarsOption);
+			var wifiBars = parseResult.GetValue(wifiBarsOption);
+			var operatorName = parseResult.GetValue(operatorNameOption);
+
+			SimulatorBatteryState? batteryState = null;
+			var batteryStateText = parseResult.GetValue(batteryStateOption);
+			if (batteryStateText is not null)
+			{
+				if (!SimulatorEnumParsing.TryParseBatteryState(batteryStateText, out var parsedState))
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown battery state '{batteryStateText}'. Use charging, charged, or discharging."));
+					return 1;
+				}
+				batteryState = parsedState;
+			}
+
+			SimulatorDataNetwork? dataNetwork = null;
+			var dataNetworkText = parseResult.GetValue(dataNetworkOption);
+			if (dataNetworkText is not null)
+			{
+				if (!SimulatorEnumParsing.TryParseDataNetwork(dataNetworkText, out var parsedNetwork))
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown data network '{dataNetworkText}'. Use wifi, 3g, 4g, lte, lte-a, lte+, 5g, 5g+, 5g-uc, or 5g-a."));
+					return 1;
+				}
+				dataNetwork = parsedNetwork;
+			}
+
+			if (time is null && !batteryLevel.HasValue && !batteryState.HasValue && !dataNetwork.HasValue &&
+				!cellularBars.HasValue && !wifiBars.HasValue && operatorName is null)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, "At least one status-bar override option must be provided (e.g. --time, --battery-level, --data-network)."));
+				return 1;
+			}
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var overrides = new StatusBarOverrides(time, batteryLevel, batteryState, dataNetwork, cellularBars, wifiBars, operatorName);
+			var success = appleProvider.OverrideStatusBar(udid, overrides);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorStatusBarFailed, $"Failed to override status bar on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorStatusBarResult { Udid = udid, Action = "override", Success = true });
+			else
+				formatter.WriteSuccess($"Status bar overridden on simulator '{udid}'.");
+			return 0;
+		});
+		statusBarCommand.Add(overrideCommand);
+
+		// clear
+		var clearUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var clearCommand = new Command("clear", "Clear all status-bar overrides") { clearUdidArg };
+		clearCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(clearUdidArg)!;
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.ClearStatusBar(udid);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorStatusBarFailed, $"Failed to clear status bar on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorStatusBarResult { Udid = udid, Action = "clear", Success = true });
+			else
+				formatter.WriteSuccess($"Status bar cleared on simulator '{udid}'.");
+			return 0;
+		});
+		statusBarCommand.Add(clearCommand);
+
+		return statusBarCommand;
+	}
+
+	static Command CreateSimulatorOpenUrlCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var urlArg = new Argument<string>("url") { Description = "URL to open (deep link or web URL)" };
+
+		var openUrlCommand = new Command("openurl", "Open a URL on a simulator") { udidArg, urlArg };
+		openUrlCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var url = parseResult.GetValue(urlArg)!;
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.OpenUrl(udid, url);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorOpenUrlFailed, $"Failed to open URL on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorOpenUrlResult { Udid = udid, Url = url, Success = true });
+			else
+				formatter.WriteSuccess($"Opened URL on simulator '{udid}'.");
+			return 0;
+		});
+
+		return openUrlCommand;
+	}
+
+	static Command CreateSimulatorPushCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var bundleIdArg = new Argument<string>("bundle-identifier") { Description = "Target app bundle identifier (e.g. com.example.MyApp)" };
+		var payloadArg = new Argument<string>("payload") { Description = "APNS payload as inline JSON (starting with '{') or a path to a .apns/.json file" };
+
+		var pushCommand = new Command("push", "Send a push notification to a simulator") { udidArg, bundleIdArg, payloadArg };
+		pushCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var bundleId = parseResult.GetValue(bundleIdArg)!;
+			var payload = parseResult.GetValue(payloadArg)!;
+
+			// If it isn't inline JSON it must be an existing file.
+			var isInlineJson = payload.TrimStart().StartsWith("{", StringComparison.Ordinal);
+			if (!isInlineJson && !File.Exists(payload))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Payload '{payload}' is not inline JSON (must start with '{{') and no file exists at that path."));
+				return 1;
+			}
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.PushNotification(udid, bundleId, payload);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorPushFailed, $"Failed to send push notification to '{bundleId}' on simulator '{udid}'. Ensure the simulator is booted and the payload is valid."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorPushResult { Udid = udid, BundleIdentifier = bundleId, Success = true });
+			else
+				formatter.WriteSuccess($"Push notification sent to '{bundleId}' on simulator '{udid}'.");
+			return 0;
+		});
+
+		return pushCommand;
+	}
+
+	static Command CreateSimulatorLocationCommand()
+	{
+		var locationCommand = new Command("location", "Set, clear, or replay the simulated GPS location");
+
+		// set
+		var setUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var latArg = new Argument<double>("latitude") { Description = "Latitude in decimal degrees" };
+		var lngArg = new Argument<double>("longitude") { Description = "Longitude in decimal degrees" };
+		var setCommand = new Command("set", "Set the simulated GPS location") { setUdidArg, latArg, lngArg };
+		setCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(setUdidArg)!;
+			var lat = parseResult.GetValue(latArg);
+			var lng = parseResult.GetValue(lngArg);
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.SetLocation(udid, lat, lng);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorLocationFailed, $"Failed to set location on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorLocationResult { Udid = udid, Action = "set", Latitude = lat, Longitude = lng, Success = true });
+			else
+				formatter.WriteSuccess($"Location set to {lat},{lng} on simulator '{udid}'.");
+			return 0;
+		});
+		locationCommand.Add(setCommand);
+
+		// clear
+		var clearUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var clearCommand = new Command("clear", "Clear the simulated GPS location") { clearUdidArg };
+		clearCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(clearUdidArg)!;
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.ClearLocation(udid);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorLocationFailed, $"Failed to clear location on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorLocationResult { Udid = udid, Action = "clear", Success = true });
+			else
+				formatter.WriteSuccess($"Location cleared on simulator '{udid}'.");
+			return 0;
+		});
+		locationCommand.Add(clearCommand);
+
+		// run
+		var runUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var gpxArg = new Argument<string>("gpx-path") { Description = "Path to a GPX file describing the route to replay" };
+		var runCommand = new Command("run", "Replay a GPX route on the simulator") { runUdidArg, gpxArg };
+		runCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(runUdidArg)!;
+			var gpxPath = parseResult.GetValue(gpxArg)!;
+
+			if (!File.Exists(gpxPath))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"GPX file not found at '{gpxPath}'."));
+				return 1;
+			}
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.RunLocation(udid, gpxPath);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorLocationFailed, $"Failed to run GPX route on simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorLocationResult { Udid = udid, Action = "run", GpxPath = gpxPath, Success = true });
+			else
+				formatter.WriteSuccess($"GPX route '{gpxPath}' running on simulator '{udid}'.");
+			return 0;
+		});
+		locationCommand.Add(runCommand);
+
+		return locationCommand;
+	}
+
+	static Command CreateSimulatorAddMediaCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var pathsArg = new Argument<string[]>("paths") { Description = "One or more media file paths (photos or videos)", Arity = ArgumentArity.OneOrMore };
+
+		var addMediaCommand = new Command("add-media", "Add photos or videos to a simulator's media library") { udidArg, pathsArg };
+		addMediaCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var paths = parseResult.GetValue(pathsArg) ?? Array.Empty<string>();
+
+			if (paths.Length == 0)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, "At least one media file path must be provided."));
+				return 1;
+			}
+
+			var missing = paths.Where(p => !File.Exists(p)).ToArray();
+			if (missing.Length > 0)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Media file(s) not found: {string.Join(", ", missing)}."));
+				return 1;
+			}
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.AddMedia(udid, paths);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAddMediaFailed, $"Failed to add media to simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorAddMediaResult { Udid = udid, Paths = paths, Count = paths.Length, Success = true });
+			else
+				formatter.WriteSuccess($"Added {paths.Length} media file(s) to simulator '{udid}'.");
+			return 0;
+		});
+
+		return addMediaCommand;
+	}
+
+	static Command CreateSimulatorScreenshotCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var outputArg = new Argument<string>("output-path") { Description = "Path to write the screenshot to" };
+		var formatOption = new Option<string>("--format") { Description = "Image format: png (default), jpeg, tiff, bmp", DefaultValueFactory = _ => "png" };
+
+		var screenshotCommand = new Command("screenshot", "Capture a screenshot from a simulator") { udidArg, outputArg, formatOption };
+		screenshotCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var outputPath = parseResult.GetValue(outputArg)!;
+			var formatText = parseResult.GetValue(formatOption)!;
+
+			if (!SimulatorEnumParsing.TryParseScreenshotFormat(formatText, out var format))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown screenshot format '{formatText}'. Use png, jpeg, tiff, or bmp."));
+				return 1;
+			}
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var success = appleProvider.Screenshot(udid, outputPath, format);
+			if (!success)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorScreenshotFailed, $"Failed to capture screenshot from simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			if (useJson)
+				formatter.Write(new SimulatorScreenshotResult { Udid = udid, OutputPath = outputPath, Format = SimulatorScreenCapture.ToSimctlFormatName(format), Success = true });
+			else
+				formatter.WriteSuccess($"Screenshot saved to '{outputPath}'.");
+			return 0;
+		});
+
+		return screenshotCommand;
+	}
+
+	static Command CreateSimulatorRecordVideoCommand()
+	{
+		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var outputArg = new Argument<string>("output-path") { Description = "Path to write the recorded video to" };
+		var formatOption = new Option<string?>("--format") { Description = "Video format: mp4 (default), h264, fmp4, gif" };
+		var forceOption = new Option<bool>("--force") { Description = "Overwrite the output file if it already exists" };
+
+		// Recording streams until interrupted (Ctrl-C), mirroring the upstream
+		// "dispose to stop" model. This keeps the CLI process alive for the
+		// duration of the recording without a separate session-tracking store.
+		var recordCommand = new Command("record-video", "Record a video from a simulator until interrupted (Ctrl-C)") { udidArg, outputArg, formatOption, forceOption };
+		recordCommand.SetAction((ParseResult parseResult) =>
+		{
+			var formatter = Program.GetFormatter(parseResult);
+
+			if (!PlatformDetector.IsMacOS)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
+				return 1;
+			}
+
+			var appleProvider = Program.AppleProvider;
+			var udid = parseResult.GetValue(udidArg)!;
+			var outputPath = parseResult.GetValue(outputArg)!;
+			var formatText = parseResult.GetValue(formatOption);
+			var force = parseResult.GetValue(forceOption);
+
+			VideoRecordingFormat? format = null;
+			if (formatText is not null)
+			{
+				if (!SimulatorEnumParsing.TryParseVideoFormat(formatText, out var parsedFormat))
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown video format '{formatText}'. Use mp4, h264, fmp4, or gif."));
+					return 1;
+				}
+				format = parsedFormat;
+			}
+
+			if (!ValidateSimulator(appleProvider, udid, formatter))
+				return 1;
+
+			var options = new RecordingOptions { Format = format, Force = force };
+			var session = appleProvider.StartRecording(udid, outputPath, options);
+			if (session is null)
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorRecordVideoFailed, $"Failed to start recording from simulator '{udid}'. Ensure the simulator is booted and xcrun is available."));
+				return 1;
+			}
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+
+			// Block until the user presses Ctrl-C, then dispose to stop and flush the file.
+			using var stopSignal = new ManualResetEventSlim(false);
+			ConsoleCancelEventHandler handler = (_, e) =>
+			{
+				e.Cancel = true; // prevent abrupt termination so we can dispose cleanly
+				stopSignal.Set();
+			};
+			Console.CancelKeyPress += handler;
+			try
+			{
+				if (!useJson)
+					formatter.WriteInfo($"Recording simulator '{udid}' to '{outputPath}'. Press Ctrl-C to stop.");
+				stopSignal.Wait();
+			}
+			finally
+			{
+				Console.CancelKeyPress -= handler;
+				session.Dispose();
+			}
+
+			if (useJson)
+				formatter.Write(new SimulatorRecordingResult { Udid = udid, OutputPath = outputPath, Format = format is { } f ? SimulatorScreenCapture.ToSimctlVideoFormatName(f) : null, Success = true });
+			else
+				formatter.WriteSuccess($"Recording saved to '{outputPath}'.");
+			return 0;
+		});
+
+		return recordCommand;
 	}
 
 	/// <summary>

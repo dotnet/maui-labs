@@ -160,3 +160,142 @@ internal sealed record SimulatorAppContainerResult
 	[JsonPropertyName("path")]
 	public required string Path { get; init; }
 }
+
+internal sealed record SimulatorPrivacyResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("action")]
+	public required string Action { get; init; }
+
+	[JsonPropertyName("service")]
+	public required string Service { get; init; }
+
+	[JsonPropertyName("bundle_identifier")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? BundleIdentifier { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorAppearanceResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("appearance")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? Appearance { get; init; }
+
+	[JsonPropertyName("action")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? Action { get; init; }
+}
+
+internal sealed record SimulatorStatusBarResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("action")]
+	public required string Action { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorOpenUrlResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("url")]
+	public required string Url { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorPushResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("bundle_identifier")]
+	public required string BundleIdentifier { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorLocationResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("action")]
+	public required string Action { get; init; }
+
+	[JsonPropertyName("latitude")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public double? Latitude { get; init; }
+
+	[JsonPropertyName("longitude")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public double? Longitude { get; init; }
+
+	[JsonPropertyName("gpx_path")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? GpxPath { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorAddMediaResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("paths")]
+	public required string[] Paths { get; init; }
+
+	[JsonPropertyName("count")]
+	public int Count { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorScreenshotResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("output_path")]
+	public required string OutputPath { get; init; }
+
+	[JsonPropertyName("format")]
+	public required string Format { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
+
+internal sealed record SimulatorRecordingResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("output_path")]
+	public required string OutputPath { get; init; }
+
+	[JsonPropertyName("format")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? Format { get; init; }
+
+	[JsonPropertyName("success")]
+	public bool Success { get; init; }
+}
