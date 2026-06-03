@@ -66,7 +66,7 @@ extends:
   parameters:
     pool:
       name: NetCore1ESPool-Internal
-      image: windows.amd64.vs2026
+      image: windows.vs2026.amd64
       os: windows
     # Required for publishing to external feeds like nuget.org
     settings:
@@ -97,7 +97,7 @@ extends:
             displayName: DevFlow - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -125,7 +125,7 @@ extends:
             displayName: Cli - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -149,7 +149,7 @@ extends:
             displayName: AI Extensions - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -173,7 +173,7 @@ extends:
             displayName: AppProjectReference - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -201,7 +201,7 @@ extends:
             displayName: Linux GTK4 - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -267,7 +267,7 @@ extends:
             dependsOn: EssentialsAI_macOS
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -341,7 +341,7 @@ extends:
             displayName: WPF - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -368,7 +368,7 @@ extends:
             displayName: macOS AppKit - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.amd64.vs2026
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -407,7 +407,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -430,7 +430,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -462,7 +462,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -486,7 +486,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -518,7 +518,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -541,7 +541,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -573,7 +573,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -596,7 +596,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -628,7 +628,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -651,7 +651,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -683,7 +683,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -706,7 +706,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -738,7 +738,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -761,7 +761,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -793,7 +793,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -816,7 +816,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.amd64.vs2026
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
