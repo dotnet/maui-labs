@@ -87,6 +87,7 @@ extends:
       - template: /eng/common/templates-official/jobs/jobs.yml@self
         parameters:
           enableMicrobuild: true
+          enablePreviewMicrobuild: true
           enablePublishBuildAssets: true
           enablePublishBuildArtifacts: true
           enablePublishTestResults: true
