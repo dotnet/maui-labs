@@ -15,6 +15,8 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <!-- NU1507: official builds inject internal feeds via SetupNugetSources that aren't in packageSourceMapping -->
     <NoWarn>$(NoWarn);NU1507</NoWarn>
+    <!-- NU3027: Xamarin.Android.Tools.AndroidSdk on dotnet11-transport is signed but not long-term timestamped -->
+    <NoWarn>$(NoWarn);NU3027</NoWarn>
     <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
     <!-- Default to non-shipping; shipping projects override per-csproj -->
