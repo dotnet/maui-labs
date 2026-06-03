@@ -518,4 +518,353 @@ public class AppleSimulatorCommandsTests
 		Assert.Contains("unavailable", stdout);
 		Assert.Empty(fake.GetAppContainerCalls); // never reached the provider
 	}
+
+	// --- Simulator extras subcommand existence ---
+
+	static Command Simulator()
+	{
+		var root = Program.BuildRootCommand();
+		return root.Subcommands
+			.First(c => c.Name == "apple").Subcommands
+			.First(c => c.Name == "simulator");
+	}
+
+	[Theory]
+	[InlineData("privacy")]
+	[InlineData("appearance")]
+	[InlineData("status-bar")]
+	[InlineData("openurl")]
+	[InlineData("push")]
+	[InlineData("location")]
+	[InlineData("add-media")]
+	[InlineData("screenshot")]
+	[InlineData("record-video")]
+	public void SimulatorCommand_HasExtrasSubcommand(string name)
+	{
+		Assert.Contains(Simulator().Subcommands, c => c.Name == name);
+	}
+
+	[Theory]
+	[InlineData("grant")]
+	[InlineData("revoke")]
+	[InlineData("reset")]
+	public void PrivacyCommand_HasActionSubcommand(string action)
+	{
+		var privacy = Simulator().Subcommands.First(c => c.Name == "privacy");
+		Assert.Contains(privacy.Subcommands, c => c.Name == action);
+	}
+
+	[Fact]
+	public void StatusBarCommand_HasOverrideAndClearSubcommands()
+	{
+		var statusBar = Simulator().Subcommands.First(c => c.Name == "status-bar");
+		Assert.Contains(statusBar.Subcommands, c => c.Name == "override");
+		Assert.Contains(statusBar.Subcommands, c => c.Name == "clear");
+	}
+
+	[Fact]
+	public void LocationCommand_HasSetClearRunSubcommands()
+	{
+		var location = Simulator().Subcommands.First(c => c.Name == "location");
+		Assert.Contains(location.Subcommands, c => c.Name == "set");
+		Assert.Contains(location.Subcommands, c => c.Name == "clear");
+		Assert.Contains(location.Subcommands, c => c.Name == "run");
+	}
+
+	[Fact]
+	public void ScreenshotCommand_HasFormatOption()
+	{
+		var screenshot = Simulator().Subcommands.First(c => c.Name == "screenshot");
+		Assert.Contains(screenshot.Options, o => o.Name == "--format");
+	}
+
+	// --- SimulatorEnumParsing ---
+
+	[Theory]
+	[InlineData("location-always", Xamarin.MacDev.PrivacyPermission.LocationAlways)]
+	[InlineData("contacts-limited", Xamarin.MacDev.PrivacyPermission.ContactsLimited)]
+	[InlineData("photos-add", Xamarin.MacDev.PrivacyPermission.PhotosAdd)]
+	[InlineData("media-library", Xamarin.MacDev.PrivacyPermission.MediaLibrary)]
+	[InlineData("Photos", Xamarin.MacDev.PrivacyPermission.Photos)]
+	[InlineData("SIRI", Xamarin.MacDev.PrivacyPermission.Siri)]
+	public void TryParsePrivacyPermission_ParsesKnownTokens(string token, Xamarin.MacDev.PrivacyPermission expected)
+	{
+		Assert.True(SimulatorEnumParsing.TryParsePrivacyPermission(token, out var permission));
+		Assert.Equal(expected, permission);
+	}
+
+	[Fact]
+	public void TryParsePrivacyPermission_RejectsUnknownToken()
+	{
+		Assert.False(SimulatorEnumParsing.TryParsePrivacyPermission("camera", out _));
+	}
+
+	[Theory]
+	[InlineData("png", Xamarin.MacDev.ScreenshotFormat.Png)]
+	[InlineData("jpg", Xamarin.MacDev.ScreenshotFormat.Jpeg)]
+	[InlineData("JPEG", Xamarin.MacDev.ScreenshotFormat.Jpeg)]
+	[InlineData("tiff", Xamarin.MacDev.ScreenshotFormat.Tiff)]
+	public void TryParseScreenshotFormat_ParsesKnownTokens(string token, Xamarin.MacDev.ScreenshotFormat expected)
+	{
+		Assert.True(SimulatorEnumParsing.TryParseScreenshotFormat(token, out var format));
+		Assert.Equal(expected, format);
+	}
+
+	[Theory]
+	[InlineData("3g", Xamarin.MacDev.SimulatorDataNetwork.ThreeG)]
+	[InlineData("lte-a", Xamarin.MacDev.SimulatorDataNetwork.LteA)]
+	[InlineData("5g-uc", Xamarin.MacDev.SimulatorDataNetwork.FiveGUc)]
+	[InlineData("wifi", Xamarin.MacDev.SimulatorDataNetwork.Wifi)]
+	public void TryParseDataNetwork_ParsesKnownTokens(string token, Xamarin.MacDev.SimulatorDataNetwork expected)
+	{
+		Assert.True(SimulatorEnumParsing.TryParseDataNetwork(token, out var network));
+		Assert.Equal(expected, network);
+	}
+
+	// --- FakeAppleProvider tracking ---
+
+	[Fact]
+	public void FakeAppleProvider_SetPrivacy_TracksCall()
+	{
+		var fake = new FakeAppleProvider { SetPrivacyResult = true };
+		var result = fake.SetPrivacy("grant", "SIM-1", Xamarin.MacDev.PrivacyPermission.Photos, "com.test.app");
+		Assert.True(result);
+		Assert.Single(fake.PrivacyCalls);
+		Assert.Equal(("grant", "SIM-1", Xamarin.MacDev.PrivacyPermission.Photos, (string?)"com.test.app"), fake.PrivacyCalls[0]);
+	}
+
+	[Fact]
+	public void FakeAppleProvider_Screenshot_TracksCall()
+	{
+		var fake = new FakeAppleProvider { ScreenshotResult = true };
+		var result = fake.Screenshot("SIM-2", "/tmp/shot.png", Xamarin.MacDev.ScreenshotFormat.Jpeg);
+		Assert.True(result);
+		Assert.Single(fake.ScreenshotCalls);
+		Assert.Equal(("SIM-2", "/tmp/shot.png", Xamarin.MacDev.ScreenshotFormat.Jpeg), fake.ScreenshotCalls[0]);
+	}
+
+	// --- JSON serialization ---
+
+	[Fact]
+	public void SimulatorPrivacyResult_SerializesToSnakeCase()
+	{
+		var model = new SimulatorPrivacyResult { Udid = "SIM-X", Action = "grant", Service = "photos", BundleIdentifier = "com.test.app", Success = true };
+		var json = JsonSerializer.Serialize(model, MauiCliJsonContext.Default.SimulatorPrivacyResult);
+		using var doc = JsonDocument.Parse(json);
+		var root = doc.RootElement;
+		Assert.Equal("SIM-X", root.GetProperty("udid").GetString());
+		Assert.Equal("grant", root.GetProperty("action").GetString());
+		Assert.Equal("photos", root.GetProperty("service").GetString());
+		Assert.Equal("com.test.app", root.GetProperty("bundle_identifier").GetString());
+		Assert.True(root.GetProperty("success").GetBoolean());
+	}
+
+	[Fact]
+	public void SimulatorPrivacyResult_OmitsNullBundleIdentifier()
+	{
+		var model = new SimulatorPrivacyResult { Udid = "SIM-X", Action = "reset", Service = "photos", Success = true };
+		var json = JsonSerializer.Serialize(model, MauiCliJsonContext.Default.SimulatorPrivacyResult);
+		using var doc = JsonDocument.Parse(json);
+		Assert.False(doc.RootElement.TryGetProperty("bundle_identifier", out _));
+	}
+
+	[Fact]
+	public void SimulatorAppearanceResult_SerializesToSnakeCase()
+	{
+		var model = new SimulatorAppearanceResult { Udid = "SIM-A", Appearance = "dark", Action = "get" };
+		var json = JsonSerializer.Serialize(model, MauiCliJsonContext.Default.SimulatorAppearanceResult);
+		using var doc = JsonDocument.Parse(json);
+		var root = doc.RootElement;
+		Assert.Equal("SIM-A", root.GetProperty("udid").GetString());
+		Assert.Equal("dark", root.GetProperty("appearance").GetString());
+		Assert.Equal("get", root.GetProperty("action").GetString());
+	}
+
+	[Fact]
+	public void SimulatorLocationResult_SerializesToSnakeCase_WithCoordinates()
+	{
+		var model = new SimulatorLocationResult { Udid = "SIM-L", Action = "set", Latitude = 37.33, Longitude = -122.03, Success = true };
+		var json = JsonSerializer.Serialize(model, MauiCliJsonContext.Default.SimulatorLocationResult);
+		using var doc = JsonDocument.Parse(json);
+		var root = doc.RootElement;
+		Assert.Equal(37.33, root.GetProperty("latitude").GetDouble());
+		Assert.Equal(-122.03, root.GetProperty("longitude").GetDouble());
+		Assert.False(root.TryGetProperty("gpx_path", out _));
+	}
+
+	[Fact]
+	public void SimulatorScreenshotResult_SerializesToSnakeCase()
+	{
+		var model = new SimulatorScreenshotResult { Udid = "SIM-S", OutputPath = "/tmp/a.png", Format = "png", Success = true };
+		var json = JsonSerializer.Serialize(model, MauiCliJsonContext.Default.SimulatorScreenshotResult);
+		using var doc = JsonDocument.Parse(json);
+		var root = doc.RootElement;
+		Assert.Equal("/tmp/a.png", root.GetProperty("output_path").GetString());
+		Assert.Equal("png", root.GetProperty("format").GetString());
+	}
+
+	// --- Error code mapping ---
+
+	[Theory]
+	[InlineData(ErrorCodes.AppleSimulatorPrivacyFailed, "E2215")]
+	[InlineData(ErrorCodes.AppleSimulatorAppearanceFailed, "E2216")]
+	[InlineData(ErrorCodes.AppleSimulatorStatusBarFailed, "E2217")]
+	[InlineData(ErrorCodes.AppleSimulatorOpenUrlFailed, "E2218")]
+	[InlineData(ErrorCodes.AppleSimulatorPushFailed, "E2219")]
+	[InlineData(ErrorCodes.AppleSimulatorLocationFailed, "E2220")]
+	[InlineData(ErrorCodes.AppleSimulatorAddMediaFailed, "E2221")]
+	[InlineData(ErrorCodes.AppleSimulatorScreenshotFailed, "E2222")]
+	[InlineData(ErrorCodes.AppleSimulatorRecordVideoFailed, "E2223")]
+	public void SimulatorExtrasFailures_MapToPlatformCategory(string code, string expectedCode)
+	{
+		var error = ErrorResult.FromException(new MauiToolException(code, "boom"));
+		Assert.Equal(expectedCode, error.Code);
+		Assert.Equal("platform", error.Category);
+	}
+
+	// --- Handler-level tests (require macOS) ---
+
+	[Fact]
+	public async Task PrivacyGrantCommand_ValidUdid_CallsProvider()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-PRIV", IsAvailable = true });
+				f.SetPrivacyResult = true;
+			},
+			"apple", "simulator", "privacy", "grant", "SIM-PRIV", "photos", "--bundle-id", "com.test.app", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.PrivacyCalls);
+		Assert.Equal(("grant", "SIM-PRIV", Xamarin.MacDev.PrivacyPermission.Photos, (string?)"com.test.app"), fake.PrivacyCalls[0]);
+	}
+
+	[Fact]
+	public async Task PrivacyGrantCommand_InvalidService_ReturnsInvalidArgument()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f => f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-PRIV", IsAvailable = true }),
+			"apple", "simulator", "privacy", "grant", "SIM-PRIV", "camera", "--json");
+
+		Assert.Equal(1, exitCode);
+		Assert.Contains("E1004", stdout);
+		Assert.Empty(fake.PrivacyCalls);
+	}
+
+	[Fact]
+	public async Task AppearanceGetCommand_ReturnsCurrentAppearance()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-APP", IsAvailable = true });
+				f.GetAppearanceResult = Xamarin.MacDev.SimulatorAppearance.Dark;
+			},
+			"apple", "simulator", "appearance", "get", "SIM-APP", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.GetAppearanceCalls);
+		Assert.Contains("dark", stdout);
+	}
+
+	[Fact]
+	public async Task AppearanceSetCommand_InvalidMode_ReturnsInvalidArgument()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f => f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-APP", IsAvailable = true }),
+			"apple", "simulator", "appearance", "sepia", "SIM-APP", "--json");
+
+		Assert.Equal(1, exitCode);
+		Assert.Contains("E1004", stdout);
+		Assert.Empty(fake.SetAppearanceCalls);
+	}
+
+	[Fact]
+	public async Task OpenUrlCommand_ValidUdid_CallsProvider()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, _, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-URL", IsAvailable = true });
+				f.OpenUrlResult = true;
+			},
+			"apple", "simulator", "openurl", "SIM-URL", "myapp://deeplink", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.OpenUrlCalls);
+		Assert.Equal(("SIM-URL", "myapp://deeplink"), fake.OpenUrlCalls[0]);
+	}
+
+	[Fact]
+	public async Task ScreenshotCommand_ValidUdid_CallsProviderWithFormat()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var output = Path.Combine(Path.GetTempPath(), $"shot_{Guid.NewGuid():N}.jpeg");
+		var (exitCode, _, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-SHOT", IsAvailable = true });
+				f.ScreenshotResult = true;
+			},
+			"apple", "simulator", "screenshot", "SIM-SHOT", output, "--format", "jpeg", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.ScreenshotCalls);
+		Assert.Equal("SIM-SHOT", fake.ScreenshotCalls[0].Udid);
+		Assert.Equal(Xamarin.MacDev.ScreenshotFormat.Jpeg, fake.ScreenshotCalls[0].Format);
+	}
+
+	[Fact]
+	public async Task StatusBarOverrideCommand_NoOptions_ReturnsInvalidArgument()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
+			f => f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-SB", IsAvailable = true }),
+			"apple", "simulator", "status-bar", "override", "SIM-SB", "--json");
+
+		Assert.Equal(1, exitCode);
+		Assert.Contains("E1004", stdout);
+		Assert.Empty(fake.StatusBarOverrideCalls);
+	}
+
+	[Fact]
+	public async Task LocationSetCommand_ValidUdid_ForwardsCoordinates()
+	{
+		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
+
+		var (exitCode, _, _, fake) = await InvokeSimulatorCommandAsync(
+			f =>
+			{
+				f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-LOC", IsAvailable = true });
+				f.SetLocationResult = true;
+			},
+			"apple", "simulator", "location", "set", "SIM-LOC", "37.3349", "-122.009", "--json");
+
+		Assert.Equal(0, exitCode);
+		Assert.Single(fake.SetLocationCalls);
+		Assert.Equal("SIM-LOC", fake.SetLocationCalls[0].Udid);
+		Assert.Equal(37.3349, fake.SetLocationCalls[0].Lat, 4);
+		Assert.Equal(-122.009, fake.SetLocationCalls[0].Lng, 3);
+	}
 }

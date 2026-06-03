@@ -750,7 +750,7 @@ public class DevFlowCommands
 
         var permGrantUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
         var permGrantBundle = new Option<string?>("--bundle-id") { Description = "App bundle identifier" };
-        var permGrantServiceArg = new Argument<string>("service") { Description = "Permission service (camera, location, photos, contacts, microphone, calendar, all, etc.)" };
+        var permGrantServiceArg = new Argument<string>("service") { Description = "Permission service (location, photos, contacts, microphone, calendar, reminders, motion, siri, media-library, all, etc.)" };
         var permGrantCmd = new Command("grant", "Grant a permission (no dialog will appear)") { permGrantServiceArg, permGrantUdid, permGrantBundle };
         permGrantCmd.SetAction(async (ctx, ct) =>
         {
