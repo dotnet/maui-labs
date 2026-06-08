@@ -96,6 +96,42 @@ public class MauiPrArtifactServiceTests
 	}
 
 	[Fact]
+	public async Task FindInProgressBuildAsync_AzureDevOpsInProgressBuild_ReturnsBuildProgress()
+	{
+		var service = CreateService(request =>
+		{
+			var url = request.RequestUri!.ToString();
+			if (url.Contains("_apis/build/builds?api-version=7.1", StringComparison.Ordinal))
+			{
+				return JsonResponse("""
+					{
+					  "value": [
+					    {
+					      "id": 123457,
+					      "buildNumber": "20260608.2",
+					      "status": "inProgress",
+					      "sourceVersion": "def456",
+					      "definition": { "name": "maui-pr" }
+					    }
+					  ]
+					}
+					""");
+			}
+
+			return NotFound();
+		});
+
+		var progress = await service.FindInProgressBuildAsync(24888);
+
+		Assert.NotNull(progress);
+		Assert.Equal(24888, progress.PullRequest);
+		Assert.Equal(123457, progress.BuildId);
+		Assert.Equal("20260608.2", progress.BuildNumber);
+		Assert.Equal("inProgress", progress.Status);
+		Assert.Equal("https://dev.azure.com/dnceng-public/public/_build/results?buildId=123457", progress.BuildUrl);
+	}
+
+	[Fact]
 	public async Task DownloadPackageArtifactAsync_CopiesPackagesAndReadsControlsVersionFromNuspec()
 	{
 		using var directory = TemporaryDirectory.Create();

@@ -26,6 +26,15 @@ public sealed record MauiPrBuildArtifact
 	public required string BuildUrl { get; init; }
 }
 
+public sealed record MauiPrBuildProgress
+{
+	public int PullRequest { get; init; }
+	public int BuildId { get; init; }
+	public required string BuildNumber { get; init; }
+	public required string Status { get; init; }
+	public required string BuildUrl { get; init; }
+}
+
 public sealed record MauiPrArtifactDownload
 {
 	public required MauiPrBuildArtifact Build { get; init; }
@@ -34,6 +43,8 @@ public sealed record MauiPrArtifactDownload
 	public required string PackageSourcePath { get; init; }
 	public required string MetadataPath { get; init; }
 	public required string Version { get; init; }
+	public bool IsStaged { get; init; }
+	public string? StagingArtifactPath { get; init; }
 }
 
 public sealed record MauiPrArtifactHivePaths
@@ -71,11 +82,18 @@ public sealed record MauiPrArtifactMetadata
 public interface IMauiPrArtifactService
 {
 	Task<MauiPrBuildArtifact> FindPackageArtifactAsync(int prNumber, CancellationToken cancellationToken = default);
+	Task<MauiPrBuildProgress?> FindInProgressBuildAsync(int prNumber, CancellationToken cancellationToken = default);
 	MauiPrArtifactHivePaths GetHivePaths(MauiPrBuildArtifact artifact, string? hiveRoot = null);
 	Task<MauiPrArtifactDownload> DownloadPackageArtifactAsync(
 		MauiPrBuildArtifact artifact,
 		string? hiveRoot = null,
 		CancellationToken cancellationToken = default);
+	Task<MauiPrArtifactDownload> StagePackageArtifactAsync(
+		MauiPrBuildArtifact artifact,
+		string? hiveRoot = null,
+		CancellationToken cancellationToken = default);
+	Task PromoteStagedPackageArtifactAsync(MauiPrArtifactDownload download, CancellationToken cancellationToken = default);
+	void DiscardStagedPackageArtifact(MauiPrArtifactDownload download);
 }
 
 public sealed class MauiPrArtifactService : IMauiPrArtifactService
@@ -121,7 +139,62 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 			$"Check https://github.com/dotnet/maui/pull/{prNumber} to confirm the PR build has completed.");
 	}
 
+	public async Task<MauiPrBuildProgress?> FindInProgressBuildAsync(int prNumber, CancellationToken cancellationToken = default)
+	{
+		if (prNumber <= 0)
+			throw new ArgumentOutOfRangeException(nameof(prNumber), "PR number must be positive.");
+
+		var buildsUrl =
+			$"https://dev.azure.com/{DefaultAzureDevOpsOrganization}/{DefaultAzureDevOpsProject}/_apis/build/builds" +
+			$"?api-version=7.1&branchName=refs/pull/{prNumber}/merge&$top=25";
+
+		using var response = await SendAsync(buildsUrl, cancellationToken);
+		if (!response.IsSuccessStatusCode)
+			throw new InvalidOperationException($"Failed to query Azure DevOps builds for PR #{prNumber}: {response.StatusCode}");
+
+		using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+		using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+		if (!document.RootElement.TryGetProperty("value", out var builds) || builds.ValueKind != JsonValueKind.Array)
+			throw new InvalidOperationException("Azure DevOps builds response did not contain a value array.");
+
+		foreach (var build in builds.EnumerateArray())
+		{
+			if (!IsInProgressMauiPrBuild(build))
+				continue;
+
+			var buildId = build.GetProperty("id").GetInt32();
+			return new MauiPrBuildProgress
+			{
+				PullRequest = prNumber,
+				BuildId = buildId,
+				BuildNumber = build.GetProperty("buildNumber").GetString() ?? buildId.ToString(),
+				Status = build.GetProperty("status").GetString() ?? "inProgress",
+				BuildUrl = $"https://dev.azure.com/{DefaultAzureDevOpsOrganization}/{DefaultAzureDevOpsProject}/_build/results?buildId={buildId}",
+			};
+		}
+
+		return null;
+	}
+
 	public async Task<MauiPrArtifactDownload> DownloadPackageArtifactAsync(
+		MauiPrBuildArtifact artifact,
+		string? hiveRoot = null,
+		CancellationToken cancellationToken = default)
+	{
+		var download = await StagePackageArtifactAsync(artifact, hiveRoot, cancellationToken);
+		try
+		{
+			await PromoteStagedPackageArtifactAsync(download, cancellationToken);
+			return download with { IsStaged = false, StagingArtifactPath = null };
+		}
+		catch
+		{
+			DiscardStagedPackageArtifact(download);
+			throw;
+		}
+	}
+
+	public async Task<MauiPrArtifactDownload> StagePackageArtifactAsync(
 		MauiPrBuildArtifact artifact,
 		string? hiveRoot = null,
 		CancellationToken cancellationToken = default)
@@ -130,7 +203,6 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 
 		var finalPaths = GetHivePaths(artifact, hiveRoot);
 		var stagingPaths = CreateStagingPaths(finalPaths);
-		await using var hiveLock = await AcquireHiveLockAsync(finalPaths.HivePath, cancellationToken);
 
 		if (Directory.Exists(stagingPaths.HivePath))
 			Directory.Delete(stagingPaths.HivePath, recursive: true);
@@ -151,7 +223,6 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 
 			var version = CopyPackagesAndFindVersion(stagingPaths.ExtractPath, stagingPaths.PackageSourcePath);
 			WriteMetadata(artifact, finalPaths, stagingPaths.MetadataPath, version);
-			ReplaceHive(stagingPaths.HivePath, finalPaths.HivePath);
 
 			return new MauiPrArtifactDownload
 			{
@@ -161,6 +232,8 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 				PackageSourcePath = finalPaths.PackageSourcePath,
 				MetadataPath = finalPaths.MetadataPath,
 				Version = version,
+				IsStaged = true,
+				StagingArtifactPath = stagingPaths.HivePath,
 			};
 		}
 
@@ -170,6 +243,29 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 				Directory.Delete(stagingPaths.HivePath, recursive: true);
 
 			throw;
+		}
+	}
+
+	public async Task PromoteStagedPackageArtifactAsync(MauiPrArtifactDownload download, CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(download);
+		if (!download.IsStaged || string.IsNullOrWhiteSpace(download.StagingArtifactPath))
+			return;
+		if (!Directory.Exists(download.StagingArtifactPath))
+			throw new InvalidOperationException($"Staged PR artifact hive no longer exists: {download.StagingArtifactPath}");
+
+		await using var hiveLock = await AcquireHiveLockAsync(download.ArtifactPath, cancellationToken);
+		ReplaceHive(download.StagingArtifactPath, download.ArtifactPath);
+	}
+
+	public void DiscardStagedPackageArtifact(MauiPrArtifactDownload download)
+	{
+		ArgumentNullException.ThrowIfNull(download);
+		if (download.IsStaged &&
+			!string.IsNullOrWhiteSpace(download.StagingArtifactPath) &&
+			Directory.Exists(download.StagingArtifactPath))
+		{
+			Directory.Delete(download.StagingArtifactPath, recursive: true);
 		}
 	}
 
@@ -564,6 +660,24 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 		return string.Equals(definitionName, MauiPrDefinitionName, StringComparison.OrdinalIgnoreCase);
 	}
 
+	static bool IsInProgressMauiPrBuild(JsonElement build)
+	{
+		var status = build.GetProperty("status").GetString();
+		if (!IsInProgressBuildStatus(status))
+			return false;
+
+		if (!build.TryGetProperty("definition", out var definition))
+			return false;
+
+		var definitionName = definition.GetProperty("name").GetString();
+		return string.Equals(definitionName, MauiPrDefinitionName, StringComparison.OrdinalIgnoreCase);
+	}
+
+	static bool IsInProgressBuildStatus(string? status) =>
+		string.Equals(status, "inProgress", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(status, "notStarted", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(status, "postponed", StringComparison.OrdinalIgnoreCase);
+
 	static bool IsRelevantMauiCheckName(string? name)
 	{
 		if (string.IsNullOrWhiteSpace(name))
@@ -589,12 +703,15 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 
 	static bool IsPathWithinDirectory(string path, string directory)
 	{
+		var comparison = OperatingSystem.IsWindows()
+			? StringComparison.OrdinalIgnoreCase
+			: StringComparison.Ordinal;
 		var normalizedDirectory = directory.EndsWith(Path.DirectorySeparatorChar)
 			? directory
 			: directory + Path.DirectorySeparatorChar;
 
-		return path.StartsWith(normalizedDirectory, StringComparison.Ordinal) ||
-			string.Equals(path, directory, StringComparison.Ordinal);
+		return path.StartsWith(normalizedDirectory, comparison) ||
+			string.Equals(path, directory, comparison);
 	}
 
 	static string CopyPackagesAndFindVersion(string extractPath, string packageSourcePath)
@@ -692,4 +809,5 @@ public sealed class MauiPrArtifactService : IMauiPrArtifactService
 	PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
 	WriteIndented = true)]
 [JsonSerializable(typeof(MauiPrArtifactMetadata))]
+[JsonSerializable(typeof(MauiPrBuildProgress))]
 internal sealed partial class MauiPrArtifactJsonContext : JsonSerializerContext;

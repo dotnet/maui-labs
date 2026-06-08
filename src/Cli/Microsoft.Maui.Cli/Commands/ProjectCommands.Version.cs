@@ -137,6 +137,10 @@ public static partial class ProjectCommands
 		{
 			Description = "MAUI hives root used for downloaded PR build packages. Defaults to ~/.maui/hives. --artifact-path is also accepted as an alias and has the same hive-root behavior.",
 		};
+		var targetFrameworkOption = new Option<string?>("--target-framework", "--framework", "-f")
+		{
+			Description = "Update project target frameworks to the specified netX.Y value, for example net10.0. Values like 10.0 are normalized to net10.0.",
+		};
 
 		var command = new Command("set", "Set the .NET MAUI version used by a project")
 		{
@@ -149,6 +153,7 @@ public static partial class ProjectCommands
 			sourceNameOption,
 			noRestoreOption,
 			hivePathOption,
+			targetFrameworkOption,
 		};
 
 		SetHandledAction(command, async (parseResult, cancellationToken) =>
@@ -168,6 +173,10 @@ public static partial class ProjectCommands
 			var source = parseResult.GetValue(sourceOption);
 			var sourceName = parseResult.GetValue(sourceNameOption) ?? ".NET MAUI Packages";
 			var hivePath = parseResult.GetValue(hivePathOption);
+			var targetFrameworkInput = parseResult.GetValue(targetFrameworkOption);
+			var targetFramework = string.IsNullOrWhiteSpace(targetFrameworkInput)
+				? null
+				: MauiProjectVersionService.NormalizeTargetFramework(targetFrameworkInput);
 			var sourceSpecified = parseResult.GetResult(sourceOption)?.Tokens.Count > 0;
 			var sourceNameSpecified = parseResult.GetResult(sourceNameOption)?.Tokens.Count > 0;
 
@@ -189,73 +198,149 @@ public static partial class ProjectCommands
 			if (!prNumber.HasValue && !string.IsNullOrWhiteSpace(hivePath))
 				throw new InvalidOperationException("--hive-path can only be used with --pr.");
 
+			var projectInfo = await projectService.GetVersionInfoAsync(projectPath, cancellationToken);
+			var selectionTargetFramework = targetFramework ?? projectInfo.TargetDotNetFramework;
+
 			string version;
 			string? sourceForConfig = source;
 			string sourceNameForConfig = sourceName;
 			MauiPrArtifactDownload? prDownload = null;
 			MauiPrBuildArtifact? prBuild = null;
+			MauiPrBuildProgress? inProgressBuild = null;
+			IMauiPrArtifactService? prArtifactService = null;
+			string? selectionMessage = null;
 			if (latest)
 			{
-				var latestStable = await feedService.GetLatestVersionAsync(MauiVersionChannel.Stable, includePrerelease: false, cancellationToken);
-				version = latestStable?.Version ?? throw new InvalidOperationException("Could not determine the latest stable MAUI version.");
+				var latestStable = await feedService.GetLatestVersionAsync(MauiVersionChannel.Stable, includePrerelease: false, selectionTargetFramework, cancellationToken);
+				version = latestStable?.Version ?? throw new InvalidOperationException(
+					selectionTargetFramework is null
+						? "Could not determine the latest stable MAUI version."
+						: $"Could not determine a stable MAUI version compatible with {selectionTargetFramework}.");
+				if (selectionTargetFramework is not null)
+					selectionMessage = $"Selected MAUI version {version} compatible with {selectionTargetFramework}.";
 			}
 			else if (latestNightly)
 			{
-				var latestNightlyVersion = await feedService.GetLatestVersionAsync(MauiVersionChannel.Nightly, includePrerelease: true, cancellationToken);
-				version = latestNightlyVersion?.Version ?? throw new InvalidOperationException("Could not determine the latest nightly MAUI version.");
+				var latestNightlyVersion = await feedService.GetLatestVersionAsync(MauiVersionChannel.Nightly, includePrerelease: true, selectionTargetFramework, cancellationToken);
+				version = latestNightlyVersion?.Version ?? throw new InvalidOperationException(
+					selectionTargetFramework is null
+						? "Could not determine the latest nightly MAUI version."
+						: $"Could not determine a nightly MAUI version compatible with {selectionTargetFramework}.");
 				sourceForConfig ??= feedService.GetFeedUrl(MauiVersionChannel.Nightly);
 				sourceNameForConfig = sourceName == ".NET MAUI Packages" ? ".NET MAUI Nightly" : sourceName;
+				if (selectionTargetFramework is not null)
+					selectionMessage = $"Selected MAUI version {version} compatible with {selectionTargetFramework}.";
 			}
 			else if (prNumber.HasValue)
 			{
-				var prArtifactService = Program.Services.GetRequiredService<IMauiPrArtifactService>();
-				prBuild = await prArtifactService.FindPackageArtifactAsync(prNumber.Value, cancellationToken);
+				prArtifactService = Program.Services.GetRequiredService<IMauiPrArtifactService>();
+				inProgressBuild = await prArtifactService.FindInProgressBuildAsync(prNumber.Value, cancellationToken);
+				try
+				{
+					prBuild = await prArtifactService.FindPackageArtifactAsync(prNumber.Value, cancellationToken);
+				}
+				catch (InvalidOperationException exception) when (inProgressBuild is not null)
+				{
+					throw new InvalidOperationException(
+						$"dotnet/maui PR #{prNumber.Value} has a build in progress ({inProgressBuild.Status}, build {inProgressBuild.BuildId}). " +
+						"Try again after it completes; no completed PackageArtifacts build is available yet.",
+						exception);
+				}
 				sourceNameForConfig = sourceNameSpecified ? sourceName : ".NET MAUI PR Build";
 
 				if (dryRun)
 				{
-					WritePrDryRunResult(formatter, parseResult, projectPath, prArtifactService, prBuild, hivePath, sourceNameForConfig);
+					WritePrDryRunResult(formatter, parseResult, projectPath, prArtifactService, prBuild, hivePath, sourceNameForConfig, inProgressBuild);
 					return 0;
 				}
 
 				if (!useJson)
+				{
+					if (inProgressBuild is not null)
+						formatter.WriteWarning($"dotnet/maui PR #{prNumber.Value} also has an in-progress build {inProgressBuild.BuildId} ({inProgressBuild.Status}); using the latest completed PackageArtifacts build.");
 					formatter.WriteInfo($"Found dotnet/maui PR #{prNumber.Value} build {prBuild.BuildId} ({prBuild.BuildNumber}).");
+				}
 
-				prDownload = await prArtifactService.DownloadPackageArtifactAsync(prBuild, hivePath, cancellationToken);
+				prDownload = await prArtifactService.StagePackageArtifactAsync(prBuild, hivePath, cancellationToken);
 				version = prDownload.Version;
 				sourceForConfig = prDownload.PackageSourcePath;
-
-				if (!useJson)
-					formatter.WriteInfo($"Downloaded PR packages to {prDownload.PackageSourcePath}.");
 			}
 			else
 			{
 				version = explicitVersion!;
 			}
 
-			var versionResult = await projectService.SetVersionAsync(projectPath, version, dryRun: true, cancellationToken);
-			var changes = new List<MauiProjectVersionChange>();
-			if (nugetConfig || prDownload is not null)
+			try
 			{
-				if (string.IsNullOrWhiteSpace(sourceForConfig))
-					throw new InvalidOperationException("--nuget-config requires --source unless --latest-nightly is used.");
-				var nugetConfigChange = await projectService.EnsureNuGetSourceAsync(
-					projectPath, sourceNameForConfig, sourceForConfig, dryRun, cancellationToken);
-				if (nugetConfigChange is not null)
-					changes.Add(nugetConfigChange);
+				EnsureTargetFrameworkCompatibility(version, projectInfo, targetFramework);
+				MauiProjectVersionUpdateResult? targetFrameworkResult = null;
+				if (targetFramework is not null)
+					targetFrameworkResult = await projectService.SetTargetFrameworkAsync(projectPath, targetFramework, dryRun: true, cancellationToken);
+
+				if (!useJson && selectionMessage is not null)
+					formatter.WriteInfo(selectionMessage);
+
+				var versionResult = await projectService.SetVersionAsync(projectPath, version, dryRun: true, cancellationToken);
+				MauiProjectVersionChange? nugetConfigChange = null;
+				var shouldUpdateNuGetConfig = nugetConfig || prDownload is not null;
+				if (shouldUpdateNuGetConfig)
+				{
+					if (string.IsNullOrWhiteSpace(sourceForConfig))
+						throw new InvalidOperationException("--nuget-config requires --source unless --latest-nightly is used.");
+					nugetConfigChange = await projectService.EnsureNuGetSourceAsync(
+						projectPath, sourceNameForConfig, sourceForConfig, dryRun: true, cancellationToken);
+				}
+
+				if (prDownload?.IsStaged == true && prArtifactService is not null)
+				{
+					if (dryRun)
+					{
+						prArtifactService.DiscardStagedPackageArtifact(prDownload);
+					}
+					else
+					{
+						await prArtifactService.PromoteStagedPackageArtifactAsync(prDownload, cancellationToken);
+						prDownload = prDownload with { IsStaged = false, StagingArtifactPath = null };
+						if (!useJson)
+							formatter.WriteInfo($"Downloaded PR packages to {prDownload.PackageSourcePath}.");
+					}
+				}
+
+				var changes = new List<MauiProjectVersionChange>();
+				if (targetFrameworkResult is not null)
+				{
+					var appliedTargetFrameworkResult = dryRun
+						? targetFrameworkResult
+						: await projectService.SetTargetFrameworkAsync(projectPath, targetFramework!, dryRun: false, cancellationToken);
+					changes.AddRange(appliedTargetFrameworkResult.Changes);
+				}
+				if (shouldUpdateNuGetConfig)
+				{
+					var appliedNuGetConfigChange = dryRun
+						? nugetConfigChange
+						: await projectService.EnsureNuGetSourceAsync(projectPath, sourceNameForConfig, sourceForConfig!, dryRun: false, cancellationToken);
+					if (appliedNuGetConfigChange is not null)
+						changes.Add(appliedNuGetConfigChange);
+				}
+
+				var result = dryRun
+					? versionResult
+					: await projectService.SetVersionAsync(projectPath, version, dryRun: false, cancellationToken);
+				changes.AddRange(result.Changes);
+
+				MauiProjectRestoreResult? restoreResult = null;
+				if (!dryRun && !noRestore && changes.Count > 0)
+					restoreResult = await projectService.RestoreAsync(projectPath, cancellationToken);
+
+				WriteUpdateResult(formatter, parseResult, result with { Changes = changes }, restoreResult, prDownload, prDownload is null ? null : sourceNameForConfig, targetFramework, inProgressBuild);
+				return 0;
 			}
-
-			var result = dryRun
-				? versionResult
-				: await projectService.SetVersionAsync(projectPath, version, dryRun: false, cancellationToken);
-			changes.AddRange(result.Changes);
-
-			MauiProjectRestoreResult? restoreResult = null;
-			if (!dryRun && !noRestore && changes.Count > 0)
-				restoreResult = await projectService.RestoreAsync(projectPath, cancellationToken);
-
-			WriteUpdateResult(formatter, parseResult, result with { Changes = changes }, restoreResult, prDownload, prDownload is null ? null : sourceNameForConfig);
-			return 0;
+			catch
+			{
+				if (prDownload?.IsStaged == true && prArtifactService is not null)
+					prArtifactService.DiscardStagedPackageArtifact(prDownload);
+				throw;
+			}
 		});
 
 		return command;
@@ -361,6 +446,46 @@ public static partial class ProjectCommands
 			_ => throw new InvalidOperationException($"Invalid channel '{channel}'. Valid values: stable, nightly."),
 		};
 
+	static void EnsureTargetFrameworkCompatibility(
+		string version,
+		MauiProjectVersionInfo projectInfo,
+		string? requestedTargetFramework)
+	{
+		var requiredTargetFramework = MauiProjectVersionService.TryGetRequiredTargetFramework(version);
+		if (requiredTargetFramework is null)
+			return;
+
+		if (requestedTargetFramework is not null)
+		{
+			if (!string.Equals(requestedTargetFramework, requiredTargetFramework, StringComparison.OrdinalIgnoreCase))
+			{
+				throw new InvalidOperationException(
+					$"MAUI version {version} requires {requiredTargetFramework}, but --framework was {requestedTargetFramework}.");
+			}
+
+			return;
+		}
+
+		if (projectInfo.TargetDotNetFramework is null)
+		{
+			if (projectInfo.TargetFrameworks.Count > 0)
+			{
+				throw new InvalidOperationException(
+					$"MAUI version {version} requires {requiredTargetFramework}, but {Path.GetFileName(projectInfo.ProjectPath)} targets multiple or non-literal frameworks. " +
+					$"Rerun with --framework {requiredTargetFramework} to update project target frameworks.");
+			}
+
+			return;
+		}
+
+		if (!string.Equals(projectInfo.TargetDotNetFramework, requiredTargetFramework, StringComparison.OrdinalIgnoreCase))
+		{
+			throw new InvalidOperationException(
+				$"MAUI version {version} requires {requiredTargetFramework}, but {Path.GetFileName(projectInfo.ProjectPath)} targets {projectInfo.TargetDotNetFramework}. " +
+				$"Rerun with --framework {requiredTargetFramework} to update project target frameworks.");
+		}
+	}
+
 	static void WriteProjectVersionInfo(IOutputFormatter formatter, MauiProjectVersionInfo info)
 	{
 		formatter.WriteInfo($"Project: {Path.GetFileName(info.ProjectPath)}");
@@ -370,6 +495,8 @@ public static partial class ProjectCommands
 			formatter.WriteInfo($"MauiVersion property: {info.MauiVersion}");
 		if (info.WorkloadVersion is not null)
 			formatter.WriteInfo($"Installed workload version: {info.WorkloadVersion}");
+		if (info.TargetFrameworks.Count > 0)
+			formatter.WriteInfo($"Target frameworks: {string.Join("; ", info.TargetFrameworks)}");
 		if (info.EffectiveVersion is not null)
 			formatter.WriteSuccess($"Effective MAUI version: {info.EffectiveVersion}");
 		else
@@ -407,7 +534,9 @@ public static partial class ProjectCommands
 		MauiProjectVersionUpdateResult result,
 		MauiProjectRestoreResult? restoreResult,
 		MauiPrArtifactDownload? prDownload = null,
-		string? prSourceName = null)
+		string? prSourceName = null,
+		string? targetFramework = null,
+		MauiPrBuildProgress? inProgressBuild = null)
 	{
 		if (parseResult.GetValue(GlobalOptions.JsonOption))
 		{
@@ -428,6 +557,11 @@ public static partial class ProjectCommands
 				PackageSourcePath = prDownload?.PackageSourcePath,
 				MetadataPath = prDownload?.MetadataPath,
 				SourceName = prSourceName,
+				TargetFramework = targetFramework,
+				BuildInProgress = inProgressBuild is not null,
+				InProgressBuildId = inProgressBuild?.BuildId,
+				InProgressBuildNumber = inProgressBuild?.BuildNumber,
+				InProgressBuildUrl = inProgressBuild?.BuildUrl,
 			});
 			return;
 		}
@@ -461,7 +595,8 @@ public static partial class ProjectCommands
 		IMauiPrArtifactService prArtifactService,
 		MauiPrBuildArtifact build,
 		string? hiveRoot,
-		string sourceName)
+		string sourceName,
+		MauiPrBuildProgress? inProgressBuild)
 	{
 		var paths = prArtifactService.GetHivePaths(build, hiveRoot);
 
@@ -481,13 +616,20 @@ public static partial class ProjectCommands
 				PackageSourcePath = paths.PackageSourcePath,
 				MetadataPath = paths.MetadataPath,
 				SourceName = sourceName,
+				BuildInProgress = inProgressBuild is not null,
+				InProgressBuildId = inProgressBuild?.BuildId,
+				InProgressBuildNumber = inProgressBuild?.BuildNumber,
+				InProgressBuildUrl = inProgressBuild?.BuildUrl,
 			});
 			return;
 		}
 
+		if (inProgressBuild is not null)
+			formatter.WriteWarning($"dotnet/maui PR #{build.PullRequest} also has an in-progress build {inProgressBuild.BuildId} ({inProgressBuild.Status}); this dry run uses the latest completed PackageArtifacts build.");
 		formatter.WriteInfo($"[dry-run] Found dotnet/maui PR #{build.PullRequest} build {build.BuildId} ({build.BuildNumber}).");
 		formatter.WriteInfo($"[dry-run] Would download {build.ArtifactName} into {paths.HivePath} and add NuGet source '{sourceName}'.");
 		formatter.WriteInfo("[dry-run] Would set MAUI version to the Microsoft.Maui.Controls version discovered in the downloaded artifact.");
+		formatter.WriteInfo("[dry-run] PR artifact target framework compatibility is validated after downloading the package version during a real run.");
 	}
 }
 
@@ -516,4 +658,9 @@ public sealed record MauiProjectVersionCommandResult
 	public string? PackageSourcePath { get; init; }
 	public string? MetadataPath { get; init; }
 	public string? SourceName { get; init; }
+	public string? TargetFramework { get; init; }
+	public bool BuildInProgress { get; init; }
+	public int? InProgressBuildId { get; init; }
+	public string? InProgressBuildNumber { get; init; }
+	public string? InProgressBuildUrl { get; init; }
 }
