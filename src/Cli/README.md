@@ -42,6 +42,10 @@ maui project version list --channel nightly --take 20
 # Pin a specific version and restore
 maui project version set 10.0.60
 
+# Try packages from a dotnet/maui pull request build
+maui project version set --pr 24888
+maui project version set --pr 24888 --hive-path ~/.maui/hives
+
 # Use the latest stable or nightly package version
 maui project version set --latest
 maui project version set --latest-nightly --nuget-config
@@ -93,7 +97,7 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui device list` | List connected devices and emulators |
 | `maui project version` | Show the effective .NET MAUI version for a project |
 | `maui project version list` | List available .NET MAUI package versions |
-| `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
+| `maui project version set` | Pin a project to a specific, latest stable, nightly, dotnet/maui PR build, or custom-source MAUI version |
 | `maui project version use-workload` | Use the installed MAUI workload version instead of a pinned project version |
 | `maui version` | Display version information |
 | **Android** | |
@@ -142,6 +146,12 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
+
+PR build packages are downloaded into a managed MAUI hive under
+`~/.maui/hives/dotnet-maui/pr-<number>/build-<build-id>/` by default. The
+project `NuGet.config` is pointed at that hive's `packages/` folder. Use
+`--hive-path` to choose a different hives root; `--artifact-path` is also
+accepted as an alias with the same hive-root behavior.
 
 DevFlow file commands can use local files directly:
 

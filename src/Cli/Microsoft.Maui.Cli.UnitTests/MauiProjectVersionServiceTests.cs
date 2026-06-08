@@ -395,6 +395,32 @@ public class MauiProjectVersionServiceTests
 	}
 
 	[Fact]
+	public async Task EnsureNuGetSourceAsync_AbsoluteLocalPath_AddsPackageSource()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var packageSourcePath = Path.Combine(directory.Path, "hives", "dotnet-maui", "pr-1", "build-2", "packages");
+		Directory.CreateDirectory(packageSourcePath);
+		var service = CreateService("10.0.41");
+
+		var change = await service.EnsureNuGetSourceAsync(
+			projectPath,
+			".NET MAUI PR Build",
+			packageSourcePath,
+			dryRun: false);
+
+		Assert.NotNull(change);
+		Assert.Equal(packageSourcePath, change.NewValue);
+		Assert.Contains(packageSourcePath, File.ReadAllText(Path.Combine(directory.Path, "NuGet.config")));
+	}
+
+	[Fact]
 	public void DiscoverProjectFile_MultipleProjects_ReturnsNull()
 	{
 		using var directory = TemporaryDirectory.Create();

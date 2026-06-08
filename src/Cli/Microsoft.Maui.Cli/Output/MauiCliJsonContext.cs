@@ -57,6 +57,8 @@ namespace Microsoft.Maui.Cli.Output;
 [JsonSerializable(typeof(MauiProjectVersionCommandResult))]
 [JsonSerializable(typeof(MauiProjectVersionInfo))]
 [JsonSerializable(typeof(MauiVersionListResult))]
+[JsonSerializable(typeof(MauiPrBuildArtifact))]
+[JsonSerializable(typeof(MauiPrArtifactDownload))]
 [JsonSerializable(typeof(SimulatorCreateResult))]
 [JsonSerializable(typeof(SimulatorEraseResult))]
 [JsonSerializable(typeof(SimulatorAppResult))]

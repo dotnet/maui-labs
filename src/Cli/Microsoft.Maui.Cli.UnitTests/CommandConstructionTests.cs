@@ -30,6 +30,10 @@ public class CommandConstructionTests
 		Assert.Contains(versionCommand.Subcommands, command => command.Name == "list");
 		Assert.Contains(versionCommand.Subcommands, command => command.Name == "set");
 		Assert.Contains(versionCommand.Subcommands, command => command.Name == "use-workload");
+		var setCommand = Assert.Single(versionCommand.Subcommands, command => command.Name == "set");
+		Assert.Contains(setCommand.Options, option => option.Name == "--pr");
+		var hivePathOption = Assert.Single(setCommand.Options, option => option.Name == "--hive-path");
+		Assert.Contains("--artifact-path", hivePathOption.Aliases);
 
 		var showCommand = Assert.Single(versionCommand.Subcommands, command => command.Name == "show");
 		Assert.Contains("check", showCommand.Aliases);

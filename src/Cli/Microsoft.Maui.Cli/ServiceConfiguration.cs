@@ -44,6 +44,10 @@ public static class ServiceConfiguration
 		services.AddSingleton<HttpClient>();
 		services.AddSingleton<IMauiVersionFeedService, MauiVersionFeedService>();
 		services.AddSingleton<IMauiProjectVersionService, MauiProjectVersionService>();
+		services.AddSingleton<IMauiPrArtifactService>(_ => new MauiPrArtifactService(new HttpClient
+		{
+			Timeout = Timeout.InfiniteTimeSpan,
+		}));
 
 		// DevFlow output
 		services.AddSingleton<IDevFlowOutputWriter, DevFlowOutputWriter>();
@@ -64,7 +68,8 @@ public static class ServiceConfiguration
 		IDeviceManager? deviceManager = null,
 		IDevFlowOutputWriter? devFlowOutputWriter = null,
 		IMauiVersionFeedService? mauiVersionFeedService = null,
-		IMauiProjectVersionService? mauiProjectVersionService = null)
+		IMauiProjectVersionService? mauiProjectVersionService = null,
+		IMauiPrArtifactService? mauiPrArtifactService = null)
 	{
 		var services = new ServiceCollection();
 
@@ -110,6 +115,14 @@ public static class ServiceConfiguration
 			services.AddSingleton(mauiProjectVersionService);
 		else
 			services.AddSingleton<IMauiProjectVersionService, MauiProjectVersionService>();
+
+		if (mauiPrArtifactService != null)
+			services.AddSingleton(mauiPrArtifactService);
+		else
+			services.AddSingleton<IMauiPrArtifactService>(_ => new MauiPrArtifactService(new HttpClient
+			{
+				Timeout = Timeout.InfiniteTimeSpan,
+			}));
 
 		return services.BuildServiceProvider();
 	}

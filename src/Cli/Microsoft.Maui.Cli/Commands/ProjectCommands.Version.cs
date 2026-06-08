@@ -101,7 +101,7 @@ public static partial class ProjectCommands
 	{
 		var versionArgument = new Argument<string?>("version")
 		{
-			Description = "Specific .NET MAUI version to use. Omit when using --latest or --latest-nightly.",
+			Description = "Specific .NET MAUI version to use. Omit when using --latest, --latest-nightly, or --pr.",
 			Arity = ArgumentArity.ZeroOrOne,
 		};
 		var latestOption = new Option<bool>("--latest")
@@ -112,13 +112,17 @@ public static partial class ProjectCommands
 		{
 			Description = "Set the project to the latest version from the MAUI nightly feed.",
 		};
+		var prOption = new Option<int?>("--pr", "--pull-request")
+		{
+			Description = "Set the project to the package version produced by a dotnet/maui pull request build.",
+		};
 		var nugetConfigOption = new Option<bool>("--nuget-config")
 		{
 			Description = "Add or update a NuGet.config source for the selected feed.",
 		};
 		var sourceOption = new Option<string>("--source")
 		{
-			Description = "NuGet v3 source URL to add to NuGet.config, useful for PR or custom builds.",
+			Description = "NuGet v3 source URL to add to NuGet.config, useful for custom builds.",
 		};
 		var sourceNameOption = new Option<string>("--source-name")
 		{
@@ -129,21 +133,28 @@ public static partial class ProjectCommands
 		{
 			Description = "Do not run dotnet restore after updating files.",
 		};
+		var hivePathOption = new Option<string?>("--hive-path", "--artifact-path")
+		{
+			Description = "MAUI hives root used for downloaded PR build packages. Defaults to ~/.maui/hives. --artifact-path is also accepted as an alias and has the same hive-root behavior.",
+		};
 
 		var command = new Command("set", "Set the .NET MAUI version used by a project")
 		{
 			versionArgument,
 			latestOption,
 			latestNightlyOption,
+			prOption,
 			nugetConfigOption,
 			sourceOption,
 			sourceNameOption,
 			noRestoreOption,
+			hivePathOption,
 		};
 
 		SetHandledAction(command, async (parseResult, cancellationToken) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var dryRun = Program.IsDryRun(parseResult);
 			var projectService = Program.Services.GetRequiredService<IMauiProjectVersionService>();
 			var feedService = Program.Services.GetRequiredService<IMauiVersionFeedService>();
@@ -151,24 +162,38 @@ public static partial class ProjectCommands
 			var explicitVersion = parseResult.GetValue(versionArgument);
 			var latest = parseResult.GetValue(latestOption);
 			var latestNightly = parseResult.GetValue(latestNightlyOption);
+			var prNumber = parseResult.GetValue(prOption);
 			var noRestore = parseResult.GetValue(noRestoreOption);
 			var nugetConfig = parseResult.GetValue(nugetConfigOption);
 			var source = parseResult.GetValue(sourceOption);
 			var sourceName = parseResult.GetValue(sourceNameOption) ?? ".NET MAUI Packages";
+			var hivePath = parseResult.GetValue(hivePathOption);
 			var sourceSpecified = parseResult.GetResult(sourceOption)?.Tokens.Count > 0;
 			var sourceNameSpecified = parseResult.GetResult(sourceNameOption)?.Tokens.Count > 0;
 
-			var sourceCount = (string.IsNullOrWhiteSpace(explicitVersion) ? 0 : 1) + (latest ? 1 : 0) + (latestNightly ? 1 : 0);
+			var sourceCount =
+				(string.IsNullOrWhiteSpace(explicitVersion) ? 0 : 1) +
+				(latest ? 1 : 0) +
+				(latestNightly ? 1 : 0) +
+				(prNumber.HasValue ? 1 : 0);
 			if (sourceCount == 0)
-				throw new InvalidOperationException("Specify a version, --latest, or --latest-nightly.");
+				throw new InvalidOperationException("Specify a version, --latest, --latest-nightly, or --pr.");
 			if (sourceCount > 1)
-				throw new InvalidOperationException("Specify only one of version, --latest, or --latest-nightly.");
-			if (!nugetConfig && (sourceSpecified || sourceNameSpecified))
+				throw new InvalidOperationException("Specify only one of version, --latest, --latest-nightly, or --pr.");
+			if (prNumber.HasValue && prNumber.Value <= 0)
+				throw new InvalidOperationException("--pr must be a positive pull request number.");
+			if (prNumber.HasValue && sourceSpecified)
+				throw new InvalidOperationException("--pr downloads PackageArtifacts and cannot be combined with --source.");
+			if (!nugetConfig && !prNumber.HasValue && (sourceSpecified || sourceNameSpecified))
 				throw new InvalidOperationException("--source and --source-name require --nuget-config.");
+			if (!prNumber.HasValue && !string.IsNullOrWhiteSpace(hivePath))
+				throw new InvalidOperationException("--hive-path can only be used with --pr.");
 
 			string version;
 			string? sourceForConfig = source;
 			string sourceNameForConfig = sourceName;
+			MauiPrArtifactDownload? prDownload = null;
+			MauiPrBuildArtifact? prBuild = null;
 			if (latest)
 			{
 				var latestStable = await feedService.GetLatestVersionAsync(MauiVersionChannel.Stable, includePrerelease: false, cancellationToken);
@@ -181,6 +206,28 @@ public static partial class ProjectCommands
 				sourceForConfig ??= feedService.GetFeedUrl(MauiVersionChannel.Nightly);
 				sourceNameForConfig = sourceName == ".NET MAUI Packages" ? ".NET MAUI Nightly" : sourceName;
 			}
+			else if (prNumber.HasValue)
+			{
+				var prArtifactService = Program.Services.GetRequiredService<IMauiPrArtifactService>();
+				prBuild = await prArtifactService.FindPackageArtifactAsync(prNumber.Value, cancellationToken);
+				sourceNameForConfig = sourceNameSpecified ? sourceName : ".NET MAUI PR Build";
+
+				if (dryRun)
+				{
+					WritePrDryRunResult(formatter, parseResult, projectPath, prArtifactService, prBuild, hivePath, sourceNameForConfig);
+					return 0;
+				}
+
+				if (!useJson)
+					formatter.WriteInfo($"Found dotnet/maui PR #{prNumber.Value} build {prBuild.BuildId} ({prBuild.BuildNumber}).");
+
+				prDownload = await prArtifactService.DownloadPackageArtifactAsync(prBuild, hivePath, cancellationToken);
+				version = prDownload.Version;
+				sourceForConfig = prDownload.PackageSourcePath;
+
+				if (!useJson)
+					formatter.WriteInfo($"Downloaded PR packages to {prDownload.PackageSourcePath}.");
+			}
 			else
 			{
 				version = explicitVersion!;
@@ -188,7 +235,7 @@ public static partial class ProjectCommands
 
 			var versionResult = await projectService.SetVersionAsync(projectPath, version, dryRun: true, cancellationToken);
 			var changes = new List<MauiProjectVersionChange>();
-			if (nugetConfig)
+			if (nugetConfig || prDownload is not null)
 			{
 				if (string.IsNullOrWhiteSpace(sourceForConfig))
 					throw new InvalidOperationException("--nuget-config requires --source unless --latest-nightly is used.");
@@ -207,7 +254,7 @@ public static partial class ProjectCommands
 			if (!dryRun && !noRestore && changes.Count > 0)
 				restoreResult = await projectService.RestoreAsync(projectPath, cancellationToken);
 
-			WriteUpdateResult(formatter, parseResult, result with { Changes = changes }, restoreResult);
+			WriteUpdateResult(formatter, parseResult, result with { Changes = changes }, restoreResult, prDownload, prDownload is null ? null : sourceNameForConfig);
 			return 0;
 		});
 
@@ -358,7 +405,9 @@ public static partial class ProjectCommands
 		IOutputFormatter formatter,
 		ParseResult parseResult,
 		MauiProjectVersionUpdateResult result,
-		MauiProjectRestoreResult? restoreResult)
+		MauiProjectRestoreResult? restoreResult,
+		MauiPrArtifactDownload? prDownload = null,
+		string? prSourceName = null)
 	{
 		if (parseResult.GetValue(GlobalOptions.JsonOption))
 		{
@@ -370,6 +419,15 @@ public static partial class ProjectCommands
 				Changed = result.Changed,
 				Changes = result.Changes,
 				Restored = restoreResult?.Success,
+				PullRequest = prDownload?.Build.PullRequest,
+				BuildId = prDownload?.Build.BuildId,
+				BuildNumber = prDownload?.Build.BuildNumber,
+				BuildUrl = prDownload?.Build.BuildUrl,
+				HiveRoot = prDownload?.HiveRoot,
+				ArtifactPath = prDownload?.ArtifactPath,
+				PackageSourcePath = prDownload?.PackageSourcePath,
+				MetadataPath = prDownload?.MetadataPath,
+				SourceName = prSourceName,
 			});
 			return;
 		}
@@ -395,6 +453,42 @@ public static partial class ProjectCommands
 		else if (!result.DryRun)
 			formatter.WriteSuccess($"Updated MAUI version to {result.Version}.");
 	}
+
+	static void WritePrDryRunResult(
+		IOutputFormatter formatter,
+		ParseResult parseResult,
+		string projectPath,
+		IMauiPrArtifactService prArtifactService,
+		MauiPrBuildArtifact build,
+		string? hiveRoot,
+		string sourceName)
+	{
+		var paths = prArtifactService.GetHivePaths(build, hiveRoot);
+
+		if (parseResult.GetValue(GlobalOptions.JsonOption))
+		{
+			formatter.Write(new MauiProjectVersionCommandResult
+			{
+				ProjectPath = projectPath,
+				DryRun = true,
+				Changed = false,
+				PullRequest = build.PullRequest,
+				BuildId = build.BuildId,
+				BuildNumber = build.BuildNumber,
+				BuildUrl = build.BuildUrl,
+				HiveRoot = paths.HiveRoot,
+				ArtifactPath = paths.HivePath,
+				PackageSourcePath = paths.PackageSourcePath,
+				MetadataPath = paths.MetadataPath,
+				SourceName = sourceName,
+			});
+			return;
+		}
+
+		formatter.WriteInfo($"[dry-run] Found dotnet/maui PR #{build.PullRequest} build {build.BuildId} ({build.BuildNumber}).");
+		formatter.WriteInfo($"[dry-run] Would download {build.ArtifactName} into {paths.HivePath} and add NuGet source '{sourceName}'.");
+		formatter.WriteInfo("[dry-run] Would set MAUI version to the Microsoft.Maui.Controls version discovered in the downloaded artifact.");
+	}
 }
 
 public sealed record MauiVersionListResult
@@ -408,9 +502,18 @@ public sealed record MauiVersionListResult
 public sealed record MauiProjectVersionCommandResult
 {
 	public required string ProjectPath { get; init; }
-	public required string Version { get; init; }
+	public string? Version { get; init; }
 	public bool DryRun { get; init; }
 	public bool Changed { get; init; }
 	public bool? Restored { get; init; }
 	public List<MauiProjectVersionChange> Changes { get; init; } = [];
+	public int? PullRequest { get; init; }
+	public int? BuildId { get; init; }
+	public string? BuildNumber { get; init; }
+	public string? BuildUrl { get; init; }
+	public string? HiveRoot { get; init; }
+	public string? ArtifactPath { get; init; }
+	public string? PackageSourcePath { get; init; }
+	public string? MetadataPath { get; init; }
+	public string? SourceName { get; init; }
 }
