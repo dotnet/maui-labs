@@ -464,7 +464,9 @@ public static partial class AndroidCommands
 						return 0;
 					}
 
-					formatter.WriteWarning("Licenses were not accepted");
+					formatter.WriteWarning(exitCode != 0
+						? $"License acceptance exited with code {exitCode}"
+						: "Licenses were not accepted");
 					return exitCode != 0 ? exitCode : 1;
 				}
 				return 0;
