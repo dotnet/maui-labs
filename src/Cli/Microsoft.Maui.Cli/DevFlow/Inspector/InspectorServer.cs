@@ -26,6 +26,7 @@ public sealed class InspectorServer : IDisposable
     // (which never call Start() to create _cts) still see shutdown.
     private readonly CancellationTokenSource _lifetimeCts = new();
     private byte[]? _cachedScreenshot;
+    private string? _cachedScreenshotElementId;
     private DateTime _screenshotCacheTime;
     private string? _rootPageId;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
@@ -184,6 +185,21 @@ public sealed class InspectorServer : IDisposable
                     "Agent not reachable", CancellationToken.None);
             }
             catch { }
+            return;
+        }
+
+        // Send the same subscribe handshake the standalone proxy uses
+        // (HandleWebSocketProxy below). The agent only emits events after
+        // it has seen a subscribe frame, so without this the broker-hosted
+        // relay would silently deliver no events to the browser.
+        try
+        {
+            var subscribe = Encoding.UTF8.GetBytes("{\"type\":\"subscribe\",\"data\":{\"events\":[\"all\"]}}");
+            await agentWs.SendAsync(subscribe, System.Net.WebSockets.WebSocketMessageType.Text, true, ct);
+        }
+        catch
+        {
+            try { await clientWs.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.InternalServerError, "Subscribe failed", CancellationToken.None); } catch { }
             return;
         }
 
@@ -442,7 +458,14 @@ public sealed class InspectorServer : IDisposable
             return (0, 0);
         int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
         int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
-        if (w < 0 || h < 0) return (0, 0);
+        // Reject negative dimensions (PNG IHDR width/height are 4-byte big-endian
+        // unsigned, so a negative int here means bit 31 was set — invalid per spec)
+        // and absurdly large positive dimensions. The inspector feeds these values
+        // into CSS sizing, so an attacker-controlled or corrupt PNG could otherwise
+        // produce a multi-million-pixel viewport. 32768 is well above any real
+        // device resolution and matches common platform texture-size limits.
+        const int MaxDimension = 32768;
+        if (w <= 0 || h <= 0 || w > MaxDimension || h > MaxDimension) return (0, 0);
         return (w, h);
     }
 
@@ -473,7 +496,13 @@ public sealed class InspectorServer : IDisposable
     {
         lock (_cacheLock)
         {
-            if (_cachedScreenshot != null && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
+            // Cache key must include elementId — a cached full-page screenshot
+            // is not a valid response for a per-element request and vice versa.
+            // Without this check, callers that vary elementId would receive
+            // whichever shot happened to be cached first within the 200ms window.
+            if (_cachedScreenshot != null
+                && string.Equals(_cachedScreenshotElementId, elementId, StringComparison.Ordinal)
+                && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
                 return _cachedScreenshot;
         }
 
@@ -481,6 +510,7 @@ public sealed class InspectorServer : IDisposable
         lock (_cacheLock)
         {
             _cachedScreenshot = fresh;
+            _cachedScreenshotElementId = elementId;
             _screenshotCacheTime = DateTime.UtcNow;
         }
         return fresh;
