@@ -569,7 +569,7 @@ public class AndroidCommandsTests
 	}
 
 	[Fact]
-	public async Task AcceptLicensesCommand_Json_ReturnsZero_WhenSdkNotFound()
+	public async Task AcceptLicensesCommand_Json_ReturnsOne_WhenSdkNotFound()
 	{
 		// When sdkmanager is not found the command returns 1 (sdk_not_found).
 		var exitCode = await InvokeAcceptLicensesJsonAsync(f =>
@@ -579,5 +579,24 @@ public class AndroidCommandsTests
 		});
 
 		Assert.Equal(1, exitCode);
+	}
+
+	// --- Handler-level tests for 'android install' interactive license decline ---
+	// Same sdkmanager exit-0-on-decline bug exists in the install flow.
+
+	[Fact]
+	public async Task InstallCommand_Json_FailsFast_WhenLicensesDeclinedInteractively()
+	{
+		// SDK is installed but licenses not accepted — simulates user typing 'n'.
+		// The install flow should abort with exit code 1, not proceed.
+		var (exitCode, fake) = await InvokeAndroidInstallJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.SdkPath = Path.Combine(Path.GetTempPath(), "sdk-test");
+			f.LicensesAccepted = false;
+		});
+
+		Assert.Equal(1, exitCode);
+		Assert.Empty(fake.InstallCalls);
 	}
 }
