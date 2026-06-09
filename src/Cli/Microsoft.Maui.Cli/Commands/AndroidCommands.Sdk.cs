@@ -454,7 +454,7 @@ public static partial class AndroidCommands
 					formatter.WriteInfo("Starting interactive license acceptance...");
 					formatter.WriteInfo("Review each license and type 'y' to accept.\n");
 
-					await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
+					_ = await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
 
 					// sdkmanager exits 0 even when the user declines; trust only the on-disk license file.
 					var interactiveLicensesAccepted = await androidProvider.AreLicensesAcceptedAsync(cancellationToken);
