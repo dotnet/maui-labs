@@ -98,6 +98,9 @@ public static class SimulatorEnumParsing
 	public static bool TryParseDataNetwork(string value, out SimulatorDataNetwork network)
 	{
 		network = SimulatorDataNetwork.Wifi;
+		// Note: Normalize() strips hyphens but preserves '+', so "lte-a" → "ltea" but
+		// "lte+" stays "lte+". We need explicit cases for both the '+' spelling and
+		// the expanded "lteplus"/"5gplus" forms.
 		switch (Normalize(value))
 		{
 			case "wifi": network = SimulatorDataNetwork.Wifi; return true;

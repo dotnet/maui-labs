@@ -563,6 +563,15 @@ public class AppleSimulatorCommandsTests
 	}
 
 	[Fact]
+	public void AppearanceCommand_HasGetLightDarkSubcommands()
+	{
+		var appearance = Simulator().Subcommands.First(c => c.Name == "appearance");
+		Assert.Contains(appearance.Subcommands, c => c.Name == "get");
+		Assert.Contains(appearance.Subcommands, c => c.Name == "light");
+		Assert.Contains(appearance.Subcommands, c => c.Name == "dark");
+	}
+
+	[Fact]
 	public void LocationCommand_HasSetClearRunSubcommands()
 	{
 		var location = Simulator().Subcommands.First(c => c.Name == "location");
@@ -778,17 +787,18 @@ public class AppleSimulatorCommandsTests
 	}
 
 	[Fact]
-	public async Task AppearanceSetCommand_InvalidMode_ReturnsInvalidArgument()
+	public async Task AppearanceSetCommand_InvalidMode_ReturnsError()
 	{
 		if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
 			return; // xUnit v2 lacks Assert.Skip — shows as "passed" on non-macOS
 
+		// "sepia" is not a valid subcommand (only "get", "light", "dark" are),
+		// so System.CommandLine returns an error without reaching the handler.
 		var (exitCode, stdout, _, fake) = await InvokeSimulatorCommandAsync(
 			f => f.Simulators.Add(new SimulatorInfo { Name = "iPhone 16", Udid = "SIM-APP", IsAvailable = true }),
 			"apple", "simulator", "appearance", "sepia", "SIM-APP", "--json");
 
-		Assert.Equal(1, exitCode);
-		Assert.Contains("E1004", stdout);
+		Assert.NotEqual(0, exitCode);
 		Assert.Empty(fake.SetAppearanceCalls);
 	}
 

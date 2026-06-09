@@ -799,11 +799,12 @@ public static class AppleCommands
 
 	static Command CreateSimulatorAppearanceCommand()
 	{
-		var modeArg = new Argument<string>("mode") { Description = "Appearance to set ('light' or 'dark') or 'get' to read the current value" };
-		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var appearanceCommand = new Command("appearance", "Get or set the simulator UI appearance (light/dark)");
 
-		var appearanceCommand = new Command("appearance", "Get or set the simulator UI appearance (light/dark)") { modeArg, udidArg };
-		appearanceCommand.SetAction((ParseResult parseResult) =>
+		// get <udid>
+		var getUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+		var getCommand = new Command("get", "Read the current appearance") { getUdidArg };
+		getCommand.SetAction((ParseResult parseResult) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
 
@@ -814,55 +815,66 @@ public static class AppleCommands
 			}
 
 			var appleProvider = Program.AppleProvider;
-			var mode = parseResult.GetValue(modeArg)!;
-			var udid = parseResult.GetValue(udidArg)!;
+			var udid = parseResult.GetValue(getUdidArg)!;
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 
 			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
 
-			var normalized = mode.Trim().ToLowerInvariant();
-			if (normalized == "get")
+			var current = appleProvider.GetAppearance(udid);
+			if (current is null)
 			{
-				var current = appleProvider.GetAppearance(udid);
-				if (current is null)
+				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAppearanceFailed, $"Failed to read appearance for simulator '{udid}'. Ensure the simulator is booted."));
+				return 1;
+			}
+
+			var value = current.Value == SimulatorAppearance.Dark ? "dark" : "light";
+			if (useJson)
+				formatter.Write(new SimulatorAppearanceResult { Udid = udid, Appearance = value, Action = "get" });
+			else
+				formatter.WriteSuccess(value);
+			return 0;
+		});
+		appearanceCommand.Add(getCommand);
+
+		// light <udid> / dark <udid>
+		foreach (var mode in new[] { "light", "dark" })
+		{
+			var setUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
+			var setCommand = new Command(mode, $"Set appearance to {mode}") { setUdidArg };
+			setCommand.SetAction((ParseResult parseResult) =>
+			{
+				var formatter = Program.GetFormatter(parseResult);
+
+				if (!PlatformDetector.IsMacOS)
 				{
-					formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAppearanceFailed, $"Failed to read appearance for simulator '{udid}'. Ensure the simulator is booted."));
+					formatter.WriteError(new MauiToolException(ErrorCodes.PlatformNotSupported, "Simulators are only available on macOS."));
 					return 1;
 				}
 
-				var value = current.Value == SimulatorAppearance.Dark ? "dark" : "light";
+				var appleProvider = Program.AppleProvider;
+				var udid = parseResult.GetValue(setUdidArg)!;
+				var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+
+				if (!ValidateSimulator(appleProvider, udid, formatter))
+					return 1;
+
+				var appearance = mode == "dark" ? SimulatorAppearance.Dark : SimulatorAppearance.Light;
+				var success = appleProvider.SetAppearance(udid, appearance);
+				if (!success)
+				{
+					formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAppearanceFailed, $"Failed to set appearance '{mode}' on simulator '{udid}'. Ensure the simulator is booted."));
+					return 1;
+				}
+
 				if (useJson)
-					formatter.Write(new SimulatorAppearanceResult { Udid = udid, Appearance = value, Action = "get" });
+					formatter.Write(new SimulatorAppearanceResult { Udid = udid, Appearance = mode, Action = "set" });
 				else
-					formatter.WriteSuccess(value);
+					formatter.WriteSuccess($"Appearance set to '{mode}' on simulator '{udid}'.");
 				return 0;
-			}
-
-			SimulatorAppearance appearance;
-			if (normalized == "light")
-				appearance = SimulatorAppearance.Light;
-			else if (normalized == "dark")
-				appearance = SimulatorAppearance.Dark;
-			else
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown appearance '{mode}'. Use 'light', 'dark', or 'get'."));
-				return 1;
-			}
-
-			var success = appleProvider.SetAppearance(udid, appearance);
-			if (!success)
-			{
-				formatter.WriteError(new MauiToolException(ErrorCodes.AppleSimulatorAppearanceFailed, $"Failed to set appearance '{normalized}' on simulator '{udid}'. Ensure the simulator is booted."));
-				return 1;
-			}
-
-			if (useJson)
-				formatter.Write(new SimulatorAppearanceResult { Udid = udid, Appearance = normalized, Action = "set" });
-			else
-				formatter.WriteSuccess($"Appearance set to '{normalized}' on simulator '{udid}'.");
-			return 0;
-		});
+			});
+			appearanceCommand.Add(setCommand);
+		}
 
 		return appearanceCommand;
 	}
@@ -1091,8 +1103,8 @@ public static class AppleCommands
 
 		// set
 		var setUdidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
-		var latArg = new Argument<double>("latitude") { Description = "Latitude in decimal degrees" };
-		var lngArg = new Argument<double>("longitude") { Description = "Longitude in decimal degrees" };
+		var latArg = new Argument<string>("latitude") { Description = "Latitude in decimal degrees" };
+		var lngArg = new Argument<string>("longitude") { Description = "Longitude in decimal degrees" };
 		var setCommand = new Command("set", "Set the simulated GPS location") { setUdidArg, latArg, lngArg };
 		setCommand.SetAction((ParseResult parseResult) =>
 		{
@@ -1106,8 +1118,19 @@ public static class AppleCommands
 
 			var appleProvider = Program.AppleProvider;
 			var udid = parseResult.GetValue(setUdidArg)!;
-			var lat = parseResult.GetValue(latArg);
-			var lng = parseResult.GetValue(lngArg);
+			var latText = parseResult.GetValue(latArg)!;
+			var lngText = parseResult.GetValue(lngArg)!;
+
+			if (!double.TryParse(latText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lat))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Invalid latitude value '{latText}'. Provide a decimal number (e.g. 37.3349)."));
+				return 1;
+			}
+			if (!double.TryParse(lngText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lng))
+			{
+				formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Invalid longitude value '{lngText}'. Provide a decimal number (e.g. -122.009)."));
+				return 1;
+			}
 
 			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
@@ -1363,6 +1386,12 @@ public static class AppleCommands
 
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 
+			// Emit a "recording started" signal so JSON consumers know we're active.
+			if (useJson)
+				formatter.WriteInfo("{\"status\":\"recording\",\"udid\":\"" + udid + "\",\"output_path\":\"" + outputPath.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"}");
+			else
+				formatter.WriteInfo($"Recording simulator '{udid}' to '{outputPath}'. Press Ctrl-C to stop.");
+
 			// Block until the user presses Ctrl-C, then dispose to stop and flush the file.
 			using var stopSignal = new ManualResetEventSlim(false);
 			ConsoleCancelEventHandler handler = (_, e) =>
@@ -1373,8 +1402,6 @@ public static class AppleCommands
 			Console.CancelKeyPress += handler;
 			try
 			{
-				if (!useJson)
-					formatter.WriteInfo($"Recording simulator '{udid}' to '{outputPath}'. Press Ctrl-C to stop.");
 				stopSignal.Wait();
 			}
 			finally
