@@ -33,4 +33,39 @@ public class LocalOriginValidatorTests
     {
         Assert.False(LocalOriginValidator.IsAllowed(origin));
     }
+
+    // ── Port-validated overload ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null, 9000)] // absent origin always allowed (non-browser callers)
+    [InlineData("", 9000)]
+    [InlineData("http://localhost:9000", 9000)]
+    [InlineData("http://127.0.0.1:9000", 9000)]
+    [InlineData("http://[::1]:9000", 9000)]
+    [InlineData("https://localhost:9000", 9000)]
+    public void IsAllowed_WithExpectedPort_PermitsMatchingLoopbackOrigin(string? origin, int expectedPort)
+    {
+        Assert.True(LocalOriginValidator.IsAllowed(origin, expectedPort));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:3000", 9000)] // legit-looking dev server on a different port
+    [InlineData("http://127.0.0.1:8080", 9000)]
+    [InlineData("http://localhost", 9000)] // defaults to :80, not the broker port
+    [InlineData("https://localhost", 9000)] // defaults to :443
+    [InlineData("http://localhost:9001", 9000)] // off-by-one
+    [InlineData("null", 9000)]
+    [InlineData("http://evil.com:9000", 9000)] // matching port, wrong host
+    public void IsAllowed_WithExpectedPort_RejectsMismatchedOrInvalidOrigin(string origin, int expectedPort)
+    {
+        Assert.False(LocalOriginValidator.IsAllowed(origin, expectedPort));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:3000", 0)] // expectedPort=0 disables the port check
+    [InlineData("http://localhost", 0)]
+    public void IsAllowed_WithZeroExpectedPort_FallsBackToHostOnlyCheck(string origin, int expectedPort)
+    {
+        Assert.True(LocalOriginValidator.IsAllowed(origin, expectedPort));
+    }
 }

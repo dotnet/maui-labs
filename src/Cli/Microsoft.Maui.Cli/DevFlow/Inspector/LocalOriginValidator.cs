@@ -14,7 +14,19 @@ internal static class LocalOriginValidator
     /// The literal Origin "null" — sent by browsers for file:// pages, sandboxed
     /// iframes, data: URLs, and other opaque origins — is rejected.
     /// </summary>
-    public static bool IsAllowed(string? origin)
+    public static bool IsAllowed(string? origin) => IsAllowed(origin, expectedPort: 0);
+
+    /// <summary>
+    /// Returns true if the origin is either absent or a loopback HTTP/HTTPS URI
+    /// matching <paramref name="expectedPort"/>. Per RFC 6454, an origin is
+    /// scheme+host+port — a page on port 3000 is a distinct security principal
+    /// from one on port 9000 even if both are loopback. Passing
+    /// <paramref name="expectedPort"/> = 0 disables the port check (loopback host
+    /// only). Otherwise the origin's port must equal <paramref name="expectedPort"/>.
+    /// This stops a malicious or compromised page on any other loopback port
+    /// (e.g. a dev server) from issuing CSRF POSTs to the broker / inspector.
+    /// </summary>
+    public static bool IsAllowed(string? origin, int expectedPort)
     {
         // No Origin header at all: non-browser client (e.g. CLI tool, curl). Permit.
         if (string.IsNullOrEmpty(origin))
@@ -32,9 +44,18 @@ internal static class LocalOriginValidator
             return false;
 
         var host = uri.Host;
-        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        var hostOk = host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
             || host == "127.0.0.1"
             || host == "[::1]"
             || host == "::1";
+        if (!hostOk)
+            return false;
+
+        // Port enforcement: only when caller supplied a non-zero expected port.
+        // uri.Port is the effective port (defaults to 80/443 if omitted from origin).
+        if (expectedPort > 0 && uri.Port != expectedPort)
+            return false;
+
+        return true;
     }
 }

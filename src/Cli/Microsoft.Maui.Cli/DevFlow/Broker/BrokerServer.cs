@@ -134,7 +134,7 @@ public class BrokerServer : IDisposable
             // the handler — otherwise a cross-origin POST to /api/shutdown would still
             // tear down the broker even though we return 403.
             var origin = context.Request.Headers["Origin"];
-            if (method == "POST" && !LocalOriginValidator.IsAllowed(origin))
+            if (method == "POST" && !LocalOriginValidator.IsAllowed(origin, _port))
             {
                 context.Response.StatusCode = 403;
                 context.Response.ContentType = "application/json";
@@ -175,7 +175,7 @@ public class BrokerServer : IDisposable
 
             // Mirror Origin only for loopback callers; the previous wildcard let any web
             // page read /api/agents (leaking IDs) and POST /api/shutdown.
-            if (LocalOriginValidator.IsAllowed(origin) && !string.IsNullOrEmpty(origin) && origin != "null")
+            if (LocalOriginValidator.IsAllowed(origin, _port) && !string.IsNullOrEmpty(origin) && origin != "null")
             {
                 context.Response.Headers.Add("Access-Control-Allow-Origin", origin);
                 context.Response.Headers.Add("Vary", "Origin");
@@ -198,7 +198,7 @@ public class BrokerServer : IDisposable
         // Reject cross-origin WebSocket connections; only the local agent process
         // or CLI tools (no Origin header) may register.
         var origin = context.Request.Headers["Origin"];
-        if (!LocalOriginValidator.IsAllowed(origin))
+        if (!LocalOriginValidator.IsAllowed(origin, _port))
         {
             context.Response.StatusCode = 403;
             context.Response.Close();
@@ -418,6 +418,15 @@ public class BrokerServer : IDisposable
         }
         _agents.Clear();
 
+        // Dispose inspector instances. Without this, a Shutdown() that doesn't
+        // go through Dispose() (e.g. /api/shutdown handler or idle timeout)
+        // leaks every InspectorServer's AgentClient (HttpClient) and CTS.
+        foreach (var insp in _inspectors.Values)
+        {
+            try { insp.Dispose(); } catch { }
+        }
+        _inspectors.Clear();
+
         // Delete state file
         DeleteBrokerState();
 
@@ -514,18 +523,17 @@ public class BrokerServer : IDisposable
         var agentId = segments[1];
         var subPath = segments.Length > 2 ? "/" + segments[2] : "/";
 
-        // Find the agent
+        // Resolve the agent. Two acceptable lookups:
+        //   1. Exact match on the registered ID.
+        //   2. Single-agent fallback (any ID routes when only one is connected) —
+        //      convenient for `maui devflow inspector` with no agent ID argument.
+        // Prefix matching was removed because ConcurrentDictionary iteration order is
+        // non-deterministic, so a request for "com.example.Foo" could silently route
+        // to either "com.example.FooApp" or "com.example.FooBarApp".
         if (!_agents.TryGetValue(agentId, out var connection))
         {
-            // Try partial match
-            connection = _agents.Values.FirstOrDefault(a =>
-                a.Registration.Id.StartsWith(agentId, StringComparison.OrdinalIgnoreCase));
-            if (connection == null)
-            {
-                // If only one agent connected, use it
-                if (_agents.Count == 1)
-                    connection = _agents.Values.First();
-            }
+            if (_agents.Count == 1)
+                connection = _agents.Values.First();
         }
 
         if (connection == null)
@@ -539,13 +547,35 @@ public class BrokerServer : IDisposable
         }
 
         // Get or create inspector server for this agent.
-        // ConcurrentDictionary.GetOrAdd may invoke the factory delegate concurrently
-        // for the same key, so we use TryGetValue + GetOrAdd and dispose the loser
-        // if two threads race. Otherwise the discarded InspectorServer leaks its
-        // AgentClient (HttpClient), CTS, and (in standalone mode) its TCP listener.
-        if (!_inspectors.TryGetValue(connection.Registration.Id, out var inspector))
+        // Three lifecycle hazards we have to defend against:
+        //   1. Race with disconnect — the agent may disconnect between our
+        //      TryGetValue above and creating the inspector. MonitorAgentConnection
+        //      runs its own _inspectors.TryRemove() but only sees inspectors that
+        //      already exist; one created after its cleanup would be orphaned.
+        //   2. Stale port on reconnect — if the agent restarts on a different port,
+        //      the cached inspector still holds an AgentClient pointing at the old
+        //      (dead) port. Replace it.
+        //   3. GetOrAdd factory race — the ConcurrentDictionary factory overload
+        //      may invoke the factory concurrently and silently discard the loser,
+        //      leaking its AgentClient (HttpClient) and CTS. Construct first, then
+        //      GetOrAdd(value), and dispose the loser.
+        var agentPort = connection.Registration.Port;
+        if (_inspectors.TryGetValue(connection.Registration.Id, out var inspector))
         {
-            var created = new InspectorServer(0, "localhost", connection.Registration.Port);
+            // Stale-port detection: the agent reconnected on a different port.
+            if (inspector.AgentPort != agentPort)
+            {
+                if (_inspectors.TryRemove(new KeyValuePair<string, InspectorServer>(connection.Registration.Id, inspector)))
+                {
+                    try { inspector.Dispose(); } catch { }
+                }
+                inspector = null;
+            }
+        }
+
+        if (inspector == null)
+        {
+            var created = new InspectorServer(0, "localhost", agentPort);
             inspector = _inspectors.GetOrAdd(connection.Registration.Id, created);
             if (!ReferenceEquals(inspector, created))
             {
@@ -553,7 +583,25 @@ public class BrokerServer : IDisposable
             }
             else
             {
-                Log($"Inspector created for agent: {connection.Registration.AppName} (port {connection.Registration.Port})");
+                Log($"Inspector created for agent: {connection.Registration.AppName} (port {agentPort})");
+            }
+
+            // Disconnect-race fix: MonitorAgentConnection may have already removed
+            // this agent ID from _agents (and tried to remove the not-yet-existing
+            // inspector). If so, our newly-stored inspector would leak — clean up
+            // and return 503 instead of routing into a dead AgentClient.
+            if (!_agents.ContainsKey(connection.Registration.Id))
+            {
+                if (_inspectors.TryRemove(new KeyValuePair<string, InspectorServer>(connection.Registration.Id, inspector)))
+                {
+                    try { inspector.Dispose(); } catch { }
+                }
+                context.Response.StatusCode = 503;
+                context.Response.ContentType = "text/plain";
+                var msg = Encoding.UTF8.GetBytes("Agent disconnected");
+                await context.Response.OutputStream.WriteAsync(msg);
+                context.Response.Close();
+                return;
             }
         }
 

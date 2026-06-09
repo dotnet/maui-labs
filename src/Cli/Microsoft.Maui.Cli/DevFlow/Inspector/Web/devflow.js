@@ -55,6 +55,32 @@
 
   // Keyed DOM diff: match elements by data-id, update in-place if changed
   function patchElements(newHtml) {
+    // ─────────────────────────────────────────────────────────────────────────
+    // XSS / trust boundary contract with the server.
+    //
+    // `newHtml` is parsed into the live DOM via `innerHTML`, so any HTML it
+    // contains is executed (attributes, <script>, event handlers, etc.).
+    // This is only safe because the server side (InspectorServer.HtmlRenderer)
+    // is the SOLE producer of `newHtml` and guarantees:
+    //
+    //   1. Element identifiers, types, and any user-controlled text reach this
+    //      function only via `HttpUtility.HtmlAttributeEncode` (in attribute
+    //      positions) or `HttpUtility.HtmlEncode` (in text positions), which
+    //      neutralise `"`, `'`, `&`, `<`, `>`.
+    //   2. No URL/JS context substitution happens server-side (no href/src/
+    //      onclick built from app-provided strings), so attribute-escaping is
+    //      sufficient — there is no executable context to escape into.
+    //   3. The response is fetched same-origin from this very inspector page,
+    //      gated by the broker's loopback + Origin-port check, so an attacker
+    //      cannot substitute their own HTML at the network layer.
+    //
+    // If any of those invariants change (raw HTML pass-through, JSON-string
+    // interpolation, cross-origin fetch, etc.), replace `innerHTML` here with
+    // explicit DOM construction (`createElement` + `setAttribute`) before the
+    // change ships — `innerHTML` parsing of server-controlled HTML is fragile
+    // and silently turns from safe into XSS-vulnerable.
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Parse new elements into a temp container
     const temp = document.createElement('div');
     temp.innerHTML = newHtml;

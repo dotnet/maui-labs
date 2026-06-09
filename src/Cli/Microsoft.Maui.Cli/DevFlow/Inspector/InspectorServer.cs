@@ -35,6 +35,13 @@ public sealed class InspectorServer : IDisposable
 
     public int Port => _port;
 
+    /// <summary>
+    /// Port of the underlying DevFlow agent this inspector is proxying to. Used by
+    /// the broker to detect when an agent has reconnected on a different port and
+    /// the cached InspectorServer's AgentClient is now pointing at a dead port.
+    /// </summary>
+    public int AgentPort => _agentPort;
+
     public InspectorServer(int port, string agentHost, int agentPort)
     {
         _port = port;
@@ -59,13 +66,18 @@ public sealed class InspectorServer : IDisposable
     {
         try
         {
+            // Origin port check uses the broker's listening port so that a page on
+            // any other loopback port (e.g. a separate dev server on :3000) is
+            // rejected — see LocalOriginValidator for the RFC 6454 rationale.
+            var brokerPort = context.Request.Url?.Port ?? 0;
+
             // Handle WebSocket upgrade for /ws/events
             if (context.Request.IsWebSocketRequest && path.TrimEnd('/') == "/ws/events")
             {
                 // Reject cross-origin WebSocket subscriptions (any web page can open a
                 // WebSocket regardless of same-origin policy — the server must enforce).
                 var origin = context.Request.Headers["Origin"];
-                if (!LocalOriginValidator.IsAllowed(origin))
+                if (!LocalOriginValidator.IsAllowed(origin, brokerPort))
                 {
                     context.Response.StatusCode = 403;
                     context.Response.Close();
@@ -83,7 +95,7 @@ public sealed class InspectorServer : IDisposable
             if (method == "POST")
             {
                 var origin = context.Request.Headers["Origin"];
-                if (!LocalOriginValidator.IsAllowed(origin))
+                if (!LocalOriginValidator.IsAllowed(origin, brokerPort))
                 {
                     context.Response.StatusCode = 403;
                     context.Response.Close();
@@ -288,7 +300,7 @@ public sealed class InspectorServer : IDisposable
                     request.Headers.TryGetValue("upgrade", out var upgradeHdr) &&
                     upgradeHdr.Equals("websocket", StringComparison.OrdinalIgnoreCase);
                 if ((request.Method == "POST" || isWebSocketUpgrade) &&
-                    !LocalOriginValidator.IsAllowed(requestOrigin))
+                    !LocalOriginValidator.IsAllowed(requestOrigin, _port))
                 {
                     await WriteResponseAsync(stream, 403, "text/plain",
                         Encoding.UTF8.GetBytes("Forbidden"), ct);
@@ -677,30 +689,69 @@ public sealed class InspectorServer : IDisposable
 
         // Connect to agent WebSocket and relay messages
         using var agentWs = new System.Net.WebSockets.ClientWebSocket();
+        // Per-call CTS used to short-circuit the agent→browser relay when the
+        // browser-side TCP stream closes. Without it, a closed browser tab would
+        // hang the relay until the agent next sent data (or _cts cancelled).
+        using var browserClosedCts = new CancellationTokenSource();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, browserClosedCts.Token);
+        var linkedCt = linkedCts.Token;
         try
         {
-            await agentWs.ConnectAsync(new Uri($"ws://{_agentHost}:{_agentPort}/ws/v1/ui/events"), ct);
+            await agentWs.ConnectAsync(new Uri($"ws://{_agentHost}:{_agentPort}/ws/v1/ui/events"), linkedCt);
 
             // Subscribe to all events
             var subscribe = Encoding.UTF8.GetBytes("{\"type\":\"subscribe\",\"data\":{\"events\":[\"all\"]}}");
-            await agentWs.SendAsync(subscribe, System.Net.WebSockets.WebSocketMessageType.Text, true, ct);
+            await agentWs.SendAsync(subscribe, System.Net.WebSockets.WebSocketMessageType.Text, true, linkedCt);
+
+            // Browser→agent monitor: this proxy doesn't forward browser payloads to
+            // the agent (the inspector only subscribes), but we still need to know
+            // when the browser closes the tab so we can stop draining agent events
+            // for nothing. Any read from clientStream — including a Close frame or
+            // a 0-byte EOF from a closed TCP socket — signals "browser is gone".
+            var monitorTask = Task.Run(async () =>
+            {
+                var monitorBuf = new byte[256];
+                try
+                {
+                    while (!linkedCt.IsCancellationRequested)
+                    {
+                        var n = await clientStream.ReadAsync(monitorBuf, linkedCt);
+                        if (n <= 0) break;
+                        // Any inbound frame here is either a Close or a Ping; the
+                        // standalone proxy doesn't process either — fall through to
+                        // cancel so the relay tears down cleanly.
+                        break;
+                    }
+                }
+                catch { }
+                finally
+                {
+                    try { browserClosedCts.Cancel(); } catch { }
+                }
+            }, linkedCt);
 
             // Relay agent messages to browser
             var buffer = new byte[8192];
-            while (!ct.IsCancellationRequested && agentWs.State == System.Net.WebSockets.WebSocketState.Open)
+            while (!linkedCt.IsCancellationRequested && agentWs.State == System.Net.WebSockets.WebSocketState.Open)
             {
-                var result = await agentWs.ReceiveAsync(buffer, ct);
+                System.Net.WebSockets.WebSocketReceiveResult result;
+                try { result = await agentWs.ReceiveAsync(buffer, linkedCt); }
+                catch { break; }
                 if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
                     break;
 
                 if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
                 {
                     var payload = buffer.AsMemory(0, result.Count).ToArray();
-                    await SendWebSocketFrameAsync(clientStream, payload, ct);
+                    await SendWebSocketFrameAsync(clientStream, payload, linkedCt);
                 }
             }
         }
         catch { }
+        finally
+        {
+            try { browserClosedCts.Cancel(); } catch { }
+        }
     }
 
     private static async Task SendWebSocketFrameAsync(NetworkStream stream, byte[] payload, CancellationToken ct)
@@ -758,25 +809,43 @@ public sealed class InspectorServer : IDisposable
 
     private static async Task<(HttpRequestInfo? Request, bool Oversized)> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
     {
+        // Accumulate reads until we find the end-of-headers sentinel (\r\n\r\n)
+        // or hit MaxHeaderBytes. A single ReadAsync is not guaranteed to deliver
+        // the full headers — TCP can fragment the stream, and a request with many
+        // cookies, long Authorization headers, or a slow client / proxy can split
+        // headers across multiple segments. Dropping such requests silently would
+        // make legitimate browsers intermittently fail with no diagnostic.
+        const int MaxHeaderBytes = 64 * 1024;
         var buffer = new byte[8192];
-        int read;
+        using var ms = new MemoryStream();
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
 
-        try
+        int headerEnd = -1;
+        while (headerEnd < 0)
         {
-            read = await stream.ReadAsync(buffer, timeoutCts.Token);
+            int read;
+            try
+            {
+                read = await stream.ReadAsync(buffer, timeoutCts.Token);
+            }
+            catch { return (null, false); }
             if (read == 0) return (null, false);
+
+            ms.Write(buffer, 0, read);
+            if (ms.Length > MaxHeaderBytes)
+                return (null, true);
+
+            // Re-scan the accumulated bytes (ASCII portion only) for the end of headers.
+            // Headers are ASCII per RFC 7230 §3.2.4, so ASCII decoding is correct and
+            // avoids splitting multi-byte UTF-8 sequences that may appear in the body.
+            var soFar = Encoding.ASCII.GetString(ms.GetBuffer(), 0, (int)ms.Length);
+            headerEnd = soFar.IndexOf("\r\n\r\n", StringComparison.Ordinal);
         }
-        catch { return (null, false); }
 
-        // Parse headers from the ASCII portion. The body is read as raw bytes below
-        // to avoid splitting multi-byte UTF-8 sequences across buffer boundaries.
-        var raw = Encoding.ASCII.GetString(buffer, 0, read);
-        var headerEnd = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-        if (headerEnd < 0) return (null, false);
-
+        var raw = Encoding.ASCII.GetString(ms.GetBuffer(), 0, (int)ms.Length);
         var headerSection = raw[..headerEnd];
+        int read_total = (int)ms.Length;
 
         var lines = headerSection.Split("\r\n");
         if (lines.Length == 0) return (null, false);
@@ -808,13 +877,13 @@ public sealed class InspectorServer : IDisposable
                 return (null, true);
 
             var bodyStart = headerEnd + 4;
-            var bytesAlreadyRead = read - bodyStart;
+            var bytesAlreadyRead = read_total - bodyStart;
             var bodyBytes = new byte[contentLength];
 
             if (bytesAlreadyRead > 0)
             {
                 var copy = Math.Min(bytesAlreadyRead, contentLength);
-                Buffer.BlockCopy(buffer, bodyStart, bodyBytes, 0, copy);
+                Buffer.BlockCopy(ms.GetBuffer(), bodyStart, bodyBytes, 0, copy);
             }
 
             int totalBodyRead = Math.Min(Math.Max(0, bytesAlreadyRead), contentLength);
