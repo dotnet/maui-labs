@@ -454,20 +454,18 @@ public static partial class AndroidCommands
 					formatter.WriteInfo("Starting interactive license acceptance...");
 					formatter.WriteInfo("Review each license and type 'y' to accept.\n");
 
-					var exitCode = await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
+					await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
 
-					// sdkmanager exits 0 even when the user declines - verify via the on-disk license file.
-					var licensesAccepted = await androidProvider.AreLicensesAcceptedAsync(cancellationToken);
-					if (licensesAccepted)
+					// sdkmanager exits 0 even when the user declines; trust only the on-disk license file.
+					var interactiveLicensesAccepted = await androidProvider.AreLicensesAcceptedAsync(cancellationToken);
+					if (interactiveLicensesAccepted)
 					{
 						formatter.WriteSuccess("License acceptance completed");
 						return 0;
 					}
 
-					formatter.WriteWarning(exitCode != 0
-						? $"License acceptance exited with code {exitCode}"
-						: "Licenses were not accepted");
-					return exitCode != 0 ? exitCode : 1;
+					formatter.WriteWarning("Licenses were not accepted");
+					return 1;
 				}
 				return 0;
 			}
