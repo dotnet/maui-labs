@@ -152,7 +152,9 @@ public static partial class AndroidCommands
 						{
 							formatter.WriteInfo("Android SDK licenses must be accepted to continue.");
 							formatter.WriteInfo("Review each license and type 'y' to accept.\n");
-							_ = await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
+							var installExitCode = await RunInteractiveLicenseAcceptanceAsync(androidProvider, cancellationToken);
+							if (installExitCode != 0)
+								formatter.WriteInfo($"sdkmanager exited with code {installExitCode}");
 
 							// sdkmanager exits 0 even when the user declines; trust only the on-disk license file.
 							if (!await androidProvider.AreLicensesAcceptedAsync(cancellationToken))
