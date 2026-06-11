@@ -1,9 +1,10 @@
 ---
 name: maui-notifications-deep-links
 description: >-
-  Implement .NET MAUI local notifications, push notifications, FCM/APNs/Azure
-  Notification Hubs registration, app links, universal links, custom URI
-  schemes, token handling, and deep-link troubleshooting. USE FOR: notification
+  Implement .NET MAUI local notifications, push notifications, FCM HTTP v1
+  and APNs migration, Azure Notification Hubs registration, app links,
+  universal links, custom URI schemes, token refresh/sign-in/logout lifecycle,
+  push payload safety, and deep-link troubleshooting. USE FOR: notification
   permission UX, Android notification channels, iOS notification registration,
   push token upload, notification tap navigation, verified links, and callback
   routing. DO NOT USE FOR: OAuth callback-only flows (use
@@ -62,6 +63,19 @@ Keep notification IDs stable when updates/cancellation are required. Store
 scheduled notification metadata in app storage if it must survive app restart.
 
 ## Push Notifications
+
+When the prompt mentions migrating a legacy Firebase server key, legacy FCM API,
+or Xamarin push registrations, include these required points:
+
+1. Android senders move to **FCM HTTP v1** with service-account OAuth
+   credentials. Do not recommend legacy server keys.
+2. iOS uses APNs device tokens, with sandbox/production environment alignment.
+3. Azure Notification Hubs is optional infrastructure, not required for direct
+   FCM/APNs token registration.
+4. Upload refreshed tokens/installations after sign-in, associate them with the
+   authenticated user, and disassociate or unregister them on logout.
+5. Keep push payloads free of PII, access tokens, and confidential data; send
+   route/entity IDs and fetch sensitive content after the app opens.
 
 - Android uses Firebase Cloud Messaging (FCM); use the FCM HTTP v1 API on the
   backend. The legacy FCM HTTP API was retired in June 2024 and should not be

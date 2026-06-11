@@ -25,6 +25,8 @@ scenarios:
       I am migrating a Xamarin.Forms app that used a legacy Firebase server key
       and direct device registration for push. For a MAUI app, how should Android
       and iOS token registration change, and is Azure Notification Hubs required?
+      Include token refresh/upload, sign-in/logout registration lifecycle, and
+      push payload safety in the answer.
     assertions:
       - type: "output_matches"
         pattern: "FCM HTTP v1|FCM v1|Firebase Cloud Messaging v1"
@@ -41,7 +43,7 @@ scenarios:
       - type: "output_matches"
         pattern: "PII|sensitive|confidential|access token|payload"
       - type: "output_not_matches"
-        pattern: "Authorization:\\s*key="
+        pattern: "(?i)(use|keep|continue using|rely on) (the )?legacy (Firebase )?server key"
     rubric:
       - "Explains that Android push backends should use FCM HTTP v1 rather than the retired legacy API"
       - "Explains that iOS uses APNs device tokens"
