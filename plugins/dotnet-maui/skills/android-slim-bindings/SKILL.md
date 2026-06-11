@@ -136,10 +136,10 @@ dotnet new androidbinding -n MyBinding.Android.Binding
 ```
 
 Key `.csproj` elements:
-- `< reference the built AARAndroidLibrary>` 
-- `< NuGet packages for transitive dependenciesPackageReference>` 
-- `<AndroidMavenLibrary Bind=" Maven deps without NuGet equivalentfalse">` 
-- `< compile-time only dependenciesAndroidIgnoredJavaDependency>` 
+- `<AndroidLibrary>` — reference the built AAR
+- `<PackageReference>` — NuGet packages for transitive dependencies
+- `<AndroidMavenLibrary Bind="false">` — Maven deps without a NuGet equivalent
+- `<AndroidIgnoredJavaDependency>` — compile-time only dependencies
 
 Configure `Transforms/Metadata.xml` for namespace renaming and parameter names.
 
