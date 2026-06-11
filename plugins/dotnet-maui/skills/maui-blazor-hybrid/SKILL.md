@@ -65,8 +65,41 @@ hybridWebView.SendRawMessage("refresh");
 hybridWebView.RawMessageReceived += OnRawMessageReceived;
 ```
 
-Keep messages typed at the .NET boundary. Use JSON DTOs and source generation
-when the payloads must be trimming-safe.
+For non-trivial payloads, keep messages typed at the .NET boundary instead of
+switching on ad-hoc strings. Use JSON DTOs with `System.Text.Json` source
+generation so serialization stays trimming/NativeAOT friendly:
+
+```csharp
+public sealed record HybridMessage(string Action, string? Id);
+
+[JsonSerializable(typeof(HybridMessage))]
+internal sealed partial class HybridJsonContext : JsonSerializerContext
+{
+}
+
+void OnRawMessageReceived(object? sender, HybridWebViewRawMessageReceivedEventArgs e)
+{
+    var message = JsonSerializer.Deserialize(
+        e.Message,
+        HybridJsonContext.Default.HybridMessage);
+
+    if (message is null)
+        throw new JsonException("Malformed HybridWebView message.");
+
+    // Dispatch only known actions after validating authorization/state.
+}
+
+hybridWebView.SendRawMessage(JsonSerializer.Serialize(
+    new HybridMessage("refresh", null),
+    HybridJsonContext.Default.HybridMessage));
+```
+
+```javascript
+window.HybridWebView.SendRawMessage(JSON.stringify({
+  action: "save",
+  id: "42"
+}));
+```
 
 ## Static Assets
 
