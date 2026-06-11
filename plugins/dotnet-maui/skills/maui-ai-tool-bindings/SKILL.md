@@ -106,7 +106,7 @@ The library does not create DI scopes. Build the chat client with the provider
 whose lifetime should back tool calls:
 
 ```csharp
-using var scope = app.Services.CreateScope();
+using var scope = serviceScopeFactory.CreateScope(); // Inject IServiceScopeFactory.
 
 var sessionClient = innerClient.AsBuilder()
     .UseFunctionInvocation(configure: invocation =>

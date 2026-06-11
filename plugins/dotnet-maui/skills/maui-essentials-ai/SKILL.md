@@ -15,13 +15,25 @@ Use this skill when a MAUI app should use on-device AI through
 
 ## Platform Support
 
-| Platform | Chat | Embeddings |
-| --- | --- | --- |
-| iOS 26+ | Apple Intelligence / Foundation Models | NaturalLanguage embeddings |
-| Mac Catalyst 26+ | Apple Intelligence | NaturalLanguage embeddings |
-| macOS 26+ | Apple Intelligence | NaturalLanguage embeddings |
-| Android | Coming soon | Coming soon |
-| Windows | Coming soon | Coming soon |
+Chat support:
+
+| Platform | Status |
+| --- | --- |
+| iOS 26+ | Apple Intelligence / Foundation Models |
+| Mac Catalyst 26+ | Apple Intelligence |
+| macOS 26+ | Apple Intelligence |
+| Android | Coming soon |
+| Windows | Coming soon |
+
+Embedding support:
+
+| Platform | Status |
+| --- | --- |
+| iOS 13+ | NaturalLanguage embeddings |
+| Mac Catalyst 13.1+ | NaturalLanguage embeddings |
+| macOS 10.15+ | NaturalLanguage embeddings |
+| Android | Not supported |
+| Windows | Not supported |
 
 Design fallback behavior for unsupported platforms. Do not silently route private
 data to a cloud model unless the user explicitly wants a cloud fallback.
@@ -38,19 +50,25 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Essentials.AI;
 
 #if IOS || MACCATALYST || MACOS
-builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 builder.Services.AddSingleton<NLEmbeddingGenerator>();
 builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
     sp.GetRequiredService<NLEmbeddingGenerator>());
-#else
-// On-device AI is not available on this platform yet.
-// Register an app-specific unavailable/null implementation or hide AI features.
+
+if (OperatingSystem.IsIOSVersionAtLeast(26) ||
+    OperatingSystem.IsMacCatalystVersionAtLeast(26) ||
+    OperatingSystem.IsMacOSVersionAtLeast(26))
+{
+    builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+}
 #endif
 ```
 
 Register platform-specific implementations conditionally if the app targets
-unsupported platforms too. For MAUI Labs AppKit (`MACOS`), verify the
-Essentials.AI integration against the target package before shipping.
+unsupported platforms too. If the app's minimum Apple OS target is below 26,
+guard chat registration with runtime OS checks or register an app-specific
+unavailable implementation for older OS versions. For MAUI Labs AppKit
+(`MACOS`), verify the Essentials.AI integration against the target package
+before shipping.
 
 ## Chat Workflow
 

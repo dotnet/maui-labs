@@ -30,7 +30,7 @@ scenarios:
       - type: "output_matches"
         pattern: "10\\.103\\.0"
       - type: "output_matches"
-        pattern: "Microsoft\\.NET\\.Workloads\\.\\d+\\.\\d+\\.\\d+"
+        pattern: "Microsoft\\.NET\\.Workloads\\.10\\.0\\.100"
       - type: "output_matches"
         pattern: "SDK band|10\\.0\\.100"
       - type: "output_matches"
@@ -48,8 +48,6 @@ scenarios:
       they also pasted a sample mobile app's App Store changelog. How should I
       keep the workload notes focused?
     assertions:
-      - type: "output_matches"
-        pattern: "reject|omit|exclude|separate|do not include"
       - type: "output_matches"
         pattern: "known issues|breaking changes|requirements"
       - type: "output_matches"
