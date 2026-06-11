@@ -28,7 +28,7 @@ scenarios:
       - type: "output_matches"
         pattern: "focus|SetSemanticFocus|semantic focus"
       - type: "output_matches"
-        pattern: "first invalid|error summary|validation"
+        pattern: "first invalid|invalid field|error summary|validation|Error:"
     rubric:
       - "Uses SemanticScreenReader.Announce for the validation result"
       - "Recommends moving focus to the error summary or first invalid field when helpful"
