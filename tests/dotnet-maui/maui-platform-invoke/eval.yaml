@@ -1,0 +1,63 @@
+scenarios:
+  - name: "Wrap app review platform API behind DI"
+    prompt: |
+      My MAUI app needs to trigger the native app review prompt on iOS and
+      Android. I don't want platform-specific code scattered through view
+      models. How should I structure it?
+    assertions:
+      - type: "output_matches"
+        pattern: "interface|IAppReviewService"
+      - type: "output_matches"
+        pattern: "AddSingleton|AddTransient|AddScoped"
+      - type: "output_matches"
+        pattern: "Platforms/Android|Platforms/iOS|#if ANDROID|#if IOS"
+      - type: "output_matches"
+        pattern: "inject|constructor"
+    rubric:
+      - "Defines a shared interface for the platform API"
+      - "Implements per-platform classes/files and registers them in MauiProgram.cs"
+      - "Injects the abstraction into app services or view models"
+      - "Explains why this belongs in a platform service rather than a visual handler"
+    timeout: 240
+
+  - name: "Request permission before invoking native camera API"
+    prompt: |
+      We are adding a small platform-specific camera metadata feature. What
+      permission and platform file guidance should the MAUI implementation
+      include?
+    assertions:
+      - type: "output_contains"
+        value: "Permissions.CheckStatusAsync"
+      - type: "output_contains"
+        value: "Permissions.RequestAsync"
+      - type: "output_matches"
+        pattern: "AndroidManifest|Info\\.plist|entitlement|capabilit"
+      - type: "output_matches"
+        pattern: "PermissionStatus\\.Granted|denied|restricted"
+    rubric:
+      - "Checks and requests the camera permission before calling native APIs"
+      - "Mentions manifest/Info.plist/capability updates as required by platform"
+      - "Handles denied or restricted permission states explicitly"
+      - "Keeps native namespaces inside platform-specific files or compile guards"
+    timeout: 240
+
+  - name: "Use lifecycle hooks for native state"
+    prompt: |
+      I need to refresh native state when the MAUI app resumes on Android/iOS and
+      configure the native Windows window when it is created. Where should this
+      code go?
+    assertions:
+      - type: "output_contains"
+        value: "ConfigureLifecycleEvents"
+      - type: "output_matches"
+        pattern: "AddAndroid|AddiOS|AddWindows"
+      - type: "output_matches"
+        pattern: "OnResume|OnActivated|OnWindowCreated"
+      - type: "output_matches"
+        pattern: "service|DI"
+    rubric:
+      - "Uses ConfigureLifecycleEvents instead of page constructors for app/window lifecycle callbacks"
+      - "Shows platform-specific lifecycle registration for Android, iOS, and Windows"
+      - "Forwards shared state work into registered services when appropriate"
+      - "Keeps lifecycle callback bodies small and platform-scoped"
+    timeout: 240

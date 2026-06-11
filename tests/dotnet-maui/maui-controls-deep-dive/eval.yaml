@@ -1,0 +1,61 @@
+scenarios:
+  - name: "Build performant incremental CollectionView"
+    prompt: |
+      My MAUI orders screen has thousands of records. I need a CollectionView
+      pattern with loading, empty state, incremental loading, and UI automation
+      hooks.
+    assertions:
+      - type: "output_contains"
+        value: "CollectionView"
+      - type: "output_contains"
+        value: "RemainingItemsThreshold"
+      - type: "output_contains"
+        value: "EmptyView"
+      - type: "output_contains"
+        value: "AutomationId"
+    rubric:
+      - "Lets CollectionView own scrolling and avoids wrapping it in ScrollView"
+      - "Uses EmptyView and a visible loading state"
+      - "Uses RemainingItemsThreshold or equivalent incremental load trigger"
+      - "Adds stable AutomationIds for the list and key states"
+    timeout: 240
+
+  - name: "Handle safe area with current API"
+    prompt: |
+      I am updating an edge-to-edge MAUI page for .NET 10 and want to stop using
+      hard-coded iOS top padding. What safe area pattern should I use?
+    assertions:
+      - type: "output_contains"
+        value: "SafeAreaEdges"
+      - type: "output_matches"
+        pattern: "Container|SoftInput|All"
+      - type: "output_matches"
+        pattern: "target framework|TFM|maui-current-apis|#if"
+      - type: "output_matches"
+        pattern: "notch|keyboard|rounded"
+    rubric:
+      - "Recommends SafeAreaEdges for .NET 10+ instead of hard-coded padding"
+      - "Says to verify the target MAUI version before changing APIs"
+      - "Mentions testing notches, rounded corners, desktop chrome, or soft keyboard scenarios"
+      - "Keeps safe area behavior declarative where possible"
+    timeout: 240
+
+  - name: "Design accessible GraphicsView drawing"
+    prompt: |
+      I need a MAUI GraphicsView chart that updates as sensor values arrive.
+      What drawing and accessibility guardrails should I follow?
+    assertions:
+      - type: "output_contains"
+        value: "IDrawable"
+      - type: "output_contains"
+        value: "Draw"
+      - type: "output_contains"
+        value: "Invalidate"
+      - type: "output_matches"
+        pattern: "SemanticProperties|SemanticScreenReader|screen reader|AutomationId"
+    rubric:
+      - "Places drawing code in IDrawable and treats Draw as a hot path"
+      - "Invalidates only when state changes and avoids allocations/blocking work in Draw"
+      - "Keeps input handling/state outside the drawable as appropriate"
+      - "Provides accessible surrounding UI or semantic alternatives for chart content"
+    timeout: 240

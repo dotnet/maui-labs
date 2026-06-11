@@ -1,0 +1,62 @@
+scenarios:
+  - name: "Scope an Entry mapper customization"
+    prompt: |
+      In a MAUI app I only want BorderlessEntry controls to remove the native
+      border/underline. Show how to implement this as a handler mapper without
+      changing every Entry in the app.
+    assertions:
+      - type: "output_matches"
+        pattern: "EntryHandler\\.Mapper\\.AppendToMapping|AppendToMapping"
+      - type: "output_contains"
+        value: "BorderlessEntry"
+      - type: "output_matches"
+        pattern: "view is BorderlessEntry|is not BorderlessEntry"
+      - type: "output_matches"
+        pattern: "#if ANDROID|#elif IOS|#elif WINDOWS"
+    rubric:
+      - "Uses EntryHandler.Mapper.AppendToMapping or equivalent mapper customization"
+      - "Scopes the customization to BorderlessEntry rather than all Entry controls"
+      - "Includes platform-specific native view code behind compile-time guards"
+      - "Registers the mapper once rather than from repeated page constructors"
+    timeout: 240
+
+  - name: "Migrate renderer event cleanup"
+    prompt: |
+      I have a Xamarin.Forms renderer that subscribes to native text-changed and
+      focus events in OnElementChanged and removes them in Dispose. Convert the
+      lifecycle idea to a MAUI custom handler.
+    assertions:
+      - type: "output_contains"
+        value: "ConnectHandler"
+      - type: "output_contains"
+        value: "DisconnectHandler"
+      - type: "output_matches"
+        pattern: "-=|unsubscribe|remove"
+      - type: "output_contains"
+        value: "PropertyMapper"
+    rubric:
+      - "Moves native event subscription/setup into ConnectHandler"
+      - "Moves unsubscription and owned native cleanup into DisconnectHandler"
+      - "Replaces OnElementPropertyChanged with PropertyMapper entries"
+      - "Avoids broad try/catch cleanup that hides lifecycle errors"
+    timeout: 240
+
+  - name: "Create handler with property and command mappers"
+    prompt: |
+      I am building a custom VideoPlayer MAUI control with Source, IsLooping,
+      and Play/Pause/Stop commands. What should the handler structure look like?
+    assertions:
+      - type: "output_contains"
+        value: "PropertyMapper"
+      - type: "output_contains"
+        value: "CommandMapper"
+      - type: "output_matches"
+        pattern: "ConfigureMauiHandlers|AddHandler"
+      - type: "output_matches"
+        pattern: "CreatePlatformView|ViewHandler"
+    rubric:
+      - "Defines bindable/cross-platform control API before native implementation"
+      - "Uses PropertyMapper for Source/IsLooping-style state"
+      - "Uses CommandMapper for Play/Pause/Stop-style actions"
+      - "Shows handler registration through ConfigureMauiHandlers"
+    timeout: 240

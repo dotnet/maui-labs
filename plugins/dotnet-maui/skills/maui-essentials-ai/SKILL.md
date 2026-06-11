@@ -1,0 +1,128 @@
+---
+name: maui-essentials-ai
+description: >-
+  Adopt Microsoft.Maui.Essentials.AI in MAUI apps. USE FOR: local/on-device
+  chat, Apple Intelligence-backed IChatClient, NL embeddings, semantic search,
+  tool use with Microsoft.Extensions.AI, privacy/offline AI architecture, and
+  platform availability planning. DO NOT USE FOR: source-generating AI tool
+  bindings (use maui-ai-tool-bindings), cloud-only AI service setup, general AI
+  debugging (use maui-ai-debugging), or non-MAUI Microsoft.Extensions.AI apps.
+---
+
+# MAUI Essentials AI
+
+Use this skill when a MAUI app should use on-device AI through
+`Microsoft.Maui.Essentials.AI` and `Microsoft.Extensions.AI` abstractions.
+
+## Platform Support
+
+| Platform | Chat | Embeddings |
+| --- | --- | --- |
+| iOS 26+ | Apple Intelligence / Foundation Models | NaturalLanguage embeddings |
+| Mac Catalyst 26+ | Apple Intelligence | NaturalLanguage embeddings |
+| macOS 26+ | Apple Intelligence | NaturalLanguage embeddings |
+| Android | Coming soon | Coming soon |
+| Windows | Coming soon | Coming soon |
+
+Design fallback behavior for unsupported platforms. Do not silently route private
+data to a cloud model unless the user explicitly wants a cloud fallback.
+
+## Install and Register
+
+```bash
+dotnet add package Microsoft.Maui.Essentials.AI --prerelease
+```
+
+```csharp
+using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
+
+builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
+    _ => new NLEmbeddingGenerator(NLEmbeddingType.Sentence));
+```
+
+Register platform-specific implementations conditionally if the app targets
+unsupported platforms too.
+
+## Chat Workflow
+
+1. Inject `IChatClient` into a view model or service, not directly into a page
+   unless the app architecture already does that.
+2. Pass cancellation tokens from commands and lifecycle boundaries.
+3. Use streaming responses for interactive UI:
+
+   ```csharp
+   await foreach (var update in _chat.GetStreamingResponseAsync(messages, cancellationToken))
+   {
+       MainThread.BeginInvokeOnMainThread(() => ResponseText += update.Text);
+   }
+   ```
+
+4. Keep conversation state in an app service so it survives page recreation.
+5. Surface model availability and failure states in the UI.
+
+If your view model framework already marshals property changes to the UI thread,
+use that convention. Otherwise, dispatch UI-bound property updates explicitly.
+
+## Embeddings and Semantic Search
+
+Use `NLEmbeddingGenerator` for local semantic search over app-owned content:
+
+```csharp
+var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
+var embeddings = await generator.GenerateAsync(
+    ["sunset beach", "mountain hiking"],
+    cancellationToken);
+```
+
+Recommended shape:
+
+- chunk app content into small searchable records;
+- generate embeddings at ingest/update time;
+- store vector plus metadata locally;
+- compare query embeddings with cosine similarity;
+- return source snippets and IDs so the UI can show grounded results.
+
+Avoid regenerating embeddings for the full corpus on every search.
+
+## Tool Use
+
+Essentials AI returns `Microsoft.Extensions.AI` clients, so normal tool calling
+patterns apply:
+
+```csharp
+var client = innerClient.AsBuilder()
+    .UseFunctionInvocation()
+    .ConfigureOptions(options =>
+    {
+        options.Tools ??= [];
+        foreach (var tool in GardenTools.Default.Tools)
+            options.Tools.Add(tool);
+    })
+    .Build(serviceProvider);
+```
+
+Use `maui-ai-tool-bindings` when tools should be generated from app methods with
+`[ExportAIFunction]`, DI parameter binding, or AOT-friendly definitions.
+
+## Privacy and UX Guardrails
+
+- Explain that AI runs on device for supported Apple platforms.
+- Ask before adding a cloud fallback.
+- Keep prompts, embeddings, and tool outputs within the app's data handling
+  policy.
+- Show unsupported-device and model-unavailable states.
+- Do not block the UI thread while generating responses or embeddings.
+- Use approval-required tools for actions that mutate data, send messages,
+  purchase, delete, or navigate unexpectedly.
+
+## Validation Checklist
+
+- The app target platform supports the requested AI capability or has an
+  explicit fallback.
+- AI clients are registered in DI and consumed from services/view models.
+- Streaming, cancellation, and error states are handled.
+- Semantic search stores metadata with embeddings and avoids full re-ingest per
+  query.
+- Tool use is scoped and user-approved for sensitive actions.

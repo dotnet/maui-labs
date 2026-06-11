@@ -1,0 +1,136 @@
+---
+name: maui-controls-deep-dive
+description: >-
+  Apply advanced .NET MAUI control guidance for CollectionView, safe areas,
+  gestures, animations, and GraphicsView. USE FOR: deep control behavior,
+  virtualization, item sizing, empty/loading states, safe area handling,
+  Tap/Pointer/Pan/Swipe/Pinch gestures, animation lifecycle, custom drawing, and
+  performance/accessibility guardrails. DO NOT USE FOR: general page layout
+  (use maui-ui-patterns), full accessibility audits (use maui-accessibility),
+  broad performance profiling (use maui-performance), or native handler
+  implementation (use maui-custom-handlers).
+---
+
+# MAUI Controls Deep Dive
+
+Use this skill when the user is already working with MAUI controls and needs
+details beyond basic layout guidance. Keep control choices aligned with current
+MAUI APIs.
+
+## Workflow
+
+1. Inspect the target framework and whether the UI is XAML, C# Markup, or another
+   MAUI UI style.
+2. Identify the control area: `CollectionView`, safe area, gestures, animations,
+   or `GraphicsView`.
+3. Apply the focused guidance below and route broader architecture, accessibility,
+   or profiling work to the relevant skill.
+4. Validate the control on the intended device sizes/platforms, including
+   automation hooks and accessibility alternatives for critical actions.
+
+## CollectionView
+
+Use `CollectionView` for repeated data and let it own scrolling:
+
+- Do not wrap it in `ScrollView`.
+- Use `EmptyView`, header/footer, and surrounding `Grid` rows for non-item UI.
+- Use `RemainingItemsThreshold` / `RemainingItemsThresholdReachedCommand` for
+  incremental loading.
+- Use `SelectionMode`, `SelectedItem`, and `SelectionChangedCommand` instead of
+  tap gestures on item roots when selection is the intent.
+- Keep item templates lightweight. Avoid nested layouts and expensive converters
+  in large lists.
+- Prefer stable `AutomationId` values on the list and critical item controls.
+- For .NET 10 iOS/Mac Catalyst behavior, check current handler guidance before
+  opting into or reverting CollectionView handlers.
+
+Example state shell:
+
+```xml
+<Grid RowDefinitions="Auto,*">
+    <ActivityIndicator
+        AutomationId="orders-loading"
+        IsRunning="{Binding IsBusy}"
+        IsVisible="{Binding IsBusy}" />
+
+    <CollectionView
+        Grid.Row="1"
+        AutomationId="orders-list"
+        ItemsSource="{Binding Orders}"
+        RemainingItemsThreshold="5"
+        RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+        <CollectionView.EmptyView>
+            <Label
+                AutomationId="orders-empty"
+                Text="No orders found." />
+        </CollectionView.EmptyView>
+    </CollectionView>
+</Grid>
+```
+
+## Safe Areas
+
+- Inspect the MAUI target version first; use `maui-current-apis` when uncertain.
+- For .NET 10+ safe-area work, prefer `SafeAreaEdges` over manual iOS-only
+  padding.
+- Keep safe-area behavior declarative in XAML or shared UI when possible.
+- Test with notches, rounded corners, desktop title bars, and soft keyboard
+  scenarios when the page uses edge-to-edge layout.
+
+```xml
+<Grid SafeAreaEdges="Container">
+    ...
+</Grid>
+```
+
+Avoid hard-coded top padding unless it is tied to a measured design requirement
+and guarded by platform/version checks.
+
+## Gestures
+
+- Use `TapGestureRecognizer` for click/tap. Do not use removed or obsolete
+  click gesture APIs.
+- Use `PointerGestureRecognizer` for hover/desktop pointer affordances.
+- Use `PanGestureRecognizer`, `SwipeGestureRecognizer`, and
+  `PinchGestureRecognizer` only where the gesture maps to an obvious UI action.
+- Do not attach competing gestures to deeply nested controls without testing
+  hit-testing and scrolling interactions.
+- Preserve accessibility alternatives: commands, buttons, menu items, keyboard
+  accelerators, or semantic descriptions as appropriate.
+
+## Animations
+
+- Prefer built-in async animation helpers such as `FadeTo`, `ScaleTo`,
+  `TranslateTo`, and `RotateTo` for view animations.
+- Await or coordinate animations so state changes do not race.
+- Cancel or ignore stale animations when view models unload or commands rerun.
+- Avoid animation-only feedback for important state; expose semantic state and
+  visual states too.
+- Keep list item animations modest; animating many recycled cells can hurt
+  scrolling performance.
+
+## GraphicsView
+
+Use `GraphicsView` for custom drawing, charts, signatures, or lightweight
+visualizations:
+
+- Put drawing code in an `IDrawable`.
+- Treat `Draw(ICanvas canvas, RectF dirtyRect)` as a hot path: avoid allocations,
+  blocking I/O, async calls, and service lookups.
+- Store state outside the drawable and call `Invalidate()` when state changes.
+- Handle pointer/touch input at the view or page layer and translate it to
+  drawing state.
+- Add accessible surrounding UI for important information drawn on the canvas.
+  Screen readers cannot infer arbitrary canvas content.
+- Use `maui-performance` if drawing stutters, allocates heavily, or invalidates
+  too often.
+
+## Validation Checklist
+
+- `CollectionView` owns its scrolling and has empty/loading behavior where data
+  can be absent.
+- Safe-area code matches the detected MAUI version and target platforms.
+- Gestures have accessible alternatives for critical actions.
+- Animations cannot leave the UI in stale state after cancellation or navigation.
+- `GraphicsView` drawing is allocation-conscious and exposes important content
+  outside the canvas.

@@ -1,0 +1,64 @@
+scenarios:
+  - name: "Audit migration blockers before porting"
+    prompt: |
+      I inherited a Xamarin.Forms 5 app with DependencyService calls,
+      MessagingCenter messages, three custom renderers, and platform projects for
+      Android and iOS. I need an audit plan before we start moving code to .NET
+      MAUI.
+    assertions:
+      - type: "output_matches"
+        pattern: "DependencyService.*DI|DI.*DependencyService"
+      - type: "output_matches"
+        pattern: "MessagingCenter.*WeakReferenceMessenger|WeakReferenceMessenger.*MessagingCenter|event aggregator|IObservable"
+      - type: "output_matches"
+        pattern: "renderer|handler|PropertyMapper|ViewHandler"
+      - type: "output_matches"
+        pattern: "permissions|Info\\.plist|AndroidManifest|capabilit"
+    rubric:
+      - "Starts with a migration audit of packages, platform projects, renderers, DependencyService, MessagingCenter, permissions, and capabilities"
+      - "Plans DependencyService replacement through DI registration and constructor injection"
+      - "Plans MessagingCenter replacement with WeakReferenceMessenger, events, observable state, or explicit services"
+      - "Classifies custom renderers before choosing mapper customization or custom handlers"
+    timeout: 240
+
+  - name: "Move Xamarin.Forms app into a new MAUI project"
+    prompt: |
+      We are moving a Xamarin.Forms app to .NET MAUI and want to avoid dragging
+      old project file cruft forward. What new-project migration workflow should
+      we use, and what namespaces/APIs should we update while copying code?
+    assertions:
+      - type: "output_matches"
+        pattern: "new .NET MAUI project|new MAUI project|dotnet new maui"
+      - type: "output_contains"
+        value: "MauiProgram.cs"
+      - type: "output_contains"
+        value: "Microsoft.Maui.Controls"
+      - type: "output_matches"
+        pattern: "Microsoft\\.Maui\\.(ApplicationModel|Devices|Storage)"
+    rubric:
+      - "Recommends starting from a fresh MAUI project/solution rather than in-place project file edits"
+      - "Moves shared code/resources first and platform code later"
+      - "Replaces Xamarin.Forms and Xamarin.Essentials namespaces with MAUI namespaces"
+      - "Mentions MAUI startup through MauiProgram.cs and DI"
+    timeout: 240
+
+  - name: "Choose handlers, platform services, or slim bindings"
+    prompt: |
+      During migration we found a renderer that only removes an Entry underline,
+      another renderer that wraps a custom camera preview, and an iOS/Android
+      native payment SDK used by platform services. How should we split the work?
+    assertions:
+      - type: "output_matches"
+        pattern: "AppendToMapping|PropertyMapper"
+      - type: "output_matches"
+        pattern: "ViewHandler|custom handler|handler"
+      - type: "output_matches"
+        pattern: "DependencyInjection|AddSingleton|AddTransient|I[A-Za-z]+Service"
+      - type: "output_matches"
+        pattern: "slim binding|android-slim-bindings|ios-slim-bindings"
+    rubric:
+      - "Maps the simple Entry native property tweak to a scoped handler mapper customization"
+      - "Maps the camera preview visual surface to a custom handler"
+      - "Maps non-visual platform operations to DI platform services"
+      - "Routes the native payment SDK to slim bindings when the app needs a maintainable SDK surface"
+    timeout: 240
