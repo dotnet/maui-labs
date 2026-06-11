@@ -88,7 +88,7 @@ For MSAL:
 
 | Platform | Check |
 | --- | --- |
-| Android | Add the intent filter in `AndroidManifest.xml` for the callback scheme/host. For `WebAuthenticator`, target MAUI's `Microsoft.Maui.Authentication.WebAuthenticatorCallbackActivity`; do not create a custom Xamarin.Essentials-style callback activity subclass. For MSAL broker flows, use the broker-compatible redirect URI and signature hash expected by the app registration. |
+| Android | For `WebAuthenticator`, add an Android activity subclass that inherits `Microsoft.Maui.Authentication.WebAuthenticatorCallbackActivity` and has an `IntentFilter` for the callback scheme/host. Use MAUI namespaces, not Xamarin.Auth or Xamarin.Essentials callback types. For MSAL broker flows, use the broker-compatible redirect URI and signature hash expected by the app registration. |
 | iOS/Mac Catalyst | Add `CFBundleURLTypes` for the callback scheme. For broker flows, include required query schemes and redirect URI configuration from MSAL docs. |
 | Windows | Register the custom protocol in the package manifest or app identity configuration used by the target. |
 

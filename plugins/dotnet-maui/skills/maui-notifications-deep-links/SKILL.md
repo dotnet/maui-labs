@@ -94,12 +94,22 @@ Route native launch callbacks into one link handler:
 ```csharp
 builder.ConfigureLifecycleEvents(events =>
 {
-    events.AddAndroid(android => android.OnNewIntent((activity, intent) =>
+    events.AddAndroid(android =>
     {
-        var uri = intent?.Data?.ToString();
-        if (!string.IsNullOrEmpty(uri))
-            DeepLinkRouter.Route(uri);
-    }));
+        android.OnCreate((activity, _) =>
+        {
+            var uri = activity.Intent?.Data?.ToString();
+            if (!string.IsNullOrEmpty(uri))
+                DeepLinkRouter.Route(uri);
+        });
+
+        android.OnNewIntent((activity, intent) =>
+        {
+            var uri = intent?.Data?.ToString();
+            if (!string.IsNullOrEmpty(uri))
+                DeepLinkRouter.Route(uri);
+        });
+    });
 
     events.AddiOS(ios => ios.OpenUrl((app, url, options) =>
     {

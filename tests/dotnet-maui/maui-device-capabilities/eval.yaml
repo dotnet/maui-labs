@@ -54,6 +54,8 @@ scenarios:
         pattern: "ACCESS_FINE_LOCATION|NSLocationWhenInUseUsageDescription"
       - type: "output_matches"
         pattern: "UseMauiMaps|<maps:Map|MapHandler"
+      - type: "output_not_matches"
+        pattern: "RequestAsync<Permissions\\.LocationAlways>"
     rubric:
       - "Checks and requests location permission before geolocation"
       - "Uses GetLocationAsync with GeolocationRequest for current location"

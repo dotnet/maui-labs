@@ -47,6 +47,7 @@ builder.Services.AddServiceDiscovery();
 
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
 {
+    // Development only: use "https://" for production endpoints.
     client.BaseAddress = new Uri("https+http://apiservice");
 })
 .AddServiceDiscovery();

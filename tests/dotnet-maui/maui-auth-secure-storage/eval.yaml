@@ -14,6 +14,8 @@ scenarios:
         pattern: "intent filter|intent-filter|CFBundleURLTypes"
       - type: "output_matches"
         pattern: "PKCE|client secret|authorization code"
+      - type: "output_not_matches"
+        pattern: "ClientSecret\\s*=|client_secret="
     rubric:
       - "Uses WebAuthenticator with a CallbackUrl matching myapp://auth"
       - "Mentions Android intent filter and iOS/Mac Catalyst CFBundleURLTypes setup"
@@ -72,13 +74,13 @@ scenarios:
         pattern: "AuthenticateAsync|WebAuthenticatorOptions"
       - type: "output_contains"
         value: "Microsoft.Maui.Authentication.WebAuthenticatorCallbackActivity"
-      - type: "output_contains"
-        value: "AndroidManifest.xml"
+      - type: "output_matches"
+        pattern: "Activity|IntentFilter"
       - type: "output_contains"
         value: "CFBundleURLTypes"
     rubric:
       - "Replaces Xamarin.Auth with MAUI WebAuthenticator APIs"
-      - "Registers the Android callback intent filter for MAUI's built-in WebAuthenticatorCallbackActivity"
-      - "Does not recommend creating a custom callback Activity subclass"
+      - "Registers an Android callback Activity subclass that inherits MAUI's WebAuthenticatorCallbackActivity"
+      - "Avoids Xamarin.Auth and Xamarin.Essentials callback types"
       - "Adds the iOS/Mac Catalyst callback scheme through CFBundleURLTypes"
     timeout: 240

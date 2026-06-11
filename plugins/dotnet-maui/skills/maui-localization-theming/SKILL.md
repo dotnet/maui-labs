@@ -77,9 +77,7 @@ binding. Existing pages usually need notification or recreation.
 ## Theme Patterns
 
 ```xml
-<Color x:Key="PageBackgroundColor">
-    <AppThemeBinding Light="#FFFFFF" Dark="#111111" />
-</Color>
+<ContentPage BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111111}" />
 
 <Label TextColor="{DynamicResource PrimaryTextColor}" />
 ```

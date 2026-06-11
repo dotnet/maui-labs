@@ -34,6 +34,8 @@ scenarios:
         pattern: "service account|legacy server key"
       - type: "output_matches"
         pattern: "optional|not required|not mandatory"
+      - type: "output_not_matches"
+        pattern: "Authorization:\\s*key="
     rubric:
       - "Explains that Android push backends should use FCM HTTP v1 rather than the retired legacy API"
       - "Explains that iOS uses APNs device tokens"
