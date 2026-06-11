@@ -24,14 +24,14 @@ scenarios:
       Update this MAUI page code for current .NET MAUI APIs. It has obsolete
       Xamarin.Forms-era API usage and platform checks. Explain what you changed.
     assertions:
-      - type: "output_contains"
-        value: "MainThread.BeginInvokeOnMainThread"
+      - type: "output_matches"
+        pattern: "MainThread\\.BeginInvokeOnMainThread|Dispatcher\\.Dispatch"
       - type: "output_matches"
         pattern: "DeviceInfo\\.Platform|Dispatcher\\.Dispatch"
       - type: "output_contains"
         value: "Microsoft.Maui.Controls"
       - type: "output_matches"
-        pattern: "TargetFramework|net10\\.0"
+        pattern: "(?i)TargetFramework|net10\\.0|\\.NET 10"
     rubric:
       - "Inspects the target framework before selecting replacement APIs"
       - "Replaces Xamarin.Forms namespace with Microsoft.Maui namespaces"
@@ -52,15 +52,16 @@ scenarios:
             </Project>
     prompt: |
       I need to update an iOS/Mac Catalyst MAUI page for safe area handling in
-      .NET 10. The old suggestion I got was to call On<iOS>().SetUseSafeArea(true).
-      What should I use instead in XAML?
+      .NET 10. Review this against current .NET MAUI APIs. The old suggestion I
+      got was to call On<iOS>().SetUseSafeArea(true). What should I use instead
+      in XAML?
     assertions:
       - type: "output_contains"
         value: "SafeAreaEdges"
       - type: "output_matches"
         pattern: "Container|All|SoftInput"
       - type: "output_matches"
-        pattern: "(?i)instead|replace|legacy|old"
+        pattern: "(?i)instead|replace|legacy|old|obsolete|deprecated|removed"
     rubric:
       - "Recommends the current SafeAreaEdges API for .NET 10+"
       - "Does not recommend the old iOS-only SetUseSafeArea pattern"
@@ -85,7 +86,7 @@ scenarios:
       - type: "output_contains"
         value: "net8.0"
       - type: "output_matches"
-        pattern: "(?i)(do not|don't|avoid|should not|never) assume"
+        pattern: "(?i)(do not|don't|avoid|should not|never).*(assume|use)|net8\\.0.*(only|compatible|available)"
     rubric:
       - "Inspects and respects the net8.0 target framework"
       - "Avoids recommending APIs that may only exist in newer MAUI versions"

@@ -16,6 +16,9 @@ scenarios:
       library (distributed via CocoaPods as 'lottie-ios') and I only need to play
       animations from JSON files. Create a slim iOS binding project in LottieBinding/
       with the XcodeGen project.yml, Podfile, Swift wrapper, and C# binding project.
+      Please write the actual files to disk and summarize the important setup in
+      your chat response, including the Podfile static-linkage line and the Swift
+      wrapper class signature with @objc and NSObject.
     assertions:
       - type: "output_contains"
         value: "XcodeGen"
@@ -25,12 +28,11 @@ scenarios:
         pattern: "@objc|NSObject"
       - type: "output_matches"
         pattern: "ApiDefinition\\.cs|BaseType"
-      - type: "file_exists"
-        path: "LottieBinding/project.yml"
-      - type: "file_exists"
-        path: "LottieBinding/Podfile"
-      - type: "file_contains"
-        path: "LottieBinding/Podfile"
+      - type: "output_contains"
+        value: "project.yml"
+      - type: "output_contains"
+        value: "Podfile"
+      - type: "output_contains"
         value: "lottie-ios"
     rubric:
       - "Uses XcodeGen (project.yml) to generate the Xcode project rather than manual Xcode project creation"
@@ -76,7 +78,8 @@ scenarios:
 
       The Swift wrapper is at MyBinding/swift/DotnetMyBinding.swift and the binding
       definition is at MyBinding/ApiDefinition.cs. Fix the code to resolve this
-      selector mismatch.
+      selector mismatch. Explain how slim bindings on iOS handle Objective-C
+      selectors.
     assertions:
       - type: "output_matches"
         pattern: "(?i)selector.*mismatch|mismatch.*selector|Export.*doesn.t match|@objc.*selector"

@@ -147,7 +147,9 @@ opening many low-signal issues.
 
 Before saving markdown or filing issues, do a final privacy pass. If a useful
 finding cannot be explained without PII or local identifiers, omit it or replace
-the details with a generic description.
+the details with a generic description. Do not repeat the original private value
+in the output, even to say that it was scrubbed; say only that local paths,
+emails, private URLs, or other identifiers were redacted.
 
 ## Optional Feedback Nudge
 
@@ -163,7 +165,7 @@ they want an opt-in review; it should not run this skill automatically.
 | Auto-scan all past sessions | Ask for scope and stay inside it |
 | Ask for session IDs, transcript paths, log paths, or artifact paths | Ask for a high-level scope such as time range, platform, feature, or current session |
 | Treat one ambiguous failure as a confirmed DevFlow bug | Label confidence and separate app/environment/unknown causes |
-| Include raw private transcript excerpts, screenshots, tokens, file paths, session IDs, or request bodies | Paraphrase safe evidence and scrub PII before output |
+| Include raw private transcript excerpts, screenshots, tokens, file paths, session IDs, or request bodies, even in "removed PII" notes | Paraphrase safe evidence and say identifiers were redacted without repeating them |
 | Fix the discovered issues during the review | Produce feedback unless the user separately asks for implementation |
 | File GitHub issues without user approval and repo access | Produce markdown first, then file only on request |
 | Hide successful workarounds | Capture the final working path and the failed attempts that led to it |

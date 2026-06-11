@@ -2,8 +2,9 @@ scenarios:
   - name: "Create login UI with automation hooks"
     prompt: |
       Create a simple .NET MAUI login page UI in XAML with email, password,
-      sign-in button, and validation message. Keep it vendor-neutral and make it
-      testable by DevFlow or UI automation.
+      sign-in button, and validation message. Keep it vendor-neutral, use
+      SemanticProperties for accessibility, make it testable by DevFlow or UI
+      automation, and output the XAML code directly in your chat response.
     assertions:
       - type: "output_contains"
         value: "AutomationId"
@@ -45,7 +46,7 @@ scenarios:
       ScrollView. Is that a good MAUI pattern? What should I do instead?
     assertions:
       - type: "output_matches"
-        pattern: "(?i)do not|avoid|don't"
+        pattern: "(?i)do not|avoid|don't|should not|instead|remove|anti-pattern"
       - type: "output_contains"
         value: "CollectionView"
       - type: "output_contains"

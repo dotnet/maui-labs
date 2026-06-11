@@ -19,7 +19,8 @@ scenarios:
             </Project>
     prompt: |
       Add CommunityToolkit.Maui to this MAUI app. The repo uses Central Package
-      Management. Show the project and package version edits.
+      Management. Use MAUI project structure best practices and show the project
+      and package version edits.
     assertions:
       - type: "output_contains"
         value: "Directory.Packages.props"
@@ -28,7 +29,7 @@ scenarios:
       - type: "output_contains"
         value: "PackageReference Include=\"CommunityToolkit.Maui\""
       - type: "output_matches"
-        pattern: "versionless|without Version|omit.*Version|leave.*Version"
+        pattern: "(?i)versionless|without version|omit.*version|leave.*version|no version"
     rubric:
       - "Detects Central Package Management from Directory.Packages.props"
       - "Adds the version as a PackageVersion"

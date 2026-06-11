@@ -2,7 +2,7 @@
 name: dotnet-workload-info
 description: >-
   Discover .NET SDK versions, workload sets, manifest versions, and workload dependencies (Xcode, JDK, Android SDK) from live NuGet APIs.
-  USE FOR: .NET SDK requirements/versions, workload set versions, workload manifest versions, Xcode version requirements, JDK version requirements, Android SDK packages, MAUI NuGet package versions.
+  USE FOR: .NET SDK requirements/versions, workload set versions, CLI-to-NuGet workload set version conversion, workload manifest versions, Xcode version requirements, JDK version requirements, Android SDK packages, MAUI NuGet package versions.
   DO NOT USE FOR: Installing workloads (use `dotnet workload install`), general MAUI debugging, app build failures.
   Triggers on questions like "What Xcode is required for .NET 10?" or "What's the latest workload set?"
 ---
@@ -67,6 +67,7 @@ The returned workloadVersion is the CLI version to use with --version flag.
 To convert this to the NuGet package version (needed for Steps 3-4):
 
 CLI 10.0.103 → NuGet 10.103.0 (remove middle .0., combine)
+Do not use the CLI version as the NuGet package version in flat-container URLs.
 The NuGet package is: Microsoft.NET.Workloads.{band} where band = CLI version (e.g., Microsoft.NET.Workloads.10.0.100)
 
 

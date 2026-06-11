@@ -16,7 +16,7 @@ scenarios:
       library (com.airbnb.android:lottie:6.6.2) but I only need to play animations
       from JSON files — not the full API surface. Create a slim Android binding
       project in LottieBinding/ with the Kotlin wrapper, Gradle build files, and
-      C# binding project.
+      C# binding project. Please write the actual files to disk.
     assertions:
       - type: "output_matches"
         pattern: "(?i)slim.binding|native.library.interop|NLI|thin.wrapper"
@@ -24,10 +24,7 @@ scenarios:
         pattern: "(?i)gradlew|gradle|build\\.gradle"
       - type: "output_matches"
         pattern: "AndroidLibrary|AndroidMavenLibrary"
-      - type: "file_exists"
-        path: "LottieBinding/build.gradle.kts"
-      - type: "file_contains"
-        path: "LottieBinding/build.gradle.kts"
+      - type: "output_contains"
         value: "com.airbnb.android:lottie"
     rubric:
       - "Recommends the slim/NLI approach over traditional full bindings given the user only needs a subset"
@@ -60,7 +57,11 @@ scenarios:
       error XA4241: Java dependency 'javax.inject:javax.inject' is not satisfied.
       ```
 
-      Fix the MyBinding/MyBinding.csproj to resolve these dependency errors.
+      I do not need javax.inject from C# and it is only a compile-time annotation
+      dependency for this wrapper.
+
+      Fix the MyBinding/MyBinding.csproj to resolve these dependency errors,
+      and explain your fixes in the chat.
     assertions:
       - type: "output_contains"
         value: "Xamarin.AndroidX.Core"

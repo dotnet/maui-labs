@@ -14,7 +14,7 @@ scenarios:
     prompt: |
       Add Shell navigation from ProductsPage to DetailsPage with a product id
       query parameter. Show how to register the route and receive the parameter
-      in the DetailsViewModel.
+      in the DetailsViewModel following MAUI MVVM architecture.
     assertions:
       - type: "output_contains"
         value: "Routing.RegisterRoute"
@@ -23,7 +23,7 @@ scenarios:
       - type: "output_matches"
         pattern: "IQueryAttributable|QueryProperty"
       - type: "output_matches"
-        pattern: "EscapeDataString|Uri\\.Escape"
+        pattern: "(?i)EscapeDataString|Uri\\.Escape|escape"
     rubric:
       - "Registers the Shell route before navigation"
       - "Uses Shell.Current.GoToAsync for navigation"

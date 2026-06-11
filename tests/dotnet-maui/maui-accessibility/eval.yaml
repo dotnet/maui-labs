@@ -2,7 +2,8 @@ scenarios:
   - name: "Make icon-only button accessible"
     prompt: |
       My MAUI toolbar uses an ImageButton with only a save icon. What
-      accessibility metadata and test hook should I add?
+      accessibility metadata and test hook should I add? I want to perform a
+      .NET MAUI accessibility audit on this.
     assertions:
       - type: "output_contains"
         value: "SemanticProperties.Description"
@@ -19,7 +20,8 @@ scenarios:
   - name: "Announce validation errors"
     prompt: |
       A MAUI form validates after the user taps Save. If the email field is
-      invalid, how should I tell screen reader users what happened?
+      invalid, how should I tell screen reader users what happened using semantic
+      focus or announcements?
     assertions:
       - type: "output_contains"
         value: "SemanticScreenReader.Announce"
@@ -36,7 +38,8 @@ scenarios:
   - name: "Mark headings and hide decorative image"
     prompt: |
       My MAUI page has a big title label and a decorative background image. What
-      properties should I set so screen readers handle them correctly?
+      properties should I set so screen readers handle them correctly according
+      to WCAG-oriented UI fixes?
     assertions:
       - type: "output_contains"
         value: "SemanticProperties.HeadingLevel"

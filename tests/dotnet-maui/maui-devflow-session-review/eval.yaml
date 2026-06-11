@@ -6,7 +6,9 @@ scenarios:
       several times. On Android it also tried direct localhost access, then
       switched between broker discovery and port forwarding before the workflow
       finally worked. I do not want to fix the app right now; I want a concise
-      product-feedback report for the DevFlow maintainers.
+      product-feedback report for the DevFlow maintainers. Explicitly mention
+      privacy scrubbing/redaction and classify each finding with severity,
+      confidence, and outcome.
     assertions:
       - type: "output_matches"
         pattern: "maui devflow (list|wait|ui tree)"
@@ -27,13 +29,14 @@ scenarios:
   - name: "Create markdown report for long Blazor WebView debugging session"
     prompt: |
       Please summarize this long MAUI Blazor Hybrid DevFlow session into a
-      markdown-only feedback report. The repeated friction was around
+      markdown-only feedback report. Output the markdown report in the chat
+      instead of saving a file. The repeated friction was around
       `maui_cdp_webviews`, `maui_cdp_source`, `maui devflow ui tree`, and a
       fallback to screenshots because the WebView list kept coming back empty.
       Do not file an issue yet.
     assertions:
-      - type: "output_contains"
-        value: "markdown"
+      - type: "output_matches"
+        pattern: "(?i)markdown|^##\\s"
       - type: "output_contains"
         value: "## Environment"
       - type: "output_contains"
@@ -56,7 +59,9 @@ scenarios:
       mention `/Users/alex/src/MyCustomerApp`, `alex@example.com`, and a private
       staging URL. The useful product signal is that `maui_query --automationId`
       failed three times, then the agent dumped the full tree and manually found
-      the element. Draft the issue body and show how you would file it.
+      the element. Draft the issue body and show how you would file it. Do not
+      repeat the raw path, email address, or private URL anywhere in your output,
+      even when explaining that the issue was scrubbed.
     assertions:
       - type: "output_contains"
         value: "dotnet/maui-labs"

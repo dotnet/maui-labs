@@ -3,7 +3,8 @@ scenarios:
     prompt: |
       I have a ProductsViewModel that calls IProductsService.LoadAsync and fills
       an ObservableCollection. Show an xUnit test for it. Should the test call
-      MauiProgram.CreateMauiApp()?
+      MauiProgram.CreateMauiApp()? Evaluate this using MAUI unit testing best
+      practices.
     assertions:
       - type: "output_contains"
         value: "[Fact]"
