@@ -32,8 +32,9 @@ services during development, persists local data, or must behave well offline.
    reference data, the entities users can edit while offline, and the fields
    that remain server-authoritative.
 7. For SQLite/offline sync answers, show the storage initialization API before
-   the entity schema: `SQLiteAsyncConnection` + `CreateTableAsync` for
-   sqlite-net, or an EF Core `DbContext` setup. Do not only show POCO models.
+   the entity schema: explicitly name `SQLiteAsyncConnection` plus
+   `CreateTableAsync<T>` for sqlite-net, or an EF Core `DbContext` setup. Do not
+   only show POCO models, sqlite-net attributes, or `db.Table<T>()` queries.
 8. Store local data in SQLite or app data files behind a repository/service
    abstraction.
 9. Add cancellation, timeout, retry, and user-facing error states.
@@ -109,11 +110,11 @@ answer does not imply every local row is editable. For example:
 | Server-authoritative data | payment status, inventory counts, account roles | display cached values but require online server confirmation before mutation |
 
 For sqlite-net, this usually means a `SQLiteAsyncConnection` and
-`CreateTableAsync` setup. For EF Core, keep the local schema behind a
-`DbContext`.
+`CreateTableAsync<T>` setup before any `db.Table<T>()` queries. For EF Core, keep
+the local schema behind a `DbContext`.
 
 Always include a short initialization snippet in offline-sync guidance so the
-storage layer is concrete, not just the row shape.
+storage layer is concrete, not just the row shape or sqlite-net attributes.
 
 ```csharp
 var db = new SQLiteAsyncConnection(databasePath);

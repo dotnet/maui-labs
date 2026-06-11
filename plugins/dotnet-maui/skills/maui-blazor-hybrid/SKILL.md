@@ -34,8 +34,9 @@ inside a native app.
 6. Use JS/.NET interop through documented APIs, not platform WebView internals.
    For `HybridWebView` raw messaging, always show `SendRawMessage`,
    `RawMessageReceived`, a JSON DTO contract, and a source-generated
-   `JsonSerializerContext`/`System.Text.Json` path when trimming safety is part
-   of the request.
+   `JsonSerializerContext`/`System.Text.Json` path when trimming, NativeAOT,
+   Release trimming, or trimming-safe messaging is part of the request. Do not
+   answer with only raw strings or `DynamicDependency`.
 7. Review trimming and NativeAOT risks for reflection, serialization, and JS
    interop payloads.
 8. Use DevFlow CDP tools to inspect WebView DOM, console, screenshots, and route
@@ -71,9 +72,10 @@ hybridWebView.SendRawMessage("refresh");
 hybridWebView.RawMessageReceived += OnRawMessageReceived;
 ```
 
-For non-trivial payloads, keep messages typed at the .NET boundary instead of
-switching on ad-hoc strings. Use JSON DTOs with `System.Text.Json` source
-generation so serialization stays trimming/NativeAOT friendly:
+For non-trivial or trimming-sensitive payloads, keep messages typed at the .NET
+boundary instead of switching on ad-hoc strings. Use a DTO plus `System.Text.Json`
+source generation (`[JsonSerializable]` and `JsonSerializerContext`) so
+serialization stays trimming/NativeAOT friendly:
 
 ```csharp
 public sealed record HybridMessage(string Action, string? Id);

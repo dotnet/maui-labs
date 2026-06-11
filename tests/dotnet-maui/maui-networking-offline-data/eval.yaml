@@ -33,7 +33,7 @@ scenarios:
       example, not just the entity classes.
     assertions:
       - type: "output_matches"
-        pattern: "SQLiteAsyncConnection|CreateTableAsync|DbContext|sqlite-net|EF Core"
+        pattern: "SQLiteAsyncConnection|CreateTableAsync|DbContext"
       - type: "output_matches"
         pattern: "read-only|readonly|cached reference|editable offline|offline-editable|server-authoritative"
       - type: "output_matches"
