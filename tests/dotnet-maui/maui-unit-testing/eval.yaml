@@ -20,39 +20,75 @@ scenarios:
       - "Explicitly avoids starting a MAUI app for pure ViewModel logic"
     timeout: 240
 
-  - name: "Abstract geolocation for testability"
+  - name: "Reject MauiProgram.CreateMauiApp in test setup"
+    setup:
+      files:
+        - path: "MyApp/MauiProgram.cs"
+          content: |
+            public static class MauiProgram
+            {
+                public static MauiApp CreateMauiApp()
+                {
+                    var builder = MauiApp.CreateBuilder();
+                    builder.Services.AddSingleton<IOrdersService, OrdersService>();
+                    builder.Services.AddTransient<OrdersViewModel>();
+                    return builder.Build();
+                }
+            }
     prompt: |
-      My ViewModel calls Geolocation.Default.GetLocationAsync directly. I want
-      deterministic unit tests. How should I refactor it?
+      My colleague suggested I call MauiProgram.CreateMauiApp() in my xUnit test
+      setup to get the real DI container for OrdersViewModel tests. Is this the
+      correct approach? What is the MAUI unit testing best practice for ViewModel
+      tests that depend on injected services?
     assertions:
       - type: "output_matches"
-        pattern: "interface|abstraction"
+        pattern: "(?i)(do\\W*not|don't|avoid|should not|no need to|never).*MauiProgram\\.CreateMauiApp"
       - type: "output_matches"
-        pattern: "ILocationService|IGeolocation"
+        pattern: "(?i)(fake|mock|stub)"
       - type: "output_matches"
-        pattern: "(?i)fake|mock"
-      - type: "output_contains"
-        value: "Geolocation.Default"
+        pattern: "(?i)(interface|inject|constructor)"
     rubric:
-      - "Recommends wrapping Geolocation.Default behind an injected interface"
-      - "Shows or describes a fake implementation for tests"
-      - "Keeps platform API calls out of the ViewModel test path"
+      - "Explicitly rejects calling MauiProgram.CreateMauiApp in ViewModel unit tests"
+      - "Recommends a fake or mock implementation of IOrdersService instead"
+      - "Explains that ViewModel unit tests should not start the full MAUI app"
     timeout: 240
 
-  - name: "Reference MAUI app project from tests"
+  - name: "Use AppProjectReference for test project referencing MAUI app"
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+        - path: "MyApp.Tests/MyApp.Tests.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+              </PropertyGroup>
+              <ItemGroup>
+                <ProjectReference Include="../MyApp/MyApp.csproj" />
+              </ItemGroup>
+            </Project>
     prompt: |
-      I need a test/tooling project to reference my .NET MAUI app project. A
-      normal ProjectReference causes app-project build issues. What MAUI Labs
-      package or approach should I consider?
+      My DevFlow integration test project uses a direct ProjectReference to the MAUI
+      app project. The build fails because the MAUI app project targets multiple
+      platforms and has handler initialization that breaks plain net10.0 builds.
+      Is there a MAUI Labs NuGet package that solves this problem for test and
+      tooling projects that need to reference a MAUI app project?
     assertions:
       - type: "output_contains"
         value: "Microsoft.Maui.Build.AppProjectReference"
       - type: "output_matches"
-        pattern: "AppProjectReference|app project reference"
-      - type: "output_matches"
-        pattern: "test|tooling"
+        pattern: "(?i)(NuGet|PackageReference|package)"
+      - type: "output_not_matches"
+        pattern: "(?i)convert.*class library|change.*SDK.*class"
     rubric:
-      - "Identifies Microsoft.Maui.Build.AppProjectReference as the MAUI Labs support package"
-      - "Explains that app projects are not ordinary class library references"
-      - "Keeps device/UI automation concerns separate from unit testing"
+      - "Identifies Microsoft.Maui.Build.AppProjectReference as the MAUI Labs solution"
+      - "Explains that MAUI app projects cannot be referenced like class libraries"
+      - "Avoids suggesting converting the app project to a class library as the fix"
     timeout: 240

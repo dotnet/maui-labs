@@ -1,5 +1,5 @@
 scenarios:
-  - name: "Replace obsolete dispatcher and platform APIs"
+  - name: "Replace Application.Current.MainPage navigation pattern"
     setup:
       files:
         - path: "MyApp/MyApp.csproj"
@@ -10,34 +10,33 @@ scenarios:
                 <UseMaui>true</UseMaui>
               </PropertyGroup>
             </Project>
-        - path: "MyApp/MainPage.xaml.cs"
+        - path: "MyApp/Services/NavigationService.cs"
           content: |
             using Xamarin.Forms;
-            public partial class MainPage : ContentPage
+            public class NavigationService
             {
-                void UpdateUi()
+                public void ShowDashboard()
                 {
-                    Device.BeginInvokeOnMainThread(() => Status.Text = Device.RuntimePlatform);
+                    Application.Current.MainPage = new DashboardPage();
                 }
             }
     prompt: |
-      Update this MAUI page code for current .NET MAUI APIs. It has obsolete
-      Xamarin.Forms-era API usage and platform checks. Explain what you changed
-      and call out the target framework you inspected before choosing replacements.
+      Update this MAUI navigation service for current .NET MAUI APIs. It sets
+      Application.Current.MainPage directly, which was the Xamarin.Forms pattern.
+      What is the recommended MAUI equivalent? Inspect the target framework first.
     assertions:
+      - type: "output_not_matches"
+        pattern: "Application\\.Current\\.MainPage\\s*="
       - type: "output_matches"
-        pattern: "MainThread\\.BeginInvokeOnMainThread|Dispatcher\\.Dispatch"
-      - type: "output_matches"
-        pattern: "DeviceInfo\\.Platform"
+        pattern: "Shell\\.Current|GoToAsync|Window\\.Page"
       - type: "output_contains"
         value: "Microsoft.Maui.Controls"
       - type: "output_matches"
         pattern: "(?i)TargetFramework|net10\\.0|\\.NET 10"
     rubric:
-      - "Inspects the target framework before selecting replacement APIs"
-      - "Replaces Xamarin.Forms namespace with Microsoft.Maui namespaces"
-      - "Replaces Device.BeginInvokeOnMainThread with MainThread or dispatcher APIs"
-      - "Avoids reintroducing Device.RuntimePlatform as the recommended platform check"
+      - "Replaces Application.Current.MainPage assignment with Shell navigation or Window.Page"
+      - "Replaces Xamarin.Forms namespace with Microsoft.Maui.Controls"
+      - "Explains when Shell routes are preferred over full-window navigation reset"
     timeout: 240
 
   - name: "Use SafeAreaEdges for .NET 10 safe area layout"
