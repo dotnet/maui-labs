@@ -20,6 +20,9 @@ description: >-
 
 Use this skill when editing the shape of a MAUI app project rather than a single
 feature implementation. Inspect existing conventions first and preserve them.
+Critical app-version guardrail: never answer "yes" to using `maui project
+version` for platform app display/build versions. Use
+`ApplicationDisplayVersion` and `ApplicationVersion` directly.
 
 ## Workflow
 
