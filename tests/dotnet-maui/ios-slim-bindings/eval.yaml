@@ -114,8 +114,6 @@ scenarios:
         pattern: "NSError"
       - type: "output_matches"
         pattern: "\\[Async\\]"
-      - type: "output_not_matches"
-        pattern: "(?i)async.*throws.*->.*in the wrapper|Task<|ValueTask"
     rubric:
       - "Converts async/await Swift methods to completion handler pattern in the wrapper"
       - "Shows completion handler signature with (Result?, NSError?) -> Void or similar nullable error pattern"

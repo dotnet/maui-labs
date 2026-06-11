@@ -1,0 +1,51 @@
+scenarios:
+  - name: "Make icon-only button accessible"
+    prompt: |
+      My MAUI toolbar uses an ImageButton with only a save icon. What
+      accessibility metadata and test hook should I add?
+    assertions:
+      - type: "output_contains"
+        value: "SemanticProperties.Description"
+      - type: "output_contains"
+        value: "SemanticProperties.Hint"
+      - type: "output_contains"
+        value: "AutomationId"
+    rubric:
+      - "Adds SemanticProperties.Description for the accessible name"
+      - "Adds SemanticProperties.Hint when the action needs clarification"
+      - "Adds AutomationId for testing but does not treat it as the accessible label"
+    timeout: 240
+
+  - name: "Announce validation errors"
+    prompt: |
+      A MAUI form validates after the user taps Save. If the email field is
+      invalid, how should I tell screen reader users what happened?
+    assertions:
+      - type: "output_contains"
+        value: "SemanticScreenReader.Announce"
+      - type: "output_matches"
+        pattern: "focus|SetSemanticFocus|semantic focus"
+      - type: "output_matches"
+        pattern: "first invalid|error summary|validation"
+    rubric:
+      - "Uses SemanticScreenReader.Announce for the validation result"
+      - "Recommends moving focus to the error summary or first invalid field when helpful"
+      - "Avoids announcing every minor UI change"
+    timeout: 240
+
+  - name: "Mark headings and hide decorative image"
+    prompt: |
+      My MAUI page has a big title label and a decorative background image. What
+      properties should I set so screen readers handle them correctly?
+    assertions:
+      - type: "output_contains"
+        value: "SemanticProperties.HeadingLevel"
+      - type: "output_matches"
+        pattern: "AutomationProperties\\.IsInAccessibleTree"
+      - type: "output_matches"
+        pattern: "False|false"
+    rubric:
+      - "Sets a semantic heading level on the title"
+      - "Hides the decorative image from the accessibility tree"
+      - "Does not hide meaningful interactive content"
+    timeout: 240

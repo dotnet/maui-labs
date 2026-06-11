@@ -1,0 +1,55 @@
+scenarios:
+  - name: "Measure slow startup with MAUI CLI profiler"
+    prompt: |
+      My .NET MAUI app feels slow to start on Android. Before changing code, what
+      measurement workflow should I use from the maui CLI?
+    assertions:
+      - type: "output_contains"
+        value: "maui profile startup"
+      - type: "output_matches"
+        pattern: "Release|device|emulator"
+      - type: "output_matches"
+        pattern: "measure|profile|baseline"
+    rubric:
+      - "Starts with measurement rather than speculative code changes"
+      - "Uses the maui profile startup CLI surface"
+      - "Mentions Release/device context for meaningful startup data"
+    timeout: 240
+
+  - name: "Fix janky CollectionView scrolling"
+    prompt: |
+      My MAUI product list scrolls poorly. It is a CollectionView inside a
+      ScrollView, each row has lots of nested layouts, and bindings do not use
+      x:DataType. What should I change first?
+    assertions:
+      - type: "output_matches"
+        pattern: "remove|avoid|do not"
+      - type: "output_contains"
+        value: "ScrollView"
+      - type: "output_contains"
+        value: "x:DataType"
+      - type: "output_matches"
+        pattern: "template|layout|nested"
+    rubric:
+      - "Identifies nested ScrollView around CollectionView as a performance problem"
+      - "Recommends compiled bindings with x:DataType"
+      - "Recommends simplifying item templates and layout depth"
+      - "Does not start with unrelated startup or networking advice"
+    timeout: 240
+
+  - name: "Optimize oversized image resources"
+    prompt: |
+      My MAUI app uses several 4000px PNG files directly in list rows and memory
+      spikes while scrolling. What resource and UI changes should I make?
+    assertions:
+      - type: "output_matches"
+        pattern: "resize|thumbnail|downscale|display size"
+      - type: "output_matches"
+        pattern: "MauiImage|Resources/Images"
+      - type: "output_matches"
+        pattern: "memory|decode|full-resolution"
+    rubric:
+      - "Recommends using display-sized images or thumbnails"
+      - "Mentions MAUI image resources/build-time resizing where applicable"
+      - "Connects full-resolution image decode to memory and scrolling cost"
+    timeout: 240

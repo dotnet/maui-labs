@@ -1,0 +1,84 @@
+---
+name: maui-performance
+description: >-
+  Diagnose and improve .NET MAUI app performance with measurement-first startup
+  profiling, layout efficiency, compiled bindings, CollectionView tuning, image
+  resource optimization, trimming/NativeAOT considerations, and platform-aware
+  validation. USE FOR: slow startup, janky scrolling, high memory use, slow page
+  loading, inefficient XAML/layouts, image bloat, and using the maui profile
+  startup CLI workflow. DO NOT USE FOR: DevFlow UI interaction bugs (use
+  maui-devflow-debug), SDK version lookup (use dotnet-workload-info), or generic
+  app architecture without a performance symptom.
+---
+
+# MAUI Performance
+
+Use this skill when the user reports a measurable performance symptom or asks
+for a performance review. Measure first, then change the smallest thing that can
+explain the symptom.
+
+## Workflow
+
+1. Identify the symptom: startup, first page render, scrolling, navigation,
+   memory, image loading, or network-bound delays.
+2. Inspect target frameworks and configuration. Prefer Release builds for
+   meaningful startup and runtime measurements.
+3. For startup, use the MAUI CLI profiling surface:
+
+   ```bash
+   maui profile startup --help
+   ```
+
+   Then run the target app with the appropriate platform/device options.
+4. For UI runtime issues, inspect visual tree depth and logs when DevFlow is
+   available.
+5. Apply targeted fixes and re-measure.
+
+## High-Value Fix Areas
+
+| Symptom | Check |
+| --- | --- |
+| Slow startup | Startup profile, excessive work in `MauiProgram`, synchronous I/O, eager service construction, font/image count |
+| Slow bindings | Missing `x:DataType`, reflection-heavy bindings, converters doing expensive work |
+| Janky lists | `CollectionView` inside `ScrollView`, complex templates, missing item sizing strategy, image decode size |
+| Layout cost | Deep nested layouts, unnecessary `Grid` nesting, repeated measure invalidations |
+| Image memory | Oversized source images, missing MAUI image resizing, unbounded remote image caching |
+| Release regression | Debug-only diagnostics leaking into Release, linker/trimming differences |
+
+## CollectionView Guardrails
+
+- Do not wrap `CollectionView` in `ScrollView`.
+- Keep item templates shallow and use compiled bindings.
+- Prefer fixed or predictable item sizing when possible.
+- Load thumbnails sized for display, not full-resolution images.
+- Avoid expensive work in property getters used by item templates.
+
+## Startup Guardrails
+
+- Avoid network calls and file scans during app construction.
+- Register services lazily when possible; do not instantiate heavy services just
+  to register them.
+- Defer non-critical initialization until after the first page is visible.
+- Keep debug-only logging and DevFlow setup behind `#if DEBUG`.
+
+## Trimming and NativeAOT Guardrails
+
+- Treat trim and NativeAOT issues as publish-build issues, not Debug-build
+  issues. Reproduce with the same publish properties used by the app.
+- Do not silence trim warnings blindly. Warnings such as IL2026 indicate code
+  that may not be safe when members are removed.
+- Prefer source-generated serializers and explicit registrations over reflection
+  discovery for app models and services used in trimmed builds.
+- When reflection is required, keep the dependency explicit with attributes such
+  as `DynamicDependency` or a linker descriptor, and document why it is needed.
+- Test startup and the affected feature after publish; a successful Debug run is
+  not evidence that trimming or NativeAOT is safe.
+
+## Validation Checklist
+
+- There is a before/after measurement or a clear reason measurement is blocked.
+- Startup investigations use `maui profile startup` when applicable.
+- Binding-heavy pages use `x:DataType`.
+- Lists avoid nested scrolling and oversized images.
+- Trim/NativeAOT changes are validated with a publish build when applicable.
+- Performance fixes do not remove accessibility metadata or automation hooks.

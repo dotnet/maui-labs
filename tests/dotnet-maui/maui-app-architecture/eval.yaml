@@ -1,0 +1,71 @@
+scenarios:
+  - name: "Register Shell route and pass query parameter"
+    setup:
+      files:
+        - path: "MyApp/AppShell.xaml.cs"
+          content: |
+            public partial class AppShell : Shell
+            {
+                public AppShell()
+                {
+                    InitializeComponent();
+                }
+            }
+    prompt: |
+      Add Shell navigation from ProductsPage to DetailsPage with a product id
+      query parameter. Show how to register the route and receive the parameter
+      in the DetailsViewModel.
+    assertions:
+      - type: "output_contains"
+        value: "Routing.RegisterRoute"
+      - type: "output_contains"
+        value: "GoToAsync"
+      - type: "output_matches"
+        pattern: "IQueryAttributable|QueryProperty"
+      - type: "output_matches"
+        pattern: "EscapeDataString|Uri\\.Escape"
+    rubric:
+      - "Registers the Shell route before navigation"
+      - "Uses Shell.Current.GoToAsync for navigation"
+      - "Uses IQueryAttributable or QueryProperty to receive query data"
+      - "Encodes query parameter values instead of string-concatenating raw data"
+    timeout: 240
+
+  - name: "Choose DI lifetimes for pages ViewModels and services"
+    prompt: |
+      In MauiProgram.cs, how should I register a ProductsPage, ProductsViewModel,
+      an ApiClient, and a user session service? Also, should I call
+      BuildServiceProvider to manually resolve the ViewModel?
+    assertions:
+      - type: "output_matches"
+        pattern: "AddTransient<.*ProductsPage|AddTransient<.*ProductsViewModel"
+      - type: "output_matches"
+        pattern: "AddSingleton<.*ApiClient|AddHttpClient"
+      - type: "output_matches"
+        pattern: "AddSingleton<.*Session"
+      - type: "output_matches"
+        pattern: "(?i)(do not|don't|avoid|should not|never).*BuildServiceProvider"
+    rubric:
+      - "Registers pages and stateful ViewModels as transient"
+      - "Uses singleton or typed HttpClient-style registration for app-wide services"
+      - "Uses singleton only for intentional app-wide session state"
+      - "Warns not to call BuildServiceProvider in MauiProgram for manual resolution"
+    timeout: 240
+
+  - name: "Add compiled bindings to page and item template"
+    prompt: |
+      My MAUI XAML page binds to ProductsViewModel and has a CollectionView of
+      Product rows. Show the x:DataType values I should add so both the page and
+      DataTemplate use compiled bindings.
+    assertions:
+      - type: "output_contains"
+        value: "x:DataType"
+      - type: "output_matches"
+        pattern: "ProductsViewModel"
+      - type: "output_matches"
+        pattern: "DataTemplate.*Product|Product.*DataTemplate"
+    rubric:
+      - "Adds x:DataType on the ContentPage for the ViewModel"
+      - "Adds x:DataType on the DataTemplate for the row model"
+      - "Explains that compiled bindings improve compile-time checking and performance"
+    timeout: 240

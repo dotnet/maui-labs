@@ -1,0 +1,59 @@
+scenarios:
+  - name: "Create login UI with automation hooks"
+    prompt: |
+      Create a simple .NET MAUI login page UI in XAML with email, password,
+      sign-in button, and validation message. Keep it vendor-neutral and make it
+      testable by DevFlow or UI automation.
+    assertions:
+      - type: "output_contains"
+        value: "AutomationId"
+      - type: "output_matches"
+        pattern: "Grid|VerticalStackLayout"
+      - type: "output_matches"
+        pattern: "SemanticProperties\\.Description|SemanticProperties\\.Hint"
+    rubric:
+      - "Uses MAUI built-in controls and does not require vendor controls"
+      - "Adds AutomationId values to important interactive controls"
+      - "Uses a maintainable layout instead of absolute coordinates"
+      - "Includes basic semantic labels or hints"
+    timeout: 240
+
+  - name: "Add loading and empty states to CollectionView"
+    prompt: |
+      My ProductsPage has a CollectionView that currently just binds ItemsSource.
+      Add loading and empty states that work well in MAUI XAML and are easy to
+      inspect in UI automation.
+    assertions:
+      - type: "output_contains"
+        value: "ActivityIndicator"
+      - type: "output_contains"
+        value: "EmptyView"
+      - type: "output_contains"
+        value: "AutomationId"
+      - type: "output_matches"
+        pattern: "IsBusy|IsLoading"
+    rubric:
+      - "Uses ActivityIndicator or equivalent visible loading state"
+      - "Uses CollectionView.EmptyView for empty data"
+      - "Adds stable AutomationIds for loading/list/empty elements"
+      - "Keeps the CollectionView as the scrolling surface"
+    timeout: 240
+
+  - name: "Avoid nested ScrollView around CollectionView"
+    prompt: |
+      I want my product list page to scroll, so I wrapped my CollectionView in a
+      ScrollView. Is that a good MAUI pattern? What should I do instead?
+    assertions:
+      - type: "output_matches"
+        pattern: "do not|avoid|don't"
+      - type: "output_contains"
+        value: "CollectionView"
+      - type: "output_contains"
+        value: "ScrollView"
+      - type: "output_matches"
+        pattern: "EmptyView|Header|Footer|Grid"
+    rubric:
+      - "Warns against wrapping CollectionView in ScrollView"
+      - "Explains that CollectionView should own scrolling"
+      - "Suggests headers, footers, empty views, or parent Grid layout instead"
+    timeout: 240

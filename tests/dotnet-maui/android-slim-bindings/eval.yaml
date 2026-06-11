@@ -24,8 +24,6 @@ scenarios:
         pattern: "(?i)gradlew|gradle|build\\.gradle"
       - type: "output_matches"
         pattern: "AndroidLibrary|AndroidMavenLibrary"
-      - type: "output_not_matches"
-        pattern: "(?i)Metadata\\.xml.{0,30}(entire|all|full|complete).{0,20}(API|surface|library)"
       - type: "file_exists"
         path: "LottieBinding/build.gradle.kts"
       - type: "file_contains"

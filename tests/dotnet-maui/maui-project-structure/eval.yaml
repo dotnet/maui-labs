@@ -1,0 +1,84 @@
+scenarios:
+  - name: "Add package with Central Package Management"
+    setup:
+      files:
+        - path: "Directory.Packages.props"
+          content: |
+            <Project>
+              <ItemGroup>
+                <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.0" />
+              </ItemGroup>
+            </Project>
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      Add CommunityToolkit.Maui to this MAUI app. The repo uses Central Package
+      Management. Show the project and package version edits.
+    assertions:
+      - type: "output_contains"
+        value: "Directory.Packages.props"
+      - type: "output_contains"
+        value: "PackageVersion Include=\"CommunityToolkit.Maui\""
+      - type: "output_contains"
+        value: "PackageReference Include=\"CommunityToolkit.Maui\""
+      - type: "output_matches"
+        pattern: "versionless|without Version|omit.*Version|leave.*Version"
+    rubric:
+      - "Detects Central Package Management from Directory.Packages.props"
+      - "Adds the version as a PackageVersion"
+      - "Keeps the app PackageReference versionless"
+    timeout: 240
+
+  - name: "Set MAUI app display and build versions"
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      Set my MAUI app version to display as 2.4.0 and use build number 240.
+      What project properties should I use, and should I use `maui project
+      version` for this?
+    assertions:
+      - type: "output_contains"
+        value: "ApplicationDisplayVersion"
+      - type: "output_contains"
+        value: "ApplicationVersion"
+      - type: "output_matches"
+        pattern: "(?i)maui project version.*not|not.*maui project version|package/workload version"
+    rubric:
+      - "Uses ApplicationDisplayVersion for the user-visible version"
+      - "Uses ApplicationVersion for the platform build number"
+      - "Explains that maui project version is for MAUI package/workload versioning, not app display/build version"
+    timeout: 240
+
+  - name: "Place assets in MAUI resource folders"
+    prompt: |
+      I need to add an image, a custom font, and a bundled JSON seed file to a
+      .NET MAUI app. Where should each file go and what MSBuild item types are
+      involved?
+    assertions:
+      - type: "output_contains"
+        value: "Resources/Images"
+      - type: "output_contains"
+        value: "Resources/Fonts"
+      - type: "output_contains"
+        value: "Resources/Raw"
+      - type: "output_matches"
+        pattern: "MauiImage|MauiFont|MauiAsset"
+    rubric:
+      - "Maps images, fonts, and raw files to the correct MAUI resource folders"
+      - "Names the correct MAUI MSBuild item types"
+      - "Avoids suggesting platform-specific asset folders as the default"
+    timeout: 240
