@@ -6,9 +6,10 @@ description: >-
   NativeAOT concerns, and DevFlow CDP debugging across routes. USE FOR: MAUI
   apps hosting Razor UI, embedded HTML/JS surfaces, native-to-web messaging,
   existing plain HTML/JavaScript surfaces, non-Razor HTML/JS messaging, choosing
-  BlazorWebView vs HybridWebView, SendRawMessage/RawMessageReceived, wwwroot
-  assets, JavaScript interop, hybrid auth/data handoff, stale DOM or Razor route
-  debugging, and WebView CDP inspection with maui_cdp_webviews,
+  BlazorWebView vs HybridWebView, SendRawMessage/RawMessageReceived, JSON DTO
+  message contracts, JsonSerializerContext/System.Text.Json source generation,
+  wwwroot assets, JavaScript interop, hybrid auth/data handoff, stale DOM or
+  Razor route debugging, and WebView CDP inspection with maui_cdp_webviews,
   maui_cdp_source, and maui_cdp_evaluate. DO NOT USE FOR: pure native XAML UI
   (use maui-ui-patterns), authentication design by itself (use
   maui-auth-secure-storage), or generic browser web apps.
@@ -31,6 +32,10 @@ inside a native app.
 4. Keep native services in MAUI DI and consume them from Razor through DI.
 5. Put static web assets under `wwwroot` or referenced Razor class libraries.
 6. Use JS/.NET interop through documented APIs, not platform WebView internals.
+   For `HybridWebView` raw messaging, always show `SendRawMessage`,
+   `RawMessageReceived`, a JSON DTO contract, and a source-generated
+   `JsonSerializerContext`/`System.Text.Json` path when trimming safety is part
+   of the request.
 7. Review trimming and NativeAOT risks for reflection, serialization, and JS
    interop payloads.
 8. Use DevFlow CDP tools to inspect WebView DOM, console, screenshots, and route
@@ -58,7 +63,8 @@ while older templates may use `Main`.
 ## HybridWebView Pattern
 
 Use `HybridWebView` when the app owns an HTML/JS surface and needs message
-exchange:
+exchange. For raw JS/.NET messaging answers, include both the raw message APIs
+and a typed JSON DTO/source-generated serialization boundary:
 
 ```csharp
 hybridWebView.SendRawMessage("refresh");
@@ -158,5 +164,8 @@ builds with WebView devtools or CDP access enabled.
 - `AddMauiBlazorWebView` is registered for Blazor Hybrid apps.
 - Static assets resolve from packaged `wwwroot` or RCL `_content` paths.
 - JS/.NET interop uses Blazor or HybridWebView APIs intentionally.
+- HybridWebView raw messages use JSON DTOs plus `JsonSerializerContext` or
+  another explicit `System.Text.Json` source-generated path when trimming-safe
+  serialization matters.
 - Release/trimming-sensitive code avoids unpreserved reflection.
 - DevFlow CDP inspection targets the correct WebView and route.
