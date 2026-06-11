@@ -140,6 +140,9 @@ bodies, screenshots, and user-specific text.
 
 Use [references/reporting.md](references/reporting.md). Default to a markdown
 report. File GitHub issues only when the user asks and repository access works.
+For markdown reports, include the exact sections `## Environment` and
+`## Findings`; put unknown environment details under `## Environment` as
+`Unknown` rather than omitting or guessing them.
 
 For GitHub issues, prefer one issue per actionable MAUI DevFlow product problem.
 Merge near-duplicate session evidence into the same issue body instead of

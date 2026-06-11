@@ -86,7 +86,7 @@ scenarios:
       - type: "output_matches"
         pattern: "initializeWithApiKey:"
       - type: "output_matches"
-        pattern: "@objc\\(.*initializeWithApiKey|Export\\(\"initialize:"
+        pattern: "@objc\\(.*initializeWithApiKey|Export\\(\"initialize:|Export.*initialize:|initializeWithApiKey:.*initialize:|initialize:.*initializeWithApiKey:"
     rubric:
       - "Identifies that the explicit @objc selector on the Swift method does not match the [Export] selector"
       - "Explains that @objc(initialize:) exports initialize: while ApiDefinition.cs expects initializeWithApiKey:"

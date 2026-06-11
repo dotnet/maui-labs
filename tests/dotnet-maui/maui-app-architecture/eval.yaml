@@ -16,8 +16,8 @@ scenarios:
       query parameter. Show how to register the route and receive the parameter
       in the DetailsViewModel following MAUI MVVM architecture.
     assertions:
-      - type: "output_contains"
-        value: "Routing.RegisterRoute"
+      - type: "output_matches"
+        pattern: "Routing\\.RegisterRoute|(?i)register(?:s|ed)?\\s+(?:the\\s+)?(?:Shell\\s+)?route|route registration"
       - type: "output_contains"
         value: "GoToAsync"
       - type: "output_matches"

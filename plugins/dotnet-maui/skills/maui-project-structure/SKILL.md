@@ -5,8 +5,9 @@ description: >-
   resources, package references, app version properties, and platform folders.
   USE FOR: single-project MAUI layout, Resources/Images/Fonts/Raw, Android/iOS/
   Windows platform configuration, Central Package Management, app version
-  properties, target framework selection, maui doctor, and MAUI package version
-  pinning guidance.
+  properties such as ApplicationDisplayVersion/ApplicationVersion, target
+  framework selection, maui doctor, MAUI package version pinning guidance, and
+  explaining that maui project version is not for app display/build versioning.
   DO NOT USE FOR: runtime UI debugging (use maui-devflow-debug), SDK/workload
   discovery (use dotnet-workload-info), or general MVVM/Shell design (use
   maui-app-architecture).
@@ -50,7 +51,8 @@ feature implementation. Inspect existing conventions first and preserve them.
    ```
 
 6. For the .NET MAUI package/workload version used by a project, use the MAUI
-   project version command:
+   project version command. Do **not** use `maui project version` to set
+   `ApplicationDisplayVersion` or `ApplicationVersion`:
 
    ```bash
    maui project version --help
@@ -114,6 +116,9 @@ project, not the platform app display/build version.
 - Do not assume every app targets Android, iOS, Mac Catalyst, and Windows.
 - Do not change signing, provisioning, package IDs, or app identifiers without
   explicit user intent.
+- Do not claim `maui project version set` or similar CLI syntax can set the app
+  display/build version; use `ApplicationDisplayVersion` and
+  `ApplicationVersion`.
 
 ## Validation Checklist
 

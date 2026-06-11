@@ -25,7 +25,9 @@ navigation. Favor explicit, testable architecture over service locator patterns.
 3. Register dependencies in `MauiProgram.cs`.
 4. Use constructor injection for pages and ViewModels.
 5. Use compiled bindings with `x:DataType` in pages and data templates.
-6. Register Shell routes once, near app startup.
+6. Register Shell routes once, near app startup. When asked how to register a
+   Shell route, show the literal `Routing.RegisterRoute(...)` call, not only a
+   prose summary.
 7. Pass navigation data through route query parameters, `[QueryProperty]`, or
    `IQueryAttributable`.
 8. Keep platform APIs behind interfaces so ViewModels remain unit-testable.

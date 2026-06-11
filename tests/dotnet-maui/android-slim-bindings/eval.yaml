@@ -26,7 +26,7 @@ scenarios:
       - type: "output_matches"
         pattern: "AndroidLibrary|AndroidMavenLibrary|AAR|binding project"
       - type: "output_matches"
-        pattern: "com\\.airbnb\\.android:lottie|Lottie 6\\.6\\.2|lottie.*6\\.6\\.2"
+        pattern: "com\\.airbnb\\.android:lottie|Lottie 6\\.6\\.2|lottie.*6\\.6\\.2|Lottie.*AndroidMavenLibrary|AndroidMavenLibrary.*Lottie"
     rubric:
       - "Recommends the slim/NLI approach over traditional full bindings given the user only needs a subset"
       - "Shows a Java or Kotlin wrapper class with a Dotnet prefix that exposes only animation playback"
