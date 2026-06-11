@@ -445,8 +445,9 @@ public sealed class MauiProjectVersionService : IMauiProjectVersionService
 		var document = LoadXml(projectPath);
 		var targetElements = document.Descendants()
 			.Where(element =>
-				element.Name.LocalName == TargetFrameworkProperty ||
-				element.Name.LocalName == TargetFrameworksProperty)
+				(element.Name.LocalName == TargetFrameworkProperty ||
+				element.Name.LocalName == TargetFrameworksProperty) &&
+				element.Parent?.Name.LocalName == "PropertyGroup")
 			.ToList();
 		var localBaseTargetProperties = targetElements
 			.Where(IsUnconditionalProperty)

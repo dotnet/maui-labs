@@ -461,6 +461,31 @@ public class MauiProjectVersionServiceTests
 	}
 
 	[Fact]
+	public async Task SetTargetFrameworkAsync_NonPropertyGroupTargetFrameworkElement_IgnoresElement()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFramework>net9.0</TargetFramework>
+			  </PropertyGroup>
+			  <ItemGroup>
+			    <TargetFrameworks>not-a-msbuild-property</TargetFrameworks>
+			  </ItemGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var result = await service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false);
+		var content = File.ReadAllText(projectPath);
+
+		Assert.True(result.Changed);
+		Assert.Contains("<TargetFramework>net10.0</TargetFramework>", content);
+		Assert.Contains("<TargetFrameworks>not-a-msbuild-property</TargetFrameworks>", content);
+	}
+
+	[Fact]
 	public async Task SetTargetFrameworkAsync_PropertyComposedTargetFrameworks_ThrowsWithoutPartialUpdate()
 	{
 		using var directory = TemporaryDirectory.Create();

@@ -291,21 +291,6 @@ public static partial class ProjectCommands
 						projectPath, sourceNameForConfig, sourceForConfig, dryRun: true, cancellationToken);
 				}
 
-				if (prDownload?.IsStaged == true && prArtifactService is not null)
-				{
-					if (dryRun)
-					{
-						prArtifactService.DiscardStagedPackageArtifact(prDownload);
-					}
-					else
-					{
-						await prArtifactService.PromoteStagedPackageArtifactAsync(prDownload, cancellationToken);
-						prDownload = prDownload with { IsStaged = false, StagingArtifactPath = null };
-						if (!useJson)
-							formatter.WriteInfo($"Downloaded PR packages to {prDownload.PackageSourcePath}.");
-					}
-				}
-
 				var changes = new List<MauiProjectVersionChange>();
 				if (targetFrameworkResult is not null)
 				{
@@ -327,6 +312,21 @@ public static partial class ProjectCommands
 					? versionResult
 					: await projectService.SetVersionAsync(projectPath, version, dryRun: false, cancellationToken);
 				changes.AddRange(result.Changes);
+
+				if (prDownload?.IsStaged == true && prArtifactService is not null)
+				{
+					if (dryRun)
+					{
+						prArtifactService.DiscardStagedPackageArtifact(prDownload);
+					}
+					else
+					{
+						await prArtifactService.PromoteStagedPackageArtifactAsync(prDownload, cancellationToken);
+						prDownload = prDownload with { IsStaged = false, StagingArtifactPath = null };
+						if (!useJson)
+							formatter.WriteInfo($"Downloaded PR packages to {prDownload.PackageSourcePath}.");
+					}
+				}
 
 				MauiProjectRestoreResult? restoreResult = null;
 				if (!dryRun && !noRestore && changes.Count > 0)
