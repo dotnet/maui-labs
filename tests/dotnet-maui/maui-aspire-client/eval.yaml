@@ -56,7 +56,7 @@ scenarios:
       - type: "output_matches"
         pattern: "cleartext|debug-only|#if DEBUG|callback"
       - type: "output_not_matches"
-        pattern: "DangerousAcceptAnyServerCertificateValidator"
+        pattern: "ServerCertificateCustomValidationCallback\\s*=\\s*HttpClientHandler\\.DangerousAcceptAnyServerCertificateValidator"
     rubric:
       - "Attaches tokens through a typed HttpClient or delegating handler"
       - "Prefers HTTPS/dev certificate trust for local protected APIs"

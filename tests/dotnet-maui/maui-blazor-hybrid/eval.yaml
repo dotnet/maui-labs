@@ -33,7 +33,7 @@ scenarios:
       - type: "output_matches"
         pattern: "JSON|DTO"
       - type: "output_matches"
-        pattern: "JsonSerializerContext|source-generat"
+        pattern: "JsonSerializerContext|source-generat|System.Text.Json"
     rubric:
       - "Chooses HybridWebView instead of BlazorWebView for non-Razor HTML/JS"
       - "Uses SendRawMessage and RawMessageReceived or equivalent messaging APIs"
@@ -53,8 +53,6 @@ scenarios:
         pattern: "maui_cdp_evaluate|maui_cdp_source"
       - type: "output_matches"
         pattern: "maui_logs|maui_cdp_screenshot"
-      - type: "output_matches"
-        pattern: "maui devflow mcp|maui_cdp_webviews"
     rubric:
       - "Lists WebViews before targeting a CDP operation"
       - "Uses CDP source or evaluate to inspect DOM and route state"

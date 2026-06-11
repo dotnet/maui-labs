@@ -5,10 +5,10 @@ description: >-
   MediaPicker, Geolocation, Maps, manifest/plist declarations, cancellation, and
   permission UX. USE FOR: camera/photos/files/location/maps features, runtime
   permission requests, Android manifest entries, iOS/Mac Catalyst Info.plist
-  usage descriptions, and graceful denied/cancelled flows. DO NOT USE FOR:
-  notifications or deep links (use maui-notifications-deep-links), secure auth
-  flows (use maui-auth-secure-storage), or visual layout patterns (use
-  maui-ui-patterns).
+  usage descriptions, Android 13 READ_MEDIA_IMAGES/Photo Picker migration, and
+  graceful denied/cancelled flows. DO NOT USE FOR: notifications or deep links
+  (use maui-notifications-deep-links), secure auth flows (use
+  maui-auth-secure-storage), or visual layout patterns (use maui-ui-patterns).
 ---
 
 # MAUI Device Capabilities

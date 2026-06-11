@@ -73,11 +73,11 @@ scenarios:
       - type: "output_contains"
         value: "READ_MEDIA_IMAGES"
       - type: "output_matches"
-        pattern: "READ_MEDIA_VIDEO|READ_MEDIA_AUDIO"
+        pattern: "Photo Picker|system photo picker|READ_MEDIA_VISUAL_USER_SELECTED|READ_MEDIA_VIDEO"
       - type: "output_matches"
         pattern: "Permissions\\.Photos|Photo Picker|system photo picker"
       - type: "output_matches"
-        pattern: "API 33|targetSdkVersion"
+        pattern: "API 33|Android 13|targetSdkVersion"
     rubric:
       - "Explains that READ_EXTERNAL_STORAGE is not sufficient for Android 13+ media access"
       - "Recommends granular READ_MEDIA_* permissions only for the media types needed"

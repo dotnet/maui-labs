@@ -4,8 +4,10 @@ description: >-
   Configure .NET MAUI app icons, splash screens, bundled assets, app lifecycle,
   window lifecycle, background/resume state preservation, and platform-specific
   asset/lifecycle settings. USE FOR: MauiIcon, MauiSplashScreen, MauiImage,
-  MauiAsset, Resources/Raw files, FileSystem app package access, Window events,
-  ConfigureLifecycleEvents, resume/save state, and platform asset overrides. DO
+  MauiFont, MauiAsset, app icon and splash screen replacement, Resources/Images,
+  Resources/Fonts, Resources/Raw seed files, bundled JSON, FileSystem app
+  package access, Window events, ConfigureLifecycleEvents, resume/save state,
+  Xamarin drawable/UIAppFonts asset migration, and platform asset overrides. DO
   NOT USE FOR: localization/theme resources (use maui-localization-theming),
   device permissions (use maui-device-capabilities), or general project
   structure edits (use maui-project-structure).

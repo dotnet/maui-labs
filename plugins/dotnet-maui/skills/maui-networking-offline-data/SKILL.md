@@ -5,10 +5,12 @@ description: >-
   JSON serialization, emulator/simulator networking, cleartext dev traffic,
   SQLite local persistence, sync boundaries, retries, cancellation, and error
   handling. USE FOR: API clients, typed HttpClient registration, localhost from
-  devices, offline-first screens, local SQLite caches, sync queues, and
-  resilient mobile networking. DO NOT USE FOR: authentication redirects or token
-  storage (use maui-auth-secure-storage), Aspire service discovery (use
-  maui-aspire-client), or UI state layout (use maui-ui-patterns).
+  devices, Android emulator 10.0.2.2, debug cleartext setup, offline-first
+  screens, local SQLite caches, SQLiteAsyncConnection/EF Core sync metadata,
+  sync queues, retry/backoff, and resilient mobile networking. DO NOT USE FOR:
+  authentication redirects or token storage (use maui-auth-secure-storage),
+  Aspire service discovery (use maui-aspire-client), or UI state layout (use
+  maui-ui-patterns).
 ---
 
 # MAUI Networking and Offline Data
@@ -55,8 +57,10 @@ bearer tokens in every page or ViewModel.
 
 For cleartext HTTP during development:
 
-- Android needs a debug-only network security config or cleartext setting.
-- iOS/Mac Catalyst need an App Transport Security exception for debug HTTP.
+- Android needs a debug-only network security config such as
+  `networkSecurityConfig` or `UsesCleartextTraffic`.
+- iOS/Mac Catalyst need an App Transport Security (`NSAppTransportSecurity`)
+  exception for debug HTTP.
 - Release builds should use HTTPS and remove broad cleartext exceptions.
 
 ## Connectivity Check
@@ -89,6 +93,9 @@ APIs or injected `IConnectivity`.
 ## SQLite and Offline Sync
 
 Use SQLite for structured local state, offline queues, and cached server data.
+For sqlite-net, this usually means a `SQLiteAsyncConnection` and
+`CreateTableAsync` setup. For EF Core, keep the local schema behind a
+`DbContext`.
 
 Common fields for syncable rows:
 

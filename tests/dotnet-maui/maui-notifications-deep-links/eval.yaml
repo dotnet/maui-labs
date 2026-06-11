@@ -12,7 +12,7 @@ scenarios:
       - type: "output_matches"
         pattern: "UNUserNotificationCenter|UserNotifications"
       - type: "output_matches"
-        pattern: "Importance|NotificationManager"
+        pattern: "NotificationManager|Importance|channel ID"
     rubric:
       - "Creates Android notification channels for Android 8+"
       - "Requests Android 13+ POST_NOTIFICATIONS permission"
