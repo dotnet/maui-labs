@@ -83,6 +83,7 @@ Format: `"{workload_id}": "{manifestVersion}/{sdkBand}"`
 ### Step 4: Download Workload Manifest
 
 Build package id: `{WorkloadId}.Manifest-{sdkBand}` (e.g., `Microsoft.NET.Sdk.iOS.Manifest-10.0.100`)
+Use the same SDK band discovered in Step 1 or extracted from the workload set entry. Do not hardcode `10.0.100` when the current SDK band is `10.0.200`, `10.0.300`, or another band.
 
 ```bash
 curl -o manifest.nupkg "https://api.nuget.org/v3-flatcontainer/{packageid}/{version}/{packageid}.{version}.nupkg"

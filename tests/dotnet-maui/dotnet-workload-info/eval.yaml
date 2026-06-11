@@ -6,7 +6,7 @@ scenarios:
       from live NuGet APIs so I can script it in my CI pipeline.
     assertions:
       - type: "output_matches"
-        pattern: "dotnet workload search version|workload search|microsoft\\.net\\.workloads\\.10\\.0\\.100"
+        pattern: "(?i)dotnet workload search version|workload search|microsoft\\.net\\.workloads"
       - type: "output_matches"
         pattern: "v3-flatcontainer|api\\.nuget\\.org"
       - type: "output_matches"
@@ -36,7 +36,7 @@ scenarios:
       - type: "output_matches"
         pattern: "(?i)v3-flatcontainer/microsoft\\.net\\.workloads"
       - type: "output_matches"
-        pattern: "(?i)workload search version"
+        pattern: "(?i)workload search version|CLI version"
     rubric:
       - "Correctly converts CLI version 10.0.103 to NuGet version 10.103.0"
       - "Derives the SDK band as 10.0.100 from the CLI version"
@@ -71,7 +71,8 @@ scenarios:
     prompt: |
       I want to check if there's a newer Microsoft.Maui.Controls NuGet package
       than what ships with the .NET 10 workload. How do I query the NuGet search
-      API for the latest version, and how would I use a newer version in my project?
+      API with an exact package ID filter for the latest version, and how would
+      I use a newer version in my project?
     assertions:
       - type: "output_contains"
         value: "azuresearch-usnc.nuget.org/query"

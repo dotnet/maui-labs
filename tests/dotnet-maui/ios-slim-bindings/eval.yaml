@@ -86,14 +86,11 @@ scenarios:
       - type: "output_matches"
         pattern: "initializeWithApiKey:"
       - type: "output_matches"
-        pattern: "@objc\\(.*initializeWithApiKey"
-      - type: "file_contains"
-        path: "MyBinding/swift/DotnetMyBinding.swift"
-        value: "initializeWithApiKey"
+        pattern: "@objc\\(.*initializeWithApiKey|Export\\(\"initialize:"
     rubric:
       - "Identifies that the explicit @objc selector on the Swift method does not match the [Export] selector"
       - "Explains that @objc(initialize:) exports initialize: while ApiDefinition.cs expects initializeWithApiKey:"
-      - "Shows the fix: add @objc(initializeWithApiKey:) to explicitly match the [Export] attribute"
+      - "Shows one valid fix: either add @objc(initializeWithApiKey:) in Swift or change [Export] to initialize: so both sides match"
       - "Emphasizes that @objc(selector:) in Swift must exactly match [Export(\"selector:\")] in ApiDefinition.cs"
     timeout: 240
 

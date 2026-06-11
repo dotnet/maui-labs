@@ -22,7 +22,8 @@ scenarios:
             }
     prompt: |
       Update this MAUI page code for current .NET MAUI APIs. It has obsolete
-      Xamarin.Forms-era API usage and platform checks. Explain what you changed.
+      Xamarin.Forms-era API usage and platform checks. Explain what you changed
+      and call out the target framework you inspected before choosing replacements.
     assertions:
       - type: "output_matches"
         pattern: "MainThread\\.BeginInvokeOnMainThread|Dispatcher\\.Dispatch"

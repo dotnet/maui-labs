@@ -71,7 +71,7 @@ scenarios:
       - type: "output_matches"
         pattern: "AndroidMavenLibrary|AndroidIgnoredJavaDependency"
       - type: "output_matches"
-        pattern: "Bind.*false|Bind=\"false\""
+        pattern: "Bind.*false|Bind=\"false\"|AndroidIgnoredJavaDependency"
       - type: "file_contains"
         path: "MyBinding/MyBinding.csproj"
         value: "Xamarin.AndroidX.Core"

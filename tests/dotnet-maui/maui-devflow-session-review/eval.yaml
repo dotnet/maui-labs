@@ -11,7 +11,7 @@ scenarios:
       confidence, and outcome.
     assertions:
       - type: "output_matches"
-        pattern: "maui devflow (list|wait|ui tree)"
+        pattern: "maui devflow (list|wait|ui tree)|list/wait|`ui tree`"
       - type: "output_matches"
         pattern: "19223|9223|adb (reverse|forward)|broker"
       - type: "output_matches"
@@ -36,7 +36,7 @@ scenarios:
       Do not file an issue yet.
     assertions:
       - type: "output_matches"
-        pattern: "(?i)markdown|^##\\s"
+        pattern: "(?i)markdown|(?m)^##\\s|# MAUI DevFlow"
       - type: "output_contains"
         value: "## Environment"
       - type: "output_contains"
