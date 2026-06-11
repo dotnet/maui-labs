@@ -64,39 +64,37 @@ scenarios:
       - "Explains that transient registration creates a fresh page and ViewModel on each Shell navigation"
     timeout: 240
 
-  - name: "Fix XamlParseException after moving ViewModel to different namespace"
+  - name: "Avoid BuildServiceProvider anti-pattern in MauiProgram"
     setup:
       files:
-        - path: "MyApp/Pages/ProductsPage.xaml"
+        - path: "MyApp/MauiProgram.cs"
           content: |
-            <?xml version="1.0" encoding="utf-8" ?>
-            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-                         xmlns:local="clr-namespace:MyApp.Pages"
-                         x:DataType="local:ProductsViewModel">
-                <Label Text="{Binding Title}" />
-            </ContentPage>
-        - path: "MyApp/ViewModels/ProductsViewModel.cs"
-          content: |
-            namespace MyApp.ViewModels;
-            public partial class ProductsViewModel : ObservableObject
+            public static class MauiProgram
             {
-                [ObservableProperty] string title = "Products";
+                public static MauiApp CreateMauiApp()
+                {
+                    var builder = MauiApp.CreateBuilder();
+                    builder.UseMaui();
+                    builder.Services.AddTransient<ProductsViewModel>();
+                    var sp = builder.Services.BuildServiceProvider();
+                    var vm = sp.GetRequiredService<ProductsViewModel>();
+                    builder.Services.AddTransient<ProductsPage>(_ => new ProductsPage { BindingContext = vm });
+                    return builder.Build();
+                }
             }
     prompt: |
-      My MAUI page uses compiled bindings and was working fine. After refactoring,
-      I moved ProductsViewModel from the MyApp.Pages namespace to MyApp.ViewModels.
-      Now the app throws a XamlParseException at startup saying the type could not
-      be resolved. What do I need to change in the XAML to fix this?
+      I’m wiring up my MAUI app architecture in MauiProgram.cs and used
+      builder.Services.BuildServiceProvider() to resolve ProductsViewModel during
+      startup so I can assign it as the page BindingContext. Is this a good MAUI
+      architecture pattern? If not, what should I do instead for page/ViewModel
+      registration and resolution?
     assertions:
-      - type: "output_contains"
-        value: "x:DataType"
       - type: "output_matches"
-        pattern: "clr-namespace:MyApp\\.ViewModels|xmlns:vm|xmlns:viewmodels"
+        pattern: "(?i)(do not|don't|avoid|should not|never).*BuildServiceProvider"
       - type: "output_matches"
-        pattern: "(?i)namespace.*update|update.*namespace|change.*xmlns|xmlns.*change|add.*xmlns"
+        pattern: "AddTransient.*ProductsPage|AddTransient.*ProductsViewModel|constructor injection"
     rubric:
-      - "Identifies that xmlns:local points to the old namespace MyApp.Pages"
-      - "Shows how to add or update an XML namespace prefix pointing to MyApp.ViewModels"
-      - "Updates x:DataType to use the new namespace prefix referencing ProductsViewModel"
+      - "Explicitly warns that BuildServiceProvider in MauiProgram is an anti-pattern"
+      - "Recommends registering page and ViewModel with DI and letting DI resolve dependencies at navigation/resolution time"
+      - "Avoids manually building a temporary service provider during app startup"
     timeout: 240

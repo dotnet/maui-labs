@@ -81,7 +81,7 @@ scenarios:
       My MAUI CollectionView shows all items but scrolling does not work on
       either iOS or Android. The page uses a Grid with a title label in row 0
       and the CollectionView in row 1. Both rows use Height="Auto". What layout
-      change fixes the scrolling?
+      change fixes the scrolling following MAUI UI pattern best practices?
     assertions:
       - type: "output_matches"
         pattern: "Height=\"\\*\"|Height=\\*|RowDefinition.*Height.*\\*|\\*.*RowDefinition"

@@ -17,9 +17,9 @@ scenarios:
       - type: "output_matches"
         pattern: "IConnectivity"
       - type: "output_matches"
-        pattern: "(?i)(fake|mock|stub|test.*implementation)"
-      - type: "output_matches"
         pattern: "(?i)(inject|constructor|DI|dependency)"
+      - type: "output_matches"
+        pattern: "(?i)Connectivity\\.Current|static access|avoid.*static"
     rubric:
       - "Recommends MAUI's built-in IConnectivity interface instead of Connectivity.Current static access"
       - "Shows constructor injection of IConnectivity into the ViewModel"
