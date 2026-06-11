@@ -5,12 +5,14 @@ scenarios:
       Android. I don't want platform-specific code scattered through view
       models. How should I structure it?
     assertions:
-      - type: "output_matches"
-        pattern: "interface|IAppReviewService"
+      - type: "output_contains"
+        value: "IAppReviewService"
       - type: "output_matches"
         pattern: "AddSingleton|AddTransient|AddScoped"
       - type: "output_matches"
-        pattern: "Platforms/Android|Platforms/iOS|#if ANDROID|#if IOS"
+        pattern: "Platforms/Android|#if\\s+ANDROID|#elif\\s+ANDROID"
+      - type: "output_matches"
+        pattern: "Platforms/iOS|Platforms/Ios|#if\\s+IOS\\b|#elif\\s+IOS\\b"
       - type: "output_matches"
         pattern: "inject|constructor"
     rubric:
@@ -49,10 +51,18 @@ scenarios:
     assertions:
       - type: "output_contains"
         value: "ConfigureLifecycleEvents"
-      - type: "output_matches"
-        pattern: "AddAndroid|AddiOS|AddWindows"
-      - type: "output_matches"
-        pattern: "OnResume|OnActivated|OnWindowCreated"
+      - type: "output_contains"
+        value: "AddAndroid"
+      - type: "output_contains"
+        value: "AddiOS"
+      - type: "output_contains"
+        value: "AddWindows"
+      - type: "output_contains"
+        value: "OnResume"
+      - type: "output_contains"
+        value: "OnActivated"
+      - type: "output_contains"
+        value: "OnWindowCreated"
       - type: "output_matches"
         pattern: "service|DI"
     rubric:

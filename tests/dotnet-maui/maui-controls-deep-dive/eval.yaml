@@ -28,7 +28,7 @@ scenarios:
       - type: "output_contains"
         value: "SafeAreaEdges"
       - type: "output_matches"
-        pattern: "Container|SoftInput|All"
+        pattern: "SafeAreaEdges\\s*=\\s*\"(Container|SoftInput|All)\"|SafeAreaEdges\\.(Container|SoftInput|All)"
       - type: "output_matches"
         pattern: "target framework|TFM|maui-current-apis|#if"
       - type: "output_matches"

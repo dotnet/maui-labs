@@ -113,7 +113,21 @@ public partial class MeterViewHandler
 ```
 
 Implement `CreatePlatformView`, `ConnectHandler`, `DisconnectHandler`, and
-mapping partials per platform. Keep platform namespaces out of shared files.
+mapping partials per platform. Put the `ViewHandler<TVirtualView, TPlatformView>`
+base class on the platform partial so native types stay out of shared files:
+
+```csharp
+// Platforms/Android/MeterViewHandler.android.cs
+public partial class MeterViewHandler : ViewHandler<MeterView, Android.Widget.FrameLayout>
+{
+    protected override Android.Widget.FrameLayout CreatePlatformView() => new(Context);
+
+    public static partial void MapValue(MeterViewHandler handler, MeterView view)
+    {
+        // Update handler.PlatformView from view.Value.
+    }
+}
+```
 
 ## Property and Command Mappers
 

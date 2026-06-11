@@ -49,7 +49,8 @@ builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp 
 ```
 
 Register platform-specific implementations conditionally if the app targets
-unsupported platforms too.
+unsupported platforms too. For MAUI Labs AppKit (`MACOS`), verify the
+Essentials.AI integration against the target package before shipping.
 
 ## Chat Workflow
 
@@ -104,7 +105,7 @@ patterns apply:
 
 ```csharp
 var innerClient = serviceProvider.GetRequiredService<IChatClient>();
-var appTools = AppTools.Default.Tools; // Generated context; see maui-ai-tool-bindings.
+var appTools = YourAppTools.Default.Tools; // Define with [AIToolSource]; see maui-ai-tool-bindings.
 
 var client = innerClient.AsBuilder()
     .UseFunctionInvocation()
