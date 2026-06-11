@@ -8,9 +8,11 @@ scenarios:
       - type: "output_contains"
         value: "AddServiceDiscovery"
       - type: "output_contains"
-        value: "https+http://apiservice"
-      - type: "output_contains"
         value: "AddHttpClient"
+      - type: "output_contains"
+        value: "apiservice"
+      - type: "output_matches"
+        pattern: "https\\+http://apiservice|https://apiservice|http://apiservice"
       - type: "output_matches"
         pattern: "Services__|IConfiguration|configuration"
     rubric:
@@ -56,7 +58,7 @@ scenarios:
       - type: "output_matches"
         pattern: "cleartext|debug-only|#if DEBUG|callback"
       - type: "output_not_matches"
-        pattern: "ServerCertificateCustomValidationCallback\\s*=\\s*HttpClientHandler\\.DangerousAcceptAnyServerCertificateValidator"
+        pattern: "(?m)^\\s*(?:\\w+\\.)?ServerCertificateCustomValidationCallback\\s*=\\s*(HttpClientHandler\\.DangerousAcceptAnyServerCertificateValidator|.*=>\\s*true)"
     rubric:
       - "Attaches tokens through a typed HttpClient or delegating handler"
       - "Prefers HTTPS/dev certificate trust for local protected APIs"

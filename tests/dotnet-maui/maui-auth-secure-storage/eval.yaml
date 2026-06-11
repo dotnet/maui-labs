@@ -15,7 +15,7 @@ scenarios:
       - type: "output_matches"
         pattern: "PKCE|client secret|authorization code"
       - type: "output_not_matches"
-        pattern: "ClientSecret\\s*=|client_secret="
+        pattern: "(?m)^\\s*(?!//|#).*\\b(ClientSecret\\s*=|client_secret=)"
     rubric:
       - "Uses WebAuthenticator with a CallbackUrl matching myapp://auth"
       - "Mentions Android intent filter and iOS/Mac Catalyst CFBundleURLTypes setup"
@@ -37,11 +37,35 @@ scenarios:
         pattern: "WithBroker|ParentActivityOrWindow|broker-compatible"
       - type: "output_matches"
         pattern: "WithRedirectUri|redirect URI|BrokerRedirectUri"
+      - type: "output_matches"
+        pattern: "LSApplicationQueriesSchemes|msauthv2|msauthv3"
     rubric:
       - "Attempts AcquireTokenSilent before interactive sign-in"
       - "Keeps auth behind an injected service instead of page-level logic"
       - "Lets MSAL own its token cache rather than duplicating tokens in Preferences"
       - "Calls out broker setup as opt-in and dependent on redirect URI/platform configuration"
+    timeout: 240
+
+  - name: "Clear MSAL and Blazor Hybrid auth state on logout"
+    prompt: |
+      My MAUI Blazor Hybrid app uses MSAL.NET for Microsoft Entra ID and a
+      custom AuthenticationStateProvider for Razor components. What should the
+      logout handler clear so the next user on a shared device cannot silently
+      reuse the previous user's session?
+    assertions:
+      - type: "output_contains"
+        value: "RemoveAsync"
+      - type: "output_matches"
+        pattern: "GetAccountsAsync|IAccount"
+      - type: "output_matches"
+        pattern: "SecureStorage.*Remove|RemoveAsync\\("
+      - type: "output_contains"
+        value: "NotifyAuthenticationStateChanged"
+    rubric:
+      - "Clears cached MSAL accounts with RemoveAsync so AcquireTokenSilent cannot reuse the previous user"
+      - "Clears app-owned secure auth/session values"
+      - "Invalidates the Blazor AuthenticationStateProvider"
+      - "Treats logout as a shared-device security boundary"
     timeout: 240
 
   - name: "Hand native auth state to Blazor Hybrid safely"

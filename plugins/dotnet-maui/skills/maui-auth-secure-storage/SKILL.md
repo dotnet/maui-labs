@@ -75,9 +75,9 @@ For MSAL:
   redirect URI expected by the platform and app registration, often referred to
   as the `BrokerRedirectUri` in MSAL setup guidance.
 - Prefer `AcquireTokenSilent` before interactive auth.
-- Configure persistent token cache storage. MSAL's default cache is in-memory
-  for many app scenarios; use the MSAL cache extension or token cache callbacks
-  backed by secure platform storage so silent auth survives cold start.
+- Use MSAL's platform token cache for MAUI mobile targets and verify persistence
+  on each target platform. Add custom token-cache serialization only for
+  desktop, unsupported, or intentionally custom cache scenarios.
 - Use interactive auth only when there is no cached account, consent is needed,
   or silent acquisition returns a UI-required result.
 - Inspect `MsalUiRequiredException.Classification`, error codes, and claims
@@ -88,13 +88,16 @@ For MSAL:
   setup are broker-ready.
 - Store account identifiers or display names if needed; do not duplicate MSAL
   access or refresh tokens into `Preferences`.
+- On logout, call `GetAccountsAsync()` and `RemoveAsync(account)` for cached
+  MSAL accounts before clearing app-owned auth state, so the next
+  `AcquireTokenSilent` cannot return the signed-out user's tokens.
 
 ## Platform Redirect Checklist
 
 | Platform | Check |
 | --- | --- |
 | Android | For `WebAuthenticator`, add an Android activity subclass that inherits `Microsoft.Maui.Authentication.WebAuthenticatorCallbackActivity` and has an `IntentFilter` for the callback scheme/host. Use MAUI namespaces, not Xamarin.Auth or Xamarin.Essentials callback types. For MSAL broker flows, use the broker-compatible redirect URI and signature hash expected by the app registration. |
-| iOS/Mac Catalyst | Add `CFBundleURLTypes` for the callback scheme. For broker flows, include required query schemes and redirect URI configuration from MSAL docs. |
+| iOS/Mac Catalyst | Add `CFBundleURLTypes` for the callback scheme. For MSAL broker flows, add `LSApplicationQueriesSchemes` entries such as `msauthv2` and `msauthv3` so MSAL can detect the broker, and match the redirect URI scheme configured in the app registration. |
 | Windows | Register the custom protocol in the package manifest or app identity configuration used by the target. |
 
 ## SecureStorage Guardrails
@@ -123,7 +126,8 @@ For MSAL:
   `[Authorize]` or `AuthorizeView`.
 - Attach bearer tokens through a typed `HttpClient` handler that asks the native
   auth service for a fresh access token.
-- Clear both native session state and Blazor auth state on logout.
+- Clear MSAL accounts with `RemoveAsync`, app-owned `SecureStorage` values, and
+  Blazor auth state on logout.
 
 ## Validation Checklist
 
@@ -131,6 +135,8 @@ For MSAL:
 - Auth flows use PKCE or MSAL public-client patterns and contain no client
   secrets.
 - Silent token acquisition is attempted before interactive MSAL prompts.
+- Logout clears MSAL cached accounts with `RemoveAsync` and invalidates Blazor
+  auth state when used.
 - Secure values are stored only in `SecureStorage` or the library-owned cache.
 - Blazor Hybrid components receive auth state through DI, not browser-only
   storage.

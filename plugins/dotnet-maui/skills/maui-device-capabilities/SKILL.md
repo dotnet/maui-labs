@@ -42,12 +42,17 @@ if (status != PermissionStatus.Granted)
 
 if (status != PermissionStatus.Granted)
 {
+    PermissionDeniedMessage = "Location is off. Enable it in Settings to show nearby stores.";
+    CanOpenSettings = true;
+    SemanticScreenReader.Announce(PermissionDeniedMessage);
     return;
 }
 ```
 
 Do not repeatedly prompt after a user denies access. Show a feature-specific
-empty/blocked state and, when appropriate, guide the user to app settings.
+empty/blocked state that screen readers can observe, and when appropriate guide
+the user to app settings with an explicit button that calls
+`AppInfo.ShowSettingsUI()`.
 
 ## Platform Declaration Map
 
@@ -83,6 +88,9 @@ background location, broad storage, or microphone declarations "just in case".
 - Ask at the moment of need, not on first launch.
 - Explain the user benefit before invoking the platform prompt.
 - Provide a useful fallback when access is denied.
+- Make denied/blocked states visible and announced with
+  `SemanticProperties.Description`, `SemanticScreenReader.Announce`, or a
+  focused explanatory label.
 - Avoid loops that immediately re-request permission after denial.
 - Make error/cancelled states visible and testable with `AutomationId` when UI
   is affected.
@@ -93,5 +101,7 @@ background location, broad storage, or microphone declarations "just in case".
   feature.
 - Runtime permission requests happen before capability APIs that require them.
 - Denied and cancelled flows are handled without crashes.
+- Denied permission UI is visible, accessible, and offers Settings when the
+  platform requires manual re-enable.
 - Picked files/media are copied when durable access is required.
 - Location code handles stale last-known data, timeout, and cancellation.

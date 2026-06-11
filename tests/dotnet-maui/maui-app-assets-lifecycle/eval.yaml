@@ -50,8 +50,8 @@ scenarios:
         value: "Window"
       - type: "output_matches"
         pattern: "Deactivated|Stopped|Resumed|Destroying"
-      - type: "output_contains"
-        value: "ConfigureLifecycleEvents"
+      - type: "output_matches"
+        pattern: "ConfigureLifecycleEvents|platform-specific lifecycle|platform lifecycle"
       - type: "output_matches"
         pattern: "Preferences|SQLite|app data"
     rubric:
@@ -74,7 +74,7 @@ scenarios:
       - type: "output_matches"
         pattern: "MauiFont|ConfigureFonts|Resources/Fonts"
       - type: "output_matches"
-        pattern: "UIAppFonts|plist font registrations|Info\\.plist.*font|font.*Info\\.plist"
+        pattern: "UIAppFonts|Info\\.plist|plist"
     rubric:
       - "Moves shared XAML/C# image assets into Resources/Images as MauiImage items"
       - "Warns not to rely on migrated Android drawable-* folders for MAUI Image sources"

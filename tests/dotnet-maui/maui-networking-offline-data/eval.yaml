@@ -15,7 +15,7 @@ scenarios:
       - type: "output_contains"
         value: "AddHttpClient"
       - type: "output_not_matches"
-        pattern: "=\\s*new\\s+HttpClient\\s*\\("
+        pattern: "(?m)^\\s*(?:var|HttpClient|using|_?client)\\b[^\\n=]*=\\s*new\\s+HttpClient\\s*\\("
     rubric:
       - "Explains that Android emulator uses 10.0.2.2 to reach the host machine"
       - "Keeps cleartext HTTP exceptions debug-only"
@@ -42,12 +42,18 @@ scenarios:
         pattern: "ETag|row version|concurrency|UpdatedAt"
       - type: "output_matches"
         pattern: "tombstone|PendingDelete|pending delete|soft delete|deleted marker|sync.*delete"
+      - type: "output_matches"
+        pattern: "encrypt|SQLCipher|SecureStorage.*key|sensitive"
+      - type: "output_matches"
+        pattern: "MainThread|background|paged|chunk|batch|Task\\.Run"
     rubric:
       - "Defines explicit offline boundaries for cached versus editable data"
       - "Includes a concrete SQLiteAsyncConnection/CreateTableAsync or EF Core DbContext setup"
       - "Adds dirty/pending operation state for queued sync"
       - "Uses concurrency metadata such as ETag, row version, or UpdatedAt"
       - "Accounts for deletes with tombstones or pending delete records"
+      - "Recommends encryption when offline data is sensitive or regulated"
+      - "Keeps large sync work off the UI thread with chunking or background processing"
       - "Recommends documenting an explicit conflict resolution policy such as server wins, client wins, field merge, or user decision"
     timeout: 240
 

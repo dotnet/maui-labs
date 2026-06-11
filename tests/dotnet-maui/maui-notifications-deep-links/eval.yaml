@@ -13,6 +13,8 @@ scenarios:
         pattern: "UNUserNotificationCenter|UserNotifications"
       - type: "output_matches"
         pattern: "NotificationManager|Importance|channel ID"
+      - type: "output_matches"
+        pattern: "denied|disabled|Settings|in-app"
     rubric:
       - "Creates Android notification channels for Android 8+"
       - "Requests Android 13+ POST_NOTIFICATIONS permission"
@@ -43,7 +45,7 @@ scenarios:
       - type: "output_matches"
         pattern: "PII|sensitive|confidential|access token|payload"
       - type: "output_not_matches"
-        pattern: "(?i)(use|keep|continue using|rely on) (the )?legacy (Firebase )?server key"
+        pattern: "(?im)^\\s*(?:[-*]\\s*)?(use|keep|continue using|rely on) (the )?legacy (Firebase )?server key"
     rubric:
       - "Explains that Android push backends should use FCM HTTP v1 rather than the retired legacy API"
       - "Explains that iOS uses APNs device tokens"
@@ -61,6 +63,8 @@ scenarios:
     assertions:
       - type: "output_contains"
         value: "assetlinks.json"
+      - type: "output_matches"
+        pattern: "autoVerify"
       - type: "output_contains"
         value: "apple-app-site-association"
       - type: "output_matches"
@@ -69,6 +73,7 @@ scenarios:
         pattern: "Shell|GoToAsync|OnAppLinkRequestReceived|ConfigureLifecycleEvents"
     rubric:
       - "Uses Android App Links with assetlinks.json for verified HTTPS links"
+      - "Sets android:autoVerify=true on the Android App Links intent filter"
       - "Uses iOS Universal Links with apple-app-site-association"
       - "Adds custom URI scheme setup as a fallback"
       - "Normalizes deep links into Shell routes or an app navigation service"

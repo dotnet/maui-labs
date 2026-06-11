@@ -145,6 +145,9 @@ Keep sync boundaries explicit:
   `Preferences`.
 - Page or chunk large sync operations and write in bounded batches so the app
   stays responsive and avoids mobile memory spikes.
+- Drain sync queues on background work, not the UI thread; marshal only progress
+  or completion updates back with `MainThread.BeginInvokeOnMainThread` when UI
+  needs to change.
 
 ## Retry and Error Handling
 
@@ -163,4 +166,6 @@ Keep sync boundaries explicit:
 - SQLite state has an explicit sync/conflict boundary and names the concrete
   storage API, such as `SQLiteAsyncConnection` with `CreateTableAsync<T>` or an
   EF Core `DbContext`.
+- Sensitive local data has an encryption decision, such as SQLCipher plus a key
+  stored in `SecureStorage`.
 - Requests support cancellation and distinguish transient from permanent errors.

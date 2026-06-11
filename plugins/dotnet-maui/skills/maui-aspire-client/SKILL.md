@@ -42,6 +42,15 @@ inject service discovery environment variables into the device app. Service-name
 URIs work only when endpoint configuration is supplied to the MAUI app through
 configuration, generated settings, or another explicit launch/deploy step.
 
+When your dev flow can launch the MAUI project from the AppHost, wire the API
+reference there first and pass endpoint configuration to the app:
+
+```csharp
+var api = builder.AddProject<Projects.ApiService>("apiservice");
+builder.AddProject<Projects.MauiClient>("mauiclient")
+       .WithReference(api);
+```
+
 ```csharp
 builder.Services.AddServiceDiscovery();
 

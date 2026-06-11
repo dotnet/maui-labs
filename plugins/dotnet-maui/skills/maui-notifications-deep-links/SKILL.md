@@ -63,6 +63,9 @@ public interface INotificationService
 
 Keep notification IDs stable when updates/cancellation are required. Store
 scheduled notification metadata in app storage if it must survive app restart.
+If notification permission is denied, surface an in-app reminders state, banner,
+or inbox fallback and provide a Settings path instead of silently dropping the
+schedule request.
 
 ## Push Notifications
 
@@ -156,6 +159,9 @@ notifications and custom schemes.
 For cold-start links or notification taps, queue the route until MAUI has built
 the app navigation surface. Do not call `Shell.Current.GoToAsync` from Android
 `OnCreate` before `Shell.Current` exists.
+While a queued link is resolving, show a pending navigation/loading state; after
+arrival, move focus to the destination heading or announce the destination with
+`SemanticScreenReader.Announce`.
 
 ## Troubleshooting Checklist
 
@@ -176,4 +182,6 @@ the app navigation surface. Do not call `Shell.Current.GoToAsync` from Android
 - Notification payloads contain route/entity references, not PII, access tokens,
   or secrets.
 - Deep links work for cold start and resume.
+- Cold-start links expose a pending state and announce/focus the destination when
+  routing completes.
 - App link/universal link verification files match the app identifiers.

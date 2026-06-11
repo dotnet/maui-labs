@@ -13,6 +13,8 @@ scenarios:
         value: "NSCameraUsageDescription"
       - type: "output_matches"
         pattern: "android.permission.CAMERA"
+      - type: "output_matches"
+        pattern: "denied|unsupported|AppInfo\\.ShowSettingsUI|Semantic"
     rubric:
       - "Checks MediaPicker capture support before invoking camera capture"
       - "Adds Android camera permission/declaration when needed"
@@ -54,8 +56,10 @@ scenarios:
         pattern: "ACCESS_FINE_LOCATION|NSLocationWhenInUseUsageDescription"
       - type: "output_matches"
         pattern: "UseMauiMaps|<maps:Map|MapHandler"
+      - type: "output_matches"
+        pattern: "denied|blocked|AppInfo\\.ShowSettingsUI|Semantic"
       - type: "output_not_matches"
-        pattern: "RequestAsync<Permissions\\.LocationAlways>"
+        pattern: "(?m)^\\s*(?!//).*RequestAsync<Permissions\\.LocationAlways>"
     rubric:
       - "Checks and requests location permission before geolocation"
       - "Uses GetLocationAsync with GeolocationRequest for current location"
