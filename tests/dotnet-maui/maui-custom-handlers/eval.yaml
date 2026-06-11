@@ -8,7 +8,7 @@ scenarios:
       - type: "output_matches"
         pattern: "EntryHandler\\.Mapper\\.AppendToMapping|AppendToMapping"
       - type: "output_matches"
-        pattern: "is BorderlessEntry|as BorderlessEntry|== typeof\\(BorderlessEntry\\)"
+        pattern: "is\\s+(not\\s+)?BorderlessEntry|as BorderlessEntry|== typeof\\(BorderlessEntry\\)"
       - type: "output_matches"
         pattern: "#(if|elif)\\s+.*(ANDROID|IOS|MACCATALYST|WINDOWS)"
     rubric:

@@ -1,11 +1,13 @@
 ---
 name: maui-labs-platform-targeting
 description: >-
-  Build MAUI apps for experimental MAUI Labs platform backends. USE FOR:
-  targeting Linux GTK4, macOS AppKit, or WPF, using templates/packages, creating
-  head projects, wiring hosting, checking parity, and validating apps. DO NOT
-  USE FOR: implementing MAUI backends/handlers/Essentials services, official
-  platform targeting, or unrelated app architecture.
+  Build MAUI apps targeting the MAUI Labs experimental Linux GTK4, macOS
+  AppKit, and WPF platform backends. USE FOR: creating head projects,
+  configuring net10.0-linux/macos/windows targets, UseMauiAppLinuxGtk4 /
+  UseMauiAppMacOS / UseMauiAppWPF hosting calls, maui-linux-gtk4 / maui-macos /
+  maui-wpf templates and packages, parity checking, and validating apps on each
+  backend. DO NOT USE FOR: implementing MAUI backends, handlers, or Essentials
+  services — use a platform-backend implementation skill for that.
 ---
 
 # MAUI Labs Platform Targeting
