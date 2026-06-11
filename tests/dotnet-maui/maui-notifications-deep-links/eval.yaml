@@ -35,7 +35,7 @@ scenarios:
       - type: "output_matches"
         pattern: "service[- ]account|legacy server key"
       - type: "output_matches"
-        pattern: "optional|not required|not mandatory"
+        pattern: "(?i)optional|not required|not mandatory|direct(ly)? (with|to) .*backend|own backend|small.*apps?.*direct|\\bNo\\b"
       - type: "output_matches"
         pattern: "refresh|refreshed|rotate|rotates|rotated|upload"
       - type: "output_matches"
