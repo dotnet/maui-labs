@@ -30,9 +30,12 @@ services during development, persists local data, or must behave well offline.
 5. Keep cleartext HTTP exceptions debug-only and platform-scoped.
 6. Define offline boundaries: what is cached, what is editable offline, what
    needs conflict detection, and what requires server truth.
-7. Store local data in SQLite or app data files behind a repository/service
+7. For SQLite/offline sync answers, show the storage initialization API before
+   the entity schema: `SQLiteAsyncConnection` + `CreateTableAsync` for
+   sqlite-net, or an EF Core `DbContext` setup. Do not only show POCO models.
+8. Store local data in SQLite or app data files behind a repository/service
    abstraction.
-8. Add cancellation, timeout, retry, and user-facing error states.
+9. Add cancellation, timeout, retry, and user-facing error states.
 
 ## HttpClient DI Pattern
 
@@ -98,6 +101,9 @@ Use SQLite for structured local state, offline queues, and cached server data.
 For sqlite-net, this usually means a `SQLiteAsyncConnection` and
 `CreateTableAsync` setup. For EF Core, keep the local schema behind a
 `DbContext`.
+
+Always include a short initialization snippet in offline-sync guidance so the
+storage layer is concrete, not just the row shape.
 
 ```csharp
 var db = new SQLiteAsyncConnection(databasePath);

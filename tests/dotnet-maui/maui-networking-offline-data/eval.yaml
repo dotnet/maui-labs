@@ -27,7 +27,8 @@ scenarios:
     prompt: |
       I am adding offline editing to a MAUI orders app. Orders should save while
       offline and sync later. What local SQLite shape and sync metadata should I
-      plan for to avoid losing edits and to handle conflicts?
+      plan for to avoid losing edits and to handle conflicts? Include a concrete
+      SQLite initialization/storage API example, not just the entity classes.
     assertions:
       - type: "output_matches"
         pattern: "SQLiteAsyncConnection|CreateTableAsync|DbContext|sqlite-net|EF Core"
@@ -39,6 +40,7 @@ scenarios:
         pattern: "tombstone|PendingDelete|pending delete|delete"
     rubric:
       - "Defines explicit offline boundaries for cached versus editable data"
+      - "Includes a concrete SQLiteAsyncConnection/CreateTableAsync or EF Core DbContext setup"
       - "Adds dirty/pending operation state for queued sync"
       - "Uses concurrency metadata such as ETag, row version, or UpdatedAt"
       - "Accounts for deletes with tombstones or pending delete records"
