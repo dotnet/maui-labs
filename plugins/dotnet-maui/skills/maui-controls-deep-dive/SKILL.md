@@ -20,8 +20,9 @@ MAUI APIs.
    MAUI UI style.
 2. Identify the control area: `CollectionView`, safe area, gestures, animations,
    or `GraphicsView`.
-3. Apply the focused guidance below and route broader architecture, accessibility,
-   or profiling work to the relevant skill.
+3. Apply the focused guidance below and route broader architecture, accessibility
+   (`maui-accessibility`), or profiling (`maui-performance`) work to the relevant
+   skill.
 4. Validate the control on the intended device sizes/platforms, including
    automation hooks and accessibility alternatives for critical actions.
 

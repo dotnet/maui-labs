@@ -103,12 +103,15 @@ Essentials AI returns `Microsoft.Extensions.AI` clients, so normal tool calling
 patterns apply:
 
 ```csharp
+var innerClient = serviceProvider.GetRequiredService<IChatClient>();
+var appTools = AppTools.Default.Tools; // Generated context; see maui-ai-tool-bindings.
+
 var client = innerClient.AsBuilder()
     .UseFunctionInvocation()
     .ConfigureOptions(options =>
     {
         options.Tools ??= [];
-        foreach (var tool in GardenTools.Default.Tools)
+        foreach (var tool in appTools)
             options.Tools.Add(tool);
     })
     .Build(serviceProvider);

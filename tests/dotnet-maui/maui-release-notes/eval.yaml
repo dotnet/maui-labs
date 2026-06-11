@@ -28,7 +28,7 @@ scenarios:
       data. What conversion should I document?
     assertions:
       - type: "output_matches"
-        pattern: "10\\.103\\.0|10\\.\\d+\\.0"
+        pattern: "10\\.103\\.0"
       - type: "output_matches"
         pattern: "Microsoft\\.NET\\.Workloads\\.\\d+\\.\\d+\\.\\d+"
       - type: "output_matches"
