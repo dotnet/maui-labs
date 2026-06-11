@@ -53,7 +53,7 @@ scenarios:
       - type: "output_matches"
         pattern: "WorkloadDependencies\\.json|WorkloadManifest|manifest data"
       - type: "output_matches"
-        pattern: "WorkloadDependencies\\.json|WorkloadManifest|known issues"
+        pattern: "(?i)app store.*(separate|out of scope|not workload)|(?:separate|out of scope|not workload).*app store|workload notes.*SDK consumers"
     rubric:
       - "Keeps release notes focused on MAUI workload/platform data for SDK consumers"
       - "Separates app-store or marketing changelog content from workload release notes"

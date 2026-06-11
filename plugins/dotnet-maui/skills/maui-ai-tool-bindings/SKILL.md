@@ -102,16 +102,22 @@ instead of returning fake success.
 
 ## Scope and Lifetime
 
-The library does not create DI scopes. Build the chat client with the provider
-whose lifetime should back tool calls:
+The library does not create DI scopes. Keep the scope alive for as long as the
+chat session can invoke tools, then dispose it when the session ends:
 
 ```csharp
-using var scope = serviceScopeFactory.CreateScope(); // Inject IServiceScopeFactory.
+private IServiceScope? _sessionScope;
+private IChatClient? _sessionClient;
 
-var sessionClient = innerClient.AsBuilder()
+_sessionScope?.Dispose();
+_sessionScope = serviceScopeFactory.CreateScope(); // Inject IServiceScopeFactory.
+
+_sessionClient = innerClient.AsBuilder()
     .UseFunctionInvocation(configure: invocation =>
         invocation.AdditionalTools = [.. GardenTools.Default.Tools])
-    .Build(scope.ServiceProvider);
+    .Build(_sessionScope.ServiceProvider);
+
+// Dispose _sessionScope when the chat session or view model ends.
 ```
 
 Use a per-chat-session scope when tools hold conversational state.

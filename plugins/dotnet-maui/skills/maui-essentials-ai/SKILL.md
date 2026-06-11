@@ -60,6 +60,11 @@ if (OperatingSystem.IsIOSVersionAtLeast(26) ||
 {
     builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 }
+else
+{
+    // Leave IChatClient unregistered and check availability before use,
+    // or register an app-specific unavailable implementation.
+}
 #endif
 ```
 
