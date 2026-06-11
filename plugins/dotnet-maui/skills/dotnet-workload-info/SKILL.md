@@ -103,6 +103,15 @@ unzip -p manifest.nupkg data/WorkloadDependencies.json
 }
 ```
 
+After extracting `androidsdk.packages`, show how to install them in CI:
+
+```bash
+sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+```
+
+Use the exact package IDs from `WorkloadDependencies.json`; do not copy the sample
+API level or build-tools version blindly.
+
 **iOS/macOS** (`microsoft.net.sdk.ios`):
 ```json
 {
