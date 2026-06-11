@@ -1,5 +1,6 @@
 scenarios:
   - name: "Set app icon and splash screen with MAUI single-project item types"
+    expectActivation: false
     setup:
       files:
         - path: "MyApp/MyApp.csproj"
@@ -29,6 +30,7 @@ scenarios:
     timeout: 240
 
   - name: "Fix misuse of maui project version for app store versions"
+    expectActivation: false
     setup:
       files:
         - path: "MyApp/MyApp.csproj"
@@ -60,6 +62,7 @@ scenarios:
     timeout: 240
 
   - name: "Fix images placed in platform-specific folders"
+    expectActivation: false
     setup:
       files:
         - path: "MyApp/MyApp.csproj"

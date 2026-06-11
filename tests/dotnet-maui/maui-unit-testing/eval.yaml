@@ -1,44 +1,29 @@
 scenarios:
-  - name: "Fix test project build error referencing multi-targeting MAUI app"
+  - name: "Use MAUI built-in IConnectivity interface for testable connectivity checks"
     setup:
       files:
-        - path: "MyApp.Tests/MyApp.Tests.csproj"
+        - path: "MyApp/ViewModels/NetworkStatusViewModel.cs"
           content: |
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <ProjectReference Include="../MyApp/MyApp.csproj" />
-              </ItemGroup>
-            </Project>
-        - path: "MyApp/MyApp.csproj"
-          content: |
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-windows10.0.19041.0</TargetFrameworks>
-                <OutputType>Exe</OutputType>
-                <UseMaui>true</UseMaui>
-              </PropertyGroup>
-            </Project>
+            public class NetworkStatusViewModel
+            {
+                public bool IsOnline => Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
+            }
     prompt: |
-      My xUnit test project (net10.0) has a ProjectReference to my MAUI app
-      project that multi-targets net10.0-android, net10.0-ios, net10.0-maccatalyst,
-      and net10.0-windows10.0.19041.0. The build fails because MAUI-specific
-      targets and task imports are missing in the plain net10.0 test project.
-      How do I correctly reference a MAUI app project from a net10.0 xUnit test
-      project without adding MAUI TFMs to the test project?
+      My ViewModel uses Connectivity.Current directly to expose an IsOnline flag.
+      In xUnit tests on CI, this static access is hard to fake and causes brittle
+      tests. Does MAUI provide a built-in injectable interface I should use instead
+      of Connectivity.Current? Show the refactored ViewModel and a unit test approach.
     assertions:
       - type: "output_matches"
-        pattern: "AppProjectReference|Microsoft\\.Maui\\.Build\\.AppProjectReference"
+        pattern: "IConnectivity"
       - type: "output_matches"
-        pattern: "(?i)PackageReference|NuGet"
-      - type: "output_not_matches"
-        pattern: "(?i)<TargetFrameworks>.*net10\\.0-android.*</TargetFrameworks>"
+        pattern: "(?i)(fake|mock|stub|test.*implementation)"
+      - type: "output_matches"
+        pattern: "(?i)(inject|constructor|DI|dependency)"
     rubric:
-      - "Mentions Microsoft.Maui.Build.AppProjectReference NuGet package as the solution"
-      - "Explains that a direct ProjectReference fails due to MAUI multi-targeting TFM mismatch"
-      - "Does not suggest adding MAUI TFMs to the plain net10.0 test project"
+      - "Recommends MAUI's built-in IConnectivity interface instead of Connectivity.Current static access"
+      - "Shows constructor injection of IConnectivity into the ViewModel"
+      - "Provides or describes a fake IConnectivity implementation for tests"
     timeout: 240
 
   - name: "Reject MauiProgram.CreateMauiApp in test setup"

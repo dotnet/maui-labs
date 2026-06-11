@@ -42,43 +42,84 @@ scenarios:
       - "Sets BUILD_LIBRARY_FOR_DISTRIBUTION to YES for ABI stability across Swift versions"
     timeout: 240
 
-  - name: "Reference pre-built xcframework in iOS slim binding project"
+  - name: "Fix unrecognized selector runtime crash in iOS binding"
+    setup:
+      files:
+        - path: "MyBinding/swift/DotnetMyBinding.swift"
+          content: |
+            import Foundation
+
+            @objc(DotnetMyBinding)
+            public class DotnetMyBinding: NSObject {
+                @objc(initialize:)
+                public func initialize(apiKey: String) -> Bool {
+                    return true
+                }
+            }
+        - path: "MyBinding/ApiDefinition.cs"
+          content: |
+            using Foundation;
+            using ObjCRuntime;
+
+            namespace MyBinding;
+
+            [BaseType(typeof(NSObject))]
+            interface DotnetMyBinding {
+                [Export("initializeWithApiKey:")]
+                bool Initialize(string apiKey);
+            }
     prompt: |
-      My iOS SDK vendor provides a pre-built binary as an xcframework file
-      (not source code with CocoaPods). I want to create a slim iOS binding that
-      wraps this xcframework for my MAUI app. How do I reference the xcframework
-      in my C# binding .csproj and what MSBuild item type should I use?
+      My iOS slim binding project at MyBinding/ builds successfully but crashes at runtime with:
+
+      ```
+      Objective-C exception thrown. Name: NSInvalidArgumentException
+      Reason: -[DotnetMyBinding initializeWithApiKey:]: unrecognized selector sent to instance
+      ```
+
+      The Swift wrapper is at MyBinding/swift/DotnetMyBinding.swift and the binding
+      definition is at MyBinding/ApiDefinition.cs. Fix the code to resolve this
+      selector mismatch. Explain how slim bindings on iOS handle Objective-C
+      selectors.
     assertions:
-      - type: "output_contains"
-        value: "NativeReference"
       - type: "output_matches"
-        pattern: "xcframework|XCFramework"
+        pattern: "(?i)selector.*(mismatch|match)|match.*selector|Export.*doesn.t match|@objc.*selector"
       - type: "output_matches"
-        pattern: "Kind=|Kind ="
+        pattern: "initializeWithApiKey:"
+      - type: "output_matches"
+        pattern: "@objc\\(.*initializeWithApiKey|Export\\(\"initialize:|Export.*initialize:|initializeWithApiKey:.*initialize:|initialize:.*initializeWithApiKey:"
     rubric:
-      - "Uses NativeReference MSBuild item to reference the xcframework in the .csproj"
-      - "Shows the Kind attribute with the correct value for a dynamic or static framework"
-      - "Demonstrates the .csproj syntax for including a binary xcframework file"
+      - "Identifies that the explicit @objc selector on the Swift method does not match the [Export] selector"
+      - "Explains that @objc(initialize:) exports initialize: while ApiDefinition.cs expects initializeWithApiKey:"
+      - "Shows one valid fix: either add @objc(initializeWithApiKey:) in Swift or change [Export] to initialize: so both sides match"
+      - "Emphasizes that @objc(selector:) in Swift must exactly match [Export(\"selector:\")] in ApiDefinition.cs"
     timeout: 240
 
-  - name: "Add BindAs attribute to map native NSNumber to C# enum in ApiDefinition.cs"
+  - name: "Design Swift wrapper for async APIs with completion handlers"
     prompt: |
-      The iOS SDK I'm wrapping has a method that returns an NSNumber representing
-      a log level (0=Debug, 1=Info, 2=Error). Objective Sharpie generated the
-      return type as NSNumber, but I want to use a strongly-typed LogLevel C#
-      enum in my MAUI app. What attribute can I add to ApiDefinition.cs to make
-      the binding automatically convert the NSNumber to the C# LogLevel enum type?
+      The iOS SDK I'm wrapping has async/await Swift APIs:
+
+      ```swift
+      class NativeSDK {
+          func fetchUser(id: String) async throws -> User
+          func uploadImage(_ data: Data) async throws -> URL
+      }
+      ```
+
+      How do I wrap these for use in a .NET MAUI iOS binding? I need the
+      C# side to be awaitable too.
     assertions:
       - type: "output_matches"
-        pattern: "\\[BindAs\\]|BindAs"
+        pattern: "(?i)completion.?handler|callback|closure"
       - type: "output_matches"
-        pattern: "LogLevel|enum"
+        pattern: "NSError"
       - type: "output_matches"
-        pattern: "NSNumber|native type|mapping"
+        pattern: "\\[Async\\]"
     rubric:
-      - "Uses the [BindAs] attribute to declare the mapping between NSNumber and the C# enum type"
-      - "Shows [BindAs(typeof(LogLevel))] syntax on the ApiDefinition method or return type"
-      - "Explains that BindAs enables type-safe C# enum usage from native NSNumber return values"
+      - "Converts async/await Swift methods to completion handler pattern in the wrapper"
+      - "Shows completion handler signature with (Result?, NSError?) -> Void or similar nullable error pattern"
+      - "Uses @objc annotation on the completion handler methods with correct selector names"
+      - "Shows [Async] attribute in ApiDefinition.cs to auto-generate C# async/await wrappers"
+      - "Does not suggest exposing Swift async/await directly through the binding"
     timeout: 240
 
   - name: "Generate ApiDefinition.cs with Objective Sharpie"
