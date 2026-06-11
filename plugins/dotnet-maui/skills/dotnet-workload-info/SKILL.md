@@ -1,8 +1,8 @@
 ---
 name: dotnet-workload-info
 description: >-
-  Discover .NET SDK versions, workload sets, manifest versions, and workload dependencies (Xcode, JDK, Android SDK) from live NuGet APIs.
-  USE FOR: .NET SDK requirements/versions, workload set versions, CLI-to-NuGet workload set version conversion, workload manifest versions, Xcode version requirements, JDK version requirements, Android SDK packages, MAUI NuGet package versions.
+  Discover .NET SDK versions, workload sets, manifest versions, workload dependencies (Xcode, JDK, Android SDK), and exact NuGet search results for MAUI packages such as Microsoft.Maui.Controls from live NuGet APIs.
+  USE FOR: .NET SDK requirements/versions, workload set versions, CLI-to-NuGet workload set version conversion, workload manifest versions, Xcode version requirements, JDK version requirements, Android SDK packages, MAUI NuGet package versions, NuGet search API exact package ID queries, and packageid:Microsoft.Maui.Controls lookups.
   DO NOT USE FOR: Installing workloads (use `dotnet workload install`), general MAUI debugging, app build failures.
   Triggers on questions like "What Xcode is required for .NET 10?" or "What's the latest workload set?"
 ---
@@ -146,6 +146,11 @@ MAUI packages may be newer than workload versions. Query for latest:
 curl -s "https://azuresearch-usnc.nuget.org/query?q=packageid:Microsoft.Maui.Controls&prerelease=false" | \
   jq '.data[0].versions | map(select(.version | startswith("{MAJOR}."))) | last'
 ```
+
+When the user asks for the NuGet search API or an exact package ID filter, use
+`https://azuresearch-usnc.nuget.org/query?q=packageid:<PackageId>` and show the
+`packageid:` filter. Do not answer with only the flat-container or registration
+endpoints; those are useful follow-up APIs but they are not the search API.
 
 Key packages: `Microsoft.Maui.Controls`, `Microsoft.Maui.Essentials`, `Microsoft.Maui.Graphics`
 
