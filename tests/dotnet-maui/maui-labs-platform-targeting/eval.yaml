@@ -33,7 +33,7 @@ scenarios:
       - type: "output_contains"
         value: "UseMauiAppMacOS"
       - type: "output_matches"
-        pattern: "MACOS|TargetPlatform|#if MAC|AddMacOSEssentials"
+        pattern: "MACOS\\b|TargetPlatform|#if\\s+MACOS\\b|AddMacOSEssentials"
     rubric:
       - "Uses the AppKit template/package and net10.0-macos target"
       - "Shows UseMauiAppMacOS and AddMacOSEssentials where appropriate"

@@ -35,11 +35,13 @@ dotnet add package Microsoft.Maui.Essentials.AI --prerelease
 
 ```csharp
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Essentials.AI;
 
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
-builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
-    _ => new NLEmbeddingGenerator(NLEmbeddingType.Sentence));
+builder.Services.AddSingleton<NLEmbeddingGenerator>();
+builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
+    sp.GetRequiredService<NLEmbeddingGenerator>());
 ```
 
 Register platform-specific implementations conditionally if the app targets
@@ -67,10 +69,13 @@ use that convention. Otherwise, dispatch UI-bound property updates explicitly.
 
 ## Embeddings and Semantic Search
 
-Use `NLEmbeddingGenerator` for local semantic search over app-owned content:
+Use `NLEmbeddingGenerator` for local semantic search over app-owned content. The
+default constructor uses Apple's English sentence embedding; pass a
+`NaturalLanguage.NLLanguage` or an existing `NaturalLanguage.NLEmbedding` when
+the app needs a different supported language or embedding:
 
 ```csharp
-var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
+var generator = new NLEmbeddingGenerator();
 var embeddings = await generator.GenerateAsync(
     ["sunset beach", "mountain hiking"],
     cancellationToken);

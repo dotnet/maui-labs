@@ -28,14 +28,14 @@ scenarios:
     assertions:
       - type: "output_contains"
         value: "NLEmbeddingGenerator"
-      - type: "output_contains"
-        value: "NLEmbeddingType.Sentence"
+      - type: "output_matches"
+        pattern: "new NLEmbeddingGenerator\\(\\)|NLLanguage|NLEmbedding\\b"
       - type: "output_matches"
         pattern: "cosine|similarity|nearest"
       - type: "output_matches"
         pattern: "metadata|snippet|source"
     rubric:
-      - "Uses NLEmbeddingGenerator with sentence embeddings for local semantic search"
+      - "Uses NLEmbeddingGenerator with its default English sentence embedding, or an explicit NLLanguage/NLEmbedding when needed"
       - "Stores embeddings with metadata/source snippets"
       - "Compares query embeddings with cosine similarity or a nearest-neighbor equivalent"
       - "Avoids regenerating the entire corpus on every query"

@@ -53,13 +53,17 @@ by a cross-platform MAUI API. Prefer small, testable abstractions over scattered
    }
    ```
 
-3. Register it in `MauiProgram.cs`:
+3. Register only the platforms that have implementations in `MauiProgram.cs`:
 
    ```csharp
-   #if ANDROID || IOS || MACCATALYST || WINDOWS || MACOS
+   #if ANDROID
    builder.Services.AddSingleton<IAppReviewService, AppReviewService>();
    #endif
    ```
+
+   When adding iOS, Mac Catalyst, Windows, or MAUI Labs AppKit support, add the
+   matching platform implementation file first and then extend the guard, for
+   example `#if IOS || MACCATALYST` or `#if MACOS`.
 
 4. Inject `IAppReviewService` into view models or application services. Keep page
    constructors simple.
