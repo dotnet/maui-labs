@@ -1,14 +1,7 @@
 scenarios:
-  - name: "Add package with Central Package Management"
+  - name: "Set app icon and splash screen with MAUI single-project item types"
     setup:
       files:
-        - path: "Directory.Packages.props"
-          content: |
-            <Project>
-              <ItemGroup>
-                <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.0" />
-              </ItemGroup>
-            </Project>
         - path: "MyApp/MyApp.csproj"
           content: |
             <Project Sdk="Microsoft.NET.Sdk">
@@ -18,22 +11,21 @@ scenarios:
               </PropertyGroup>
             </Project>
     prompt: |
-      Add CommunityToolkit.Maui to this MAUI app. The repo uses Central Package
-      Management. Use MAUI project structure best practices and show the project
-      and package version edits.
+      I want to add a custom app icon and a splash screen to my MAUI single
+      project. I have icon.svg and splash.svg files ready. What MSBuild item
+      types should I use, where should the files go, and how do I configure
+      a background color for the splash screen and a tint for the icon?
     assertions:
       - type: "output_contains"
-        value: "Directory.Packages.props"
-      - type: "output_contains"
-        value: "PackageVersion Include=\"CommunityToolkit.Maui\""
-      - type: "output_contains"
-        value: "PackageReference Include=\"CommunityToolkit.Maui\""
+        value: "MauiIcon"
       - type: "output_matches"
-        pattern: "(?i)versionless|without\\s+(?:a\\s+)?version|omit.*version|leave.*version|no version|no\\s+`?Version`?\\s+attribute|CPM handles it|CPM convention"
+        pattern: "MauiSplashScreen"
+      - type: "output_matches"
+        pattern: "Color|TintColor|BackgroundColor"
     rubric:
-      - "Detects Central Package Management from Directory.Packages.props"
-      - "Adds the version as a PackageVersion"
-      - "Keeps the app PackageReference versionless"
+      - "Uses MauiIcon (not MauiImage) for the app icon item type"
+      - "Uses MauiSplashScreen for the splash screen item type"
+      - "Shows Color or TintColor attribute for the icon and BackgroundColor for the splash"
     timeout: 240
 
   - name: "Fix misuse of maui project version for app store versions"

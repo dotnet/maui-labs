@@ -31,41 +31,72 @@ scenarios:
       - "Encodes query parameter values instead of string-concatenating raw data"
     timeout: 240
 
-  - name: "Choose DI lifetimes for pages ViewModels and services"
+  - name: "Fix stale ViewModel state caused by singleton page registration"
+    setup:
+      files:
+        - path: "MyApp/MauiProgram.cs"
+          content: |
+            public static class MauiProgram
+            {
+                public static MauiApp CreateMauiApp()
+                {
+                    var builder = MauiApp.CreateBuilder();
+                    builder.UseMaui();
+                    builder.Services.AddSingleton<ProductsPage>();
+                    builder.Services.AddSingleton<ProductsViewModel>();
+                    return builder.Build();
+                }
+            }
     prompt: |
-      In MauiProgram.cs, how should I register a ProductsPage, ProductsViewModel,
-      an ApiClient, and a user session service? Also, should I call
-      BuildServiceProvider to manually resolve the ViewModel?
+      When I navigate to ProductsPage, apply a search filter, then navigate
+      back and return to ProductsPage, the old search filter is still showing.
+      My ProductsPage and ProductsViewModel are both registered with
+      AddSingleton in MauiProgram.cs. Why does this happen and what is the
+      correct DI registration for Shell-navigable pages and ViewModels in MAUI?
     assertions:
       - type: "output_matches"
-        pattern: "AddTransient<.*ProductsPage|AddTransient<.*ProductsViewModel"
+        pattern: "AddTransient.*ProductsPage|ProductsPage.*[Tt]ransient"
       - type: "output_matches"
-        pattern: "AddSingleton<.*ApiClient|AddHttpClient"
-      - type: "output_matches"
-        pattern: "AddSingleton<.*Session"
-      - type: "output_matches"
-        pattern: "(?i)(do not|don't|avoid|should not|never).*BuildServiceProvider"
+        pattern: "AddTransient.*ProductsViewModel|ProductsViewModel.*[Tt]ransient"
     rubric:
-      - "Registers pages and stateful ViewModels as transient"
-      - "Uses singleton or typed HttpClient-style registration for app-wide services"
-      - "Uses singleton only for intentional app-wide session state"
-      - "Warns not to call BuildServiceProvider in MauiProgram for manual resolution"
+      - "Identifies singleton registration as the cause of stale ViewModel state between navigations"
+      - "Recommends AddTransient for Shell-navigable pages and their ViewModels"
+      - "Explains that transient registration creates a fresh page and ViewModel on each Shell navigation"
     timeout: 240
 
-  - name: "Add compiled bindings to page and item template"
+  - name: "Fix XamlParseException after moving ViewModel to different namespace"
+    setup:
+      files:
+        - path: "MyApp/Pages/ProductsPage.xaml"
+          content: |
+            <?xml version="1.0" encoding="utf-8" ?>
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:local="clr-namespace:MyApp.Pages"
+                         x:DataType="local:ProductsViewModel">
+                <Label Text="{Binding Title}" />
+            </ContentPage>
+        - path: "MyApp/ViewModels/ProductsViewModel.cs"
+          content: |
+            namespace MyApp.ViewModels;
+            public partial class ProductsViewModel : ObservableObject
+            {
+                [ObservableProperty] string title = "Products";
+            }
     prompt: |
-      My MAUI XAML page binds to ProductsViewModel and has a CollectionView of
-      Product rows. Show the x:DataType values I should add so both the page and
-      DataTemplate use compiled bindings.
+      My MAUI page uses compiled bindings and was working fine. After refactoring,
+      I moved ProductsViewModel from the MyApp.Pages namespace to MyApp.ViewModels.
+      Now the app throws a XamlParseException at startup saying the type could not
+      be resolved. What do I need to change in the XAML to fix this?
     assertions:
       - type: "output_contains"
         value: "x:DataType"
       - type: "output_matches"
-        pattern: "ProductsViewModel"
+        pattern: "clr-namespace:MyApp\\.ViewModels|xmlns:vm|xmlns:viewmodels"
       - type: "output_matches"
-        pattern: "DataTemplate.*Product|Product.*DataTemplate"
+        pattern: "(?i)namespace.*update|update.*namespace|change.*xmlns|xmlns.*change|add.*xmlns"
     rubric:
-      - "Adds x:DataType on the ContentPage for the ViewModel"
-      - "Adds x:DataType on the DataTemplate for the row model"
-      - "Explains that compiled bindings improve compile-time checking and performance"
+      - "Identifies that xmlns:local points to the old namespace MyApp.Pages"
+      - "Shows how to add or update an XML namespace prefix pointing to MyApp.ViewModels"
+      - "Updates x:DataType to use the new namespace prefix referencing ProductsViewModel"
     timeout: 240

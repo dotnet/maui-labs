@@ -1,20 +1,32 @@
 scenarios:
-  - name: "Make icon-only button accessible"
+  - name: "Fix screen reader reading image filename instead of button label"
+    setup:
+      files:
+        - path: "MyApp/Pages/ToolbarPage.xaml"
+          content: |
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+              <ContentPage.ToolbarItems>
+                <ToolbarItem IconImageSource="save_icon.png"
+                             Clicked="OnSaveClicked" />
+              </ContentPage.ToolbarItems>
+            </ContentPage>
     prompt: |
-      My MAUI toolbar uses an ImageButton with only a save icon. What
-      accessibility metadata and test hook should I add? I want to perform a
-      .NET MAUI accessibility audit on this.
+      Screen reader users on iOS and Android report that my toolbar save button
+      reads out "save_icon.png" instead of a meaningful description. What MAUI
+      accessibility property should I set on this ToolbarItem so screen readers
+      announce the correct action label instead of the image filename?
     assertions:
       - type: "output_contains"
         value: "SemanticProperties.Description"
-      - type: "output_contains"
-        value: "SemanticProperties.Hint"
-      - type: "output_contains"
-        value: "AutomationId"
+      - type: "output_matches"
+        pattern: "(?i)description.*save|SemanticProperties\\.Description\\s*=\\s*\"?Save"
+      - type: "output_matches"
+        pattern: "(?i)accessible name|screen reader|a11y|accessibility label"
     rubric:
-      - "Adds SemanticProperties.Description for the accessible name"
-      - "Adds SemanticProperties.Hint when the action needs clarification"
-      - "Adds AutomationId for testing but does not treat it as the accessible label"
+      - "Sets SemanticProperties.Description to a meaningful action label such as Save"
+      - "Explains that SemanticProperties.Description provides the accessible name read by screen readers"
+      - "Does not use the image filename as the description value"
     timeout: 240
 
   - name: "Announce validation errors"

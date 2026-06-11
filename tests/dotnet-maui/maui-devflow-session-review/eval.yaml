@@ -1,29 +1,29 @@
 scenarios:
-  - name: "Review repeated broker and agent wait failures"
+  - name: "Classify recurring DevFlow tap and screenshot friction across sessions"
     prompt: |
-      I had a MAUI DevFlow debugging session where the agent tried
-      `maui devflow list`, `maui devflow wait`, and `maui devflow ui tree`
-      several times. On Android it also tried direct localhost access, then
-      switched between broker discovery and port forwarding before the workflow
-      finally worked. I do not want to fix the app right now; I want a concise
-      product-feedback report for the DevFlow maintainers. Explicitly mention
-      privacy scrubbing/redaction and classify each finding with severity,
-      confidence, and outcome.
+      I ran three DevFlow debugging sessions this week. In all three sessions,
+      maui_tap reported success but the wrong element was triggered and the agent
+      had to fall back to maui_hittest to find the actual tap targets. In two of
+      those sessions, maui_screenshot returned a blank frame after the app was
+      backgrounded. I do not want to debug the app now. I want a structured
+      DevFlow friction report output directly as markdown in your chat response.
+      Classify each pattern: is it a DevFlow tool issue or an app-side issue,
+      what is the severity, and what should the DevFlow team investigate?
     assertions:
       - type: "output_matches"
-        pattern: "(?i)maui devflow (list|wait|ui tree)|list/wait|`ui tree`|agent wait|visual tree|tree dump|broker discovery"
+        pattern: "(?i)markdown|(?m)^##\\s|# DevFlow"
       - type: "output_matches"
-        pattern: "19223|9223|adb (reverse|forward)|broker"
+        pattern: "maui_tap|maui_hittest|maui_screenshot"
       - type: "output_matches"
-        pattern: "(?i)PII|scrub|sanitize|redact"
-      - type: "output_matches"
-        pattern: "(?i)severity|confidence|outcome"
+        pattern: "(?i)severity|DevFlow.*issue|tool.*issue|app.*issue"
+      - type: "output_not_matches"
+        pattern: "/Users/|\\\\Users\\\\|hostname|username"
     rubric:
-      - "Treats the task as a session review/report, not as an app fix"
-      - "Identifies repeated broker/wait/tree attempts as DevFlow friction"
-      - "Calls out Android broker/agent port forwarding as relevant evidence"
-      - "Includes privacy scrubbing and avoids local identifiers"
-      - "Classifies findings with severity, confidence, and outcome"
+      - "Outputs a structured markdown friction report rather than debugging instructions"
+      - "Identifies the maui_tap success with wrong element requiring maui_hittest fallback as a DevFlow tool reliability issue"
+      - "Identifies maui_screenshot blank frame after backgrounding as a second distinct pattern"
+      - "Classifies each finding by severity and DevFlow vs. app-side responsibility"
+      - "Does not include personal identifiers or local system paths"
     timeout: 240
 
   - name: "Create markdown report for long Blazor WebView debugging session"

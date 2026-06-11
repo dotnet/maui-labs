@@ -1,23 +1,44 @@
 scenarios:
-  - name: "Unit test ViewModel without starting MAUI app"
+  - name: "Fix test project build error referencing multi-targeting MAUI app"
+    setup:
+      files:
+        - path: "MyApp.Tests/MyApp.Tests.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+              </PropertyGroup>
+              <ItemGroup>
+                <ProjectReference Include="../MyApp/MyApp.csproj" />
+              </ItemGroup>
+            </Project>
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-windows10.0.19041.0</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
     prompt: |
-      I have a ProductsViewModel that calls IProductsService.LoadAsync and fills
-      an ObservableCollection. Show an xUnit test for it. Should the test call
-      MauiProgram.CreateMauiApp()? Evaluate this using MAUI unit testing best
-      practices.
+      My xUnit test project (net10.0) has a ProjectReference to my MAUI app
+      project that multi-targets net10.0-android, net10.0-ios, net10.0-maccatalyst,
+      and net10.0-windows10.0.19041.0. The build fails because MAUI-specific
+      targets and task imports are missing in the plain net10.0 test project.
+      How do I correctly reference a MAUI app project from a net10.0 xUnit test
+      project without adding MAUI TFMs to the test project?
     assertions:
-      - type: "output_contains"
-        value: "[Fact]"
-      - type: "output_contains"
-        value: "IProductsService"
       - type: "output_matches"
-        pattern: "(?i)fake|mock|stub"
+        pattern: "AppProjectReference|Microsoft\\.Maui\\.Build\\.AppProjectReference"
       - type: "output_matches"
-        pattern: "(?i)(do\\W*not|don't|avoid|should not|no need to|never).*MauiProgram\\.CreateMauiApp"
+        pattern: "(?i)PackageReference|NuGet"
+      - type: "output_not_matches"
+        pattern: "(?i)<TargetFrameworks>.*net10\\.0-android.*</TargetFrameworks>"
     rubric:
-      - "Shows a normal xUnit test for ViewModel state"
-      - "Uses a fake/mock service dependency"
-      - "Explicitly avoids starting a MAUI app for pure ViewModel logic"
+      - "Mentions Microsoft.Maui.Build.AppProjectReference NuGet package as the solution"
+      - "Explains that a direct ProjectReference fails due to MAUI multi-targeting TFM mismatch"
+      - "Does not suggest adding MAUI TFMs to the plain net10.0 test project"
     timeout: 240
 
   - name: "Reject MauiProgram.CreateMauiApp in test setup"

@@ -1,19 +1,32 @@
 scenarios:
-  - name: "Measure slow startup with MAUI CLI profiler"
+  - name: "Fix misleading maui profile startup results from Debug build"
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
     prompt: |
-      My .NET MAUI app feels slow to start on Android. Before changing code, what
-      measurement workflow should I use from the maui CLI?
+      I ran `maui profile startup` on my Android app and the profiler showed only
+      480ms total startup time. But my app feels much slower on my physical device
+      and users report 4+ second cold starts. I ran the profiler against the Debug
+      build on an emulator. What am I doing wrong and what should I change to get
+      meaningful startup profiling data with `maui profile startup`?
     assertions:
       - type: "output_contains"
         value: "maui profile startup"
       - type: "output_matches"
-        pattern: "(?i)release|device|emulator"
+        pattern: "(?i)release|Release|-c Release|--configuration"
       - type: "output_matches"
-        pattern: "measure|profile|baseline"
+        pattern: "(?i)(physical|real) device|not emulator|emulator.*not|avoid.*emulator"
     rubric:
-      - "Starts with measurement rather than speculative code changes"
-      - "Uses the maui profile startup CLI surface"
-      - "Mentions Release/device context for meaningful startup data"
+      - "Identifies Debug build as the reason for misleadingly fast profiler results"
+      - "Recommends using Release build with maui profile startup for accurate measurement"
+      - "Recommends profiling on a physical device rather than the Android emulator"
     timeout: 240
 
   - name: "Fix janky CollectionView scrolling"
