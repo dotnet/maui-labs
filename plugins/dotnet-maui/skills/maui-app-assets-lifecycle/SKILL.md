@@ -46,10 +46,12 @@ sizes. Avoid manually adding resized copies unless a platform requires a custom
 override.
 
 When migrating from Xamarin.iOS, remove old `UIAppFonts` entries from
-`Platforms/iOS/Info.plist`; `MauiFont` generates those registrations. Do not
-copy Xamarin Android `drawable-*` folders or iOS `.xcassets` directly into
-`Platforms/*` for images used by MAUI XAML/C#; put shared image assets in
-`Resources/Images` as `MauiImage` items.
+`Platforms/iOS/Info.plist`; `MauiFont` generates those registrations. Keep font
+aliases in MAUI's font pipeline, typically with `MauiFont` items and
+`ConfigureFonts()` when explicit aliases are needed. Do not copy Xamarin Android
+`drawable-*` folders or iOS `.xcassets` directly into `Platforms/*` for images
+used by MAUI XAML/C#; put shared image assets in `Resources/Images` as
+`MauiImage` items.
 
 ## Bundled Assets
 

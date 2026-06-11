@@ -72,12 +72,12 @@ scenarios:
       - type: "output_contains"
         value: "MauiImage"
       - type: "output_matches"
-        pattern: "MauiFont|Resources/Fonts"
+        pattern: "MauiFont|ConfigureFonts|Resources/Fonts"
       - type: "output_matches"
-        pattern: "UIAppFonts|Info.plist"
+        pattern: "UIAppFonts|plist font registrations"
     rubric:
       - "Moves shared XAML/C# image assets into Resources/Images as MauiImage items"
       - "Warns not to rely on migrated Android drawable-* folders for MAUI Image sources"
-      - "Uses MauiFont for shared font registration"
+      - "Uses MauiFont or ConfigureFonts for shared font registration"
       - "Explains that old iOS UIAppFonts entries should be removed when MauiFont generates registrations"
     timeout: 240
