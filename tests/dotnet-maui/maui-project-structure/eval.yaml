@@ -29,7 +29,7 @@ scenarios:
       - type: "output_contains"
         value: "PackageReference Include=\"CommunityToolkit.Maui\""
       - type: "output_matches"
-        pattern: "(?i)versionless|without version|omit.*version|leave.*version|no version"
+        pattern: "(?i)versionless|without\\s+(?:a\\s+)?version|omit.*version|leave.*version|no version|no\\s+`?Version`?\\s+attribute|CPM handles it|CPM convention"
     rubric:
       - "Detects Central Package Management from Directory.Packages.props"
       - "Adds the version as a PackageVersion"

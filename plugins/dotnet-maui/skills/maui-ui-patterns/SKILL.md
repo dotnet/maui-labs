@@ -20,6 +20,9 @@ UI states over coordinate-based or screenshot-only UI.
 ## Workflow
 
 1. Inspect the existing UI style: XAML, C# Markup, MauiReactor, or Blazor Hybrid.
+   If the requested page/component cannot be found but the user asked for a UI
+   pattern, still provide a self-contained snippet or create the requested file
+   at a sensible path instead of stopping with only a clarification request.
 2. Choose layout primitives based on content:
    - `Grid` for structured forms and dashboards.
    - `FlexLayout` for wrapping content and responsive chip/card layouts.
@@ -28,6 +31,9 @@ UI states over coordinate-based or screenshot-only UI.
 3. Move repeated colors, spacing, and text styles into resources.
 4. Add `AutomationId` to important interactive elements.
 5. Add loading, empty, error, and success states for data-driven screens.
+   For `CollectionView` loading/empty-state requests, show a visible loading
+   element such as `ActivityIndicator`, a `CollectionView.EmptyView`, and stable
+   `AutomationId` values for loading/list/empty elements.
 6. Add basic accessibility hooks while building the UI; route deeper audits to
    `maui-accessibility`.
 7. Verify with build plus DevFlow tree/screenshot when available.
@@ -82,4 +88,3 @@ UI states over coordinate-based or screenshot-only UI.
 - Data-driven screens have empty/loading/error behavior.
 - `CollectionView` is not nested inside a parent `ScrollView`.
 - The layout can scale across the intended device sizes.
-
