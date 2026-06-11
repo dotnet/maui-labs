@@ -26,14 +26,20 @@ scenarios:
       and direct device registration for push. For a MAUI app, how should Android
       and iOS token registration change, and is Azure Notification Hubs required?
     assertions:
-      - type: "output_contains"
-        value: "FCM HTTP v1"
+      - type: "output_matches"
+        pattern: "FCM HTTP v1|FCM v1|Firebase Cloud Messaging v1"
       - type: "output_contains"
         value: "APNs"
       - type: "output_matches"
-        pattern: "service account|legacy server key"
+        pattern: "service[- ]account|legacy server key"
       - type: "output_matches"
         pattern: "optional|not required|not mandatory"
+      - type: "output_matches"
+        pattern: "refresh|refreshed|rotate|rotates|rotated|upload"
+      - type: "output_matches"
+        pattern: "logout|log out|sign[- ]out|disassociate|unregister"
+      - type: "output_matches"
+        pattern: "PII|sensitive|confidential|access token|payload"
       - type: "output_not_matches"
         pattern: "Authorization:\\s*key="
     rubric:

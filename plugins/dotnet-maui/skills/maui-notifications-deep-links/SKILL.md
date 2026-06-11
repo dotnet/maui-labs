@@ -23,11 +23,19 @@ notifications, or URLs that open the app and navigate to content.
    links.
 2. Add platform declarations and entitlements before writing app logic.
 3. Request notification permission at a useful moment and support a denied state.
-4. Register device push tokens with the backend or Azure Notification Hubs.
-5. Normalize all notification taps and deep links into one app navigation
+4. For migrated push-token guidance, explicitly say Android backends use
+   **FCM HTTP v1** with service-account OAuth credentials, not legacy server
+   keys. iOS uses APNs device tokens.
+5. Register refreshed device push tokens/installations with the backend or
+   Azure Notification Hubs after sign-in, and disassociate them on logout.
+6. Treat Azure Notification Hubs as optional infrastructure unless the app needs
+   brokered installations, tags, templates, or multi-platform fanout.
+7. Keep push payloads free of PII, access tokens, and confidential content; send
+   route/entity IDs and fetch sensitive data after the app opens.
+8. Normalize all notification taps and deep links into one app navigation
    service.
-6. Route links with Shell routes or an explicit navigation abstraction.
-7. Add diagnostics for token registration, payload parsing, and cold-start versus
+9. Route links with Shell routes or an explicit navigation abstraction.
+10. Add diagnostics for token registration, payload parsing, and cold-start versus
    resume handling.
 
 ## Local Notifications
@@ -65,9 +73,13 @@ scheduled notification metadata in app storage if it must survive app restart.
   tags, installations, or multi-platform push management.
 - When using Azure Notification Hubs with FCM, configure FCM v1 service account
   credentials rather than legacy server keys.
+- Migrating the backend send API from legacy FCM to FCM HTTP v1 does not require
+  a new client registration-token format; keep normal token refresh handling
+  because FCM can still rotate tokens.
 - Upload the current push token/installation ID to the backend after it changes.
-- Associate tokens with the signed-in user only after auth completes, and remove
-  or disassociate them on logout.
+- Protect token registration endpoints with app user authentication. Associate
+  tokens with the signed-in user only after auth completes, and remove or
+  disassociate them on logout.
 - Do not put secrets, access tokens, or sensitive content in push payloads.
 - Include a stable route or entity ID in the payload, then fetch sensitive data
   after the app opens.
@@ -123,6 +135,10 @@ Override `App.OnAppLinkRequestReceived(Uri uri)` for verified HTTPS app links
 and universal links, then forward the URI to the same parser used by
 notifications and custom schemes.
 
+For cold-start links or notification taps, queue the route until MAUI has built
+the app navigation surface. Do not call `Shell.Current.GoToAsync` from Android
+`OnCreate` before `Shell.Current` exists.
+
 ## Troubleshooting Checklist
 
 - Confirm the app package ID/bundle ID matches the FCM/APNs/Azure registration.
@@ -136,7 +152,10 @@ notifications and custom schemes.
 ## Validation Checklist
 
 - Notification permissions and platform declarations are present and scoped.
+- Push migration guidance names FCM HTTP v1/service-account credentials, APNs,
+  and Notification Hubs as optional infrastructure.
 - Push tokens are uploaded, refreshed, and disassociated on logout.
-- Notification payloads contain route/entity references, not secrets.
+- Notification payloads contain route/entity references, not PII, access tokens,
+  or secrets.
 - Deep links work for cold start and resume.
 - App link/universal link verification files match the app identifiers.
