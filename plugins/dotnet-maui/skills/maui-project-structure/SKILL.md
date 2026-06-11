@@ -93,6 +93,11 @@ feature implementation. Inspect existing conventions first and preserve them.
 `maui project version` is for the MAUI package/workload version used by the
 project, not the platform app display/build version.
 
+If the prompt asks whether to use `maui project version` for app display/build
+versioning, the final response must explicitly answer: do **not** use it for
+`ApplicationDisplayVersion` or `ApplicationVersion`; set those MSBuild
+properties directly.
+
 ### Resources
 
 ```xml
@@ -130,3 +135,5 @@ project, not the platform app display/build version.
 - Resource files are in the correct MAUI resource folders.
 - Platform-specific settings are in the matching `Platforms/*` folder.
 - Version changes use `ApplicationDisplayVersion` and `ApplicationVersion`.
+- Prompts that mention `maui project version` explicitly say it is not for app
+  display/build versioning.
