@@ -2,7 +2,12 @@
 name: dotnet-workload-info
 description: >-
   Discover .NET SDK versions, workload sets, manifest versions, workload dependencies (Xcode, JDK, Android SDK), and exact NuGet search results for MAUI packages such as Microsoft.Maui.Controls from live NuGet APIs.
-  USE FOR: .NET SDK requirements/versions, workload set versions, CLI-to-NuGet workload set version conversion, workload manifest versions, Xcode version requirements, JDK version requirements, Android SDK packages, MAUI NuGet package versions, NuGet search API exact package ID queries, and packageid:Microsoft.Maui.Controls lookups.
+  USE FOR: .NET SDK requirements/versions, workload set versions,
+  CLI-to-NuGet workload set version conversion, workload manifest versions,
+  Xcode version requirements, JDK version requirements, finding the exact
+  Android SDK packages required by the MAUI workload manifest for CI/build
+  scripts, MAUI NuGet package versions, NuGet search API exact package ID
+  queries, and packageid:Microsoft.Maui.Controls lookups.
   DO NOT USE FOR: Installing workloads (use `dotnet workload install`), general MAUI debugging, app build failures, or setting app display/build versions with ApplicationDisplayVersion/ApplicationVersion (use maui-project-structure).
   Triggers on questions like "What Xcode is required for .NET 10?" or "What's the latest workload set?"
 ---

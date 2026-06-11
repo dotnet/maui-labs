@@ -4,9 +4,9 @@ description: >-
   Design and update .NET MAUI app architecture around dependency injection,
   MVVM, compiled bindings, Shell navigation, route registration, and testable
   services. USE FOR: MauiProgram service registration, ViewModel/page wiring,
-  Shell GoToAsync routes, query parameters, x:DataType compiled bindings,
-  service lifetime choices, and replacing DependencyService or service locator
-  patterns. DO NOT USE FOR: project file/resource layout (use
+  Shell GoToAsync routes, query parameters, adding x:DataType compiled binding
+  annotations to XAML pages and DataTemplate item templates, service lifetime
+  choices, and replacing DependencyService or service locator patterns. DO NOT USE FOR: project file/resource layout (use
   maui-project-structure), current API deprecation checks (use maui-current-apis),
   or runtime UI inspection (use maui-devflow-debug).
 ---

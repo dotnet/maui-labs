@@ -6,11 +6,15 @@ description: >-
   ApplicationVersion, display version, and build number, and reject using maui
   project version set for those app version properties. Also cover target
   frameworks, resources, package references, and platform folders.
-  USE FOR: single-project MAUI layout, Resources/Images/Fonts/Raw, Android/iOS/
-  Windows platform configuration, Central Package Management, app version
-  properties such as ApplicationDisplayVersion/ApplicationVersion, target
-  framework selection, maui doctor, MAUI package version pinning guidance, and
-  explaining that maui project version is not for app display/build versioning.
+  USE FOR: single-project MAUI layout, adding or placing image/font/asset/JSON
+  files in MAUI resource folders (MauiImage, MauiBundledFont, MauiAsset,
+  MauiSplashScreen item types, Resources/Images/Fonts/Raw directories), adding
+  NuGet packages using Central Package Management (Directory.Packages.props
+  versionless PackageReference), Android/iOS/Windows platform configuration,
+  app version properties such as ApplicationDisplayVersion/ApplicationVersion,
+  target framework selection, maui doctor, MAUI package version pinning
+  guidance, and explaining that maui project version is not for app
+  display/build versioning.
   DO NOT USE FOR: runtime UI debugging (use maui-devflow-debug), SDK/workload
   discovery (use dotnet-workload-info), or general MVVM/Shell design (use
   maui-app-architecture).

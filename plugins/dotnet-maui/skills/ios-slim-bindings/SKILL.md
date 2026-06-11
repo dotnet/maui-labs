@@ -4,7 +4,10 @@ description: >-
   Create and update slim/native platform interop bindings for iOS in .NET MAUI and .NET for iOS projects.
   Guides through creating Swift/Objective-C wrappers, configuring Xcode projects, generating C# API definitions,
   and integrating native iOS libraries using the Native Library Interop (NLI) approach.
-  USE FOR: iOS bindings, xcframework integration, Swift interop, Objective Sharpie, bridging native iOS SDKs to .NET.
+  USE FOR: iOS bindings, xcframework integration, Swift interop, Objective
+  Sharpie, bridging native iOS SDKs to .NET, and diagnosing iOS binding runtime
+  crashes including NSInvalidArgumentException, unrecognized selector sent to
+  instance, and ObjC/Swift selector mismatch errors.
   DO NOT USE FOR: Android bindings (use android-slim-bindings), general MAUI app development, NuGet package issues.
 ---
 

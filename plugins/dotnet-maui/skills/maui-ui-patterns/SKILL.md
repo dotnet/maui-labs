@@ -3,10 +3,10 @@ name: maui-ui-patterns
 description: >-
   Build or update vendor-neutral .NET MAUI UI pages and components with
   responsive layouts, resources, visual states, AutomationIds, accessibility
-  hooks, and loading/empty/error states. USE FOR: XAML or C# UI layout,
-  Grid/FlexLayout choices, ResourceDictionary styles, design tokens,
-  CollectionView empty/loading states, responsive phone/tablet/desktop UI, and
-  adding stable AutomationIds. DO NOT USE FOR: Shell/DI/ViewModel architecture
+  hooks, and loading/empty/error states.   USE FOR: XAML or C# UI layout, Grid/FlexLayout choices, ResourceDictionary
+  styles, design tokens, CollectionView empty/loading states, responsive
+  phone/tablet/desktop UI, adding stable AutomationIds, and avoiding MAUI UI
+  anti-patterns such as wrapping a CollectionView inside a ScrollView. DO NOT USE FOR: Shell/DI/ViewModel architecture
   (use maui-app-architecture), accessibility audits (use maui-accessibility), or
   Syncfusion/vendor-specific control generation.
 ---

@@ -4,9 +4,10 @@ description: >-
   Diagnose and improve .NET MAUI app performance with measurement-first startup
   profiling, layout efficiency, compiled bindings, CollectionView tuning, image
   resource optimization, trimming/NativeAOT considerations, and platform-aware
-  validation. USE FOR: slow startup, janky scrolling, high memory use, slow page
-  loading, inefficient XAML/layouts, image bloat, and using the maui profile
-  startup CLI workflow. DO NOT USE FOR: DevFlow UI interaction bugs (use
+  validation.   USE FOR: slow startup, janky scrolling, high memory use, slow page loading,
+  inefficient XAML/layouts, oversized image resources causing memory spikes,
+  and running the maui profile startup CLI command to measure MAUI app startup
+  time before optimizing. DO NOT USE FOR: DevFlow UI interaction bugs (use
   maui-devflow-debug), SDK version lookup (use dotnet-workload-info), or generic
   app architecture without a performance symptom.
 ---
@@ -45,7 +46,25 @@ explain the symptom.
 | Image memory | Oversized source images, missing MAUI image resizing, unbounded remote image caching |
 | Release regression | Debug-only diagnostics leaking into Release, linker/trimming differences |
 
-## CollectionView Guardrails
+## Image Memory Guidance
+
+A 4000×4000 RGBA PNG decodes to ~64 MB in memory regardless of how small it
+appears on screen. A 200×200 display-sized image decodes to ~160 KB — 400×
+less memory. Apply these changes when large images cause scrolling or memory
+issues:
+
+1. Resize images to display size before adding to the project.
+2. Use the `MauiImage` build action in `.csproj` with `BaseSize` for automatic
+   platform-specific resizing:
+   ```xml
+   <MauiImage Include="Resources/Images/*.png" BaseSize="400,400" />
+   ```
+3. Decode images to display size at runtime when loading from remote URLs.
+4. Use WebP or SVG for icons and logos that need to scale.
+5. For list rows, generate or download thumbnails — never decode 4000 × 4000
+   images inside a `CollectionView` item template.
+
+
 
 - Do not wrap `CollectionView` in `ScrollView`.
 - Keep item templates shallow and use compiled bindings.

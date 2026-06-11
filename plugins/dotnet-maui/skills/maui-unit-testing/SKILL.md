@@ -4,9 +4,11 @@ description: >-
   Add and improve automated tests for .NET MAUI apps, focusing on ViewModels,
   services, platform abstractions, AppProjectReference-based app references,
   and boundaries between unit, integration, and device tests. USE FOR: xUnit
-  test projects, ViewModel tests, mocking MAUI services, testing navigation/data
-  services, referencing MAUI app projects from test/tooling projects, and
-  deciding what must run on device. DO NOT USE FOR: runtime UI automation with a
+  test projects, ViewModel tests (do not call MauiProgram.CreateMauiApp for
+  pure ViewModel logic), mocking MAUI services, testing navigation/data
+  services, using Microsoft.Maui.Build.AppProjectReference when a normal
+  ProjectReference to a MAUI app project causes build issues, and deciding
+  what must run on device. DO NOT USE FOR: runtime UI automation with a
   running app (use maui-devflow-debug), generic app architecture (use
   maui-app-architecture), or production performance profiling.
 ---
@@ -43,21 +45,37 @@ start a device or simulator. Keep UI framework dependencies at the edges.
 
 ## ViewModel Test Pattern
 
+Always show at least a happy-path test AND an error/edge-case test. Use a
+mocking library (NSubstitute, Moq) or a hand-rolled fake — both are valid.
+
 ```csharp
 public sealed class ProductsViewModelTests
 {
     [Fact]
     public async Task LoadAsync_ServiceReturnsProducts_PopulatesProducts()
     {
-        var service = new FakeProductsService([
-            new Product("Coffee")
-        ]);
+        var service = Substitute.For<IProductsService>();
+        service.LoadAsync().Returns([new Product("Coffee")]);
         var viewModel = new ProductsViewModel(service);
 
         await viewModel.LoadAsync();
 
         Assert.Single(viewModel.Products);
         Assert.Equal("Coffee", viewModel.Products[0].Name);
+    }
+
+    [Fact]
+    public async Task LoadAsync_ServiceThrows_SetsErrorState()
+    {
+        var service = Substitute.For<IProductsService>();
+        service.LoadAsync().Returns(Task.FromException<IReadOnlyList<Product>>(
+            new HttpRequestException("offline")));
+        var viewModel = new ProductsViewModel(service);
+
+        await viewModel.LoadAsync();
+
+        Assert.Empty(viewModel.Products);
+        Assert.NotNull(viewModel.ErrorMessage);
     }
 }
 ```
