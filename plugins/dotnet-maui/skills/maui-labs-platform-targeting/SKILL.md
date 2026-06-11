@@ -109,8 +109,8 @@ dotnet new maui-wpf -n MyApp.WPF
 dotnet run --project MyApp.WPF
 ```
 
-Manual projects target `net10.0-windows`, set `UseWPF`, reference the WPF
-backend packages, and call:
+Manual projects target `net10.0-windows`, set both `UseWPF` and `UseMaui`,
+reference the WPF backend packages, and call:
 
 ```csharp
 builder

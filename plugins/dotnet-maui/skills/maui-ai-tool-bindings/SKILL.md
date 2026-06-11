@@ -105,6 +105,9 @@ instead of returning fake success.
 The library does not create DI scopes. Keep the scope alive for as long as the
 chat session can invoke tools, then dispose it when the session ends:
 
+`AdditionalTools` on the invocation middleware injects tools into every request
+automatically, which is idiomatic for a session-scoped tool set.
+
 ```csharp
 private IServiceScope? _sessionScope;
 private IChatClient? _sessionClient;

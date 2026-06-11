@@ -51,12 +51,14 @@ scenarios:
       - type: "output_contains"
         value: "UseWPF"
       - type: "output_contains"
+        value: "UseMaui"
+      - type: "output_contains"
         value: "UseMauiAppWPF"
       - type: "output_contains"
         value: "UseWPFEssentials"
     rubric:
       - "Uses the WPF template/package and net10.0-windows target"
-      - "Includes UseWPF for manual projects"
+      - "Includes UseWPF and UseMaui for manual projects"
       - "Shows UseMauiAppWPF and UseWPFEssentials hosting setup"
       - "Frames this as consuming an experimental backend, not implementing backend handlers"
     timeout: 240
