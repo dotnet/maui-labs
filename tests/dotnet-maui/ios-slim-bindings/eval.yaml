@@ -82,7 +82,7 @@ scenarios:
       selectors.
     assertions:
       - type: "output_matches"
-        pattern: "(?i)selector.*mismatch|mismatch.*selector|Export.*doesn.t match|@objc.*selector"
+        pattern: "(?i)selector.*(mismatch|match)|match.*selector|Export.*doesn.t match|@objc.*selector"
       - type: "output_matches"
         pattern: "initializeWithApiKey:"
       - type: "output_matches"

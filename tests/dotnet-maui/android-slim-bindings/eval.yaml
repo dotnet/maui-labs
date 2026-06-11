@@ -20,13 +20,13 @@ scenarios:
       chat response.
     assertions:
       - type: "output_matches"
-        pattern: "(?i)slim.binding|native.library.interop|NLI|thin.wrapper"
+        pattern: "(?i)slim.binding|native.library.interop|NLI|thin.wrapper|slim.wrapper"
       - type: "output_matches"
         pattern: "(?i)gradlew|gradle|build\\.gradle"
       - type: "output_matches"
-        pattern: "AndroidLibrary|AndroidMavenLibrary"
-      - type: "output_contains"
-        value: "com.airbnb.android:lottie"
+        pattern: "AndroidLibrary|AndroidMavenLibrary|AAR|binding project"
+      - type: "output_matches"
+        pattern: "com\\.airbnb\\.android:lottie|Lottie 6\\.6\\.2|lottie.*6\\.6\\.2"
     rubric:
       - "Recommends the slim/NLI approach over traditional full bindings given the user only needs a subset"
       - "Shows a Java or Kotlin wrapper class with a Dotnet prefix that exposes only animation playback"

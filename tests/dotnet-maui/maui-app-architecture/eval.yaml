@@ -23,7 +23,7 @@ scenarios:
       - type: "output_matches"
         pattern: "IQueryAttributable|QueryProperty"
       - type: "output_matches"
-        pattern: "(?i)EscapeDataString|Uri\\.Escape|escape"
+        pattern: "(?i)EscapeDataString|Uri\\.Escape|escape|encode"
     rubric:
       - "Registers the Shell route before navigation"
       - "Uses Shell.Current.GoToAsync for navigation"

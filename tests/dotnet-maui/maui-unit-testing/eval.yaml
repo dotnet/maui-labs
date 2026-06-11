@@ -13,7 +13,7 @@ scenarios:
       - type: "output_matches"
         pattern: "(?i)fake|mock|stub"
       - type: "output_matches"
-        pattern: "(?i)(do not|don't|avoid|should not|no need to|never).*MauiProgram\\.CreateMauiApp"
+        pattern: "(?i)(do\\W*not|don't|avoid|should not|no need to|never).*MauiProgram\\.CreateMauiApp"
     rubric:
       - "Shows a normal xUnit test for ViewModel state"
       - "Uses a fake/mock service dependency"

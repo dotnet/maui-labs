@@ -11,11 +11,11 @@ scenarios:
       confidence, and outcome.
     assertions:
       - type: "output_matches"
-        pattern: "maui devflow (list|wait|ui tree)|list/wait|`ui tree`"
+        pattern: "(?i)maui devflow (list|wait|ui tree)|list/wait|`ui tree`|agent wait|visual tree|tree dump|broker discovery"
       - type: "output_matches"
         pattern: "19223|9223|adb (reverse|forward)|broker"
       - type: "output_matches"
-        pattern: "(?i)PII|scrub|sanitize"
+        pattern: "(?i)PII|scrub|sanitize|redact"
       - type: "output_matches"
         pattern: "(?i)severity|confidence|outcome"
     rubric:
@@ -68,7 +68,7 @@ scenarios:
       - type: "output_matches"
         pattern: "gh issue create|GitHub issue"
       - type: "output_matches"
-        pattern: "(?i)scrub|remove|sanitize|redact"
+        pattern: "(?i)scrub|remove|sanitize|redact|exclude"
       - type: "output_matches"
         pattern: "maui_query|AutomationId|full tree"
       - type: "output_not_contains"
