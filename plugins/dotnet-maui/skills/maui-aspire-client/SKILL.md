@@ -86,6 +86,10 @@ Do not hard-code emulator-only addresses into production configuration.
 
 - Prefer HTTPS with trusted development certificates.
 - If HTTP is needed for local development, add debug-only cleartext exceptions.
+- Prefer installing/trusting the development certificate or using an explicit
+  debug-only HTTP fallback over certificate-validation bypass code. Do not show
+  `DangerousAcceptAnyServerCertificateValidator` snippets in generated app
+  guidance.
 - Document how the app is launched under AppHost versus direct device deploy.
 - Avoid disabling certificate validation globally in production code.
 

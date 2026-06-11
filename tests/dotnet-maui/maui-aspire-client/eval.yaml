@@ -52,11 +52,11 @@ scenarios:
       - type: "output_contains"
         value: "Bearer"
       - type: "output_matches"
-        pattern: "HTTPS|trust|ServerCertificateCustomValidationCallback"
+        pattern: "(?i)HTTPS|trust|dev certificate|dotnet dev-certs"
       - type: "output_matches"
         pattern: "cleartext|debug-only|#if DEBUG|callback"
       - type: "output_not_matches"
-        pattern: "(?is)^(?=.*DangerousAcceptAnyServerCertificateValidator)(?!.*(#if DEBUG|debug-only|development only|local dev|never ship|never in production)).*$"
+        pattern: "ServerCertificateCustomValidationCallback\\s*=\\s*HttpClientHandler\\.DangerousAcceptAnyServerCertificateValidator"
     rubric:
       - "Attaches tokens through a typed HttpClient or delegating handler"
       - "Prefers HTTPS/dev certificate trust for local protected APIs"
