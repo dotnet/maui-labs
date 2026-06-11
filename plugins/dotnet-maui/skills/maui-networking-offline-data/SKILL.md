@@ -160,5 +160,7 @@ Keep sync boundaries explicit:
 - API clients are registered in DI and are not created directly in UI code.
 - Local dev base addresses are platform-aware.
 - Cleartext HTTP exceptions are debug-only.
-- SQLite state has an explicit sync/conflict boundary.
+- SQLite state has an explicit sync/conflict boundary and names the concrete
+  storage API, such as `SQLiteAsyncConnection` with `CreateTableAsync<T>` or an
+  EF Core `DbContext`.
 - Requests support cancellation and distinguish transient from permanent errors.
