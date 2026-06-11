@@ -28,8 +28,9 @@ services during development, persists local data, or must behave well offline.
    `System.Text.Json` source generation for trimmed or NativeAOT-sensitive apps.
 4. Decide the local development address by runtime platform and environment.
 5. Keep cleartext HTTP exceptions debug-only and platform-scoped.
-6. Define offline boundaries: what is cached, what is editable offline, what
-   needs conflict detection, and what requires server truth.
+6. Define offline boundaries before schema/code: name the read-only cached
+   reference data, the entities users can edit while offline, and the fields
+   that remain server-authoritative.
 7. For SQLite/offline sync answers, show the storage initialization API before
    the entity schema: `SQLiteAsyncConnection` + `CreateTableAsync` for
    sqlite-net, or an EF Core `DbContext` setup. Do not only show POCO models.
@@ -98,6 +99,15 @@ APIs or injected `IConnectivity`.
 ## SQLite and Offline Sync
 
 Use SQLite for structured local state, offline queues, and cached server data.
+Start offline-sync guidance with an explicit boundary list or table so the
+answer does not imply every local row is editable. For example:
+
+| Boundary | Examples | Sync behavior |
+|----------|----------|---------------|
+| Read-only cached reference data | product catalog, feature flags, lookup values | pull/refresh from server; do not enqueue local edits |
+| Offline-editable user data | draft orders, notes, inspection forms | local writes get dirty state and outbox entries |
+| Server-authoritative data | payment status, inventory counts, account roles | display cached values but require online server confirmation before mutation |
+
 For sqlite-net, this usually means a `SQLiteAsyncConnection` and
 `CreateTableAsync` setup. For EF Core, keep the local schema behind a
 `DbContext`.
@@ -120,7 +130,8 @@ Common fields for syncable rows:
 
 Keep sync boundaries explicit:
 
-- Cache read-only reference data separately from editable offline data.
+- Cache read-only reference data separately from editable offline data and say
+  which local tables are never enqueued for upload.
 - Retry idempotent operations automatically; ask the user before replaying
   non-idempotent actions.
 - Resolve conflicts with a documented policy: server wins, client wins, field
