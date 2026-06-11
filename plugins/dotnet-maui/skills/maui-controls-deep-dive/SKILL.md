@@ -20,11 +20,11 @@ MAUI APIs.
    MAUI UI style.
 2. Identify the control area: `CollectionView`, safe area, gestures, animations,
    or `GraphicsView`.
-3. Apply the focused guidance below and route broader architecture, accessibility
-   (`maui-accessibility`), or profiling (`maui-performance`) work to the relevant
-   skill.
-4. Validate the control on the intended device sizes/platforms, including
-   automation hooks and accessibility alternatives for critical actions.
+3. Apply the focused guidance below. Route broad accessibility audits to
+   `maui-accessibility`; for GraphicsView-specific semantics, apply
+   `SemanticProperties` and `AutomationId` directly (see GraphicsView section).
+   Route performance profiling to `maui-performance`.
+4. Validate the control on the intended device sizes and platforms.
 
 ## CollectionView
 
@@ -68,21 +68,30 @@ Example state shell:
 
 ## Safe Areas
 
-- Inspect the MAUI target version first; use `maui-current-apis` when uncertain.
-- For .NET 10+ safe-area work, prefer `SafeAreaEdges` over manual iOS-only
-  padding.
-- Keep safe-area behavior declarative in XAML or shared UI when possible.
-- Test with notches, rounded corners, desktop title bars, and soft keyboard
-  scenarios when the page uses edge-to-edge layout.
+For .NET 10+ safe-area work, use `SafeAreaEdges` on the root container instead
+of hard-coded iOS-only padding:
+
+| Value | Effect |
+|---|---|
+| `SafeAreaEdges.Container` | Insets only the device bezel/notch boundary |
+| `SafeAreaEdges.SoftInput` | Also avoids the on-screen keyboard |
+| `SafeAreaEdges.All` | All edges including status bar and navigation areas |
 
 ```xml
+<!-- XAML: apply on the outermost layout that should respect device edges -->
 <Grid SafeAreaEdges="Container">
     ...
 </Grid>
 ```
 
-Avoid hard-coded top padding unless it is tied to a measured design requirement
-and guarded by platform/version checks.
+```csharp
+// C# Markup
+new Grid { SafeAreaEdges = SafeAreaEdges.Container }
+```
+
+Keep safe-area behavior declarative. Test with notches, rounded corners, desktop
+title bars, and soft keyboard scenarios when the page uses edge-to-edge layout.
+If the MAUI version is unknown, use `maui-current-apis` before changing APIs.
 
 ## Gestures
 
@@ -118,10 +127,12 @@ visualizations:
 - Store state outside the drawable and call `Invalidate()` when state changes.
 - Handle pointer/touch input at the view or page layer and translate it to
   drawing state.
-- Add accessible surrounding UI for important information drawn on the canvas.
-  Screen readers cannot infer arbitrary canvas content.
-- Use `maui-performance` if drawing stutters, allocates heavily, or invalidates
-  too often.
+- For important information in the drawing, provide accessible alternatives
+  outside the canvas: wrap the `GraphicsView` alongside a `Label` or use
+  `SemanticProperties.Description` on the view so screen readers announce it.
+  `AutomationId` on the `GraphicsView` enables UI-test targeting.
+- Use `SemanticScreenReader.Announce` for dynamic changes that must be audible.
+- If drawing stutters or allocates heavily, consult `maui-performance`.
 
 ## Validation Checklist
 

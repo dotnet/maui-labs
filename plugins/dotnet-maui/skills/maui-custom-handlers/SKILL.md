@@ -1,11 +1,13 @@
 ---
 name: maui-custom-handlers
 description: >-
-  Implement and migrate .NET MAUI handler customizations. USE FOR: handler
-  mappers, property/command mappers, native view tweaks, handler lifecycle
-  cleanup, renderer replacement, and choosing handlers versus platform services
-  or bindings. DO NOT USE FOR: non-visual platform APIs, full Xamarin migration,
-  native SDK bindings, or MAUI platform backend implementation.
+  Implement and migrate .NET MAUI handler customizations using mapper APIs.
+  USE FOR: AppendToMapping, PropertyMapper, CommandMapper, handler lifecycle
+  (ConnectHandler/DisconnectHandler), platform-specific native view changes,
+  scoped mapper customization, renderer-to-handler migration, and deciding when
+  to use handlers versus platform services or slim bindings. DO NOT USE FOR:
+  non-visual platform APIs, full Xamarin migration, native SDK bindings, or MAUI
+  platform backend implementation.
 ---
 
 # MAUI Custom Handlers
