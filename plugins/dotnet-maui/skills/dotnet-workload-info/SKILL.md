@@ -112,6 +112,20 @@ sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0
 Use the exact package IDs from `WorkloadDependencies.json`; do not copy the sample
 API level or build-tools version blindly.
 
+When the user asks for CI-ready Android SDK package discovery, include this
+minimum flow in the answer:
+
+1. Download `Microsoft.NET.Workloads.{sdkBand}` and read
+   `data/microsoft.net.workloads.workloadset.json` (`workloadset.json`).
+2. Read the `microsoft.net.sdk.android` entry to get
+   `{manifestVersion}/{manifestSdkBand}`.
+3. Download `Microsoft.NET.Sdk.Android.Manifest-{manifestSdkBand}` at that
+   manifest version and read `data/WorkloadDependencies.json`.
+4. Extract `androidsdk.packages`, including `platform-tools`,
+   `platforms;android-*`, `build-tools;*`, and `cmdline-tools;*`. Filter by
+   `"optional": "false"` when the manifest marks packages optional.
+5. Feed the extracted package IDs to `sdkmanager --install`.
+
 **iOS/macOS** (`microsoft.net.sdk.ios`):
 ```json
 {
