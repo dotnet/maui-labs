@@ -58,9 +58,11 @@ bearer tokens in every page or ViewModel.
 For cleartext HTTP during development:
 
 - Android needs a debug-only network security config such as
-  `networkSecurityConfig` or `UsesCleartextTraffic`.
+  `networkSecurityConfig` or `UsesCleartextTraffic`. Gate it with `#if DEBUG`,
+  `IsDevelopment`, or an MSBuild `Condition` on the Debug configuration so it is
+  never present in Release builds.
 - iOS/Mac Catalyst need an App Transport Security (`NSAppTransportSecurity`)
-  exception for debug HTTP.
+  exception for debug HTTP, also guarded by a Debug-only condition.
 - Release builds should use HTTPS and remove broad cleartext exceptions.
 
 ## Connectivity Check
@@ -96,6 +98,12 @@ Use SQLite for structured local state, offline queues, and cached server data.
 For sqlite-net, this usually means a `SQLiteAsyncConnection` and
 `CreateTableAsync` setup. For EF Core, keep the local schema behind a
 `DbContext`.
+
+```csharp
+var db = new SQLiteAsyncConnection(databasePath);
+await db.CreateTableAsync<Order>();
+await db.CreateTableAsync<SyncOperation>();
+```
 
 Common fields for syncable rows:
 

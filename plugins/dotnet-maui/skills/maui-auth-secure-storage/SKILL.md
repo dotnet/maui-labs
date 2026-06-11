@@ -5,11 +5,11 @@ description: >-
   WebAuthenticator, MSAL.NET, platform callback URIs, token caching,
   SecureStorage, broker considerations, and Blazor Hybrid auth handoff. USE FOR:
   login/logout, OAuth/OIDC redirects, Microsoft Entra ID, callback URI setup,
-  Android/iOS/Mac Catalyst/Windows auth configuration, secure token or secret
-  storage, and native-to-Blazor auth state. DO NOT USE FOR: general app
-  architecture (use maui-app-architecture), API client retry/offline behavior
-  (use maui-networking-offline-data), or runtime UI debugging (use
-  maui-devflow-debug).
+  MSAL redirect URI/BrokerRedirectUri setup, Android/iOS/Mac Catalyst/Windows
+  auth configuration, secure token or secret storage, and native-to-Blazor auth
+  state. DO NOT USE FOR: general app architecture (use maui-app-architecture),
+  API client retry/offline behavior (use maui-networking-offline-data), or
+  runtime UI debugging (use maui-devflow-debug).
 ---
 
 # MAUI Auth and Secure Storage
@@ -69,6 +69,11 @@ builder.Services.AddSingleton<IAuthService, MsalAuthService>();
 For MSAL:
 
 - Configure redirect URIs in the Entra app registration and the platform app.
+- Build the public client with an explicit redirect URI, for example
+  `.WithRedirectUri("msal{client-id}://auth")` when using the default MAUI MSAL
+  public-client redirect pattern. Broker-capable apps must use the broker
+  redirect URI expected by the platform and app registration, often referred to
+  as the `BrokerRedirectUri` in MSAL setup guidance.
 - Prefer `AcquireTokenSilent` before interactive auth.
 - Configure persistent token cache storage. MSAL's default cache is in-memory
   for many app scenarios; use the MSAL cache extension or token cache callbacks

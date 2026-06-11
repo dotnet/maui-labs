@@ -11,7 +11,7 @@ scenarios:
       - type: "output_matches"
         pattern: "networkSecurityConfig|UsesCleartextTraffic|cleartextTrafficPermitted|NSAppTransportSecurity|App Transport Security"
       - type: "output_matches"
-        pattern: "#if DEBUG|IsDevelopment|debug-only"
+        pattern: "#if DEBUG|IsDevelopment|debug-only|Condition=.*Debug"
       - type: "output_contains"
         value: "AddHttpClient"
       - type: "output_not_matches"

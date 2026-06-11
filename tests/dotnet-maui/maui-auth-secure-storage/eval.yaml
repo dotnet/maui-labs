@@ -36,7 +36,7 @@ scenarios:
       - type: "output_matches"
         pattern: "WithBroker|ParentActivityOrWindow|broker-compatible"
       - type: "output_matches"
-        pattern: "redirect URI|BrokerRedirectUri"
+        pattern: "WithRedirectUri|redirect URI|BrokerRedirectUri"
     rubric:
       - "Attempts AcquireTokenSilent before interactive sign-in"
       - "Keeps auth behind an injected service instead of page-level logic"
