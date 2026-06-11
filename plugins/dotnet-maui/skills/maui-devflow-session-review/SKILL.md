@@ -8,8 +8,9 @@ description: >-
   structured markdown feedback reports with Environment/Findings/Severity/
   Confidence/Outcome sections, and drafting GitHub issues for dotnet/maui-labs
   (scrubbing private file paths, emails, and PII before filing). Analyzes the
-  session content provided by the user — does NOT invoke live DevFlow CLI
-  commands or agents during retrospective review. INVOKES: session history tools
+  session content provided by the user — does NOT invoke live `maui devflow`
+  CLI commands or agents during retrospective review; DOES use gh CLI for issue
+  filing. INVOKES: session history tools
   for scope discovery; gh CLI for issue filing. DO NOT USE FOR: fixing discovered
   bugs, adding DevFlow to apps (use maui-devflow-onboard), iterative app
   debugging (use maui-devflow-debug), or generic memory search.

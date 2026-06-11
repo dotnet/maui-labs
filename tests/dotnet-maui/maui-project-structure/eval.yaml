@@ -36,7 +36,7 @@ scenarios:
       - "Keeps the app PackageReference versionless"
     timeout: 240
 
-  - name: "Set MAUI app display and build versions"
+  - name: "Fix misuse of maui project version for app store versions"
     setup:
       files:
         - path: "MyApp/MyApp.csproj"
@@ -48,40 +48,54 @@ scenarios:
               </PropertyGroup>
             </Project>
     prompt: |
-      Set my MAUI app version to display as 2.4.0 and use build number 240.
-      What project properties should I use, and should I use `maui project
-      version` for this?
+      I ran `maui project version set --display-version 2.4.0 --build-number 240`
+      but the Play Store still shows the old version. What is `maui project version`
+      actually for, and what should I do instead to set my app's store display and
+      build version?
     assertions:
       - type: "output_contains"
         value: "ApplicationDisplayVersion"
       - type: "output_contains"
         value: "ApplicationVersion"
       - type: "output_matches"
-        pattern: "(?i)maui project version.*(not|don't|do\\W*not)|(?:not|don't|do\\W*not|avoid|should not).*maui project version|package/workload|sdk/workload"
+        pattern: "(?i)maui project version.*(workload|package|sdk|version of maui|not for app|not set|does not set|manages maui)"
       - type: "output_not_matches"
         pattern: "(?im)^\\s*maui project version\\s+set\\b|^\\s*--display-version\\b|^\\s*--build-number\\b"
     rubric:
-      - "Uses ApplicationDisplayVersion for the user-visible version"
-      - "Uses ApplicationVersion for the platform build number"
-      - "Explains that maui project version is for MAUI package/workload versioning, not app display/build version"
+      - "Explains that maui project version manages the MAUI workload/package version, not app store versions"
+      - "Directs the user to ApplicationDisplayVersion and ApplicationVersion MSBuild properties instead"
+      - "Shows or describes the correct .csproj property syntax"
     timeout: 240
 
-  - name: "Place assets in MAUI resource folders"
+  - name: "Fix images placed in platform-specific folders"
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+        - path: "MyApp/Platforms/Android/Resources/drawable/logo.png"
+          content: "(binary placeholder)"
     prompt: |
-      I need to add an image, a custom font, and a bundled JSON seed file to a
-      .NET MAUI app. Where should each file go and what MSBuild item types are
-      involved?
+      I put my logo.png in Platforms/Android/Resources/drawable/ to match the old
+      Android structure. It shows on Android but not on iOS or Windows. What is the
+      correct MAUI cross-platform way to add shared images, and what MSBuild item
+      type should I use?
     assertions:
       - type: "output_contains"
         value: "Resources/Images"
-      - type: "output_contains"
-        value: "Resources/Fonts"
-      - type: "output_contains"
-        value: "Resources/Raw"
       - type: "output_matches"
-        pattern: "MauiImage|MauiFont|MauiAsset"
+        pattern: "MauiImage"
+      - type: "output_matches"
+        pattern: "(?i)(cross.platform|shared|unified|all platform|not platform.specific)"
+      - type: "output_not_matches"
+        pattern: "(?i)Platforms/Android/Resources/drawable(?!/logo\\.png)"
     rubric:
-      - "Maps images, fonts, and raw files to the correct MAUI resource folders"
-      - "Names the correct MAUI MSBuild item types"
-      - "Avoids suggesting platform-specific asset folders as the default"
+      - "Identifies that platform-specific drawable folders are not the MAUI cross-platform approach"
+      - "Directs to Resources/Images with the MauiImage build action"
+      - "Explains that MAUI compiles unified images to platform-native formats automatically"
     timeout: 240

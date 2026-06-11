@@ -69,7 +69,7 @@ scenarios:
       - "Mentions checking the target framework before applying the replacement"
     timeout: 240
 
-  - name: "Do not assume net10 APIs for a net8 app"
+  - name: "Avoid net10-only APIs when targeting net8"
     setup:
       files:
         - path: "LegacyMaui/LegacyMaui.csproj"
@@ -80,16 +80,26 @@ scenarios:
                 <UseMaui>true</UseMaui>
               </PropertyGroup>
             </Project>
+        - path: "LegacyMaui/MainPage.xaml"
+          content: |
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         SafeAreaEdges="Container">
+              <Label Text="Hello" />
+            </ContentPage>
     prompt: |
-      Add a current-API review comment for this MAUI app. It targets net8.0.
-      Should I use .NET 10-only APIs when fixing warnings?
+      My MAUI app compiles fine on my machine but a colleague targeting net8.0
+      gets a build error saying SafeAreaEdges is not a valid attribute. Did I
+      use an API that requires a newer MAUI version, and what should I use instead
+      on net8.0?
     assertions:
       - type: "output_contains"
         value: "net8.0"
       - type: "output_matches"
-        pattern: "(?i)(do not|don't|avoid|should not|never).*(assume|use)|net8\\.0.*(only|compatible|available)"
+        pattern: 'SafeAreaEdges.*(net10|\.NET 10|not available|not supported|require|only in|introduced)'
+      - type: "output_matches"
+        pattern: "(?i)(SafeAreaView|UseSafeArea|Padding|On<iOS>|platform.specific|workaround|alternative)"
     rubric:
-      - "Inspects and respects the net8.0 target framework"
-      - "Avoids recommending APIs that may only exist in newer MAUI versions"
-      - "Suggests target-compatible replacements or an explicit upgrade decision"
+      - "Identifies that SafeAreaEdges is a .NET 10+ API not available on net8"
+      - "Suggests a net8-compatible safe area alternative"
+      - "Inspects the project target framework to confirm the net8 constraint"
     timeout: 240
