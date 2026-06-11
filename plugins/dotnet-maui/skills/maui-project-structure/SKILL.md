@@ -7,7 +7,7 @@ description: >-
   project version set for those app version properties. Also cover target
   frameworks, resources, package references, and platform folders.
   USE FOR: single-project MAUI layout, Resources/Images/Fonts/Raw,
-  MauiImage/MauiFont/MauiAsset resource item types, Android/iOS/Windows
+  MauiImage/MauiBundledFont/MauiAsset resource item types, Android/iOS/Windows
   platform configuration, Central Package Management (Directory.Packages.props
   versionless PackageReference), app version properties such as
   ApplicationDisplayVersion/ApplicationVersion, target framework selection,

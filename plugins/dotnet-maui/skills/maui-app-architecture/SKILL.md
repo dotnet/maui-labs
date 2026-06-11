@@ -18,9 +18,8 @@ navigation. Favor explicit, testable architecture over service locator patterns.
 
 ## Workflow
 
-1. If project files are available, inspect `MauiProgram.cs`, `AppShell.xaml`,
-   page constructors, and existing ViewModels. If not, provide direct
-   best-practice guidance based on the stated goal.
+1. Inspect `MauiProgram.cs`, `AppShell.xaml`, page constructors, and existing
+   ViewModels.
 2. Preserve the app's UI pattern: XAML/MVVM, C# Markup, MauiReactor, Blazor
    Hybrid, or a mix.
 3. Register dependencies in `MauiProgram.cs`.
@@ -43,21 +42,8 @@ navigation. Favor explicit, testable architecture over service locator patterns.
 | User session/state service | Singleton if intentionally app-wide |
 | Disposable per-flow services | Scoped only if the app has an explicit scope boundary |
 
-Show a complete registration example when asked how to register pages, ViewModels, and services:
-
-```csharp
-builder.Services
-    .AddSingleton<ApiClient>()             // stateless HTTP service → Singleton
-    .AddSingleton<ISessionService, SessionService>() // app-wide state → Singleton
-    .AddTransient<ProductsViewModel>()     // page-scoped state → Transient
-    .AddTransient<ProductsPage>();         // page → Transient
-
-// Constructor injection wires it automatically:
-// ProductsPage(ProductsViewModel vm) { ... }
-```
-
 Avoid calling `BuildServiceProvider()` inside `MauiProgram.cs`. Register the
-type and let MAUI resolve it through constructor injection.
+type and let MAUI resolve it.
 
 ## Shell Navigation Pattern
 
@@ -82,10 +68,6 @@ public sealed partial class DetailsViewModel : ObservableObject, IQueryAttributa
 
 ## Compiled Binding Pattern
 
-Add `x:DataType` to every page root and every `DataTemplate` to enable compiled
-bindings. This provides **compile-time type checking** and **better runtime
-performance** (no reflection at binding evaluation).
-
 ```xml
 <ContentPage
     x:Class="MyApp.Views.ProductsPage"
@@ -96,13 +78,8 @@ performance** (no reflection at binding evaluation).
     x:DataType="viewModels:ProductsViewModel">
     <CollectionView ItemsSource="{Binding Products}">
         <CollectionView.ItemTemplate>
-            <!-- x:DataType on the DataTemplate, not the outer page -->
             <DataTemplate x:DataType="models:Product">
-                <Grid>
-                    <Label Text="{Binding Name}" />
-                    <Label Text="{Binding Price, StringFormat='{0:C}'}" />
-                    <Image Source="{Binding ImageUrl}" />
-                </Grid>
+                <Label Text="{Binding Name}" />
             </DataTemplate>
         </CollectionView.ItemTemplate>
     </CollectionView>
