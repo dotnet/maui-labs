@@ -5,9 +5,10 @@ description: >-
   HybridWebView, Razor components, static assets, JS/.NET interop, trimming and
   NativeAOT concerns, and DevFlow CDP debugging across routes. USE FOR: MAUI
   apps hosting Razor UI, embedded HTML/JS surfaces, native-to-web messaging,
-  choosing BlazorWebView vs HybridWebView, SendRawMessage/RawMessageReceived,
-  wwwroot assets, JavaScript interop, hybrid auth/data handoff, stale DOM or
-  Razor route debugging, and WebView CDP inspection with maui_cdp_webviews,
+  existing plain HTML/JavaScript surfaces, non-Razor HTML/JS messaging, choosing
+  BlazorWebView vs HybridWebView, SendRawMessage/RawMessageReceived, wwwroot
+  assets, JavaScript interop, hybrid auth/data handoff, stale DOM or Razor route
+  debugging, and WebView CDP inspection with maui_cdp_webviews,
   maui_cdp_source, and maui_cdp_evaluate. DO NOT USE FOR: pure native XAML UI
   (use maui-ui-patterns), authentication design by itself (use
   maui-auth-secure-storage), or generic browser web apps.
