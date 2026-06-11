@@ -1,8 +1,11 @@
 ---
 name: maui-project-structure
 description: >-
-  Inspect and update .NET MAUI app project structure, target frameworks,
-  resources, package references, app version properties, and platform folders.
+  Inspect and update .NET MAUI app project structure and app display/build
+  versioning. Answer questions about ApplicationDisplayVersion,
+  ApplicationVersion, display version, and build number, and reject using maui
+  project version set for those app version properties. Also cover target
+  frameworks, resources, package references, and platform folders.
   USE FOR: single-project MAUI layout, Resources/Images/Fonts/Raw, Android/iOS/
   Windows platform configuration, Central Package Management, app version
   properties such as ApplicationDisplayVersion/ApplicationVersion, target

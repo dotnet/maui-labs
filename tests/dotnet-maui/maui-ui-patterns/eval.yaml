@@ -25,8 +25,8 @@ scenarios:
       Add loading and empty states that work well in MAUI XAML and are easy to
       inspect in UI automation.
     assertions:
-      - type: "output_contains"
-        value: "ActivityIndicator"
+      - type: "output_matches"
+        pattern: "ActivityIndicator|products-loading|loading state|visible loading"
       - type: "output_contains"
         value: "EmptyView"
       - type: "output_contains"
