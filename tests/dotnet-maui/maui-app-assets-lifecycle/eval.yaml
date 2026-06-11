@@ -1,0 +1,83 @@
+scenarios:
+  - name: "Configure app icon and splash screen"
+    prompt: |
+      I need to replace a MAUI app icon and splash screen using shared
+      single-project assets. What project item types and resource folders should
+      I use instead of hand-editing each platform's generated assets?
+    assertions:
+      - type: "output_contains"
+        value: "MauiIcon"
+      - type: "output_contains"
+        value: "MauiSplashScreen"
+      - type: "output_contains"
+        value: "Resources/AppIcon"
+      - type: "output_contains"
+        value: "Resources/Splash"
+    rubric:
+      - "Uses MauiIcon for the app icon"
+      - "Uses MauiSplashScreen for the splash screen"
+      - "Places shared assets under Resources/AppIcon and Resources/Splash"
+      - "Avoids defaulting to manual per-platform generated asset edits"
+    timeout: 240
+
+  - name: "Read bundled seed data from Resources Raw"
+    prompt: |
+      I have a seed.json file that ships with my MAUI app. Where should I place
+      it, how should I read it, and what if the app needs to modify it later?
+    assertions:
+      - type: "output_contains"
+        value: "MauiAsset"
+      - type: "output_contains"
+        value: "Resources/Raw"
+      - type: "output_contains"
+        value: "OpenAppPackageFileAsync"
+      - type: "output_matches"
+        pattern: "read-only|copy"
+    rubric:
+      - "Places bundled data in Resources/Raw as MauiAsset"
+      - "Reads the packaged file with FileSystem.OpenAppPackageFileAsync"
+      - "Explains that packaged files are read-only"
+      - "Copies data to app storage before editing"
+    timeout: 240
+
+  - name: "Preserve state across stop resume and multi-window lifecycle"
+    prompt: |
+      A MAUI app loses an in-progress draft when it goes to the background and
+      resumes later. What lifecycle events and state storage approach should I
+      use, and when should platform-specific lifecycle hooks be added?
+    assertions:
+      - type: "output_contains"
+        value: "Window"
+      - type: "output_matches"
+        pattern: "Stopped|Resumed|Destroying"
+      - type: "output_contains"
+        value: "ConfigureLifecycleEvents"
+      - type: "output_matches"
+        pattern: "Preferences|SQLite|app data"
+    rubric:
+      - "Uses cross-platform Window lifecycle events for app/window state"
+      - "Persists draft state before stop/destroy and restores on resume/startup"
+      - "Chooses Preferences, app data files, or SQLite based on state size"
+      - "Limits ConfigureLifecycleEvents to platform-specific lifecycle behavior"
+    timeout: 240
+
+  - name: "Migrate Xamarin image and font assets to single-project MAUI"
+    prompt: |
+      I am migrating a Xamarin.Forms app with Android drawable-hdpi image folders,
+      iOS asset catalogs, and plist font registrations. The images are used from
+      shared XAML. Where should these assets move in a MAUI single-project app?
+    assertions:
+      - type: "output_contains"
+        value: "Resources/Images"
+      - type: "output_contains"
+        value: "MauiImage"
+      - type: "output_contains"
+        value: "MauiFont"
+      - type: "output_contains"
+        value: "UIAppFonts"
+    rubric:
+      - "Moves shared XAML/C# image assets into Resources/Images as MauiImage items"
+      - "Warns not to rely on migrated Android drawable-* folders for MAUI Image sources"
+      - "Uses MauiFont for shared font registration"
+      - "Explains that old iOS UIAppFonts entries should be removed when MauiFont generates registrations"
+    timeout: 240

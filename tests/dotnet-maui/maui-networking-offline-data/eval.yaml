@@ -1,0 +1,65 @@
+scenarios:
+  - name: "Call a local API from Android emulator during development"
+    prompt: |
+      My MAUI Android emulator cannot call my ASP.NET Core API at
+      http://localhost:5251. Show the platform-aware base address guidance and
+      debug-only cleartext setup I should consider while keeping my HttpClient
+      registration clean.
+    assertions:
+      - type: "output_contains"
+        value: "10.0.2.2"
+      - type: "output_matches"
+        pattern: "networkSecurityConfig|UsesCleartextTraffic|cleartextTrafficPermitted"
+      - type: "output_matches"
+        pattern: "#if DEBUG|IsDevelopment"
+      - type: "output_contains"
+        value: "AddHttpClient"
+    rubric:
+      - "Explains that Android emulator uses 10.0.2.2 to reach the host machine"
+      - "Keeps cleartext HTTP exceptions debug-only"
+      - "Uses DI/typed HttpClient rather than constructing clients in pages"
+      - "Mentions different fallback addresses for iOS simulator, desktop, or physical devices"
+    timeout: 240
+
+  - name: "Design SQLite offline sync boundaries"
+    prompt: |
+      I am adding offline editing to a MAUI orders app. Orders should save while
+      offline and sync later. What local SQLite shape and sync metadata should I
+      plan for to avoid losing edits and to handle conflicts?
+    assertions:
+      - type: "output_matches"
+        pattern: "SQLiteAsyncConnection|CreateTableAsync|DbContext"
+      - type: "output_matches"
+        pattern: "dirty|PendingCreate|PendingUpdate"
+      - type: "output_matches"
+        pattern: "ETag|row version|concurrency"
+      - type: "output_matches"
+        pattern: "tombstone|PendingDelete|delete"
+    rubric:
+      - "Defines explicit offline boundaries for cached versus editable data"
+      - "Adds dirty/pending operation state for queued sync"
+      - "Uses concurrency metadata such as ETag, row version, or UpdatedAt"
+      - "Accounts for deletes with tombstones or pending delete records"
+      - "Recommends documenting an explicit conflict resolution policy such as server wins, client wins, field merge, or user decision"
+    timeout: 240
+
+  - name: "Build a resilient typed API client"
+    prompt: |
+      Create guidance for a MAUI typed API client that serializes DTOs, supports
+      cancellation from UI commands, and retries transient mobile network
+      failures without retrying validation errors.
+    assertions:
+      - type: "output_contains"
+        value: "AddHttpClient"
+      - type: "output_matches"
+        pattern: "JsonSerializerContext|source-generat"
+      - type: "output_contains"
+        value: "CancellationToken"
+      - type: "output_matches"
+        pattern: "exponential|backoff|AddStandardResilienceHandler"
+    rubric:
+      - "Registers the API client through AddHttpClient"
+      - "Uses System.Text.Json options or source generation for DTO serialization"
+      - "Passes CancellationToken from UI/lifecycle boundaries"
+      - "Retries only transient failures with backoff and does not retry validation failures"
+    timeout: 240

@@ -1,0 +1,131 @@
+---
+name: maui-networking-offline-data
+description: >-
+  Build .NET MAUI networking and offline data features with HttpClient DI,
+  JSON serialization, emulator/simulator networking, cleartext dev traffic,
+  SQLite local persistence, sync boundaries, retries, cancellation, and error
+  handling. USE FOR: API clients, typed HttpClient registration, localhost from
+  devices, offline-first screens, local SQLite caches, sync queues, and
+  resilient mobile networking. DO NOT USE FOR: authentication redirects or token
+  storage (use maui-auth-secure-storage), Aspire service discovery (use
+  maui-aspire-client), or UI state layout (use maui-ui-patterns).
+---
+
+# MAUI Networking and Offline Data
+
+Use this skill when a MAUI feature calls backend APIs, works against local
+services during development, persists local data, or must behave well offline.
+
+## Workflow
+
+1. Inspect `MauiProgram.cs`, existing API clients, model serialization, and data
+   storage packages.
+2. Register API clients through DI. Prefer typed clients or named clients over
+   constructing `HttpClient` in pages.
+3. Define request/response DTOs and serialization options once. Prefer
+   `System.Text.Json` source generation for trimmed or NativeAOT-sensitive apps.
+4. Decide the local development address by runtime platform and environment.
+5. Keep cleartext HTTP exceptions debug-only and platform-scoped.
+6. Define offline boundaries: what is cached, what is editable offline, what
+   needs conflict detection, and what requires server truth.
+7. Store local data in SQLite or app data files behind a repository/service
+   abstraction.
+8. Add cancellation, timeout, retry, and user-facing error states.
+
+## HttpClient DI Pattern
+
+```csharp
+builder.Services.AddHttpClient<IProductsApi, ProductsApi>(client =>
+{
+    client.BaseAddress = new Uri("https://api.contoso.dev/");
+});
+```
+
+Keep auth headers in a delegating handler or typed client boundary. Do not add
+bearer tokens in every page or ViewModel.
+
+## Local Development Networking
+
+| Runtime | Local backend address |
+| --- | --- |
+| Android emulator | Use `10.0.2.2` to reach the host machine. |
+| iOS simulator | `localhost` usually reaches the Mac host. |
+| Windows/Mac Catalyst app | `localhost` reaches the same machine. |
+| Physical device | Use a LAN-reachable hostname/IP, reverse tunnel, dev proxy, or deployed endpoint. |
+
+For cleartext HTTP during development:
+
+- Android needs a debug-only network security config or cleartext setting.
+- iOS/Mac Catalyst need an App Transport Security exception for debug HTTP.
+- Release builds should use HTTPS and remove broad cleartext exceptions.
+
+## Connectivity Check
+
+Use MAUI connectivity APIs to decide when to show offline UI and when to drain
+sync queues:
+
+```csharp
+public sealed class SyncService(IConnectivity connectivity)
+{
+    public bool IsOnline => connectivity.NetworkAccess == NetworkAccess.Internet;
+}
+```
+
+Subscribe to `ConnectivityChanged` from a long-lived service when the app should
+resume sync on reconnect, and unsubscribe when the owner is disposed. Only
+`NetworkAccess.Internet` indicates a routable connection. In migrated apps,
+replace `Xamarin.Essentials.Connectivity` with `Microsoft.Maui.Networking`
+APIs or injected `IConnectivity`.
+
+## JSON Guidance
+
+- Use one `JsonSerializerOptions` instance for casing, enum conversion, and null
+  handling.
+- Prefer source-generated `JsonSerializerContext` when the app is trimmed,
+  NativeAOT-sensitive, or serializes many known DTOs.
+- Separate DTOs from database entities when local schema and API shape evolve at
+  different speeds.
+
+## SQLite and Offline Sync
+
+Use SQLite for structured local state, offline queues, and cached server data.
+
+Common fields for syncable rows:
+
+- Server ID and local ID.
+- `UpdatedAt`, `ETag`, row version, or another concurrency token.
+- Dirty state such as `PendingCreate`, `PendingUpdate`, or `PendingDelete`.
+- Tombstone/deleted marker when deletes must sync.
+
+Keep sync boundaries explicit:
+
+- Cache read-only reference data separately from editable offline data.
+- Retry idempotent operations automatically; ask the user before replaying
+  non-idempotent actions.
+- Resolve conflicts with a documented policy: server wins, client wins, field
+  merge, or user decision.
+- Persist queued operations before sending them so app termination does not lose
+  offline edits.
+- Encrypt the local SQLite database when it stores sensitive business data.
+  Options include SQLCipher-based packages or provider-specific SQLite
+  encryption. Store the database key in `SecureStorage`, not in source code or
+  `Preferences`.
+- Page or chunk large sync operations and write in bounded batches so the app
+  stays responsive and avoids mobile memory spikes.
+
+## Retry and Error Handling
+
+- Pass `CancellationToken` from UI commands and lifecycle shutdown paths.
+- Use short connection timeouts and clear user messages for no network,
+  unauthorized, validation, and server errors.
+- Retry only transient failures such as timeouts and 5xx responses.
+- Use exponential backoff with jitter for background sync.
+- Do not silently swallow sync failures; surface pending state and retry status.
+
+## Validation Checklist
+
+- API clients are registered in DI and are not created directly in UI code.
+- Local dev base addresses are platform-aware.
+- Cleartext HTTP exceptions are debug-only.
+- SQLite state has an explicit sync/conflict boundary.
+- Requests support cancellation and distinguish transient from permanent errors.

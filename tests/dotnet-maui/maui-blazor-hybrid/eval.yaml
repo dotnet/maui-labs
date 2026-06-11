@@ -1,0 +1,63 @@
+scenarios:
+  - name: "Set up BlazorWebView with MAUI DI"
+    prompt: |
+      I am converting a MAUI page to host Razor components. Show the essential
+      MauiProgram registration, XAML host, root component setup, and static asset
+      location for a BlazorWebView.
+    assertions:
+      - type: "output_contains"
+        value: "AddMauiBlazorWebView"
+      - type: "output_matches"
+        pattern: "HostPage=\"wwwroot/index.html\"|RootComponents"
+      - type: "output_contains"
+        value: "RootComponent"
+      - type: "output_contains"
+        value: "wwwroot"
+    rubric:
+      - "Registers AddMauiBlazorWebView in MauiProgram"
+      - "Uses BlazorWebView with a HostPage under wwwroot"
+      - "Defines RootComponent entries for Razor components"
+      - "Explains that Razor components consume MAUI DI services"
+    timeout: 240
+
+  - name: "Use HybridWebView for raw JS to .NET messaging"
+    prompt: |
+      I have an existing HTML/JavaScript surface in a MAUI app, not Razor
+      components. I need to send messages between JavaScript and .NET and keep it
+      trimming-safe. What should I use?
+    assertions:
+      - type: "output_contains"
+        value: "HybridWebView"
+      - type: "output_matches"
+        pattern: "SendRawMessage|RawMessageReceived"
+      - type: "output_matches"
+        pattern: "JSON|DTO"
+      - type: "output_matches"
+        pattern: "JsonSerializerContext|source-generat"
+    rubric:
+      - "Chooses HybridWebView instead of BlazorWebView for non-Razor HTML/JS"
+      - "Uses SendRawMessage and RawMessageReceived or equivalent messaging APIs"
+      - "Keeps the message boundary typed with JSON DTOs"
+      - "Mentions source-generated serialization or trimming preservation"
+    timeout: 240
+
+  - name: "Debug Blazor Hybrid route state with DevFlow CDP"
+    prompt: |
+      My MAUI Blazor Hybrid app navigates between Razor routes, but a component
+      renders stale DOM after navigation. Which DevFlow WebView/CDP tools should
+      I use to inspect the active route and DOM?
+    assertions:
+      - type: "output_contains"
+        value: "maui_cdp_webviews"
+      - type: "output_matches"
+        pattern: "maui_cdp_evaluate|maui_cdp_source"
+      - type: "output_matches"
+        pattern: "maui_logs|maui_cdp_screenshot"
+      - type: "output_matches"
+        pattern: "maui devflow mcp|maui_cdp_webviews"
+    rubric:
+      - "Lists WebViews before targeting a CDP operation"
+      - "Uses CDP source or evaluate to inspect DOM and route state"
+      - "Mentions screenshots or logs when visual/console evidence is needed"
+      - "Avoids coordinate-only debugging for hybrid route issues"
+    timeout: 240

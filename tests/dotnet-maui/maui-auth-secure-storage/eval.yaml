@@ -1,0 +1,84 @@
+scenarios:
+  - name: "Configure WebAuthenticator callback on Android and iOS"
+    prompt: |
+      I am adding OAuth login to a .NET MAUI app with WebAuthenticator. The
+      provider redirect URI is myapp://auth. What app code and platform setup do
+      I need for Android and iOS/Mac Catalyst, and what should I avoid putting in
+      the mobile app?
+    assertions:
+      - type: "output_matches"
+        pattern: "AuthenticateAsync|WebAuthenticatorOptions"
+      - type: "output_contains"
+        value: "CallbackUrl"
+      - type: "output_matches"
+        pattern: "intent filter|intent-filter|CFBundleURLTypes"
+      - type: "output_matches"
+        pattern: "PKCE|client secret|authorization code"
+    rubric:
+      - "Uses WebAuthenticator with a CallbackUrl matching myapp://auth"
+      - "Mentions Android intent filter and iOS/Mac Catalyst CFBundleURLTypes setup"
+      - "Explains that mobile apps must not embed confidential client secrets"
+      - "Recommends PKCE or a provider-supported public client flow"
+    timeout: 240
+
+  - name: "Use MSAL silent auth before broker-capable interactive auth"
+    prompt: |
+      My MAUI app signs into Microsoft Entra ID with MSAL.NET. I need a design
+      for token caching, silent refresh, interactive sign-in, and broker support
+      without scattering auth code across pages.
+    assertions:
+      - type: "output_contains"
+        value: "AcquireTokenSilent"
+      - type: "output_contains"
+        value: "AcquireTokenInteractive"
+      - type: "output_matches"
+        pattern: "WithBroker|ParentActivityOrWindow|broker-compatible"
+      - type: "output_matches"
+        pattern: "redirect URI|BrokerRedirectUri"
+    rubric:
+      - "Attempts AcquireTokenSilent before interactive sign-in"
+      - "Keeps auth behind an injected service instead of page-level logic"
+      - "Lets MSAL own its token cache rather than duplicating tokens in Preferences"
+      - "Calls out broker setup as opt-in and dependent on redirect URI/platform configuration"
+    timeout: 240
+
+  - name: "Hand native auth state to Blazor Hybrid safely"
+    prompt: |
+      I have a MAUI Blazor Hybrid app. Native login succeeds, but Razor
+      components need AuthorizeView and API calls need bearer tokens. How should
+      I hand auth state from MAUI to Blazor without relying on browser local
+      storage?
+    assertions:
+      - type: "output_contains"
+        value: "AuthenticationStateProvider"
+      - type: "output_matches"
+        pattern: "DelegatingHandler|AuthorizationMessageHandler"
+      - type: "output_matches"
+        pattern: "GetAuthenticationStateAsync|NotifyAuthenticationStateChanged"
+    rubric:
+      - "Uses a native auth/session service registered in MAUI DI"
+      - "Provides Blazor auth state through a custom AuthenticationStateProvider"
+      - "Attaches fresh bearer tokens through a typed HttpClient or delegating handler"
+      - "Avoids using browser local storage as the source of truth for secrets"
+    timeout: 240
+
+  - name: "Migrate Xamarin auth callbacks to MAUI WebAuthenticator"
+    prompt: |
+      I am migrating a Xamarin.Forms app that used Xamarin.Auth and a custom
+      Android callback activity for OAuth. What is the MAUI pattern for the
+      browser sign-in call and platform callback registration?
+    assertions:
+      - type: "output_matches"
+        pattern: "AuthenticateAsync|WebAuthenticatorOptions"
+      - type: "output_contains"
+        value: "Microsoft.Maui.Authentication.WebAuthenticatorCallbackActivity"
+      - type: "output_contains"
+        value: "AndroidManifest.xml"
+      - type: "output_contains"
+        value: "CFBundleURLTypes"
+    rubric:
+      - "Replaces Xamarin.Auth with MAUI WebAuthenticator APIs"
+      - "Registers the Android callback intent filter for MAUI's built-in WebAuthenticatorCallbackActivity"
+      - "Does not recommend creating a custom callback Activity subclass"
+      - "Adds the iOS/Mac Catalyst callback scheme through CFBundleURLTypes"
+    timeout: 240

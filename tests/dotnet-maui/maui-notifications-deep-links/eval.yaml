@@ -1,0 +1,65 @@
+scenarios:
+  - name: "Schedule local notifications with platform permission UX"
+    prompt: |
+      I need local reminder notifications in a MAUI app for Android and iOS.
+      What platform setup and permission UX should I include before scheduling
+      notifications?
+    assertions:
+      - type: "output_contains"
+        value: "NotificationChannel"
+      - type: "output_contains"
+        value: "POST_NOTIFICATIONS"
+      - type: "output_matches"
+        pattern: "UNUserNotificationCenter|UserNotifications"
+      - type: "output_matches"
+        pattern: "Importance|NotificationManager"
+    rubric:
+      - "Creates Android notification channels for Android 8+"
+      - "Requests Android 13+ POST_NOTIFICATIONS permission"
+      - "Requests iOS notification authorization through UserNotifications"
+      - "Handles denied notification permission as a visible app state"
+    timeout: 240
+
+  - name: "Migrate push tokens from legacy FCM to current providers"
+    prompt: |
+      I am migrating a Xamarin.Forms app that used a legacy Firebase server key
+      and direct device registration for push. For a MAUI app, how should Android
+      and iOS token registration change, and is Azure Notification Hubs required?
+    assertions:
+      - type: "output_contains"
+        value: "FCM HTTP v1"
+      - type: "output_contains"
+        value: "APNs"
+      - type: "output_matches"
+        pattern: "service account|legacy server key"
+      - type: "output_matches"
+        pattern: "optional|not required|not mandatory"
+    rubric:
+      - "Explains that Android push backends should use FCM HTTP v1 rather than the retired legacy API"
+      - "Explains that iOS uses APNs device tokens"
+      - "Treats Azure Notification Hubs as optional infrastructure, not a requirement for small apps"
+      - "Uploads refreshed tokens/installations to the backend"
+      - "Warns that push payloads must not contain PII, tokens, or confidential data; routes entity IDs only and fetches sensitive content after open"
+      - "Associates and disassociates registrations with user sign-in/logout"
+    timeout: 240
+
+  - name: "Route app links and custom URI schemes into Shell"
+    prompt: |
+      My MAUI app should open product pages from https://contoso.example/p/42 and
+      also support myapp://product/42 as a fallback. What Android/iOS setup and
+      app-side routing should I implement?
+    assertions:
+      - type: "output_contains"
+        value: "assetlinks.json"
+      - type: "output_contains"
+        value: "apple-app-site-association"
+      - type: "output_matches"
+        pattern: "CFBundleURLTypes|intent filter|intent-filter"
+      - type: "output_matches"
+        pattern: "Shell|GoToAsync|OnAppLinkRequestReceived|ConfigureLifecycleEvents"
+    rubric:
+      - "Uses Android App Links with assetlinks.json for verified HTTPS links"
+      - "Uses iOS Universal Links with apple-app-site-association"
+      - "Adds custom URI scheme setup as a fallback"
+      - "Normalizes deep links into Shell routes or an app navigation service"
+    timeout: 240

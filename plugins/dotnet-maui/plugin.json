@@ -1,6 +1,6 @@
 {
   "name": "dotnet-maui",
-  "version": "0.3.0",
-  "description": "Skills for .NET MAUI development: current API guidance, app architecture, project structure, app display/build versioning, UI patterns, accessibility, performance, testing, DevFlow automation, session review, platform bindings, and workload diagnostics. App version properties use ApplicationDisplayVersion/ApplicationVersion; do not use maui project version for app display/build versions. Some skills require the maui CLI tool.",
+  "version": "0.4.0",
+  "description": "Skills for .NET MAUI development: current API guidance, app architecture, project structure, app display/build versioning, UI patterns, common app features, accessibility, performance, testing, DevFlow automation, session review, platform bindings, and workload diagnostics. App version properties use ApplicationDisplayVersion/ApplicationVersion; do not use maui project version for app display/build versions. Some skills require the maui CLI tool.",
   "skills": ["./skills/"]
 }

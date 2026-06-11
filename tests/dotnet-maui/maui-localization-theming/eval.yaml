@@ -1,0 +1,63 @@
+scenarios:
+  - name: "Switch app language at runtime with RESX"
+    prompt: |
+      My MAUI app has AppResources.resx files and a settings page language
+      picker. How should I switch culture at runtime so existing pages update,
+      and where should I persist the user choice?
+    assertions:
+      - type: "output_matches"
+        pattern: "CultureInfo|ResourceManager"
+      - type: "output_contains"
+        value: "DefaultThreadCurrentUICulture"
+      - type: "output_matches"
+        pattern: "notify|INotifyPropertyChanged|recreate"
+      - type: "output_contains"
+        value: "Preferences"
+    rubric:
+      - "Uses RESX resources as the source for user-visible strings"
+      - "Sets DefaultThreadCurrentCulture and DefaultThreadCurrentUICulture"
+      - "Explains that existing bindings need notification or page recreation"
+      - "Persists the user-selected culture in Preferences"
+    timeout: 240
+
+  - name: "Prepare a page for right-to-left cultures"
+    prompt: |
+      I am localizing a MAUI checkout page for Arabic and Hebrew. What should I
+      change in layout direction, platform language metadata, and directional
+      resource naming?
+    assertions:
+      - type: "output_contains"
+        value: "FlowDirection"
+      - type: "output_matches"
+        pattern: "RightToLeft|MatchParent"
+      - type: "output_contains"
+        value: "CFBundleLocalizations"
+      - type: "output_matches"
+        pattern: "start|end"
+    rubric:
+      - "Uses FlowDirection with MatchParent or RightToLeft as appropriate"
+      - "Mentions iOS/Mac Catalyst supported localization metadata"
+      - "Avoids hard-coded left/right assumptions in resources and code"
+      - "Calls out icons/gestures that imply direction"
+    timeout: 240
+
+  - name: "Implement runtime light dark system theme switching"
+    prompt: |
+      Add a MAUI settings option for Light, Dark, and System theme. Which XAML
+      resource patterns and runtime API should I use so already-created pages
+      update?
+    assertions:
+      - type: "output_contains"
+        value: "AppThemeBinding"
+      - type: "output_contains"
+        value: "DynamicResource"
+      - type: "output_contains"
+        value: "UserAppTheme"
+      - type: "output_matches"
+        pattern: "AppTheme\\.Unspecified"
+    rubric:
+      - "Uses AppThemeBinding for light/dark resource values"
+      - "Uses DynamicResource for values that must update at runtime"
+      - "Sets Application.Current.UserAppTheme for user-selected themes"
+      - "Uses AppTheme.Unspecified or equivalent to return to system theme"
+    timeout: 240
