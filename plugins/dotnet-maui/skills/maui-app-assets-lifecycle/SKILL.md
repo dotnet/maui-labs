@@ -24,12 +24,16 @@ state handling across start, stop, resume, and multi-window lifecycle events.
 2. Use MAUI single-project item types for shared assets.
 3. Put platform-only assets under the matching `Platforms/*` folder only when a
    shared MAUI asset cannot express the requirement.
-4. Access bundled raw files through `FileSystem.OpenAppPackageFileAsync`.
-5. Use `Window` lifecycle events for cross-platform app/window state.
-6. Use `ConfigureLifecycleEvents` for platform-specific lifecycle hooks.
-7. Persist user/session state before deactivation or stop; restore on resume or
+4. For Xamarin.Forms asset migrations, explicitly map old Android
+   `drawable-*`, iOS `.xcassets`, and iOS `Info.plist` `UIAppFonts` font
+   registrations to MAUI `MauiImage`, `MauiFont`, `Resources/Images`, and
+   `Resources/Fonts`.
+5. Access bundled raw files through `FileSystem.OpenAppPackageFileAsync`.
+6. Use `Window` lifecycle events for cross-platform app/window state.
+7. Use `ConfigureLifecycleEvents` for platform-specific lifecycle hooks.
+8. Persist user/session state before deactivation or stop; restore on resume or
    app startup.
-8. Validate icon/splash/background behavior on each target platform.
+9. Validate icon/splash/background behavior on each target platform.
 
 ## Asset Item Types
 
@@ -104,5 +108,7 @@ events, such as Android activity callbacks or iOS scene/app delegate events.
 - Shared assets use MAUI item types and live under `Resources`.
 - Bundled files are read through `FileSystem.OpenAppPackageFileAsync`.
 - Editable data is copied out of the app package.
+- Xamarin migration guidance removes old `UIAppFonts`/`Info.plist` font
+  registrations when `MauiFont`/`ConfigureFonts()` owns shared fonts.
 - State is saved before stop/destroy and restored on startup/resume.
 - Platform lifecycle hooks are isolated to platform-specific behavior.

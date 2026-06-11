@@ -74,7 +74,7 @@ scenarios:
       - type: "output_matches"
         pattern: "MauiFont|ConfigureFonts|Resources/Fonts"
       - type: "output_matches"
-        pattern: "UIAppFonts|plist font registrations"
+        pattern: "UIAppFonts|plist font registrations|Info\\.plist.*font|font.*Info\\.plist"
     rubric:
       - "Moves shared XAML/C# image assets into Resources/Images as MauiImage items"
       - "Warns not to rely on migrated Android drawable-* folders for MAUI Image sources"
