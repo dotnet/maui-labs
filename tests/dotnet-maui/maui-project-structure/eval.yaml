@@ -59,7 +59,7 @@ scenarios:
       - type: "output_matches"
         pattern: "(?i)maui project version.*(not|don't|do\\W*not)|(?:not|don't|do\\W*not|avoid|should not).*maui project version|package/workload|sdk/workload"
       - type: "output_not_matches"
-        pattern: "(?i)maui project version\\s+set|--display-version|--build-number"
+        pattern: "(?im)^\\s*maui project version\\s+set\\b|^\\s*--display-version\\b|^\\s*--build-number\\b"
     rubric:
       - "Uses ApplicationDisplayVersion for the user-visible version"
       - "Uses ApplicationVersion for the platform build number"
