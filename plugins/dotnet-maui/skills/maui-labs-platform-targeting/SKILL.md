@@ -58,13 +58,13 @@ dotnet run --project MyApp.Linux
 ```
 
 For an existing app, create `MyApp.Linux` next to the shared MAUI project and
-reference the shared app/project:
+reference the shared app/project. Pin concrete package versions for production;
+the version below is a placeholder to replace with the selected prerelease:
 
 ```xml
 <ProjectReference Include="../MyApp/MyApp.csproj" />
-<!-- Pin a specific prerelease for production; *-* floats to latest prerelease. -->
-<PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4" Version="*-*" />
-<PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="*-*" />
+<PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4" Version="0.6.0-preview.1" />
+<PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.6.0-preview.1" />
 ```
 
 ```csharp
@@ -134,9 +134,9 @@ builder
 ## Do Not Confuse With Backend Implementation
 
 If the task is to add a handler, implement an Essentials API, scaffold backend
-source, or debug renderer internals in `platforms/*`, use the
-`maui-platform-backend` skill instead. This skill is only for app developers who
-consume the experimental platform packages.
+source, or debug renderer internals in `platforms/*`, use a platform-backend
+implementation skill if one is available in your environment. This skill is only
+for app developers who consume the experimental platform packages.
 
 ## Validation Checklist
 

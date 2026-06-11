@@ -127,7 +127,13 @@ Essentials AI returns `Microsoft.Extensions.AI` clients, so normal tool calling
 patterns apply:
 
 ```csharp
-var innerClient = serviceProvider.GetRequiredService<IChatClient>();
+var innerClient = serviceProvider.GetService<IChatClient>();
+if (innerClient is null)
+{
+    // Chat is unavailable on this platform/OS version; hide or disable the feature.
+    return;
+}
+
 var appTools = YourAppTools.Default.Tools; // Define with [AIToolSource]; see maui-ai-tool-bindings.
 
 var client = innerClient.AsBuilder()

@@ -5,8 +5,8 @@ description: >-
   migration audits, new-project workflows, namespace/API changes, renderer to
   handler planning, DependencyService to DI, MessagingCenter replacement, and
   platform parity. DO NOT USE FOR: brand-new MAUI apps, native SDK bindings
-  (use slim bindings), or platform backend implementation (use
-  maui-platform-backend).
+  (use slim bindings), or platform backend implementation (use an available
+  platform-backend implementation skill).
 ---
 
 # Xamarin.Forms Migration

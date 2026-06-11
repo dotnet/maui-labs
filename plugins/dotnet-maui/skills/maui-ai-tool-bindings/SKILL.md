@@ -112,6 +112,11 @@ automatically, which is idiomatic for a session-scoped tool set.
 private IServiceScope? _sessionScope;
 private IChatClient? _sessionClient;
 
+if (_sessionClient is IAsyncDisposable asyncDisposable)
+    await asyncDisposable.DisposeAsync();
+else
+    _sessionClient?.Dispose();
+
 _sessionScope?.Dispose();
 _sessionScope = serviceScopeFactory.CreateScope(); // Inject IServiceScopeFactory.
 
@@ -120,7 +125,7 @@ _sessionClient = innerClient.AsBuilder()
         invocation.AdditionalTools = [.. GardenTools.Default.Tools])
     .Build(_sessionScope.ServiceProvider);
 
-// Dispose _sessionScope when the chat session or view model ends.
+// Also dispose _sessionClient and _sessionScope when the chat session or view model ends.
 ```
 
 Use a per-chat-session scope when tools hold conversational state.
