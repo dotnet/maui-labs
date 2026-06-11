@@ -24,9 +24,10 @@ notifications, or URLs that open the app and navigate to content.
    links.
 2. Add platform declarations and entitlements before writing app logic.
 3. Request notification permission at a useful moment and support a denied state.
-4. For migrated push-token guidance, explicitly say Android backends use
-   **FCM HTTP v1** with service-account OAuth credentials, not legacy server
-   keys. iOS uses APNs device tokens.
+4. For migrated push-token guidance, explicitly say Android backends use the
+   official **FCM HTTP v1** / **Firebase Cloud Messaging v1** API with
+   service-account OAuth credentials, not legacy server keys. Treat OAuth 2.0
+   as the credential flow, not the API version. iOS uses APNs device tokens.
 5. Register refreshed device push tokens/installations with the backend or
    Azure Notification Hubs after sign-in, and disassociate them on logout.
 6. Treat Azure Notification Hubs as optional infrastructure unless the app needs
@@ -67,8 +68,10 @@ scheduled notification metadata in app storage if it must survive app restart.
 When the prompt mentions migrating a legacy Firebase server key, legacy FCM API,
 or Xamarin push registrations, include these required points:
 
-1. Android senders move to **FCM HTTP v1** with service-account OAuth
-   credentials. Do not recommend legacy server keys.
+1. Android senders move to the official **FCM HTTP v1** / **Firebase Cloud
+   Messaging v1** API with service-account OAuth credentials. Do not recommend
+   legacy server keys. Treat OAuth 2.0 service-account authentication as the
+   credential flow, not the API version.
 2. iOS uses APNs device tokens, with sandbox/production environment alignment.
 3. Azure Notification Hubs is optional infrastructure, not required for direct
    FCM/APNs token registration.
@@ -77,16 +80,16 @@ or Xamarin push registrations, include these required points:
 5. Keep push payloads free of PII, access tokens, and confidential data; send
    route/entity IDs and fetch sensitive content after the app opens.
 
-- Android uses Firebase Cloud Messaging (FCM); use the FCM HTTP v1 API on the
-  backend. The legacy FCM HTTP API was retired in June 2024 and should not be
-  used for migrated Xamarin or new MAUI apps.
+- Android uses Firebase Cloud Messaging (FCM); use the official **FCM HTTP v1**
+  API on the backend. The legacy FCM HTTP API was retired in June 2024 and
+  should not be used for migrated Xamarin or new MAUI apps.
 - iOS and Mac Catalyst use APNs.
 - Windows packaged apps use Windows Notification Service (WNS) channel URIs.
 - Small apps can register FCM/APNs/WNS tokens directly with their own backend.
   Azure Notification Hubs is optional and useful when the app needs a broker for
   tags, installations, or multi-platform push management.
-- When using Azure Notification Hubs with FCM, configure FCM v1 service account
-  credentials rather than legacy server keys.
+- When using Azure Notification Hubs with FCM, configure **FCM HTTP v1**
+  service-account credentials rather than legacy server keys.
 - Migrating the backend send API from legacy FCM to FCM HTTP v1 does not require
   a new client registration-token format; keep normal token refresh handling
   because FCM can still rotate tokens.
