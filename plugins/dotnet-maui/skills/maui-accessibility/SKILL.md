@@ -86,6 +86,20 @@ SemanticScreenReader.Announce("Profile saved");
 - For CollectionView rows, ensure the row exposes a meaningful label instead of
   reading every decorative child.
 
+## MAUI-Specific Best Practices
+
+- **Label/Text redundancy**: Do NOT add `SemanticProperties.Description` to a
+  `Label` when its `Text` property already serves as the accessible name.
+  Only add it when the visible text is absent or insufficient.
+- **Announcements**: Call `SemanticScreenReader.Announce` for important outcomes
+  (save success, validation summary) but NOT for every state change. Provide
+  guidance on avoiding over-announcing by batching related errors.
+- **CollectionView rows**: Ensure each row exposes a meaningful composite label
+  rather than reading every child view separately. Use `SemanticProperties`
+  on the container or a specific child, not all children.
+- **Multiple validation errors**: Announce a summary count ("2 errors") after
+  the user submits, not a separate announcement per field.
+
 ## Anti-Patterns
 
 - Do not rely on placeholder text as the only field label.
