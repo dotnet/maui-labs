@@ -32,12 +32,10 @@ version` for platform app display/build versions. Use
 2. Check for Central Package Management: if `Directory.Packages.props` exists, add
    new NuGet package versions there with `<PackageVersion Include="..." Version="..." />`,
    and keep `PackageReference` items in the `.csproj` versionless.
-3. Use the MAUI resource folder layout:
-   - `Resources/Images/` for images (`MauiImage` build action)
-   - `Resources/Fonts/` for fonts (`MauiFont` build action)
-   - `Resources/Raw/` for bundled files (`MauiAsset` build action)
-   - `Platforms/Android/`, `Platforms/iOS/`, `Platforms/MacCatalyst/`,
-     `Platforms/Windows/` for platform-specific overrides
+3. Use the MAUI resource folder layout for app assets:
+   - `Resources/Images/` → `MauiImage` (images/icons)
+   - `Resources/Fonts/` → `MauiFont` (custom fonts)
+   - `Resources/Raw/` → `MauiAsset` (bundled JSON, data, HTML files)
 4. For app display/build version edits, use `ApplicationDisplayVersion` and
    `ApplicationVersion` as MSBuild properties in the `.csproj`.
 5. If environment issues arise, run `maui doctor`.
