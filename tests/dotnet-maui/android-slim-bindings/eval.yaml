@@ -16,7 +16,8 @@ scenarios:
       library (com.airbnb.android:lottie:6.6.2) but I only need to play animations
       from JSON files — not the full API surface. Create a slim Android binding
       project in LottieBinding/ with the Kotlin wrapper, Gradle build files, and
-      C# binding project. Please write the actual files to disk.
+      C# binding project. Show the important file tree and code snippets in your
+      chat response.
     assertions:
       - type: "output_matches"
         pattern: "(?i)slim.binding|native.library.interop|NLI|thin.wrapper"

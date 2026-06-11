@@ -16,9 +16,9 @@ scenarios:
       library (distributed via CocoaPods as 'lottie-ios') and I only need to play
       animations from JSON files. Create a slim iOS binding project in LottieBinding/
       with the XcodeGen project.yml, Podfile, Swift wrapper, and C# binding project.
-      Please write the actual files to disk and summarize the important setup in
-      your chat response, including the Podfile static-linkage line and the Swift
-      wrapper class signature with @objc and NSObject.
+      Show the important file tree and code snippets in your chat response,
+      including the Podfile static-linkage line and the Swift wrapper class
+      signature with @objc and NSObject.
     assertions:
       - type: "output_contains"
         value: "XcodeGen"
@@ -51,7 +51,7 @@ scenarios:
 
             @objc(DotnetMyBinding)
             public class DotnetMyBinding: NSObject {
-                @objc
+                @objc(initialize:)
                 public func initialize(apiKey: String) -> Bool {
                     return true
                 }
@@ -91,8 +91,8 @@ scenarios:
         path: "MyBinding/swift/DotnetMyBinding.swift"
         value: "initializeWithApiKey"
     rubric:
-      - "Identifies that the @objc annotation is missing an explicit selector, so Swift generated a different one"
-      - "Explains that Swift auto-generates the selector as initializeWithApiKey: but the @objc without explicit selector may produce initializeApiKey: or similar"
+      - "Identifies that the explicit @objc selector on the Swift method does not match the [Export] selector"
+      - "Explains that @objc(initialize:) exports initialize: while ApiDefinition.cs expects initializeWithApiKey:"
       - "Shows the fix: add @objc(initializeWithApiKey:) to explicitly match the [Export] attribute"
       - "Emphasizes that @objc(selector:) in Swift must exactly match [Export(\"selector:\")] in ApiDefinition.cs"
     timeout: 240

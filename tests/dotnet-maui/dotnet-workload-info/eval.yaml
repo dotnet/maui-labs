@@ -76,7 +76,7 @@ scenarios:
       - type: "output_contains"
         value: "azuresearch-usnc.nuget.org/query"
       - type: "output_matches"
-        pattern: "packageid:Microsoft\\.Maui\\.Controls|q=Microsoft\\.Maui\\.Controls"
+        pattern: "packageid:Microsoft\\.Maui\\.Controls"
       - type: "output_matches"
         pattern: "<PackageReference"
     rubric:

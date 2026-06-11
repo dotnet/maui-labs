@@ -68,7 +68,7 @@ To convert this to the NuGet package version (needed for Steps 3-4):
 
 CLI 10.0.103 → NuGet 10.103.0 (remove middle .0., combine)
 Do not use the CLI version as the NuGet package version in flat-container URLs.
-The NuGet package is: Microsoft.NET.Workloads.{band} where band = CLI version (e.g., Microsoft.NET.Workloads.10.0.100)
+The NuGet package is `Microsoft.NET.Workloads.{band}` where `{band}` is the SDK band derived from the CLI version (for example, CLI 10.0.103 → package `Microsoft.NET.Workloads.10.0.100`, NuGet version `10.103.0`).
 
 
 ### Step 3: Download Workload Set Manifest

@@ -27,7 +27,7 @@ scenarios:
       - type: "output_matches"
         pattern: "MainThread\\.BeginInvokeOnMainThread|Dispatcher\\.Dispatch"
       - type: "output_matches"
-        pattern: "DeviceInfo\\.Platform|Dispatcher\\.Dispatch"
+        pattern: "DeviceInfo\\.Platform"
       - type: "output_contains"
         value: "Microsoft.Maui.Controls"
       - type: "output_matches"
