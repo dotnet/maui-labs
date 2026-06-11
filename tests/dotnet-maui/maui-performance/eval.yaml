@@ -7,7 +7,7 @@ scenarios:
       - type: "output_contains"
         value: "maui profile startup"
       - type: "output_matches"
-        pattern: "Release|device|emulator"
+        pattern: "(?i)release|device|emulator"
       - type: "output_matches"
         pattern: "measure|profile|baseline"
     rubric:
@@ -23,7 +23,7 @@ scenarios:
       x:DataType. What should I change first?
     assertions:
       - type: "output_matches"
-        pattern: "remove|avoid|do not"
+        pattern: "(?i)remove|avoid|do not"
       - type: "output_contains"
         value: "ScrollView"
       - type: "output_contains"

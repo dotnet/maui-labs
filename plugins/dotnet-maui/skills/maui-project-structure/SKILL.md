@@ -22,13 +22,13 @@ feature implementation. Inspect existing conventions first and preserve them.
 1. Find the MAUI app project:
 
    ```bash
-   grep -R "<UseMaui>true</UseMaui>" -n *.csproj **/*.csproj
+   grep -R -n --include="*.csproj" "<UseMaui>true</UseMaui>" .
    ```
 
 2. Inspect target frameworks, package management, and shared build props:
 
    ```bash
-   grep -R "<TargetFramework" -n *.csproj **/*.csproj Directory.Build.props 2>/dev/null
+   grep -R -n --include="*.csproj" --include="Directory.Build.props" "<TargetFramework" . 2>/dev/null
    test -f Directory.Packages.props && grep -n "PackageVersion" Directory.Packages.props
    ```
 

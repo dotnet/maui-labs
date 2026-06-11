@@ -10,7 +10,7 @@ scenarios:
       - type: "output_contains"
         value: "IProductsService"
       - type: "output_matches"
-        pattern: "fake|mock|stub"
+        pattern: "(?i)fake|mock|stub"
       - type: "output_matches"
         pattern: "(?i)(do not|don't|avoid|should not|no need to|never).*MauiProgram\\.CreateMauiApp"
     rubric:
@@ -29,7 +29,7 @@ scenarios:
       - type: "output_matches"
         pattern: "ILocationService|IGeolocation"
       - type: "output_matches"
-        pattern: "fake|mock"
+        pattern: "(?i)fake|mock"
       - type: "output_contains"
         value: "Geolocation.Default"
     rubric:

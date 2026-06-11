@@ -22,8 +22,9 @@ instead of generating stale Xamarin.Forms or early MAUI patterns.
 1. Inspect the target frameworks and package versions before recommending APIs:
 
    ```bash
-   grep -R "<TargetFramework" -n *.csproj **/*.csproj Directory.Build.props 2>/dev/null
-   grep -R "Microsoft.Maui.Controls\\|UseMaui\\|MauiVersion" -n *.csproj **/*.csproj Directory.Build.props Directory.Packages.props 2>/dev/null
+   grep -R -n --include="*.csproj" --include="Directory.Build.props" "<TargetFramework" . 2>/dev/null
+   grep -R -n --include="*.csproj" --include="Directory.Build.props" --include="Directory.Packages.props" \
+     "Microsoft.Maui.Controls\\|UseMaui\\|MauiVersion" . 2>/dev/null
    ```
 
 2. Identify whether the project targets .NET 8, .NET 9, .NET 10, or multiple
