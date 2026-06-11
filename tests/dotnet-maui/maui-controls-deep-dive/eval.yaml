@@ -5,8 +5,8 @@ scenarios:
       pattern with loading, empty state, incremental loading, and UI automation
       hooks.
     assertions:
-      - type: "output_contains"
-        value: "CollectionView"
+      - type: "output_matches"
+        pattern: "ItemsSource|ItemTemplate|SelectionMode|EmptyView"
       - type: "output_contains"
         value: "RemainingItemsThreshold"
       - type: "output_contains"

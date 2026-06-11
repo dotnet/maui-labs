@@ -7,10 +7,8 @@ scenarios:
     assertions:
       - type: "output_matches"
         pattern: "EntryHandler\\.Mapper\\.AppendToMapping|AppendToMapping"
-      - type: "output_contains"
-        value: "BorderlessEntry"
       - type: "output_matches"
-        pattern: "view is BorderlessEntry|is not BorderlessEntry"
+        pattern: "is BorderlessEntry|as BorderlessEntry|== typeof\\(BorderlessEntry\\)"
       - type: "output_matches"
         pattern: "#if ANDROID|#elif IOS|#elif WINDOWS"
     rubric:

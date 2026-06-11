@@ -2,11 +2,10 @@
 name: maui-essentials-ai
 description: >-
   Adopt Microsoft.Maui.Essentials.AI in MAUI apps. USE FOR: local/on-device
-  chat, Apple Intelligence-backed IChatClient, NL embeddings, semantic search,
-  tool use with Microsoft.Extensions.AI, privacy/offline AI architecture, and
-  platform availability planning. DO NOT USE FOR: source-generating AI tool
-  bindings (use maui-ai-tool-bindings), cloud-only AI service setup, general AI
-  debugging (use maui-ai-debugging), or non-MAUI Microsoft.Extensions.AI apps.
+  chat, Apple Intelligence IChatClient, NL embeddings, semantic search, tool
+  use, privacy/offline architecture, and platform planning. DO NOT USE FOR:
+  source-generating AI tool bindings, cloud-only AI setup, AI debugging, or
+  non-MAUI Microsoft.Extensions.AI apps.
 ---
 
 # MAUI Essentials AI
@@ -38,10 +37,15 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Essentials.AI;
 
+#if IOS || MACCATALYST || MACOS
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 builder.Services.AddSingleton<NLEmbeddingGenerator>();
 builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
     sp.GetRequiredService<NLEmbeddingGenerator>());
+#else
+// On-device AI is not available on this platform yet.
+// Register an app-specific unavailable/null implementation or hide AI features.
+#endif
 ```
 
 Register platform-specific implementations conditionally if the app targets
@@ -75,10 +79,12 @@ default constructor uses Apple's English sentence embedding; pass a
 the app needs a different supported language or embedding:
 
 ```csharp
+#if IOS || MACCATALYST || MACOS
 var generator = new NLEmbeddingGenerator();
 var embeddings = await generator.GenerateAsync(
     ["sunset beach", "mountain hiking"],
     cancellationToken);
+#endif
 ```
 
 Recommended shape:

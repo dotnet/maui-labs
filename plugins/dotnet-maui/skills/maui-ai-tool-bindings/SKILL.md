@@ -3,12 +3,10 @@ name: maui-ai-tool-bindings
 description: >-
   Use Microsoft.Maui.AI.Attributes / AIExtensions to source-generate
   Microsoft.Extensions.AI tools for MAUI apps. USE FOR: [ExportAIFunction],
-  [AIToolSource], AIToolContext, generated Default.Tools, DI parameter binding,
-  [FromServices], [FromKeyedServices], ApprovalRequired, AOT-friendly tool
-  definitions, and wiring tools into IChatClient. DO NOT USE FOR:
-  Microsoft.Maui.Essentials.AI chat or embedding setup itself (use
-  maui-essentials-ai), hand-written native platform bindings, or general
-  non-MAUI tool-calling theory.
+  [AIToolSource], AIToolContext, Default.Tools, DI parameter binding,
+  [FromServices], [FromKeyedServices], ApprovalRequired, AOT-friendly tools, and
+  IChatClient wiring. DO NOT USE FOR: Essentials.AI chat/embedding setup,
+  native platform bindings, or non-MAUI tool-calling theory.
 ---
 
 # MAUI AI Tool Bindings

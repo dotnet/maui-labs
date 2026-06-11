@@ -7,7 +7,7 @@ scenarios:
       MAUI.
     assertions:
       - type: "output_matches"
-        pattern: "DependencyService.*DI|DI.*DependencyService"
+        pattern: "DependencyService.*(DI|dependency injection)|(DI|dependency injection).*DependencyService"
       - type: "output_matches"
         pattern: "MessagingCenter.*WeakReferenceMessenger|WeakReferenceMessenger.*MessagingCenter|event aggregator|IObservable"
       - type: "output_matches"

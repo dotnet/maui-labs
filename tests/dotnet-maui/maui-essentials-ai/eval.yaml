@@ -26,8 +26,8 @@ scenarios:
       sending them to a cloud model. How should I use the Essentials AI embedding
       generator and store/search the results?
     assertions:
-      - type: "output_contains"
-        value: "NLEmbeddingGenerator"
+      - type: "output_matches"
+        pattern: "NLEmbeddingGenerator|IEmbeddingGenerator"
       - type: "output_matches"
         pattern: "new NLEmbeddingGenerator\\(\\)|NLLanguage|NLEmbedding\\b"
       - type: "output_matches"

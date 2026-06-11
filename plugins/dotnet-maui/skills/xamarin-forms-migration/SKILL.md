@@ -2,14 +2,11 @@
 name: xamarin-forms-migration
 description: >-
   Plan and execute Xamarin.Forms to .NET MAUI app migrations. USE FOR:
-  migration audits, new-project migration workflows, namespace/API changes,
-  custom renderer to handler planning, DependencyService to DI, MessagingCenter
-  replacement, platform capability parity, and deciding when to route to
-  maui-current-apis, maui-custom-handlers, maui-platform-invoke, or slim
-  bindings. DO NOT USE FOR: brand-new MAUI apps with no Xamarin.Forms code
-  (use maui-app-architecture and maui-current-apis), implementing native
-  library bindings directly (use android-slim-bindings or ios-slim-bindings),
-  or backend/platform implementation work (use maui-platform-backend).
+  migration audits, new-project workflows, namespace/API changes, renderer to
+  handler planning, DependencyService to DI, MessagingCenter replacement, and
+  platform parity. DO NOT USE FOR: brand-new MAUI apps, native SDK bindings
+  (use slim bindings), or platform backend implementation (use
+  maui-platform-backend).
 ---
 
 # Xamarin.Forms Migration

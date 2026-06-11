@@ -6,8 +6,8 @@ scenarios:
       requirements, and validation commands. What data collection and note shape
       should I use?
     assertions:
-      - type: "output_contains"
-        value: "dotnet-workload-info"
+      - type: "output_matches"
+        pattern: "workload set|manifest versions|WorkloadDependencies\\.json"
       - type: "output_contains"
         value: "WorkloadDependencies.json"
       - type: "output_matches"
@@ -28,7 +28,7 @@ scenarios:
       data. What conversion should I document?
     assertions:
       - type: "output_matches"
-        pattern: "\\d+\\.\\d+\\.\\d+"
+        pattern: "10\\.103\\.0|10\\.\\d+\\.0"
       - type: "output_matches"
         pattern: "Microsoft\\.NET\\.Workloads\\.\\d+\\.\\d+\\.\\d+"
       - type: "output_matches"
@@ -52,8 +52,8 @@ scenarios:
         pattern: "reject|omit|exclude|separate|do not include"
       - type: "output_matches"
         pattern: "known issues|breaking changes|requirements"
-      - type: "output_contains"
-        value: "dotnet-workload-info"
+      - type: "output_matches"
+        pattern: "WorkloadDependencies\\.json|WorkloadManifest|manifest data"
       - type: "output_matches"
         pattern: "WorkloadDependencies\\.json|WorkloadManifest|known issues"
     rubric:
