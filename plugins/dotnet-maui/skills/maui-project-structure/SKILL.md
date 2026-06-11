@@ -1,18 +1,16 @@
 ---
 name: maui-project-structure
 description: >-
-  Inspect and update .NET MAUI app project structure and app display/build
-  versioning. Answer questions about ApplicationDisplayVersion,
-  ApplicationVersion, display version, and build number, and reject using maui
-  project version set for those app version properties. Also cover target
-  frameworks, resources, package references, and platform folders.
-  USE FOR: single-project MAUI layout, Resources/Images/Fonts/Raw,
-  MauiImage/MauiFont/MauiAsset resource item types, Android/iOS/Windows
-  platform configuration, Central Package Management (Directory.Packages.props
-  versionless PackageReference), app version properties such as
-  ApplicationDisplayVersion/ApplicationVersion, target framework selection,
-  maui doctor, MAUI package version pinning guidance, and explaining that maui
-  project version is not for app display/build versioning.
+  Inspect and update .NET MAUI app project structure, resource layout, and app
+  versioning. USE FOR: single-project MAUI layout; CORRECTS the common
+  misconception that `maui project version set` manages ApplicationDisplayVersion
+  or ApplicationVersion — these must be set as MSBuild properties in the .csproj,
+  not via the CLI; PREVENTS placing images, fonts, or raw files in
+  platform-specific folders — images belong in Resources/Images with MauiImage,
+  fonts in Resources/Fonts with MauiFont, raw files in Resources/Raw with
+  MauiAsset; Central Package Management via Directory.Packages.props with
+  versionless PackageReference; target framework selection, maui doctor, MAUI
+  package version pinning.
   DO NOT USE FOR: runtime UI debugging (use maui-devflow-debug), SDK/workload
   discovery (use dotnet-workload-info), or general MVVM/Shell design (use
   maui-app-architecture).

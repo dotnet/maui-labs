@@ -3,13 +3,16 @@ name: maui-devflow-session-review
 description: >-
   Review previous AI sessions that used MAUI DevFlow to identify opt-in product
   feedback, friction, repeated attempts, failed advertised features, and
-  workarounds.   USE FOR: MAUI DevFlow session review, stuck maui devflow debugging sessions,
-  reviewing CLI/MCP behavior for friction, markdown feedback reports, drafting
-  GitHub issues for dotnet/maui-labs (including scrubbing private file paths,
-  emails, and PII from session content before filing). DO NOT USE FOR: fixing discovered bugs,
-  adding DevFlow to apps (use maui-devflow-onboard), iterative app debugging
-  (use maui-devflow-debug), or generic memory search. INVOKES: session
-  history/search tools, gh CLI, and maui devflow CLI.
+  workarounds. USE FOR: MAUI DevFlow session review, summarizing stuck maui
+  devflow debugging sessions, reviewing CLI/MCP behavior for friction, drafting
+  structured markdown feedback reports with Environment/Findings/Severity/
+  Confidence/Outcome sections, and drafting GitHub issues for dotnet/maui-labs
+  (scrubbing private file paths, emails, and PII before filing). Analyzes the
+  session content provided by the user — does NOT invoke live DevFlow CLI
+  commands or agents during retrospective review. INVOKES: session history tools
+  for scope discovery; gh CLI for issue filing. DO NOT USE FOR: fixing discovered
+  bugs, adding DevFlow to apps (use maui-devflow-onboard), iterative app
+  debugging (use maui-devflow-debug), or generic memory search.
 ---
 
 # MAUI DevFlow Session Review
@@ -45,7 +48,11 @@ Use this skill when:
 
 ### 1. Confirm opt-in scope
 
-Identify what the user wants reviewed:
+**If the user has provided session content directly in the message**, start from
+step 4 (Classify friction) immediately — do not invoke live DevFlow CLI commands,
+search tools, or session history tools. The user has already supplied the evidence.
+
+If no session content is provided, identify what the user wants reviewed:
 
 - current session
 - recent sessions matching MAUI DevFlow keywords

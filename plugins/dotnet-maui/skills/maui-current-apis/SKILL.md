@@ -3,12 +3,13 @@ name: maui-current-apis
 description: >-
   Guard .NET MAUI code generation and fixes against obsolete Xamarin.Forms-era
   APIs and version-specific MAUI API changes. USE FOR: creating or updating MAUI
-  XAML/C#, resolving obsolete warnings, TFM-aware API selection to avoid suggesting
-  net10+ APIs when the project targets net8 or net9, replacing Xamarin.Forms or
-  Xamarin.Essentials patterns, safe area migration (SafeAreaEdges for .NET 10+),
-  Shell/window API choices, and preventing deprecated agent suggestions. DO NOT USE
-  FOR: SDK/workload version discovery (use dotnet-workload-info), runtime UI
-  inspection (use maui-devflow-debug), or full Xamarin migration planning.
+  XAML/C#, resolving obsolete warnings, enforcing TFM inspection before any code
+  change — never outputs .NET 10-only APIs when the project targets net8 or net9,
+  replacing Xamarin.Forms or Xamarin.Essentials patterns, safe area migration
+  (SafeAreaEdges for .NET 10+), Shell/window API choices, and preventing
+  deprecated agent suggestions. DO NOT USE FOR: SDK/workload version discovery
+  (use dotnet-workload-info), runtime UI inspection (use maui-devflow-debug), or
+  full Xamarin migration planning.
 ---
 
 # MAUI Current APIs
@@ -43,7 +44,7 @@ instead of generating stale Xamarin.Forms or early MAUI patterns.
 | --- | --- |
 | `using Xamarin.Forms;` | `using Microsoft.Maui.Controls;` |
 | `using Xamarin.Essentials;` | `using Microsoft.Maui.ApplicationModel`, `Microsoft.Maui.Devices`, `Microsoft.Maui.Storage`, or the specific MAUI namespace |
-| `Device.BeginInvokeOnMainThread(...)` | `MainThread.BeginInvokeOnMainThread(...)` or `Dispatcher.Dispatch(...)` |
+| `Device.BeginInvokeOnMainThread(...)` | `MainThread.BeginInvokeOnMainThread(...)` |
 | `Device.StartTimer(...)` | `Dispatcher.StartTimer(...)` or `IDispatcherTimer` |
 | `Device.RuntimePlatform` for platform behavior | `DeviceInfo.Platform`, `OnPlatform`, or compile-time platform services |
 | `MessagingCenter` for new app architecture | `WeakReferenceMessenger`, events, interfaces, or another explicit messaging abstraction |

@@ -6,11 +6,12 @@ description: >-
   and boundaries between unit, integration, and device tests. USE FOR: xUnit
   test projects, ViewModel tests (do not call MauiProgram.CreateMauiApp for
   pure ViewModel logic), mocking MAUI services, testing navigation/data
-  services, using Microsoft.Maui.Build.AppProjectReference when a normal
-  ProjectReference to a MAUI app project causes build issues, and deciding
-  what must run on device. DO NOT USE FOR: runtime UI automation with a
-  running app (use maui-devflow-debug), generic app architecture (use
-  maui-app-architecture), or production performance profiling.
+  services, using Microsoft.Maui.Build.AppProjectReference NuGet package when
+  a normal ProjectReference to a MAUI app project fails with build errors — this
+  is the MAUI Labs MSBuild SDK that enables test/tooling projects to reference
+  app projects, and deciding what must run on device. DO NOT USE FOR: runtime UI
+  automation with a running app (use maui-devflow-debug), generic app
+  architecture (use maui-app-architecture), or production performance profiling.
 ---
 
 # MAUI Unit Testing
