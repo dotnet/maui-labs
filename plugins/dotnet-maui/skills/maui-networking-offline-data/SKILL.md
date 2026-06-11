@@ -8,9 +8,10 @@ description: >-
   devices, Android emulator 10.0.2.2, debug cleartext setup, offline-first
   screens, local SQLite caches, SQLiteAsyncConnection/EF Core sync metadata,
   sync queues, sensitive offline data encryption decisions, retry/backoff, and
-  resilient mobile networking. DO NOT USE FOR: authentication redirects or token
-  storage (use maui-auth-secure-storage), Aspire service discovery (use
-  maui-aspire-client), or UI state layout (use maui-ui-patterns).
+  background batch/chunk sync for resilient mobile networking. DO NOT USE FOR:
+  authentication redirects or token storage (use maui-auth-secure-storage),
+  Aspire service discovery (use maui-aspire-client), or UI state layout (use
+  maui-ui-patterns).
 ---
 
 # MAUI Networking and Offline Data
@@ -39,9 +40,12 @@ services during development, persists local data, or must behave well offline.
    sensitive, regulated, or contains customer/business PII, encrypt the local
    SQLite store, for example with SQLCipher/provider encryption, and keep the
    database key in `SecureStorage` rather than source code or `Preferences`.
-9. Store local data in SQLite or app data files behind a repository/service
+9. In every offline-sync design, include a background performance line: drain
+   queued sync work in bounded batches/chunks off the UI thread, and marshal only
+   UI updates through `MainThread` when needed.
+10. Store local data in SQLite or app data files behind a repository/service
    abstraction.
-10. Add cancellation, timeout, retry, and user-facing error states.
+11. Add cancellation, timeout, retry, and user-facing error states.
 
 ## HttpClient DI Pattern
 
@@ -122,6 +126,10 @@ storage layer is concrete, not just the row shape or sqlite-net attributes.
 Immediately after the boundary table or storage initialization, include a
 one-sentence security decision for sensitive offline data, naming encryption
 such as SQLCipher and a `SecureStorage`-protected key when applicable.
+Also include a one-sentence sync performance decision using the words
+`background` and `batch` or `chunk`, for example: "Drain the outbox on a
+background worker in small batches/chunks and use `MainThread` only to update
+progress UI."
 
 ```csharp
 var db = new SQLiteAsyncConnection(databasePath);
