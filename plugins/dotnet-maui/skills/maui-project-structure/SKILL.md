@@ -28,51 +28,15 @@ version` for platform app display/build versions. Use
 
 ## Workflow
 
-1. Find the MAUI app project:
-
-   ```bash
-   grep -R -n --include="*.csproj" "<UseMaui>true</UseMaui>" .
-   ```
-
-2. Inspect target frameworks, package management, and shared build props:
-
-   ```bash
-   grep -R -n --include="*.csproj" --include="Directory.Build.props" "<TargetFramework" . 2>/dev/null
-   test -f Directory.Packages.props && grep -n "PackageVersion" Directory.Packages.props
-   ```
-
-3. Respect Central Package Management:
-   - If `Directory.Packages.props` exists, add versions there with
-     `<PackageVersion Include="..." Version="..." />`.
-   - Leave project `PackageReference` items versionless.
-4. Use MAUI single-project folders:
-   - `Resources/Images` with `MauiImage`
-   - `Resources/Fonts` with `MauiFont`
-   - `Resources/Raw` with `MauiAsset`
-   - `Platforms/Android`, `Platforms/iOS`, `Platforms/MacCatalyst`,
-     `Platforms/Windows`
-5. For app display/build version edits, use project properties:
-
-   ```xml
-   <ApplicationDisplayVersion>1.2.3</ApplicationDisplayVersion>
-   <ApplicationVersion>123</ApplicationVersion>
-   ```
-
-6. For the .NET MAUI package/workload version used by a project, use the MAUI
-   project version command. Do **not** use `maui project version` to set
-   `ApplicationDisplayVersion` or `ApplicationVersion`:
-
-   ```bash
-   maui project version --help
-   ```
-
-7. For environment issues, run:
-
-   ```bash
-   maui doctor
-   ```
-
-8. Build the edited app project for at least one target framework.
+1. Identify which file is the MAUI app project (has `<UseMaui>true</UseMaui>`).
+2. Check for Central Package Management: if `Directory.Packages.props` exists, add
+   new NuGet package versions there with `<PackageVersion Include="..." Version="..." />`,
+   and keep `PackageReference` items in the `.csproj` versionless.
+3. Use the resource folder layout and item types shown in the patterns below.
+4. For app display/build version edits, use `ApplicationDisplayVersion` and
+   `ApplicationVersion` as MSBuild properties in the `.csproj`.
+5. If environment issues arise, run `maui doctor`.
+6. Build the edited project to verify.
 
 ## Project File Patterns
 

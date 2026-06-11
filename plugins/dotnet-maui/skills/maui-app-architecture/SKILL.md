@@ -68,6 +68,10 @@ public sealed partial class DetailsViewModel : ObservableObject, IQueryAttributa
 
 ## Compiled Binding Pattern
 
+Compiled bindings with `x:DataType` give compile-time type checking, eliminate
+reflection overhead, and can provide measurable startup and scrolling performance
+improvements over reflection-based bindings.
+
 ```xml
 <ContentPage
     x:Class="MyApp.Views.ProductsPage"

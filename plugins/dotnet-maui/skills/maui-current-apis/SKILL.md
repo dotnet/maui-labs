@@ -2,14 +2,13 @@
 name: maui-current-apis
 description: >-
   Guard .NET MAUI code generation and fixes against obsolete Xamarin.Forms-era
-  APIs and version-specific MAUI API changes.   USE FOR: creating or updating MAUI XAML/C#, resolving obsolete warnings,
-  selecting the correct APIs for the project's specific TFM (do not assume
-  net10 APIs for net8 or net9 projects), replacing Xamarin.Forms or
-  Xamarin.Essentials patterns, safe area migration, Shell/window API choices,
-  and preventing deprecated agent suggestions. DO NOT USE FOR:
-  SDK/workload version discovery (use dotnet-workload-info), runtime UI inspection
-  (use maui-devflow-debug), or full Xamarin migration planning (use
-  xamarin-forms-migration when available).
+  APIs and version-specific MAUI API changes. USE FOR: creating or updating MAUI
+  XAML/C#, resolving obsolete warnings, TFM-aware API selection to avoid suggesting
+  net10+ APIs when the project targets net8 or net9, replacing Xamarin.Forms or
+  Xamarin.Essentials patterns, safe area migration (SafeAreaEdges for .NET 10+),
+  Shell/window API choices, and preventing deprecated agent suggestions. DO NOT USE
+  FOR: SDK/workload version discovery (use dotnet-workload-info), runtime UI
+  inspection (use maui-devflow-debug), or full Xamarin migration planning.
 ---
 
 # MAUI Current APIs
