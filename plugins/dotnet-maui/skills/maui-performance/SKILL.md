@@ -22,14 +22,17 @@ explain the symptom.
 
 1. Identify the symptom: startup, first page render, scrolling, navigation,
    memory, image loading, or network-bound delays.
-2. Inspect target frameworks and configuration. Prefer Release builds for
-   meaningful startup and runtime measurements.
-3. For startup, use the MAUI CLI profiling surface:
+2. If project files are available, inspect target frameworks and configuration.
+   Prefer Release builds for meaningful startup and runtime measurements.
+3. For startup, use the MAUI CLI profiling surface. Always measure Release
+   builds; Debug builds include diagnostics overhead that inflate times:
 
    ```bash
-   maui profile startup --help
+   maui profile startup --configuration Release --iterations 3 --json
    ```
 
+   Key flags: `--iterations N` (multiple runs for stability), `--device` to
+   target a specific device/emulator, `--json` for machine-readable output.
    Then run the target app with the appropriate platform/device options.
 4. For UI runtime issues, inspect visual tree depth and logs when DevFlow is
    available.
