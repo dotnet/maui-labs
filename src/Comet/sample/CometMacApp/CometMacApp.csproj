@@ -14,7 +14,7 @@
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
 		<SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
-		<MauiVersion>10.0.31</MauiVersion>
+		<MauiVersion>11.0.0-preview.5.26304.4</MauiVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
