@@ -6,8 +6,7 @@ description: >-
   DependencyService to DI, MessagingCenter replacement, renderer triage into
   mapper customizations/custom handlers/platform services/slim bindings, and
   platform parity planning. DO NOT USE FOR: brand-new MAUI apps, native SDK
-  bindings (use slim bindings), or platform backend implementation (use an
-  available platform-backend implementation skill).
+  bindings, or platform backend implementation.
 ---
 
 # Xamarin.Forms Migration

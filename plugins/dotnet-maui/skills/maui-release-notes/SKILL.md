@@ -6,9 +6,8 @@ description: >-
   move to a new .NET/MAUI release, summarizing breaking changes, Xcode/JDK/Android
   SDK requirements that affect app builds, package/workload update steps,
   migration checklists, CI updates, and app-team validation plans. DO NOT USE
-  FOR: authoring workload or manifest release notes for MAUI maintainers,
-  publishing SDK/package tables for the MAUI repo, app-store marketing copy,
-  or general debugging.
+  FOR: authoring MAUI workload release notes, SDK/package table publishing,
+  or app-store marketing copy.
 ---
 
 # MAUI Release Notes

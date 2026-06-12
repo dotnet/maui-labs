@@ -6,7 +6,7 @@ description: >-
   and net10.0-windows setup, UseMauiAppLinuxGtk4 / UseMauiAppMacOS /
   UseMauiAppWPF, AppKit instead of Mac Catalyst, and WPF/GTK/AppKit parity
   planning. DO NOT USE FOR: implementing MAUI backends, handlers, or Essentials
-  services — use a platform-backend implementation skill for that.
+  services.
 ---
 
 # MAUI Labs Platform Targeting
