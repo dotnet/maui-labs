@@ -1,11 +1,12 @@
 ---
 name: maui-essentials-ai
 description: >-
-  Adopt Microsoft.Maui.Essentials.AI in MAUI apps. USE FOR: local/on-device
-  chat, Apple Intelligence IChatClient, NL embeddings, semantic search, tool
-  use, privacy/offline architecture, and platform planning. DO NOT USE FOR:
-  source-generating AI tool bindings, cloud-only AI setup, AI debugging, or
-  non-MAUI Microsoft.Extensions.AI apps.
+  Adopt Microsoft.Maui.Essentials.AI in MAUI apps. USE FOR: Apple Intelligence
+  IChatClient registration, NLEmbeddingGenerator semantic search, local/on-device
+  chat, wiring app tools into local chat via UseFunctionInvocation, privacy/offline
+  UX, and platform fallback planning. DO NOT USE FOR: source-generating AI tool
+  bindings, cloud-only AI setup, AI debugging, or non-MAUI
+  Microsoft.Extensions.AI apps.
 ---
 
 # MAUI Essentials AI

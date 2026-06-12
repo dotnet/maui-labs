@@ -1,11 +1,12 @@
 ---
 name: maui-controls-deep-dive
 description: >-
-  Apply advanced .NET MAUI control guidance for CollectionView, safe areas,
-  gestures, animations, and GraphicsView. USE FOR: virtualization, item sizing,
-  empty/loading states, SafeAreaEdges, gestures, animation lifecycle, drawing,
-  and performance/accessibility guardrails. DO NOT USE FOR: general page layout,
-  full accessibility audits, broad profiling, or native handler implementation.
+  Apply advanced .NET MAUI control guidance. USE FOR: CollectionView incremental
+  loading, EmptyView and AutomationId patterns, SafeAreaEdges on .NET 10,
+  GraphicsView/IDrawable/Invalidate accessibility guidance, gestures, and
+  animation lifecycle/performance tradeoffs. DO NOT USE FOR: general page
+  layout, full accessibility audits, broad profiling, or native handler
+  implementation.
 ---
 
 # MAUI Controls Deep Dive

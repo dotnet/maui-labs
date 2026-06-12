@@ -1,11 +1,12 @@
 ---
 name: maui-release-notes
 description: >-
-  Generate or update maintainer-oriented MAUI workload release notes. USE FOR:
-  MAUI workload notes, SDK/workload set summaries, manifest/dependency tables,
-  Xcode/JDK/Android SDK requirements, and dotnet-workload-info data. DO NOT USE
-  FOR: app store notes, app marketing copy, general MAUI debugging, or workload
-  installation troubleshooting.
+  Write maintainer-facing .NET MAUI workload release notes. USE FOR: workload set
+  CLI to NuGet version conversion, Microsoft.NET.Workloads.* package IDs,
+  manifest/version tables, WorkloadDependencies.json requirements, install/update
+  commands, validation steps, and keeping SDK/workload notes separate from App
+  Store changelogs. DO NOT USE FOR: app release notes, app marketing copy,
+  general MAUI debugging, or workload installation troubleshooting.
 ---
 
 # MAUI Release Notes

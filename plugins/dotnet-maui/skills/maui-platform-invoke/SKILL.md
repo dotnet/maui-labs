@@ -1,11 +1,12 @@
 ---
 name: maui-platform-invoke
 description: >-
-  Add platform-specific API calls to .NET MAUI apps safely. USE FOR: partial
-  classes, conditional compilation, DI platform services, permissions,
-  manifests/Info.plist/capabilities, lifecycle hooks, and choosing services vs
-  handlers vs bindings. DO NOT USE FOR: visual native view customization, native
-  SDK binding projects, or MAUI platform backend implementation.
+  Add native platform APIs to .NET MAUI apps safely. USE FOR: IAppReviewService-style
+  DI wrappers, camera/permission flows, ConfigureLifecycleEvents with AddAndroid /
+  AddiOS / AddWindows, partial classes, manifests/Info.plist/capabilities, and
+  choosing platform services vs handlers vs slim bindings. DO NOT USE FOR: visual
+  native view customization, native SDK binding projects, or MAUI platform backend
+  implementation.
 ---
 
 # MAUI Platform Invoke
