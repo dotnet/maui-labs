@@ -1,14 +1,16 @@
 ---
 name: ios-slim-bindings
 description: >-
-  Create and update slim/native platform interop bindings for iOS in .NET MAUI and .NET for iOS projects.
-  Guides through creating Swift/Objective-C wrappers, configuring Xcode projects, generating C# API definitions,
-  and integrating native iOS libraries using the Native Library Interop (NLI) approach.
-  USE FOR: iOS bindings, xcframework integration, Swift interop, Objective
-  Sharpie, bridging native iOS SDKs to .NET, and diagnosing iOS binding runtime
-  crashes including NSInvalidArgumentException, unrecognized selector sent to
-  instance, and ObjC/Swift selector mismatch errors.
-  DO NOT USE FOR: Android bindings (use android-slim-bindings), general MAUI app development, NuGet package issues.
+  Create and debug iOS slim bindings for .NET MAUI using Swift/Objective-C
+  wrappers, XcodeGen project generation, CocoaPods static linking, Objective
+  Sharpie, C# binding definitions, and fixing runtime selector mismatches
+  (@objc(selector:) vs [Export]). USE FOR: Creating slim iOS bindings with
+  XcodeGen and Podfile, configuring static CocoaPods linking, Swift wrapper
+  class design with @objc annotations, Objective-C selector matching between
+  @objc and [Export], fixing "unrecognized selector" runtime crashes, wrapping
+  async Swift APIs with completion handlers, and integrating iOS native SDKs
+  into MAUI. DO NOT USE FOR: Android bindings (use android-slim-bindings),
+  general MAUI app development, or NuGet packaging issues.
 ---
 
 # When to use this skill
