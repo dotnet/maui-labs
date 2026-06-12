@@ -25,7 +25,7 @@ scenarios:
       native text-changed and
       focus events in OnElementChanged and removes them in Dispose. Convert the
       lifecycle idea to a MAUI custom handler with ConnectHandler and
-      DisconnectHandler.
+      DisconnectHandler, and show where PropertyMapper fits.
     assertions:
       - type: "output_contains"
         value: "ConnectHandler"

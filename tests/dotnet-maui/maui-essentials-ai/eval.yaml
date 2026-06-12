@@ -47,8 +47,9 @@ scenarios:
     prompt: |
       My local MAUI Essentials.AI chat assistant should be able to call app tools
       like searching
-      the user's garden catalog. How do I wire Microsoft.Extensions.AI tool
-      invocation, and when should I use the AI Attributes skill?
+      the user's garden catalog. How do I build the IChatClient pipeline with
+      UseFunctionInvocation and AdditionalTools, and when should I use the AI
+      Attributes skill?
     assertions:
       - type: "output_contains"
         value: "UseFunctionInvocation"

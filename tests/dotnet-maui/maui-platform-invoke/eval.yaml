@@ -28,7 +28,7 @@ scenarios:
       We are adding a MAUI platform service that invokes a small platform-specific
       camera metadata feature. What
       permission and platform file guidance should the MAUI implementation
-      include?
+      include in AndroidManifest.xml and Info.plist?
     assertions:
       - type: "output_contains"
         value: "Permissions.CheckStatusAsync"
@@ -50,7 +50,7 @@ scenarios:
       I need MAUI platform invoke lifecycle hooks to refresh native state when the
       MAUI app resumes on Android/iOS and
       configure the native Windows window when it is created. Where should this
-      code go?
+      code go in ConfigureLifecycleEvents with AddAndroid/AddiOS/AddWindows?
     assertions:
       - type: "output_contains"
         value: "ConfigureLifecycleEvents"

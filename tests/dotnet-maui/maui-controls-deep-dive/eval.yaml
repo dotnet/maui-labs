@@ -24,7 +24,9 @@ scenarios:
   - name: "Handle safe area with current API"
     prompt: |
       I am updating an edge-to-edge MAUI page for .NET 10 and want to stop using
-      hard-coded iOS top padding. What SafeAreaEdges pattern should I use?
+      hard-coded iOS top padding. What SafeAreaEdges pattern should I use
+      (Container, SoftInput, or All), and how should I validate notch/keyboard
+      cases?
     assertions:
       - type: "output_contains"
         value: "SafeAreaEdges"

@@ -1,7 +1,7 @@
 scenarios:
   - name: "Summarize upgrade notes for a MAUI app team"
     prompt: |
-      I need maui-release-notes guidance for an app team. Our .NET MAUI app is on
+      I need framework-upgrade guidance for an app team. Our .NET MAUI app is on
       .NET 9 today and we're considering the current
       .NET 10 MAUI release. I need upgrade notes for the app team, not MAUI SDK
       maintainers. What should I extract from the release notes about breaking
@@ -25,7 +25,7 @@ scenarios:
 
   - name: "Turn MAUI release notes into repo and CI action items"
     prompt: |
-      I own a MAUI app repo and need maui-release-notes guidance for upgrading our
+      I own a MAUI app repo and need framework-upgrade guidance for upgrading our
       team from one MAUI
       release to the next. We pin the SDK in global.json and install workloads in
       CI. What should the upgrade notes capture for app developers and build
@@ -48,7 +48,7 @@ scenarios:
 
   - name: "Keep framework upgrade notes separate from store changelog"
     prompt: |
-      In maui-release-notes scope, a teammate mixed our shopping app's App Store
+      In framework-upgrade planning scope, a teammate mixed our shopping app's App Store
       release notes into a draft
       about upgrading the app to a new .NET MAUI release. How should I separate
       framework upgrade notes from customer-facing app release notes?
