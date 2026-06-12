@@ -1,62 +1,64 @@
 scenarios:
-  - name: "Draft workload release notes from live data"
+  - name: "Summarize upgrade notes for a MAUI app team"
     prompt: |
-      I need maintainer release notes for the current .NET 10 MAUI workload. I
-      care about workload set version, manifest versions, Xcode/JDK/Android SDK
-      requirements, and validation commands. What data collection and note shape
-      should I use?
+      Our .NET MAUI app is on .NET 9 today and we're considering the current
+      .NET 10 MAUI release. I need upgrade notes for the app team, not MAUI SDK
+      maintainers. What should I extract from the release notes about breaking
+      changes, Xcode/JDK/Android SDK requirements, CI changes, and post-upgrade
+      validation?
     assertions:
       - type: "output_matches"
-        pattern: "workload set|manifest versions|WorkloadDependencies\\.json"
-      - type: "output_contains"
-        value: "WorkloadDependencies.json"
+        pattern: "breaking changes|known issues|upgrade"
       - type: "output_matches"
-        pattern: "known issues|breaking changes|installation|validation"
+        pattern: "Xcode|JDK|Android SDK|workload"
       - type: "output_matches"
-        pattern: "manifest|workload set"
+        pattern: "CI|global\\.json|pipeline|build"
+      - type: "output_matches"
+        pattern: "validation|smoke test|regression"
     rubric:
-      - "Routes live workload discovery to dotnet-workload-info"
-      - "Collects workload set and manifest versions before drafting notes"
-      - "Gets platform requirements from WorkloadDependencies.json"
-      - "Includes install/update and validation sections in the release note shape"
+      - "Frames the answer for an app team evaluating an upgrade, not for MAUI SDK maintainers"
+      - "Calls out app-facing breaking changes, environment requirements, and CI impact"
+      - "Uses dotnet-workload-info for exact live version or dependency requirements when needed"
+      - "Includes a concrete post-upgrade validation plan"
     timeout: 240
 
-  - name: "Convert workload set version for release note links"
+  - name: "Turn MAUI release notes into repo and CI action items"
     prompt: |
-      The workload set CLI version for a release is 10.0.103. I need release
-      notes that include the NuGet package ID/version and a table of workload
-      data. What conversion should I document?
+      I own a MAUI app repo and need notes for upgrading our team from one MAUI
+      release to the next. We pin the SDK in global.json and install workloads in
+      CI. What should the upgrade notes capture for app developers and build
+      engineers?
     assertions:
       - type: "output_matches"
-        pattern: "10\\.103\\.0"
+        pattern: "global\\.json|SDK"
       - type: "output_matches"
-        pattern: "Microsoft\\.NET\\.Workloads\\.10\\.0\\.100"
+        pattern: "dotnet workload (install|update)|workload set|CI"
       - type: "output_matches"
-        pattern: "SDK band|10\\.0\\.100"
+        pattern: "Xcode|JDK|Android SDK|tooling"
       - type: "output_matches"
-        pattern: "markdown table|\\|.*\\||WorkloadManifest"
+        pattern: "smoke test|device|simulator|validation"
     rubric:
-      - "Converts CLI version 10.0.103 to NuGet version 10.103.0"
-      - "Identifies Microsoft.NET.Workloads.10.0.100 as the workload set package ID"
-      - "Explains the SDK band relationship"
-      - "Places version data into a release-note table"
+      - "Translates framework release notes into repo and CI actions for an app team"
+      - "Mentions SDK pinning, workload updates, and environment/tooling changes"
+      - "Keeps the focus on app adoption guidance instead of manifest/package publishing details"
+      - "Includes validation steps for builds and critical app flows"
     timeout: 240
 
-  - name: "Keep maintainer workload notes separate from app notes"
+  - name: "Keep framework upgrade notes separate from store changelog"
     prompt: |
-      A teammate asked me to update MAUI release notes for SDK consumers, but
-      they also pasted a sample mobile app's App Store changelog. How should I
-      keep the workload notes focused?
+      A teammate mixed our shopping app's App Store release notes into a draft
+      about upgrading the app to a new .NET MAUI release. How should I separate
+      framework upgrade notes from customer-facing app release notes?
     assertions:
       - type: "output_matches"
-        pattern: "known issues|breaking changes|requirements"
+        pattern: "(?i)app store|play store|customer-facing"
       - type: "output_matches"
-        pattern: "WorkloadDependencies\\.json|WorkloadManifest|manifest data"
+        pattern: "(?i)separate|out of scope|different audience"
       - type: "output_matches"
-        pattern: "(?i)app store.*(separate|out of scope|not workload)|(?:separate|out of scope|not workload).*app store|workload notes.*SDK consumers"
+        pattern: "upgrade|breaking changes|requirements|validation|known issues"
     rubric:
-      - "Keeps release notes focused on MAUI workload/platform data for SDK consumers"
-      - "Separates app-store or marketing changelog content from workload release notes"
-      - "Uses live workload discovery for versions and requirements"
-      - "Includes known issues, breaking changes, and validation when data is available"
+      - "Separates customer-facing store notes from developer-facing framework upgrade guidance"
+      - "Keeps the upgrade notes focused on app risks, requirements, and testing"
+      - "Does not drift into MAUI SDK maintainer release-note structure"
+      - "Explains the distinct audiences and purposes of the two note types"
     timeout: 240

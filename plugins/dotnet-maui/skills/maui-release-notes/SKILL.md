@@ -1,112 +1,108 @@
 ---
 name: maui-release-notes
 description: >-
-  Write maintainer-facing .NET MAUI workload release notes. USE FOR: workload set
-  CLI to NuGet version conversion, Microsoft.NET.Workloads.* package IDs,
-  manifest/version tables, WorkloadDependencies.json requirements, install/update
-  commands, validation steps, and keeping SDK/workload notes separate from App
-  Store changelogs. DO NOT USE FOR: app release notes, app marketing copy,
-  general MAUI debugging, or workload installation troubleshooting.
+  Help .NET MAUI app teams read official .NET/MAUI release notes and turn them
+  into an upgrade plan for their app. USE FOR: deciding whether an app should
+  move to a new .NET/MAUI release, summarizing breaking changes, Xcode/JDK/Android
+  SDK requirements that affect app builds, package/workload update steps,
+  migration checklists, CI updates, and app-team validation plans. DO NOT USE
+  FOR: authoring workload or manifest release notes for MAUI maintainers,
+  publishing SDK/package tables for the MAUI repo, app-store marketing copy,
+  or general debugging.
 ---
 
 # MAUI Release Notes
 
-Use this skill narrowly for maintainers writing .NET MAUI workload or package
-release notes. The notes must be grounded in live workload/package data, not
-hardcoded guesses.
+Use this skill when an app team needs to answer: "What does this .NET or MAUI
+release mean for our app?" Focus on adoption guidance for app developers, QA,
+and CI owners rather than on shipping the MAUI SDK itself.
 
-## Required Inputs
+## Typical Inputs
 
-- Target .NET channel and SDK band, such as `10.0` / `10.0.100`.
-- Current release SDK or workload set version.
-- Previous release version for comparison when producing deltas.
-- Release scope: workload manifests, MAUI NuGet packages, platform dependency
-  requirements, known issues, or all of these.
+- The app's current .NET version, workload set, and MAUI package baseline.
+- The target release the team is considering.
+- Platforms in scope: Android, iOS, Mac Catalyst, macOS, Windows.
+- Whether the output should be a short summary, an upgrade checklist, or rollout
+  guidance.
 
-If version data is missing, use `dotnet-workload-info` before drafting.
+If exact workload, package, Xcode, JDK, or Android SDK version data is missing,
+use `dotnet-workload-info` to confirm it. Use live version discovery to support
+app upgrade planning, not to dump maintainer-only manifest data unless the user
+explicitly asks for it.
 
-## Data Collection Workflow
+## What to Extract from Release Notes
 
-1. Query live workload data with `dotnet-workload-info`:
-   - latest SDK;
-   - workload set CLI version;
-   - workload set NuGet package/version;
-   - MAUI, iOS, Android, Mac Catalyst, macOS, and other relevant manifest
-     versions;
-   - `WorkloadDependencies.json` contents for Xcode, JDK, Android SDK packages,
-     and related requirements.
-2. Query latest MAUI package versions when the notes mention out-of-band packages:
-   `Microsoft.Maui.Controls`, `Microsoft.Maui.Essentials`,
-   `Microsoft.Maui.Graphics`, and product-specific packages.
-3. Compare previous and current versions. Separate:
-   - requirement changes;
-   - package/manifest version changes;
-   - behavior changes;
-   - known issues and mitigations;
-   - validation steps.
-4. Pull change summaries from authoritative repo release notes, merged PRs, or
-   curated maintainer notes when available. Do not invent feature descriptions
-   from version numbers alone.
-5. Draft concise notes with commands and exact version tables.
+1. Breaking changes or deprecations that affect app code, project files, or
+   deployment.
+2. Required environment updates such as Xcode, JDK, Android SDK, Visual Studio,
+   or workload-set changes that affect building or shipping the app.
+3. MAUI package, workload, or CI updates the app repo needs.
+4. Known issues, regressions, or unsupported combinations that could block the
+   upgrade.
+5. Validation work the app team should plan after the upgrade.
+6. Rollback considerations if the new release introduces app-specific risk.
 
-## Suggested Release Note Shape
+## Recommended Workflow
+
+1. Establish the app's current baseline: target framework, workloads, packages,
+   CI image/tooling, and supported platforms.
+2. Read the official .NET and MAUI release notes for the target release.
+3. Pull only the changes that are relevant to app builders: environment
+   requirements, app-facing breaking changes, tooling shifts, and known issues.
+4. Use `dotnet-workload-info` when the team needs exact upgrade commands or
+   authoritative workload dependency requirements.
+5. Translate the release into app-specific actions, risks, and tests instead of
+   repeating framework internals.
+
+## Suggested Output Shape
 
 ````markdown
-# .NET MAUI workload release notes for <version>
+# Upgrade notes for <app/team> adopting .NET MAUI <version>
 
-## Highlights
+## Should we upgrade now?
+- Recommendation
+- Main benefits
+- Main risks or blockers
 
-## Install or update
+## What changes for our app?
+- Breaking or behavior changes that touch app code, project files, CI, or dependencies
 
-```bash
-dotnet workload install maui --version <workload-set-version>
-dotnet workload update --version <workload-set-version>
-```
+## Required environment updates
+- Xcode / JDK / Android SDK / workloads / IDE requirements
 
-## Workload and manifest versions
+## Repo and CI changes
+- global.json, workload install/update, package pinning, CI image/tooling updates
 
-| Workload | Manifest version | SDK band |
-| --- | --- | --- |
+## Validation checklist
+- Clean restore/build
+- Device or simulator smoke tests
+- Critical app flows such as auth, notifications, payments, deep links, or media
+- Archive, signing, and store submission checks if relevant
 
-## Platform requirements
+## Known issues and mitigations
 
-| Platform | Requirement | Version/range |
-| --- | --- | --- |
-
-## MAUI packages
-
-| Package | Version |
-| --- | --- |
-
-## Breaking changes and known issues
-
-## Validation
+## Rollback plan
 ````
 
-Adjust headings to the repository's existing release-note template if one exists.
-
-## Version Rules
-
-- Convert workload set CLI versions to NuGet package versions using the
-  `dotnet-workload-info` skill's conversion rules.
-- Include SDK band with manifest versions.
-- Include exact NuGet or blob URLs only when useful for reproducibility.
-- Prefer version ranges from `WorkloadDependencies.json` over prose guesses.
-- State "not found" or "not changed" when the data source confirms it.
+Only include manifest or package-version tables when the user explicitly asks
+for that level of detail.
 
 ## Guardrails
 
-- Do not hardcode current Xcode/JDK/Android SDK requirements from memory.
-- Do not claim workload install commands were tested unless they were.
-- Do not mix app release notes with workload/platform release notes.
-- Do not summarize all MAUI changes as "performance improvements" without
-  source-backed details.
-- Keep maintainer notes actionable for SDK, CI, and workload consumers.
+- Do not write from the perspective of MAUI workload maintainers.
+- Do not default to manifest tables, package internals, or repo publishing notes
+  unless the user asks for them.
+- Keep App Store or Play Store marketing notes separate from framework upgrade
+  notes.
+- Do not recommend an upgrade until platform and tooling prerequisites are
+  confirmed.
+- Prefer official release notes and linked issues over memory or guesses.
 
 ## Validation Checklist
 
-- Live workload/package data was queried or provided by the user.
-- Current and previous versions are clearly identified.
-- Dependency requirements come from workload manifests.
-- Install/update commands use the correct workload set version.
-- Known issues and breaking changes are sourced or explicitly marked unknown.
+- The output is framed for app builders, QA, and CI owners.
+- App-facing changes are called out separately from framework internals.
+- Environment prerequisites match the platforms the app ships.
+- Upgrade commands and CI guidance align with the target release.
+- Known issues, mitigations, and validation steps are concrete enough for a real
+  app rollout.
