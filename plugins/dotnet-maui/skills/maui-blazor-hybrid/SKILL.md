@@ -10,8 +10,8 @@ description: >-
   message contracts, JsonSerializerContext/System.Text.Json source generation,
   wwwroot assets, JavaScript interop, hybrid auth/data handoff, stale DOM or
   Razor route debugging, and WebView CDP inspection with maui_cdp_webviews,
-  maui_cdp_source, and maui_cdp_evaluate. DO NOT USE FOR: pure native XAML UI
-  (use maui-ui-patterns), authentication design by itself (use
+  maui_cdp_source, maui_cdp_evaluate, maui_cdp_screenshot, and maui_logs. DO
+  NOT USE FOR: pure native XAML UI (use maui-ui-patterns), authentication design by itself (use
   maui-auth-secure-storage), or generic browser web apps.
 ---
 
@@ -39,8 +39,11 @@ inside a native app.
    answer with only raw strings or `DynamicDependency`.
 7. Review trimming and NativeAOT risks for reflection, serialization, and JS
    interop payloads.
-8. Use DevFlow CDP tools to inspect WebView DOM, console, screenshots, and route
-   state when debugging.
+8. Use DevFlow CDP tools to inspect WebView DOM, console logs, CDP screenshots,
+   and route state when debugging. For Blazor Hybrid stale route/DOM answers,
+   explicitly name `maui_cdp_webviews`, `maui_cdp_source` or
+   `maui_cdp_evaluate`, and at least one evidence tool: `maui_cdp_screenshot`
+   or `maui_logs`.
 
 ## BlazorWebView Pattern
 
@@ -158,8 +161,12 @@ builder.Services.AddBlazorWebViewDeveloperTools();
 
 Relevant MCP tools include `maui_cdp_webviews`, `maui_cdp_source`,
 `maui_cdp_evaluate`, `maui_cdp_screenshot`, and `maui_logs`. Inspect the active
-WebView before evaluating route-specific DOM or JavaScript. Do not ship release
-builds with WebView devtools or CDP access enabled.
+WebView before evaluating route-specific DOM or JavaScript. When the issue is
+stale Blazor route state or DOM, include `maui_cdp_screenshot` for WebView
+visual evidence and/or `maui_logs` for Blazor rendering or WebView console
+errors; do not substitute only the generic app-level `maui_screenshot` for CDP
+WebView evidence. Do not ship release builds with WebView devtools or CDP access
+enabled.
 
 ## Validation Checklist
 
@@ -170,4 +177,5 @@ builds with WebView devtools or CDP access enabled.
   another explicit `System.Text.Json` source-generated path when trimming-safe
   serialization matters.
 - Release/trimming-sensitive code avoids unpreserved reflection.
-- DevFlow CDP inspection targets the correct WebView and route.
+- DevFlow CDP inspection targets the correct WebView and route, and route/DOM
+  debugging guidance names `maui_cdp_screenshot` or `maui_logs` for evidence.
