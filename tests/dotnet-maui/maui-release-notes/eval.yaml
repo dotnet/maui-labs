@@ -1,7 +1,8 @@
 scenarios:
   - name: "Summarize upgrade notes for a MAUI app team"
     prompt: |
-      Our .NET MAUI app is on .NET 9 today and we're considering the current
+      I need maui-release-notes guidance for an app team. Our .NET MAUI app is on
+      .NET 9 today and we're considering the current
       .NET 10 MAUI release. I need upgrade notes for the app team, not MAUI SDK
       maintainers. What should I extract from the release notes about breaking
       changes, Xcode/JDK/Android SDK requirements, CI changes, and post-upgrade
@@ -24,10 +25,11 @@ scenarios:
 
   - name: "Turn MAUI release notes into repo and CI action items"
     prompt: |
-      I own a MAUI app repo and need notes for upgrading our team from one MAUI
+      I own a MAUI app repo and need maui-release-notes guidance for upgrading our
+      team from one MAUI
       release to the next. We pin the SDK in global.json and install workloads in
       CI. What should the upgrade notes capture for app developers and build
-      engineers?
+      engineers, and when should I use dotnet-workload-info for exact versions?
     assertions:
       - type: "output_matches"
         pattern: "global\\.json|SDK"
@@ -46,7 +48,8 @@ scenarios:
 
   - name: "Keep framework upgrade notes separate from store changelog"
     prompt: |
-      A teammate mixed our shopping app's App Store release notes into a draft
+      In maui-release-notes scope, a teammate mixed our shopping app's App Store
+      release notes into a draft
       about upgrading the app to a new .NET MAUI release. How should I separate
       framework upgrade notes from customer-facing app release notes?
     assertions:

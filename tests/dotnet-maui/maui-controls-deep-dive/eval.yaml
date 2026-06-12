@@ -1,7 +1,8 @@
 scenarios:
   - name: "Build performant incremental CollectionView"
     prompt: |
-      My MAUI orders screen has thousands of records. I need a CollectionView
+      I need MAUI controls deep-dive guidance for an orders screen with thousands
+      of records. I need a CollectionView
       pattern with loading, empty state, incremental loading, and UI automation
       hooks.
     assertions:
@@ -23,7 +24,7 @@ scenarios:
   - name: "Handle safe area with current API"
     prompt: |
       I am updating an edge-to-edge MAUI page for .NET 10 and want to stop using
-      hard-coded iOS top padding. What safe area pattern should I use?
+      hard-coded iOS top padding. What SafeAreaEdges pattern should I use?
     assertions:
       - type: "output_contains"
         value: "SafeAreaEdges"
@@ -42,7 +43,8 @@ scenarios:
 
   - name: "Design accessible GraphicsView drawing"
     prompt: |
-      I need a MAUI GraphicsView chart that updates as sensor values arrive.
+      I need MAUI controls deep-dive guidance for a GraphicsView chart that
+      updates as sensor values arrive.
       What drawing and accessibility guardrails should I follow?
     assertions:
       - type: "output_contains"

@@ -1,9 +1,10 @@
 scenarios:
   - name: "Wrap app review platform API behind DI"
     prompt: |
-      My MAUI app needs to trigger the native app review prompt on iOS and
+      For MAUI platform invoke, my MAUI app needs to trigger the native app
+      review prompt on iOS and
       Android. I don't want platform-specific code scattered through view
-      models. How should I structure it?
+      models. How should I structure it as a DI platform service abstraction?
     assertions:
       - type: "output_contains"
         value: "IAppReviewService"
@@ -24,7 +25,8 @@ scenarios:
 
   - name: "Request permission before invoking native camera API"
     prompt: |
-      We are adding a small platform-specific camera metadata feature. What
+      We are adding a MAUI platform service that invokes a small platform-specific
+      camera metadata feature. What
       permission and platform file guidance should the MAUI implementation
       include?
     assertions:
@@ -45,7 +47,8 @@ scenarios:
 
   - name: "Use lifecycle hooks for native state"
     prompt: |
-      I need to refresh native state when the MAUI app resumes on Android/iOS and
+      I need MAUI platform invoke lifecycle hooks to refresh native state when the
+      MAUI app resumes on Android/iOS and
       configure the native Windows window when it is created. Where should this
       code go?
     assertions:

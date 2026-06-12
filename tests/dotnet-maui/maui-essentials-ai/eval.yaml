@@ -1,7 +1,8 @@
 scenarios:
   - name: "Register local Apple Intelligence chat"
     prompt: |
-      I want my MAUI app to use local on-device chat on supported Apple devices
+      I want my MAUI app to use Microsoft.Maui.Essentials.AI local on-device chat
+      on supported Apple devices
       through Microsoft.Extensions.AI abstractions. What package and registration
       should I use, and what platform caveat should I show in the UI?
     assertions:
@@ -22,7 +23,8 @@ scenarios:
 
   - name: "Build local semantic search with embeddings"
     prompt: |
-      I have private notes in a MAUI app and want local semantic search without
+      I have private notes in a MAUI app and want local semantic search with
+      NLEmbeddingGenerator without
       sending them to a cloud model. How should I use the Essentials AI embedding
       generator and store/search the results?
     assertions:
@@ -43,7 +45,8 @@ scenarios:
 
   - name: "Add app tools to local chat client"
     prompt: |
-      My local MAUI chat assistant should be able to call app tools like searching
+      My local MAUI Essentials.AI chat assistant should be able to call app tools
+      like searching
       the user's garden catalog. How do I wire Microsoft.Extensions.AI tool
       invocation, and when should I use the AI Attributes skill?
     assertions:

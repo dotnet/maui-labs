@@ -16,6 +16,14 @@ Use this skill when an app team needs to answer: "What does this .NET or MAUI
 release mean for our app?" Focus on adoption guidance for app developers, QA,
 and CI owners rather than on shipping the MAUI SDK itself.
 
+## Response Checklist
+
+- Keep the audience app-focused: repo owners, app developers, QA, and CI owners.
+- Convert release notes into concrete app actions (SDK/workload/tooling updates,
+  risks, and validation plan), not maintainer publishing tasks.
+- Use `dotnet-workload-info` when exact workload or environment dependency data
+  is needed.
+
 ## Typical Inputs
 
 - The app's current .NET version, workload set, and MAUI package baseline.

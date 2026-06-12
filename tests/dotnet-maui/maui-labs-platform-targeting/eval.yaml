@@ -1,7 +1,8 @@
 scenarios:
   - name: "Add Linux GTK4 head project"
     prompt: |
-      I have a normal MAUI app and want to try the experimental MAUI Labs Linux
+      I need MAUI Labs platform targeting guidance. I have a normal MAUI app and
+      want to try the experimental MAUI Labs Linux
       GTK4 backend without pretending there is an official net10.0-linux MAUI
       TFM. What project shape and commands should I use?
     assertions:
@@ -22,7 +23,8 @@ scenarios:
 
   - name: "Choose AppKit instead of Mac Catalyst"
     prompt: |
-      Our desktop app needs native macOS AppKit behavior instead of Mac Catalyst.
+      For MAUI Labs platform targeting, our desktop app needs native macOS AppKit
+      behavior instead of Mac Catalyst.
       How do we target the MAUI Labs AppKit backend and keep platform conditionals
       straight?
     assertions:
@@ -43,7 +45,8 @@ scenarios:
 
   - name: "Target WPF backend from MAUI Labs"
     prompt: |
-      I want to run a MAUI app as a WPF desktop app using the MAUI Labs backend.
+      For MAUI Labs platform targeting, I want to run a MAUI app as a WPF desktop
+      app using the MAUI Labs backend.
       What template or manual project setup should I use?
     assertions:
       - type: "output_contains"

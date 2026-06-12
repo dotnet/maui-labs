@@ -15,6 +15,14 @@ Use this skill when the user is already working with MAUI controls and needs
 details beyond basic layout guidance. Keep control choices aligned with current
 MAUI APIs.
 
+## Response Checklist
+
+- For list scenarios, prefer `CollectionView` with `EmptyView`,
+  `RemainingItemsThreshold`, and stable `AutomationId` hooks.
+- For edge-to-edge scenarios, call out `.NET 10` `SafeAreaEdges` values.
+- For `GraphicsView`, keep `IDrawable.Draw` hot-path guidance and add semantic
+  alternatives (`SemanticProperties` / accessible companion UI).
+
 ## Workflow
 
 1. Inspect the target framework and whether the UI is XAML, C# Markup, or another

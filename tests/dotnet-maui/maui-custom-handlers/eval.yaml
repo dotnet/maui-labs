@@ -1,9 +1,10 @@
 scenarios:
   - name: "Scope an Entry mapper customization"
     prompt: |
-      In a MAUI app I only want BorderlessEntry controls to remove the native
+      In a MAUI custom handlers scenario, I only want BorderlessEntry controls to
+      remove the native
       border/underline. Show how to implement this as a handler mapper without
-      changing every Entry in the app.
+      changing every Entry in the app using EntryHandler.Mapper.AppendToMapping.
     assertions:
       - type: "output_matches"
         pattern: "EntryHandler\\.Mapper\\.AppendToMapping|AppendToMapping"
@@ -20,9 +21,11 @@ scenarios:
 
   - name: "Migrate renderer event cleanup"
     prompt: |
-      I have a Xamarin.Forms renderer that subscribes to native text-changed and
+      I have a Xamarin.Forms renderer-to-handler migration that subscribes to
+      native text-changed and
       focus events in OnElementChanged and removes them in Dispose. Convert the
-      lifecycle idea to a MAUI custom handler.
+      lifecycle idea to a MAUI custom handler with ConnectHandler and
+      DisconnectHandler.
     assertions:
       - type: "output_contains"
         value: "ConnectHandler"
@@ -41,7 +44,8 @@ scenarios:
 
   - name: "Create handler with property and command mappers"
     prompt: |
-      I am building a custom VideoPlayer MAUI control with Source, IsLooping,
+      I am building a custom VideoPlayer MAUI control using a custom ViewHandler
+      with Source, IsLooping,
       and Play/Pause/Stop commands. What should the handler structure look like?
     assertions:
       - type: "output_contains"

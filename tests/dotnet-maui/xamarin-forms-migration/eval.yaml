@@ -1,7 +1,8 @@
 scenarios:
   - name: "Audit migration blockers before porting"
     prompt: |
-      I inherited a Xamarin.Forms 5 app with DependencyService calls,
+      I need a Xamarin.Forms migration audit before porting to .NET MAUI. I
+      inherited a Xamarin.Forms 5 app with DependencyService calls,
       MessagingCenter messages, three custom renderers, and platform projects for
       Android and iOS. I need an audit plan before we start moving code to .NET
       MAUI.
@@ -23,7 +24,8 @@ scenarios:
 
   - name: "Move Xamarin.Forms app into a new MAUI project"
     prompt: |
-      We are moving a Xamarin.Forms app to .NET MAUI and want to avoid dragging
+      We are doing a fresh-project Xamarin.Forms to .NET MAUI migration and want
+      to avoid dragging
       old project file cruft forward. What new-project migration workflow should
       we use, and what namespaces/APIs should we update while copying code?
     assertions:
@@ -44,7 +46,8 @@ scenarios:
 
   - name: "Choose handlers, platform services, or slim bindings"
     prompt: |
-      During migration we found a renderer that only removes an Entry underline,
+      During Xamarin.Forms migration we are doing renderer-to-handler triage. We
+      found a renderer that only removes an Entry underline,
       another renderer that wraps a custom camera preview, and an iOS/Android
       native payment SDK used by platform services. How should we split the work?
     assertions:

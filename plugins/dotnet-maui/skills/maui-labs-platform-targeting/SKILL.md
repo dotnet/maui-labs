@@ -15,6 +15,14 @@ Use this skill when an app developer wants to run a MAUI app on experimental
 MAUI Labs backends such as Linux GTK4, native macOS AppKit, or WPF. This is for
 consuming backends, not implementing them.
 
+## Response Checklist
+
+- Keep backend terms explicit: `maui-linux-gtk4`, `maui-macos`, `maui-wpf`.
+- Show the hosting call for the selected backend (`UseMauiAppLinuxGtk4`,
+  `UseMauiAppMacOS`, or `UseMauiAppWPF`).
+- Distinguish AppKit (`MACOS`) from Mac Catalyst and call out experimental parity
+  validation.
+
 ## Workflow
 
 1. Confirm the app target: Linux GTK4, macOS AppKit, WPF, or a comparison between

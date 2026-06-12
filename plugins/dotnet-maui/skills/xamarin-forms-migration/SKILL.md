@@ -15,6 +15,14 @@ Use this skill to move a Xamarin.Forms app to .NET MAUI without blindly copying
 obsolete patterns. Treat migration as an audit and phased rebuild on a fresh
 MAUI project unless the user explicitly needs a small tactical port.
 
+## Response Checklist
+
+- Call out the migration audit first (`DependencyService`, `MessagingCenter`,
+  custom renderers/effects, permissions, and platform capabilities).
+- Prefer a fresh MAUI project workflow and `MauiProgram.cs` DI setup.
+- Explicitly classify renderer replacements into mapper customization, custom
+  handler, platform service, or slim binding.
+
 ## Migration Tooling
 
 Before migrating manually, check whether the .NET Upgrade Assistant can cover

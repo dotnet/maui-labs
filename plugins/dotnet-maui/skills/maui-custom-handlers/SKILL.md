@@ -16,6 +16,14 @@ Use this skill when a MAUI visual element needs native platform behavior. Keep
 handlers focused on views. Route non-visual APIs to platform services and route
 large native SDK surfaces to slim bindings.
 
+## Response Checklist
+
+- Use handler language explicitly: `AppendToMapping`, `PropertyMapper`,
+  `CommandMapper`, and `ViewHandler`.
+- For renderer migration, map subscription/setup to `ConnectHandler` and cleanup
+  to `DisconnectHandler`.
+- Keep mapper changes scoped to the intended control type, not all controls.
+
 ## Decision Tree
 
 | Need | Prefer |

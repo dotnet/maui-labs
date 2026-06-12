@@ -15,6 +15,15 @@ Use this skill when a MAUI app needs platform APIs that are not already exposed
 by a cross-platform MAUI API. Prefer small, testable abstractions over scattered
 `#if` blocks.
 
+## Response Checklist
+
+- Define a DI abstraction first (for example `IAppReviewService`) and inject it
+  into app services or view models.
+- Mention required permission flow and platform metadata files
+  (`AndroidManifest.xml`, `Info.plist`, capabilities/entitlements).
+- Put lifecycle guidance in `ConfigureLifecycleEvents` (`AddAndroid`, `AddiOS`,
+  `AddWindows`) instead of page constructors.
+
 ## Choose the Right Extension Point
 
 | Need | Prefer |

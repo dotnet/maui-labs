@@ -14,6 +14,16 @@ description: >-
 Use this skill when a MAUI app should use on-device AI through
 `Microsoft.Maui.Essentials.AI` and `Microsoft.Extensions.AI` abstractions.
 
+## Response Checklist
+
+- Mention the package and primary types explicitly:
+  `Microsoft.Maui.Essentials.AI`, `AppleIntelligenceChatClient`,
+  `NLEmbeddingGenerator`.
+- Keep platform support explicit (Apple chat support is iOS/macOS/Mac Catalyst
+  26+; embeddings have broader Apple OS coverage).
+- For app tools, show `UseFunctionInvocation` and route source-generated tool
+  definitions to `maui-ai-tool-bindings` when appropriate.
+
 ## Platform Support
 
 Chat support:
