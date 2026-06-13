@@ -82,6 +82,20 @@ namespace Comet.DevTools
 			if (method is null)
 				return;
 
+			// Screenshot returns binary PNG, not JSON.
+			var bare = path;
+			var qi = bare.IndexOf('?');
+			if (qi >= 0) bare = bare.Substring(0, qi);
+			if (method == "GET" && (bare == "/api/v1/ui/screenshot" || bare == "/screenshot"))
+			{
+				var png = RunOnMainBytes(() => CometDevRegistry.ScreenshotProvider?.Invoke());
+				if (png is { Length: > 0 })
+					WriteBinaryResponse(stream, png, "image/png");
+				else
+					WriteResponse(stream, 503, "{\"ok\":false,\"error\":\"no screenshot provider\"}");
+				return;
+			}
+
 			string json;
 			int status = 200;
 			try
@@ -95,6 +109,28 @@ namespace Comet.DevTools
 			}
 
 			WriteResponse(stream, status, json);
+		}
+
+		byte[]? RunOnMainBytes(Func<byte[]?> work)
+		{
+			var tcs = new TaskCompletionSource<byte[]?>();
+			_dispatchToMain(() =>
+			{
+				try { tcs.SetResult(work()); }
+				catch { tcs.SetResult(null); }
+			});
+			try { return tcs.Task.GetAwaiter().GetResult(); }
+			catch { return null; }
+		}
+
+		static void WriteBinaryResponse(NetworkStream stream, byte[] payload, string contentType)
+		{
+			var head = $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\n" +
+				$"Content-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
+			var headBytes = Encoding.ASCII.GetBytes(head);
+			stream.Write(headBytes, 0, headBytes.Length);
+			stream.Write(payload, 0, payload.Length);
+			stream.Flush();
 		}
 
 		string Route(string method, string path, string body)

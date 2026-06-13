@@ -25,6 +25,9 @@ namespace Comet.Platform.SwiftUI
 
 		public UIViewController CreateController(View view)
 		{
+			// Let the dev agent's /ui/screenshot endpoint snapshot the rendered SwiftUI window.
+			Comet.DevTools.CometDevRegistry.ScreenshotProvider = () => CometSwiftUIHost.ScreenshotPng()?.ToArray();
+
 			var root = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context);
 			var controller = CometSwiftUIHost.HostController(root.Native);
 

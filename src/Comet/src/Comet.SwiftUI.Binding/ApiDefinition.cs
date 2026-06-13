@@ -62,6 +62,10 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("measureNode:maxWidth:maxHeight:")]
 		CoreGraphics.CGSize MeasureNode(CometNode node, double maxWidth, double maxHeight);
 
+		[Static, Export("screenshotPNG")]
+		[return: NullAllowed]
+		Foundation.NSData ScreenshotPng();
+
 		[Static, Export("hostControllerForRoot:")]
 		UIViewController HostController(CometNode root);
 	}

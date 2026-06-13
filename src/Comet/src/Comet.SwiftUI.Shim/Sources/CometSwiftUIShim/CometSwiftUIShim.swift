@@ -138,6 +138,29 @@ import SwiftUI
     public static func hostController(_ root: CometNode) -> UIViewController {
         return UIHostingController(rootView: CometNodeView(node: root))
     }
+
+    // In-app screenshot (DevFlow/ailoha style): renders the key window to a PNG, so external
+    // tooling can fetch the rendered UI over the agent connection (works on a physical device
+    // via USB port-forward, no Developer Disk Image needed). Must be called on the main thread.
+    @objc(screenshotPNG)
+    public static func screenshotPNG() -> Data? {
+        guard let window = activeKeyWindow() else { return nil }
+        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
+        let image = renderer.image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        return image.pngData()
+    }
+
+    static func activeKeyWindow() -> UIWindow? {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let ws = scene as? UIWindowScene else { continue }
+            if let kw = ws.windows.first(where: { $0.isKeyWindow }) ?? ws.windows.first {
+                return kw
+            }
+        }
+        return nil
+    }
 }
 
 // The leaf control for a node (no children, no layout). Used for rendering leaves and, via

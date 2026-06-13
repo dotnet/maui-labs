@@ -38,6 +38,13 @@ namespace Comet.DevTools
 		/// <summary>When false, <see cref="Register"/> is a no-op (production default).</summary>
 		public static bool Enabled { get; set; }
 
+		/// <summary>
+		/// Optional platform hook that renders the current UI to a PNG (DevFlow-style in-app
+		/// screenshot). Set by the backend (e.g. the SwiftUI host); invoked on the UI thread by
+		/// the agent's <c>/ui/screenshot</c> endpoint. Null when the platform can't snapshot.
+		/// </summary>
+		public static Func<byte[]?>? ScreenshotProvider { get; set; }
+
 		/// <summary>Drops all tracked nodes (e.g. before a fresh root mount).</summary>
 		public static void Reset()
 		{
