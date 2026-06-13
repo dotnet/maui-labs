@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 3 gate: a pure .NET iOS app (no MAUI) that renders a SwiftUI view driven
+       from C# via the CometSwiftUIShim binding. The iOS analog of CometComposeProbe. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+    <RootNamespace>CometSwiftUIProbe</RootNamespace>
+    <ApplicationId>com.comet.swiftuiprobe</ApplicationId>
+    <ApplicationTitle>CometSwiftUI</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comet.SwiftUI.Binding\Comet.SwiftUI.Binding.csproj" />
+  </ItemGroup>
+
+  <!-- Link + embed the Swift framework directly in the app so the static registrar's
+       hard reference to _OBJC_CLASS_$_CometSwiftUIHost resolves. -->
+  <ItemGroup>
+    <NativeReference Include="..\..\src\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework">
+      <Kind>Framework</Kind>
+      <SmartLink>False</SmartLink>
+    </NativeReference>
+  </ItemGroup>
+
+</Project>
