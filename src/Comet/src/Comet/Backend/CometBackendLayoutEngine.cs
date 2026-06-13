@@ -5,6 +5,7 @@ using Comet.Layout.Yoga;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using YogaFlexDirection = Comet.Layout.Yoga.FlexDirection;
+using YogaFlexAlign = Comet.Layout.Yoga.FlexAlign;
 
 namespace Comet.Backend
 {
@@ -47,6 +48,11 @@ namespace Comet.Backend
 			{
 				var direction = view is HStack ? YogaFlexDirection.Row : YogaFlexDirection.Column;
 				node.FlexDirection = direction;
+
+				// Comet's stack default alignment is Fill → flexbox stretch: children fill the
+				// cross axis, so a Text gets a definite width and wraps (grows in height) rather
+				// than measuring at single-line intrinsic width.
+				node.AlignItems = YogaFlexAlign.Stretch;
 
 				if (view is IStackLayout stack && stack.Spacing > 0)
 					node.SetGap(YogaGutter.All, (float)stack.Spacing);

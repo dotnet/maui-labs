@@ -123,14 +123,28 @@ import SwiftUI
     }
 
     // Measures a leaf node's intrinsic size — the one place layout crosses into native.
+    // The content is constrained to the available width so multi-line text wraps (and reports
+    // its wrapped height); UIHostingController.sizeThatFits alone returns the single-line ideal.
     @objc(measureNode:maxWidth:maxHeight:)
     public static func measureNode(_ node: CometNode, maxWidth: Double, maxHeight: Double) -> CGSize {
         let w = (maxWidth.isFinite && maxWidth > 0) ? maxWidth : UIScreen.main.bounds.width
-        let h = (maxHeight.isFinite && maxHeight > 0) ? maxHeight : UIScreen.main.bounds.height
+
+        // Text: measure with TextKit, which reliably wraps to the width (UIHostingController's
+        // sizeThatFits/systemLayoutSizeFitting return the single-line ideal for SwiftUI Text).
+        if node.kind == "text" {
+            let font = UIFont.preferredFont(forTextStyle: .body)
+            let rect = (node.text as NSString).boundingRect(
+                with: CGSize(width: w, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: font],
+                context: nil)
+            return CGSize(width: w, height: ceil(rect.height))
+        }
+
+        // Interactive controls (button/textfield/toggle/slider) don't wrap; SwiftUI sizes them.
         let host = UIHostingController(rootView: CometLeafContent(node: node))
         host.view.backgroundColor = .clear
-        let size = host.sizeThatFits(in: CGSize(width: w, height: h))
-        return size
+        return host.sizeThatFits(in: CGSize(width: w, height: .greatestFiniteMagnitude))
     }
 
     // Returns a UIViewController hosting the SwiftUI tree rooted at `root`.

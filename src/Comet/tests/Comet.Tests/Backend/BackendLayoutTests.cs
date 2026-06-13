@@ -94,6 +94,57 @@ namespace Comet.Tests.Backend
 			Assert.Equal(30, leafFrame.Width, 3);
 		}
 
+		[Fact]
+		public void StretchedText_IsMeasuredWithContainerWidth_AndWraps()
+		{
+			// A "text" leaf whose height grows as its width shrinks (simulating wrapping):
+			// natural single line is 600 wide x 20 tall; constrained narrower, it wraps taller.
+			var text = new Text("long");
+			var root = new VStack(spacing: 0f) { text };
+			Bridge(root);
+
+			Node(text).MeasureFunc = (w, h) =>
+			{
+				const double natural = 600, line = 20;
+				if (double.IsInfinity(w) || w >= natural) return new Size(natural, line);
+				int lines = (int)System.Math.Ceiling(natural / w);
+				return new Size(w, lines * line);
+			};
+
+			CometBackendLayoutEngine.Layout(root, new Size(200, 1000));
+
+			// The leaf must be measured with the (stretched) container width, not infinity,
+			// so it wraps: 600/200 = 3 lines * 20 = 60 tall.
+			Assert.Equal(200, Node(text).LastMeasureWidth, 3);
+			Assert.Equal(60, Node(text).ArrangedFrame!.Value.Height, 3);
+		}
+
+		[Fact]
+		public void PaddedStack_MeasuresChildWithContentWidth_NotFullWidth()
+		{
+			// Mirrors the probe: a padded VStack; the text child must be measured with the
+			// content width (available - padding), so it wraps inside the padding.
+			var text = new Text("long");
+			var root = new VStack(spacing: 0f) { text }.Padding(24);
+			Bridge(root);
+
+			Node(text).MeasureFunc = (w, h) =>
+			{
+				const double natural = 600, line = 20;
+				if (double.IsInfinity(w) || w >= natural) return new Size(natural, line);
+				int lines = (int)System.Math.Ceiling(natural / w);
+				return new Size(w, lines * line);
+			};
+
+			CometBackendLayoutEngine.Layout(root, new Size(400, 1000));
+
+			// 400 wide - 48 padding = 352 content width.
+			Assert.Equal(352, Node(text).LastMeasureWidth, 3);
+			// 600/352 = 2 lines * 20 = 40 tall; and the child sits at x=24 (left padding).
+			Assert.Equal(40, Node(text).ArrangedFrame!.Value.Height, 3);
+			Assert.Equal(24, Node(text).ArrangedFrame!.Value.X, 3);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;

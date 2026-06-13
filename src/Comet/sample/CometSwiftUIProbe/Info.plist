@@ -25,6 +25,12 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<!-- A launch storyboard tells iOS the app supports the full native screen size; without
+	     one iOS runs the app letterboxed at a legacy size (not edge-to-edge, and
+	     UIScreen.Bounds is wrong, which throws off the Yoga layout). .NET iOS strips the
+	     plist-only UILaunchScreen, so a compiled LaunchScreen.storyboard is used instead. -->
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>MinimumOSVersion</key>
 	<string>17.0</string>
 </dict>

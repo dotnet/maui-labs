@@ -18,6 +18,7 @@ namespace CometSwiftUIProbe
 		readonly Signal<string> _name = new(string.Empty);
 		readonly Signal<bool> _fancy = new(false);
 		readonly Signal<int> _taps = new(0);
+		readonly Signal<bool> _long = new(false);
 
 		NavigationView? _nav;
 		CometDevAgent? _agent;
@@ -45,15 +46,18 @@ namespace CometSwiftUIProbe
 		}
 
 		// Direct VStack root (no NavigationView, which is own-content and stops the layout
-		// engine) so the Yoga engine actually lays this tree out under UseYogaLayout.
+		// engine) so the Yoga engine lays this out under UseYogaLayout. The 24pt Padding should
+		// inset from the screen edges; tapping Toggle grows the middle text's height, and the
+		// rows below must reflow downward (proving relayout-on-reactive-change).
 		View BuildUi() => new VStack
 		{
-			new Text("Yoga layout").Color(Colors.White),
-			new Text("A").Color(Colors.White),
-			new Text("BB").Color(Colors.White),
-			new Text("CCC").Color(Colors.White),
-			new Button("Increment", () => _count.Value++),
-			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
+			new Text("Reflow + padding").Color(Colors.White),
+			new Button("Toggle", () => _long.Value = !_long.Value).AutomationId("toggleBtn"),
+			new Text(() => _long.Value
+				? "This is a long paragraph that wraps onto several lines, so its height grows when toggled and the rows beneath it are pushed down by Yoga."
+				: "short").Color(Colors.White),
+			new Text("── below ──").Color(Colors.White),
+			new Text("row 2").Color(Colors.White),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		// Interactive controls with AutomationIds (clean `--automationId` selector targets) plus

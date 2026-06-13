@@ -27,6 +27,13 @@ namespace Comet.Tests.Backend
 		public ICometEventSink? Sink { get; private set; }
 		public Rect? ArrangedFrame { get; private set; }
 		public Size MeasureResult { get; set; } = Size.Zero;
+
+		/// <summary>Optional width-aware measure (e.g. to simulate text wrapping); when set it
+		/// overrides <see cref="MeasureResult"/>. Receives the (width, height) constraints.</summary>
+		public System.Func<double, double, Size>? MeasureFunc { get; set; }
+
+		/// <summary>The width constraint of the most recent <see cref="Measure"/> call.</summary>
+		public double LastMeasureWidth { get; private set; } = double.NaN;
 		public bool Disposed { get; private set; }
 
 		/// <summary>Count of ApplyProperty calls (including no-op re-applies, if any reach us).</summary>
@@ -61,7 +68,11 @@ namespace Comet.Tests.Backend
 			Log.Add($"move {fromIndex}->{toIndex} {node.Kind}");
 		}
 
-		public Size Measure(double widthConstraint, double heightConstraint) => MeasureResult;
+		public Size Measure(double widthConstraint, double heightConstraint)
+		{
+			LastMeasureWidth = widthConstraint;
+			return MeasureFunc?.Invoke(widthConstraint, heightConstraint) ?? MeasureResult;
+		}
 
 		public void Arrange(Rect frame)
 		{
