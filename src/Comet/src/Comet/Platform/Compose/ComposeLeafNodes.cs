@@ -14,6 +14,8 @@ namespace Comet.Platform.Compose
 	{
 		readonly MutableState<string> _text = new(string.Empty);
 		Microsoft.Maui.Graphics.Color? _color;
+		int _fontSize;
+		int _fontWeight;
 		readonly MutableState<int> _colorVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -25,23 +27,43 @@ namespace Comet.Platform.Compose
 				_color = value.AsColor;
 				_colorVersion.Value++;
 			}
+			else if (id == PropertyIds.Text_FontSize)
+			{
+				_fontSize = (int)System.Math.Round(value.AsDouble);
+				_colorVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_FontWeight)
+			{
+				_fontWeight = (int)value.AsDouble;
+				_colorVersion.Value++;
+			}
 		}
 
 		// Intrinsic size for the Yoga engine: measure the text wrapped to the available width
 		// with StaticLayout (synchronous, no composition needed). 16sp ~ Material bodyLarge.
 		public override Size Measure(double widthConstraint, double heightConstraint)
-			=> TextMeasure.MeasureWrapped(_text.Value, 16f, widthConstraint);
+			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint);
 
 		public override void Render(IComposer composer)
 		{
 			// Reading _text.Value inside composition subscribes this scope, so a later
 			// ApplyProperty -> setValue recomposes just this Text.
-			_ = _colorVersion.Value; // subscribe so a color change recomposes
+			_ = _colorVersion.Value; // subscribe so a color/size/weight change recomposes
 			var text = new ComposeText(_text.Value) { Modifier = BuildNodeModifier() };
 			if (_color is { } c)
 				text.Color = ToComposeColor(c);
+			if (_fontSize > 0)
+				text.FontSize = new AndroidX.Compose.Sp(_fontSize);
+			if (_fontWeight > 0)
+				text.FontWeight = MapWeight(_fontWeight);
 			text.Render(composer);
 		}
+
+		static AndroidX.Compose.FontWeight MapWeight(int w) =>
+			w >= 700 ? AndroidX.Compose.FontWeight.Bold
+			: w >= 600 ? AndroidX.Compose.FontWeight.SemiBold
+			: w >= 500 ? AndroidX.Compose.FontWeight.Medium
+			: AndroidX.Compose.FontWeight.Normal;
 	}
 
 	/// <summary>Synchronous native text measurement for the Yoga layout engine.</summary>
@@ -70,7 +92,14 @@ namespace Comet.Platform.Compose
 			using var layout = global::Android.Text.StaticLayout.Builder
 				.Obtain(s, 0, s.Length, paint, widthPx)
 				.Build();
-			return new Size(widthPx / density, layout.Height / density);
+
+			// Report the ACTUAL used width (the widest laid-out line), not the constraint — so a
+			// short label hugs its text (and the flex row packs it tight) while a long one still
+			// wraps to widthPx. Returning the constraint width made every Text fill its column.
+			float used = 0f;
+			for (int i = 0; i < layout.LineCount; i++)
+				used = System.Math.Max(used, layout.GetLineWidth(i));
+			return new Size(System.Math.Ceiling(used) / density, layout.Height / density);
 		}
 	}
 

@@ -54,57 +54,9 @@ namespace CometSwiftUIProbe
 			return true;
 		}
 
-		sealed record Message(string Author, string Body, string AvatarSeed);
-
-		static readonly System.Collections.Generic.List<Message> Conversation = new()
-		{
-			new("Taylor Brooks", "Morning everyone! Did you catch the new layout engine demo yesterday?", "taylor"),
-			new("Ada Lovelace", "I did — the whole thing reflows from one flexbox pass now, shared across iOS and Android. Pretty wild.", "ada"),
-			new("John Glenn", "So the same Comet tree lands pixel-identical on both backends? No per-platform tweaking?", "john"),
-			new("Ada Lovelace", "That's the idea. Text wraps, avatars size, rows grow — all computed once in C#.", "ada"),
-			new("Taylor Brooks", "Ship it. 🚀", "taylor"),
-			new("Grace Hopper", "Let's make sure the long messages still wrap cleanly though — this one is intentionally a good deal longer so we can watch it spill onto several lines inside a virtualized row and confirm the row height grows to fit.", "grace"),
-			new("John Glenn", "Confirmed on my iPhone — looks great.", "john"),
-			new("Ada Lovelace", "And the list is genuinely lazy: rows only materialize as they scroll in.", "ada"),
-			new("Taylor Brooks", "Perfect. Same screen, two platforms, one layout pass.", "taylor"),
-			new("Grace Hopper", "That's the dream. Good work today, team.", "grace"),
-		};
-
-		// A Jetchat-style conversation screen: a fixed top bar over a virtualized, Yoga-laid-out
-		// message list — the same Comet tree the Compose backend renders, so both match.
-		View BuildUi() => new VStack(spacing: 0f)
-		{
-			new HStack(spacing: 12f)
-			{
-				new Text("#composers").Color(Colors.White),
-			}.Padding(new Microsoft.Maui.Thickness(16, 56, 16, 16)).Background(Color.FromArgb("#6750A4")), // top inset clears the status bar
-
-			new ScrollView
-			{
-				new VStack(spacing: 0f)
-				{
-					ToCard(Conversation[0]), ToCard(Conversation[1]), ToCard(Conversation[2]),
-					ToCard(Conversation[3]), ToCard(Conversation[4]), ToCard(Conversation[5]),
-					ToCard(Conversation[6]), ToCard(Conversation[7]), ToCard(Conversation[8]),
-					ToCard(Conversation[9]),
-				},
-			}.FillVertical(),
-		}.Background(Color.FromArgb("#F2EFF7")); // tonal page behind the cards
-
-		// Each message is a Material card: a rounded, raised white surface (corner radius +
-		// elevation), inset from the page by the outer container's padding (the inter-card gap).
-		static View ToCard(Message m) => new VStack(spacing: 0f)
-		{
-			new HStack(spacing: 12f)
-			{
-				new Image($"https://picsum.photos/seed/{m.AvatarSeed}/80").Frame(width: 42, height: 42).CornerRadius(21),
-				new VStack(spacing: 2f)
-				{
-					new Text(m.Author).Color(Color.FromArgb("#1C1B1F")),
-					new Text(m.Body).Color(Color.FromArgb("#49454F")),
-				},
-			}.Padding(new Microsoft.Maui.Thickness(12)).Background(Colors.White).CornerRadius(16).Elevation(2),
-		}.Padding(new Microsoft.Maui.Thickness(12, 6, 12, 6));
+		// The faithful Jetchat conversation screen (shared tree, identical on Android). iPhone
+		// safe-area insets: status bar / Dynamic Island ~50dp top, home indicator ~28dp bottom.
+		View BuildUi() => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28);
 
 		// Interactive controls with AutomationIds (clean `--automationId` selector targets) plus
 		// a Navigate button, so the dev tree pruning across push/pop is observable.

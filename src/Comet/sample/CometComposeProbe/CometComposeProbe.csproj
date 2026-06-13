@@ -21,6 +21,8 @@
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- ComponentActivity host for ComposeView. -->
     <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0" />
+    <!-- Shared faithful Jetchat conversation screen (identical tree on both backends). -->
+    <Compile Include="..\Shared\Jetchat\JetchatConversation.cs" Link="Shared\Jetchat\JetchatConversation.cs" />
   </ItemGroup>
 
 </Project>

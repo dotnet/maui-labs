@@ -15,8 +15,14 @@ import SwiftUI
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
     @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
+    @Published var fontSize: CGFloat = 0        // 0 = default (body)
+    @Published var fontWeight: Int = 0          // 0 = default; otherwise Maui FontWeight (100–900)
     @Published var padding: CGFloat = 0
-    @Published var cornerRadius: CGFloat = 0     // Material card rounded corners (clips content)
+    // Per-corner radii (top-left, top-right, bottom-right, bottom-left); clips content.
+    @Published var cornerTL: CGFloat = 0
+    @Published var cornerTR: CGFloat = 0
+    @Published var cornerBR: CGFloat = 0
+    @Published var cornerBL: CGFloat = 0
     @Published var elevation: CGFloat = 0        // soft drop shadow depth
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     // Yoga-computed parent-relative layout frame. hasFrame flips true once C# arranges this
@@ -79,8 +85,13 @@ import SwiftUI
         switch property {
         case "padding": node.padding = CGFloat(value)
         case "value": node.doubleValue = value
-        case "cornerradius": node.cornerRadius = CGFloat(value)
+        case "corner.tl": node.cornerTL = CGFloat(value)
+        case "corner.tr": node.cornerTR = CGFloat(value)
+        case "corner.br": node.cornerBR = CGFloat(value)
+        case "corner.bl": node.cornerBL = CGFloat(value)
         case "elevation": node.elevation = CGFloat(value)
+        case "fontsize": node.fontSize = CGFloat(value)
+        case "fontweight": node.fontWeight = Int(value)
         default: break
         }
     }
@@ -143,13 +154,17 @@ import SwiftUI
         // Text: measure with TextKit, which reliably wraps to the width (UIHostingController's
         // sizeThatFits/systemLayoutSizeFitting return the single-line ideal for SwiftUI Text).
         if node.kind == "text" {
-            let font = UIFont.preferredFont(forTextStyle: .body)
+            let font: UIFont = node.fontSize > 0
+                ? UIFont.systemFont(ofSize: node.fontSize, weight: uiFontWeight(node.fontWeight))
+                : UIFont.preferredFont(forTextStyle: .body)
             let rect = (node.text as NSString).boundingRect(
                 with: CGSize(width: w, height: .greatestFiniteMagnitude),
                 options: [.usesLineFragmentOrigin, .usesFontLeading],
                 attributes: [.font: font],
                 context: nil)
-            return CGSize(width: w, height: ceil(rect.height))
+            // Report the ACTUAL used width (≤ constraint) so a short label hugs and the flex row
+            // packs it tight; the wrapped height drives multi-line bubbles.
+            return CGSize(width: min(ceil(rect.width), w), height: ceil(rect.height))
         }
 
         // Interactive controls (button/textfield/toggle/slider) don't wrap; SwiftUI sizes them.
@@ -198,6 +213,7 @@ struct CometLeafContent: View {
         case "button":
             Button(action: { node.onTap?() }) { Text(node.text) }
                 .modifier(ForegroundModifier(argb: node.textColorARGB))
+                .modifier(FontModifier(node: node))
         case "textfield":
             TextField(node.placeholder, text: Binding(
                 get: { node.text },
@@ -224,6 +240,52 @@ struct CometLeafContent: View {
         default: // "text" and unknown leaves
             Text(node.text)
                 .modifier(ForegroundModifier(argb: node.textColorARGB))
+                .modifier(FontModifier(node: node))
+        }
+    }
+}
+
+// SwiftUI Font.Weight for a Maui FontWeight numeric (100–900).
+private func swiftFontWeight(_ w: Int) -> Font.Weight {
+    switch w {
+    case 1..<200: return .thin
+    case 200..<300: return .ultraLight
+    case 300..<400: return .light
+    case 400..<500: return .regular
+    case 500..<600: return .medium
+    case 600..<700: return .semibold
+    case 700..<800: return .bold
+    case 800..<900: return .heavy
+    case 900...: return .black
+    default: return .regular
+    }
+}
+
+private func uiFontWeight(_ w: Int) -> UIFont.Weight {
+    switch w {
+    case 1..<200: return .thin
+    case 200..<300: return .ultraLight
+    case 300..<400: return .light
+    case 400..<500: return .regular
+    case 500..<600: return .medium
+    case 600..<700: return .semibold
+    case 700..<800: return .bold
+    case 800..<900: return .heavy
+    case 900...: return .black
+    default: return .regular
+    }
+}
+
+// Applies an explicit font size/weight when Comet set one; otherwise leaves the default.
+private struct FontModifier: ViewModifier {
+    @ObservedObject var node: CometNode
+    func body(content: Content) -> some View {
+        if node.fontSize > 0 {
+            content.font(.system(size: node.fontSize, weight: swiftFontWeight(node.fontWeight)))
+        } else if node.fontWeight > 0 {
+            content.fontWeight(swiftFontWeight(node.fontWeight))
+        } else {
+            content
         }
     }
 }
@@ -361,11 +423,16 @@ private struct TapGestureModifier: ViewModifier {
 private struct SurfaceModifier: ViewModifier {
     @ObservedObject var node: CometNode
     func body(content: Content) -> some View {
-        let radius = node.cornerRadius
+        let hasCorners = node.cornerTL > 0 || node.cornerTR > 0 || node.cornerBR > 0 || node.cornerBL > 0
         let elevation = node.elevation
-        if radius > 0 || elevation > 0 {
+        if hasCorners || elevation > 0 {
             content
-                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .clipShape(UnevenRoundedRectangle(
+                    topLeadingRadius: node.cornerTL,
+                    bottomLeadingRadius: node.cornerBL,
+                    bottomTrailingRadius: node.cornerBR,
+                    topTrailingRadius: node.cornerTR,
+                    style: .continuous))
                 .shadow(color: Color.black.opacity(elevation > 0 ? 0.18 : 0),
                         radius: elevation, x: 0, y: elevation > 0 ? elevation / 2 : 0)
         } else {

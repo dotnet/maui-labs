@@ -59,9 +59,9 @@ namespace Comet
 			if (this is IStackLayout stack)
 				node.ApplyProperty(PropertyIds.Stack_Spacing, PropertyValue.From(stack.Spacing));
 
-			// Surface styling (rounded corners + elevation) — the Material card building blocks.
-			if (this.GetEnvironment<double?>(this, SurfaceExtensions.CornerRadiusKey, false) is { } radius && radius > 0)
-				node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.From(radius));
+			// Surface styling (rounded corners + elevation) — the Material card / chat-bubble blocks.
+			if (this.GetEnvironment<CornerRadii?>(this, SurfaceExtensions.CornerRadiusKey, false) is { } corners && !corners.IsZero)
+				node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(corners));
 
 			if (this.GetEnvironment<double?>(this, SurfaceExtensions.ElevationKey, false) is { } elevation && elevation > 0)
 				node.ApplyProperty(PropertyIds.Shadow, PropertyValue.From(elevation));

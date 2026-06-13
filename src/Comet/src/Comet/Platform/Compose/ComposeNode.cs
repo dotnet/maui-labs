@@ -33,7 +33,7 @@ namespace Comet.Platform.Compose
 		// They're held as plain fields and a style-version state drives recomposition.
 		Microsoft.Maui.Graphics.Color? _background;
 		Microsoft.Maui.Thickness _padding;
-		float _cornerRadius;
+		CornerRadii _corners;
 		float _elevation;
 		readonly MutableState<int> _styleVersion = new(0);
 
@@ -73,7 +73,7 @@ namespace Comet.Platform.Compose
 			}
 			else if (id == PropertyIds.CornerRadius)
 			{
-				_cornerRadius = (float)value.AsDouble;
+				_corners = value.AsObject is CornerRadii c ? c : default;
 				_styleVersion.Value++;
 			}
 			else if (id == PropertyIds.Shadow)
@@ -106,14 +106,14 @@ namespace Comet.Platform.Compose
 					.AbsoluteOffset(new Dp(_fx), new Dp(_fy))
 					.Size(new Dp(_fw), new Dp(_fh));
 
-			// Card surface: raise (shadow) then round the corners, so the shadow follows the
-			// rounded outline and the background/content below are clipped to it.
+			// Card surface / chat bubble: raise (shadow) then round the corners, so the shadow
+			// follows the rounded outline and the background/content below are clipped to it.
+			bool rounded = !_corners.IsZero;
 			if (_elevation > 0)
-				m = (m ?? Modifier.Companion).Shadow(new Dp(_elevation),
-					_cornerRadius > 0 ? AndroidX.Compose.Shape.RoundedCorners(new Dp(_cornerRadius)) : null);
+				m = (m ?? Modifier.Companion).Shadow(new Dp(_elevation), rounded ? CornerShape() : null);
 
-			if (_cornerRadius > 0)
-				m = (m ?? Modifier.Companion).Clip(AndroidX.Compose.Shape.RoundedCorners(new Dp(_cornerRadius)));
+			if (rounded)
+				m = (m ?? Modifier.Companion).Clip(CornerShape());
 
 			if (_background is { } bg)
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
@@ -135,6 +135,14 @@ namespace Comet.Platform.Compose
 
 			return m;
 		}
+
+		// The clip/shadow outline. Uniform corners use the single-radius factory; otherwise
+		// per-corner (LTR: TopLeft→topStart, TopRight→topEnd, BottomRight→bottomEnd, BottomLeft→bottomStart).
+		AndroidX.Compose.Shape CornerShape() => _corners.IsUniform
+			? AndroidX.Compose.Shape.RoundedCorners(new Dp((float)_corners.TopLeft))
+			: AndroidX.Compose.Shape.RoundedCorners(
+				new Dp((float)_corners.TopLeft), new Dp((float)_corners.TopRight),
+				new Dp((float)_corners.BottomRight), new Dp((float)_corners.BottomLeft));
 
 		protected static AndroidX.Compose.Color ToComposeColor(Microsoft.Maui.Graphics.Color c) => AndroidX.Compose.Color.FromArgb(
 			(byte)(c.Alpha * 255), (byte)(c.Red * 255), (byte)(c.Green * 255), (byte)(c.Blue * 255));

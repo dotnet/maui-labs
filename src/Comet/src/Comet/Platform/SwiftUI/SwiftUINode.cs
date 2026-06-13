@@ -62,12 +62,22 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetBool(_native, "hastapgesture", value.AsBool);
 			else if (id == PropertyIds.Text_Color && value.AsColor is { } tc)
 				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(tc));
+			else if (id == PropertyIds.Text_FontSize)
+				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
+			else if (id == PropertyIds.Text_FontWeight)
+				CometSwiftUIHost.SetDouble(_native, "fontweight", value.AsDouble);
 			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 			else if (id == PropertyIds.Padding && value.AsObject is Microsoft.Maui.Thickness t)
 				CometSwiftUIHost.SetDouble(_native, "padding", t.Left);
-			else if (id == PropertyIds.CornerRadius)
-				CometSwiftUIHost.SetDouble(_native, "cornerradius", value.AsDouble);
+			else if (id == PropertyIds.CornerRadius && value.AsObject is CornerRadii corners)
+			{
+				// Four SetDouble calls (reusing the bound host fn) carry per-corner radii.
+				CometSwiftUIHost.SetDouble(_native, "corner.tl", corners.TopLeft);
+				CometSwiftUIHost.SetDouble(_native, "corner.tr", corners.TopRight);
+				CometSwiftUIHost.SetDouble(_native, "corner.br", corners.BottomRight);
+				CometSwiftUIHost.SetDouble(_native, "corner.bl", corners.BottomLeft);
+			}
 			else if (id == PropertyIds.Shadow)
 				CometSwiftUIHost.SetDouble(_native, "elevation", value.AsDouble);
 		}

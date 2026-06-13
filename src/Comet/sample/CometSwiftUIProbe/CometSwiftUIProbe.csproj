@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
+    <!-- Shared faithful Jetchat conversation screen (identical tree on both backends). -->
+    <Compile Include="..\Shared\Jetchat\JetchatConversation.cs" Link="Shared\Jetchat\JetchatConversation.cs" />
   </ItemGroup>
 
   <!-- Link + embed the Swift framework directly in the app so the static registrar's
