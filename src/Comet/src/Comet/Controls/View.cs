@@ -34,7 +34,7 @@ namespace Comet
 		public IElementHandler NewHandler { get; }
 	}
 
-	public class View : ContextualObject, IDisposable, IView, IHotReloadableView, ISafeAreaView, IContentTypeHash, IAnimator, ITitledElement, IGestureView, IVisualTreeElement, IPadding
+	public partial class View : ContextualObject, IDisposable, IView, IHotReloadableView, ISafeAreaView, IContentTypeHash, IAnimator, ITitledElement, IGestureView, IVisualTreeElement, IPadding
 	{
 		static internal readonly WeakList<IView> ActiveViews = new WeakList<IView>();
 		static internal readonly object ActiveViewsLock = new object();
