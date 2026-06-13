@@ -22,14 +22,31 @@ Version set that aligns on .NET 11 preview 5:
 - `Xamarin.AndroidX.Compose.Material3` 1.4.0.2
 - `Xamarin.AndroidX.Activity[.Compose]` 1.13.0 (pin to resolve the transitive Activity graph)
 
+## Composition entry point — confirmed signature
+
+From `Xamarin.AndroidX.Compose.UI.Android` 1.11.2 (ikdasm):
+
+```
+ComposeView.SetContent(Kotlin.Jvm.Functions.IFunction2 content)
+  // JNI: setContent.(Lkotlin/jvm/functions/Function2;)V
+```
+
+So C# drives Compose by implementing a `Kotlin.Jvm.Functions.IFunction2`
+(the composable lambda `(Composer, Integer) -> Unit`) and passing it to
+`SetContent`. The lambda's `Invoke(composer, changed)` re-enters our emit code,
+threading the `composer` into each composable call.
+
 ## Still to prove (the hard part)
 
 1. **Composable invocation from C#.** `@Composable` functions use a special
-   calling convention — an implicit `Composer` parameter plus a `changed` int
-   bitmask. Invoking `TextKt.Text(...)`, `ButtonKt.Button(...)`, `ColumnKt.Column(...)`
-   from C# requires threading a `Composer` and the bitmask correctly.
-2. **`ComposeView.SetContent(...)` with a C# composable lambda.** Needs a
-   `Function2<Composer, int, Unit>` implemented in C# that re-enters our emit code.
+   calling convention — the implicit `Composer` parameter plus a `changed` int
+   bitmask. Whether the Xamarin bindings surface `Text`/`Button`/`Column` as
+   directly-callable C# methods (threading `IComposer`) or whether they must be
+   invoked via JNI (as Peppers' generator does) is the next thing to determine —
+   initial ikdasm probing did not surface a public `TextKt.Text(...)` overload,
+   which suggests the JNI-invocation path (study Peppers' generator output).
+2. **`ComposeView.SetContent(IFunction2)` with a C# composable lambda.** Entry
+   point now known; implement the `IFunction2` in C#.
 3. **On-device render.** A `ComposeView` set as activity content rendering a
    C#-driven `Text` + `Button`, with a `MutableState` write recomposing the
    narrowest scope (proving steady-state JNI is limited to `setValue`).
