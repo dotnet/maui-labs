@@ -280,3 +280,25 @@ for the full MAUI startup before the first frame.
 > runtime + framework init, and the new path provably avoids the MAUI host. (The
 > 2026-06-12 baseline measured CometStressTest at 644 ms; it read 721 ms today —
 > ~12% device/thermal drift — hence the same-session re-measure for a fair delta.)
+
+## Phase 5 — Legacy render path decoupled (iOS handler rooting fixed)
+
+The Phase 4 iOS caveat (legacy `CollectionViewHandler` + CollectionView/CarouselView
+survived trimming, rooted by the static registrar's scan of every NSObject type in
+the assembly) is resolved. The legacy MAUI ViewHandler render path is now gated
+behind `CometLegacyRenderPath` (MSBuild property, default `true`). Building with
+`-p:CometLegacyRenderPath=false` excludes the cluster (`Handlers/**`, `Maui/**`,
+`AppHostBuilderExtensions`, and the iOS `CometView*`/`CUI*` native views) so the
+registrar never sees them and they trim.
+
+`CometSwiftUIProbe` Release sim, `TrimMode=full`, linked `Comet.dll`:
+
+| | legacy ON | legacy OFF |
+|---|---:|---:|
+| `Comet.dll` | 243,200 B / 183 classes | **202,752 B / 136 classes** |
+| `CollectionViewHandler`, `CometViewHandler`, `CometView`, `CUITableView`, `ScrollViewHandler`, `NavigationViewHandler` | present | **all 0** |
+| SwiftUI backend (`SwiftUINode`, …) + used controls | present | present |
+
+Non-breaking: the default (`true`) build is unchanged — maccatalyst compiles and
+the host suite stays 875 pass / 1 known-fail. Windows/MacCatalyst keep the legacy
+path; iOS/Android node-backend apps opt out for the smaller, fully-trimmed binary.

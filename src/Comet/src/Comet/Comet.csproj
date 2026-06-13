@@ -26,6 +26,39 @@
 	<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
   </ItemGroup>
 
+  <!--
+    Phase 5 decoupling: the legacy MAUI ViewHandler render path (per-control
+    ViewHandlers + the CometViewHandler host + UseCometHandlers + the native CUI*/
+    Comet* platform views) is compiled only when CometLegacyRenderPath=true
+    (default). With the new Compose/SwiftUI node backend it is dead code, and on
+    iOS its NSObject-derived handlers/views are force-rooted by the static
+    registrar (so they can't trim) — building with -p:CometLegacyRenderPath=false
+    excludes the cluster so it trims away. Windows/MacCatalyst still need it.
+  -->
+  <PropertyGroup>
+	<CometLegacyRenderPath Condition="'$(CometLegacyRenderPath)' == ''">true</CometLegacyRenderPath>
+	<DefineConstants Condition="'$(CometLegacyRenderPath)' == 'true'">$(DefineConstants);COMET_LEGACY_RENDER_PATH</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(CometLegacyRenderPath)' != 'true'">
+	<Compile Remove="Handlers\**\*.cs" />
+	<Compile Remove="Maui\**\*.cs" />
+	<Compile Remove="AppHostBuilderExtensions.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CometLegacyRenderPath)' != 'true' AND $(TargetFramework.Contains('-ios'))">
+	<Compile Remove="Platform\iOS\CometView.cs" />
+	<Compile Remove="Platform\iOS\CometViewController.cs" />
+	<Compile Remove="Platform\iOS\CUIContainerView.cs" />
+	<Compile Remove="Platform\iOS\CUINavigationController.cs" />
+	<Compile Remove="Platform\iOS\CUIScrollView.cs" />
+	<Compile Remove="Platform\iOS\CUIShapeView.cs" />
+	<Compile Remove="Platform\iOS\CUITableView.cs" />
+	<Compile Remove="Platform\iOS\CUITableViewCell.cs" />
+	<Compile Remove="Platform\iOS\CUITableViewSource.cs" />
+	<Compile Remove="Platform\iOS\CUITabView.cs" />
+	<Compile Remove="Platform\iOS\CUIRadioButton.cs" />
+	<Compile Remove="Platform\iOS\HandlerExtensions.cs" />
+  </ItemGroup>
+
   <!-- Platform.Maui.MacOS provides the AppKit handler bridge for net11.0-macos. -->
   <ItemGroup Condition="$(TargetFramework.Contains('-macos'))">
 	<ProjectReference Include="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\Platform.Maui.MacOS.csproj" />
