@@ -257,3 +257,26 @@ So each platform's build trims the *other* backend plus unused controls. **Cavea
 rooted by the iOS static registrar's `[Register]` scan, even though the probe uses
 the new backend. On the pure new-backend Android probe these trim to 0. Fully
 decoupling the legacy iOS handlers from the new render path is Phase 5 work.
+
+## Phase 4 — Cold start A/B (Pixel 5, same session)
+
+`tools/bench/startup.sh` (`am start -W` TotalTime, force-stop + 2 s settle
+between runs, 10 runs, median). Both Release single-RID `android-arm64`, on the
+physical Pixel 5 (`13041FDD4007MT`), measured back-to-back on 2026-06-13.
+
+| App | Render path | Cold start (median) | Range |
+|---|---|---:|---:|
+| `CometStressTest` | **legacy** MAUI handlers (`UseCometHandlers`) | **721 ms** | 695–820 |
+| `CometComposeProbe` | **new** node backend, no `UseMaui` | **534 ms** | 515–570 |
+
+**~26% faster (−187 ms) and a much tighter distribution.** The new path is a pure
+`ComponentActivity` that never runs the MAUI app-host (`MauiApp.CreateBuilder` →
+handler registration → Shell), so it skips that init entirely; the legacy app pays
+for the full MAUI startup before the first frame.
+
+> Caveat: not a perfectly controlled A/B — the two are different apps
+> (CometStressTest exercises many pages; the probe is minimal), so part of the gap
+> is app complexity, not solely the backend. But the dominant cold-start cost is
+> runtime + framework init, and the new path provably avoids the MAUI host. (The
+> 2026-06-12 baseline measured CometStressTest at 644 ms; it read 721 ms today —
+> ~12% device/thermal drift — hence the same-session re-measure for a fair delta.)
