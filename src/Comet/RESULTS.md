@@ -237,3 +237,23 @@ LINKED=sample/CometComposeProbe/obj/Release/net11.0-android/android-arm64/linked
 ikdasm "$LINKED" | grep -c '\.class '                 # ~113
 ikdasm "$LINKED" | grep -E '\.class .*\bPicker\b'     # (empty — trimmed)
 ```
+
+### iOS / SwiftUI backend (same proof)
+
+`CometSwiftUIProbe` (Text/Button/TextField/Toggle/Nav) built
+`-c Release -r iossimulator-arm64 -p:TrimMode=full`, linked `Comet.dll` inspected:
+
+| Metric | Value |
+|---|---:|
+| `Comet.dll` (linked) | 243,200 B / 183 classes |
+| Compose backend (`ComposeNode`, `Compose*Node`) | **trimmed to 0** (Android-only code gone from the iOS build) |
+| SwiftUI nodes in use (`SwiftUINode`, `SwiftUINavigationNode`) | survive |
+| `SwiftUIListNode` (probe drops ListView) | **0** — trimmed |
+| Picker, GraphicsView, WebView, Stepper, TabView, DatePicker, ScrollView, Frame, Grid | **0** |
+
+So each platform's build trims the *other* backend plus unused controls. **Caveat
+(Phase 5 item):** on iOS a few legacy handlers still survive —
+`Comet.Handlers.CollectionViewHandler` (+ `CollectionView`/`CarouselView`) are
+rooted by the iOS static registrar's `[Register]` scan, even though the probe uses
+the new backend. On the pure new-backend Android probe these trim to 0. Fully
+decoupling the legacy iOS handlers from the new render path is Phase 5 work.
