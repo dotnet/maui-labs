@@ -20,11 +20,30 @@ namespace Comet.Platform.Compose
 				_text.Value = value.AsString ?? string.Empty;
 		}
 
+		// Intrinsic size for the Yoga engine: measure the text with the platform Paint
+		// (synchronous, no composition needed). 16sp ~ Material bodyLarge.
+		public override Size Measure(double widthConstraint, double heightConstraint)
+			=> TextMeasure.Measure(_text.Value, 16f);
+
 		public override void Render(IComposer composer)
 		{
 			// Reading _text.Value inside composition subscribes this scope, so a later
 			// ApplyProperty -> setValue recomposes just this Text.
 			new ComposeText(_text.Value) { Modifier = BuildNodeModifier() }.Render(composer);
+		}
+	}
+
+	/// <summary>Synchronous native text measurement for the Yoga layout engine.</summary>
+	static class TextMeasure
+	{
+		public static Size Measure(string? text, float sp)
+		{
+			var density = ComposeNode.Density;
+			using var paint = new global::Android.Graphics.Paint { TextSize = sp * density };
+			float wPx = paint.MeasureText(text ?? string.Empty);
+			var fm = paint.GetFontMetrics();
+			float hPx = fm.Descent - fm.Ascent;
+			return new Size(wPx / density, hPx / density);
 		}
 	}
 
@@ -38,6 +57,13 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.Button_Text)
 				_text.Value = value.AsString ?? string.Empty;
+		}
+
+		// A Material filled button: label plus default content padding, min 48dp tall.
+		public override Size Measure(double widthConstraint, double heightConstraint)
+		{
+			var label = TextMeasure.Measure(_text.Value, 14f);
+			return new Size(label.Width + 48, System.Math.Max(label.Height + 20, 48));
 		}
 
 		public override void Render(IComposer composer)

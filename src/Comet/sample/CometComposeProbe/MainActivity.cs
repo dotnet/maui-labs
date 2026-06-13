@@ -19,9 +19,7 @@ namespace CometComposeProbe
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
-		readonly Signal<string> _name = new(string.Empty);
-		readonly Signal<bool> _fancy = new(false);
-		readonly Signal<double> _volume = new(0.3);
+		readonly Signal<int> _count = new(0);
 
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
@@ -32,42 +30,22 @@ namespace CometComposeProbe
 
 			var root = BuildUi();
 
-			var backend = new ComposeBackendRoot(new EmptyServiceProvider());
+			var backend = new ComposeBackendRoot(new EmptyServiceProvider()) { UseYogaLayout = true };
 			var composeView = backend.CreateView(this, root);
 			SetContentView(composeView);
 		}
 
-		// A real master–detail app on the Compose backend, combining everything: a
-		// virtualized list of tappable styled rows (the master), navigating to a detail
-		// screen and back — navigation + LazyColumn + gestures + styling together.
-		static readonly string[] Frameworks =
-			{ "Jetpack Compose", "SwiftUI", "WinUI 3", "GTK 4", "Qt Quick", "Flutter", "React Native", "AppKit" };
-
-		View BuildUi()
+		// Direct VStack root (no NavigationView, which is own-content and stops the layout
+		// engine) so the Yoga engine lays this out — the Android counterpart of the iOS test.
+		View BuildUi() => new VStack
 		{
-			var nav = new NavigationView();
-			nav.Add(ListScreen(nav));
-			return nav;
-		}
-
-		static View ListScreen(NavigationView nav) =>
-			new ListView<string>(() => Frameworks.ToList())
-			{
-				ViewFor = item => new VStack
-				{
-					new Text(item),
-					new Text("tap for detail").Color(Colors.Gray),
-				}
-				.Background(Color.FromArgb("#F4EFF4")).Padding(16)
-				.OnTap(_ => nav.Navigate(DetailScreen(nav, item))),
-			};
-
-		static View DetailScreen(NavigationView nav, string item) => new VStack
-		{
-			new Text($"📄  {item}").Color(Colors.White),
-			new Text("Pushed from the list via Navigate()").Color(Colors.White),
-			new Button("←  Back to list", () => nav.Pop()),
-		}.Background(Color.FromArgb("#6750A4")).Padding(28);
+			new Text("Yoga layout").Color(Colors.White),
+			new Text("A").Color(Colors.White),
+			new Text("BB").Color(Colors.White),
+			new Text("CCC").Color(Colors.White),
+			new Button("Increment", () => _count.Value++),
+			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
+		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{

@@ -19,19 +19,45 @@ namespace Comet.Platform.Compose
 	{
 		readonly BackendContext _context;
 		ComposeNode? _root;
+		View? _layoutRoot;
+		Microsoft.Maui.Graphics.Size _availableDp;
 
 		public ComposeBackendRoot(IServiceProvider services)
 			=> _context = new BackendContext(services);
+
+		/// <summary>When true, the C# Yoga engine computes layout and the Compose nodes are
+		/// positioned absolutely from the computed frames. Default false (native layout).</summary>
+		public bool UseYogaLayout { get; set; }
 
 		/// <summary>Materializes <paramref name="view"/> into a Compose tree and returns the
 		/// hosting <see cref="ComposeView"/> to set as content.</summary>
 		public ComposeView CreateView(Context context, View view)
 		{
+			var metrics = context.Resources!.DisplayMetrics!;
+			ComposeNode.Density = metrics.Density;
+
 			_root = (ComposeNode)CometBackendBridge.Materialize(view, _context);
+
+			if (UseYogaLayout)
+			{
+				_layoutRoot = view.HasContent ? view.GetView() : view;
+				_availableDp = new Microsoft.Maui.Graphics.Size(
+					metrics.WidthPixels / metrics.Density,
+					metrics.HeightPixels / metrics.Density);
+				RunLayout();
+				// Reflow after each reactive flush (content size changes re-measure + re-arrange).
+				Comet.Reactive.ReactiveScheduler.AfterFlush += RunLayout;
+			}
 
 			var composeView = new ComposeView(context);
 			composeView.SetContent(_ => _root);
 			return composeView;
+		}
+
+		void RunLayout()
+		{
+			if (_layoutRoot is not null)
+				CometBackendLayoutEngine.Layout(_layoutRoot, _availableDp);
 		}
 	}
 }

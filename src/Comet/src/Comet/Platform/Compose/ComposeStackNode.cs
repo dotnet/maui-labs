@@ -27,15 +27,25 @@ namespace Comet.Platform.Compose
 		public override void Render(IComposer composer)
 		{
 			int spacing = _spacing.Value;
-			var arrangement = spacing > 0 ? Arrangement.SpacedBy(spacing) : null;
 
-			ComposableContainer container = _axis switch
+			// When Yoga has arranged this stack, render a Box so children position themselves
+			// absolutely (each child carries its own offset+size); Yoga owns spacing/axis then.
+			ComposableContainer container;
+			if (HasFrame)
 			{
-				StackAxis.Horizontal => new Row(arrangement),
-				StackAxis.Depth => new Box(),
-				_ => new Column(arrangement),
-			};
-			// background / padding / tap gesture become the stack's modifier chain.
+				container = new Box();
+			}
+			else
+			{
+				var arrangement = spacing > 0 ? Arrangement.SpacedBy(spacing) : null;
+				container = _axis switch
+				{
+					StackAxis.Horizontal => new Row(arrangement),
+					StackAxis.Depth => new Box(),
+					_ => new Column(arrangement),
+				};
+			}
+			// background / padding / tap gesture (+ Yoga frame) become the stack's modifier chain.
 			((ComposableNode)container).Modifier = BuildNodeModifier();
 			AddChildrenTo(container);
 			((ComposableNode)container).Render(composer);

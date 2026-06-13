@@ -35,6 +35,18 @@ namespace Comet.Platform.Compose
 		Microsoft.Maui.Thickness _padding;
 		readonly MutableState<int> _styleVersion = new(0);
 
+		// Yoga-driven layout (when the engine runs): parent-relative frame in Dp + a version
+		// state so a re-arrange recomposes. Until arranged, Compose lays the node out natively.
+		float _fx, _fy, _fw, _fh;
+		bool _hasFrame;
+		readonly MutableState<int> _frameVersion = new(0);
+
+		/// <summary>Display density (px per Dp), set by the backend root; used to convert native
+		/// pixel measurements (e.g. text) into the Dp space Yoga computes in.</summary>
+		public static float Density { get; set; } = 1f;
+
+		protected bool HasFrame => _hasFrame;
+
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------
@@ -67,11 +79,19 @@ namespace Comet.Platform.Compose
 		protected Modifier? BuildNodeModifier()
 		{
 			_ = _styleVersion.Value; // subscribe so background/padding changes recompose
+			_ = _frameVersion.Value; // subscribe so a re-arrange recomposes
 
 			Modifier? m = null;
 
+			// Yoga-positioned: place + size this node absolutely within its (Box) parent. Applied
+			// first so background/clickable cover the arranged frame.
+			if (_hasFrame)
+				m = Modifier.Companion
+					.AbsoluteOffset(new Dp(_fx), new Dp(_fy))
+					.Size(new Dp(_fw), new Dp(_fh));
+
 			if (_background is { } bg)
-				m = Modifier.Background(ToComposeColor(bg));
+				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
 
 			var p = _padding;
 			if (p.Left != 0 || p.Top != 0 || p.Right != 0 || p.Bottom != 0)
@@ -111,10 +131,19 @@ namespace Comet.Platform.Compose
 			_childVersion.Value++;
 		}
 
-		// Compose measures/positions its own tree for now; the Yoga positioned-host
-		// model wires through these in a later step.
-		public Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
-		public void Arrange(Rect frame) { }
+		// Leaf intrinsic size for the Yoga engine (overridden by measurable leaves, e.g. text).
+		// Container nodes defer to Yoga and need no intrinsic size.
+		public virtual Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
+
+		// Yoga-computed parent-relative frame (in Dp); stored + recomposed so BuildNodeModifier
+		// positions this node absolutely.
+		public void Arrange(Rect frame)
+		{
+			_fx = (float)frame.X; _fy = (float)frame.Y;
+			_fw = (float)frame.Width; _fh = (float)frame.Height;
+			_hasFrame = true;
+			_frameVersion.Value++;
+		}
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 
