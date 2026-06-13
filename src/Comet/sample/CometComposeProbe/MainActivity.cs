@@ -16,8 +16,8 @@ namespace CometComposeProbe
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
-		readonly Signal<int> _a = new(0);
-		readonly Signal<int> _b = new(0);
+		readonly Signal<string> _name = new(string.Empty);
+		readonly Signal<bool> _fancy = new(false);
 
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
@@ -33,28 +33,24 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// A richer tree exercising nested layout (Row inside Column), two independent
-		// reactive counters, and a DERIVED value (Sum) that tracks BOTH signals — proving
-		// multi-dependency reactive tracking flows through the Compose bridge.
+		// A form exercising two-way input through Compose: a TextField bound to a Signal
+		// (typing updates the greeting live) and a Switch bound to a Signal (flipping
+		// updates a label) — both round-tripping user input back into Comet's reactive state.
 		View BuildUi() => new VStack
 		{
 			new Text("Comet → Jetpack Compose"),
 
-			new Text(() => $"A = {_a.Value}"),
+			new TextField(_name, "Enter your name"),
+			new Text(() => string.IsNullOrEmpty(_name.Value)
+				? "Hello, stranger"
+				: $"Hello, {_name.Value}!"),
+
 			new HStack
 			{
-				new Button("A +", () => _a.Value++),
-				new Button("A −", () => _a.Value--),
+				new Text("Fancy mode"),
+				new Toggle(_fancy),
 			},
-
-			new Text(() => $"B = {_b.Value}"),
-			new HStack
-			{
-				new Button("B +", () => _b.Value++),
-				new Button("B −", () => _b.Value--),
-			},
-
-			new Text(() => $"Sum = {_a.Value + _b.Value}"),
+			new Text(() => _fancy.Value ? "✨ Fancy is ON ✨" : "plain mode"),
 		};
 
 		sealed class EmptyServiceProvider : IServiceProvider

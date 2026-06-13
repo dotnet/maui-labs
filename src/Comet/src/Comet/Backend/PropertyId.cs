@@ -85,5 +85,13 @@ namespace Comet.Backend
 		// --- Stack layouts (128–143) ---
 		public static readonly PropertyId Stack_Orientation = new(128);
 		public static readonly PropertyId Stack_Spacing = new(129);
+
+		// --- Toggle / Switch (144–159) ---
+		public static readonly PropertyId Toggle_IsOn = new(144);
+
+		// --- Slider (160–175) ---
+		public static readonly PropertyId Slider_Value = new(160);
+		public static readonly PropertyId Slider_Minimum = new(161);
+		public static readonly PropertyId Slider_Maximum = new(162);
 	}
 }

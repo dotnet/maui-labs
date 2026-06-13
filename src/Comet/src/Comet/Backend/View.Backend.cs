@@ -87,10 +87,16 @@ namespace Comet
 		}
 
 		/// <summary>
-		/// Handles an event raised by this view's backend node (e.g. a Compose button
-		/// click). Controls override to invoke their reactive handlers. Base is a no-op.
+		/// Handles a no-payload event raised by this view's backend node (e.g. a Compose
+		/// button click). Controls override to invoke their reactive handlers. No-op base.
 		/// </summary>
 		protected internal virtual void OnBackendEvent(Backend.EventId id) { }
+
+		/// <summary>
+		/// Handles an event carrying a payload (e.g. a TextField's new string, a Switch's
+		/// new bool) so the control can write it back to its bound state. No-op base.
+		/// </summary>
+		protected internal virtual void OnBackendEvent<T>(Backend.EventId id, T payload) { }
 	}
 
 	/// <summary>Routes a backend node's events to its owning Comet view.</summary>
@@ -100,7 +106,7 @@ namespace Comet
 		public ViewEventSink(View view) => _view = view;
 
 		public void OnEvent(Backend.EventId id) => _view.OnBackendEvent(id);
-		public void OnEvent<T>(Backend.EventId id, T payload) => _view.OnBackendEvent(id);
+		public void OnEvent<T>(Backend.EventId id, T payload) => _view.OnBackendEvent(id, payload);
 		public void OnGesture(Backend.GestureKind kind, in Backend.GestureData data) { }
 	}
 }

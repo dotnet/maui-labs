@@ -38,5 +38,17 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new ComposeStackNode(StackAxis.Depth);
 	}
+
+	public partial class TextField
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeTextFieldNode();
+	}
+
+	public partial class Toggle
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeToggleNode();
+	}
 }
 #endif
