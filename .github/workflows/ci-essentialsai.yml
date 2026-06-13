@@ -54,3 +54,36 @@ jobs:
       pack: true
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+
+  # Step 3: Run device tests on Mac Catalyst via DeviceRunners + dotnet test.
+  device-tests-maccatalyst:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install workloads
+        run: dotnet workload install maui maccatalyst --version 10.0.203
+
+      - name: Run device tests (Mac Catalyst)
+        run: >
+          dotnet test
+          tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
+          -f net10.0-maccatalyst
+          -c Release
+          --logger trx
+          --results-directory artifacts/TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-essentialsai-device-maccatalyst
+          path: artifacts/TestResults/**/*.trx
