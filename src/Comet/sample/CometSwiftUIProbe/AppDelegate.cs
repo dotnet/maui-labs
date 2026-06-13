@@ -1,5 +1,6 @@
 using Comet;
 using Comet.Platform.SwiftUI;
+using Comet.Reactive;
 using Foundation;
 using Microsoft.Maui.Graphics;
 using UIKit;
@@ -10,6 +11,8 @@ namespace CometSwiftUIProbe
 	public class AppDelegate : UIApplicationDelegate
 	{
 		public override UIWindow? Window { get; set; }
+
+		readonly Signal<int> _count = new(0);
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
 		{
@@ -24,18 +27,22 @@ namespace CometSwiftUIProbe
 			Window.RootViewController = backend.CreateController(BuildUi());
 
 			Window.MakeKeyAndVisible();
+
+			// Drive the Signal on a timer to prove the reactive loop C# -> SwiftUI:
+			// each tick writes the Signal, the scheduler flushes, the bound Text re-emits
+			// to its SwiftUI node, and SwiftUI re-renders. (The Button does the same on tap.)
+			NSTimer.CreateScheduledTimer(1.0, true, _ => _count.Value++);
+
 			return true;
 		}
 
-		static View BuildUi() => new VStack
+		// Interactive reactive loop on iOS: tapping the SwiftUI Button writes the Signal,
+		// the reactive scheduler flushes, and the bound Text re-emits to its SwiftUI node.
+		View BuildUi() => new VStack
 		{
 			new Text("Comet → SwiftUI"),
-			new Text("A Comet tree rendered via the node protocol"),
-			new HStack
-			{
-				new Text("nested"),
-				new Text("HStack"),
-			}.Background(Color.FromArgb("#E8DEF8")).Padding(12),
+			new Text(() => $"Count: {_count.Value}"),
+			new Button("Increment", () => _count.Value++),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : System.IServiceProvider

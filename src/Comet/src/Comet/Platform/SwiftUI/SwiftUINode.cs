@@ -21,7 +21,15 @@ namespace Comet.Platform.SwiftUI
 
 		public CometNode Native => _native;
 
-		public SwiftUINode(string kind) => _native = CometSwiftUIHost.MakeNode(kind);
+		public SwiftUINode(string kind)
+		{
+			_native = CometSwiftUIHost.MakeNode(kind);
+			// Route native taps (e.g. a SwiftUI Button) back through the event sink.
+			// Harmless for non-interactive kinds (their handler never fires).
+			CometSwiftUIHost.SetTapHandler(_native, OnNativeTap);
+		}
+
+		void OnNativeTap() => _sink?.OnEvent(EventIds.Clicked);
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{

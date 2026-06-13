@@ -11,6 +11,8 @@ import SwiftUI
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
     @Published var padding: CGFloat = 0
+    // Tap callback into C# (set via the host fn). ObjC block so .NET binds it as an Action.
+    var onTap: (() -> Void)?
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -43,6 +45,11 @@ import SwiftUI
         if property == "padding" { node.padding = CGFloat(value) }
     }
 
+    @objc(setTapHandler:handler:)
+    public static func setTapHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
+        node.onTap = handler
+    }
+
     @objc(insertChild:atIndex:child:)
     public static func insertChild(_ node: CometNode, atIndex index: Int, child: CometNode) {
         let i = max(0, min(index, node.children.count))
@@ -71,6 +78,8 @@ struct CometNodeView: View {
         switch node.kind {
         case "text":
             Text(node.text)
+        case "button":
+            Button(action: { node.onTap?() }) { Text(node.text) }
         case "hstack":
             HStack { ForEach(node.children) { CometNodeView(node: $0) } }
         case "zstack":

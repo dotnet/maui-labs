@@ -14,6 +14,12 @@ namespace Comet
 			=> new SwiftUINode("text");
 	}
 
+	public partial class Button
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("button");
+	}
+
 	public partial class VStack
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
