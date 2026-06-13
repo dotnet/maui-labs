@@ -103,15 +103,44 @@ Open environment question for any option: Peppers targets `net10.0-android`;
 confirm his composition renders under **.NET 11 preview 5** on the Pixel 5
 (binding rebuild may be required).
 
-## On-device render — remaining (implementation labor, not risk)
-A `ComposeView` rendering a C#-driven `BasicText` (chosen: no value-class params)
-via the pattern above, then `Button` + `MutableState` recompose. Blueprint complete;
-exact bridges depend on the build-vs-reuse decision above.
+## Decision & status (2026-06-12)
 
-Escape hatch if pure-C# composable invocation proves impractical: a tiny Kotlin
-AAR holding only the composition skeleton (state holders + a node-kind `when`),
-with C# still owning all logic. The `ICometBackendNode` protocol is unchanged
-either way.
+**Decided: vendor/fork Peppers' facade** as the bridge layer (this folder).
+✅ Vendored `Microsoft.AndroidX.Compose` (facade + JNI-bridge generator, 309 files)
+**builds clean under .NET 11 preview 5** — net10→net11 bump + inline version pins
+(StdLib 2.4.0 for Core 1.19.0). The whole C#→Compose plumbing is now in-tree.
+
+## Next: the retained↔composition backend bridge (Comet's value-add)
+
+Comet's diff drives **imperative retained mutations** (`ICometBackendNode`:
+ApplyProperty/InsertChild/…); the vendored facade is **declarative
+rebuild-per-composition** (`ComposableNode.Render(IComposer)`). Bridge them in
+`src/Comet/src/Comet/Platform/Compose/` (android TFM), referencing the vendored
+facade:
+
+- `ComposeNode : ICometBackendNode` base. Holds children in a vendored
+  `MutableStateList` so structural diffs (InsertChild/RemoveChildAt/MoveChild)
+  recompose the container. Implements `Render(IComposer)` (abstract).
+- Per-control nodes (`ComposeTextNode`, `ComposeButtonNode`, `ComposeColumnNode`…):
+  each property is a vendored `IMutableState` from
+  `SnapshotStateKt.MutableStateOf(value, StructuralEqualityPolicy())`.
+  - `ApplyProperty(id, value)` writes the matching state's `.Value` — the single
+    steady-state JNI call (`setValue`).
+  - `Render(composer)` builds the vendored composable (`new AndroidX.Compose.Text(
+    (string)_text.Value)`) reading the states, so Compose tracks the read and
+    recomposes only that scope on the next `setValue`.
+- `ComposeBackendRoot`: owns the `ComposeView`, `SetContent(c => rootNode)`, set as
+  activity content. `CreateBackendNode` overrides on Comet's control partials
+  (`Text.Compose.g.cs` …) return the matching `ComposeNode` — the only reference, so
+  unused controls + nodes trim away.
+
+Then: wire `Comet.csproj` → conditional ProjectReference to the vendored facade for
+`net11.0-android`; render the mini Todo on the Pixel 5 (Phase 1 gate); A/B vs the
+`RESULTS.md` baseline.
+
+Escape hatch (still open) if the retained↔composition bridge proves impractical: a
+tiny Kotlin AAR holding only the composition skeleton (state holders + a node-kind
+`when`), with C# owning all logic. The `ICometBackendNode` protocol is unchanged.
 
 ## Files
 - `Comet.Compose.Facade.csproj` — package set + TFM (net11.0-android, minSdk 24)
