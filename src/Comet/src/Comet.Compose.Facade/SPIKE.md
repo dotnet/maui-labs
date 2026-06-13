@@ -36,20 +36,77 @@ So C# drives Compose by implementing a `Kotlin.Jvm.Functions.IFunction2`
 `SetContent`. The lambda's `Invoke(composer, changed)` re-enters our emit code,
 threading the `composer` into each composable call.
 
-## Still to prove (the hard part)
+## Mechanism — fully reverse-engineered (risk retired)
 
-1. **Composable invocation from C#.** `@Composable` functions use a special
-   calling convention — the implicit `Composer` parameter plus a `changed` int
-   bitmask. Whether the Xamarin bindings surface `Text`/`Button`/`Column` as
-   directly-callable C# methods (threading `IComposer`) or whether they must be
-   invoked via JNI (as Peppers' generator does) is the next thing to determine —
-   initial ikdasm probing did not surface a public `TextKt.Text(...)` overload,
-   which suggests the JNI-invocation path (study Peppers' generator output).
-2. **`ComposeView.SetContent(IFunction2)` with a C# composable lambda.** Entry
-   point now known; implement the `IFunction2` in C#.
-3. **On-device render.** A `ComposeView` set as activity content rendering a
-   C#-driven `Text` + `Button`, with a `MutableState` write recomposing the
-   narrowest scope (proving steady-state JNI is limited to `setValue`).
+The composables are **not** callable binding methods (the .NET-for-Android binder
+drops `@Composable` functions — they have no `$default` sibling overload and a
+mangled JVM name from Kotlin value-class params). They must be invoked by **raw
+JNI**. The complete, proven pattern (from Peppers' `ComposeBridgeGenerator`):
+
+**1. Invoke a composable** — cached `FindClass` + `GetStaticMethodID` + `CallStaticVoidMethod`:
+```
+s_Button_class = FindClass("androidx/compose/material3/ButtonKt")      // cached global ref
+mid            = GetStaticMethodID(s_Button_class, "Button", signature) // JVM sig incl. value classes
+int defaults = (int)ButtonDefault.All;                  // $default bitmask: bit set = use Kotlin default
+if (modifier is not null) defaults &= ~(int)ButtonDefault.Modifier;  // clear bit for each arg we pass
+// marshal args + composer.Handle + $changed(0) + defaults into JValue*
+CallStaticVoidMethod(s_Button_class, mid, args);
+GC.KeepAlive(onClick); GC.KeepAlive(content); GC.KeepAlive(composer);   // across the JNI call
+```
+- The JVM **signature** ends `…Landroidx/compose/runtime/Composer;II)V` (or `;III)V`
+  when params > ~10 → `$changed` splits across multiple ints). Material3 `Text`'s
+  name is mangled `Text--4IGK_g` and packs `Color`/`TextUnit` value classes as `J` (long).
+- `$default` enum per composable (`[ComposeDefaults("ButtonDefault","!onClick","modifier",…,"!content")]`):
+  `!`-prefixed = required (no default bit). Provide an arg → clear its bit.
+
+**2. SetContent entry**:
+```
+view.SetContent(ComposableLambdaKt.ComposableLambdaInstance(key:-1, tracked:…, block: <IFunction2 ACW>))
+// block.Invoke(composer, changed) -> content(composer).Render(composer)
+```
+
+**3. Kotlin function params** (onClick, content, the SetContent block) are
+`[Register("net/compose/…")]`'d `Java.Lang.Object` ACWs implementing the bound
+`Kotlin.Jvm.Functions.IFunction0/2/3`, so Compose's bytecode-typed lambda slots
+accept them. `Invoke()` returns `Kotlin.Unit.Instance`.
+
+**4. The node model maps 1:1 onto Comet's protocol.** Peppers' `ComposableNode.Render(IComposer)`
+is the moral equivalent of `ICometBackendNode`: a passive AST whose `Render` does the
+JNI invocation, threading the composer to children via containers. Comet's
+`ComposeXxxNode` will hold its `MutableState`s and read them in `Render` so a
+`setValue` recomposes the narrowest scope (the steady-state-JNI-is-`setValue` goal).
+
+## ⚠️ Strategic finding — build-vs-reuse of the bridge layer
+
+Building Comet's **own** facade (per the plan) means reproducing **all of the
+above** for ~65 composables: a multi-file Roslyn generator
+(`ComposeBridgeGenerator` + `ComposeFacadeGenerator` + `ComposeDefaultsGenerator`
++ `ComposeCompanionGenerator`) emitting ~4,000 lines of raw-JNI bridges from
+`[ComposeBridge]`/`[ComposeDefaults]` metadata, including value-class ABI
+mangling and `$changed`/`$default` bit math. That is the bulk of Peppers'
+~8,000-line library — and it is **commodity Compose-ABI plumbing with zero Comet
+differentiation**. Comet's value-add is the reactive MVU core, the
+`ICometBackendNode` protocol, Yoga layout, and typed storage — none of which this
+plumbing touches.
+
+**Recommendation to revisit with David:** the "build our own facade, Peppers as
+reference only" decision was made before the bridge layer's true shape was known.
+Options, fastest-to-most-control:
+1. **Vendor/fork Peppers' `*.SourceGenerators` + bridges as the JNI layer**, build
+   Comet's `ICometBackendNode` Compose backend on top (own the node model, reuse the
+   ABI plumbing). Keeps full control of everything that differentiates Comet.
+2. **Reference his NuGet** as a dependency (least control, fastest).
+3. **Build our own generator** from this blueprint (max control, ~weeks of ABI work,
+   no differentiation gained).
+
+Open environment question for any option: Peppers targets `net10.0-android`;
+confirm his composition renders under **.NET 11 preview 5** on the Pixel 5
+(binding rebuild may be required).
+
+## On-device render — remaining (implementation labor, not risk)
+A `ComposeView` rendering a C#-driven `BasicText` (chosen: no value-class params)
+via the pattern above, then `Button` + `MutableState` recompose. Blueprint complete;
+exact bridges depend on the build-vs-reuse decision above.
 
 Escape hatch if pure-C# composable invocation proves impractical: a tiny Kotlin
 AAR holding only the composition skeleton (state holders + a node-kind `when`),
