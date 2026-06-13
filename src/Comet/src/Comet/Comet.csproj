@@ -42,4 +42,10 @@
 	<ProjectReference Include="..\Comet.Layout.Yoga\Comet.Layout.Yoga.csproj" />
   </ItemGroup>
 
+  <!-- Jetpack Compose backend (Android only) renders through the vendored
+       Microsoft.AndroidX.Compose bridge layer. See src/vendor/VENDORED.md. -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+	<ProjectReference Include="..\vendor\Microsoft.AndroidX.Compose\Microsoft.AndroidX.Compose.csproj" />
+  </ItemGroup>
+
 </Project>

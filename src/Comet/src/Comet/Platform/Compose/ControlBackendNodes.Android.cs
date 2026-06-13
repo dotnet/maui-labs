@@ -1,0 +1,42 @@
+#nullable enable
+#if ANDROID
+using Comet.Backend;
+using Comet.Platform.Compose;
+
+namespace Comet
+{
+	// CreateBackendNode overrides wiring each wave-1 control to its Compose node.
+	// These are the ONLY references to the concrete node types, so a control the app
+	// never uses trims away together with its node.
+
+	public partial class Text
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeTextNode();
+	}
+
+	public partial class Button
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeButtonNode();
+	}
+
+	public partial class VStack
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeStackNode(StackAxis.Vertical);
+	}
+
+	public partial class HStack
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeStackNode(StackAxis.Horizontal);
+	}
+
+	public partial class ZStack
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeStackNode(StackAxis.Depth);
+	}
+}
+#endif
