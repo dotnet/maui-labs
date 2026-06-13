@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Comet;
 using Comet.DevTools;
 using Comet.Platform.SwiftUI;
@@ -14,11 +16,10 @@ namespace CometSwiftUIProbe
 	{
 		public override UIWindow? Window { get; set; }
 
-		readonly Signal<int> _count = new(0);
-		readonly Signal<string> _name = new(string.Empty);
-		readonly Signal<bool> _fancy = new(false);
-		readonly Signal<int> _taps = new(0);
+		static readonly string[] Planets =
+			{ "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune" };
 
+		NavigationView? _nav;
 		CometDevAgent? _agent;
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
@@ -28,10 +29,8 @@ namespace CometSwiftUIProbe
 
 			Window = new UIWindow(UIScreen.MainScreen.Bounds);
 
-			// In-process dev agent (ailoha/DevFlow model): lets the CLI / an AI agent / curl
-			// inspect this Comet tree and drive semantic actions (tap/fill/toggle) over HTTP.
-			// Reactive writes must run on the UI thread, so we hand it the main queue. Start it
-			// BEFORE materializing so the registry tracks every node as the tree is built.
+			// In-process dev agent (ailoha/DevFlow model): inspect this Comet tree and drive
+			// semantic actions over HTTP. Start BEFORE materializing so it tracks every node.
 			_agent = new CometDevAgent(9234, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
 
@@ -41,33 +40,39 @@ namespace CometSwiftUIProbe
 			Window.RootViewController = backend.CreateController(BuildUi());
 
 			Window.MakeKeyAndVisible();
-
 			return true;
 		}
 
-		// No timer: state changes only via user interaction or the dev agent, so a tap/fill/
-		// toggle through the agent is a clean, deterministic verification of the event loop.
-		View BuildUi() => new VStack
+		// Master-detail capstone: a virtualized List of rows; tapping a row (an arbitrary-view
+		// tap gesture, not a Button) navigates to a Detail screen. Detail carries a reactive
+		// counter (Button click loop) and a Back button (Pop). Exercises list + tap gesture +
+		// navigation + reactivity together — the iOS counterpart of the Android capstone.
+		View BuildUi()
 		{
-			new Text("Comet → SwiftUI").Color(Colors.White),
+			_nav = new NavigationView();
+			_nav.Add(MasterScreen());
+			return _nav;
+		}
 
-			// Counter — exercises the Button click event path (Swift onTap -> C# -> Signal).
-			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
-			new Button("Increment", () => _count.Value++),
+		View MasterScreen() =>
+			new ListView<string>(() => (IReadOnlyList<string>)Planets.ToList())
+			{
+				ViewFor = planet => new Text($"🪐  {planet}")
+					.Color(Colors.White)
+					.OnTap(_ => _nav!.Navigate(DetailScreen(planet))),
+			};
 
-			// Text input — exercises the TextField write-back path (fill -> Signal -> Text).
-			new TextField(_name, "Type a name"),
-			new Text(() => $"Hello, {(_name.Value.Length == 0 ? "stranger" : _name.Value)}").Color(Colors.White),
-
-			// Toggle — exercises the bool write-back path.
-			new Toggle(_fancy),
-			new Text(() => _fancy.Value ? "Fancy: ON" : "Fancy: off").Color(Colors.White),
-
-			// Arbitrary-view tap gesture (not a Button) — exercises the OnGesture(Tap) path:
-			// SwiftUI .onTapGesture -> CometNode.onTapGesture -> sink.OnGesture(Tap) -> recognizer.
-			new Text(() => $"Tapped: {_taps.Value}× (tap me)").Color(Colors.White)
-				.OnTap(_ => _taps.Value++),
-		}.Background(Color.FromArgb("#6750A4")).Padding(24);
+		View DetailScreen(string planet)
+		{
+			var count = new Signal<int>(0);
+			return new VStack
+			{
+				new Text($"📄  {planet}").Color(Colors.White),
+				new Text(() => $"Taps: {count.Value}").Color(Colors.White),
+				new Button("Increment", () => count.Value++),
+				new Button("← Back", () => _nav!.Pop()),
+			}.Background(Color.FromArgb("#7D5260")).Padding(28);
+		}
 
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
