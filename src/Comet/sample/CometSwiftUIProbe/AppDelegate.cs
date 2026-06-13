@@ -17,6 +17,7 @@ namespace CometSwiftUIProbe
 		readonly Signal<int> _count = new(0);
 		readonly Signal<string> _name = new(string.Empty);
 		readonly Signal<bool> _fancy = new(false);
+		readonly Signal<int> _taps = new(0);
 
 		CometDevAgent? _agent;
 
@@ -61,6 +62,11 @@ namespace CometSwiftUIProbe
 			// Toggle — exercises the bool write-back path.
 			new Toggle(_fancy),
 			new Text(() => _fancy.Value ? "Fancy: ON" : "Fancy: off").Color(Colors.White),
+
+			// Arbitrary-view tap gesture (not a Button) — exercises the OnGesture(Tap) path:
+			// SwiftUI .onTapGesture -> CometNode.onTapGesture -> sink.OnGesture(Tap) -> recognizer.
+			new Text(() => $"Tapped: {_taps.Value}× (tap me)").Color(Colors.White)
+				.OnTap(_ => _taps.Value++),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : System.IServiceProvider

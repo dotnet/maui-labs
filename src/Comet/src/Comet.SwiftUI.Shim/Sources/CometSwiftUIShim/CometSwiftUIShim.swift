@@ -14,8 +14,10 @@ import SwiftUI
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
     @Published var padding: CGFloat = 0
+    @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     // Callbacks into C# (set via host fns). ObjC blocks so .NET binds them as Actions.
-    var onTap: (() -> Void)?
+    var onTap: (() -> Void)?            // Button action (-> Clicked)
+    var onTapGesture: (() -> Void)?     // arbitrary-view tap gesture (-> OnGesture(Tap))
     var onChangeString: ((String) -> Void)?
     var onChangeBool: ((Bool) -> Void)?
     var onChangeDouble: ((Double) -> Void)?
@@ -47,7 +49,11 @@ import SwiftUI
 
     @objc(setBool:property:value:)
     public static func setBool(_ node: CometNode, property: String, value: Bool) {
-        if property == "ison" { node.isOn = value }
+        switch property {
+        case "ison": node.isOn = value
+        case "hastapgesture": node.hasTapGesture = value
+        default: break
+        }
     }
 
     @objc(setColor:property:argb:)
@@ -67,6 +73,11 @@ import SwiftUI
     @objc(setTapHandler:handler:)
     public static func setTapHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
         node.onTap = handler
+    }
+
+    @objc(setTapGestureHandler:handler:)
+    public static func setTapGestureHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
+        node.onTapGesture = handler
     }
 
     @objc(setStringChangeHandler:handler:)
@@ -152,6 +163,23 @@ struct CometNodeView: View {
         content
             .padding(node.padding)
             .modifier(BackgroundModifier(argb: node.backgroundARGB))
+            .modifier(TapGestureModifier(node: node))
+    }
+}
+
+// Routes a SwiftUI tap on an arbitrary view to the node's gesture callback (the iOS
+// counterpart of Compose's Modifier.Clickable). contentShape makes the whole padded
+// frame — including transparent areas of a stack — hittable.
+private struct TapGestureModifier: ViewModifier {
+    @ObservedObject var node: CometNode
+    func body(content: Content) -> some View {
+        if node.hasTapGesture {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { node.onTapGesture?() }
+        } else {
+            content
+        }
     }
 }
 

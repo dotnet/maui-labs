@@ -35,6 +35,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setTapHandler:handler:")]
 		void SetTapHandler(CometNode node, Action handler);
 
+		[Static, Export("setTapGestureHandler:handler:")]
+		void SetTapGestureHandler(CometNode node, Action handler);
+
 		[Static, Export("setStringChangeHandler:handler:")]
 		void SetStringChangeHandler(CometNode node, Action<string> handler);
 

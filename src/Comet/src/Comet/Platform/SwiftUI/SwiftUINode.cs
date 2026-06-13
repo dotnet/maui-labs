@@ -34,12 +34,14 @@ namespace Comet.Platform.SwiftUI
 			// Route native events back through the event sink. Harmless for kinds that
 			// don't raise a given event (their handler simply never fires).
 			CometSwiftUIHost.SetTapHandler(_native, OnNativeTap);
+			CometSwiftUIHost.SetTapGestureHandler(_native, OnNativeTapGesture);
 			CometSwiftUIHost.SetStringChangeHandler(_native, OnNativeTextChanged);
 			CometSwiftUIHost.SetBoolChangeHandler(_native, OnNativeToggled);
 			CometSwiftUIHost.SetDoubleChangeHandler(_native, OnNativeValueChanged);
 		}
 
 		void OnNativeTap() => _sink?.OnEvent(EventIds.Clicked);
+		void OnNativeTapGesture() => _sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
 		void OnNativeTextChanged(string s) => _sink?.OnEvent(EventIds.TextChanged, s);
 		void OnNativeToggled(bool b) => _sink?.OnEvent(EventIds.Toggled, b);
 		void OnNativeValueChanged(double d) => _sink?.OnEvent(EventIds.ValueChanged, d);
@@ -54,6 +56,8 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
 			else if (id == PropertyIds.Slider_Value)
 				CometSwiftUIHost.SetDouble(_native, "value", value.AsDouble);
+			else if (id == PropertyIds.HasTapGesture)
+				CometSwiftUIHost.SetBool(_native, "hastapgesture", value.AsBool);
 			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 			else if (id == PropertyIds.Padding && value.AsObject is Microsoft.Maui.Thickness t)
