@@ -24,17 +24,29 @@ namespace Comet.Platform.SwiftUI
 		public SwiftUINode(string kind)
 		{
 			_native = CometSwiftUIHost.MakeNode(kind);
-			// Route native taps (e.g. a SwiftUI Button) back through the event sink.
-			// Harmless for non-interactive kinds (their handler never fires).
+			// Route native events back through the event sink. Harmless for kinds that
+			// don't raise a given event (their handler simply never fires).
 			CometSwiftUIHost.SetTapHandler(_native, OnNativeTap);
+			CometSwiftUIHost.SetStringChangeHandler(_native, OnNativeTextChanged);
+			CometSwiftUIHost.SetBoolChangeHandler(_native, OnNativeToggled);
+			CometSwiftUIHost.SetDoubleChangeHandler(_native, OnNativeValueChanged);
 		}
 
 		void OnNativeTap() => _sink?.OnEvent(EventIds.Clicked);
+		void OnNativeTextChanged(string s) => _sink?.OnEvent(EventIds.TextChanged, s);
+		void OnNativeToggled(bool b) => _sink?.OnEvent(EventIds.Toggled, b);
+		void OnNativeValueChanged(double d) => _sink?.OnEvent(EventIds.ValueChanged, d);
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
-			if (id == PropertyIds.Text_Value || id == PropertyIds.Button_Text)
+			if (id == PropertyIds.Text_Value || id == PropertyIds.Button_Text || id == PropertyIds.TextField_Text)
 				CometSwiftUIHost.SetString(_native, "text", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.TextField_Placeholder)
+				CometSwiftUIHost.SetString(_native, "placeholder", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Toggle_IsOn)
+				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
+			else if (id == PropertyIds.Slider_Value)
+				CometSwiftUIHost.SetDouble(_native, "value", value.AsDouble);
 			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 			else if (id == PropertyIds.Padding && value.AsObject is Microsoft.Maui.Thickness t)

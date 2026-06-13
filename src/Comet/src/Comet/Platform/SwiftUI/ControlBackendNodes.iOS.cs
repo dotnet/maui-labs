@@ -37,5 +37,23 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new SwiftUINode("zstack");
 	}
+
+	public partial class TextField
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("textfield");
+	}
+
+	public partial class Toggle
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("toggle");
+	}
+
+	public partial class Slider
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("slider");
+	}
 }
 #endif

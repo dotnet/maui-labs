@@ -8,11 +8,17 @@ import SwiftUI
 @objc(CometNode) public class CometNode: NSObject, ObservableObject, Identifiable {
     @objc public let kind: String
     @Published var text: String = ""
+    @Published var placeholder: String = ""
+    @Published var isOn: Bool = false
+    @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
     @Published var padding: CGFloat = 0
-    // Tap callback into C# (set via the host fn). ObjC block so .NET binds it as an Action.
+    // Callbacks into C# (set via host fns). ObjC blocks so .NET binds them as Actions.
     var onTap: (() -> Void)?
+    var onChangeString: ((String) -> Void)?
+    var onChangeBool: ((Bool) -> Void)?
+    var onChangeDouble: ((Double) -> Void)?
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -32,7 +38,16 @@ import SwiftUI
 
     @objc(setString:property:value:)
     public static func setString(_ node: CometNode, property: String, value: String) {
-        if property == "text" { node.text = value }
+        switch property {
+        case "text": node.text = value
+        case "placeholder": node.placeholder = value
+        default: break
+        }
+    }
+
+    @objc(setBool:property:value:)
+    public static func setBool(_ node: CometNode, property: String, value: Bool) {
+        if property == "ison" { node.isOn = value }
     }
 
     @objc(setColor:property:argb:)
@@ -42,12 +57,31 @@ import SwiftUI
 
     @objc(setDouble:property:value:)
     public static func setDouble(_ node: CometNode, property: String, value: Double) {
-        if property == "padding" { node.padding = CGFloat(value) }
+        switch property {
+        case "padding": node.padding = CGFloat(value)
+        case "value": node.doubleValue = value
+        default: break
+        }
     }
 
     @objc(setTapHandler:handler:)
     public static func setTapHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
         node.onTap = handler
+    }
+
+    @objc(setStringChangeHandler:handler:)
+    public static func setStringChangeHandler(_ node: CometNode, handler: @escaping @convention(block) (String) -> Void) {
+        node.onChangeString = handler
+    }
+
+    @objc(setBoolChangeHandler:handler:)
+    public static func setBoolChangeHandler(_ node: CometNode, handler: @escaping @convention(block) (Bool) -> Void) {
+        node.onChangeBool = handler
+    }
+
+    @objc(setDoubleChangeHandler:handler:)
+    public static func setDoubleChangeHandler(_ node: CometNode, handler: @escaping @convention(block) (Double) -> Void) {
+        node.onChangeDouble = handler
     }
 
     @objc(insertChild:atIndex:child:)
@@ -80,6 +114,20 @@ struct CometNodeView: View {
             Text(node.text)
         case "button":
             Button(action: { node.onTap?() }) { Text(node.text) }
+        case "textfield":
+            TextField(node.placeholder, text: Binding(
+                get: { node.text },
+                set: { node.text = $0; node.onChangeString?($0) }))
+                .textFieldStyle(.roundedBorder)
+        case "toggle":
+            Toggle("", isOn: Binding(
+                get: { node.isOn },
+                set: { node.isOn = $0; node.onChangeBool?($0) }))
+                .labelsHidden()
+        case "slider":
+            Slider(value: Binding(
+                get: { node.doubleValue },
+                set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
         case "hstack":
             HStack { ForEach(node.children) { CometNodeView(node: $0) } }
         case "zstack":

@@ -23,6 +23,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setString:property:value:")]
 		void SetString(CometNode node, string property, string value);
 
+		[Static, Export("setBool:property:value:")]
+		void SetBool(CometNode node, string property, bool value);
+
 		[Static, Export("setColor:property:argb:")]
 		void SetColor(CometNode node, string property, uint argb);
 
@@ -31,6 +34,15 @@ namespace Comet.SwiftUI.Interop
 
 		[Static, Export("setTapHandler:handler:")]
 		void SetTapHandler(CometNode node, Action handler);
+
+		[Static, Export("setStringChangeHandler:handler:")]
+		void SetStringChangeHandler(CometNode node, Action<string> handler);
+
+		[Static, Export("setBoolChangeHandler:handler:")]
+		void SetBoolChangeHandler(CometNode node, Action<bool> handler);
+
+		[Static, Export("setDoubleChangeHandler:handler:")]
+		void SetDoubleChangeHandler(CometNode node, Action<double> handler);
 
 		[Static, Export("insertChild:atIndex:child:")]
 		void InsertChild(CometNode node, nint index, CometNode child);
