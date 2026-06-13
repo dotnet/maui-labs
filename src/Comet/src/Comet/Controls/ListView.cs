@@ -150,7 +150,7 @@ namespace Comet
 		}
 	}
 
-	public class ListView : View, IEnumerable, IEnumerable<View>, IListView
+	public partial class ListView : View, IEnumerable, IEnumerable<View>, IListView
 	{
 		public static bool HandlerSupportsVirtualization { get; set; } = true;
 

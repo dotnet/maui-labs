@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Android.App;
 using Android.OS;
 using Comet;
@@ -34,27 +36,16 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// A form exercising two-way input through Compose: a TextField bound to a Signal
-		// (typing updates the greeting live) and a Switch bound to a Signal (flipping
-		// updates a label) — both round-tripping user input back into Comet's reactive state.
-		View BuildUi() => new VStack
+		// A virtualized list of 100 rows rendered through Compose's LazyColumn: each row's
+		// template (an HStack of two Texts) is materialized into backend nodes only when it
+		// scrolls into view. The list is the root because a LazyColumn needs a bounded height.
+		View BuildUi() => new ListView<int>(() => Enumerable.Range(1, 100).ToList())
 		{
-			new Text("Comet → Jetpack Compose"),
-
-			new TextField(_name, "Enter your name"),
-			new Text(() => string.IsNullOrEmpty(_name.Value)
-				? "Hello, stranger"
-				: $"Hello, {_name.Value}!"),
-
-			new HStack
+			ViewFor = i => new HStack
 			{
-				new Text("Fancy mode"),
-				new Toggle(_fancy),
+				new Text($"#{i}"),
+				new Text($"   Comet row via Compose LazyColumn"),
 			},
-			new Text(() => _fancy.Value ? "✨ Fancy is ON ✨" : "plain mode"),
-
-			new Text(() => $"Volume: {(int)(_volume.Value * 100)}%"),
-			new Slider(_volume),
 		};
 
 		sealed class EmptyServiceProvider : IServiceProvider

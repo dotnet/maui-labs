@@ -56,5 +56,11 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new ComposeSliderNode();
 	}
+
+	public partial class ListView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeListNode(this, context);
+	}
 }
 #endif

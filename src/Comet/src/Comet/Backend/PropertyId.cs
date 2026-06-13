@@ -93,5 +93,9 @@ namespace Comet.Backend
 		public static readonly PropertyId Slider_Value = new(160);
 		public static readonly PropertyId Slider_Minimum = new(161);
 		public static readonly PropertyId Slider_Maximum = new(162);
+
+		// --- List (176–191) ---
+		// Bumped whenever the list's data changes, to recompose the LazyColumn.
+		public static readonly PropertyId List_Version = new(176);
 	}
 }
