@@ -14,23 +14,28 @@ namespace Comet.Platform.Compose
 	sealed class ComposeStackNode : ComposeNode
 	{
 		readonly StackAxis _axis;
+		readonly MutableState<int> _spacing = new(0);
 
 		public ComposeStackNode(StackAxis axis) => _axis = axis;
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
-			// Spacing/alignment wiring follows once Yoga drives positioning.
+			if (id == PropertyIds.Stack_Spacing)
+				_spacing.Value = (int)value.AsDouble;
 		}
 
 		public override void Render(IComposer composer)
 		{
+			int spacing = _spacing.Value;
+			var arrangement = spacing > 0 ? Arrangement.SpacedBy(spacing) : null;
+
 			ComposableContainer container = _axis switch
 			{
-				StackAxis.Horizontal => new Row(),
+				StackAxis.Horizontal => new Row(arrangement),
 				StackAxis.Depth => new Box(),
-				_ => new Column(),
+				_ => new Column(arrangement),
 			};
-			// A tap gesture on a stack (e.g. a tappable list row) becomes a clickable.
+			// background / padding / tap gesture become the stack's modifier chain.
 			((ComposableNode)container).Modifier = BuildNodeModifier();
 			AddChildrenTo(container);
 			((ComposableNode)container).Render(composer);

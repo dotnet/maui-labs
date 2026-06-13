@@ -6,6 +6,7 @@ using Android.OS;
 using Comet;
 using Comet.Platform.Compose;
 using Comet.Reactive;
+using Microsoft.Maui.Graphics;
 
 namespace CometComposeProbe
 {
@@ -36,17 +37,28 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// A virtualized list of 100 TAPPABLE rows rendered through Compose's LazyColumn:
-		// each row's template (an HStack with a tap gesture) is materialized only when it
-		// scrolls into view, and tapping a row routes back through the gesture infrastructure.
-		View BuildUi() => new ListView<int>(() => Enumerable.Range(1, 100).ToList())
+		// Styling through Compose modifiers: background colors, padding, and VStack/HStack
+		// spacing — all flowing from Comet's fluent API through the backend's modifier chain.
+		View BuildUi() => new VStack
 		{
-			ViewFor = i => new HStack
+			new VStack
 			{
-				new Text($"#{i}"),
-				new Text($"   tap this Comet row (LazyColumn)"),
-			}.OnTap(_ => Android.Util.Log.Info("CometProbe", $"Tapped row {i} — gesture routed through Compose")),
-		};
+				new Text("Comet → Jetpack Compose").Color(Colors.White),
+				new Text("Styled with Compose modifiers").Color(Colors.White),
+			}.Background(Color.FromArgb("#6750A4")).Padding(24),
+
+			new VStack
+			{
+				new Text("Card: background + padding"),
+				new Text("Row spacing comes from the VStack"),
+			}.Background(Color.FromArgb("#ECE6F0")).Padding(20),
+
+			new HStack
+			{
+				new Text("A row"),
+				new Text("with spacing + tint"),
+			}.Background(Color.FromArgb("#E8DEF8")).Padding(16),
+		}.Background(Color.FromArgb("#FFFBFE")).Padding(12);
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{

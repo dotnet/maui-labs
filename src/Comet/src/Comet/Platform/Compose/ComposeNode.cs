@@ -29,6 +29,11 @@ namespace Comet.Platform.Compose
 		readonly MutableState<int> _childVersion = new(0);
 		ICometEventSink? _sink;
 		readonly MutableState<bool> _hasTap = new(false);
+		// Color/Thickness aren't Java-boxable, so they can't live in a Compose MutableState.
+		// They're held as plain fields and a style-version state drives recomposition.
+		Microsoft.Maui.Graphics.Color? _background;
+		Microsoft.Maui.Thickness _padding;
+		readonly MutableState<int> _styleVersion = new(0);
 
 		protected ICometEventSink? Sink => _sink;
 
@@ -38,6 +43,16 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
+			else if (id == PropertyIds.BackgroundColor)
+			{
+				_background = value.AsColor;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Padding)
+			{
+				_padding = value.AsObject is Microsoft.Maui.Thickness t ? t : default;
+				_styleVersion.Value++;
+			}
 			else
 				ApplyControlProperty(id, in value);
 		}
@@ -46,15 +61,35 @@ namespace Comet.Platform.Compose
 		/// handled by <see cref="ApplyProperty"/> before this is called.</summary>
 		protected abstract void ApplyControlProperty(PropertyId id, in PropertyValue value);
 
-		/// <summary>Builds the modifier this node should apply to its composable — currently a
-		/// clickable when the Comet view has a tap gesture. Returns null when none applies.</summary>
+		/// <summary>Builds the modifier chain this node applies to its composable: background,
+		/// padding, and a clickable when the Comet view has a tap gesture. Reads run inside
+		/// composition (via MutableState) so changes recompose. Returns null when none apply.</summary>
 		protected Modifier? BuildNodeModifier()
 		{
-			if (!_hasTap.Value)
-				return null;
-			return Modifier.Clickable(() =>
-				Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default)));
+			_ = _styleVersion.Value; // subscribe so background/padding changes recompose
+
+			Modifier? m = null;
+
+			if (_background is { } bg)
+				m = Modifier.Background(ToComposeColor(bg));
+
+			var p = _padding;
+			if (p.Left != 0 || p.Top != 0 || p.Right != 0 || p.Bottom != 0)
+				m = (m is null ? Modifier.Companion : m)
+					.Padding((float)p.Left, (float)p.Top, (float)p.Right, (float)p.Bottom);
+
+			if (_hasTap.Value)
+			{
+				var clickable = Modifier.Clickable(() =>
+					Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default)));
+				m = m is null ? clickable : m.Then(clickable);
+			}
+
+			return m;
 		}
+
+		static AndroidX.Compose.Color ToComposeColor(Microsoft.Maui.Graphics.Color c) => AndroidX.Compose.Color.FromArgb(
+			(byte)(c.Alpha * 255), (byte)(c.Red * 255), (byte)(c.Green * 255), (byte)(c.Blue * 255));
 
 		public void InsertChild(int index, ICometBackendNode child)
 		{

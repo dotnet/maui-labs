@@ -52,6 +52,13 @@ namespace Comet
 			if (this.GetBackground() is SolidPaint { Color: { } bg })
 				node.ApplyProperty(PropertyIds.BackgroundColor, PropertyValue.From(bg));
 
+			var pad = this.GetPadding();
+			if (pad.Left != 0 || pad.Top != 0 || pad.Right != 0 || pad.Bottom != 0)
+				node.ApplyProperty(PropertyIds.Padding, PropertyValue.FromObject(pad));
+
+			if (this is IStackLayout stack)
+				node.ApplyProperty(PropertyIds.Stack_Spacing, PropertyValue.From(stack.Spacing));
+
 			// Transforms — emit only when they differ from identity.
 			var t = (ITransform)this;
 			if (t.TranslationX != 0) node.ApplyProperty(PropertyIds.TranslationX, PropertyValue.From(t.TranslationX));

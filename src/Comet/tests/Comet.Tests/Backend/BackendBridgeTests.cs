@@ -93,6 +93,17 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void Materialize_EmitsBackgroundPaddingAndSpacing()
+		{
+			var node = Bridge(new VStack { new Text("x") }.Background(Colors.Blue).Padding(16));
+
+			Assert.Equal(Colors.Blue, node.Get(PropertyIds.BackgroundColor).AsColor);
+			Assert.IsType<Microsoft.Maui.Thickness>(node.Get(PropertyIds.Padding).AsObject);
+			// VStack carries a default spacing, emitted for the Compose Column arrangement.
+			Assert.NotEqual(PropertyValueKind.None, node.Get(PropertyIds.Stack_Spacing).Kind);
+		}
+
+		[Fact]
 		public void Materialize_ResolvesComponentBodyToConcreteTree()
 		{
 			var node = Bridge(new BodyComponent());
