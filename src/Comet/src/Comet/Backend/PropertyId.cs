@@ -99,5 +99,10 @@ namespace Comet.Backend
 		// --- List (176–191) ---
 		// Bumped whenever the list's data changes, to recompose the LazyColumn.
 		public static readonly PropertyId List_Version = new(176);
+
+		// --- Icon (192–207) ---
+		public static readonly PropertyId Icon_Symbol = new(192);
+		public static readonly PropertyId Icon_Tint = new(193);
+		public static readonly PropertyId Icon_Size = new(194);
 	}
 }

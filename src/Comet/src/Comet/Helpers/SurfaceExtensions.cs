@@ -11,6 +11,9 @@ namespace Comet
 		public bool IsZero => TopLeft == 0 && TopRight == 0 && BottomRight == 0 && BottomLeft == 0;
 	}
 
+	/// <summary>A stroke border: <paramref name="Width"/> Dp of <paramref name="Color"/>.</summary>
+	public readonly record struct BorderSpec(double Width, Microsoft.Maui.Graphics.Color Color);
+
 	/// <summary>
 	/// Fluent surface styling that any view can opt into — rounded corners (uniform or
 	/// per-corner) and elevation — the building blocks of a Material "card" or a chat bubble.
@@ -26,6 +29,17 @@ namespace Comet
 
 		/// <summary>Environment key for the elevation / shadow depth (Dp).</summary>
 		public const string ElevationKey = "Comet.Elevation";
+
+		/// <summary>Environment key for a stroke border (<see cref="BorderSpec"/>).</summary>
+		public const string BorderKey = "Comet.Border";
+
+		/// <summary>Strokes this view's outline (following its <see cref="CornerRadius{T}(T,double)"/>)
+		/// with <paramref name="width"/> Dp of <paramref name="color"/> — e.g. an avatar ring.</summary>
+		public static T Border<T>(this T view, double width, Microsoft.Maui.Graphics.Color color) where T : View
+		{
+			view.SetEnvironment(BorderKey, new BorderSpec(width, color), false);
+			return view;
+		}
 
 		/// <summary>Rounds this view's corners (and clips its content/background) to <paramref name="radius"/> Dp.</summary>
 		public static T CornerRadius<T>(this T view, double radius) where T : View

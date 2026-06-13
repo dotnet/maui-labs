@@ -54,6 +54,12 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetString(_native, "placeholder", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Image_Source)
 				CometSwiftUIHost.SetString(_native, "imageurl", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Icon_Symbol)
+				CometSwiftUIHost.SetString(_native, "icon", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Icon_Tint && value.AsColor is { } it)
+				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(it));
+			else if (id == PropertyIds.Icon_Size)
+				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
 			else if (id == PropertyIds.Toggle_IsOn)
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
 			else if (id == PropertyIds.Slider_Value)
@@ -80,6 +86,11 @@ namespace Comet.Platform.SwiftUI
 			}
 			else if (id == PropertyIds.Shadow)
 				CometSwiftUIHost.SetDouble(_native, "elevation", value.AsDouble);
+			else if (id == PropertyIds.Border && value.AsObject is BorderSpec border)
+			{
+				CometSwiftUIHost.SetDouble(_native, "borderwidth", border.Width);
+				CometSwiftUIHost.SetColor(_native, "bordercolor", ToArgb(border.Color));
+			}
 		}
 
 		public void InsertChild(int index, ICometBackendNode child)

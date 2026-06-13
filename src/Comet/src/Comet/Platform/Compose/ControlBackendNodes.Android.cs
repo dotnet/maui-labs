@@ -15,6 +15,12 @@ namespace Comet
 			=> new ComposeImageNode();
 	}
 
+	public partial class Icon
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeIconNode();
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

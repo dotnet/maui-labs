@@ -66,6 +66,9 @@ namespace Comet
 			if (this.GetEnvironment<double?>(this, SurfaceExtensions.ElevationKey, false) is { } elevation && elevation > 0)
 				node.ApplyProperty(PropertyIds.Shadow, PropertyValue.From(elevation));
 
+			if (this.GetEnvironment<BorderSpec?>(this, SurfaceExtensions.BorderKey, false) is { } border && border.Width > 0)
+				node.ApplyProperty(PropertyIds.Border, PropertyValue.FromObject(border));
+
 			// Transforms — emit only when they differ from identity.
 			var t = (ITransform)this;
 			if (t.TranslationX != 0) node.ApplyProperty(PropertyIds.TranslationX, PropertyValue.From(t.TranslationX));

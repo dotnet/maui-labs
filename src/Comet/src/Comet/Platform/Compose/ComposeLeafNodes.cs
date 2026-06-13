@@ -50,6 +50,9 @@ namespace Comet.Platform.Compose
 			// ApplyProperty -> setValue recomposes just this Text.
 			_ = _colorVersion.Value; // subscribe so a color/size/weight change recomposes
 			var text = new ComposeText(_text.Value) { Modifier = BuildNodeModifier() };
+			// Zero letter-spacing so the rendered width matches the Paint measurement above (the
+			// MaterialTheme default bodyLarge adds 0.5sp, which otherwise overflows the frame).
+			text.LetterSpacing = AndroidX.Compose.Sp.Zero;
 			if (_color is { } c)
 				text.Color = ToComposeColor(c);
 			if (_fontSize > 0)
@@ -99,7 +102,9 @@ namespace Comet.Platform.Compose
 			float used = 0f;
 			for (int i = 0; i < layout.LineCount; i++)
 				used = System.Math.Max(used, layout.GetLineWidth(i));
-			return new Size(System.Math.Ceiling(used) / density, layout.Height / density);
+			// Small margin absorbs sub-pixel differences between this Paint measurement and the
+			// composed Text's rendering (hinting/letter-spacing), so a one-line label never clips.
+			return new Size((System.Math.Ceiling(used) + 2) / density, layout.Height / density);
 		}
 	}
 

@@ -35,6 +35,8 @@ namespace Comet.Platform.Compose
 		Microsoft.Maui.Thickness _padding;
 		CornerRadii _corners;
 		float _elevation;
+		float _borderWidth;
+		Microsoft.Maui.Graphics.Color? _borderColor;
 		readonly MutableState<int> _styleVersion = new(0);
 
 		// Yoga-driven layout (when the engine runs): parent-relative frame in Dp + a version
@@ -81,6 +83,15 @@ namespace Comet.Platform.Compose
 				_elevation = (float)value.AsDouble;
 				_styleVersion.Value++;
 			}
+			else if (id == PropertyIds.Border)
+			{
+				if (value.AsObject is BorderSpec b)
+				{
+					_borderWidth = (float)b.Width;
+					_borderColor = b.Color;
+				}
+				_styleVersion.Value++;
+			}
 			else
 				ApplyControlProperty(id, in value);
 		}
@@ -117,6 +128,11 @@ namespace Comet.Platform.Compose
 
 			if (_background is { } bg)
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
+
+			// Stroke (e.g. avatar ring) following the same rounded outline, drawn over the fill.
+			if (_borderWidth > 0 && _borderColor is { } bc)
+				m = (m ?? Modifier.Companion).Border(new Dp(_borderWidth), ToComposeColor(bc),
+					rounded ? CornerShape() : null);
 
 			// Native padding only when Compose lays out natively; under Yoga the engine has
 			// already inset the children (their absolute frames include the padding), so applying

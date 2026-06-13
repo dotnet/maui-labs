@@ -29,6 +29,11 @@ namespace Comet.Platform.Compose
 		/// positioned absolutely from the computed frames. Default false (native layout).</summary>
 		public bool UseYogaLayout { get; set; }
 
+		/// <summary>Optional hook to wrap the composed root — e.g. in a <c>MaterialTheme</c> carrying
+		/// the app's color scheme — so real Material controls (Button, Icon, ripples) pick up the
+		/// theme. The app supplies this since the theme/colors are app-specific, not backend policy.</summary>
+		public Func<AndroidX.Compose.ComposableNode, AndroidX.Compose.ComposableNode>? WrapContent { get; set; }
+
 		/// <summary>Materializes <paramref name="view"/> into a Compose tree and returns the
 		/// hosting <see cref="ComposeView"/> to set as content.</summary>
 		public ComposeView CreateView(Context context, View view)
@@ -50,7 +55,7 @@ namespace Comet.Platform.Compose
 			}
 
 			var composeView = new ComposeView(context);
-			composeView.SetContent(_ => _root);
+			composeView.SetContent(_ => WrapContent is null ? _root : WrapContent(_root));
 			return composeView;
 		}
 

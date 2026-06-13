@@ -56,6 +56,12 @@ namespace Comet
 			=> new SwiftUINode("image");
 	}
 
+	public partial class Icon
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("icon");
+	}
+
 	public partial class Slider
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

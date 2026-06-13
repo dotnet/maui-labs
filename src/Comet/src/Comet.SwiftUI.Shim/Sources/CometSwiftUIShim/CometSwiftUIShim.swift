@@ -10,6 +10,7 @@ import SwiftUI
     @Published var text: String = ""
     @Published var placeholder: String = ""
     @Published var imageUrl: String = ""
+    @Published var iconName: String = ""        // cross-platform symbol name → SF Symbol
     @Published var isOn: Bool = false
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
@@ -24,6 +25,8 @@ import SwiftUI
     @Published var cornerBR: CGFloat = 0
     @Published var cornerBL: CGFloat = 0
     @Published var elevation: CGFloat = 0        // soft drop shadow depth
+    @Published var borderWidth: CGFloat = 0      // stroke width (e.g. avatar ring)
+    @Published var borderColorARGB: UInt32 = 0   // stroke color
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     // Yoga-computed parent-relative layout frame. hasFrame flips true once C# arranges this
     // node; until then the view uses native SwiftUI layout (so rendering is unchanged).
@@ -58,6 +61,7 @@ import SwiftUI
         case "text": node.text = value
         case "placeholder": node.placeholder = value
         case "imageurl": node.imageUrl = value
+        case "icon": node.iconName = value
         default: break
         }
     }
@@ -76,6 +80,7 @@ import SwiftUI
         switch property {
         case "background": node.backgroundARGB = argb
         case "textcolor": node.textColorARGB = argb
+        case "bordercolor": node.borderColorARGB = argb
         default: break
         }
     }
@@ -92,6 +97,7 @@ import SwiftUI
         case "elevation": node.elevation = CGFloat(value)
         case "fontsize": node.fontSize = CGFloat(value)
         case "fontweight": node.fontWeight = Int(value)
+        case "borderwidth": node.borderWidth = CGFloat(value)
         default: break
         }
     }
@@ -167,6 +173,12 @@ import SwiftUI
             return CGSize(width: min(ceil(rect.width), w), height: ceil(rect.height))
         }
 
+        // Icon: a square box at the symbol's point size.
+        if node.kind == "icon" {
+            let s = node.fontSize > 0 ? node.fontSize : 24
+            return CGSize(width: s, height: s)
+        }
+
         // Interactive controls (button/textfield/toggle/slider) don't wrap; SwiftUI sizes them.
         let host = UIHostingController(rootView: CometLeafContent(node: node))
         host.view.backgroundColor = .clear
@@ -228,6 +240,11 @@ struct CometLeafContent: View {
             Slider(value: Binding(
                 get: { node.doubleValue },
                 set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
+        case "icon":
+            // Real SF Symbol, tinted + sized — the iOS counterpart of Compose's Material Icon.
+            Image(systemName: sfSymbol(node.iconName))
+                .font(.system(size: node.fontSize > 0 ? node.fontSize : 24))
+                .modifier(ForegroundModifier(argb: node.textColorARGB))
         case "image":
             AsyncImage(url: URL(string: node.imageUrl)) { phase in
                 if let image = phase.image {
@@ -242,6 +259,32 @@ struct CometLeafContent: View {
                 .modifier(ForegroundModifier(argb: node.textColorARGB))
                 .modifier(FontModifier(node: node))
         }
+    }
+}
+
+// Cross-platform symbol name → SF Symbol (the iOS counterpart of the Compose Icons mapping).
+private func sfSymbol(_ name: String) -> String {
+    switch name {
+    case "search": return "magnifyingglass"
+    case "info": return "info.circle"
+    case "menu": return "line.3.horizontal"
+    case "send": return "paperplane.fill"
+    case "place", "location": return "mappin"
+    case "person": return "person.crop.circle"
+    case "account": return "person.crop.circle.fill"
+    case "call", "phone": return "phone.fill"
+    case "email", "mail": return "envelope"
+    case "close": return "xmark"
+    case "settings": return "gearshape"
+    case "share": return "square.and.arrow.up"
+    case "back": return "chevron.left"
+    case "add": return "plus"
+    case "edit": return "pencil"
+    case "mood", "emoji": return "face.smiling"
+    case "at": return "at"
+    case "photo", "image": return "photo"
+    case "video", "duo": return "video"
+    default: return "star"
     }
 }
 
@@ -425,20 +468,31 @@ private struct SurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         let hasCorners = node.cornerTL > 0 || node.cornerTR > 0 || node.cornerBR > 0 || node.cornerBL > 0
         let elevation = node.elevation
-        if hasCorners || elevation > 0 {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: node.cornerTL,
+            bottomLeadingRadius: node.cornerBL,
+            bottomTrailingRadius: node.cornerBR,
+            topTrailingRadius: node.cornerTR,
+            style: .continuous)
+        if hasCorners || elevation > 0 || node.borderWidth > 0 {
             content
-                .clipShape(UnevenRoundedRectangle(
-                    topLeadingRadius: node.cornerTL,
-                    bottomLeadingRadius: node.cornerBL,
-                    bottomTrailingRadius: node.cornerBR,
-                    topTrailingRadius: node.cornerTR,
-                    style: .continuous))
+                .clipShape(shape)
+                .overlay(node.borderWidth > 0
+                    ? AnyView(shape.strokeBorder(colorFromARGB(node.borderColorARGB), lineWidth: node.borderWidth))
+                    : AnyView(EmptyView()))
                 .shadow(color: Color.black.opacity(elevation > 0 ? 0.18 : 0),
                         radius: elevation, x: 0, y: elevation > 0 ? elevation / 2 : 0)
         } else {
             content
         }
     }
+}
+
+private func colorFromARGB(_ argb: UInt32) -> Color {
+    Color(red: Double((argb >> 16) & 0xFF) / 255.0,
+          green: Double((argb >> 8) & 0xFF) / 255.0,
+          blue: Double(argb & 0xFF) / 255.0,
+          opacity: Double((argb >> 24) & 0xFF) / 255.0)
 }
 
 private struct BackgroundModifier: ViewModifier {
