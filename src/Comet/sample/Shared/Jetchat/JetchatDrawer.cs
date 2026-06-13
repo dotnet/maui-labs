@@ -17,7 +17,7 @@ namespace CometSamples.Jetchat
 	{
 		static readonly Color SelectedBg = Color.FromArgb("#DDE1FF");  // Blue90 — selected item container
 
-		public static View Content(double topInset) => new VStack(spacing: 0f)
+		public static View Content(double topInset, System.Action<string>? onProfile = null) => new VStack(spacing: 0f)
 		{
 			// Header
 			new HStack(spacing: 12f)
@@ -33,8 +33,8 @@ namespace CometSamples.Jetchat
 
 			new HStack().Frame(height: 8),
 			SectionTitle("Recent Profiles"),
-			ProfileItem("Ali Conors", C.AvatarMe),
-			ProfileItem("Taylor Brooks", C.AvatarOther),
+			ProfileItem("Ali Conors", C.AvatarMe, onProfile),
+			ProfileItem("Taylor Brooks", C.AvatarOther, onProfile),
 		}.Background(C.Surface);
 
 		static View SectionTitle(string text) =>
@@ -55,11 +55,11 @@ namespace CometSamples.Jetchat
 			.CornerRadius(selected ? 28 : 0)
 			.Margin(new Thickness(12, 0, 12, 0));
 
-		static View ProfileItem(string name, string avatar) => new HStack(spacing: 12f)
+		static View ProfileItem(string name, string avatar, System.Action<string>? onProfile) => new HStack(spacing: 12f)
 		{
 			new Image(avatar).Frame(width: 24, height: 24).CornerRadius(12),
 			new Text(name).Color(C.OnSurface).FontSize(14)
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
-		}.Padding(new Thickness(28, 10, 16, 10));
+		}.Padding(new Thickness(28, 10, 16, 10)).OnTap(_ => onProfile?.Invoke(name));
 	}
 }

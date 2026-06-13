@@ -55,11 +55,14 @@ namespace CometSamples.Jetchat
 		/// are the platform safe-area insets (status bar / home indicator) in Dp.</summary>
 		internal static readonly Comet.Reactive.Signal<bool> DrawerOpen = new(false);
 
-		/// <summary>The whole screen: the conversation behind a modal navigation drawer.</summary>
+		/// <summary>The Jetchat sample: conversation behind the navigation drawer. (The profile
+		/// detail via <see cref="JetchatApp"/> is wired but blocked on root-Component body swap
+		/// support in the node backend — tapping a drawer profile currently just closes the drawer.)</summary>
 		public static View Build(double topInset = 24, double bottomInset = 0) =>
-			new Drawer(DrawerOpen, JetchatDrawer.Content(topInset), Conversation(topInset, bottomInset));
+			new Drawer(DrawerOpen, JetchatDrawer.Content(topInset), ConversationView(topInset, bottomInset));
 
-		static View Conversation(double topInset, double bottomInset) => new VStack(spacing: 0f)
+		/// <summary>The conversation screen (drawer content slot). Public for <see cref="JetchatApp"/>.</summary>
+		internal static View ConversationView(double topInset, double bottomInset) => new VStack(spacing: 0f)
 		{
 			ChannelNameBar(topInset),
 
