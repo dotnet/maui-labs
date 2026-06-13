@@ -28,6 +28,7 @@ import SwiftUI
     @Published var borderWidth: CGFloat = 0      // stroke width (e.g. avatar ring)
     @Published var borderColorARGB: UInt32 = 0   // stroke color
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
+    @Published var drawerOpen: Bool = false     // Drawer: side panel shown
     // Yoga-computed parent-relative layout frame. hasFrame flips true once C# arranges this
     // node; until then the view uses native SwiftUI layout (so rendering is unchanged).
     @Published var frame: CGRect = .zero
@@ -71,6 +72,7 @@ import SwiftUI
         switch property {
         case "ison": node.isOn = value
         case "hastapgesture": node.hasTapGesture = value
+        case "draweropen": node.drawerOpen = value
         default: break
         }
     }
@@ -390,6 +392,20 @@ struct CometNodeView: View {
         switch node.kind {
         case "navigation":
             if let top = node.children.last { CometNodeView(node: top) } else { EmptyView() }
+        case "drawer":
+            // children[0] = content (full screen); children[1] = side panel. Scrim + slide-in.
+            ZStack(alignment: .topLeading) {
+                if node.children.count > 0 { CometNodeView(node: node.children[0]) }
+                if node.drawerOpen {
+                    Color.black.opacity(0.32).ignoresSafeArea()
+                        .onTapGesture { node.onTap?() }
+                    if node.children.count > 1 {
+                        CometNodeView(node: node.children[1])
+                            .transition(.move(edge: .leading))
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: node.drawerOpen)
         case "list":
             // Full-bleed, separator-free rows so a Yoga-laid-out row (which already carries its
             // own padding) spans edge-to-edge exactly like the Compose LazyColumn.

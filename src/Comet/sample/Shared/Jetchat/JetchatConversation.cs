@@ -19,19 +19,19 @@ namespace CometSamples.Jetchat
 	/// </summary>
 	public static class JetchatConversation
 	{
-		// ── Jetchat light color scheme (theme/Themes.kt + Color.kt) ──
-		static readonly Color Primary = Color.FromArgb("#1546F6");          // Blue40 — my bubble + my avatar ring
-		static readonly Color OnPrimary = Colors.White;                     // my bubble text
-		static readonly Color Surface = Color.FromArgb("#FBFDFD");          // Grey99 — page + bars
-		static readonly Color OnSurface = Color.FromArgb("#191C1D");        // Grey10 — titles, others' bubble text
-		static readonly Color SurfaceVariant = Color.FromArgb("#E2E1EC");   // BlueGrey90 — others' bubble
-		static readonly Color OnSurfaceVariant = Color.FromArgb("#45464F"); // BlueGrey30 — subtitle, timestamps, icons
-		static readonly Color Tertiary = Color.FromArgb("#7A5900");         // Yellow40 — others' avatar ring
-		static readonly Color Divider = Color.FromArgb("#1F191C1D");        // onSurface @ 12%
+		// ── Jetchat light color scheme (theme/Themes.kt + Color.kt) ── (internal: shared w/ drawer)
+		internal static readonly Color Primary = Color.FromArgb("#1546F6");          // Blue40 — my bubble + my avatar ring
+		internal static readonly Color OnPrimary = Colors.White;                     // my bubble text
+		internal static readonly Color Surface = Color.FromArgb("#FBFDFD");          // Grey99 — page + bars
+		internal static readonly Color OnSurface = Color.FromArgb("#191C1D");        // Grey10 — titles, others' bubble text
+		internal static readonly Color SurfaceVariant = Color.FromArgb("#E2E1EC");   // BlueGrey90 — others' bubble
+		internal static readonly Color OnSurfaceVariant = Color.FromArgb("#45464F"); // BlueGrey30 — subtitle, timestamps, icons
+		internal static readonly Color Tertiary = Color.FromArgb("#7A5900");         // Yellow40 — others' avatar ring
+		internal static readonly Color Divider = Color.FromArgb("#1F191C1D");        // onSurface @ 12%
 
-		const string AssetBase = "https://raw.githubusercontent.com/android/compose-samples/main/Jetchat/app/src/main/res/drawable-nodpi/";
-		const string AvatarMe = AssetBase + "ali.png";
-		const string AvatarOther = AssetBase + "someone_else.jpg";
+		internal const string AssetBase = "https://raw.githubusercontent.com/android/compose-samples/main/Jetchat/app/src/main/res/drawable-nodpi/";
+		internal const string AvatarMe = AssetBase + "ali.png";
+		internal const string AvatarOther = AssetBase + "someone_else.jpg";
 		const string Sticker = AssetBase + "sticker.png";
 
 		sealed record Msg(string Author, string Content, string Timestamp, bool HasImage = false);
@@ -53,7 +53,13 @@ namespace CometSamples.Jetchat
 
 		/// <summary>Builds the conversation screen. <paramref name="topInset"/>/<paramref name="bottomInset"/>
 		/// are the platform safe-area insets (status bar / home indicator) in Dp.</summary>
-		public static View Build(double topInset = 24, double bottomInset = 0) => new VStack(spacing: 0f)
+		internal static readonly Comet.Reactive.Signal<bool> DrawerOpen = new(false);
+
+		/// <summary>The whole screen: the conversation behind a modal navigation drawer.</summary>
+		public static View Build(double topInset = 24, double bottomInset = 0) =>
+			new Drawer(DrawerOpen, JetchatDrawer.Content(topInset), Conversation(topInset, bottomInset));
+
+		static View Conversation(double topInset, double bottomInset) => new VStack(spacing: 0f)
 		{
 			ChannelNameBar(topInset),
 
@@ -71,7 +77,7 @@ namespace CometSamples.Jetchat
 		{
 			new HStack(spacing: 0f)
 			{
-				BarIcon("menu"),                   // nav drawer
+				BarIcon("menu").OnTap(_ => DrawerOpen.Value = true),   // open the nav drawer
 				new VStack(spacing: 0f)
 				{
 					new Text("#composers").Color(OnSurface).FontSize(16).FontWeight(FontWeight.Medium)

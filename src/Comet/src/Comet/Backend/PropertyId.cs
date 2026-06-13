@@ -104,5 +104,8 @@ namespace Comet.Backend
 		public static readonly PropertyId Icon_Symbol = new(192);
 		public static readonly PropertyId Icon_Tint = new(193);
 		public static readonly PropertyId Icon_Size = new(194);
+
+		// --- Drawer (208–223) ---
+		public static readonly PropertyId Drawer_IsOpen = new(208);
 	}
 }

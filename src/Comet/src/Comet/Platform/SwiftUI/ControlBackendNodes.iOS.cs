@@ -62,6 +62,12 @@ namespace Comet
 			=> new SwiftUINode("icon");
 	}
 
+	public partial class Drawer
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIDrawerNode(this, context);
+	}
+
 	public partial class Slider
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
