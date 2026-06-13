@@ -14,7 +14,10 @@ import SwiftUI
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
+    @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
     @Published var padding: CGFloat = 0
+    @Published var cornerRadius: CGFloat = 0     // Material card rounded corners (clips content)
+    @Published var elevation: CGFloat = 0        // soft drop shadow depth
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     // Yoga-computed parent-relative layout frame. hasFrame flips true once C# arranges this
     // node; until then the view uses native SwiftUI layout (so rendering is unchanged).
@@ -64,7 +67,11 @@ import SwiftUI
 
     @objc(setColor:property:argb:)
     public static func setColor(_ node: CometNode, property: String, argb: UInt32) {
-        if property == "background" { node.backgroundARGB = argb }
+        switch property {
+        case "background": node.backgroundARGB = argb
+        case "textcolor": node.textColorARGB = argb
+        default: break
+        }
     }
 
     @objc(setDouble:property:value:)
@@ -72,6 +79,8 @@ import SwiftUI
         switch property {
         case "padding": node.padding = CGFloat(value)
         case "value": node.doubleValue = value
+        case "cornerradius": node.cornerRadius = CGFloat(value)
+        case "elevation": node.elevation = CGFloat(value)
         default: break
         }
     }
@@ -188,6 +197,7 @@ struct CometLeafContent: View {
         switch node.kind {
         case "button":
             Button(action: { node.onTap?() }) { Text(node.text) }
+                .modifier(ForegroundModifier(argb: node.textColorARGB))
         case "textfield":
             TextField(node.placeholder, text: Binding(
                 get: { node.text },
@@ -213,6 +223,24 @@ struct CometLeafContent: View {
             .clipped()
         default: // "text" and unknown leaves
             Text(node.text)
+                .modifier(ForegroundModifier(argb: node.textColorARGB))
+        }
+    }
+}
+
+// Applies an explicit text/foreground color when Comet set one (argb != 0); otherwise leaves
+// the default so it adapts to light/dark like native SwiftUI text.
+private struct ForegroundModifier: ViewModifier {
+    let argb: UInt32
+    func body(content: Content) -> some View {
+        if argb == 0 {
+            content
+        } else {
+            content.foregroundColor(Color(
+                red:   Double((argb >> 16) & 0xFF) / 255.0,
+                green: Double((argb >> 8) & 0xFF) / 255.0,
+                blue:  Double(argb & 0xFF) / 255.0,
+                opacity: Double((argb >> 24) & 0xFF) / 255.0))
         }
     }
 }
@@ -235,6 +263,7 @@ struct CometNodeView: View {
         content
             .modifier(SizeModifier(node: node))
             .modifier(BackgroundModifier(argb: node.backgroundARGB))
+            .modifier(SurfaceModifier(node: node)) // rounded corners + elevation (Material card)
             .modifier(TapGestureModifier(node: node))
             .modifier(OffsetModifier(node: node))
     }
@@ -314,6 +343,25 @@ private struct TapGestureModifier: ViewModifier {
             content
                 .contentShape(Rectangle())
                 .onTapGesture { node.onTapGesture?() }
+        } else {
+            content
+        }
+    }
+}
+
+// Rounds a node's corners (clipping its background + content) and casts a soft drop shadow —
+// the Compose `.Clip(RoundedCornerShape)` + `.Shadow(elevation)` analog, so a card looks the
+// same on both backends. Applied after the background so the fill is clipped to the rounded rect.
+private struct SurfaceModifier: ViewModifier {
+    @ObservedObject var node: CometNode
+    func body(content: Content) -> some View {
+        let radius = node.cornerRadius
+        let elevation = node.elevation
+        if radius > 0 || elevation > 0 {
+            content
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .shadow(color: Color.black.opacity(elevation > 0 ? 0.18 : 0),
+                        radius: elevation, x: 0, y: elevation > 0 ? elevation / 2 : 0)
         } else {
             content
         }

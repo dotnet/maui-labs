@@ -59,6 +59,13 @@ namespace Comet
 			if (this is IStackLayout stack)
 				node.ApplyProperty(PropertyIds.Stack_Spacing, PropertyValue.From(stack.Spacing));
 
+			// Surface styling (rounded corners + elevation) — the Material card building blocks.
+			if (this.GetEnvironment<double?>(this, SurfaceExtensions.CornerRadiusKey, false) is { } radius && radius > 0)
+				node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.From(radius));
+
+			if (this.GetEnvironment<double?>(this, SurfaceExtensions.ElevationKey, false) is { } elevation && elevation > 0)
+				node.ApplyProperty(PropertyIds.Shadow, PropertyValue.From(elevation));
+
 			// Transforms — emit only when they differ from identity.
 			var t = (ITransform)this;
 			if (t.TranslationX != 0) node.ApplyProperty(PropertyIds.TranslationX, PropertyValue.From(t.TranslationX));

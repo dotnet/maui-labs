@@ -33,6 +33,8 @@ namespace Comet.Platform.Compose
 		// They're held as plain fields and a style-version state drives recomposition.
 		Microsoft.Maui.Graphics.Color? _background;
 		Microsoft.Maui.Thickness _padding;
+		float _cornerRadius;
+		float _elevation;
 		readonly MutableState<int> _styleVersion = new(0);
 
 		// Yoga-driven layout (when the engine runs): parent-relative frame in Dp + a version
@@ -69,6 +71,16 @@ namespace Comet.Platform.Compose
 				_padding = value.AsObject is Microsoft.Maui.Thickness t ? t : default;
 				_styleVersion.Value++;
 			}
+			else if (id == PropertyIds.CornerRadius)
+			{
+				_cornerRadius = (float)value.AsDouble;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Shadow)
+			{
+				_elevation = (float)value.AsDouble;
+				_styleVersion.Value++;
+			}
 			else
 				ApplyControlProperty(id, in value);
 		}
@@ -94,6 +106,15 @@ namespace Comet.Platform.Compose
 					.AbsoluteOffset(new Dp(_fx), new Dp(_fy))
 					.Size(new Dp(_fw), new Dp(_fh));
 
+			// Card surface: raise (shadow) then round the corners, so the shadow follows the
+			// rounded outline and the background/content below are clipped to it.
+			if (_elevation > 0)
+				m = (m ?? Modifier.Companion).Shadow(new Dp(_elevation),
+					_cornerRadius > 0 ? AndroidX.Compose.Shape.RoundedCorners(new Dp(_cornerRadius)) : null);
+
+			if (_cornerRadius > 0)
+				m = (m ?? Modifier.Companion).Clip(AndroidX.Compose.Shape.RoundedCorners(new Dp(_cornerRadius)));
+
 			if (_background is { } bg)
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
 
@@ -115,7 +136,7 @@ namespace Comet.Platform.Compose
 			return m;
 		}
 
-		static AndroidX.Compose.Color ToComposeColor(Microsoft.Maui.Graphics.Color c) => AndroidX.Compose.Color.FromArgb(
+		protected static AndroidX.Compose.Color ToComposeColor(Microsoft.Maui.Graphics.Color c) => AndroidX.Compose.Color.FromArgb(
 			(byte)(c.Alpha * 255), (byte)(c.Red * 255), (byte)(c.Green * 255), (byte)(c.Blue * 255));
 
 		public void InsertChild(int index, ICometBackendNode child)

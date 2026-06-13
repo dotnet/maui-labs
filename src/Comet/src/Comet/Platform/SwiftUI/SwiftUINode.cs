@@ -60,10 +60,16 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetDouble(_native, "value", value.AsDouble);
 			else if (id == PropertyIds.HasTapGesture)
 				CometSwiftUIHost.SetBool(_native, "hastapgesture", value.AsBool);
+			else if (id == PropertyIds.Text_Color && value.AsColor is { } tc)
+				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(tc));
 			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 			else if (id == PropertyIds.Padding && value.AsObject is Microsoft.Maui.Thickness t)
 				CometSwiftUIHost.SetDouble(_native, "padding", t.Left);
+			else if (id == PropertyIds.CornerRadius)
+				CometSwiftUIHost.SetDouble(_native, "cornerradius", value.AsDouble);
+			else if (id == PropertyIds.Shadow)
+				CometSwiftUIHost.SetDouble(_native, "elevation", value.AsDouble);
 		}
 
 		public void InsertChild(int index, ICometBackendNode child)

@@ -64,17 +64,22 @@ namespace CometComposeProbe
 			{
 				ViewFor = MessageRow,
 			}.FillVertical(),
-		}.Background(Colors.White);
+		}.Background(Color.FromArgb("#F2EFF7")); // tonal page behind the cards
 
-		static View MessageRow(Message m) => new HStack(spacing: 12f)
+		// Each message is a Material card: a rounded, raised white surface (corner radius +
+		// elevation), inset from the page by the outer container's padding (the inter-card gap).
+		static View MessageRow(Message m) => new VStack(spacing: 0f)
 		{
-			new Image($"https://picsum.photos/seed/{m.AvatarSeed}/80").Frame(width: 42, height: 42),
-			new VStack(spacing: 2f)
+			new HStack(spacing: 12f)
 			{
-				new Text(m.Author).Color(Color.FromArgb("#1C1B1F")),
-				new Text(m.Body).Color(Color.FromArgb("#49454F")),
-			},
-		}.Padding(new Thickness(16, 10, 16, 10));
+				new Image($"https://picsum.photos/seed/{m.AvatarSeed}/80").Frame(width: 42, height: 42).CornerRadius(21),
+				new VStack(spacing: 2f)
+				{
+					new Text(m.Author).Color(Color.FromArgb("#1C1B1F")),
+					new Text(m.Body).Color(Color.FromArgb("#49454F")),
+				},
+			}.Padding(new Thickness(12)).Background(Colors.White).CornerRadius(16).Elevation(2),
+		}.Padding(new Thickness(12, 6, 12, 6));
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{

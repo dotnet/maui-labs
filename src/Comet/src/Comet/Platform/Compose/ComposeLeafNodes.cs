@@ -13,11 +13,18 @@ namespace Comet.Platform.Compose
 	sealed class ComposeTextNode : ComposeNode
 	{
 		readonly MutableState<string> _text = new(string.Empty);
+		Microsoft.Maui.Graphics.Color? _color;
+		readonly MutableState<int> _colorVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Text_Value)
 				_text.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Text_Color)
+			{
+				_color = value.AsColor;
+				_colorVersion.Value++;
+			}
 		}
 
 		// Intrinsic size for the Yoga engine: measure the text wrapped to the available width
@@ -29,7 +36,11 @@ namespace Comet.Platform.Compose
 		{
 			// Reading _text.Value inside composition subscribes this scope, so a later
 			// ApplyProperty -> setValue recomposes just this Text.
-			new ComposeText(_text.Value) { Modifier = BuildNodeModifier() }.Render(composer);
+			_ = _colorVersion.Value; // subscribe so a color change recomposes
+			var text = new ComposeText(_text.Value) { Modifier = BuildNodeModifier() };
+			if (_color is { } c)
+				text.Color = ToComposeColor(c);
+			text.Render(composer);
 		}
 	}
 
