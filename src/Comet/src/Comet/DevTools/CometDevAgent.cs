@@ -31,7 +31,7 @@ namespace Comet.DevTools
 	/// <c>POST /fill</c>, <c>POST /toggle</c>, <c>POST /slider</c> — each action body is
 	/// <c>{ "id": N, ... }</c> and the response echoes the post-action tree.</para>
 	/// </remarks>
-	public sealed class CometDevAgent
+	public sealed partial class CometDevAgent
 	{
 		readonly int _port;
 		readonly Action<Action> _dispatchToMain;
@@ -99,9 +99,16 @@ namespace Comet.DevTools
 
 		string Route(string method, string path, string body)
 		{
-			// Strip query string.
+			// DevFlow/ailoha CLI wire-compatible surface (so `maui devflow ui …` drives Comet).
+			// Passed the raw path so the handler can read query params (e.g. ?text=&type=).
+			var rawPath = path;
+
+			// Strip query string for the simple-route switch below.
 			var q = path.IndexOf('?');
 			if (q >= 0) path = path.Substring(0, q);
+
+			if (path.StartsWith("/api/v1/", System.StringComparison.Ordinal))
+				return RouteDevFlow(method, rawPath, body);
 
 			switch (method, path)
 			{

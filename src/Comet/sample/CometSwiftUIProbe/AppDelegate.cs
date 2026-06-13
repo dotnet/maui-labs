@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Comet;
 using Comet.DevTools;
 using Comet.Platform.SwiftUI;
@@ -16,10 +14,11 @@ namespace CometSwiftUIProbe
 	{
 		public override UIWindow? Window { get; set; }
 
-		static readonly string[] Planets =
-			{ "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune" };
+		readonly Signal<int> _count = new(0);
+		readonly Signal<string> _name = new(string.Empty);
+		readonly Signal<bool> _fancy = new(false);
+		readonly Signal<int> _taps = new(0);
 
-		NavigationView? _nav;
 		CometDevAgent? _agent;
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
@@ -29,9 +28,11 @@ namespace CometSwiftUIProbe
 
 			Window = new UIWindow(UIScreen.MainScreen.Bounds);
 
-			// In-process dev agent (ailoha/DevFlow model): inspect this Comet tree and drive
-			// semantic actions over HTTP. Start BEFORE materializing so it tracks every node.
-			_agent = new CometDevAgent(9234, a => DispatchQueue.MainQueue.DispatchAsync(a));
+			// Dev agent on the DevFlow CLI's default port: `maui devflow ui tree/tap` connects
+			// straight to localhost:9223 on the iOS sim, so the stock CLI drives this Comet app
+			// (it also still answers the simple /tree, /tap, … routes for curl). Start BEFORE
+			// materializing so the registry tracks every node as the tree is built.
+			_agent = new CometDevAgent(CometDevAgent.DevFlowPort, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
 
 			// A real Comet view tree, rendered as SwiftUI through the node protocol —
@@ -43,36 +44,24 @@ namespace CometSwiftUIProbe
 			return true;
 		}
 
-		// Master-detail capstone: a virtualized List of rows; tapping a row (an arbitrary-view
-		// tap gesture, not a Button) navigates to a Detail screen. Detail carries a reactive
-		// counter (Button click loop) and a Back button (Pop). Exercises list + tap gesture +
-		// navigation + reactivity together — the iOS counterpart of the Android capstone.
-		View BuildUi()
+		// Clean single-root tree of distinct, addressable controls — good targets for the CLI
+		// (`maui devflow ui tap --text Increment`, `ui fill --text … --automation-id name`).
+		View BuildUi() => new VStack
 		{
-			_nav = new NavigationView();
-			_nav.Add(MasterScreen());
-			return _nav;
-		}
+			new Text("Comet → SwiftUI").Color(Colors.White),
 
-		View MasterScreen() =>
-			new ListView<string>(() => (IReadOnlyList<string>)Planets.ToList())
-			{
-				ViewFor = planet => new Text($"🪐  {planet}")
-					.Color(Colors.White)
-					.OnTap(_ => _nav!.Navigate(DetailScreen(planet))),
-			};
+			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
+			new Button("Increment", () => _count.Value++),
 
-		View DetailScreen(string planet)
-		{
-			var count = new Signal<int>(0);
-			return new VStack
-			{
-				new Text($"📄  {planet}").Color(Colors.White),
-				new Text(() => $"Taps: {count.Value}").Color(Colors.White),
-				new Button("Increment", () => count.Value++),
-				new Button("← Back", () => _nav!.Pop()),
-			}.Background(Color.FromArgb("#7D5260")).Padding(28);
-		}
+			new TextField(_name, "Type a name"),
+			new Text(() => $"Hello, {(_name.Value.Length == 0 ? "stranger" : _name.Value)}").Color(Colors.White),
+
+			new Toggle(_fancy),
+			new Text(() => _fancy.Value ? "Fancy: ON" : "Fancy: off").Color(Colors.White),
+
+			new Text(() => $"Tapped: {_taps.Value}× (tap me)").Color(Colors.White)
+				.OnTap(_ => _taps.Value++),
+		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
