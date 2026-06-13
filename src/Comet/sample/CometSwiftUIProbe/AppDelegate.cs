@@ -19,6 +19,7 @@ namespace CometSwiftUIProbe
 		readonly Signal<bool> _fancy = new(false);
 		readonly Signal<int> _taps = new(0);
 
+		NavigationView? _nav;
 		CometDevAgent? _agent;
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
@@ -29,9 +30,8 @@ namespace CometSwiftUIProbe
 			Window = new UIWindow(UIScreen.MainScreen.Bounds);
 
 			// Dev agent on the DevFlow CLI's default port: `maui devflow ui tree/tap` connects
-			// straight to localhost:9223 on the iOS sim, so the stock CLI drives this Comet app
-			// (it also still answers the simple /tree, /tap, … routes for curl). Start BEFORE
-			// materializing so the registry tracks every node as the tree is built.
+			// straight to localhost:9223 on the iOS sim, so the stock CLI drives this Comet app.
+			// Start BEFORE materializing so the registry tracks every node as the tree is built.
 			_agent = new CometDevAgent(CometDevAgent.DevFlowPort, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
 
@@ -44,24 +44,40 @@ namespace CometSwiftUIProbe
 			return true;
 		}
 
-		// Clean single-root tree of distinct, addressable controls — good targets for the CLI
-		// (`maui devflow ui tap --text Increment`, `ui fill --text … --automation-id name`).
-		View BuildUi() => new VStack
+		View BuildUi()
+		{
+			_nav = new NavigationView();
+			_nav.Add(HomeScreen());
+			return _nav;
+		}
+
+		// Interactive controls with AutomationIds (clean `--automationId` selector targets) plus
+		// a Navigate button, so the dev tree pruning across push/pop is observable.
+		View HomeScreen() => new VStack
 		{
 			new Text("Comet → SwiftUI").Color(Colors.White),
 
-			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
-			new Button("Increment", () => _count.Value++),
+			new Text(() => $"Count: {_count.Value}").Color(Colors.White).AutomationId("countLabel"),
+			new Button("Increment", () => _count.Value++).AutomationId("incrementButton"),
 
-			new TextField(_name, "Type a name"),
+			new TextField(_name, "Type a name").AutomationId("nameField"),
 			new Text(() => $"Hello, {(_name.Value.Length == 0 ? "stranger" : _name.Value)}").Color(Colors.White),
 
-			new Toggle(_fancy),
+			new Toggle(_fancy).AutomationId("fancyToggle"),
 			new Text(() => _fancy.Value ? "Fancy: ON" : "Fancy: off").Color(Colors.White),
 
 			new Text(() => $"Tapped: {_taps.Value}× (tap me)").Color(Colors.White)
-				.OnTap(_ => _taps.Value++),
+				.OnTap(_ => _taps.Value++).AutomationId("tapTarget"),
+
+			new Button("Go to Page 2 →", () => _nav!.Navigate(SecondScreen())).AutomationId("gotoPage2"),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
+
+		View SecondScreen() => new VStack
+		{
+			new Text("📄  Page 2").Color(Colors.White),
+			new Text("Pushed via Navigate()").Color(Colors.White),
+			new Button("← Back", () => _nav!.Pop()).AutomationId("backButton"),
+		}.Background(Color.FromArgb("#7D5260")).Padding(28);
 
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{

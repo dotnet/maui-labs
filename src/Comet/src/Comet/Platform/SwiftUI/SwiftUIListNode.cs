@@ -36,12 +36,16 @@ namespace Comet.Platform.SwiftUI
 
 		void Rebuild()
 		{
+			// Drop the previous rows from the dev tree (they register under the ListView).
+			if (_list is View listView)
+				Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
+
 			CometSwiftUIHost.ClearChildren(_native);
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			for (int i = 0; i < count; i++)
 			{
 				var view = _list.ViewFor(0, i);
-				var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context);
+				var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context, _list as View);
 				CometSwiftUIHost.InsertChild(_native, i, node.Native);
 			}
 		}

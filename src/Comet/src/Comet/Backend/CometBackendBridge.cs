@@ -20,6 +20,12 @@ namespace Comet.Backend
 		public static ICometBackendNode Materialize(View view, BackendContext context)
 			=> Materialize(view, v => v.CreateBackendNode(context), context);
 
+		/// <summary>Materializes under a known <paramref name="parent"/> view so own-content
+		/// nodes (navigation screens, list rows) register beneath their container in the dev
+		/// tree and can be pruned as a subtree when replaced.</summary>
+		internal static ICometBackendNode Materialize(View view, BackendContext context, View? parent)
+			=> Materialize(view, v => v.CreateBackendNode(context), context, parent);
+
 		/// <summary>Materializes <paramref name="view"/> using a supplied node factory
 		/// (test path).</summary>
 		public static ICometBackendNode Materialize(View view, CometNodeFactory factory, BackendContext context)
@@ -36,11 +42,13 @@ namespace Comet.Backend
 			var node = factory(rendered);
 			rendered.Node = node;
 			node.SetEventSink(new ViewEventSink(rendered));
-			rendered.ApplyAllSetProperties(node);
 
-			// Track for the in-process dev agent (no-op unless enabled). Linked to its parent
-			// so external tooling can present the tree and resolve element ids back to views.
+			// Track for the in-process dev agent (no-op unless enabled) BEFORE applying
+			// properties: own-content nodes (lists) materialize their children during
+			// ApplyAllSetProperties, and those children resolve their parent through this entry.
 			DevTools.CometDevRegistry.Register(rendered, node, parent);
+
+			rendered.ApplyAllSetProperties(node);
 
 			// Nodes that manage their own content (navigation, lists) pull the views they
 			// need themselves; don't materialize the static child tree for them.

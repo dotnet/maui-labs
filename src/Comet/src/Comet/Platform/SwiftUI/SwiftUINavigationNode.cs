@@ -16,14 +16,17 @@ namespace Comet.Platform.SwiftUI
 	sealed class SwiftUINavigationNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
 	{
 		readonly BackendContext _context;
+		readonly NavigationView _nav;
 		readonly CometNode _native;
 		readonly List<View> _stack = new();
+		View? _shown;
 
 		public CometNode Native => _native;
 
 		public SwiftUINavigationNode(NavigationView nav, BackendContext context)
 		{
 			_context = context;
+			_nav = nav;
 			_native = CometSwiftUIHost.MakeNode("navigation");
 
 			if (nav.Content is { } root)
@@ -48,12 +51,21 @@ namespace Comet.Platform.SwiftUI
 
 		void ShowTop()
 		{
+			// Drop the previous screen's nodes from the dev tree before swapping it out.
+			if (_shown is { } prev)
+			{
+				Comet.DevTools.CometDevRegistry.UnregisterSubtree(prev, includeRoot: true);
+				_shown = null;
+			}
+
 			CometSwiftUIHost.ClearChildren(_native);
 			if (_stack.Count == 0)
 				return;
 			var top = _stack[_stack.Count - 1];
-			var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(top, _context);
+			// Register the screen under the NavigationView so the dev tree nests correctly.
+			var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(top, _context, _nav);
 			CometSwiftUIHost.InsertChild(_native, 0, node.Native);
+			_shown = top;
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value) { }

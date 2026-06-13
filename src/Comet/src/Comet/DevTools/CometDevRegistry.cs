@@ -77,6 +77,62 @@ namespace Comet.DevTools
 			}
 		}
 
+		/// <summary>Stops tracking a single view (e.g. when its backend node is disposed).</summary>
+		internal static void Unregister(View view)
+		{
+			if (!Enabled || view is null)
+				return;
+			lock (_gate)
+			{
+				if (_viewIds.TryGetValue(view, out var box))
+				{
+					_byId.Remove(box.Value);
+					_viewIds.Remove(view);
+				}
+			}
+		}
+
+		/// <summary>
+		/// Stops tracking <paramref name="root"/> and everything materialized beneath it
+		/// (resolved through the parent links), so a replaced navigation screen or list row set
+		/// drops out of the tree deterministically rather than waiting for GC.
+		/// </summary>
+		internal static void UnregisterSubtree(View root, bool includeRoot)
+		{
+			if (!Enabled || root is null)
+				return;
+			lock (_gate)
+			{
+				if (!_viewIds.TryGetValue(root, out var rootBox))
+					return;
+				int rootId = rootBox.Value;
+
+				// Collect rootId + all descendants via the parentId graph (closure).
+				var ids = new HashSet<int> { rootId };
+				bool grew = true;
+				while (grew)
+				{
+					grew = false;
+					foreach (var e in _byId.Values)
+						if (ids.Contains(e.ParentId) && ids.Add(e.Id))
+							grew = true;
+				}
+
+				if (!includeRoot)
+					ids.Remove(rootId);
+
+				foreach (var id in ids)
+				{
+					if (_byId.TryGetValue(id, out var e))
+					{
+						if (e.View.TryGetTarget(out var v))
+							_viewIds.Remove(v);
+						_byId.Remove(id);
+					}
+				}
+			}
+		}
+
 		/// <summary>Resolves a tracked id back to its live view, or null if collected.</summary>
 		public static View? Find(int id)
 		{
