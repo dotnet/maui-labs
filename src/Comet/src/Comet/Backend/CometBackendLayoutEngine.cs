@@ -51,6 +51,14 @@ namespace Comet.Backend
 				if (view is IStackLayout stack && stack.Spacing > 0)
 					node.SetGap(YogaGutter.All, (float)stack.Spacing);
 
+				// Comet Padding insets children (Yoga container padding); the native .padding()
+				// is not applied in absolute mode, so the engine owns it.
+				var pad = view.GetPadding();
+				if (pad.Left != 0) node.SetPadding(YogaEdge.Left, YogaValue.Point((float)pad.Left));
+				if (pad.Top != 0) node.SetPadding(YogaEdge.Top, YogaValue.Point((float)pad.Top));
+				if (pad.Right != 0) node.SetPadding(YogaEdge.Right, YogaValue.Point((float)pad.Right));
+				if (pad.Bottom != 0) node.SetPadding(YogaEdge.Bottom, YogaValue.Point((float)pad.Bottom));
+
 				var children = ((IContainerView)view).GetChildren();
 				for (int i = 0; i < children.Count; i++)
 					node.InsertChild(Build(children[i], direction), node.ChildCount);

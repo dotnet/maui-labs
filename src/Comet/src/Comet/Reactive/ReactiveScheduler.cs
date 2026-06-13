@@ -111,6 +111,13 @@ public static class ReactiveScheduler
 		EnsureFlushScheduled();
 	}
 
+	/// <summary>
+	/// Raised on the UI thread after a full flush cycle settles (effects + view reloads + their
+	/// backend property pushes are done). The layout-driving backends subscribe to this to
+	/// recompute Yoga layout once per flush, so reactive content-size changes reflow.
+	/// </summary>
+	public static event Action? AfterFlush;
+
 	static void FlushEntry()
 	{
 		lock (_lock)
@@ -127,6 +134,8 @@ public static class ReactiveScheduler
 		{
 			_flushing = false;
 		}
+
+		AfterFlush?.Invoke();
 	}
 
 	static void Flush(int depth)

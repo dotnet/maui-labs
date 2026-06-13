@@ -15,6 +15,7 @@ namespace Comet.Platform.SwiftUI
 	public sealed class SwiftUIBackendRoot
 	{
 		readonly BackendContext _context;
+		View? _layoutRoot;
 
 		public SwiftUIBackendRoot(IServiceProvider services)
 			=> _context = new BackendContext(services);
@@ -33,13 +34,23 @@ namespace Comet.Platform.SwiftUI
 
 			if (UseYogaLayout)
 			{
-				var rootView = view.HasContent ? view.GetView() : view;
-				var bounds = UIScreen.MainScreen.Bounds;
-				CometBackendLayoutEngine.Layout(rootView,
-					new Microsoft.Maui.Graphics.Size(bounds.Width, bounds.Height));
+				_layoutRoot = view.HasContent ? view.GetView() : view;
+				RunLayout();
+				// Reflow after each reactive flush: content whose size changed (e.g. a bound
+				// label) is re-measured and the tree re-arranged.
+				Comet.Reactive.ReactiveScheduler.AfterFlush += RunLayout;
 			}
 
 			return controller;
+		}
+
+		void RunLayout()
+		{
+			if (_layoutRoot is null)
+				return;
+			var bounds = UIScreen.MainScreen.Bounds;
+			CometBackendLayoutEngine.Layout(_layoutRoot,
+				new Microsoft.Maui.Graphics.Size(bounds.Width, bounds.Height));
 		}
 	}
 }
