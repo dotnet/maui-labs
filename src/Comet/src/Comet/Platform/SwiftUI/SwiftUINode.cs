@@ -7,16 +7,23 @@ using Microsoft.Maui.Graphics;
 
 namespace Comet.Platform.SwiftUI
 {
+	/// <summary>A backend node backed by a Swift <see cref="CometNode"/>. Lets nodes of
+	/// different C# types (generic nodes, the list node) nest and expose their native handle.</summary>
+	interface ISwiftUINativeNode
+	{
+		CometNode Native { get; }
+	}
+
 	/// <summary>
 	/// A retained backend node that bridges Comet's diff to a Swift <see cref="CometNode"/>
 	/// in the SwiftUI tree (the iOS counterpart of the Compose <c>ComposeNode</c>). Unlike
 	/// the Compose backend — which needs a distinct class per control — the SwiftUI shim is
 	/// kind-driven, so one node type parameterized by a kind string suffices.
 	/// </summary>
-	sealed class SwiftUINode : ICometBackendNode
+	sealed class SwiftUINode : ICometBackendNode, ISwiftUINativeNode
 	{
 		readonly CometNode _native;
-		readonly List<SwiftUINode> _children = new();
+		readonly List<ICometBackendNode> _children = new();
 		ICometEventSink? _sink;
 
 		public CometNode Native => _native;
@@ -55,8 +62,8 @@ namespace Comet.Platform.SwiftUI
 
 		public void InsertChild(int index, ICometBackendNode child)
 		{
-			var c = (SwiftUINode)child;
-			_children.Insert(index, c);
+			var c = (ISwiftUINativeNode)child;
+			_children.Insert(index, (ICometBackendNode)c);
 			CometSwiftUIHost.InsertChild(_native, index, c.Native);
 		}
 
@@ -72,7 +79,7 @@ namespace Comet.Platform.SwiftUI
 			_children.RemoveAt(fromIndex);
 			CometSwiftUIHost.RemoveChild(_native, fromIndex);
 			_children.Insert(toIndex, c);
-			CometSwiftUIHost.InsertChild(_native, toIndex, c.Native);
+			CometSwiftUIHost.InsertChild(_native, toIndex, ((ISwiftUINativeNode)c).Native);
 		}
 
 		// SwiftUI lays out its own tree (as Compose does today); Yoga positioning is a

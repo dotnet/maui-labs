@@ -50,6 +50,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("removeChild:atIndex:")]
 		void RemoveChild(CometNode node, nint index);
 
+		[Static, Export("clearChildren:")]
+		void ClearChildren(CometNode node);
+
 		[Static, Export("hostControllerForRoot:")]
 		UIViewController HostController(CometNode root);
 	}

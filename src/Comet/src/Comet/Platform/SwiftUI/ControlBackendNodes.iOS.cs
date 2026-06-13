@@ -55,5 +55,11 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new SwiftUINode("slider");
 	}
+
+	public partial class ListView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIListNode(this, context);
+	}
 }
 #endif

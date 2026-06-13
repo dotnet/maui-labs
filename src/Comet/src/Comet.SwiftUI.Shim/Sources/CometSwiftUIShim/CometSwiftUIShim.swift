@@ -96,6 +96,11 @@ import SwiftUI
         node.children.remove(at: index)
     }
 
+    @objc(clearChildren:)
+    public static func clearChildren(_ node: CometNode) {
+        node.children.removeAll()
+    }
+
     // Returns a UIViewController hosting the SwiftUI tree rooted at `root`.
     @objc(hostControllerForRoot:)
     public static func hostController(_ root: CometNode) -> UIViewController {
@@ -128,6 +133,8 @@ struct CometNodeView: View {
             Slider(value: Binding(
                 get: { node.doubleValue },
                 set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
+        case "list":
+            List { ForEach(node.children) { CometNodeView(node: $0) } }
         case "hstack":
             HStack { ForEach(node.children) { CometNodeView(node: $0) } }
         case "zstack":

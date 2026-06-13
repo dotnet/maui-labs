@@ -21,7 +21,7 @@ namespace Comet.Platform.SwiftUI
 
 		public UIViewController CreateController(View view)
 		{
-			var root = (SwiftUINode)CometBackendBridge.Materialize(view, _context);
+			var root = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context);
 			return CometSwiftUIHost.HostController(root.Native);
 		}
 	}
