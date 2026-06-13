@@ -13,8 +13,8 @@ namespace CometSwiftUIProbe
 	{
 		public override UIWindow? Window { get; set; }
 
-		static readonly string[] Frameworks =
-			{ "Jetpack Compose", "SwiftUI", "WinUI 3", "GTK 4", "Qt Quick", "Flutter", "React Native", "AppKit", "Avalonia", "Uno Platform" };
+		NavigationView? _nav;
+		int _navTick;
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
 		{
@@ -27,19 +27,38 @@ namespace CometSwiftUIProbe
 			Window.RootViewController = backend.CreateController(BuildUi());
 
 			Window.MakeKeyAndVisible();
+
+			// Drive navigation on a timer (no tap tool on the sim): alternately push a Detail
+			// screen and pop back, proving Navigate/Pop re-render the SwiftUI nav stack.
+			NSTimer.CreateScheduledTimer(2.5, true, _ =>
+			{
+				if (_navTick++ % 2 == 0)
+					_nav!.Navigate(DetailScreen());
+				else
+					_nav!.Pop();
+			});
+
 			return true;
 		}
 
-		// A Comet ListView rendered as a native SwiftUI List, each row a styled template.
-		View BuildUi() =>
-			new ListView<string>(() => Frameworks.ToList())
-			{
-				ViewFor = item => new VStack
-				{
-					new Text(item),
-					new Text("a UI framework").Color(Colors.Gray),
-				},
-			};
+		View BuildUi()
+		{
+			_nav = new NavigationView();
+			_nav.Add(HomeScreen());
+			return _nav;
+		}
+
+		static View HomeScreen() => new VStack
+		{
+			new Text("🏠  Home").Color(Colors.White),
+			new Text("Auto-navigating every 2.5s…").Color(Colors.White),
+		}.Background(Color.FromArgb("#6750A4")).Padding(28);
+
+		static View DetailScreen() => new VStack
+		{
+			new Text("📄  Detail").Color(Colors.White),
+			new Text("Pushed via Navigate(), pops back").Color(Colors.White),
+		}.Background(Color.FromArgb("#7D5260")).Padding(28);
 
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{

@@ -133,6 +133,10 @@ struct CometNodeView: View {
             Slider(value: Binding(
                 get: { node.doubleValue },
                 set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
+        case "navigation":
+            // Imperative nav: the C# side keeps the stack and sets the single top screen
+            // as this node's child (mirrors the Compose nav node).
+            if let top = node.children.last { CometNodeView(node: top) } else { EmptyView() }
         case "list":
             List { ForEach(node.children) { CometNodeView(node: $0) } }
         case "hstack":

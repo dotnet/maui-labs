@@ -61,5 +61,11 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new SwiftUIListNode(this, context);
 	}
+
+	public partial class NavigationView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINavigationNode(this, context);
+	}
 }
 #endif
