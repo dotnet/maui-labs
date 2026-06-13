@@ -145,6 +145,55 @@ namespace Comet.Tests.Backend
 			Assert.Equal(24, Node(text).ArrangedFrame!.Value.X, 3);
 		}
 
+		[Fact]
+		public void FlexGrow_ExpandsToFillMainAxis_PushingSiblings()
+		{
+			// HStack: A (40) | filler (grows) | C (60), in 400 wide → filler = 300, C at x=340.
+			var a = new Text("a");
+			var filler = new Text("f").FlexGrow(1);
+			var c = new Text("c");
+			var root = new HStack(spacing: 0f) { a, filler, c };
+			Bridge(root);
+			Node(a).MeasureResult = new Size(40, 20);
+			Node(filler).MeasureResult = new Size(10, 20);
+			Node(c).MeasureResult = new Size(60, 20);
+
+			CometBackendLayoutEngine.Layout(root, new Size(400, 100));
+
+			Assert.Equal(300, Node(filler).ArrangedFrame!.Value.Width, 2);
+			Assert.Equal(340, Node(c).ArrangedFrame!.Value.X, 2);
+		}
+
+		[Fact]
+		public void CenterAlignedChild_IsCenteredOnCrossAxis_NotStretched()
+		{
+			// A VStack child with center horizontal alignment keeps its intrinsic width and
+			// centers, instead of stretching to fill (the container default).
+			var a = new Text("a").HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center);
+			var root = new VStack(spacing: 0f) { a };
+			Bridge(root);
+			Node(a).MeasureResult = new Size(100, 20);
+
+			CometBackendLayoutEngine.Layout(root, new Size(300, 100));
+
+			var f = Node(a).ArrangedFrame!.Value;
+			Assert.Equal(100, f.Width, 2);      // intrinsic, not stretched to 300
+			Assert.Equal(100, f.X, 2);          // centered: (300-100)/2
+		}
+
+		[Fact]
+		public void ExplicitFrameWidth_IsHonored()
+		{
+			var a = new Text("a").Frame(width: 80);
+			var root = new VStack(spacing: 0f) { a };
+			Bridge(root);
+			Node(a).MeasureResult = new Size(999, 20);
+
+			CometBackendLayoutEngine.Layout(root, new Size(300, 100));
+
+			Assert.Equal(80, Node(a).ArrangedFrame!.Value.Width, 2);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;
