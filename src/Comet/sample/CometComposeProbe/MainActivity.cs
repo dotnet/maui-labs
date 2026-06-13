@@ -37,29 +37,37 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// Navigation through Compose: a NavigationView whose top screen is composed; the
-		// home screen pushes a detail screen onto the stack, which pops back — driven by
-		// Comet's Navigate/Pop and recomposed by the backend nav node.
+		// A real master–detail app on the Compose backend, combining everything: a
+		// virtualized list of tappable styled rows (the master), navigating to a detail
+		// screen and back — navigation + LazyColumn + gestures + styling together.
+		static readonly string[] Frameworks =
+			{ "Jetpack Compose", "SwiftUI", "WinUI 3", "GTK 4", "Qt Quick", "Flutter", "React Native", "AppKit" };
+
 		View BuildUi()
 		{
 			var nav = new NavigationView();
-			nav.Add(HomeScreen(nav));
+			nav.Add(ListScreen(nav));
 			return nav;
 		}
 
-		static View HomeScreen(NavigationView nav) => new VStack
-		{
-			new Text("🏠  Home").Color(Colors.White),
-			new Text("Screen one, on the navigation stack").Color(Colors.White),
-			new Button("Go to Detail  →", () => nav.Navigate(DetailScreen(nav))),
-		}.Background(Color.FromArgb("#6750A4")).Padding(28);
+		static View ListScreen(NavigationView nav) =>
+			new ListView<string>(() => Frameworks.ToList())
+			{
+				ViewFor = item => new VStack
+				{
+					new Text(item),
+					new Text("tap for detail").Color(Colors.Gray),
+				}
+				.Background(Color.FromArgb("#F4EFF4")).Padding(16)
+				.OnTap(_ => nav.Navigate(DetailScreen(nav, item))),
+			};
 
-		static View DetailScreen(NavigationView nav) => new VStack
+		static View DetailScreen(NavigationView nav, string item) => new VStack
 		{
-			new Text("📄  Detail").Color(Colors.White),
-			new Text("Screen two — pushed via Navigate()").Color(Colors.White),
-			new Button("←  Back", () => nav.Pop()),
-		}.Background(Color.FromArgb("#7D5260")).Padding(28);
+			new Text($"📄  {item}").Color(Colors.White),
+			new Text("Pushed from the list via Navigate()").Color(Colors.White),
+			new Button("←  Back to list", () => nav.Pop()),
+		}.Background(Color.FromArgb("#6750A4")).Padding(28);
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{
