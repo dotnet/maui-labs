@@ -173,3 +173,67 @@ ANDROID_SERIAL=<serial> tools/bench/startup.sh \
   sample/CometStressTest/bin/Release/net11.0-android/publish/com.comet.stresstest-Signed.apk \
   com.comet.stresstest 10
 ```
+
+---
+
+## Phase 4 — Trimming proof (managed code, new backend)
+
+The core thesis of the refactor: the legacy MAUI-handler path roots **every**
+control, so none can be trimmed, whereas the new node backend reaches a control's
+renderer only through the virtual `View.CreateBackendNode`, so unused controls
+trim away with their backend nodes.
+
+**Why the legacy path can't trim** — `AppHostBuilderExtensions.UseCometHandlers`
+(required by every legacy Comet app) registers a `Dictionary<Type,Type>` literal
+with `typeof(Picker)`, `typeof(CollectionView)`, `typeof(GraphicsView)`, … for all
+~60 controls. A `typeof`/`ldtoken` in reachable code roots the type; the ILLinker
+cannot remove it. So a legacy "hello world" still ships every control + handler.
+
+**New backend, measured** — `CometComposeProbe` (pure Android, no `UseMaui`, no
+`UseCometHandlers`) uses only Text, Button, VStack, ListView, NavigationView.
+Published Release with `-p:TrimMode=full` (full ILLink; `RunAOTCompilation=false`
+to isolate managed trimming), then the linked `Comet.dll` was inspected with
+`ikdasm`/`monodis`:
+
+| Metric | Unlinked | Linked (TrimMode=full) | Δ |
+|---|---:|---:|---:|
+| `Comet.dll` size | 805,888 B (787 KiB) | 108,544 B (106 KiB) | **−87%** |
+| Type definitions (classes) | 773 | 113 | **−85%** |
+| `libassembly-store.so` (arm64, all managed) | 8.47 MiB¹ | 6.10 MiB | −2.37 MiB |
+
+¹ Phase 0 baseline (CometStressTest, legacy path).
+
+**Unused controls — typedefs present (unlinked → linked):**
+
+| Control | → | Control | → | Control | → |
+|---|---|---|---|---|---|
+| CollectionView | 3 → **0** | CarouselView | 2 → **0** | Picker | 2 → **0** |
+| GraphicsView | 1 → **0** | WebView | 1 → **0** | RefreshView | 2 → **0** |
+| FlyoutPage | 1 → **0** | Stepper | 3 → **0** | SwipeView | 1 → **0** |
+| TabView | 2 → **0** | SearchBar | 2 → **0** | DatePicker | 3 → **0** |
+| ProgressBar | 3 → **0** | ActivityIndicator | 2 → **0** | ScrollView/Frame/Border/Grid | → **0** |
+
+**Used controls survive** (linked): Text, Button, VStack, ListView (+`ListView<T>`),
+NavigationView — all present.
+
+> Conclusion: the new backend makes Comet's managed surface pay-for-what-you-use —
+> a 5-control app ships 106 KiB of Comet instead of 787 KiB, and every unused
+> control (and its `CreateBackendNode`/`Compose*Node`) is gone. This is the
+> "handlers aren't trimmable → app-size bloat" problem, retired.
+>
+> Caveats: total APK is still dominated by the Compose AndroidX deps (dex) +
+> CoreCLR runtime, not Comet's managed code, so the win shows in `Comet.dll` /
+> assembly-store, not the package total. Cold-start A/B and a minimal **legacy**
+> trimmed build (to show controls *survive* empirically) are still pending — the
+> latter needs a few-control legacy app since CometStressTest instantiates most
+> controls.
+
+### Reproduce
+
+```bash
+dotnet publish sample/CometComposeProbe/CometComposeProbe.csproj \
+  -f net11.0-android -c Release -p:TrimMode=full -p:RunAOTCompilation=false
+LINKED=sample/CometComposeProbe/obj/Release/net11.0-android/android-arm64/linked/Comet.dll
+ikdasm "$LINKED" | grep -c '\.class '                 # ~113
+ikdasm "$LINKED" | grep -E '\.class .*\bPicker\b'     # (empty — trimmed)
+```
