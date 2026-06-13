@@ -56,6 +56,12 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("clearChildren:")]
 		void ClearChildren(CometNode node);
 
+		[Static, Export("setFrame:x:y:width:height:")]
+		void SetFrame(CometNode node, double x, double y, double width, double height);
+
+		[Static, Export("measureNode:maxWidth:maxHeight:")]
+		CoreGraphics.CGSize MeasureNode(CometNode node, double maxWidth, double maxHeight);
+
 		[Static, Export("hostControllerForRoot:")]
 		UIViewController HostController(CometNode root);
 	}

@@ -37,19 +37,24 @@ namespace CometSwiftUIProbe
 
 			// A real Comet view tree, rendered as SwiftUI through the node protocol —
 			// no MAUI handlers in the render path.
-			var backend = new SwiftUIBackendRoot(new EmptyServiceProvider());
+			var backend = new SwiftUIBackendRoot(new EmptyServiceProvider()) { UseYogaLayout = true };
 			Window.RootViewController = backend.CreateController(BuildUi());
 
 			Window.MakeKeyAndVisible();
 			return true;
 		}
 
-		View BuildUi()
+		// Direct VStack root (no NavigationView, which is own-content and stops the layout
+		// engine) so the Yoga engine actually lays this tree out under UseYogaLayout.
+		View BuildUi() => new VStack
 		{
-			_nav = new NavigationView();
-			_nav.Add(HomeScreen());
-			return _nav;
-		}
+			new Text("Yoga layout").Color(Colors.White),
+			new Text("A").Color(Colors.White),
+			new Text("BB").Color(Colors.White),
+			new Text("CCC").Color(Colors.White),
+			new Button("Increment", () => _count.Value++),
+			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
+		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		// Interactive controls with AutomationIds (clean `--automationId` selector targets) plus
 		// a Navigate button, so the dev tree pruning across push/pop is observable.

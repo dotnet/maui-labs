@@ -15,6 +15,10 @@ import SwiftUI
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
     @Published var padding: CGFloat = 0
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
+    // Yoga-computed parent-relative layout frame. hasFrame flips true once C# arranges this
+    // node; until then the view uses native SwiftUI layout (so rendering is unchanged).
+    @Published var frame: CGRect = .zero
+    @Published var hasFrame: Bool = false
     // Callbacks into C# (set via host fns). ObjC blocks so .NET binds them as Actions.
     var onTap: (() -> Void)?            // Button action (-> Clicked)
     var onTapGesture: (() -> Void)?     // arbitrary-view tap gesture (-> OnGesture(Tap))
@@ -112,6 +116,23 @@ import SwiftUI
         node.children.removeAll()
     }
 
+    @objc(setFrame:x:y:width:height:)
+    public static func setFrame(_ node: CometNode, x: Double, y: Double, width: Double, height: Double) {
+        node.frame = CGRect(x: x, y: y, width: width, height: height)
+        node.hasFrame = true
+    }
+
+    // Measures a leaf node's intrinsic size — the one place layout crosses into native.
+    @objc(measureNode:maxWidth:maxHeight:)
+    public static func measureNode(_ node: CometNode, maxWidth: Double, maxHeight: Double) -> CGSize {
+        let w = (maxWidth.isFinite && maxWidth > 0) ? maxWidth : UIScreen.main.bounds.width
+        let h = (maxHeight.isFinite && maxHeight > 0) ? maxHeight : UIScreen.main.bounds.height
+        let host = UIHostingController(rootView: CometLeafContent(node: node))
+        host.view.backgroundColor = .clear
+        let size = host.sizeThatFits(in: CGSize(width: w, height: h))
+        return size
+    }
+
     // Returns a UIViewController hosting the SwiftUI tree rooted at `root`.
     @objc(hostControllerForRoot:)
     public static func hostController(_ root: CometNode) -> UIViewController {
@@ -119,15 +140,13 @@ import SwiftUI
     }
 }
 
-// Recursively renders a CometNode tree as SwiftUI, observing each node for changes.
-struct CometNodeView: View {
+// The leaf control for a node (no children, no layout). Used for rendering leaves and, via
+// UIHostingController.sizeThatFits, for the Yoga engine's intrinsic-size measurement.
+struct CometLeafContent: View {
     @ObservedObject var node: CometNode
-
     @ViewBuilder
-    private var content: some View {
+    var body: some View {
         switch node.kind {
-        case "text":
-            Text(node.text)
         case "button":
             Button(action: { node.onTap?() }) { Text(node.text) }
         case "textfield":
@@ -144,26 +163,57 @@ struct CometNodeView: View {
             Slider(value: Binding(
                 get: { node.doubleValue },
                 set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
+        default: // "text" and unknown leaves
+            Text(node.text)
+        }
+    }
+}
+
+private func isYogaContainer(_ kind: String) -> Bool {
+    return kind == "vstack" || kind == "hstack" || kind == "zstack"
+}
+
+// Recursively renders a CometNode tree as SwiftUI. Once C#'s Yoga engine has arranged a flow
+// container (hasFrame), its children are positioned absolutely from the computed frames;
+// otherwise native SwiftUI layout is used (rendering unchanged until the engine drives it).
+struct CometNodeView: View {
+    @ObservedObject var node: CometNode
+
+    var body: some View {
+        Group {
+            if node.hasFrame && isYogaContainer(node.kind) {
+                ZStack(alignment: .topLeading) {
+                    ForEach(node.children) { child in
+                        CometNodeView(node: child)
+                            .frame(width: child.frame.width, height: child.frame.height, alignment: .topLeading)
+                            .offset(x: child.frame.minX, y: child.frame.minY)
+                    }
+                }
+                .frame(width: node.frame.width, height: node.frame.height, alignment: .topLeading)
+            } else {
+                nativeContent
+            }
+        }
+        .modifier(BackgroundModifier(argb: node.backgroundARGB))
+        .modifier(TapGestureModifier(node: node))
+    }
+
+    @ViewBuilder
+    private var nativeContent: some View {
+        switch node.kind {
         case "navigation":
-            // Imperative nav: the C# side keeps the stack and sets the single top screen
-            // as this node's child (mirrors the Compose nav node).
             if let top = node.children.last { CometNodeView(node: top) } else { EmptyView() }
         case "list":
             List { ForEach(node.children) { CometNodeView(node: $0) } }
         case "hstack":
-            HStack { ForEach(node.children) { CometNodeView(node: $0) } }
+            HStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":
-            ZStack { ForEach(node.children) { CometNodeView(node: $0) } }
-        default: // "vstack" and unknown containers
-            VStack { ForEach(node.children) { CometNodeView(node: $0) } }
+            ZStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
+        case "vstack":
+            VStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
+        default:
+            CometLeafContent(node: node)
         }
-    }
-
-    var body: some View {
-        content
-            .padding(node.padding)
-            .modifier(BackgroundModifier(argb: node.backgroundARGB))
-            .modifier(TapGestureModifier(node: node))
     }
 }
 

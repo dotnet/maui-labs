@@ -86,10 +86,16 @@ namespace Comet.Platform.SwiftUI
 			CometSwiftUIHost.InsertChild(_native, toIndex, ((ISwiftUINativeNode)c).Native);
 		}
 
-		// SwiftUI lays out its own tree (as Compose does today); Yoga positioning is a
-		// later, cross-backend step.
-		public Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
-		public void Arrange(Rect frame) { }
+		// Yoga layout: a leaf's intrinsic size comes from SwiftUI (sizeThatFits), and the
+		// Yoga-computed parent-relative frame is pushed back so the shim positions it absolutely.
+		public Size Measure(double widthConstraint, double heightConstraint)
+		{
+			var size = CometSwiftUIHost.MeasureNode(_native, widthConstraint, heightConstraint);
+			return new Size(size.Width, size.Height);
+		}
+
+		public void Arrange(Rect frame)
+			=> CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 		public void Dispose() { }

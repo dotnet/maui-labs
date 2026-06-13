@@ -19,10 +19,24 @@ namespace Comet.Platform.SwiftUI
 		public SwiftUIBackendRoot(IServiceProvider services)
 			=> _context = new BackendContext(services);
 
+		/// <summary>When true, the C# Yoga engine computes layout and the SwiftUI nodes are
+		/// positioned absolutely from the computed frames. Default false (native layout).</summary>
+		public bool UseYogaLayout { get; set; }
+
 		public UIViewController CreateController(View view)
 		{
 			var root = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context);
-			return CometSwiftUIHost.HostController(root.Native);
+			var controller = CometSwiftUIHost.HostController(root.Native);
+
+			if (UseYogaLayout)
+			{
+				var rootView = view.HasContent ? view.GetView() : view;
+				var bounds = UIScreen.MainScreen.Bounds;
+				CometBackendLayoutEngine.Layout(rootView,
+					new Microsoft.Maui.Graphics.Size(bounds.Width, bounds.Height));
+			}
+
+			return controller;
 		}
 	}
 }
