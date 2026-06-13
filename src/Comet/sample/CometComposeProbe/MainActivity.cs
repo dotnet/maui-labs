@@ -19,11 +19,20 @@ namespace CometComposeProbe
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
-		readonly Signal<int> _count = new(0);
+		readonly Signal<int> _len = new(0);
+
+		static readonly string[] Lengths =
+		{
+			"one line",
+			"a slightly longer line that may wrap once on a phone width here",
+			"three lines worth of text here that should wrap onto roughly three lines on a typical phone width so we can watch the stack below it move",
+			"a much longer paragraph designed to wrap onto five or six lines so that the rows beneath it are pushed substantially further down the screen, proving the whole vertical stack expands and contracts as the text length changes rather than the text just growing inside a fixed slot",
+		};
 
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
 			base.OnCreate(savedInstanceState);
+			ActionBar?.Hide(); // full-screen content; no title bar offsetting the Yoga layout
 
 			// Comet's fluent env writes post through ThreadHelper; route to the UI thread.
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
@@ -35,16 +44,16 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// Direct VStack root (no NavigationView, which is own-content and stops the layout
-		// engine) so the Yoga engine lays this out — the Android counterpart of the iOS test.
+		// Direct VStack root (NavigationView is own-content and stops the layout engine), so the
+		// Yoga engine lays this out. Cycling the text length proves the whole stack reflows — the
+		// Android counterpart of the iOS test.
 		View BuildUi() => new VStack
 		{
-			new Text("Yoga layout").Color(Colors.White),
-			new Text("A").Color(Colors.White),
-			new Text("BB").Color(Colors.White),
-			new Text("CCC").Color(Colors.White),
-			new Button("Increment", () => _count.Value++),
-			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
+			new Text(() => $"Cycle length: {_len.Value}").Color(Colors.White),
+			new Button("Cycle", () => _len.Value = (_len.Value + 1) % Lengths.Length).AutomationId("cycleBtn"),
+			new Text(() => Lengths[_len.Value]).Color(Colors.White),
+			new Text("── below ──").Color(Colors.White),
+			new Text("row 2 (should track the paragraph height)").Color(Colors.White),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : IServiceProvider
