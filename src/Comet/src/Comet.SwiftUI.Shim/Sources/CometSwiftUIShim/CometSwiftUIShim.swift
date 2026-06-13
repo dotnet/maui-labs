@@ -257,7 +257,16 @@ struct CometNodeView: View {
         case "navigation":
             if let top = node.children.last { CometNodeView(node: top) } else { EmptyView() }
         case "list":
-            List { ForEach(node.children) { CometNodeView(node: $0) } }
+            // Full-bleed, separator-free rows so a Yoga-laid-out row (which already carries its
+            // own padding) spans edge-to-edge exactly like the Compose LazyColumn.
+            List {
+                ForEach(node.children) { child in
+                    CometNodeView(node: child)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                }
+            }
+            .listStyle(.plain)
         case "hstack":
             HStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":

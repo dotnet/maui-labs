@@ -6,35 +6,26 @@ using Android.OS;
 using Comet;
 using Comet.Platform.Compose;
 using Comet.Reactive;
+using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 
 namespace CometComposeProbe
 {
 	/// <summary>
-	/// Builds a Comet view tree and renders it as a single Jetpack Compose composition
-	/// — no MAUI handlers anywhere in the render path. The Phase 1 go/no-go proof.
+	/// Reproduces a Jetchat-style conversation screen (a C# port of Google's Compose
+	/// "Jetchat" sample) on the Comet node backend: a fixed top bar over a virtualized,
+	/// Yoga-laid-out message list. Every row is laid out by the shared C# Yoga engine
+	/// (avatar + author + wrapping body), so it renders identically to the iOS/SwiftUI
+	/// backend — no MAUI handlers in the path.
 	/// </summary>
-	/// <remarks>Extends <c>ComponentActivity</c> because <c>ComposeView</c> requires the
-	/// ViewTree lifecycle / saved-state owners that a plain <c>Activity</c> doesn't set.</remarks>
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
-		readonly Signal<int> _len = new(0);
-
-		static readonly string[] Lengths =
-		{
-			"one line",
-			"a slightly longer line that may wrap once on a phone width here",
-			"three lines worth of text here that should wrap onto roughly three lines on a typical phone width so we can watch the stack below it move",
-			"a much longer paragraph designed to wrap onto five or six lines so that the rows beneath it are pushed substantially further down the screen, proving the whole vertical stack expands and contracts as the text length changes rather than the text just growing inside a fixed slot",
-		};
-
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
 			base.OnCreate(savedInstanceState);
-			ActionBar?.Hide(); // full-screen content; no title bar offsetting the Yoga layout
+			ActionBar?.Hide();
 
-			// Comet's fluent env writes post through ThreadHelper; route to the UI thread.
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
 
 			var root = BuildUi();
@@ -44,24 +35,46 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// Direct VStack root (NavigationView is own-content and stops the layout engine), so the
-		// Yoga engine lays this out. Cycling the text length proves the whole stack reflows — the
-		// Android counterpart of the iOS test.
-		View BuildUi() => new VStack(spacing: 16f)
+		sealed record Message(string Author, string Body, string AvatarSeed);
+
+		static readonly List<Message> Conversation = new()
 		{
-			new Text("Image test").Color(Colors.White),
+			new("Taylor Brooks", "Morning everyone! Did you catch the new layout engine demo yesterday?", "taylor"),
+			new("Ada Lovelace", "I did — the whole thing reflows from one flexbox pass now, shared across iOS and Android. Pretty wild.", "ada"),
+			new("John Glenn", "So the same Comet tree lands pixel-identical on both backends? No per-platform tweaking?", "john"),
+			new("Ada Lovelace", "That's the idea. Text wraps, avatars size, rows grow — all computed once in C#.", "ada"),
+			new("Taylor Brooks", "Ship it. 🚀", "taylor"),
+			new("Grace Hopper", "Let's make sure the long messages still wrap cleanly though — this one is intentionally a good deal longer so we can watch it spill onto several lines inside a virtualized row and confirm the row height grows to fit.", "grace"),
+			new("John Glenn", "Confirmed on my Pixel — looks great.", "john"),
+			new("Ada Lovelace", "And the list is genuinely lazy: rows only materialize as they scroll in.", "ada"),
+			new("Taylor Brooks", "Perfect. Same screen, two platforms, one layout pass.", "taylor"),
+			new("Grace Hopper", "That's the dream. Good work today, team.", "grace"),
+		};
+
+		View BuildUi() => new VStack(spacing: 0f)
+		{
+			// Top app bar
 			new HStack(spacing: 12f)
 			{
-				new Image("https://picsum.photos/seed/comet/160").Frame(width: 64, height: 64),
-				new VStack(spacing: 2f)
-				{
-					new Text("Ada Lovelace").Color(Colors.White),
-					new Text("first programmer").Color(Colors.White),
-				},
+				new Text("#composers").Color(Colors.White),
+			}.Padding(new Thickness(16, 44, 16, 16)).Background(Color.FromArgb("#6750A4")), // top inset clears the status bar
+
+			// Scrolling, Yoga-laid-out message list filling the rest of the screen.
+			new ListView<Message>(() => Conversation)
+			{
+				ViewFor = MessageRow,
+			}.FillVertical(),
+		}.Background(Colors.White);
+
+		static View MessageRow(Message m) => new HStack(spacing: 12f)
+		{
+			new Image($"https://picsum.photos/seed/{m.AvatarSeed}/80").Frame(width: 42, height: 42),
+			new VStack(spacing: 2f)
+			{
+				new Text(m.Author).Color(Color.FromArgb("#1C1B1F")),
+				new Text(m.Body).Color(Color.FromArgb("#49454F")),
 			},
-			new Image("https://picsum.photos/seed/banner/800/300").Frame(height: 160),
-			new Text("below the banner").Color(Colors.White),
-		}.Background(Color.FromArgb("#6750A4")).Padding(24);
+		}.Padding(new Thickness(16, 10, 16, 10));
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{

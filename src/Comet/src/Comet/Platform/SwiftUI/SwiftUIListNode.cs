@@ -1,5 +1,6 @@
 #nullable enable
 #if IOS
+using System.Collections.Generic;
 using Comet.Backend;
 using Comet.SwiftUI.Interop;
 using Microsoft.Maui.Graphics;
@@ -18,6 +19,8 @@ namespace Comet.Platform.SwiftUI
 		readonly IListView _list;
 		readonly BackendContext _context;
 		readonly CometNode _native;
+		readonly List<View> _rows = new();
+		double _width;
 
 		public CometNode Native => _native;
 
@@ -41,13 +44,25 @@ namespace Comet.Platform.SwiftUI
 				Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
 
 			CometSwiftUIHost.ClearChildren(_native);
+			_rows.Clear();
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			for (int i = 0; i < count; i++)
 			{
 				var view = _list.ViewFor(0, i);
 				var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context, _list as View);
 				CometSwiftUIHost.InsertChild(_native, i, node.Native);
+				_rows.Add(view);
+				LayoutRow(view); // no-op until the list has been arranged (width known)
 			}
+		}
+
+		// Lay each row out to the list's arranged width with the shared Yoga engine, height-wrapped,
+		// so rows render identically to the Compose backend (avatar + author + wrapping body). Each
+		// row's nodes self-position from the frames this pushes; the row root self-sizes for the List.
+		void LayoutRow(View row)
+		{
+			if (_width > 0)
+				CometBackendLayoutEngine.LayoutContent(row, _width);
 		}
 
 		// The node manages its own rows; the generic child API is unused.
@@ -55,7 +70,20 @@ namespace Comet.Platform.SwiftUI
 		public void RemoveChildAt(int index) { }
 		public void MoveChild(int fromIndex, int toIndex) { }
 		public Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
-		public void Arrange(Rect frame) { }
+
+		public void Arrange(Rect frame)
+		{
+			// Position + size the List from its Yoga frame (below the top bar, filling the rest).
+			CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
+
+			// First time we learn our width (or it changed), (re)lay the rows out to it.
+			if (frame.Width > 0 && System.Math.Abs(frame.Width - _width) > 0.5)
+			{
+				_width = frame.Width;
+				foreach (var row in _rows)
+					LayoutRow(row);
+			}
+		}
 		public void SetEventSink(ICometEventSink? sink) { }
 		public void Dispose() { }
 	}

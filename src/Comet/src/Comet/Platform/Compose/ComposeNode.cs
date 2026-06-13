@@ -47,6 +47,10 @@ namespace Comet.Platform.Compose
 
 		protected bool HasFrame => _hasFrame;
 
+		/// <summary>The Yoga-arranged width of this node in Dp (0 until arranged). Own-content
+		/// nodes (list, scroll) use it to lay their own content out to the host's width.</summary>
+		protected float FrameWidth => _fw;
+
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------

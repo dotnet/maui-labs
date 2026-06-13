@@ -194,6 +194,53 @@ namespace Comet.Tests.Backend
 			Assert.Equal(80, Node(a).ArrangedFrame!.Value.Width, 2);
 		}
 
+		[Fact]
+		public void LayoutContent_PinsWidth_AndWrapsHeightToContent()
+		{
+			// The list-row / scroll-content model: width is pinned to the host, height grows to fit
+			// the content (here two stacked rows) rather than filling a viewport.
+			var top = new Text("top");
+			var bottom = new Text("bottom");
+			var row = new VStack(spacing: 8f) { top, bottom };
+			Bridge(row);
+
+			Node(top).MeasureResult = new Size(100, 20);
+			Node(bottom).MeasureResult = new Size(100, 30);
+
+			var size = CometBackendLayoutEngine.LayoutContent(row, 250);
+
+			// Width pinned to the host; height = 20 + 8 gap + 30 = 58 (wrapped, not the screen).
+			Assert.Equal(250, size.Width, 3);
+			Assert.Equal(58, size.Height, 3);
+			Assert.Equal(58, Node(row).ArrangedFrame!.Value.Height, 3);
+			// Children stack within the pinned width.
+			Assert.Equal(0, Node(top).ArrangedFrame!.Value.Y, 3);
+			Assert.Equal(28, Node(bottom).ArrangedFrame!.Value.Y, 3);
+		}
+
+		[Fact]
+		public void LayoutContent_StretchesChildToPinnedWidth_SoTextWraps()
+		{
+			// A row whose body text wraps: pinned to 200 wide, a 600-wide natural line wraps to
+			// 3 lines (60 tall), and the row height reflects it — the virtualized-row height path.
+			var text = new Text("long");
+			var row = new VStack(spacing: 0f) { text };
+			Bridge(row);
+
+			Node(text).MeasureFunc = (w, h) =>
+			{
+				const double natural = 600, line = 20;
+				if (double.IsInfinity(w) || w >= natural) return new Size(natural, line);
+				int lines = (int)System.Math.Ceiling(natural / w);
+				return new Size(w, lines * line);
+			};
+
+			var size = CometBackendLayoutEngine.LayoutContent(row, 200);
+
+			Assert.Equal(200, Node(text).LastMeasureWidth, 3);
+			Assert.Equal(60, size.Height, 3);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;

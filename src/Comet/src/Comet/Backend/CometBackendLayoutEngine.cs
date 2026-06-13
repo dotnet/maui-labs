@@ -46,6 +46,26 @@ namespace Comet.Backend
 			Arrange(root, yoga);
 		}
 
+		/// <summary>Lays out <paramref name="content"/> at a fixed <paramref name="width"/> with
+		/// its height wrapping the content, pushes the computed frames onto the node tree, and
+		/// returns the content's natural size. This is the model for a scroll viewport or a
+		/// virtualized list row: the cross axis is pinned to the host's width while the main axis
+		/// grows to whatever the content needs (the part that then scrolls / sets the row height).</summary>
+		public static Size LayoutContent(View content, double width)
+		{
+			if (content is null) throw new ArgumentNullException(nameof(content));
+
+			var yoga = Build(content, YogaFlexDirection.Column);
+
+			// Pin the width; leave height Auto so Yoga wraps to the content's natural height
+			// rather than filling a (non-existent) viewport.
+			yoga.Width = Comet.Layout.Yoga.YogaValue.Point((float)width);
+
+			yoga.CalculateLayout((float)width, float.NaN);
+			Arrange(content, yoga);
+			return new Size(yoga.LayoutWidth, yoga.LayoutHeight);
+		}
+
 		static YogaNode Build(View view, YogaFlexDirection parentDirection)
 		{
 			var node = new YogaNode();

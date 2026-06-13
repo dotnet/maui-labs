@@ -46,12 +46,33 @@ namespace Comet.Platform.Compose
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			var indices = Enumerable.Range(0, count).ToList();
 
-			new ComposeLazyColumn(indices, i =>
+			// Under Yoga, lay each row out to the list's arranged width so rows render identically
+			// to the rest of the tree (and to iOS). FrameWidth is 0 until the engine arranges this
+			// list, so fall back to the screen width.
+			bool yoga = HasFrame;
+			double rowWidth = FrameWidth > 0
+				? FrameWidth
+				: global::Android.Content.Res.Resources.System!.DisplayMetrics!.WidthPixels / ComposeNode.Density;
+
+			var lazy = new ComposeLazyColumn(indices, i =>
 			{
 				// Materialized lazily by Compose for visible rows only.
 				var view = _list.ViewFor(0, i);
-				return (ComposableNode)CometBackendBridge.Materialize(view, _context);
-			}).Render(composer);
+				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context);
+
+				// Drive the same Yoga pass the root uses, but width-pinned / height-wrapped so the
+				// row's own size comes from its content — the row then carries absolute child frames
+				// and renders as a self-positioning Box (see ComposeStackNode), matching iOS.
+				if (yoga)
+					CometBackendLayoutEngine.LayoutContent(view, rowWidth);
+
+				return node;
+			});
+
+			// Position + size the list from its Yoga frame (offset below the top bar, sized to the
+			// remaining height) so it scrolls within its slot rather than laying out at the origin.
+			((ComposableNode)lazy).Modifier = BuildNodeModifier();
+			lazy.Render(composer);
 		}
 	}
 }
