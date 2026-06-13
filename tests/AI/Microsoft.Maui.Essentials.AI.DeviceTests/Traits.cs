@@ -28,7 +28,7 @@ static class Traits
 			yield return $"Category={AppleIntelligenceChatClient}";
 		}
 
-		// Read TestFilter from environment (set by Helix/XHarness via --set-env)
+		// Read TestFilter from environment (e.g. set via --set-env in CI)
 		// Supports TestFilter=SkipCategories=X,Y,Z format
 		string? testFilter = null;
 		foreach (var en in Foundation.NSProcessInfo.ProcessInfo.Environment)
