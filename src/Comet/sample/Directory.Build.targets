@@ -1,8 +1,8 @@
 <Project>
 	<!-- Force-bump SupportedOSPlatformVersion for all Comet samples. The current
-	     iOS/MacCatalyst SDK requires >= 17.0; current Android requires minSdk >= 23.
-	     Override in Directory.Build.targets (after the csproj evaluates) so all
-	     samples pick this up without per-project edits. -->
+	     iOS/MacCatalyst SDK requires >= 17.0; current Android (.NET 11 preview 5)
+	     requires minSdk >= 24. Override in Directory.Build.targets (after the csproj
+	     evaluates) so all samples pick this up without per-project edits. -->
 	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
 		<SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
@@ -10,7 +10,7 @@
 		<SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
 	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
-		<SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
