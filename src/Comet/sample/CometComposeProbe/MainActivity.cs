@@ -16,7 +16,8 @@ namespace CometComposeProbe
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
-		readonly Signal<int> _count = new(0);
+		readonly Signal<int> _a = new(0);
+		readonly Signal<int> _b = new(0);
 
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
@@ -32,14 +33,28 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// A small Comet tree: a heading, a live reactive counter, and a button.
-		// Tapping Increment writes the Signal -> Comet's reactive scheduler flushes ->
-		// the bound Text re-emits Text_Value -> the Compose MutableState recomposes.
+		// A richer tree exercising nested layout (Row inside Column), two independent
+		// reactive counters, and a DERIVED value (Sum) that tracks BOTH signals — proving
+		// multi-dependency reactive tracking flows through the Compose bridge.
 		View BuildUi() => new VStack
 		{
-			new Text("Comet rendering via Jetpack Compose"),
-			new Text(() => $"Count: {_count.Value}"),
-			new Button("Increment", () => _count.Value++),
+			new Text("Comet → Jetpack Compose"),
+
+			new Text(() => $"A = {_a.Value}"),
+			new HStack
+			{
+				new Button("A +", () => _a.Value++),
+				new Button("A −", () => _a.Value--),
+			},
+
+			new Text(() => $"B = {_b.Value}"),
+			new HStack
+			{
+				new Button("B +", () => _b.Value++),
+				new Button("B −", () => _b.Value--),
+			},
+
+			new Text(() => $"Sum = {_a.Value + _b.Value}"),
 		};
 
 		sealed class EmptyServiceProvider : IServiceProvider
