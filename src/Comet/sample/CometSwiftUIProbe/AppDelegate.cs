@@ -1,7 +1,8 @@
-using System.Collections.Generic;
-using System.Linq;
 using Comet;
+using Comet.DevTools;
 using Comet.Platform.SwiftUI;
+using Comet.Reactive;
+using CoreFoundation;
 using Foundation;
 using Microsoft.Maui.Graphics;
 using UIKit;
@@ -13,8 +14,11 @@ namespace CometSwiftUIProbe
 	{
 		public override UIWindow? Window { get; set; }
 
-		NavigationView? _nav;
-		int _navTick;
+		readonly Signal<int> _count = new(0);
+		readonly Signal<string> _name = new(string.Empty);
+		readonly Signal<bool> _fancy = new(false);
+
+		CometDevAgent? _agent;
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
 		{
@@ -23,42 +27,41 @@ namespace CometSwiftUIProbe
 
 			Window = new UIWindow(UIScreen.MainScreen.Bounds);
 
+			// In-process dev agent (ailoha/DevFlow model): lets the CLI / an AI agent / curl
+			// inspect this Comet tree and drive semantic actions (tap/fill/toggle) over HTTP.
+			// Reactive writes must run on the UI thread, so we hand it the main queue. Start it
+			// BEFORE materializing so the registry tracks every node as the tree is built.
+			_agent = new CometDevAgent(9234, a => DispatchQueue.MainQueue.DispatchAsync(a));
+			_agent.Start();
+
+			// A real Comet view tree, rendered as SwiftUI through the node protocol —
+			// no MAUI handlers in the render path.
 			var backend = new SwiftUIBackendRoot(new EmptyServiceProvider());
 			Window.RootViewController = backend.CreateController(BuildUi());
 
 			Window.MakeKeyAndVisible();
 
-			// Drive navigation on a timer (no tap tool on the sim): alternately push a Detail
-			// screen and pop back, proving Navigate/Pop re-render the SwiftUI nav stack.
-			NSTimer.CreateScheduledTimer(2.5, true, _ =>
-			{
-				if (_navTick++ % 2 == 0)
-					_nav!.Navigate(DetailScreen());
-				else
-					_nav!.Pop();
-			});
-
 			return true;
 		}
 
-		View BuildUi()
+		// No timer: state changes only via user interaction or the dev agent, so a tap/fill/
+		// toggle through the agent is a clean, deterministic verification of the event loop.
+		View BuildUi() => new VStack
 		{
-			_nav = new NavigationView();
-			_nav.Add(HomeScreen());
-			return _nav;
-		}
+			new Text("Comet → SwiftUI").Color(Colors.White),
 
-		static View HomeScreen() => new VStack
-		{
-			new Text("🏠  Home").Color(Colors.White),
-			new Text("Auto-navigating every 2.5s…").Color(Colors.White),
-		}.Background(Color.FromArgb("#6750A4")).Padding(28);
+			// Counter — exercises the Button click event path (Swift onTap -> C# -> Signal).
+			new Text(() => $"Count: {_count.Value}").Color(Colors.White),
+			new Button("Increment", () => _count.Value++),
 
-		static View DetailScreen() => new VStack
-		{
-			new Text("📄  Detail").Color(Colors.White),
-			new Text("Pushed via Navigate(), pops back").Color(Colors.White),
-		}.Background(Color.FromArgb("#7D5260")).Padding(28);
+			// Text input — exercises the TextField write-back path (fill -> Signal -> Text).
+			new TextField(_name, "Type a name"),
+			new Text(() => $"Hello, {(_name.Value.Length == 0 ? "stranger" : _name.Value)}").Color(Colors.White),
+
+			// Toggle — exercises the bool write-back path.
+			new Toggle(_fancy),
+			new Text(() => _fancy.Value ? "Fancy: ON" : "Fancy: off").Color(Colors.White),
+		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{

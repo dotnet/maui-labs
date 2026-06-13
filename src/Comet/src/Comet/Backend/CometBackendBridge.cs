@@ -23,6 +23,9 @@ namespace Comet.Backend
 		/// <summary>Materializes <paramref name="view"/> using a supplied node factory
 		/// (test path).</summary>
 		public static ICometBackendNode Materialize(View view, CometNodeFactory factory, BackendContext context)
+			=> Materialize(view, factory, context, parent: null);
+
+		static ICometBackendNode Materialize(View view, CometNodeFactory factory, BackendContext context, View? parent)
 		{
 			if (view is null) throw new ArgumentNullException(nameof(view));
 			if (factory is null) throw new ArgumentNullException(nameof(factory));
@@ -35,6 +38,10 @@ namespace Comet.Backend
 			node.SetEventSink(new ViewEventSink(rendered));
 			rendered.ApplyAllSetProperties(node);
 
+			// Track for the in-process dev agent (no-op unless enabled). Linked to its parent
+			// so external tooling can present the tree and resolve element ids back to views.
+			DevTools.CometDevRegistry.Register(rendered, node, parent);
+
 			// Nodes that manage their own content (navigation, lists) pull the views they
 			// need themselves; don't materialize the static child tree for them.
 			if (rendered is IContainerView container && node is not IBackendManagesOwnContent)
@@ -46,7 +53,7 @@ namespace Comet.Backend
 					// Establish the parent link so .Navigation (and other inherited context)
 					// propagates down the materialized tree.
 					child.Parent = rendered;
-					node.InsertChild(i, Materialize(child, factory, context));
+					node.InsertChild(i, Materialize(child, factory, context, rendered));
 				}
 			}
 
