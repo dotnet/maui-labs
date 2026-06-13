@@ -48,4 +48,9 @@
 	<ProjectReference Include="..\vendor\Microsoft.AndroidX.Compose\Microsoft.AndroidX.Compose.csproj" />
   </ItemGroup>
 
+  <!-- SwiftUI backend (iOS only) renders through the CometSwiftUIShim @objc binding. -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-ios'))">
+	<ProjectReference Include="..\Comet.SwiftUI.Binding\Comet.SwiftUI.Binding.csproj" />
+  </ItemGroup>
+
 </Project>
