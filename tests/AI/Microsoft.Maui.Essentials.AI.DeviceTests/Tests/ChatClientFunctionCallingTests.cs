@@ -14,7 +14,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	protected virtual IChatClient EnableFunctionCalling(T client) => client;
 
 	[Fact]
-	public async Task GetResponseAsync_CallsFunctionAndReturnsResult()
+	public virtual async Task GetResponseAsync_CallsFunctionAndReturnsResult()
 	{
 		bool functionWasCalled = false;
 		string? capturedLocation = null;
@@ -48,7 +48,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_HandlesMultipleFunctionCalls()
+	public virtual async Task GetResponseAsync_HandlesMultipleFunctionCalls()
 	{
 		int weatherCallCount = 0;
 		int timeCallCount = 0;
@@ -88,7 +88,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_CallsFunctionAndStreamsUpdates()
+	public virtual async Task GetStreamingResponseAsync_CallsFunctionAndStreamsUpdates()
 	{
 		bool functionWasCalled = false;
 		string? capturedLocation = null;
@@ -127,7 +127,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_StreamsToolCallContent()
+	public virtual async Task GetStreamingResponseAsync_StreamsToolCallContent()
 	{
 		var weatherTool = AIFunctionFactory.Create(
 			(string location) => $"Sunny, 72°F in {location}",
@@ -162,7 +162,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_StreamsToolResultContent()
+	public virtual async Task GetStreamingResponseAsync_StreamsToolResultContent()
 	{
 		var weatherTool = AIFunctionFactory.Create(
 			(string location) => $"Sunny, 72°F in {location}",
@@ -197,7 +197,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_ToolResultHasCorrectRole()
+	public virtual async Task GetStreamingResponseAsync_ToolResultHasCorrectRole()
 	{
 		// Verifies that streaming updates containing FunctionResultContent
 		// use ChatRole.Tool (not ChatRole.Assistant), matching M.E.AI conventions.
@@ -233,7 +233,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_StreamsToolCallBeforeToolResult()
+	public virtual async Task GetStreamingResponseAsync_StreamsToolCallBeforeToolResult()
 	{
 		var weatherTool = AIFunctionFactory.Create(
 			(string location) => $"Sunny, 72°F in {location}",
@@ -277,7 +277,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_HandlesMultipleFunctionCalls()
+	public virtual async Task GetStreamingResponseAsync_HandlesMultipleFunctionCalls()
 	{
 		int weatherCallCount = 0;
 		int timeCallCount = 0;
@@ -321,7 +321,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_FunctionWithComplexParameters()
+	public virtual async Task GetResponseAsync_FunctionWithComplexParameters()
 	{
 		bool functionWasCalled = false;
 
@@ -351,7 +351,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_FunctionWithComplexParameters()
+	public virtual async Task GetStreamingResponseAsync_FunctionWithComplexParameters()
 	{
 		bool functionWasCalled = false;
 
@@ -385,7 +385,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_ChainedFunctionCalls_TimeAndWeather()
+	public virtual async Task GetResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
 		int timeCallCount = 0;
 		int weatherCallCount = 0;
@@ -457,7 +457,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_ChainedFunctionCalls_TimeAndWeather()
+	public virtual async Task GetStreamingResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
 		int timeCallCount = 0;
 		int weatherCallCount = 0;
@@ -530,7 +530,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_FunctionWithEnumParameter_CallsToolCorrectly()
+	public virtual async Task GetResponseAsync_FunctionWithEnumParameter_CallsToolCorrectly()
 	{
 		// This test verifies that enum parameters are properly preserved in the JSON schema
 		// and that the AI can call the function with valid enum values.
@@ -593,7 +593,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_FunctionWithEnumParameter_CallsToolCorrectly()
+	public virtual async Task GetStreamingResponseAsync_FunctionWithEnumParameter_CallsToolCorrectly()
 	{
 		// This test verifies enum parameters work correctly in streaming scenarios
 
@@ -659,7 +659,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_MultiTurnConversationWithToolCalling_SucceedsOnFollowUp()
+	public virtual async Task GetResponseAsync_MultiTurnConversationWithToolCalling_SucceedsOnFollowUp()
 	{
 		var weatherTool = AIFunctionFactory.Create(
 			(string location) => $"Sunny, 72°F in {location}",
@@ -704,7 +704,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_MultiTurnConversationWithToolCalling_SucceedsOnFollowUp()
+	public virtual async Task GetStreamingResponseAsync_MultiTurnConversationWithToolCalling_SucceedsOnFollowUp()
 	{
 		var weatherTool = AIFunctionFactory.Create(
 			(string location) => $"Sunny, 72°F in {location}",
@@ -749,7 +749,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_HistoryBuiltFromStreamedContent_SucceedsOnFollowUp()
+	public virtual async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_HistoryBuiltFromStreamedContent_SucceedsOnFollowUp()
 	{
 		// This test simulates the exact pattern ChatViewModel uses:
 		// Add each content item to history as it arrives, preserving stream order.
@@ -822,7 +822,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_HistoryBuiltFromStreamedContent_ToolResultsPreservedInContext()
+	public virtual async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_HistoryBuiltFromStreamedContent_ToolResultsPreservedInContext()
 	{
 		// Verifies tool results from streamed turn 1 are available in turn 2's context.
 		// Uses a distinctive value (47°F) that the model can't hallucinate.
@@ -885,7 +885,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_MultiTurnConversationWithToolCalling_ToolResultsPreservedInContext()
+	public virtual async Task GetResponseAsync_MultiTurnConversationWithToolCalling_ToolResultsPreservedInContext()
 	{
 		// Use a distinctive, unlikely-to-be-hallucinated temperature value
 		var weatherTool = AIFunctionFactory.Create(
@@ -925,7 +925,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextContent()
+	public virtual async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextContent()
 	{
 		// Verifies that no text content with the literal value "null" leaks through
 		// the streaming pipeline during tool-calling conversations. This guards against
@@ -962,7 +962,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_WithToolCalling_StreamOrderIsToolsBeforeResponse()
+	public virtual async Task GetStreamingResponseAsync_WithToolCalling_StreamOrderIsToolsBeforeResponse()
 	{
 		// Records the exact order of content types in a tool-calling stream
 		// to verify that tool calls/results arrive BEFORE the final text response.
@@ -1022,7 +1022,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_WithToolCalling_StreamOrderPreservedThroughFICC()
+	public virtual async Task GetStreamingResponseAsync_WithToolCalling_StreamOrderPreservedThroughFICC()
 	{
 		// Tests the stream order through a FunctionInvokingChatClient middleware chain.
 		// The Apple Intelligence client sets InformationalOnly=true on FunctionCallContent,
@@ -1079,7 +1079,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_InformationalOnlyFunctionCalls_NotInvokedByFICC()
+	public virtual async Task GetStreamingResponseAsync_InformationalOnlyFunctionCalls_NotInvokedByFICC()
 	{
 		// The native Apple Intelligence framework invokes tools itself (via AIFunctionToolAdapter).
 		// InformationalOnly=true prevents FICC from invoking them AGAIN.
@@ -1117,7 +1117,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_ContentOrderPreserved()
+	public virtual async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_ContentOrderPreserved()
 	{
 		// Verifies that conversation history built from streaming preserves the
 		// correct interleaving order: each FunctionCallContent (Assistant) is followed
@@ -1193,7 +1193,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextBeforeToolCalls()
+	public virtual async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextBeforeToolCalls()
 	{
 		// Captures the EXACT raw sequence of all content items during a tool-calling stream.
 		// Verifies: (1) no text delta contains "null" (case-insensitive substring),
@@ -1270,7 +1270,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_ViewModelSimulation_ThinkingBubbleRemovedBeforeToolCalls()
+	public virtual async Task GetStreamingResponseAsync_ViewModelSimulation_ThinkingBubbleRemovedBeforeToolCalls()
 	{
 		// Simulates the ChatViewModel's exact state machine to reproduce the "null thinking bubble" bug.
 		// The user reports: "what are landmarks in africa" → thinking bubble text goes to "null",
@@ -1406,7 +1406,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_ViewModelSimulation_NoNullTextInStream_RawClient()
+	public virtual async Task GetStreamingResponseAsync_ViewModelSimulation_NoNullTextInStream_RawClient()
 	{
 		// Same as above but uses the RAW client (no middleware) to isolate whether
 		// "null" text comes from Apple or from the middleware pipeline.

@@ -12,7 +12,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public async Task GetResponseAsync_AcceptsNullOptions()
+	public virtual async Task GetResponseAsync_AcceptsNullOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -24,7 +24,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
+	public virtual async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -59,7 +59,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	public virtual async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -76,7 +76,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
+	public virtual async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -92,7 +92,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_AcceptsNullOptions()
+	public virtual async Task GetStreamingResponseAsync_AcceptsNullOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -107,7 +107,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_WithChatOptions_AcceptsValidOptions()
+	public virtual async Task GetStreamingResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>

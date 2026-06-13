@@ -12,7 +12,7 @@ public abstract class ChatClientResponseTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public async Task GetResponseAsync_ReturnsNonNullResponse()
+	public virtual async Task GetResponseAsync_ReturnsNonNullResponse()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>

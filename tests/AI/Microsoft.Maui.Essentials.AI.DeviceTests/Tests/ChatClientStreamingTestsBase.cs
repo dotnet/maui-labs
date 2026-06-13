@@ -12,7 +12,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public async Task GetStreamingResponseAsync_ReturnsStreamingUpdates()
+	public virtual async Task GetStreamingResponseAsync_ReturnsStreamingUpdates()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -31,7 +31,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_UpdatesHaveContents()
+	public virtual async Task GetStreamingResponseAsync_UpdatesHaveContents()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -50,7 +50,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_CanBuildCompleteResponseFromUpdates()
+	public virtual async Task GetStreamingResponseAsync_CanBuildCompleteResponseFromUpdates()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -75,7 +75,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_DeliversMultipleIncrementalUpdates()
+	public virtual async Task GetStreamingResponseAsync_DeliversMultipleIncrementalUpdates()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -106,7 +106,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_ConcatenatedTextMatchesNonStreaming()
+	public virtual async Task GetStreamingResponseAsync_ConcatenatedTextMatchesNonStreaming()
 	{
 		var client = new T();
 		var prompt = "What is the capital of France? Answer in one word.";

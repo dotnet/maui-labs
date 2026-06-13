@@ -8,10 +8,8 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 /// Tests for AppleIntelligenceChatClient edge cases in message conversion,
 /// tool validation, and error handling paths.
 /// </summary>
-[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientValidationTests
 {
-	public AppleIntelligenceChatClientValidationTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 	/// <summary>
 	/// Verifies that passing a non-AIFunction tool (e.g., a custom AITool subclass)
 	/// throws NotSupportedException with a descriptive message listing the unsupported types.
@@ -41,6 +39,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// passes through content filtering to the native API without throwing.
 	/// </summary>
 	[Fact]
+	[Trait("RequiresModel", "true")]
 	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -71,6 +70,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// FunctionCallContent is handled gracefully (empty tool name, no exception).
 	/// </summary>
 	[Fact]
+	[Trait("RequiresModel", "true")]
 	public async Task GetResponseAsync_WithOrphanedFunctionResult_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -94,6 +94,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// is handled gracefully (empty tool name, no exception). This covers the null CallId path too.
 	/// </summary>
 	[Fact]
+	[Trait("RequiresModel", "true")]
 	public async Task GetResponseAsync_WithFunctionResultOrphanedCallId_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -123,6 +124,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// FunctionCallContent validates name is not null in its constructor.
 	/// </summary>
 	[Fact]
+	[Trait("RequiresModel", "true")]
 	public async Task GetResponseAsync_WithFunctionCallEmptyName_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -144,6 +146,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// The Instructions string is prepended as a system message internally.
 	/// </summary>
 	[Fact]
+	[Trait("RequiresModel", "true")]
 	public async Task GetResponseAsync_WithInstructions_Succeeds()
 	{
 		var client = new AppleIntelligenceChatClient();
