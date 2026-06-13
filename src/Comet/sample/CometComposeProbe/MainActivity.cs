@@ -18,6 +18,7 @@ namespace CometComposeProbe
 	{
 		readonly Signal<string> _name = new(string.Empty);
 		readonly Signal<bool> _fancy = new(false);
+		readonly Signal<double> _volume = new(0.3);
 
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
@@ -51,6 +52,9 @@ namespace CometComposeProbe
 				new Toggle(_fancy),
 			},
 			new Text(() => _fancy.Value ? "✨ Fancy is ON ✨" : "plain mode"),
+
+			new Text(() => $"Volume: {(int)(_volume.Value * 100)}%"),
+			new Slider(_volume),
 		};
 
 		sealed class EmptyServiceProvider : IServiceProvider

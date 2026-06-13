@@ -112,6 +112,31 @@ namespace Comet.Tests.Backend
 			Assert.Equal("ON", label.Get(PropertyIds.Text_Value).AsString);
 		}
 
+		[Fact]
+		public void Slider_EmitsValueAndWritesBack()
+		{
+			var pos = new Signal<double>(0.0);
+			var node = Bridge(new VStack { new Slider(pos) });
+			var slider = node.Children[0];
+			Assert.Equal(0.0, slider.Get(PropertyIds.Slider_Value).AsDouble, 5);
+
+			slider.Sink!.OnEvent(EventIds.ValueChanged, 0.7);
+			Assert.Equal(0.7, pos.Value, 5);
+		}
+
+		[Fact]
+		public void Slider_OwnVisualReflectsValueAfterDrag()
+		{
+			var pos = new Signal<double>(0.0);
+			var node = Bridge(new VStack { new Slider(pos) });
+			var slider = node.Children[0];
+
+			slider.Sink!.OnEvent(EventIds.ValueChanged, 0.7);
+			ReactiveScheduler.FlushSync();
+
+			Assert.Equal(0.7, slider.Get(PropertyIds.Slider_Value).AsDouble, 5);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;

@@ -50,5 +50,11 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new ComposeToggleNode();
 	}
+
+	public partial class Slider
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeSliderNode();
+	}
 }
 #endif

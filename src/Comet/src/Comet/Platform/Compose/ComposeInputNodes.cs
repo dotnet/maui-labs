@@ -6,6 +6,7 @@ using AndroidX.Compose.Runtime;
 using Comet.Backend;
 using ComposeTextField = AndroidX.Compose.TextField;
 using ComposeSwitch = AndroidX.Compose.Switch;
+using ComposeSlider = AndroidX.Compose.Slider;
 
 namespace Comet.Platform.Compose
 {
@@ -35,6 +36,27 @@ namespace Comet.Platform.Compose
 				field.Placeholder = new AndroidX.Compose.Text(placeholder);
 
 			field.Render(composer);
+		}
+	}
+
+	/// <summary>Renders Comet <c>Slider</c> as a Material 3 <c>Slider</c> (default 0..1
+	/// range), routing drags back through the event sink (ValueChanged double payload).</summary>
+	sealed class ComposeSliderNode : ComposeNode
+	{
+		readonly MutableState<float> _value = new(0f);
+
+		public override void ApplyProperty(PropertyId id, in PropertyValue value)
+		{
+			if (id == PropertyIds.Slider_Value)
+				_value.Value = (float)value.AsDouble;
+		}
+
+		public override void Render(IComposer composer)
+		{
+			new ComposeSlider(
+				value: _value.Value,
+				onValueChange: v => Sink?.OnEvent(EventIds.ValueChanged, (double)v))
+				.Render(composer);
 		}
 	}
 
