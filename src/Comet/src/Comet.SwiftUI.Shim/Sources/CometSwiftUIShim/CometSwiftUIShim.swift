@@ -217,22 +217,27 @@ struct CometNodeView: View {
     @ObservedObject var node: CometNode
 
     var body: some View {
-        Group {
-            if node.hasFrame && isYogaContainer(node.kind) {
-                ZStack(alignment: .topLeading) {
-                    ForEach(node.children) { child in
-                        CometNodeView(node: child)
-                            .frame(width: child.frame.width, height: child.frame.height, alignment: .topLeading)
-                            .offset(x: child.frame.minX, y: child.frame.minY)
-                    }
-                }
-                .frame(width: node.frame.width, height: node.frame.height, alignment: .topLeading)
-            } else {
-                nativeContent
+        // Each node sizes + positions ITSELF from its own (observed) frame, so a re-arrange
+        // (reflow) re-renders just that node and the layout adapts live — the parent can't
+        // observe the children's frames in its own body. Order matters: size → background
+        // (so it fills the arranged frame) → offset (move the whole node into place).
+        content
+            .modifier(SizeModifier(node: node))
+            .modifier(BackgroundModifier(argb: node.backgroundARGB))
+            .modifier(TapGestureModifier(node: node))
+            .modifier(OffsetModifier(node: node))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if node.hasFrame && isYogaContainer(node.kind) {
+            // Children self-position via their own modifiers; just overlay them.
+            ZStack(alignment: .topLeading) {
+                ForEach(node.children) { CometNodeView(node: $0) }
             }
+        } else {
+            nativeContent
         }
-        .modifier(BackgroundModifier(argb: node.backgroundARGB))
-        .modifier(TapGestureModifier(node: node))
     }
 
     @ViewBuilder
@@ -250,6 +255,31 @@ struct CometNodeView: View {
             VStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         default:
             CometLeafContent(node: node)
+        }
+    }
+}
+
+// Sizes a node to its Yoga-computed frame (observing the node, so reflow re-applies it).
+private struct SizeModifier: ViewModifier {
+    @ObservedObject var node: CometNode
+    func body(content: Content) -> some View {
+        if node.hasFrame {
+            content.frame(width: node.frame.width, height: node.frame.height, alignment: .topLeading)
+        } else {
+            content
+        }
+    }
+}
+
+// Positions a node at its Yoga-computed parent-relative offset (applied after background so
+// the background fills the frame and moves with the node).
+private struct OffsetModifier: ViewModifier {
+    @ObservedObject var node: CometNode
+    func body(content: Content) -> some View {
+        if node.hasFrame {
+            content.offset(x: node.frame.minX, y: node.frame.minY)
+        } else {
+            content
         }
     }
 }

@@ -35,6 +35,13 @@ namespace Comet.Backend
 			if (root is null) throw new ArgumentNullException(nameof(root));
 
 			var yoga = Build(root, YogaFlexDirection.Column);
+
+			// The root fills the available space (the screen), so a root container's background
+			// covers the whole surface and its children lay out within — rather than Yoga
+			// shrinking the root to its content height.
+			yoga.Width = Comet.Layout.Yoga.YogaValue.Point((float)available.Width);
+			yoga.Height = Comet.Layout.Yoga.YogaValue.Point((float)available.Height);
+
 			yoga.CalculateLayout((float)available.Width, (float)available.Height);
 			Arrange(root, yoga);
 		}

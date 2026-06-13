@@ -19,6 +19,15 @@ namespace CometSwiftUIProbe
 		readonly Signal<bool> _fancy = new(false);
 		readonly Signal<int> _taps = new(0);
 		readonly Signal<bool> _long = new(false);
+		readonly Signal<int> _len = new(0);
+
+		static readonly string[] Lengths =
+		{
+			"one line",
+			"a slightly longer line that may wrap once on a phone width here",
+			"three lines worth of text here that should wrap onto roughly three lines on a typical phone width so we can watch the stack below it move",
+			"a much longer paragraph designed to wrap onto five or six lines so that the rows beneath it are pushed substantially further down the screen, proving the whole vertical stack expands and contracts as the text length changes rather than the text just growing inside a fixed slot",
+		};
 
 		NavigationView? _nav;
 		CometDevAgent? _agent;
@@ -51,13 +60,11 @@ namespace CometSwiftUIProbe
 		// rows below must reflow downward (proving relayout-on-reactive-change).
 		View BuildUi() => new VStack
 		{
-			new Text("Reflow + padding").Color(Colors.White),
-			new Button("Toggle", () => _long.Value = !_long.Value).AutomationId("toggleBtn"),
-			new Text(() => _long.Value
-				? "This is a long paragraph that wraps onto several lines, so its height grows when toggled and the rows beneath it are pushed down by Yoga."
-				: "short").Color(Colors.White),
+			new Text(() => $"Cycle length: {_len.Value}").Color(Colors.White),
+			new Button("Cycle", () => _len.Value = (_len.Value + 1) % Lengths.Length).AutomationId("cycleBtn"),
+			new Text(() => Lengths[_len.Value]).Color(Colors.White),
 			new Text("── below ──").Color(Colors.White),
-			new Text("row 2").Color(Colors.White),
+			new Text("row 2 (should track the paragraph height)").Color(Colors.White),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		// Interactive controls with AutomationIds (clean `--automationId` selector targets) plus
