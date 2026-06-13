@@ -37,28 +37,29 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// Styling through Compose modifiers: background colors, padding, and VStack/HStack
-		// spacing — all flowing from Comet's fluent API through the backend's modifier chain.
-		View BuildUi() => new VStack
+		// Navigation through Compose: a NavigationView whose top screen is composed; the
+		// home screen pushes a detail screen onto the stack, which pops back — driven by
+		// Comet's Navigate/Pop and recomposed by the backend nav node.
+		View BuildUi()
 		{
-			new VStack
-			{
-				new Text("Comet → Jetpack Compose").Color(Colors.White),
-				new Text("Styled with Compose modifiers").Color(Colors.White),
-			}.Background(Color.FromArgb("#6750A4")).Padding(24),
+			var nav = new NavigationView();
+			nav.Add(HomeScreen(nav));
+			return nav;
+		}
 
-			new VStack
-			{
-				new Text("Card: background + padding"),
-				new Text("Row spacing comes from the VStack"),
-			}.Background(Color.FromArgb("#ECE6F0")).Padding(20),
+		static View HomeScreen(NavigationView nav) => new VStack
+		{
+			new Text("🏠  Home").Color(Colors.White),
+			new Text("Screen one, on the navigation stack").Color(Colors.White),
+			new Button("Go to Detail  →", () => nav.Navigate(DetailScreen(nav))),
+		}.Background(Color.FromArgb("#6750A4")).Padding(28);
 
-			new HStack
-			{
-				new Text("A row"),
-				new Text("with spacing + tint"),
-			}.Background(Color.FromArgb("#E8DEF8")).Padding(16),
-		}.Background(Color.FromArgb("#FFFBFE")).Padding(12);
+		static View DetailScreen(NavigationView nav) => new VStack
+		{
+			new Text("📄  Detail").Color(Colors.White),
+			new Text("Screen two — pushed via Navigate()").Color(Colors.White),
+			new Button("←  Back", () => nav.Pop()),
+		}.Background(Color.FromArgb("#7D5260")).Padding(28);
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{

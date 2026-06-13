@@ -35,11 +35,19 @@ namespace Comet.Backend
 			node.SetEventSink(new ViewEventSink(rendered));
 			rendered.ApplyAllSetProperties(node);
 
-			if (rendered is IContainerView container)
+			// Nodes that manage their own content (navigation, lists) pull the views they
+			// need themselves; don't materialize the static child tree for them.
+			if (rendered is IContainerView container && node is not IBackendManagesOwnContent)
 			{
 				var children = container.GetChildren();
 				for (int i = 0; i < children.Count; i++)
-					node.InsertChild(i, Materialize(children[i], factory, context));
+				{
+					var child = children[i];
+					// Establish the parent link so .Navigation (and other inherited context)
+					// propagates down the materialized tree.
+					child.Parent = rendered;
+					node.InsertChild(i, Materialize(child, factory, context));
+				}
 			}
 
 			return node;

@@ -51,4 +51,12 @@ namespace Comet.Backend
 		/// <summary>Sets (or clears) the sink that receives this node's events and gestures.</summary>
 		void SetEventSink(ICometEventSink? sink);
 	}
+
+	/// <summary>
+	/// Marker for backend nodes that render their own content dynamically (e.g. a
+	/// navigation stack or a virtualized list) rather than via the static child tree.
+	/// The bridge skips generic child materialization for these — the node pulls the
+	/// views it needs itself.
+	/// </summary>
+	public interface IBackendManagesOwnContent { }
 }
