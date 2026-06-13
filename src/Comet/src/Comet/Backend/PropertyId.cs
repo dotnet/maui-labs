@@ -53,6 +53,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Border = new(16);
 		public static readonly PropertyId CornerRadius = new(17);
 		public static readonly PropertyId AutomationId = new(18);
+		public static readonly PropertyId HasTapGesture = new(19);
 
 		// --- Text (64–79) ---
 		public static readonly PropertyId Text_Value = new(64);

@@ -32,7 +32,7 @@ namespace Comet.Platform.Compose
 			_context = context;
 		}
 
-		public override void ApplyProperty(PropertyId id, in PropertyValue value)
+		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.List_Version)
 				_version.Value++; // recompose against the latest rows

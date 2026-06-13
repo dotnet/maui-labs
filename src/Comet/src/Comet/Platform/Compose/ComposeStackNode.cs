@@ -17,7 +17,7 @@ namespace Comet.Platform.Compose
 
 		public ComposeStackNode(StackAxis axis) => _axis = axis;
 
-		public override void ApplyProperty(PropertyId id, in PropertyValue value)
+		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			// Spacing/alignment wiring follows once Yoga drives positioning.
 		}
@@ -30,6 +30,8 @@ namespace Comet.Platform.Compose
 				StackAxis.Depth => new Box(),
 				_ => new Column(),
 			};
+			// A tap gesture on a stack (e.g. a tappable list row) becomes a clickable.
+			((ComposableNode)container).Modifier = BuildNodeModifier();
 			AddChildrenTo(container);
 			((ComposableNode)container).Render(composer);
 		}

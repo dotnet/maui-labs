@@ -36,16 +36,16 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// A virtualized list of 100 rows rendered through Compose's LazyColumn: each row's
-		// template (an HStack of two Texts) is materialized into backend nodes only when it
-		// scrolls into view. The list is the root because a LazyColumn needs a bounded height.
+		// A virtualized list of 100 TAPPABLE rows rendered through Compose's LazyColumn:
+		// each row's template (an HStack with a tap gesture) is materialized only when it
+		// scrolls into view, and tapping a row routes back through the gesture infrastructure.
 		View BuildUi() => new ListView<int>(() => Enumerable.Range(1, 100).ToList())
 		{
 			ViewFor = i => new HStack
 			{
 				new Text($"#{i}"),
-				new Text($"   Comet row via Compose LazyColumn"),
-			},
+				new Text($"   tap this Comet row (LazyColumn)"),
+			}.OnTap(_ => Android.Util.Log.Info("CometProbe", $"Tapped row {i} — gesture routed through Compose")),
 		};
 
 		sealed class EmptyServiceProvider : IServiceProvider

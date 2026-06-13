@@ -64,6 +64,21 @@ namespace Comet
 
 			if (!IsEnabled)
 				node.ApplyProperty(PropertyIds.IsEnabled, PropertyValue.From(false));
+
+			// Tap gestures become a clickable modifier on the backend node.
+			if (HasTapGesture())
+				node.ApplyProperty(PropertyIds.HasTapGesture, PropertyValue.From(true));
+		}
+
+		bool HasTapGesture()
+		{
+			var gestures = Gestures;
+			if (gestures is null)
+				return false;
+			for (int i = 0; i < gestures.Count; i++)
+				if (gestures[i] is TapGesture)
+					return true;
+			return false;
 		}
 
 		/// <summary>
@@ -97,6 +112,20 @@ namespace Comet
 		/// new bool) so the control can write it back to its bound state. No-op base.
 		/// </summary>
 		protected internal virtual void OnBackendEvent<T>(Backend.EventId id, T payload) { }
+
+		/// <summary>Handles a gesture raised by this view's backend node (e.g. a Compose
+		/// clickable tap), invoking the matching Comet gesture recognizers.</summary>
+		protected internal virtual void OnBackendGesture(Backend.GestureKind kind, in Backend.GestureData data)
+		{
+			if (kind != Backend.GestureKind.Tap)
+				return;
+			var gestures = Gestures;
+			if (gestures is null)
+				return;
+			for (int i = 0; i < gestures.Count; i++)
+				if (gestures[i] is TapGesture tap)
+					tap.Invoke();
+		}
 	}
 
 	/// <summary>Routes a backend node's events to its owning Comet view.</summary>
@@ -107,6 +136,6 @@ namespace Comet
 
 		public void OnEvent(Backend.EventId id) => _view.OnBackendEvent(id);
 		public void OnEvent<T>(Backend.EventId id, T payload) => _view.OnBackendEvent(id, payload);
-		public void OnGesture(Backend.GestureKind kind, in Backend.GestureData data) { }
+		public void OnGesture(Backend.GestureKind kind, in Backend.GestureData data) => _view.OnBackendGesture(kind, data);
 	}
 }

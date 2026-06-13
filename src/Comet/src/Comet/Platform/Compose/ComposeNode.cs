@@ -28,12 +28,33 @@ namespace Comet.Platform.Compose
 		protected readonly List<ComposeNode> Children = new();
 		readonly MutableState<int> _childVersion = new(0);
 		ICometEventSink? _sink;
+		readonly MutableState<bool> _hasTap = new(false);
 
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------
 
-		public abstract void ApplyProperty(PropertyId id, in PropertyValue value);
+		public void ApplyProperty(PropertyId id, in PropertyValue value)
+		{
+			if (id == PropertyIds.HasTapGesture)
+				_hasTap.Value = value.AsBool;
+			else
+				ApplyControlProperty(id, in value);
+		}
+
+		/// <summary>Applies a control-specific property. Common (View-level) properties are
+		/// handled by <see cref="ApplyProperty"/> before this is called.</summary>
+		protected abstract void ApplyControlProperty(PropertyId id, in PropertyValue value);
+
+		/// <summary>Builds the modifier this node should apply to its composable — currently a
+		/// clickable when the Comet view has a tap gesture. Returns null when none applies.</summary>
+		protected Modifier? BuildNodeModifier()
+		{
+			if (!_hasTap.Value)
+				return null;
+			return Modifier.Clickable(() =>
+				Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default)));
+		}
 
 		public void InsertChild(int index, ICometBackendNode child)
 		{

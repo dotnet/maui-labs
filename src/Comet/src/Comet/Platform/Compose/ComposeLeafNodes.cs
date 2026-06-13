@@ -14,7 +14,7 @@ namespace Comet.Platform.Compose
 	{
 		readonly MutableState<string> _text = new(string.Empty);
 
-		public override void ApplyProperty(PropertyId id, in PropertyValue value)
+		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Text_Value)
 				_text.Value = value.AsString ?? string.Empty;
@@ -24,7 +24,7 @@ namespace Comet.Platform.Compose
 		{
 			// Reading _text.Value inside composition subscribes this scope, so a later
 			// ApplyProperty -> setValue recomposes just this Text.
-			new ComposeText(_text.Value).Render(composer);
+			new ComposeText(_text.Value) { Modifier = BuildNodeModifier() }.Render(composer);
 		}
 	}
 
@@ -34,7 +34,7 @@ namespace Comet.Platform.Compose
 	{
 		readonly MutableState<string> _text = new(string.Empty);
 
-		public override void ApplyProperty(PropertyId id, in PropertyValue value)
+		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Button_Text)
 				_text.Value = value.AsString ?? string.Empty;
