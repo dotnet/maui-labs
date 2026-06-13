@@ -69,6 +69,12 @@ namespace Comet
 			=> new ComposeListNode(this, context);
 	}
 
+	public partial class ScrollView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeScrollNode(this, context);
+	}
+
 	public partial class NavigationView
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

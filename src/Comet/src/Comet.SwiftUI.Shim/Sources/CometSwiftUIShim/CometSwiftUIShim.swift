@@ -296,6 +296,12 @@ struct CometNodeView: View {
                 }
             }
             .listStyle(.plain)
+        case "scroll":
+            // The single content view is laid out (by Yoga) taller than the viewport and
+            // self-positions, so a plain vertical ScrollView hosting it scrolls as one piece.
+            ScrollView(.vertical, showsIndicators: true) {
+                ForEach(node.children) { CometNodeView(node: $0) }
+            }
         case "hstack":
             HStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":

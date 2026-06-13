@@ -6,7 +6,7 @@ using Microsoft.Maui;
 
 namespace Comet
 {
-	public class ScrollView : ContentView, IEnumerable, IScrollView
+	public partial class ScrollView : ContentView, IEnumerable, IScrollView
 	{
 		public ScrollView(Orientation orientation = Orientation.Vertical)
 		{

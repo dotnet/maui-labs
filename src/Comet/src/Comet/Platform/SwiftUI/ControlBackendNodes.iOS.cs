@@ -68,6 +68,12 @@ namespace Comet
 			=> new SwiftUIListNode(this, context);
 	}
 
+	public partial class ScrollView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIScrollNode(this, context);
+	}
+
 	public partial class NavigationView
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

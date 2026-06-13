@@ -79,15 +79,21 @@ namespace CometSwiftUIProbe
 				new Text("#composers").Color(Colors.White),
 			}.Padding(new Microsoft.Maui.Thickness(16, 56, 16, 16)).Background(Color.FromArgb("#6750A4")), // top inset clears the status bar
 
-			new ListView<Message>(() => Conversation)
+			new ScrollView
 			{
-				ViewFor = MessageRow,
+				new VStack(spacing: 0f)
+				{
+					ToCard(Conversation[0]), ToCard(Conversation[1]), ToCard(Conversation[2]),
+					ToCard(Conversation[3]), ToCard(Conversation[4]), ToCard(Conversation[5]),
+					ToCard(Conversation[6]), ToCard(Conversation[7]), ToCard(Conversation[8]),
+					ToCard(Conversation[9]),
+				},
 			}.FillVertical(),
 		}.Background(Color.FromArgb("#F2EFF7")); // tonal page behind the cards
 
 		// Each message is a Material card: a rounded, raised white surface (corner radius +
 		// elevation), inset from the page by the outer container's padding (the inter-card gap).
-		static View MessageRow(Message m) => new VStack(spacing: 0f)
+		static View ToCard(Message m) => new VStack(spacing: 0f)
 		{
 			new HStack(spacing: 12f)
 			{
