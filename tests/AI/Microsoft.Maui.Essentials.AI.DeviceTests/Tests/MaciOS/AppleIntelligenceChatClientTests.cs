@@ -3,11 +3,17 @@ using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientCancellationTests : ChatClientCancellationTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientCancellationTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 }
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientFunctionCallingTestsBase() => AppleIntelligenceAvailability.SkipIfUnavailable();
 }
 public class AppleIntelligenceChatClientGetServiceTests : ChatClientGetServiceTestsBase<AppleIntelligenceChatClient>
 {
@@ -17,11 +23,18 @@ public class AppleIntelligenceChatClientGetServiceTests : ChatClientGetServiceTe
 public class AppleIntelligenceChatClientInstantiationTests : ChatClientInstantiationTestsBase<AppleIntelligenceChatClient>
 {
 }
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientMessagesTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 }
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientOptionsTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
+
 	/// <summary>
 	/// Apple Intelligence requires a JSON schema for structured responses.
 	/// Unlike the base test, this expects an InvalidOperationException when using ChatResponseFormat.Json without a schema.
@@ -73,14 +86,22 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 		Assert.Contains("JSON schema", exception.Message, StringComparison.OrdinalIgnoreCase);
 	}
 }
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientResponseTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 }
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientStreamingTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 }
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
+	public AppleIntelligenceChatClientJsonSchemaTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 	[Fact(Skip = "Apple Intelligence requires a JSON schema for structured responses, so this test is not applicable.")]
 	public override Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{

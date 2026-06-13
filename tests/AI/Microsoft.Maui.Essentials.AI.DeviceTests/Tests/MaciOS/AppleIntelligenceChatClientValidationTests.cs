@@ -8,8 +8,10 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 /// Tests for AppleIntelligenceChatClient edge cases in message conversion,
 /// tool validation, and error handling paths.
 /// </summary>
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientValidationTests
 {
+	public AppleIntelligenceChatClientValidationTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 	/// <summary>
 	/// Verifies that passing a non-AIFunction tool (e.g., a custom AITool subclass)
 	/// throws NotSupportedException with a descriptive message listing the unsupported types.

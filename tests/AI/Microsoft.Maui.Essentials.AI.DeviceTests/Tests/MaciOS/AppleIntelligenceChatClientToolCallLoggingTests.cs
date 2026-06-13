@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
+
+[Trait("Category", "AppleIntelligence")]
 public class AppleIntelligenceChatClientToolCallLoggingTests
 {
+	public AppleIntelligenceChatClientToolCallLoggingTests() => AppleIntelligenceAvailability.SkipIfUnavailable();
 	// ====================================================================
 	// Single tool, Debug level
 	// Expected: exactly 2 entries
