@@ -65,27 +65,15 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
 
-      - name: Check Apple Intelligence availability
-        id: ai-check
-        run: |
-          AVAIL=$(swift -e 'import FoundationModels; print(SystemLanguageModel.default.availability)')
-          echo "availability=$AVAIL" >> "$GITHUB_OUTPUT"
-          if [ "$AVAIL" != "available" ]; then
-            echo "::warning::Apple Intelligence models not available ($AVAIL). Tests will be skipped."
-          fi
-
       - name: Setup .NET
-        if: steps.ai-check.outputs.availability == 'available'
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
       - name: Install workloads
-        if: steps.ai-check.outputs.availability == 'available'
         run: dotnet workload install maui macos maccatalyst --version 10.0.203
 
       - name: Run device tests (Mac Catalyst)
-        if: steps.ai-check.outputs.availability == 'available'
         run: >
           dotnet test
           tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
@@ -95,7 +83,7 @@ jobs:
           --results-directory artifacts/TestResults
 
       - name: Upload test results
-        if: always() && steps.ai-check.outputs.availability == 'available'
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-results-essentialsai-device-maccatalyst
