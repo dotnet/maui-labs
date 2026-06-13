@@ -73,5 +73,34 @@ namespace Comet
 		/// </summary>
 		protected internal virtual void ApplyChangedProperties(View old, ICometBackendNode node)
 			=> ApplyAllSetProperties(node);
+
+		/// <summary>
+		/// Pushes the current property values to this view's backend node after a reactive
+		/// change. Phase 1 re-emits the full set-only patch (cheap: writing a backend
+		/// MutableState to an unchanged value is a no-op under structural equality); the
+		/// generator will narrow this to the single changed property.
+		/// </summary>
+		internal void UpdateBackendNode()
+		{
+			if (Node is { } node)
+				ApplyAllSetProperties(node);
+		}
+
+		/// <summary>
+		/// Handles an event raised by this view's backend node (e.g. a Compose button
+		/// click). Controls override to invoke their reactive handlers. Base is a no-op.
+		/// </summary>
+		protected internal virtual void OnBackendEvent(Backend.EventId id) { }
+	}
+
+	/// <summary>Routes a backend node's events to its owning Comet view.</summary>
+	sealed class ViewEventSink : Backend.ICometEventSink
+	{
+		readonly View _view;
+		public ViewEventSink(View view) => _view = view;
+
+		public void OnEvent(Backend.EventId id) => _view.OnBackendEvent(id);
+		public void OnEvent<T>(Backend.EventId id, T payload) => _view.OnBackendEvent(id);
+		public void OnGesture(Backend.GestureKind kind, in Backend.GestureData data) { }
 	}
 }

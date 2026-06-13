@@ -18,5 +18,11 @@ namespace Comet
 			if (this.GetEnvironment<Color?>(EnvironmentKeys.Colors.Color) is { } color)
 				node.ApplyProperty(PropertyIds.Button_TextColor, PropertyValue.From(color));
 		}
+
+		protected internal override void OnBackendEvent(Backend.EventId id)
+		{
+			if (id == Backend.EventIds.Clicked)
+				Clicked?.Invoke();
+		}
 	}
 }

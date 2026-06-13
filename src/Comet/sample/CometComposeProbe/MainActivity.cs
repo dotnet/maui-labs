@@ -3,6 +3,7 @@ using Android.App;
 using Android.OS;
 using Comet;
 using Comet.Platform.Compose;
+using Comet.Reactive;
 
 namespace CometComposeProbe
 {
@@ -15,7 +16,7 @@ namespace CometComposeProbe
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
-		int _count;
+		readonly Signal<int> _count = new(0);
 
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
@@ -31,12 +32,14 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		// A small Comet tree: a heading, a live counter, and a button.
+		// A small Comet tree: a heading, a live reactive counter, and a button.
+		// Tapping Increment writes the Signal -> Comet's reactive scheduler flushes ->
+		// the bound Text re-emits Text_Value -> the Compose MutableState recomposes.
 		View BuildUi() => new VStack
 		{
 			new Text("Comet rendering via Jetpack Compose"),
-			new Text(() => $"Count: {_count}"),
-			new Button("Increment", () => _count++),
+			new Text(() => $"Count: {_count.Value}"),
+			new Button("Increment", () => _count.Value++),
 		};
 
 		sealed class EmptyServiceProvider : IServiceProvider

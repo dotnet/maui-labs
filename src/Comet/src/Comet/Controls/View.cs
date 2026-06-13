@@ -561,6 +561,7 @@ namespace Comet
 			}
 			var newPropName = GetHandlerPropertyName(property);
 			ViewHandler?.UpdateValue(newPropName);
+			UpdateBackendNode();
 			builtView?.ViewPropertyChanged(property, value);
 			if (measurementValid && PropertyChangeShouldTriggerLayout(newPropName))
 			{

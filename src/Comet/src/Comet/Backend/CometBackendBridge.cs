@@ -32,6 +32,7 @@ namespace Comet.Backend
 
 			var node = factory(rendered);
 			rendered.Node = node;
+			node.SetEventSink(new ViewEventSink(rendered));
 			rendered.ApplyAllSetProperties(node);
 
 			if (rendered is IContainerView container)
