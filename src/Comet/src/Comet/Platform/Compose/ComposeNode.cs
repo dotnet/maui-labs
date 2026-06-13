@@ -93,8 +93,11 @@ namespace Comet.Platform.Compose
 			if (_background is { } bg)
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
 
+			// Native padding only when Compose lays out natively; under Yoga the engine has
+			// already inset the children (their absolute frames include the padding), so applying
+			// it again here would double it and push content off the edge.
 			var p = _padding;
-			if (p.Left != 0 || p.Top != 0 || p.Right != 0 || p.Bottom != 0)
+			if (!_hasFrame && (p.Left != 0 || p.Top != 0 || p.Right != 0 || p.Bottom != 0))
 				m = (m is null ? Modifier.Companion : m)
 					.Padding((float)p.Left, (float)p.Top, (float)p.Right, (float)p.Bottom);
 
