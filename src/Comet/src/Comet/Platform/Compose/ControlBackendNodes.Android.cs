@@ -9,6 +9,12 @@ namespace Comet
 	// These are the ONLY references to the concrete node types, so a control the app
 	// never uses trims away together with its node.
 
+	public partial class Image
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeImageNode();
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

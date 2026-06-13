@@ -47,13 +47,20 @@ namespace CometComposeProbe
 		// Direct VStack root (NavigationView is own-content and stops the layout engine), so the
 		// Yoga engine lays this out. Cycling the text length proves the whole stack reflows — the
 		// Android counterpart of the iOS test.
-		View BuildUi() => new VStack
+		View BuildUi() => new VStack(spacing: 16f)
 		{
-			new Text(() => $"Cycle length: {_len.Value}").Color(Colors.White),
-			new Button("Cycle", () => _len.Value = (_len.Value + 1) % Lengths.Length).AutomationId("cycleBtn"),
-			new Text(() => Lengths[_len.Value]).Color(Colors.White),
-			new Text("── below ──").Color(Colors.White),
-			new Text("row 2 (should track the paragraph height)").Color(Colors.White),
+			new Text("Image test").Color(Colors.White),
+			new HStack(spacing: 12f)
+			{
+				new Image("https://picsum.photos/seed/comet/160").Frame(width: 64, height: 64),
+				new VStack(spacing: 2f)
+				{
+					new Text("Ada Lovelace").Color(Colors.White),
+					new Text("first programmer").Color(Colors.White),
+				},
+			},
+			new Image("https://picsum.photos/seed/banner/800/300").Frame(height: 160),
+			new Text("below the banner").Color(Colors.White),
 		}.Background(Color.FromArgb("#6750A4")).Padding(24);
 
 		sealed class EmptyServiceProvider : IServiceProvider

@@ -91,5 +91,51 @@ namespace Comet.Platform.Compose
 			button.Render(composer);
 		}
 	}
+
+	/// <summary>Renders Comet <c>Image</c> by hosting a native <c>ImageView</c> (via Compose
+	/// AndroidView) and loading the URL source asynchronously. Images carry no intrinsic layout
+	/// size, so callers give them an explicit Frame; the Yoga engine positions/sizes the node.</summary>
+	sealed class ComposeImageNode : ComposeNode
+	{
+		static readonly System.Net.Http.HttpClient Http = new();
+		readonly MutableState<string> _url = new(string.Empty);
+
+		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
+		{
+			if (id == PropertyIds.Image_Source)
+				_url.Value = value.AsString ?? string.Empty;
+		}
+
+		public override void Render(IComposer composer)
+		{
+			var url = _url.Value; // subscribe so a source change recomposes
+			var view = new AndroidView(factory: ctx =>
+			{
+				var iv = new global::Android.Widget.ImageView(ctx);
+				iv.SetScaleType(global::Android.Widget.ImageView.ScaleType.CenterCrop);
+				Load(iv, url);
+				return iv;
+			});
+			((ComposableNode)view).Modifier = BuildNodeModifier();
+			view.Render(composer);
+		}
+
+		static void Load(global::Android.Widget.ImageView iv, string url)
+		{
+			if (string.IsNullOrEmpty(url))
+				return;
+			_ = System.Threading.Tasks.Task.Run(async () =>
+			{
+				try
+				{
+					var bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
+					var bmp = global::Android.Graphics.BitmapFactory.DecodeByteArray(bytes, 0, bytes.Length);
+					if (bmp is not null)
+						iv.Post(() => iv.SetImageBitmap(bmp));
+				}
+				catch { /* leave the empty image view */ }
+			});
+		}
+	}
 }
 #endif

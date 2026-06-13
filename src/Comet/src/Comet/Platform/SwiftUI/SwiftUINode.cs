@@ -52,6 +52,8 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetString(_native, "text", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.TextField_Placeholder)
 				CometSwiftUIHost.SetString(_native, "placeholder", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Image_Source)
+				CometSwiftUIHost.SetString(_native, "imageurl", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Toggle_IsOn)
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
 			else if (id == PropertyIds.Slider_Value)

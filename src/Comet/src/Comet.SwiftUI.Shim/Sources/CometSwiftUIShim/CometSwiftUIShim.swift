@@ -9,6 +9,7 @@ import SwiftUI
     @objc public let kind: String
     @Published var text: String = ""
     @Published var placeholder: String = ""
+    @Published var imageUrl: String = ""
     @Published var isOn: Bool = false
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
@@ -47,6 +48,7 @@ import SwiftUI
         switch property {
         case "text": node.text = value
         case "placeholder": node.placeholder = value
+        case "imageurl": node.imageUrl = value
         default: break
         }
     }
@@ -200,6 +202,15 @@ struct CometLeafContent: View {
             Slider(value: Binding(
                 get: { node.doubleValue },
                 set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
+        case "image":
+            AsyncImage(url: URL(string: node.imageUrl)) { phase in
+                if let image = phase.image {
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    Color.gray.opacity(0.25)
+                }
+            }
+            .clipped()
         default: // "text" and unknown leaves
             Text(node.text)
         }
