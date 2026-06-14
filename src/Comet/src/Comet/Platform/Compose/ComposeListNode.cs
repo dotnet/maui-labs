@@ -26,6 +26,14 @@ namespace Comet.Platform.Compose
 		readonly BackendContext _context;
 		readonly MutableState<int> _version = new(0);
 
+		// Compose re-invokes a LazyColumn item's content on every recomposition (and the list
+		// recomposes per scroll frame), so materializing + Yoga-laying-out the row in the item
+		// lambda re-did that work for every visible row every frame. Cache the materialized node per
+		// row so a recomposition is O(1); invalidate when the data version or the row width changes.
+		readonly System.Collections.Generic.Dictionary<int, ComposableNode> _rowCache = new();
+		int _cachedVersion = -1;
+		double _cachedWidth = -1;
+
 		public ComposeListNode(IListView list, BackendContext context)
 		{
 			_list = list;
@@ -40,7 +48,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
-			_ = _version.Value; // subscribe so data changes recompose the list
+			int version = _version.Value; // subscribe so data changes recompose the list
 
 			// Single-section (the common case); multi-section flattening is a follow-up.
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
@@ -54,18 +62,25 @@ namespace Comet.Platform.Compose
 				? FrameWidth
 				: global::Android.Content.Res.Resources.System!.DisplayMetrics!.WidthPixels / ComposeNode.Density;
 
+			// Drop the cache when the rows or the width change (otherwise we'd render stale layout).
+			if (version != _cachedVersion || rowWidth != _cachedWidth)
+			{
+				_rowCache.Clear();
+				_cachedVersion = version;
+				_cachedWidth = rowWidth;
+			}
+
 			var lazy = new ComposeLazyColumn(indices, i =>
 			{
-				// Materialized lazily by Compose for visible rows only.
+				if (_rowCache.TryGetValue(i, out var cached))
+					return cached;
+
+				// First time this row is needed: build, materialize, and Yoga-lay-out once, then cache.
 				var view = _list.ViewFor(0, i);
 				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context);
-
-				// Drive the same Yoga pass the root uses, but width-pinned / height-wrapped so the
-				// row's own size comes from its content — the row then carries absolute child frames
-				// and renders as a self-positioning Box (see ComposeStackNode), matching iOS.
 				if (yoga)
 					CometBackendLayoutEngine.LayoutContent(view, rowWidth);
-
+				_rowCache[i] = node;
 				return node;
 			});
 

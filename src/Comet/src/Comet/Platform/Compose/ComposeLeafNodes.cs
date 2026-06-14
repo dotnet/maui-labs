@@ -51,9 +51,9 @@ namespace Comet.Platform.Compose
 		public override Size Measure(double widthConstraint, double heightConstraint)
 			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface());
 
-		// First-baseline offset (Dp) measured by Compose's OWN layout (TextMeasurer), with a style that
-		// mirrors what Render sets — so the reported baseline equals the drawn baseline exactly (the
-		// React-Native single-engine model), not a StaticLayout estimate of a Compose render.
+		// First-baseline offset (Dp) measured by Compose's OWN layout (TextMeasurer) so the reported
+		// baseline equals the drawn one (the RN single-engine model). Only invoked for baseline-aligned
+		// rows, and the list caches materialized rows so it runs once per row, not per scroll frame.
 		public override double? MeasureBaseline(double width, double height)
 		{
 			int sp = _fontSize > 0 ? _fontSize : 16;
