@@ -165,6 +165,34 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void BaselineAlignedRow_LinesUpChildBaselines()
+		{
+			// HStack with two .AlignBaseline() texts of different heights/baselines: the engine
+			// must shift each so their baselines (top + baseline offset) coincide on one line.
+			// Bigger text has the larger baseline, so it sets the shared line and the smaller rides up.
+			var big = new Text("big").AlignBaseline();
+			var small = new Text("small").AlignBaseline();
+			var root = new HStack(spacing: 0f) { big, small };
+			Bridge(root);
+
+			Node(big).MeasureResult = new Size(40, 30);
+			Node(big).BaselineResult = 24;          // baseline 24px from its top
+			Node(small).MeasureResult = new Size(40, 20);
+			Node(small).BaselineResult = 16;        // baseline 16px from its top
+
+			CometBackendLayoutEngine.Layout(root, new Size(400, 100));
+
+			var fBig = Node(big).ArrangedFrame!.Value;
+			var fSmall = Node(small).ArrangedFrame!.Value;
+
+			// Shared baseline = max(24, 16) = 24: big sits at y=0, small drops to y=8.
+			Assert.Equal(0, fBig.Y, 2);
+			Assert.Equal(8, fSmall.Y, 2);
+			// The invariant: top + baseline is equal across the row (one common baseline).
+			Assert.Equal(fBig.Y + 24, fSmall.Y + 16, 2);
+		}
+
+		[Fact]
 		public void CenterAlignedChild_IsCenteredOnCrossAxis_NotStretched()
 		{
 			// A VStack child with center horizontal alignment keeps its intrinsic width and

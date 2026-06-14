@@ -107,6 +107,13 @@ namespace Comet.Backend
 					var size = leaf.Node?.Measure(w, h) ?? Size.Zero;
 					return new YogaSize((float)size.Width, (float)size.Height);
 				};
+
+				// Baseline-aligned text: report the node's first-baseline offset so Yoga can line up
+				// the row on a shared baseline. When the node has no text baseline, fall back to the
+				// node height (Yoga's default), which degrades to bottom alignment.
+				if (leaf.GetBaselineAlign())
+					node.BaselineFunction = (_, w, h) =>
+						(float)(leaf.Node?.MeasureBaseline(w, h) ?? h);
 			}
 
 			return node;

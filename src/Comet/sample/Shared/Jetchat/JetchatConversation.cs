@@ -189,11 +189,8 @@ namespace CometSamples.Jetchat
 
 		static View AuthorNameTimestamp(Msg m) => new HStack(spacing: 8f)
 		{
-			new Text(m.Author).Color(OnSurface).TitleMedium()
-				.VerticalLayoutAlignment(LayoutAlignment.End),
-			new Text(m.Timestamp).Color(OnSurfaceVariant).BodySmall()
-				.VerticalLayoutAlignment(LayoutAlignment.End)
-				.Margin(bottom: 0.5f),   // baseline-match the larger name (bottom-align alone leaves it ~2px low)
+			new Text(m.Author).Color(OnSurface).TitleMedium().AlignBaseline(),
+			new Text(m.Timestamp).Color(OnSurfaceVariant).BodySmall().AlignBaseline(),
 		}.Padding(new Thickness(0, 0, 0, 4));
 
 		// The iconic chat bubble: RoundedCornerShape(4,20,20,20); primary/white for me,

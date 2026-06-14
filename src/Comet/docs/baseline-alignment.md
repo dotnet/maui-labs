@@ -1,6 +1,35 @@
 # Spec: Baseline alignment in the Comet layout engine
 
-Status: **Draft / not started.** Owner: TBD. Created 2026-06-14.
+Status: **Implemented on Android (Compose); iOS pending.** Created 2026-06-14.
+
+## Implementation notes (what shipped)
+- Public API: **`view.AlignBaseline()`** (env `Layout.BaselineAlign`), mirroring Compose's
+  `Modifier.alignByBaseline()`. Per-child opt-in on a row.
+- Engine: `YogaMeasureBridge.ApplyStyle` sets `AlignSelf = FlexAlign.Baseline` for opted-in
+  children of a row; `CometBackendLayoutEngine.Build` installs `node.BaselineFunction →
+  leaf.Node.MeasureBaseline(...)` (falling back to node height when null).
+- Node contract: `ICometBackendNode.MeasureBaseline(width, height)` (default `null`);
+  `ComposeTextNode` overrides it via `TextMeasure.FirstBaselineDp` — the analytical first-baseline
+  inside the pinned `LineHeightSp`, using the **proportional** leading split (Compose's default).
+- **Visibility gap (§4.1) was a non-issue:** `Comet.Layout.Yoga` already has
+  `[InternalsVisibleTo("Comet")]`, so `BaselineFunction`/`YogaBaselineFunc` are reachable — no port
+  change needed.
+- Jetchat `AuthorNameTimestamp` now uses `.AlignBaseline()`; the empirical `0.5dp` nudge is gone.
+- Verified: host unit test `BaselineAlignedRow_LinesUpChildBaselines` (engine math, generalizes to
+  any baseline values, 45/45 backend tests pass) + on-device Pixel 5 measurement (author/timestamp
+  baselines within 1px — the screenshot measurement floor).
+
+### Still open
+- **iOS**: the SwiftUI text node still returns `null` from `MeasureBaseline` (falls back to height
+  ≈ bottom). Implement via `UIFont` metrics — see §5. Not validated yet (Android-first per current
+  direction).
+- **`FormattedText`** (rich-text bubbles) doesn't override `MeasureBaseline` yet — only plain `Text`.
+- The proportional leading model matches Compose to ≤1px here; if a future font exposes a mismatch,
+  pin an explicit `LineHeightStyle` (§5) to make it closed-form.
+
+---
+
+## Original spec follows.
 
 ## 1. Goal
 

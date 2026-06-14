@@ -45,6 +45,14 @@ namespace Comet.Backend
 		/// </summary>
 		Size Measure(double widthConstraint, double heightConstraint);
 
+		/// <summary>
+		/// Returns this node's first text baseline as an offset (Dp) from the top of its measured
+		/// box, or <c>null</c> when the node has no text baseline. Used by the layout engine to
+		/// align a row of text on a shared baseline (the Yoga baseline function). The offset must
+		/// match where the backend actually renders the baseline, not just the font ascent.
+		/// </summary>
+		double? MeasureBaseline(double width, double height) => null;
+
 		/// <summary>Positions this node at the Yoga-computed frame (parent-relative).</summary>
 		void Arrange(Rect frame);
 

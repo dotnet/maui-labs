@@ -51,6 +51,11 @@ namespace Comet.Platform.Compose
 		public override Size Measure(double widthConstraint, double heightConstraint)
 			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface());
 
+		// First-baseline offset (Dp) from the top of the measured box, matching where the composed
+		// Text draws the baseline inside the pinned LineHeight — so a baseline-aligned row lines up.
+		public override double? MeasureBaseline(double width, double height)
+			=> TextMeasure.FirstBaselineDp(_fontSize > 0 ? _fontSize : 16f, MeasureTypeface());
+
 		// The typeface to measure with: the resolved custom font (which carries the weight), or the
 		// default font at the requested weight — so bold default-font text isn't measured at Regular
 		// width (which clips the heavier rendered glyphs).
@@ -140,6 +145,27 @@ namespace Comet.Platform.Compose
 				used = System.Math.Max(used, layout.GetLineWidth(i));
 			double heightDp = layout.LineCount * LineHeightSp(sp);
 			return new Size((System.Math.Ceiling(used) + 2) / density, heightDp);
+		}
+
+		// First-baseline offset (Dp) from the top of a line whose height is pinned to LineHeightSp.
+		// Compose distributes the extra leading (lineHeight − natural ascent/descent) PROPORTIONALLY
+		// to the ascent:descent ratio (the default when no LineHeightStyle is set), so the baseline
+		// sits at topLeading + ascent. Matching this exactly is what makes a baseline-aligned row
+		// line up to the pixel instead of ~2px off.
+		public static double FirstBaselineDp(float sp, global::Android.Graphics.Typeface? typeface)
+		{
+			var density = ComposeNode.Density;
+			using var paint = new global::Android.Graphics.Paint { TextSize = sp * density };
+			if (typeface is not null)
+				paint.SetTypeface(typeface);
+			var fm = paint.GetFontMetrics();
+			float ascent = -fm.Ascent;                 // px above the baseline
+			float descent = fm.Descent;                // px below the baseline
+			float naturalPx = ascent + descent;
+			float lineHeightPx = LineHeightSp(sp) * density;
+			float extraPx = System.Math.Max(0f, lineHeightPx - naturalPx);
+			float topLeadingPx = naturalPx > 0 ? extraPx * ascent / naturalPx : 0f;
+			return (topLeadingPx + ascent) / density;
 		}
 
 		// Single-line width (e.g. a button label).

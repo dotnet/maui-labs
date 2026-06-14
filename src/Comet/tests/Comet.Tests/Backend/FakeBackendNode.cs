@@ -32,6 +32,10 @@ namespace Comet.Tests.Backend
 		/// overrides <see cref="MeasureResult"/>. Receives the (width, height) constraints.</summary>
 		public System.Func<double, double, Size>? MeasureFunc { get; set; }
 
+		/// <summary>Simulated first-baseline offset (Dp) reported by <see cref="MeasureBaseline"/>;
+		/// null means "no text baseline" (the engine falls back to the node height).</summary>
+		public double? BaselineResult { get; set; }
+
 		/// <summary>The width constraint of the most recent <see cref="Measure"/> call.</summary>
 		public double LastMeasureWidth { get; private set; } = double.NaN;
 		public bool Disposed { get; private set; }
@@ -73,6 +77,8 @@ namespace Comet.Tests.Backend
 			LastMeasureWidth = widthConstraint;
 			return MeasureFunc?.Invoke(widthConstraint, heightConstraint) ?? MeasureResult;
 		}
+
+		public double? MeasureBaseline(double width, double height) => BaselineResult;
 
 		public void Arrange(Rect frame)
 		{

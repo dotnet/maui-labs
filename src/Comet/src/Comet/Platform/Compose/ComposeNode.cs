@@ -203,6 +203,9 @@ namespace Comet.Platform.Compose
 		// Container nodes defer to Yoga and need no intrinsic size.
 		public virtual Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
 
+		// First text baseline (Dp from the top), for baseline-aligned rows; null = no text baseline.
+		public virtual double? MeasureBaseline(double width, double height) => null;
+
 		// Yoga-computed parent-relative frame (in Dp); stored + recomposed so BuildNodeModifier
 		// positions this node absolutely.
 		public void Arrange(Rect frame)

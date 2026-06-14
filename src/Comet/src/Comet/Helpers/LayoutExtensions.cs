@@ -272,6 +272,18 @@ namespace Comet
 			return constraints ?? defaultContraints;
 		}
 
+		/// <summary>Aligns this view to the shared text baseline of its row (like Compose's
+		/// <c>Modifier.alignByBaseline()</c>). In an HStack, opted-in text views are positioned so
+		/// their first text baselines coincide. No-op on the cross axis of a column.</summary>
+		public static T AlignBaseline<T>(this T view) where T : View
+		{
+			view.SetEnvironment(EnvironmentKeys.Layout.BaselineAlign, true, false);
+			return view;
+		}
+
+		public static bool GetBaselineAlign(this View view) =>
+			view.GetEnvironment<bool?>(view, EnvironmentKeys.Layout.BaselineAlign, false) == true;
+
 		// AbsoluteLayout extensions
 		public static T LayoutBounds<T>(this T view, Rect bounds) where T : View
 		{
