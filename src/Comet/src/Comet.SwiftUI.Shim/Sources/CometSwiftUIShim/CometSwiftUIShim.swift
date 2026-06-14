@@ -18,6 +18,7 @@ import SwiftUI
     @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
     @Published var fontSize: CGFloat = 0        // 0 = default (body)
     @Published var fontWeight: Int = 0          // 0 = default; otherwise Maui FontWeight (100–900)
+    @Published var fontFamily: String = ""      // custom font family (e.g. "Montserrat"); "" = system
     @Published var padding: CGFloat = 0
     // Per-corner radii (top-left, top-right, bottom-right, bottom-left); clips content.
     @Published var cornerTL: CGFloat = 0
@@ -63,6 +64,7 @@ import SwiftUI
         case "placeholder": node.placeholder = value
         case "imageurl": node.imageUrl = value
         case "icon": node.iconName = value
+        case "fontfamily": node.fontFamily = value
         default: break
         }
     }
@@ -162,9 +164,13 @@ import SwiftUI
         // Text: measure with TextKit, which reliably wraps to the width (UIHostingController's
         // sizeThatFits/systemLayoutSizeFitting return the single-line ideal for SwiftUI Text).
         if node.kind == "text" {
-            let font: UIFont = node.fontSize > 0
+            let size = node.fontSize > 0 ? node.fontSize : UIFont.preferredFont(forTextStyle: .body).pointSize
+            var font: UIFont = node.fontSize > 0
                 ? UIFont.systemFont(ofSize: node.fontSize, weight: uiFontWeight(node.fontWeight))
                 : UIFont.preferredFont(forTextStyle: .body)
+            if !node.fontFamily.isEmpty, let custom = customUIFont(node.fontFamily, size, node.fontWeight) {
+                font = custom
+            }
             let rect = (node.text as NSString).boundingRect(
                 with: CGSize(width: w, height: .greatestFiniteMagnitude),
                 options: [.usesLineFragmentOrigin, .usesFontLeading],
@@ -322,17 +328,30 @@ private func uiFontWeight(_ w: Int) -> UIFont.Weight {
     }
 }
 
-// Applies an explicit font size/weight when Comet set one; otherwise leaves the default.
+// A registered custom font (e.g. Montserrat/Karla, bundled + listed in UIAppFonts) at the given
+// weight, or nil if not available. Derives the weight on a variable font via the descriptor.
+private func customUIFont(_ family: String, _ size: CGFloat, _ weight: Int) -> UIFont? {
+    guard let base = UIFont(name: family, size: size) else { return nil }
+    let traits: [UIFontDescriptor.TraitKey: Any] = [.weight: uiFontWeight(weight)]
+    let descriptor = base.fontDescriptor.addingAttributes([.traits: traits])
+    return UIFont(descriptor: descriptor, size: size)
+}
+
+// Applies an explicit font (custom family if set, else system) at the Comet size/weight.
 private struct FontModifier: ViewModifier {
     @ObservedObject var node: CometNode
     func body(content: Content) -> some View {
-        if node.fontSize > 0 {
-            content.font(.system(size: node.fontSize, weight: swiftFontWeight(node.fontWeight)))
-        } else if node.fontWeight > 0 {
-            content.fontWeight(swiftFontWeight(node.fontWeight))
-        } else {
-            content
+        let size = node.fontSize > 0 ? node.fontSize : UIFont.preferredFont(forTextStyle: .body).pointSize
+        if !node.fontFamily.isEmpty, let f = customUIFont(node.fontFamily, size, node.fontWeight) {
+            return AnyView(content.font(Font(f)))
         }
+        if node.fontSize > 0 {
+            return AnyView(content.font(.system(size: node.fontSize, weight: swiftFontWeight(node.fontWeight))))
+        }
+        if node.fontWeight > 0 {
+            return AnyView(content.fontWeight(swiftFontWeight(node.fontWeight)))
+        }
+        return AnyView(content)
     }
 }
 

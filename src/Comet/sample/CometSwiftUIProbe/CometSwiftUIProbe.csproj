@@ -19,6 +19,9 @@
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
+    <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
+    <BundleResource Include="Fonts\Montserrat.ttf" />
+    <BundleResource Include="Fonts\Karla.ttf" />
   </ItemGroup>
 
   <!-- Link + embed the Swift framework directly in the app so the static registrar's

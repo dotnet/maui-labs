@@ -33,5 +33,10 @@
 	<string>LaunchScreen</string>
 	<key>MinimumOSVersion</key>
 	<string>17.0</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fonts/Montserrat.ttf</string>
+		<string>Fonts/Karla.ttf</string>
+	</array>
 </dict>
 </plist>
