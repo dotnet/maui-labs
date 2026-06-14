@@ -21,17 +21,19 @@ namespace CometSamples.Jetchat
 	{
 		// Semantic color roles come from the centralized JetchatTheme (mirrors theme/Themes.kt);
 		// these are local aliases so the screen reads tokens, not hardcoded hex.
-		internal static readonly Color Primary = JetchatTheme.Primary;
-		internal static readonly Color OnPrimary = JetchatTheme.OnPrimary;
-		internal static readonly Color Secondary = JetchatTheme.Secondary;
-		internal static readonly Color Surface = JetchatTheme.Surface;
-		internal static readonly Color OnSurface = JetchatTheme.OnSurface;
-		internal static readonly Color SurfaceVariant = JetchatTheme.SurfaceVariant;
-		internal static readonly Color OnSurfaceVariant = JetchatTheme.OnSurfaceVariant;
-		internal static readonly Color Tertiary = JetchatTheme.Tertiary;
-		internal static readonly Color Divider = JetchatTheme.Divider;
-		internal static readonly Color BarSurface = JetchatTheme.SurfaceTinted;
-		internal static readonly Color Disabled = JetchatTheme.Disabled;
+		// Read live from JetchatTheme (computed, not cached) so a runtime scheme swap (Material You,
+		// JetchatTheme.ApplyScheme) reaches these before the tree is built.
+		internal static Color Primary => JetchatTheme.Primary;
+		internal static Color OnPrimary => JetchatTheme.OnPrimary;
+		internal static Color Secondary => JetchatTheme.Secondary;
+		internal static Color Surface => JetchatTheme.Surface;
+		internal static Color OnSurface => JetchatTheme.OnSurface;
+		internal static Color SurfaceVariant => JetchatTheme.SurfaceVariant;
+		internal static Color OnSurfaceVariant => JetchatTheme.OnSurfaceVariant;
+		internal static Color Tertiary => JetchatTheme.Tertiary;
+		internal static Color Divider => JetchatTheme.Divider;
+		internal static Color BarSurface => JetchatTheme.SurfaceTinted;
+		internal static Color Disabled => JetchatTheme.Disabled;
 
 		// Bundled drawables (Jetchat ships these as local resources via painterResource, so they
 		// render offline and without a network round-trip). The backends resolve a bare name to a

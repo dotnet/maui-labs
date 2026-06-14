@@ -28,28 +28,56 @@ namespace CometSamples.Jetchat
 		static readonly Color BlueGrey50 = Color.FromArgb("#767680");
 		static readonly Color BlueGrey90 = Color.FromArgb("#E2E1EC");
 
-		// ── Themes.kt: LightColorScheme (semantic roles) ──
-		public static readonly Color Primary = Blue40;
-		public static readonly Color OnPrimary = Colors.White;
-		public static readonly Color PrimaryContainer = Blue90;
-		public static readonly Color Secondary = DarkBlue40;       // footer Surface contentColor
-		public static readonly Color Surface = Grey99;
-		public static readonly Color OnSurface = Grey10;
-		public static readonly Color SurfaceVariant = BlueGrey90;
-		public static readonly Color OnSurfaceVariant = BlueGrey30;
-		public static readonly Color Background = Grey99;
-		public static readonly Color Tertiary = Yellow40;
-		public static readonly Color Outline = BlueGrey50;
+		// ── Themes.kt: semantic roles. Settable so ApplyScheme can swap in the platform's
+		// Material You (dynamicLightColorScheme) at runtime; the values below are the static
+		// JetchatLightColorScheme fallback (used pre-Android-12 / when dynamic is off). Consumers
+		// must read these live (not cache in a static field) so the dynamic swap reaches them. ──
+		public static Color Primary { get; private set; } = Blue40;
+		public static Color OnPrimary { get; private set; } = Colors.White;
+		public static Color PrimaryContainer { get; private set; } = Blue90;
+		public static Color Secondary { get; private set; } = DarkBlue40;       // footer Surface contentColor
+		public static Color Surface { get; private set; } = Grey99;
+		public static Color OnSurface { get; private set; } = Grey10;
+		public static Color SurfaceVariant { get; private set; } = BlueGrey90;
+		public static Color OnSurfaceVariant { get; private set; } = BlueGrey30;
+		public static Color Background { get; private set; } = Grey99;
+		public static Color Tertiary { get; private set; } = Yellow40;
+		public static Color Outline { get; private set; } = BlueGrey50;
 		// The profile FAB roles (tertiaryContainer / onTertiaryContainer) — Themes.kt JetchatLightColorScheme.
-		public static readonly Color TertiaryContainer = Yellow90;   // #FFDE9C (was sampled pink #F8D8F0)
-		public static readonly Color OnTertiaryContainer = Yellow10; // #261900
+		public static Color TertiaryContainer { get; private set; } = Yellow90;   // #FFDE9C (was sampled pink #F8D8F0)
+		public static Color OnTertiaryContainer { get; private set; } = Yellow10; // #261900
 
 		// The footer bar = Surface(tonalElevation = 2.dp): primary composited over surface at the M3
-		// 2dp overlay alpha (≈0.0694) = #EBF0FD. The HEADER (CenterAlignedTopAppBar) is plain Surface.
-		// TODO(T2): compute surfaceColorAtElevation at runtime from the active (dynamic) scheme.
-		public static readonly Color SurfaceTinted = Color.FromArgb("#EBF0FD");
-		public static readonly Color Divider = Color.FromArgb("#1F191C1D");
+		// 2dp overlay alpha (≈0.0694). The HEADER (CenterAlignedTopAppBar) is plain Surface.
+		public static Color SurfaceTinted { get; private set; } = SurfaceAtElevation(Blue40, Grey99, 2);
+		public static Color Divider { get; private set; } = Grey10.WithAlpha(0.12f);   // onSurface @ 12%
 		public static readonly Color Disabled = Color.FromArgb("#C4C6D0");
+
+		/// <summary>Swap the semantic roles to a platform <c>ColorScheme</c> (Material You) at startup,
+		/// mirroring <c>JetchatTheme(isDynamicColor = true)</c> in Themes.kt. Call BEFORE building the
+		/// view tree. Derived roles (the tonal footer + the 12% divider) are recomputed from the new
+		/// surface/primary/onSurface.</summary>
+		public static void ApplyScheme(Color primary, Color onPrimary, Color primaryContainer, Color secondary,
+			Color surface, Color onSurface, Color surfaceVariant, Color onSurfaceVariant, Color background,
+			Color tertiary, Color tertiaryContainer, Color onTertiaryContainer, Color outline)
+		{
+			Primary = primary; OnPrimary = onPrimary; PrimaryContainer = primaryContainer; Secondary = secondary;
+			Surface = surface; OnSurface = onSurface; SurfaceVariant = surfaceVariant; OnSurfaceVariant = onSurfaceVariant;
+			Background = background; Tertiary = tertiary; TertiaryContainer = tertiaryContainer;
+			OnTertiaryContainer = onTertiaryContainer; Outline = outline;
+			SurfaceTinted = SurfaceAtElevation(primary, surface, 2);
+			Divider = onSurface.WithAlpha(0.12f);
+		}
+
+		// Material 3 surfaceColorAtElevation: primary composited over surface at alpha = (4.5·ln(dp+1)+2)/100.
+		static Color SurfaceAtElevation(Color primary, Color surface, double dp)
+		{
+			double a = (4.5 * System.Math.Log(dp + 1) + 2) / 100.0;
+			return new Color(
+				(float)(primary.Red * a + surface.Red * (1 - a)),
+				(float)(primary.Green * a + surface.Green * (1 - a)),
+				(float)(primary.Blue * a + surface.Blue * (1 - a)));
+		}
 
 		// ── Typography.kt: Jetchat uses Montserrat (titles/labels) + Karla (body), NOT Roboto.
 		// FontFamily names are applied once those fonts are bundled (see note); size/weight/line-
