@@ -15,6 +15,9 @@ namespace Comet
 			if (this.GetEnvironment<double?>(EnvironmentKeys.Fonts.Size) is { } fontSize)
 				node.ApplyProperty(PropertyIds.Text_FontSize, PropertyValue.From(fontSize));
 
+			if (this.GetEnvironment<double?>(EnvironmentKeys.Fonts.LineHeight) is { } lineHeight)
+				node.ApplyProperty(PropertyIds.Text_LineHeight, PropertyValue.From(lineHeight));
+
 			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
 				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(family));
 		}

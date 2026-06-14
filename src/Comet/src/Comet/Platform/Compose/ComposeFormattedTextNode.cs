@@ -16,8 +16,11 @@ namespace Comet.Platform.Compose
 	{
 		IReadOnlyList<TextRun> _runs = System.Array.Empty<TextRun>();
 		int _fontSize;
+		int _lineHeight;
 		string? _fontFamily;
 		readonly MutableState<int> _version = new(0);
+
+		int EffectiveLineHeightSp() => _lineHeight > 0 ? _lineHeight : TextMeasure.LineHeightSp(_fontSize > 0 ? _fontSize : 16f);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
@@ -31,6 +34,11 @@ namespace Comet.Platform.Compose
 				_fontSize = (int)System.Math.Round(value.AsDouble);
 				_version.Value++;
 			}
+			else if (id == PropertyIds.Text_LineHeight)
+			{
+				_lineHeight = (int)System.Math.Round(value.AsDouble);
+				_version.Value++;
+			}
 			else if (id == PropertyIds.Text_FontFamily)
 			{
 				_fontFamily = value.AsString;
@@ -42,7 +50,7 @@ namespace Comet.Platform.Compose
 		{
 			int sp = _fontSize > 0 ? _fontSize : 16;
 			var baseTypeface = ComposeFontRegistry.Resolve(_fontFamily, 400)?.Typeface;
-			return TextMeasure.MeasureRuns(_runs, sp, widthConstraint, baseTypeface);
+			return TextMeasure.MeasureRuns(_runs, sp, widthConstraint, baseTypeface, EffectiveLineHeightSp());
 		}
 
 		public override void Render(IComposer composer)
@@ -71,7 +79,7 @@ namespace Comet.Platform.Compose
 			text.LetterSpacing = AndroidX.Compose.Sp.Zero;
 			if (_fontSize > 0)
 				text.FontSize = new AndroidX.Compose.Sp(_fontSize);
-			text.LineHeight = new AndroidX.Compose.Sp(TextMeasure.LineHeightSp(_fontSize > 0 ? _fontSize : 16f));
+			text.LineHeight = new AndroidX.Compose.Sp(EffectiveLineHeightSp());
 			// Base (non-code) runs use the body family; code runs override to monospace above.
 			if (ComposeFontRegistry.Resolve(_fontFamily, 400) is { } r)
 				text.FontFamily = r.Family;

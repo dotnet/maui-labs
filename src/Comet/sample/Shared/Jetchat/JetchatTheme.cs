@@ -80,22 +80,21 @@ namespace CometSamples.Jetchat
 		}
 
 		// ── Typography.kt: Jetchat uses Montserrat (titles/labels) + Karla (body), NOT Roboto.
-		// FontFamily names are applied once those fonts are bundled (see note); size/weight/line-
-		// height already match the scale so the layout is correct. ──
+		// Each style carries the EXACT size + lineHeight from Typography.kt (not a 1.3× heuristic). ──
 		const string Montserrat = "Montserrat";
 		const string Karla = "Karla";
 
-		public static T HeadlineSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 24);
-		public static T TitleLarge<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 22);
-		public static T TitleMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 16);
-		public static T BodyLarge<T>(this T v) where T : View => v.Type(Karla, FontWeight.Regular, 16);
-		public static T BodyMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Medium, 14);
-		public static T BodySmall<T>(this T v) where T : View => v.Type(Karla, FontWeight.Bold, 12);
-		public static T LabelLarge<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 14);
-		public static T LabelSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 11);
+		public static T HeadlineSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 24, 32);
+		public static T TitleLarge<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 22, 28);
+		public static T TitleMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 16, 24);
+		public static T BodyLarge<T>(this T v) where T : View => v.Type(Karla, FontWeight.Regular, 16, 24);
+		public static T BodyMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Medium, 14, 20);
+		public static T BodySmall<T>(this T v) where T : View => v.Type(Karla, FontWeight.Bold, 12, 16);
+		public static T LabelLarge<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 14, 20);
+		public static T LabelSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 11, 16);
 
-		static T Type<T>(this T v, string family, FontWeight weight, double size) where T : View =>
-			v.FontFamily(family).FontWeight(weight).FontSize(size);
+		static T Type<T>(this T v, string family, FontWeight weight, double size, double lineHeight) where T : View =>
+			v.FontFamily(family).FontWeight(weight).FontSize(size).LineHeight(lineHeight);
 
 		// ── Shapes ──
 		// The chat bubble (RoundedCornerShape(4,20,20,20)); apply with .CornerRadius(BubbleTL,…).

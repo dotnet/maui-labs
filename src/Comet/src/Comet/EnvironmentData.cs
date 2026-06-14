@@ -18,6 +18,7 @@ namespace Comet
 			public const string Size = "Font.Size";
 			public const string Weight = "Font.Weight";
 			public const string Family = "Font.Family";
+			public const string LineHeight = "Font.LineHeight";
 			public const string Slant = "Font.Slant";
 			//public const string Attributes = "Font.Attributes";
 		}
