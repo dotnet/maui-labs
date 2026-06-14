@@ -73,6 +73,51 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 - Test results: `artifacts/TestResults/**/*.xml`
 - No quarantine or outerloop test attributes are used in this repo
 
+## Comet node-backend (Compose/SwiftUI) development
+
+Comet is being refactored off MAUI handlers onto a retained **node backend**
+(Jetpack Compose on Android, SwiftUI on iOS). This path uses **.NET 11 preview**,
+pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
+
+- **Run Comet builds from inside `src/Comet`.** Bare `dotnet` at the repo root
+  resolves the .NET 10 SDK (root `global.json`) and fails net11 targets with
+  NETSDK1045.
+- **Host tests link Comet via a HintPath**, so rebuild it first:
+  `dotnet build src/Comet/src/Comet/Comet.csproj -f net11.0-maccatalyst`
+  before `dotnet test tests/Comet.Tests` — otherwise tests run a stale DLL.
+- **After editing the vendored Compose facade** (`src/Comet/src/vendor/`), do a
+  clean rebuild (rm `obj`/`bin` for facade + Comet + probe) or `SetContent`
+  throws `ComposableLambda2: no Java peer`. Engine/sample-only edits build
+  incrementally — no clean needed. iOS: after a `Comet.SwiftUI.Shim` change,
+  re-run `build-xcframework.sh` AND rm the probe `obj`/`bin` (incremental build
+  won't relink the NativeReference xcframework).
+- **Probe apps**: `sample/CometComposeProbe` (Android),
+  `sample/CometSwiftUIProbe` (iOS). Android deploy:
+  `dotnet build -t:Run -p:AndroidPackageFormat=apk`.
+- **Two devices are usually attached** — always target explicitly with
+  `adb -s 13041FDD4007MT` (the physical Pixel 5). Don't use left-edge swipes to
+  open drawers (triggers the system back/home gesture).
+- **A black `adb screencap` usually means the display is off or the lock screen
+  is up, NOT a render bug** — check `dumpsys display | grep mScreenState` and
+  `keyguardShowing` before touching code. (Same lesson on the iOS simulator: its
+  GPU state degrades after a couple of launches — verify on a physical device.)
+- **Screenshots come scaled** ("multiply by N"); compute tap targets in the FULL
+  resolution (1080-wide), not the displayed size.
+- **Gold standard is local**: `~/work/compose-samples` (android/compose-samples —
+  Jetchat/JetNews/Reply). Read the Kotlin directly; don't WebFetch GitHub.
+
+### Matching the gold standard (fidelity rules)
+The point of the Comet sample work is proving Comet drives the EXACT Jetpack
+Compose widget the sample uses — the sample is the proof, not the goal.
+- Before claiming a screen matches, open the actual Kotlin for that component and
+  enumerate every widget + modifier; match the widget (a `Button` is a Button,
+  not a styled `Text`) and reproduce real modifiers (e.g. `baselineHeight`),
+  not look-alikes.
+- Don't report "faithful / pixel-exact / done" without a side-by-side against the
+  gold image; state what you verified and on which device.
+- Never assert an environment fact (device locked, network up, the cause of a
+  black/blank shot) you haven't checked — verify first, then claim.
+
 ## Code Conventions
 
 - **ImplicitUsings**: enabled repo-wide
