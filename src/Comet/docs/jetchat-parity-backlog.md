@@ -9,6 +9,10 @@ every **color / size / spacing / lineHeight / weight** value is taken from **sou
 eyeballed or color-picked. Source root: `~/work/compose-samples/Jetchat/app/src/main/java/com/example/compose/jetchat`
 (checkout `d3ff757b`). Citations below are `file:line`.
 
+**Status (2026-06-14):** ✅ §0 value corrections (commit `cec…`), ✅ **T1 Material You dynamic color**
+(verified Pixel 5 — conversation/profile now render the device's dynamic palette, matching the
+captures). Next: T3 (type lineHeight/letterSpacing), C1 (scroll-state + JumpToBottom).
+
 **Reframing finding:** the captured screenshots are rose/maroon because Jetchat runs
 `JetchatTheme(isDynamicColor = true)` → `dynamicLightColorScheme(context)` (`theme/Themes.kt:91`),
 i.e. **Material You from the wallpaper**. The blue scheme in our code is only the static fallback
