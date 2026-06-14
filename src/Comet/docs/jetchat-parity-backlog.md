@@ -9,9 +9,19 @@ every **color / size / spacing / lineHeight / weight** value is taken from **sou
 eyeballed or color-picked. Source root: `~/work/compose-samples/Jetchat/app/src/main/java/com/example/compose/jetchat`
 (checkout `d3ff757b`). Citations below are `file:line`.
 
-**Status (2026-06-14):** ✅ §0 value corrections (commit `cec…`), ✅ **T1 Material You dynamic color**
-(verified Pixel 5 — conversation/profile now render the device's dynamic palette, matching the
-captures). Next: T3 (type lineHeight/letterSpacing), C1 (scroll-state + JumpToBottom).
+**Status (2026-06-14):** ✅ §0 value corrections (`d2743458`), ✅ **T1 Material You dynamic color**
+(`2a7e805b`), ✅ **T3 explicit line height** (`<this commit>` — `View.LineHeight(sp)` → bubbles get
+bodyLarge 16/24; letterSpacing deferred, facade `Sp` integer-only + negligible). All verified Pixel 5.
+**Next: C1.** Facade is ready (`LazyColumn.State`/`.ReverseLayout`, `LazyListState.CanScrollForward`/
+`AnimateScrollToItemAsync`, `composer.RememberLazyListState`) — no facade change. C1 design:
+(1) `ListView` exposes a `Signal<bool>` "scrolled-away" + a `ScrollToBottom()`; (2) `ComposeListNode`
+remembers a `LazyListState`, reads `CanScrollForward` (boundary-triggered, so no per-frame recompose →
+no scroll-jank regression) and marshals it to the signal, and runs `AnimateScrollToItemAsync` on the
+remembered coroutine scope; (3) the JumpToBottom `ExtendedFloatingActionButton` (surface/primary,
+h36, `ic_arrow_downward` 18dp) overlays via ZStack. **Sub-dependency discovered: node-level REACTIVE
+VISIBILITY** (show/hide the button from the signal without re-running the whole tree) — currently the
+conversation tree is static; needs a `.Visible(signal)`/opacity node property or AnimatedVisibility.
+That's the real capability C1 unblocks (and it generalizes).
 
 **Reframing finding:** the captured screenshots are rose/maroon because Jetchat runs
 `JetchatTheme(isDynamicColor = true)` → `dynamicLightColorScheme(context)` (`theme/Themes.kt:91`),
