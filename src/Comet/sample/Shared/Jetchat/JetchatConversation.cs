@@ -157,16 +157,17 @@ namespace CometSamples.Jetchat
 			View gutter = topOfGroup
 				? new VStack(spacing: 0f)
 					{
-						new Image(isMe ? AvatarMe : AvatarOther).Frame(width: 36, height: 36).CornerRadius(18),
+						new Image(isMe ? AvatarMe : AvatarOther).Frame(width: 36, height: 36).CornerRadius(18).FlexShrink(0),
 					}
 						.Frame(width: 42, height: 42)
+						.FlexShrink(0)   // never compress the avatar's width when the row's text is wide
 						.Padding(new Thickness(3))
 						.Background(Surface)
 						.CornerRadius(21)
 						.Border(2, isMe ? Primary : Tertiary)
 						.Margin(left: 16, right: 16)
 						.VerticalLayoutAlignment(LayoutAlignment.Start)   // stay 42×42, don't stretch to row height
-				: new HStack().Frame(width: 74);
+				: new HStack().Frame(width: 74).FlexShrink(0);
 
 			var column = new VStack(spacing: 0f);
 			if (topOfGroup)

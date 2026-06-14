@@ -56,7 +56,7 @@ namespace CometSamples.Jetchat
 
 		static View ProfileItem(string name, string avatar, System.Action<string>? onProfile) => new HStack(spacing: 12f)
 		{
-			new Image(avatar).Frame(width: 24, height: 24).CornerRadius(12),
+			new Image(avatar).Frame(width: 24, height: 24).CornerRadius(12).FlexShrink(0),
 			new Text(name).Color(C.OnSurface).BodyLarge()
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
 		}.Padding(new Thickness(28, 10, 16, 10)).OnTap(_ => onProfile?.Invoke(name));
