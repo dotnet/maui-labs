@@ -22,6 +22,14 @@ h36, `ic_arrow_downward` 18dp) overlays via ZStack. **Sub-dependency discovered:
 VISIBILITY** (show/hide the button from the signal without re-running the whole tree) — currently the
 conversation tree is static; needs a `.Visible(signal)`/opacity node property or AnimatedVisibility.
 That's the real capability C1 unblocks (and it generalizes).
+✅ **D1 drawer structure** (`<commit>`): "Chats" + leading logo pills + "(you)" + Settings, verified.
+**C1 facade is fully verified/ready** (no facade change): `LazyListState.AnimateScrollToItemAsync`
+returns a `Task` (call straight from C#, no coroutine scope), `ExtendedFloatingActionButton` exists,
+`Modifier.Alpha` exists, Comet already emits `Opacity`/`IsVisible` (ComposeNode just needs to honor
+them → `.Alpha` + skip-clickable-when-0 = the reactive-visibility capability). Remaining C1 unknowns
+are minor: Box child `align`/`fillMaxSize` for the overlay. Follow-up (D1 color): the drawer chat-icon
+should be the jetchat logo TINTED monochrome (`onSurfaceVariant`/`primary`) — needs Icon force-tint of
+a multicolor asset (explicit `.Color()` on a multicolor asset → tinted Icon path, not the Image path).
 
 **Reframing finding:** the captured screenshots are rose/maroon because Jetchat runs
 `JetchatTheme(isDynamicColor = true)` → `dynamicLightColorScheme(context)` (`theme/Themes.kt:91`),
