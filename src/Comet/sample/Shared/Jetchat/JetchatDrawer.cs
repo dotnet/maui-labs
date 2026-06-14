@@ -23,7 +23,7 @@ namespace CometSamples.Jetchat
 			new HStack(spacing: 12f)
 			{
 				new Icon("account").Color(C.Primary).IconSize(28),
-				new Text("Jetchat").Color(C.Primary).FontSize(20).FontWeight(FontWeight.Bold)
+				new Text("Jetchat").Color(C.Primary).TitleLarge()
 					.VerticalLayoutAlignment(LayoutAlignment.Center),
 			}.Padding(new Thickness(20, topInset + 12, 16, 16)),
 
@@ -38,16 +38,15 @@ namespace CometSamples.Jetchat
 		}.Background(C.Surface);
 
 		static View SectionTitle(string text) =>
-			new Text(text).Color(C.OnSurfaceVariant).FontSize(11).FontWeight(FontWeight.Medium)
+			new Text(text).Color(C.OnSurfaceVariant).LabelSmall()
 				.Padding(new Thickness(28, 12, 16, 8));
 
 		// "# channel" row; the selected one gets a rounded primary-container highlight.
 		static View ChannelItem(string name, bool selected) => new HStack(spacing: 0f)
 		{
-			new Text("#").Color(selected ? C.Primary : C.OnSurfaceVariant).FontSize(16)
+			new Text("#").Color(selected ? C.Primary : C.OnSurfaceVariant).BodyLarge()
 				.Padding(new Thickness(0, 0, 8, 0)),
-			new Text(name).Color(selected ? C.Primary : C.OnSurface).FontSize(14)
-				.FontWeight(selected ? FontWeight.Medium : FontWeight.Regular)
+			new Text(name).Color(selected ? C.Primary : C.OnSurface).BodyLarge()
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
 		}
 			.Padding(new Thickness(16, 12, 16, 12))
@@ -58,7 +57,7 @@ namespace CometSamples.Jetchat
 		static View ProfileItem(string name, string avatar, System.Action<string>? onProfile) => new HStack(spacing: 12f)
 		{
 			new Image(avatar).Frame(width: 24, height: 24).CornerRadius(12),
-			new Text(name).Color(C.OnSurface).FontSize(14)
+			new Text(name).Color(C.OnSurface).BodyLarge()
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
 		}.Padding(new Thickness(28, 10, 16, 10)).OnTap(_ => onProfile?.Invoke(name));
 	}

@@ -49,8 +49,19 @@ namespace Comet.Platform.Compose
 		// with StaticLayout (synchronous, no composition needed). Uses the resolved custom typeface
 		// so measurement matches the rendered (custom-font) glyphs. 16sp ~ Material bodyLarge.
 		public override Size Measure(double widthConstraint, double heightConstraint)
-			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint,
-				ComposeFontRegistry.Resolve(_fontFamily, _fontWeight)?.Typeface);
+			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface());
+
+		// The typeface to measure with: the resolved custom font (which carries the weight), or the
+		// default font at the requested weight — so bold default-font text isn't measured at Regular
+		// width (which clips the heavier rendered glyphs).
+		global::Android.Graphics.Typeface? MeasureTypeface()
+		{
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight)?.Typeface is { } custom)
+				return custom;
+			if (_fontWeight >= 500 && System.OperatingSystem.IsAndroidVersionAtLeast(28))
+				return global::Android.Graphics.Typeface.Create(global::Android.Graphics.Typeface.Default, _fontWeight, false);
+			return null;
+		}
 
 		public override void Render(IComposer composer)
 		{
