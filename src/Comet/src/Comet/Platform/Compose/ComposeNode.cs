@@ -59,6 +59,10 @@ namespace Comet.Platform.Compose
 		/// <see cref="CornerShape"/> to a composable that takes an explicit shape, e.g. a Button).</summary>
 		protected bool HasRoundedCorners => !_corners.IsZero;
 
+		/// <summary>The top-left corner radius in Dp (avatars/clips use a uniform radius). Lets a
+		/// subclass clip a hosted native View to the same outline Compose would (e.g. ImageView).</summary>
+		protected float CornerRadiusDp => (float)_corners.TopLeft;
+
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------

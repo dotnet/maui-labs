@@ -266,10 +266,20 @@ namespace Comet.Platform.Compose
 		public override void Render(IComposer composer)
 		{
 			var url = _url.Value; // subscribe so a source change recomposes
+			// Capture the rounded outline now (avatars use a uniform radius). Compose's
+			// Modifier.clip() does NOT reliably round a native View hosted in an AndroidView, so
+			// clip the ImageView itself with a hardware outline → a true circle, never an ellipse.
+			bool rounded = HasRoundedCorners;
+			float radiusPx = CornerRadiusDp * ComposeNode.Density;
 			var view = new AndroidView(factory: ctx =>
 			{
 				var iv = new global::Android.Widget.ImageView(ctx);
 				iv.SetScaleType(global::Android.Widget.ImageView.ScaleType.CenterCrop);
+				if (rounded)
+				{
+					iv.OutlineProvider = new RoundedOutlineProvider(radiusPx);
+					iv.ClipToOutline = true;
+				}
 				Load(iv, url);
 				return iv;
 			});
@@ -277,10 +287,39 @@ namespace Comet.Platform.Compose
 			view.Render(composer);
 		}
 
+		// Clips a hosted ImageView to a circle (radius ≥ half the size) or a rounded rect, using the
+		// view's own px bounds so the cropped bitmap fills a true circle with no width distortion.
+		sealed class RoundedOutlineProvider : global::Android.Views.ViewOutlineProvider
+		{
+			readonly float _radiusPx;
+			public RoundedOutlineProvider(float radiusPx) => _radiusPx = radiusPx;
+			public override void GetOutline(global::Android.Views.View view, global::Android.Graphics.Outline outline)
+			{
+				int w = view.Width, h = view.Height;
+				if (w <= 0 || h <= 0)
+					return;
+				if (_radiusPx * 2f >= System.Math.Min(w, h))
+					outline.SetOval(0, 0, w, h);
+				else
+					outline.SetRoundRect(0, 0, w, h, _radiusPx);
+			}
+		}
+
 		static void Load(global::Android.Widget.ImageView iv, string url)
 		{
 			if (string.IsNullOrEmpty(url))
 				return;
+			// A bare name (no scheme) is a bundled drawable — load it synchronously like Jetchat's
+			// painterResource (works offline; avatars/stickers ship with the app). Only http(s)
+			// sources go through the async network fetch.
+			if (!url.StartsWith("http", System.StringComparison.OrdinalIgnoreCase))
+			{
+				var ctx = global::Android.App.Application.Context;
+				int resId = ctx.Resources!.GetIdentifier(url, "drawable", ctx.PackageName);
+				if (resId != 0)
+					iv.SetImageResource(resId);
+				return;
+			}
 			_ = System.Threading.Tasks.Task.Run(async () =>
 			{
 				try

@@ -32,10 +32,12 @@ namespace CometSamples.Jetchat
 		internal static readonly Color BarSurface = JetchatTheme.SurfaceTinted;
 		internal static readonly Color Disabled = JetchatTheme.Disabled;
 
-		internal const string AssetBase = "https://raw.githubusercontent.com/android/compose-samples/main/Jetchat/app/src/main/res/drawable-nodpi/";
-		internal const string AvatarMe = AssetBase + "ali.png";
-		internal const string AvatarOther = AssetBase + "someone_else.jpg";
-		const string Sticker = AssetBase + "sticker.png";
+		// Bundled drawables (Jetchat ships these as local resources via painterResource, so they
+		// render offline and without a network round-trip). The backends resolve a bare name to a
+		// platform resource: Android drawable / iOS bundle image.
+		internal const string AvatarMe = "ali";
+		internal const string AvatarOther = "someone_else";
+		const string Sticker = "sticker";
 
 		sealed record Msg(string Author, string Content, string Timestamp, bool HasImage = false);
 
@@ -78,26 +80,42 @@ namespace CometSamples.Jetchat
 			UserInput(bottomInset),
 		}.Background(Surface);
 
-		// ── Channel bar: ‹people-logo⟩  ⟨#composers / 42 members⟩  ⌕  ⓘ ── (no bottom line; the
-		// background tint separates it from the body). 16dp edge margins; bold title.
+		// ── Channel bar: ‹jetchat-logo⟩  ⟨#composers / 42 members⟩  ⌕  ⓘ ── (no bottom line; the
+		// background tint separates it from the body). Mirrors a CenterAlignedTopAppBar: equal-flex
+		// side zones screen-center the title; 16dp edge insets via the bar's own padding (leaf
+		// padding is ignored by the layout engine, so spacing comes from the zones/margins). ──
 		static View ChannelNameBar(double topInset) => new HStack(spacing: 0f)
 		{
-			new Icon("jetchat").Color(Primary).IconSize(28).Padding(new Thickness(16, 14, 8, 14))
-				.OnTap(_ => DrawerOpen.Value = true),   // the real jetchat logo → open the nav drawer
+			// Left zone (flex): the jetchat logo at the start; the spacer balances the right zone.
+			new HStack(spacing: 0f)
+			{
+				new Icon("jetchat").Color(Primary).IconSize(28)
+					.VerticalLayoutAlignment(LayoutAlignment.Center)
+					.OnTap(_ => DrawerOpen.Value = true),   // tap the logo → open the nav drawer
+				Spacer(),
+			}.FlexGrow(1).FlexBasis(0),
+
 			new VStack(spacing: 0f)
 			{
 				new Text("#composers").Color(OnSurface).TitleMedium()
 					.HorizontalLayoutAlignment(LayoutAlignment.Center),
 				new Text("42 members").Color(OnSurfaceVariant).BodySmall()
 					.HorizontalLayoutAlignment(LayoutAlignment.Center),
-			}.FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
-			BarIcon("search"),
-			BarIcon("info"),
-		}.Padding(new Thickness(0, topInset + 4, 4, 14)).Background(BarSurface);
+			}.VerticalLayoutAlignment(LayoutAlignment.Center),
 
-		// A real Material Icon (ImageVector / SF Symbol), 24dp, tinted onSurfaceVariant.
+			// Right zone (flex, equal weight → title sits at true screen-center): the actions at the end.
+			new HStack(spacing: 0f)
+			{
+				Spacer(),
+				BarIcon("search").Margin(right: 20),
+				BarIcon("info"),
+			}.FlexGrow(1).FlexBasis(0),
+		}.Padding(new Thickness(16, topInset + 12, 16, 12)).Background(BarSurface);
+
+		// A real Material Icon (ImageVector / SF Symbol), 24dp, tinted onSurfaceVariant, centered.
 		static View BarIcon(string symbol) =>
-			new Icon(symbol).Color(OnSurfaceVariant).IconSize(24).Padding(new Thickness(12, 16, 12, 16));
+			new Icon(symbol).Color(OnSurfaceVariant).IconSize(24)
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
 
 		// ── Message log ──
 		static View MessageLog()
