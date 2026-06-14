@@ -19,17 +19,18 @@ namespace CometSamples.Jetchat
 	/// </summary>
 	public static class JetchatConversation
 	{
-		// ── Jetchat light color scheme (theme/Themes.kt + Color.kt) ── (internal: shared w/ drawer)
-		internal static readonly Color Primary = Color.FromArgb("#1546F6");          // Blue40 — my bubble + my avatar ring
-		internal static readonly Color OnPrimary = Colors.White;                     // my bubble text
-		internal static readonly Color Surface = Color.FromArgb("#FBFDFD");          // Grey99 — page + bars
-		internal static readonly Color OnSurface = Color.FromArgb("#191C1D");        // Grey10 — titles, others' bubble text
-		internal static readonly Color SurfaceVariant = Color.FromArgb("#E2E1EC");   // BlueGrey90 — others' bubble
-		internal static readonly Color OnSurfaceVariant = Color.FromArgb("#45464F"); // BlueGrey30 — subtitle, timestamps, icons
-		internal static readonly Color Tertiary = Color.FromArgb("#7A5900");         // Yellow40 — others' avatar ring
-		internal static readonly Color Divider = Color.FromArgb("#1F191C1D");        // onSurface @ 12%
-		internal static readonly Color BarSurface = Color.FromArgb("#E7E9F8");       // tonal-elevated surface — header + footer
-		internal static readonly Color Disabled = Color.FromArgb("#C4C6D0");         // disabled outline/onSurface
+		// Semantic color roles come from the centralized JetchatTheme (mirrors theme/Themes.kt);
+		// these are local aliases so the screen reads tokens, not hardcoded hex.
+		internal static readonly Color Primary = JetchatTheme.Primary;
+		internal static readonly Color OnPrimary = JetchatTheme.OnPrimary;
+		internal static readonly Color Surface = JetchatTheme.Surface;
+		internal static readonly Color OnSurface = JetchatTheme.OnSurface;
+		internal static readonly Color SurfaceVariant = JetchatTheme.SurfaceVariant;
+		internal static readonly Color OnSurfaceVariant = JetchatTheme.OnSurfaceVariant;
+		internal static readonly Color Tertiary = JetchatTheme.Tertiary;
+		internal static readonly Color Divider = JetchatTheme.Divider;
+		internal static readonly Color BarSurface = JetchatTheme.SurfaceTinted;
+		internal static readonly Color Disabled = JetchatTheme.Disabled;
 
 		internal const string AssetBase = "https://raw.githubusercontent.com/android/compose-samples/main/Jetchat/app/src/main/res/drawable-nodpi/";
 		internal const string AvatarMe = AssetBase + "ali.png";
@@ -85,9 +86,9 @@ namespace CometSamples.Jetchat
 				.OnTap(_ => DrawerOpen.Value = true),   // jetchat logo → open the nav drawer
 			new VStack(spacing: 0f)
 			{
-				new Text("#composers").Color(OnSurface).FontSize(18).FontWeight(FontWeight.Bold)
+				new Text("#composers").Color(OnSurface).TitleMedium()
 					.HorizontalLayoutAlignment(LayoutAlignment.Center),
-				new Text("42 members").Color(OnSurfaceVariant).FontSize(12)
+				new Text("42 members").Color(OnSurfaceVariant).BodySmall()
 					.HorizontalLayoutAlignment(LayoutAlignment.Center),
 			}.FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
 			BarIcon("search"),
@@ -158,8 +159,8 @@ namespace CometSamples.Jetchat
 
 		static View AuthorNameTimestamp(Msg m) => new HStack(spacing: 8f)
 		{
-			new Text(m.Author).Color(OnSurface).FontSize(16).FontWeight(FontWeight.Medium),
-			new Text(m.Timestamp).Color(OnSurfaceVariant).FontSize(12),
+			new Text(m.Author).Color(OnSurface).TitleMedium(),
+			new Text(m.Timestamp).Color(OnSurfaceVariant).BodySmall(),
 		}.Padding(new Thickness(0, 0, 0, 4));
 
 		// The iconic chat bubble: RoundedCornerShape(4,20,20,20); primary/white for me,
@@ -167,11 +168,11 @@ namespace CometSamples.Jetchat
 		// the column width only when the text wraps).
 		static View Bubble(string content, bool isMe) => new VStack(spacing: 0f)
 		{
-			new Text(content).Color(isMe ? OnPrimary : OnSurface).FontSize(16),
+			new Text(content).Color(isMe ? OnPrimary : OnSurface).BodyLarge(),
 		}
 			.Padding(new Thickness(16))
 			.Background(isMe ? Primary : SurfaceVariant)
-			.CornerRadius(4, 20, 20, 20)
+			.CornerRadius(JetchatTheme.BubbleTopStart, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther)
 			.HorizontalLayoutAlignment(LayoutAlignment.Start);
 
 		static View StickerBubble(bool isMe) => new VStack(spacing: 0f)
@@ -179,7 +180,7 @@ namespace CometSamples.Jetchat
 			new Image(Sticker).Frame(width: 160, height: 160),
 		}
 			.Background(isMe ? Primary : SurfaceVariant)
-			.CornerRadius(4, 20, 20, 20)
+			.CornerRadius(JetchatTheme.BubbleTopStart, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther)
 			.HorizontalLayoutAlignment(LayoutAlignment.Start);
 
 		// Row of: rule — "Today" — rule, all vertically centered (the rule aligns to the text's
@@ -187,7 +188,7 @@ namespace CometSamples.Jetchat
 		static View DayHeader(string day) => new HStack(spacing: 0f)
 		{
 			HLine().FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
-			new Text(day).Color(OnSurfaceVariant).FontSize(11).FontWeight(FontWeight.Medium)
+			new Text(day).Color(OnSurfaceVariant).LabelSmall()
 				.VerticalLayoutAlignment(LayoutAlignment.Center).Padding(new Thickness(16, 0, 16, 0)),
 			HLine().FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
 		}.Padding(new Thickness(16, 8, 16, 8));
@@ -202,16 +203,14 @@ namespace CometSamples.Jetchat
 			{
 				InputIcon("mood"), Spacer(), InputIcon("at"), Spacer(), InputIcon("photo"),
 				Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
-				// Disabled Send: outlined pill, grey, no fill (until the field has text), per the
-				// sample. The padding/border must be on the container (the engine only insets
-				// containers, not leaf Text) so it reads as a pill, not tight around the glyphs.
-				new VStack(spacing: 0f)
-				{
-					new Text("Send").Color(Disabled).FontSize(14).FontWeight(FontWeight.Medium),
-				}
-					.Padding(new Thickness(20, 8, 20, 8))
+				// Disabled Send: a real Material OutlinedButton (bordered, no fill) with grey
+				// content — exactly the sample's disabled Send button, not a styled label.
+				new Button("Send", () => { })
+					.Outlined()
+					.LabelLarge()
+					.Color(Disabled)
 					.CornerRadius(18)
-					.Border(1, Disabled)
+					.Frame(height: 36)
 					.VerticalLayoutAlignment(LayoutAlignment.Center),
 			}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
 		}.Background(BarSurface);

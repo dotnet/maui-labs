@@ -55,6 +55,10 @@ namespace Comet.Platform.Compose
 		/// nodes (list, scroll) use it to lay their own content out to the host's width.</summary>
 		protected float FrameWidth => _fw;
 
+		/// <summary>True when a non-zero corner radius was set (so a subclass can apply
+		/// <see cref="CornerShape"/> to a composable that takes an explicit shape, e.g. a Button).</summary>
+		protected bool HasRoundedCorners => !_corners.IsZero;
+
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------
@@ -154,7 +158,7 @@ namespace Comet.Platform.Compose
 
 		// The clip/shadow outline. Uniform corners use the single-radius factory; otherwise
 		// per-corner (LTR: TopLeft→topStart, TopRight→topEnd, BottomRight→bottomEnd, BottomLeft→bottomStart).
-		AndroidX.Compose.Shape CornerShape() => _corners.IsUniform
+		protected AndroidX.Compose.Shape CornerShape() => _corners.IsUniform
 			? AndroidX.Compose.Shape.RoundedCorners(new Dp((float)_corners.TopLeft))
 			: AndroidX.Compose.Shape.RoundedCorners(
 				new Dp((float)_corners.TopLeft), new Dp((float)_corners.TopRight),

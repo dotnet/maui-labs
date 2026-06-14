@@ -126,14 +126,27 @@ namespace Comet.Platform.Compose
 	sealed class ComposeButtonNode : ComposeNode
 	{
 		readonly MutableState<string> _text = new(string.Empty);
+		Microsoft.Maui.Graphics.Color? _textColor;
+		bool _outlined;
+		readonly MutableState<int> _styleVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Button_Text)
 				_text.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Button_TextColor)
+			{
+				_textColor = value.AsColor;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Button_Outlined)
+			{
+				_outlined = value.AsBool;
+				_styleVersion.Value++;
+			}
 		}
 
-		// A Material filled button: label plus default content padding, min 48dp tall.
+		// A Material button: label plus default content padding, min 48dp tall.
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
 			var label = TextMeasure.SingleLine(_text.Value, 14f);
@@ -142,11 +155,35 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
-			var button = new ComposeButton(onClick: () => Sink?.OnEvent(EventIds.Clicked));
-			// Apply the Yoga frame (offset+size) so the button is positioned like every other node.
-			((ComposableNode)button).Modifier = BuildNodeModifier();
-			button.Add(new ComposeText(_text.Value));
-			button.Render(composer);
+			_ = _styleVersion.Value;
+
+			// A real Material Button — filled by default, or OutlinedButton (bordered, no fill) when
+			// asked. Content color + corner shape come from the Comet view's .Color()/.CornerRadius().
+			var label = new ComposeText(_text.Value);
+			void OnClick() => Sink?.OnEvent(EventIds.Clicked);
+
+			if (_outlined)
+			{
+				var button = new AndroidX.Compose.OutlinedButton(OnClick);
+				if (_textColor is { } tc)
+					button.Colors = composer.ButtonColors(contentColor: (long)ToComposeColor(tc));
+				if (HasRoundedCorners)
+					button.Shape = CornerShape();
+				((ComposableNode)button).Modifier = BuildNodeModifier();
+				button.Add(label);
+				button.Render(composer);
+			}
+			else
+			{
+				var button = new ComposeButton(OnClick);
+				if (_textColor is { } tc)
+					button.Colors = composer.ButtonColors(contentColor: (long)ToComposeColor(tc));
+				if (HasRoundedCorners)
+					button.Shape = CornerShape();
+				((ComposableNode)button).Modifier = BuildNodeModifier();
+				button.Add(label);
+				button.Render(composer);
+			}
 		}
 	}
 
