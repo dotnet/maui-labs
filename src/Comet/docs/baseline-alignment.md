@@ -19,6 +19,46 @@ Status: **Implemented on Android (Compose); iOS pending.** Created 2026-06-14.
   any baseline values, 45/45 backend tests pass) + on-device Pixel 5 measurement (author/timestamp
   baselines within 1px — the screenshot measurement floor).
 
+### Pixel-exact: the cross-engine seam (the ~1px residual)
+
+The engine baseline wiring is **the same design React Native uses** — Yoga `align-items: baseline`
++ a per-node baseline function the text node supplies (RN: ["base-line metric exposure for
+`<Text>`"](https://github.com/facebook/react-native/commit/51b3529f6c2ca354800c0cf6ecb8eb3115eaa36e)).
+RN is pixel-exact because its `<Text>` **measures and renders with the same text engine** (Android
+`StaticLayout`/`Layout` → `ReactTextView`); the baseline handed to Yoga comes from the same layout
+object that paints the glyphs.
+
+Comet has **two text engines in series**: it measures with Android `StaticLayout`/`Paint`
+(`TextMeasure`) but **renders with Jetpack Compose** (`androidx.compose.ui.text`), which has its own
+leading distribution, `includeFontPadding` default, and integer-metric rounding. That seam is the
+entire ~1px error. Measured on a Pixel 5 for the 16sp/12sp pair, every *prediction* model floors at
+~1px regardless: proportional leading −1.0px, centered −0.93px, natural line-height (no leading)
+−2 to −3px. The leading model is not the lever; the cross-engine seam is.
+
+**The correct (RN-equivalent) fix: measure through Compose, so one engine does measure + render.**
+Two routes, both confirmed to be heavy facade work (investigated 2026-06-14):
+- **(1) Bind `TextMeasurer`** (measure-before-layout, RN-shadow-node style — cleanest, no frame
+  caveat). Needs: a shared `TextMeasurer` (built from `createFontFamilyResolver(context)` + `Density`
+  + `LayoutDirection`), its `measure()` (heavy — the `Constraints` inline value-class param packs to
+  a `long`; many params, a `$default` synthetic), and `TextLayoutResult.firstBaseline` + `.size`
+  (`IntSize` inline-class unpack). `ComposeTextNode.Measure`/`MeasureBaseline` then call it; this also
+  retires the `LineHeightSp`/letter-spacing fudges and makes *all* text sizing render-accurate.
+- **(2) Read `TextLayoutResult.firstBaseline` from the live render via `onTextLayout`**, cache it per
+  type-style (baseline depends only on family/weight/size, not content), and reflow once on a cache
+  miss (1-frame warm-up using the `StaticLayout` estimate, then exact; on a scrolling list, styles are
+  cached after their first row). Lighter conceptually BUT the facade's `[ComposeFacade]` generator
+  can't pass an object-typed callback (`[Callback]` supports only bool/string/float — error CN3005),
+  so the **core `Text` bridge must be hand-rewritten** (drop `[ComposeFacade]`), which is risky
+  because `Text` is used everywhere. Also needs a reflow trigger (`ComposeBackendRoot.RunLayout`
+  posted to the next frame).
+
+Recommendation: **(1) `TextMeasurer`** is the principled fix (single engine, measure-before-render,
+broad payoff) and should be its own task. Until then the proportional model (~1px, committed) is the
+floor for prediction. A purely *visual* exact result for a specific name+timestamp is also available
+by merging the two into one `AnnotatedText` run (Compose owns the line's baseline) — exact and
+fastest for long lists, but it's one `Text`, not the gold standard's `Row`+two `Text`s, and the gap
+becomes space-approximated.
+
 ### Still open
 - **iOS**: the SwiftUI text node still returns `null` from `MeasureBaseline` (falls back to height
   ≈ bottom). Implement via `UIFont` metrics — see §5. Not validated yet (Android-first per current
