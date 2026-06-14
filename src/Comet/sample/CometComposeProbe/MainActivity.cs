@@ -26,11 +26,11 @@ namespace CometComposeProbe
 			base.OnCreate(savedInstanceState);
 			ActionBar?.Hide();
 
-			// System bars match the Jetchat surface (light bars, dark icons), not the platform
-			// default — so the status/nav areas are the correct color.
-			var surface = Android.Graphics.Color.ParseColor("#FBFDFD");
-			Window!.SetStatusBarColor(surface);
-			Window.SetNavigationBarColor(surface);
+			// System bars match the Jetchat header/footer bar tint (light bars, dark icons) so the
+			// status + navigation areas blend edge-to-edge with the bars.
+			var barTint = Android.Graphics.Color.ParseColor("#E7E9F8");
+			Window!.SetStatusBarColor(barTint);
+			Window.SetNavigationBarColor(barTint);
 			const int light = (int)Android.Views.WindowInsetsControllerAppearance.LightStatusBars
 				| (int)Android.Views.WindowInsetsControllerAppearance.LightNavigationBars;
 			Window.InsetsController?.SetSystemBarsAppearance(light, light);

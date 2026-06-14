@@ -135,6 +135,7 @@ namespace CometSamples.Jetchat
 						.CornerRadius(21)
 						.Border(2, isMe ? Primary : Tertiary)
 						.Margin(left: 16, right: 16)
+						.VerticalLayoutAlignment(LayoutAlignment.Start)   // stay 42×42, don't stretch to row height
 				: new HStack().Frame(width: 74);
 
 			var column = new VStack(spacing: 0f);
@@ -201,8 +202,13 @@ namespace CometSamples.Jetchat
 			{
 				InputIcon("mood"), Spacer(), InputIcon("at"), Spacer(), InputIcon("photo"),
 				Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
-				// Disabled Send: outlined, grey, no fill (until the field has text), per the sample.
-				new Text("Send").Color(Disabled).FontSize(14).FontWeight(FontWeight.Medium)
+				// Disabled Send: outlined pill, grey, no fill (until the field has text), per the
+				// sample. The padding/border must be on the container (the engine only insets
+				// containers, not leaf Text) so it reads as a pill, not tight around the glyphs.
+				new VStack(spacing: 0f)
+				{
+					new Text("Send").Color(Disabled).FontSize(14).FontWeight(FontWeight.Medium),
+				}
 					.Padding(new Thickness(20, 8, 20, 8))
 					.CornerRadius(18)
 					.Border(1, Disabled)

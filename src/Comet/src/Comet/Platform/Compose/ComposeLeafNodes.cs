@@ -59,6 +59,11 @@ namespace Comet.Platform.Compose
 				text.FontSize = new AndroidX.Compose.Sp(_fontSize);
 			if (_fontWeight > 0)
 				text.FontWeight = MapWeight(_fontWeight);
+			// Pin the rendered line-height to exactly what the measurement used (instead of the
+			// MaterialTheme bodyLarge default of 24sp) so multi-line text doesn't clip, a single
+			// line isn't an over-tall box (which threw off vertical centering + the title/subtitle
+			// gap), and the frame height matches the render line-for-line.
+			text.LineHeight = new AndroidX.Compose.Sp(TextMeasure.LineHeightSp(_fontSize > 0 ? _fontSize : 16f));
 			text.Render(composer);
 		}
 
@@ -72,6 +77,12 @@ namespace Comet.Platform.Compose
 	/// <summary>Synchronous native text measurement for the Yoga layout engine.</summary>
 	static class TextMeasure
 	{
+		// A comfortable line-height multiple (close to Roboto's natural ~1.17 plus a little), used
+		// BOTH to set the rendered Text's lineHeight and to compute the measured frame height — so
+		// measure == render and nothing clips. Integer sp so the two sides match exactly.
+		const float LineMult = 1.3f;
+		public static int LineHeightSp(float sp) => (int)System.Math.Round(sp * LineMult);
+
 		// Single-line width (e.g. a button label).
 		public static Size SingleLine(string? text, float sp)
 		{
@@ -102,11 +113,11 @@ namespace Comet.Platform.Compose
 			float used = 0f;
 			for (int i = 0; i < layout.LineCount; i++)
 				used = System.Math.Max(used, layout.GetLineWidth(i));
-			// Width: +2px absorbs hinting/letter-spacing differences so a one-line label never clips.
-			// Height: the composed Text uses MaterialTheme's bodyLarge line-height (~24sp for 16sp),
-			// taller than StaticLayout's default (~1.17×) — scale by ~1.28 so a multi-line bubble's
-			// frame is tall enough and the last line isn't clipped.
-			return new Size((System.Math.Ceiling(used) + 2) / density, (layout.Height * 1.28f + 2) / density);
+			// Width: +2px absorbs hinting differences so a one-line label never clips.
+			// Height: lineCount × the SAME line-height the renderer pins (LineHeightSp), so the frame
+			// is exactly as tall as the composed Text — no clipping, no extra slack.
+			double heightDp = layout.LineCount * LineHeightSp(sp);
+			return new Size((System.Math.Ceiling(used) + 2) / density, heightDp);
 		}
 	}
 
