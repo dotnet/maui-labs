@@ -189,8 +189,10 @@ namespace CometSamples.Jetchat
 
 		static View AuthorNameTimestamp(Msg m) => new HStack(spacing: 8f)
 		{
-			new Text(m.Author).Color(OnSurface).TitleMedium(),
-			new Text(m.Timestamp).Color(OnSurfaceVariant).BodySmall(),
+			new Text(m.Author).Color(OnSurface).TitleMedium()
+				.VerticalLayoutAlignment(LayoutAlignment.End),
+			new Text(m.Timestamp).Color(OnSurfaceVariant).BodySmall()
+				.VerticalLayoutAlignment(LayoutAlignment.End),
 		}.Padding(new Thickness(0, 0, 0, 4));
 
 		// The iconic chat bubble: RoundedCornerShape(4,20,20,20); primary/white for me,
