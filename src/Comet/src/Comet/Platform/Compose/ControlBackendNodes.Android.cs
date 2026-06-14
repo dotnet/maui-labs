@@ -33,6 +33,12 @@ namespace Comet
 			=> new ComposeTextNode();
 	}
 
+	public partial class FormattedText
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeFormattedTextNode();
+	}
+
 	public partial class Button
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

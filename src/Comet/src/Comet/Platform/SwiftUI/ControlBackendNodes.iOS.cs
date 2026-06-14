@@ -14,6 +14,14 @@ namespace Comet
 			=> new SwiftUINode("text");
 	}
 
+	public partial class FormattedText
+	{
+		// iOS renders the concatenated text (per-run styling is a follow-up); the node folds runs
+		// into the plain "text" value.
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("text");
+	}
+
 	public partial class Button
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

@@ -50,6 +50,8 @@ namespace Comet.Platform.SwiftUI
 		{
 			if (id == PropertyIds.Text_Value || id == PropertyIds.Button_Text || id == PropertyIds.TextField_Text)
 				CometSwiftUIHost.SetString(_native, "text", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Text_Runs && value.AsObject is System.Collections.Generic.IReadOnlyList<TextRun> runs)
+				CometSwiftUIHost.SetString(_native, "text", string.Concat(System.Linq.Enumerable.Select(runs, r => r.Text)));
 			else if (id == PropertyIds.TextField_Placeholder)
 				CometSwiftUIHost.SetString(_native, "placeholder", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Image_Source)

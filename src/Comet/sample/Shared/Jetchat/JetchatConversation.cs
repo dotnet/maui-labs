@@ -168,12 +168,46 @@ namespace CometSamples.Jetchat
 		// the column width only when the text wraps).
 		static View Bubble(string content, bool isMe) => new VStack(spacing: 0f)
 		{
-			new Text(content).Color(isMe ? OnPrimary : OnSurface).BodyLarge(),
+			new FormattedText(FormatMessage(content, isMe)).BodyLarge(),
 		}
 			.Padding(new Thickness(16))
 			.Background(isMe ? Primary : SurfaceVariant)
 			.CornerRadius(JetchatTheme.BubbleTopStart, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther)
 			.HorizontalLayoutAlignment(LayoutAlignment.Start);
+
+		// The C# port of Jetchat's messageFormatter: @mentions and links take the accent color
+		// (links underlined), `code` spans render monospace in a tonal box. On my (primary) bubbles
+		// the accent is the on-primary color; on others it's the primary blue.
+		static System.Collections.Generic.IReadOnlyList<TextRun> FormatMessage(string content, bool isMe)
+		{
+			var baseColor = isMe ? OnPrimary : OnSurface;
+			var accent = isMe ? OnPrimary : Primary;
+			var codeBg = isMe ? Color.FromArgb("#33FFFFFF") : Color.FromArgb("#14000000");
+
+			var runs = new System.Collections.Generic.List<TextRun>();
+			var parts = content.Split('`');
+			for (int i = 0; i < parts.Length; i++)
+			{
+				if (i % 2 == 1)             // odd segments are between backticks → code
+				{
+					if (parts[i].Length > 0)
+						runs.Add(new TextRun(parts[i], Color: baseColor, Monospace: true, Background: codeBg));
+					continue;
+				}
+				foreach (var token in System.Text.RegularExpressions.Regex.Split(parts[i], @"(\s+)"))
+				{
+					if (token.Length == 0)
+						continue;
+					if (token.StartsWith("@"))
+						runs.Add(new TextRun(token, Color: accent));
+					else if (token.StartsWith("http"))
+						runs.Add(new TextRun(token, Color: accent, Underline: true));
+					else
+						runs.Add(new TextRun(token, Color: baseColor));
+				}
+			}
+			return runs;
+		}
 
 		static View StickerBubble(bool isMe) => new VStack(spacing: 0f)
 		{

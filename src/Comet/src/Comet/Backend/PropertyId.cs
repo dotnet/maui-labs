@@ -66,6 +66,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Text_VerticalAlignment = new(70);
 		public static readonly PropertyId Text_LineBreakMode = new(71);
 		public static readonly PropertyId Text_MaxLines = new(72);
+		public static readonly PropertyId Text_Runs = new(73);   // FormattedText: IReadOnlyList<TextRun>
 
 		// --- Button (80–95) ---
 		public static readonly PropertyId Button_Text = new(80);

@@ -97,6 +97,40 @@ namespace Comet.Platform.Compose
 		const float LineMult = 1.3f;
 		public static int LineHeightSp(float sp) => (int)System.Math.Round(sp * LineMult);
 
+		// Measures formatted runs by building a native SpannableString with the same monospace
+		// ("code") spans the renderer uses, so wrapping/height match the composed AnnotatedText.
+		public static Size MeasureRuns(System.Collections.Generic.IReadOnlyList<Comet.TextRun> runs,
+			float sp, double maxWidthDp, global::Android.Graphics.Typeface? baseTypeface)
+		{
+			var density = ComposeNode.Density;
+			int widthPx = (maxWidthDp > 0 && !double.IsInfinity(maxWidthDp))
+				? (int)System.Math.Ceiling(maxWidthDp * density)
+				: global::Android.Content.Res.Resources.System!.DisplayMetrics!.WidthPixels;
+
+			var sb = new global::Android.Text.SpannableStringBuilder();
+			foreach (var run in runs)
+			{
+				int start = sb.Length();
+				sb.Append(run.Text ?? string.Empty);
+				if (run.Monospace)
+					sb.SetSpan(new global::Android.Text.Style.TypefaceSpan("monospace"),
+						start, sb.Length(), global::Android.Text.SpanTypes.InclusiveExclusive);
+			}
+
+			using var paint = new global::Android.Text.TextPaint { TextSize = sp * density };
+			if (baseTypeface is not null)
+				paint.SetTypeface(baseTypeface);
+			using var layout = global::Android.Text.StaticLayout.Builder
+				.Obtain(sb, 0, sb.Length(), paint, widthPx)
+				.Build();
+
+			float used = 0f;
+			for (int i = 0; i < layout.LineCount; i++)
+				used = System.Math.Max(used, layout.GetLineWidth(i));
+			double heightDp = layout.LineCount * LineHeightSp(sp);
+			return new Size((System.Math.Ceiling(used) + 2) / density, heightDp);
+		}
+
 		// Single-line width (e.g. a button label).
 		public static Size SingleLine(string? text, float sp)
 		{
