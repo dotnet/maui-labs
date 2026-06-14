@@ -16,6 +16,7 @@ namespace Comet.Platform.Compose
 		Microsoft.Maui.Graphics.Color? _color;
 		int _fontSize;
 		int _fontWeight;
+		string? _fontFamily;
 		readonly MutableState<int> _colorVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -34,21 +35,28 @@ namespace Comet.Platform.Compose
 			}
 			else if (id == PropertyIds.Text_FontWeight)
 			{
-				_fontWeight = (int)value.AsDouble;
+				_fontWeight = value.AsInt;   // emitted as From((int)weight) — read as Int, not Double
+				_colorVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_FontFamily)
+			{
+				_fontFamily = value.AsString;
 				_colorVersion.Value++;
 			}
 		}
 
 		// Intrinsic size for the Yoga engine: measure the text wrapped to the available width
-		// with StaticLayout (synchronous, no composition needed). 16sp ~ Material bodyLarge.
+		// with StaticLayout (synchronous, no composition needed). Uses the resolved custom typeface
+		// so measurement matches the rendered (custom-font) glyphs. 16sp ~ Material bodyLarge.
 		public override Size Measure(double widthConstraint, double heightConstraint)
-			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint);
+			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint,
+				ComposeFontRegistry.Resolve(_fontFamily, _fontWeight)?.Typeface);
 
 		public override void Render(IComposer composer)
 		{
 			// Reading _text.Value inside composition subscribes this scope, so a later
 			// ApplyProperty -> setValue recomposes just this Text.
-			_ = _colorVersion.Value; // subscribe so a color/size/weight change recomposes
+			_ = _colorVersion.Value; // subscribe so a color/size/weight/family change recomposes
 			var text = new ComposeText(_text.Value) { Modifier = BuildNodeModifier() };
 			// Zero letter-spacing so the rendered width matches the Paint measurement above (the
 			// MaterialTheme default bodyLarge adds 0.5sp, which otherwise overflows the frame).
@@ -57,7 +65,13 @@ namespace Comet.Platform.Compose
 				text.Color = ToComposeColor(c);
 			if (_fontSize > 0)
 				text.FontSize = new AndroidX.Compose.Sp(_fontSize);
-			if (_fontWeight > 0)
+			// Custom font: the resolved typeface already carries the weight, so set the family and
+			// DON'T also set FontWeight (which would synthesize bold on top). Falls back to the
+			// weight when no custom family is registered.
+			var resolved = ComposeFontRegistry.Resolve(_fontFamily, _fontWeight);
+			if (resolved is { } r)
+				text.FontFamily = r.Family;
+			else if (_fontWeight > 0)
 				text.FontWeight = MapWeight(_fontWeight);
 			// Pin the rendered line-height to exactly what the measurement used (instead of the
 			// MaterialTheme bodyLarge default of 24sp) so multi-line text doesn't clip, a single
@@ -94,8 +108,9 @@ namespace Comet.Platform.Compose
 		}
 
 		// Wrapped to the available width: StaticLayout lays the text out to widthPx and reports
-		// the multi-line height (the Compose analog of iOS TextKit boundingRect).
-		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp)
+		// the multi-line height (the Compose analog of iOS TextKit boundingRect). When a custom
+		// typeface is supplied it is used so the measurement matches the rendered glyph metrics.
+		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp, global::Android.Graphics.Typeface? typeface = null)
 		{
 			var density = ComposeNode.Density;
 			var s = text ?? string.Empty;
@@ -103,6 +118,8 @@ namespace Comet.Platform.Compose
 				? (int)System.Math.Ceiling(maxWidthDp * density)
 				: global::Android.Content.Res.Resources.System!.DisplayMetrics!.WidthPixels;
 			using var paint = new global::Android.Text.TextPaint { TextSize = sp * density };
+			if (typeface is not null)
+				paint.SetTypeface(typeface);
 			using var layout = global::Android.Text.StaticLayout.Builder
 				.Obtain(s, 0, s.Length, paint, widthPx)
 				.Build();

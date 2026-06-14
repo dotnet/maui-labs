@@ -30,6 +30,14 @@ public sealed partial class FontFamily : Java.Lang.Object
     FontFamily(IntPtr handle, JniHandleOwnership transfer)
         : base(handle, transfer) { }
 
+    /// <summary>Wraps a platform <see cref="Android.Graphics.Typeface"/> (e.g. loaded from an
+    /// asset) into a Compose <c>FontFamily</c> via <c>FontFamilyKt.FontFamily(Typeface)</c>.</summary>
+    public static FontFamily FromTypeface(Android.Graphics.Typeface typeface)
+    {
+        IntPtr handle = ComposeBridges.FontFamilyFromTypeface(typeface.Handle);
+        return new FontFamily(handle, JniHandleOwnership.TransferLocalRef);
+    }
+
     /// <summary>
     /// <c>FontFamily.Default</c> — the platform's system font family.
     /// </summary>

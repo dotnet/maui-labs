@@ -37,6 +37,19 @@ namespace CometComposeProbe
 
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
 
+			// Load Jetchat's real fonts (Montserrat titles/labels, Karla body) from bundled assets
+			// and register them so the Compose backend renders them (degrades to the default font
+			// if anything fails). Variable TTFs — weights are derived per use.
+			try
+			{
+				ComposeFontRegistry.Register("Montserrat", Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/Montserrat.ttf"));
+				ComposeFontRegistry.Register("Karla", Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/Karla.ttf"));
+			}
+			catch (Exception ex)
+			{
+				Android.Util.Log.Warn("CometProbe", "Font load failed: " + ex);
+			}
+
 			var root = BuildUi();
 
 			var backend = new ComposeBackendRoot(new EmptyServiceProvider())

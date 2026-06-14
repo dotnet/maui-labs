@@ -220,6 +220,16 @@ internal static partial class ComposeBridges
     internal static partial IntPtr RoundedCornerShape4Percent(
         int topStartPercent, int topEndPercent, int bottomEndPercent, int bottomStartPercent);
 
+    // androidx.compose.ui.text.font.FontFamilyKt.FontFamily(Typeface) — wraps a platform
+    // android.graphics.Typeface into a Compose FontFamily. Plain-static interop: no receiver,
+    // no $default, no Composer, no value classes. Lets us load custom fonts (Montserrat/Karla,
+    // icon fonts) the facade otherwise can't construct (it only binds the system families).
+    [ComposeBridge(
+        Class     = "androidx/compose/ui/text/font/AndroidTypeface_androidKt",
+        JvmName   = "FontFamily",
+        Signature = "(Landroid/graphics/Typeface;)Landroidx/compose/ui/text/font/FontFamily;")]
+    internal static partial IntPtr FontFamilyFromTypeface(IntPtr typeface);
+
     // androidx.compose.ui.draw.ClipKt.clip(Modifier, Shape) — both args
     // required, no $default and no name mangling. Plain-static shape
     // with a Modifier extension receiver.
