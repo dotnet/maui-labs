@@ -43,6 +43,7 @@ namespace Comet.Platform.Compose
 		// state so a re-arrange recomposes. Until arranged, Compose lays the node out natively.
 		float _fx, _fy, _fw, _fh;
 		bool _hasFrame;
+		float _contentTopInset;
 		readonly MutableState<int> _frameVersion = new(0);
 
 		/// <summary>Display density (px per Dp), set by the backend root; used to convert native
@@ -133,6 +134,11 @@ namespace Comet.Platform.Compose
 					.AbsoluteOffset(new Dp(_fx), new Dp(_fy))
 					.Size(new Dp(_fw), new Dp(_fh));
 
+			// baselineHeight: inset the content down within the (already-grown) box so the text's
+			// first baseline lands at the requested offset. Applied after Size so it insets inside.
+			if (_contentTopInset > 0)
+				m = (m ?? Modifier.Companion).Padding(0f, _contentTopInset, 0f, 0f);
+
 			// Card surface / chat bubble: raise (shadow) then round the corners, so the shadow
 			// follows the rounded outline and the background/content below are clipped to it.
 			bool rounded = !_corners.IsZero;
@@ -205,6 +211,13 @@ namespace Comet.Platform.Compose
 
 		// First text baseline (Dp from the top), for baseline-aligned rows; null = no text baseline.
 		public virtual double? MeasureBaseline(double width, double height) => null;
+
+		// baselineHeight content inset (Dp): the engine grew the box by this and we pad the top to match.
+		public void SetContentTopInset(double dp)
+		{
+			_contentTopInset = (float)dp;
+			_frameVersion.Value++;
+		}
 
 		// Yoga-computed parent-relative frame (in Dp); stored + recomposed so BuildNodeModifier
 		// positions this node absolutely.

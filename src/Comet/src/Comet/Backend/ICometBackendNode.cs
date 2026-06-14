@@ -53,6 +53,12 @@ namespace Comet.Backend
 		/// </summary>
 		double? MeasureBaseline(double width, double height) => null;
 
+		/// <summary>Insets this node's rendered content down by <paramref name="dp"/> within its
+		/// arranged box (the layout engine has already grown the box to match). Used to realize
+		/// <c>baselineHeight</c>: pad the top so the text's first baseline lands at a fixed offset.
+		/// Default no-op for backends that don't support it.</summary>
+		void SetContentTopInset(double dp) { }
+
 		/// <summary>Positions this node at the Yoga-computed frame (parent-relative).</summary>
 		void Arrange(Rect frame);
 

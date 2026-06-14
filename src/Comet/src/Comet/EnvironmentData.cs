@@ -48,6 +48,7 @@ namespace Comet
 			public const string FrameConstraints = "Layout.FrameConstraints";
 			public const string IgnoreSafeArea = "Layout.IgnoreSafeArea";
 			public const string BaselineAlign = "Layout.BaselineAlign";
+			public const string BaselineHeight = "Layout.BaselineHeight";
 		}
 
 		public static class View

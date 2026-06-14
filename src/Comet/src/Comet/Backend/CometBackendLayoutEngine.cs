@@ -123,12 +123,25 @@ namespace Comet.Backend
 			{
 				// Leaf: its intrinsic size comes from the native control via the backend node.
 				var leaf = view;
+
+				// baselineHeight: pin the first baseline at a fixed offset from the top. The first
+				// baseline is independent of wrap width (it's the first line), so compute the top pad
+				// once, push it to the node (which insets its content), and grow the measured box to
+				// match — exactly Jetchat's baselineHeight layout (pad = height − firstBaseline).
+				float baselinePad = 0f;
+				if (leaf.GetBaselineHeight() is double targetBaseline &&
+					leaf.Node?.MeasureBaseline(double.PositiveInfinity, double.PositiveInfinity) is double firstBaseline)
+				{
+					baselinePad = (float)Math.Max(0, targetBaseline - firstBaseline);
+					leaf.Node?.SetContentTopInset(baselinePad);
+				}
+
 				node.MeasureFunction = (_, availableWidth, widthMode, availableHeight, heightMode) =>
 				{
 					var w = Resolve(availableWidth, widthMode);
 					var h = Resolve(availableHeight, heightMode);
 					var size = leaf.Node?.Measure(w, h) ?? Size.Zero;
-					return new YogaSize((float)size.Width, (float)size.Height);
+					return new YogaSize((float)size.Width, (float)size.Height + baselinePad);
 				};
 
 				// Baseline-aligned text: report the node's first-baseline offset so Yoga can line up

@@ -57,12 +57,14 @@ namespace CometSamples.Jetchat
 							new Image(d.Photo).FillHorizontal().AspectRatio(1).FlexShrink(0)
 								.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
 
-							// Name + position.
+							// Name + position (NameAndPosition): each text baseline-anchored — the name's
+							// first baseline 32dp from its top, the position's 24dp, +20dp below.
 							new VStack(spacing: 0f)
 							{
-								new Text(d.Name).Color(T.OnSurface).HeadlineSmall(),
-								new Text(d.Position).Color(T.OnSurfaceVariant).BodyLarge(),
-							}.Padding(new Thickness(16, 8, 16, 20)),
+								new Text(d.Name).Color(T.OnSurface).HeadlineSmall().BaselineHeight(32),
+								new Text(d.Position).Color(T.OnSurfaceVariant).BodyLarge()
+									.BaselineHeight(24).Margin(bottom: 20),
+							}.Padding(new Thickness(16, 8, 16, 0)),
 
 							// Property rows, each preceded by a divider; Twitter is a primary-colored link.
 							Property("Display name", d.DisplayName, isLink: false),
@@ -81,12 +83,14 @@ namespace CometSamples.Jetchat
 			};
 		}
 
+		// ProfileProperty: a divider, then the label and value, each baseline-anchored 24dp from the
+		// top of its box (Jetchat's baselineHeight). Column padding: 16 start/end, 16 bottom.
 		static View Property(string label, string value, bool isLink) => new VStack(spacing: 0f)
 		{
 			Divider(),
-			new Text(label).Color(T.OnSurfaceVariant).BodySmall().Padding(new Thickness(0, 12, 0, 0)),
-			new Text(value).Color(isLink ? T.Primary : T.OnSurface).BodyLarge(),
-		}.Padding(new Thickness(16, 0, 16, 12));
+			new Text(label).Color(T.OnSurfaceVariant).BodySmall().BaselineHeight(24),
+			new Text(value).Color(isLink ? T.Primary : T.OnSurface).BodyLarge().BaselineHeight(24),
+		}.Padding(new Thickness(16, 0, 16, 16));
 
 		static View Divider() => new HStack().Frame(height: 1).Background(T.Divider);
 
