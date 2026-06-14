@@ -1,6 +1,17 @@
 # Spec: Baseline alignment in the Comet layout engine
 
-Status: **Implemented on Android (Compose); iOS pending.** Created 2026-06-14.
+Status: **Implemented on Android, pixel-exact; iOS pending.** Created 2026-06-14.
+
+> **Update — exact baseline landed.** The cross-engine seam (below) was closed by measuring
+> through **Compose's own `TextMeasurer`** (`ComposeTextMeasure.FirstBaselineDp` →
+> `TextLayoutResult.firstBaseline`) with a `TextStyle` mirroring the rendered `Text` — one engine for
+> measure + render, the RN model. **No JNI bridge was needed**: `createFontFamilyResolver`, `Density`,
+> `TextMeasurer`, `Measure`, `TextLayoutResult.FirstBaseline`, and `ConstraintsKt.Constraints` are all
+> directly callable from the Xamarin binding. Exact by construction (logged Jetchat header baselines:
+> `John Glenn` 16sp = 15.636dp, `8:12 PM` 12sp = 10.909dp → engine drops the timestamp 4.727dp so both
+> land at 15.636dp). Gotchas: `Constraints` can't pack a large *finite* maxHeight next to a width — use
+> Compose's `Int.MaxValue` Infinity sentinel; and a screenshot ruler has a ~1px font-size bias, so
+> trust the logged layout values, not pixel-counting.
 
 ## Implementation notes (what shipped)
 - Public API: **`view.AlignBaseline()`** (env `Layout.BaselineAlign`), mirroring Compose's
