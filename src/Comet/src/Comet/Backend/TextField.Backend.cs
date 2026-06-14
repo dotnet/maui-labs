@@ -17,6 +17,20 @@ namespace Comet
 			var placeholder = Placeholder?.CurrentValue;
 			if (placeholder is not null)
 				node.ApplyProperty(PropertyIds.TextField_Placeholder, PropertyValue.From(placeholder));
+
+			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color?>(EnvironmentKeys.Colors.Color) is { } color)
+				node.ApplyProperty(PropertyIds.TextField_TextColor, PropertyValue.From(color));
+
+			if (this.GetEnvironment<bool?>(this, "Comet.TextFieldBorderless", false) == true)
+				node.ApplyProperty(PropertyIds.TextField_Borderless, PropertyValue.From(true));
+		}
+
+		/// <summary>Renders this field with no Material container or indicator line (a foundation
+		/// <c>BasicTextField</c>) so it blends into its surroundings — e.g. a chat composer.</summary>
+		public TextField Borderless()
+		{
+			this.SetEnvironment("Comet.TextFieldBorderless", true, false);
+			return this;
 		}
 
 		protected internal override void OnBackendEvent<T>(Backend.EventId id, T payload)

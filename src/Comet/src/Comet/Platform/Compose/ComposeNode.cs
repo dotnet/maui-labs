@@ -63,6 +63,10 @@ namespace Comet.Platform.Compose
 		/// subclass clip a hosted native View to the same outline Compose would (e.g. ImageView).</summary>
 		protected float CornerRadiusDp => (float)_corners.TopLeft;
 
+		/// <summary>The Comet padding (Dp). The Yoga engine doesn't inset leaf content, so a leaf
+		/// that needs interior padding (e.g. a borderless text field) applies this itself.</summary>
+		protected Microsoft.Maui.Thickness Padding => _padding;
+
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------

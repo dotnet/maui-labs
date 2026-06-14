@@ -383,6 +383,14 @@ using AndroidX.Compose;
     "keyboardOptions", "keyboardActions", "singleLine", "maxLines", "minLines",
     "interactionSource", "shape", "colors")]
 
+// androidx.compose.foundation.text.BasicTextFieldKt.BasicTextField (String overload): 16 user
+// params, bit 0 = value, bit 1 = onValueChange (both provided through value/callback).
+[assembly: ComposeDefaults("BasicTextFieldDefault",
+    "!value", "!onValueChange", "modifier", "enabled", "readOnly",
+    "textStyle", "keyboardOptions", "keyboardActions", "singleLine", "maxLines",
+    "minLines", "visualTransformation", "onTextLayout", "interactionSource", "cursorBrush",
+    "decorationBox")]
+
 // androidx.compose.material3.SecureTextFieldKt.SecureTextField-XvU6IwQ AND
 // OutlinedSecureTextField-XvU6IwQ: 23 user params, bit 0 = state (always
 // provided through the SecureTextFieldState wrapper). Two enums (one per

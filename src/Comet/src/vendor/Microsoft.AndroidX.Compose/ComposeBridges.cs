@@ -823,6 +823,37 @@ internal static partial class ComposeBridges
         Shape? shape,
         IComposer composer);
 
+    // androidx.compose.foundation.text.BasicTextFieldKt.BasicTextField (String overload) — the
+    // un-decorated text field (no Material container or indicator line), used for a borderless
+    // input that blends into its surroundings. We expose only value/onValueChange/modifier/
+    // textStyle/singleLine; everything else (cursorBrush, decorationBox, keyboard*,
+    // interactionSource, …) keeps its Kotlin default. 16 user params → III tail (two $changed + one
+    // $default mask).
+    const string BasicTextFieldStringSig =
+        "(Ljava/lang/String;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;ZZ" +
+        "Landroidx/compose/ui/text/TextStyle;" +
+        "Landroidx/compose/foundation/text/KeyboardOptions;" +
+        "Landroidx/compose/foundation/text/KeyboardActions;ZII" +
+        "Landroidx/compose/ui/text/input/VisualTransformation;" +
+        "Lkotlin/jvm/functions/Function1;" +
+        "Landroidx/compose/foundation/interaction/MutableInteractionSource;" +
+        "Landroidx/compose/ui/graphics/Brush;" +
+        "Lkotlin/jvm/functions/Function3;" +
+        "Landroidx/compose/runtime/Composer;III)V";
+
+    [ComposeBridge(
+        Class     = "androidx/compose/foundation/text/BasicTextFieldKt",
+        JvmName   = "BasicTextField",
+        Signature = BasicTextFieldStringSig,
+        Defaults  = typeof(BasicTextFieldDefault))]
+    public static partial void BasicTextField(
+        string value,
+        [Callback(typeof(string))] IFunction1 onValueChange,
+        IModifier? modifier,
+        AndroidX.Compose.UI.Text.TextStyle? textStyle,
+        bool? singleLine,
+        IComposer composer);
+
     // androidx.compose.material3.TextFieldKt.TextField (TextFieldValue
     // overload) and OutlinedTextFieldKt.OutlinedTextField (TextFieldValue
     // overload). Same 23 user-param shape as the String overload — bit

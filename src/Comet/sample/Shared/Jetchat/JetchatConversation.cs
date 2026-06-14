@@ -250,6 +250,7 @@ namespace CometSamples.Jetchat
 		static View UserInput(double bottomInset) => new VStack(spacing: 0f)
 		{
 			new TextField(new Comet.Reactive.Signal<string>(string.Empty), "Message #composers")
+				.Borderless().Color(OnSurface)
 				.Padding(new Thickness(20, 14, 20, 10)),
 			new HStack(spacing: 0f)
 			{
