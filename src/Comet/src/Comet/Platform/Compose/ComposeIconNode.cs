@@ -54,6 +54,7 @@ namespace Comet.Platform.Compose
 			"send" => Icons.AutoMirrored.Default.Send,
 			"place" or "location" => Icons.Filled.Place,
 			"person" => Icons.Filled.Person,
+			"people" => Icons.Filled.AccountCircle,   // jetchat logo stand-in (core set has no "groups")
 			"account" => Icons.Filled.AccountCircle,
 			"call" or "phone" => Icons.Filled.Call,
 			"email" or "mail" => Icons.Filled.Email,

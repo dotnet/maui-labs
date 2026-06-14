@@ -25,6 +25,11 @@ namespace Comet.Platform.Compose
 				_placeholder.Value = value.AsString ?? string.Empty;
 		}
 
+		// A Material TextField fills the available width and is ~56dp tall; give Yoga that intrinsic
+		// size so it doesn't collapse to zero height.
+		public override Size Measure(double widthConstraint, double heightConstraint)
+			=> new Size(double.IsInfinity(widthConstraint) ? 0 : widthConstraint, 56);
+
 		public override void Render(IComposer composer)
 		{
 			var field = new ComposeTextField(
@@ -35,6 +40,8 @@ namespace Comet.Platform.Compose
 			if (!string.IsNullOrEmpty(placeholder))
 				field.Placeholder = new AndroidX.Compose.Text(placeholder);
 
+			// Position + size the field from its Yoga frame so it doesn't render at the origin.
+			((ComposableNode)field).Modifier = BuildNodeModifier();
 			field.Render(composer);
 		}
 	}

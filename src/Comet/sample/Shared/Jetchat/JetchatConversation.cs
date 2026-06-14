@@ -28,6 +28,8 @@ namespace CometSamples.Jetchat
 		internal static readonly Color OnSurfaceVariant = Color.FromArgb("#45464F"); // BlueGrey30 — subtitle, timestamps, icons
 		internal static readonly Color Tertiary = Color.FromArgb("#7A5900");         // Yellow40 — others' avatar ring
 		internal static readonly Color Divider = Color.FromArgb("#1F191C1D");        // onSurface @ 12%
+		internal static readonly Color BarSurface = Color.FromArgb("#E7E9F8");       // tonal-elevated surface — header + footer
+		internal static readonly Color Disabled = Color.FromArgb("#C4C6D0");         // disabled outline/onSurface
 
 		internal const string AssetBase = "https://raw.githubusercontent.com/android/compose-samples/main/Jetchat/app/src/main/res/drawable-nodpi/";
 		internal const string AvatarMe = AssetBase + "ali.png";
@@ -75,29 +77,26 @@ namespace CometSamples.Jetchat
 			UserInput(bottomInset),
 		}.Background(Surface);
 
-		// ── Channel bar: ‹nav›  ⟨#composers / Members, 42⟩  ⌕  ⓘ ──
-		static View ChannelNameBar(double topInset) => new VStack(spacing: 0f)
+		// ── Channel bar: ‹people-logo⟩  ⟨#composers / 42 members⟩  ⌕  ⓘ ── (no bottom line; the
+		// background tint separates it from the body). 16dp edge margins; bold title.
+		static View ChannelNameBar(double topInset) => new HStack(spacing: 0f)
 		{
-			new HStack(spacing: 0f)
+			new Icon("people").Color(Primary).IconSize(24).Padding(new Thickness(16, 16, 8, 16))
+				.OnTap(_ => DrawerOpen.Value = true),   // jetchat logo → open the nav drawer
+			new VStack(spacing: 0f)
 			{
-				BarIcon("menu").OnTap(_ => DrawerOpen.Value = true),   // open the nav drawer
-				new VStack(spacing: 0f)
-				{
-					new Text("#composers").Color(OnSurface).FontSize(16).FontWeight(FontWeight.Medium)
-						.HorizontalLayoutAlignment(LayoutAlignment.Center),
-					new Text("Members, 42").Color(OnSurfaceVariant).FontSize(12)
-						.HorizontalLayoutAlignment(LayoutAlignment.Center),
-				}.FlexGrow(1),
-				BarIcon("search"),
-				BarIcon("info"),
-			}.Padding(new Thickness(4, topInset + 6, 4, 6)),
-
-			HLine(),
-		}.Background(Surface);
+				new Text("#composers").Color(OnSurface).FontSize(18).FontWeight(FontWeight.Bold)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center),
+				new Text("42 members").Color(OnSurfaceVariant).FontSize(12)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center),
+			}.FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
+			BarIcon("search"),
+			BarIcon("info"),
+		}.Padding(new Thickness(0, topInset + 4, 4, 14)).Background(BarSurface);
 
 		// A real Material Icon (ImageVector / SF Symbol), 24dp, tinted onSurfaceVariant.
 		static View BarIcon(string symbol) =>
-			new Icon(symbol).Color(OnSurfaceVariant).IconSize(24).Padding(new Thickness(12, 14, 12, 14));
+			new Icon(symbol).Color(OnSurfaceVariant).IconSize(24).Padding(new Thickness(12, 16, 12, 16));
 
 		// ── Message log ──
 		static View MessageLog()
@@ -122,15 +121,20 @@ namespace CometSamples.Jetchat
 		{
 			bool isMe = m.Author == "me";
 
-			// Left gutter: a 42dp avatar (with a tonal ring) on the group's top message; a 74dp
-			// spacer otherwise — so a run of messages by one author lines up under the avatar.
+			// Left gutter: a 42dp avatar (author ring + a surface "halo" gap around the photo) on
+			// the group's top message; a 74dp spacer otherwise — so a run of messages by one author
+			// lines up under the avatar. The 3px surface padding inside the ring is the halo.
 			View gutter = topOfGroup
 				? new VStack(spacing: 0f)
 					{
-						new Image(isMe ? AvatarMe : AvatarOther)
-							.Frame(width: 42, height: 42).CornerRadius(21)
-							.Border(2, isMe ? Primary : Tertiary),   // author ring (primary / tertiary)
-					}.Padding(new Thickness(16, 0, 16, 0))
+						new Image(isMe ? AvatarMe : AvatarOther).Frame(width: 36, height: 36).CornerRadius(18),
+					}
+						.Frame(width: 42, height: 42)
+						.Padding(new Thickness(3))
+						.Background(Surface)
+						.CornerRadius(21)
+						.Border(2, isMe ? Primary : Tertiary)
+						.Margin(left: 16, right: 16)
 				: new HStack().Frame(width: 74);
 
 			var column = new VStack(spacing: 0f);
@@ -177,35 +181,41 @@ namespace CometSamples.Jetchat
 			.CornerRadius(4, 20, 20, 20)
 			.HorizontalLayoutAlignment(LayoutAlignment.Start);
 
+		// Row of: rule — "Today" — rule, all vertically centered (the rule aligns to the text's
+		// middle). Text given full height + center alignment so it isn't cropped.
 		static View DayHeader(string day) => new HStack(spacing: 0f)
 		{
-			HLine().FlexGrow(1),
-			new Text(day).Color(OnSurfaceVariant).FontSize(11).FontWeight(FontWeight.Medium).Padding(new Thickness(16, 0, 16, 0)),
-			HLine().FlexGrow(1),
+			HLine().FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
+			new Text(day).Color(OnSurfaceVariant).FontSize(11).FontWeight(FontWeight.Medium)
+				.VerticalLayoutAlignment(LayoutAlignment.Center).Padding(new Thickness(16, 0, 16, 0)),
+			HLine().FlexGrow(1).VerticalLayoutAlignment(LayoutAlignment.Center),
 		}.Padding(new Thickness(16, 8, 16, 8));
 
-		// ── Bottom input bar ──
+		// ── Bottom input bar (same tint as the header; no top line). Row 1: a borderless,
+		// full-width text field. Row 2: the blue action icons spread evenly to a disabled Send. ──
 		static View UserInput(double bottomInset) => new VStack(spacing: 0f)
 		{
-			HLine(),
 			new TextField(new Comet.Reactive.Signal<string>(string.Empty), "Message #composers")
-				.Padding(new Thickness(16, 12, 16, 12)),
-			new HStack(spacing: 20f)
+				.Padding(new Thickness(20, 14, 20, 10)),
+			new HStack(spacing: 0f)
 			{
-				InputIcon("mood"),     // emoji
-				InputIcon("at"),       // dm
-				InputIcon("photo"),    // photos
-				InputIcon("place"),    // location
-				InputIcon("video"),    // video call
-				new HStack().FlexGrow(1),
-				// A real Material Button (filled), not a styled label.
-				new Button("Send", () => { }).VerticalLayoutAlignment(LayoutAlignment.Center),
-			}.Padding(new Thickness(16, 0, 16, 12 + bottomInset)),
-		}.Background(Surface);
+				InputIcon("mood"), Spacer(), InputIcon("at"), Spacer(), InputIcon("photo"),
+				Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
+				// Disabled Send: outlined, grey, no fill (until the field has text), per the sample.
+				new Text("Send").Color(Disabled).FontSize(14).FontWeight(FontWeight.Medium)
+					.Padding(new Thickness(20, 8, 20, 8))
+					.CornerRadius(18)
+					.Border(1, Disabled)
+					.VerticalLayoutAlignment(LayoutAlignment.Center),
+			}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
+		}.Background(BarSurface);
 
-		static View InputIcon(string symbol) => new Icon(symbol).Color(OnSurfaceVariant).IconSize(24);
+		static View InputIcon(string symbol) => new Icon(symbol).Color(Primary).IconSize(24)
+			.VerticalLayoutAlignment(LayoutAlignment.Center);
 
-		// A 1dp hairline in the divider color (used for the bar borders + day header rule).
+		static View Spacer() => new HStack().FlexGrow(1);
+
+		// A 1dp hairline in the divider color (used for the day header rule).
 		static View HLine() => new HStack().Frame(height: 1).Background(Divider);
 	}
 }

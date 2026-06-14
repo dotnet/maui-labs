@@ -102,9 +102,11 @@ namespace Comet.Platform.Compose
 			float used = 0f;
 			for (int i = 0; i < layout.LineCount; i++)
 				used = System.Math.Max(used, layout.GetLineWidth(i));
-			// Small margin absorbs sub-pixel differences between this Paint measurement and the
-			// composed Text's rendering (hinting/letter-spacing), so a one-line label never clips.
-			return new Size((System.Math.Ceiling(used) + 2) / density, layout.Height / density);
+			// Width: +2px absorbs hinting/letter-spacing differences so a one-line label never clips.
+			// Height: the composed Text uses MaterialTheme's bodyLarge line-height (~24sp for 16sp),
+			// taller than StaticLayout's default (~1.17×) — scale by ~1.28 so a multi-line bubble's
+			// frame is tall enough and the last line isn't clipped.
+			return new Size((System.Math.Ceiling(used) + 2) / density, (layout.Height * 1.28f + 2) / density);
 		}
 	}
 

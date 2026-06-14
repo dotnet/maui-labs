@@ -273,6 +273,7 @@ private func sfSymbol(_ name: String) -> String {
     case "send": return "paperplane.fill"
     case "place", "location": return "mappin"
     case "person": return "person.crop.circle"
+    case "people": return "person.2.fill"
     case "account": return "person.crop.circle.fill"
     case "call", "phone": return "phone.fill"
     case "email", "mail": return "envelope"
