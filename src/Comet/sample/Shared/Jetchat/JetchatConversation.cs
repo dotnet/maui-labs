@@ -43,18 +43,43 @@ namespace CometSamples.Jetchat
 
 		// FakeData.initialMessages is newest-first (the LazyColumn is reverseLayout); displayed
 		// top-to-bottom it is the reverse — oldest at top. Authored exactly as the sample.
-		static readonly List<Msg> Display = new()
+		static readonly List<Msg> Display = BuildDisplay();
+
+		static List<Msg> BuildDisplay()
 		{
-			new("John Glenn", "Yeah its seems to be pretty new!", "8:12 PM"),
-			new("Taylor Brooks", "Wow! I never knew about Glance Widgets when was this added to the android ecosystem", "8:10 PM"),
-			new("Shangeeth Sivan", "Does anyone know about Glance Widgets its the new way to build widgets in Android!", "8:08 PM"),
-			new("me", "Compose newbie: I’ve scourged the internet for tutorials about async data loading but haven’t found any good ones 🫠☁️. What’s the recommended way to load async data and emit composable widgets?", "8:03 PM"),
-			new("John Glenn", "Compose newbie as well 🦩, have you looked at the JetNews sample? Most blog posts end up out of date pretty fast but this sample is always up to date and deals with async data loading (it’s faked but the same idea applies) 👉 https://goo.gle/jetnews", "8:04 PM"),
-			new("Taylor Brooks", "@aliconors Take a look at the `Flow.collectAsStateWithLifecycle()` APIs", "8:05 PM"),
-			new("Taylor Brooks", "You can use all the same stuff", "8:05 PM"),
-			new("me", "Thank you!🥷", "8:06 PM", HasImage: true),
-			new("me", "Check it out!", "8:07 PM"),
-		};
+			var list = new List<Msg>
+			{
+				new("John Glenn", "Yeah its seems to be pretty new!", "8:12 PM"),
+				new("Taylor Brooks", "Wow! I never knew about Glance Widgets when was this added to the android ecosystem", "8:10 PM"),
+				new("Shangeeth Sivan", "Does anyone know about Glance Widgets its the new way to build widgets in Android!", "8:08 PM"),
+				new("me", "Compose newbie: I’ve scourged the internet for tutorials about async data loading but haven’t found any good ones 🫠☁️. What’s the recommended way to load async data and emit composable widgets?", "8:03 PM"),
+				new("John Glenn", "Compose newbie as well 🦩, have you looked at the JetNews sample? Most blog posts end up out of date pretty fast but this sample is always up to date and deals with async data loading (it’s faked but the same idea applies) 👉 https://goo.gle/jetnews", "8:04 PM"),
+				new("Taylor Brooks", "@aliconors Take a look at the `Flow.collectAsStateWithLifecycle()` APIs", "8:05 PM"),
+				new("Taylor Brooks", "You can use all the same stuff", "8:05 PM"),
+				new("me", "Thank you!🥷", "8:06 PM", HasImage: true),
+				new("me", "Check it out!", "8:07 PM"),
+			};
+
+			// ~100 extra messages so the LazyColumn actually virtualizes/recycles while scrolling.
+			// Varied authors + lengths (some wrap, some carry @mentions / `code` / links) so each row
+			// re-measures realistically rather than all being identical.
+			string[] authors = { "John Glenn", "Taylor Brooks", "Shangeeth Sivan", "me", "Ali Conors" };
+			string[] bodies =
+			{
+				"👍",
+				"Sounds good to me",
+				"A medium-length reply that wraps onto a second line on most phones for layout variety",
+				"@aliconors did you try the `rememberLazyListState()` API for scroll position?",
+				"Here's the doc with the full async-loading walkthrough 👉 https://goo.gle/jetnews",
+				"Longer one: virtualization means only the rows on screen are composed and measured, so a list of hundreds should scroll just as smoothly as a list of nine — that's the whole point of LazyColumn 🚀",
+				"`collectAsStateWithLifecycle()` is the move",
+				"Nice 🔥",
+			};
+			for (int i = 0; i < 100; i++)
+				list.Add(new Msg(authors[i % authors.Length], bodies[i % bodies.Length], $"7:{59 - i % 60:D2} PM"));
+
+			return list;
+		}
 
 		// Flattened rows for the message LazyColumn: the "Today" header plus each message tagged with
 		// its grouping (top-of-group shows the avatar + author; bottom-of-group gets extra spacing).
