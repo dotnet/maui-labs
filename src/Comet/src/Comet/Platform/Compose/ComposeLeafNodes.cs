@@ -51,10 +51,21 @@ namespace Comet.Platform.Compose
 		public override Size Measure(double widthConstraint, double heightConstraint)
 			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface());
 
-		// First-baseline offset (Dp) from the top of the measured box, matching where the composed
-		// Text draws the baseline inside the pinned LineHeight — so a baseline-aligned row lines up.
+		// First-baseline offset (Dp) measured by Compose's OWN layout (TextMeasurer), with a style that
+		// mirrors what Render sets — so the reported baseline equals the drawn baseline exactly (the
+		// React-Native single-engine model), not a StaticLayout estimate of a Compose render.
 		public override double? MeasureBaseline(double width, double height)
-			=> TextMeasure.FirstBaselineDp(_fontSize > 0 ? _fontSize : 16f, MeasureTypeface());
+		{
+			int sp = _fontSize > 0 ? _fontSize : 16;
+			var resolved = ComposeFontRegistry.Resolve(_fontFamily, _fontWeight);
+			// Mirror Render: a resolved custom family carries the weight (no FontWeight); otherwise
+			// apply the weight to the default family.
+			AndroidX.Compose.FontFamily? family = resolved?.Family;
+			AndroidX.Compose.FontWeight? weight = resolved is null && _fontWeight > 0 ? MapWeight(_fontWeight) : null;
+			return AndroidX.Compose.ComposeTextMeasure.FirstBaselineDp(
+				global::Android.App.Application.Context!, ComposeNode.Density, _text.Value,
+				new AndroidX.Compose.Sp(sp), family, weight, new AndroidX.Compose.Sp(TextMeasure.LineHeightSp(sp)), width);
+		}
 
 		// The typeface to measure with: the resolved custom font (which carries the weight), or the
 		// default font at the requested weight — so bold default-font text isn't measured at Regular
