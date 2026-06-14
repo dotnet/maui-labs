@@ -56,6 +56,27 @@ namespace CometSamples.Jetchat
 			new("me", "Check it out!", "8:07 PM"),
 		};
 
+		// Flattened rows for the message LazyColumn: the "Today" header plus each message tagged with
+		// its grouping (top-of-group shows the avatar + author; bottom-of-group gets extra spacing).
+		abstract record Row;
+		sealed record HeaderRow(string Day) : Row;
+		sealed record MsgRow(Msg M, bool TopOfGroup, double BottomSpace) : Row;
+
+		static readonly List<Row> Rows = BuildRows();
+
+		static List<Row> BuildRows()
+		{
+			var rows = new List<Row> { new HeaderRow("Today") };
+			for (int i = 0; i < Display.Count; i++)
+			{
+				var m = Display[i];
+				bool topOfGroup = i == 0 || Display[i - 1].Author != m.Author;       // avatar + name here
+				bool bottomOfGroup = i == Display.Count - 1 || Display[i + 1].Author != m.Author;
+				rows.Add(new MsgRow(m, topOfGroup, bottomOfGroup ? 8 : 4));
+			}
+			return rows;
+		}
+
 		/// <summary>Builds the conversation screen. <paramref name="topInset"/>/<paramref name="bottomInset"/>
 		/// are the platform safe-area insets (status bar / home indicator) in Dp.</summary>
 		internal static readonly Comet.Reactive.Signal<bool> DrawerOpen = new(false);
@@ -71,11 +92,8 @@ namespace CometSamples.Jetchat
 		{
 			ChannelNameBar(topInset),
 
-			// The message log scrolls between the fixed bars.
-			new ScrollView
-			{
-				MessageLog(),
-			}.FillVertical(),
+			// The message log (a LazyColumn) scrolls itself between the fixed bars.
+			MessageLog(),
 
 			UserInput(bottomInset),
 		}.Background(Surface);
@@ -117,24 +135,17 @@ namespace CometSamples.Jetchat
 			new Icon(symbol).Color(OnSurfaceVariant).IconSize(24)
 				.VerticalLayoutAlignment(LayoutAlignment.Center);
 
-		// ── Message log ──
-		static View MessageLog()
+		// ── Message log: a real virtualized LazyColumn (Comet ListView), exactly like the gold
+		// standard's Messages() — each row template is materialized only when it scrolls into view. ──
+		static View MessageLog() => new ListView<Row>(() => Rows)
 		{
-			var stack = new VStack(spacing: 0f)
+			ViewFor = r => r switch
 			{
-				DayHeader("Today"),
-			};
-
-			for (int i = 0; i < Display.Count; i++)
-			{
-				var m = Display[i];
-				bool topOfGroup = i == 0 || Display[i - 1].Author != m.Author;       // avatar + name here
-				bool bottomOfGroup = i == Display.Count - 1 || Display[i + 1].Author != m.Author;
-				stack.Add(MessageRow(m, topOfGroup, bottomOfGroup ? 8 : 4));
-			}
-
-			return stack;
-		}
+				HeaderRow h => DayHeader(h.Day),
+				MsgRow m => MessageRow(m.M, m.TopOfGroup, m.BottomSpace),
+				_ => new VStack(),
+			},
+		}.FillVertical();
 
 		static View MessageRow(Msg m, bool topOfGroup, double bottomSpace)
 		{
@@ -188,6 +199,7 @@ namespace CometSamples.Jetchat
 		{
 			new FormattedText(FormatMessage(content, isMe)).BodyLarge(),
 		}
+			.AsSurface()   // the gold standard draws the bubble with Surface(color, shape)
 			.Padding(new Thickness(16))
 			.Background(isMe ? Primary : SurfaceVariant)
 			.CornerRadius(JetchatTheme.BubbleTopStart, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther)
@@ -233,6 +245,7 @@ namespace CometSamples.Jetchat
 		}
 			.Background(isMe ? Primary : SurfaceVariant)
 			.CornerRadius(JetchatTheme.BubbleTopStart, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther)
+			.AsSurface()
 			.HorizontalLayoutAlignment(LayoutAlignment.Start);
 
 		// Row of: rule — "Today" — rule, all vertically centered (the rule aligns to the text's

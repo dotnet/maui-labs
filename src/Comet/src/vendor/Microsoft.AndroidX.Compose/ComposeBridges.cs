@@ -668,7 +668,7 @@ internal static partial class ComposeBridges
                     "Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V",
         Defaults  = typeof(SurfaceDefault))]
     [ComposeFacade]
-    public static partial void Surface(IModifier? modifier, Shape? shape, IFunction2 content, IComposer composer);
+    public static partial void Surface(IModifier? modifier, Shape? shape, Color? color, IFunction2 content, IComposer composer);
 
     // androidx.compose.foundation.ImageKt.Image (Painter overload) — all
     // four `Image` Kotlin overloads share the JVM name `Image`, so the

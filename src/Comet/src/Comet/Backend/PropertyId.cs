@@ -90,6 +90,7 @@ namespace Comet.Backend
 		// --- Stack layouts (128–143) ---
 		public static readonly PropertyId Stack_Orientation = new(128);
 		public static readonly PropertyId Stack_Spacing = new(129);
+		public static readonly PropertyId Container_Surface = new(130);
 
 		// --- Toggle / Switch (144–159) ---
 		public static readonly PropertyId Toggle_IsOn = new(144);

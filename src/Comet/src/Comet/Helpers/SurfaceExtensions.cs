@@ -48,5 +48,14 @@ namespace Comet
 		/// <c>Border</c> shape carrying the stroke.</summary>
 		public static T Border<T>(this T view, double width, Color color) where T : View =>
 			view.Border(new RoundedRectangle(0).Stroke(color, (float)width));
+
+		/// <summary>Renders this container as a Material <c>Surface</c> (its <c>.Background</c> color +
+		/// <c>.CornerRadius</c> shape) instead of a plain Box — matching the gold standard's
+		/// <c>Surface(color, shape)</c> chat bubble. A no-op on backends without a Surface widget.</summary>
+		public static T AsSurface<T>(this T view) where T : View
+		{
+			view.SetEnvironment("Comet.AsSurface", true, false);
+			return view;
+		}
 	}
 }

@@ -67,6 +67,10 @@ namespace Comet.Platform.Compose
 		/// that needs interior padding (e.g. a borderless text field) applies this itself.</summary>
 		protected Microsoft.Maui.Thickness Padding => _padding;
 
+		/// <summary>The background color set via <c>.Background()</c>, if any. Lets a container render
+		/// as a Material <c>Surface</c> (color + shape) rather than a plain Box.</summary>
+		protected Microsoft.Maui.Graphics.Color? Background => _background;
+
 		protected ICometEventSink? Sink => _sink;
 
 		// ICometBackendNode ----------------------------------------------------

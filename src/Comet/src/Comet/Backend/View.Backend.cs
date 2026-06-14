@@ -59,6 +59,11 @@ namespace Comet
 			if (this is IStackLayout stack)
 				node.ApplyProperty(PropertyIds.Stack_Spacing, PropertyValue.From(stack.Spacing));
 
+			// Opt-in: render this container as a Material Surface (color + shape) rather than a plain
+			// Box — used for chat bubbles, which the gold standard draws with Surface(color, shape).
+			if (this.GetEnvironment<bool?>(this, "Comet.AsSurface", false) == true)
+				node.ApplyProperty(PropertyIds.Container_Surface, PropertyValue.From(true));
+
 			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /
 			// Border), so .ClipShape/.Shadow/.RoundedBorder, ButtonStyles, ViewModifier and the
 			// .CornerRadius/.Elevation/.Border sugar all flow to the backend through one path.

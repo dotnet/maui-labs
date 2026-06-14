@@ -15,6 +15,7 @@ namespace Comet.Platform.Compose
 	{
 		readonly StackAxis _axis;
 		readonly MutableState<int> _spacing = new(0);
+		readonly MutableState<bool> _asSurface = new(false);
 
 		public ComposeStackNode(StackAxis axis) => _axis = axis;
 
@@ -22,11 +23,28 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.Stack_Spacing)
 				_spacing.Value = (int)value.AsDouble;
+			else if (id == PropertyIds.Container_Surface)
+				_asSurface.Value = value.AsBool;
 		}
 
 		public override void Render(IComposer composer)
 		{
 			int spacing = _spacing.Value;
+
+			// Opt-in: a real Material Surface (color + shape) — the widget the gold standard draws
+			// chat bubbles with. The Surface owns the fill + clip, so children sit inside it.
+			if (_asSurface.Value && Background is { } bgColor)
+			{
+				var surface = new AndroidX.Compose.Surface
+				{
+					Color = ToComposeColor(bgColor),
+					Shape = HasRoundedCorners ? CornerShape() : null,
+					Modifier = BuildNodeModifier(),
+				};
+				AddChildrenTo(surface);
+				((ComposableNode)surface).Render(composer);
+				return;
+			}
 
 			// When Yoga has arranged this stack, render a Box so children position themselves
 			// absolutely (each child carries its own offset+size); Yoga owns spacing/axis then.
