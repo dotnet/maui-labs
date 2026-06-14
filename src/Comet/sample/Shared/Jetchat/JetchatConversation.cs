@@ -106,13 +106,23 @@ namespace CometSamples.Jetchat
 		/// are the platform safe-area insets (status bar / home indicator) in Dp.</summary>
 		internal static readonly Comet.Reactive.Signal<bool> DrawerOpen = new(false);
 
-		/// <summary>The Jetchat sample: conversation behind the navigation drawer. (The profile
-		/// detail via <see cref="JetchatApp"/> is wired but blocked on root-Component body swap
-		/// support in the node backend — tapping a drawer profile currently just closes the drawer.)</summary>
-		public static View Build(double topInset = 24, double bottomInset = 0) =>
-			new Drawer(DrawerOpen, JetchatDrawer.Content(topInset), ConversationView(topInset, bottomInset));
+		/// <summary>The Jetchat sample, rooted in a real <see cref="NavigationView"/> (the C# port of
+		/// Jetchat's NavActivity nav graph): the conversation-behind-the-drawer is the root screen;
+		/// tapping a drawer profile closes the drawer and <c>Navigate</c>s the profile detail onto the
+		/// stack; the profile's back arrow <c>Pop</c>s it.</summary>
+		public static View Build(double topInset = 24, double bottomInset = 0)
+		{
+			var nav = new NavigationView();
+			void OpenProfile(string profileName)
+			{
+				DrawerOpen.Value = false;                                  // close the drawer …
+				nav.Navigate(JetchatProfile.Screen(profileName, topInset, bottomInset, () => nav.Pop())); // … and push the profile
+			}
+			nav.Content = new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, OpenProfile), ConversationView(topInset, bottomInset));
+			return nav;
+		}
 
-		/// <summary>The conversation screen (drawer content slot). Public for <see cref="JetchatApp"/>.</summary>
+		/// <summary>The conversation screen (the drawer's content slot / nav root screen).</summary>
 		internal static View ConversationView(double topInset, double bottomInset) => new VStack(spacing: 0f)
 		{
 			ChannelNameBar(topInset),

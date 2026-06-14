@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using Comet;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
@@ -8,50 +9,26 @@ using C = CometSamples.Jetchat.JetchatConversation;
 namespace CometSamples.Jetchat
 {
 	/// <summary>
-	/// Root of the Jetchat sample: an MVU <see cref="Component"/> that swaps between the
-	/// drawer-wrapped conversation and a profile detail screen (the C# port of Jetchat's
-	/// NavActivity nav graph). Tapping a profile in the drawer pushes the profile;
-	/// the back arrow pops it — a single reactive <see cref="SetState"/>.
+	/// The Jetchat profile detail screen (the C# port of <c>ProfileScreen.kt</c>): a back bar, a
+	/// full-width hero photo, the name + position, info sections, and a Message button. It's a real
+	/// navigation destination — pushed onto the <see cref="NavigationView"/> stack by a drawer
+	/// profile tap and popped by the back arrow / Message button.
 	/// </summary>
-	public sealed class JetchatApp : Component<JetchatApp.S>
+	static class JetchatProfile
 	{
-		public sealed class S { public string? Profile; }
-
-		readonly double _topInset, _bottomInset;
-
-		public JetchatApp(double topInset, double bottomInset)
-		{
-			_topInset = topInset;
-			_bottomInset = bottomInset;
-		}
-
-		public override View Render() =>
-			State.Profile is { } name
-				? Profile(name)
-				: new Drawer(C.DrawerOpen,
-					JetchatDrawer.Content(_topInset, OpenProfile),
-					C.ConversationView(_topInset, _bottomInset));
-
-		void OpenProfile(string name)
-		{
-			C.DrawerOpen.Value = false;
-			SetState(s => s.Profile = name);
-		}
-
-		// ── Profile detail (ProfileScreen.kt): back bar, big photo, name, position, sections ──
-		View Profile(string name)
+		public static View Screen(string name, double topInset, double bottomInset, Action onBack)
 		{
 			bool isMe = name == "Ali Conors";
 			var avatar = isMe ? C.AvatarMe : C.AvatarOther;
 
 			return new VStack(spacing: 0f)
 			{
-				// Top bar with a back arrow.
+				// Top bar with a back arrow that pops the navigation stack.
 				new HStack(spacing: 0f)
 				{
 					new Icon("back").Color(C.OnSurface).IconSize(24)
-						.Padding(new Thickness(12, _topInset + 8, 12, 8))
-						.OnTap(_ => SetState(s => s.Profile = null)),
+						.Padding(new Thickness(12, topInset + 8, 12, 8))
+						.OnTap(_ => onBack()),
 					new HStack().FlexGrow(1),
 				}.Background(C.Surface),
 
@@ -72,8 +49,8 @@ namespace CometSamples.Jetchat
 							Section("Timezone", "In your timezone"),
 
 							new HStack().Frame(height: 16),
-							new Button("Message", () => SetState(s => s.Profile = null)),
-						}.Padding(new Thickness(24, 16, 24, 24 + _bottomInset)),
+							new Button("Message", () => onBack()),
+						}.Padding(new Thickness(24, 16, 24, 24 + bottomInset)),
 					},
 				}.FillVertical(),
 			}.Background(C.Surface);

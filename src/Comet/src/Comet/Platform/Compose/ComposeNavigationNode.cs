@@ -19,6 +19,9 @@ namespace Comet.Platform.Compose
 		readonly NavigationView _nav;
 		readonly BackendContext _context;
 		readonly List<View> _stack = new();
+		// Each screen is materialized + laid out once and kept while it's on the stack, so pushing
+		// a screen doesn't re-materialize the ones beneath it (and popping back preserves their state).
+		readonly Dictionary<View, ComposableNode> _screens = new();
 		readonly MutableState<int> _version = new(0);
 
 		public ComposeNavigationNode(NavigationView nav, BackendContext context)
@@ -40,7 +43,9 @@ namespace Comet.Platform.Compose
 			{
 				if (_stack.Count > 1)
 				{
+					var popped = _stack[_stack.Count - 1];
 					_stack.RemoveAt(_stack.Count - 1);
+					_screens.Remove(popped);   // it's gone — don't keep it cached
 					_version.Value++;
 				}
 			});
@@ -55,7 +60,17 @@ namespace Comet.Platform.Compose
 				return;
 
 			var top = _stack[_stack.Count - 1];
-			((ComposableNode)CometBackendBridge.Materialize(top, _context)).Render(composer);
+			if (!_screens.TryGetValue(top, out var node))
+			{
+				// Materialize the screen, then lay it out full-screen with the Yoga engine (the
+				// pushed screen owns the whole viewport, just like the root did).
+				node = (ComposableNode)CometBackendBridge.Materialize(top, _context);
+				var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
+				CometBackendLayoutEngine.Layout(top, new Microsoft.Maui.Graphics.Size(
+					m.WidthPixels / ComposeNode.Density, m.HeightPixels / ComposeNode.Density));
+				_screens[top] = node;
+			}
+			node.Render(composer);
 		}
 	}
 }
