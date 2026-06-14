@@ -17,6 +17,10 @@ namespace Comet.Platform.Compose
 		float _size = 24f;
 		readonly MutableState<int> _iconVersion = new(0);
 
+		// Brand logos that ship their own colors — rendered as an Image (untinted) so
+		// painterResource preserves them. Every other bundled "ic_<symbol>" is tinted.
+		static readonly System.Collections.Generic.HashSet<string> MulticolorAssets = new() { "jetchat" };
+
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Icon_Symbol)
@@ -37,16 +41,28 @@ namespace Comet.Platform.Compose
 		{
 			_ = _iconVersion.Value;
 
-			// A bundled multicolor vector drawable named "ic_<symbol>" (e.g. ic_jetchat) renders as
-			// an Image (painterResource keeps its own colors); everything else is a tinted Material
-			// Icon from the ImageVector set.
+			// A bundled vector drawable named "ic_<symbol>" wins over the built-in ImageVector set,
+			// so apps can ship exact assets (e.g. Jetchat's own footer icons). Multicolor brand
+			// logos (jetchat) render as an Image so painterResource keeps their own colors;
+			// everything else renders through the tinted Material Icon (painter overload), so the
+			// requested .Color() recolors the glyph just like a built-in icon.
 			var ctx = global::Android.App.Application.Context;
 			int resId = ctx.Resources!.GetIdentifier("ic_" + _symbol.Value, "drawable", ctx.PackageName);
 			if (resId != 0)
 			{
-				var image = new AndroidX.Compose.Image(resId, _symbol.Value);
-				((ComposableNode)image).Modifier = BuildNodeModifier();
-				image.Render(composer);
+				if (MulticolorAssets.Contains(_symbol.Value))
+				{
+					var image = new AndroidX.Compose.Image(resId, _symbol.Value);
+					((ComposableNode)image).Modifier = BuildNodeModifier();
+					image.Render(composer);
+					return;
+				}
+
+				var bundled = new ComposeIcon(resId, _symbol.Value);
+				if (_tint is { } bt)
+					bundled.Tint = ToComposeColor(bt);
+				((ComposableNode)bundled).Modifier = BuildNodeModifier();
+				bundled.Render(composer);
 				return;
 			}
 
