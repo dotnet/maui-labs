@@ -59,15 +59,22 @@ namespace Comet
 			if (this is IStackLayout stack)
 				node.ApplyProperty(PropertyIds.Stack_Spacing, PropertyValue.From(stack.Spacing));
 
-			// Surface styling (rounded corners + elevation) — the Material card / chat-bubble blocks.
-			if (this.GetEnvironment<CornerRadii?>(this, SurfaceExtensions.CornerRadiusKey, false) is { } corners && !corners.IsZero)
+			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /
+			// Border), so .ClipShape/.Shadow/.RoundedBorder, ButtonStyles, ViewModifier and the
+			// .CornerRadius/.Elevation/.Border sugar all flow to the backend through one path.
+			if (this.GetClipShape() is { } clip && ToCornerRadii(clip) is { IsZero: false } corners)
 				node.ApplyProperty(PropertyIds.CornerRadius, PropertyValue.FromObject(corners));
 
-			if (this.GetEnvironment<double?>(this, SurfaceExtensions.ElevationKey, false) is { } elevation && elevation > 0)
-				node.ApplyProperty(PropertyIds.Shadow, PropertyValue.From(elevation));
+			if (this.GetShadow() is { } shadow && shadow.Radius > 0)
+				node.ApplyProperty(PropertyIds.Shadow, PropertyValue.From((double)shadow.Radius));
 
-			if (this.GetEnvironment<BorderSpec?>(this, SurfaceExtensions.BorderKey, false) is { } border && border.Width > 0)
-				node.ApplyProperty(PropertyIds.Border, PropertyValue.FromObject(border));
+			if (this.GetBorder() is { } borderShape)
+			{
+				var strokeWidth = borderShape.GetLineWidth(this, 0f);
+				var strokeColor = borderShape.GetStrokeColor(this, null!);
+				if (strokeWidth > 0 && strokeColor is not null)
+					node.ApplyProperty(PropertyIds.Border, PropertyValue.FromObject(new BorderSpec(strokeWidth, strokeColor)));
+			}
 
 			// Transforms — emit only when they differ from identity.
 			var t = (ITransform)this;
@@ -86,6 +93,15 @@ namespace Comet
 			if (HasTapGesture())
 				node.ApplyProperty(PropertyIds.HasTapGesture, PropertyValue.From(true));
 		}
+
+		// Parse a ClipShape into the per-corner radii the backend nodes consume. Only the rounded
+		// shapes carry corner data; any other shape clips but contributes no corner radius.
+		static CornerRadii? ToCornerRadii(Comet.Shape shape) => shape switch
+		{
+			RoundedRectangle rr => new CornerRadii(rr.CornerRadius),
+			AsymmetricRoundedRectangle ar => new CornerRadii(ar.TopLeft, ar.TopRight, ar.BottomRight, ar.BottomLeft),
+			_ => null,
+		};
 
 		bool HasTapGesture()
 		{

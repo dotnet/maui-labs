@@ -25,6 +25,9 @@ namespace Comet
 
 			if (this.GetEnvironment<Microsoft.Maui.FontWeight?>(EnvironmentKeys.Fonts.Weight) is { } weight)
 				node.ApplyProperty(PropertyIds.Text_FontWeight, PropertyValue.From((int)weight));
+
+			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
+				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(family));
 		}
 	}
 }
