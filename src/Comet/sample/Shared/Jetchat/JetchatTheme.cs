@@ -36,6 +36,9 @@ namespace CometSamples.Jetchat
 		public static readonly Color Background = Grey99;
 		public static readonly Color Tertiary = Yellow40;
 		public static readonly Color Outline = BlueGrey50;
+		// The profile FAB's tertiaryContainer (light pink in the sampled build) + its content color.
+		public static readonly Color TertiaryContainer = Color.FromArgb("#F8D8F0");
+		public static readonly Color OnTertiaryContainer = Color.FromArgb("#3A2A33");
 
 		// Surface at tonal elevation (the header/footer bars) + a 12% divider + disabled grey.
 		public static readonly Color SurfaceTinted = Color.FromArgb("#E7E9F8");
@@ -48,6 +51,7 @@ namespace CometSamples.Jetchat
 		const string Montserrat = "Montserrat";
 		const string Karla = "Karla";
 
+		public static T HeadlineSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 24);
 		public static T TitleLarge<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 22);
 		public static T TitleMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 16);
 		public static T BodyLarge<T>(this T v) where T : View => v.Type(Karla, FontWeight.Regular, 16);

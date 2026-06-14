@@ -4,6 +4,7 @@ using Comet.Layout;
 using Comet.Layout.Yoga;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Primitives;
 using YogaFlexDirection = Comet.Layout.Yoga.FlexDirection;
 using YogaFlexAlign = Comet.Layout.Yoga.FlexAlign;
 
@@ -73,16 +74,33 @@ namespace Comet.Backend
 
 			if (IsLayoutContainer(view))
 			{
+				bool isDepth = view is ZStack;
 				var direction = view is HStack ? YogaFlexDirection.Row : YogaFlexDirection.Column;
 				node.FlexDirection = direction;
 
-				// Comet's stack default alignment is Fill → flexbox stretch: children fill the
-				// cross axis, so a Text gets a definite width and wraps (grows in height) rather
-				// than measuring at single-line intrinsic width.
-				node.AlignItems = YogaFlexAlign.Stretch;
+				if (isDepth)
+				{
+					// ZStack → Compose Box: children overlap (z-order = child order, so a later
+					// child paints over an earlier one). Each child is absolutely positioned within
+					// this container, so its background/clickable cover its own arranged frame and
+					// the layers don't push each other in flow. The container is Relative so it forms
+					// the containing block for those absolute children (otherwise they'd escape to
+					// the root). Insetless children are centered by the container's justify/align;
+					// a child's Comet alignment becomes Yoga insets (see ApplyZStackOverlay).
+					node.PositionType = Comet.Layout.Yoga.FlexPositionType.Relative;
+					node.JustifyContent = Comet.Layout.Yoga.FlexJustify.Center;
+					node.AlignItems = YogaFlexAlign.Center;
+				}
+				else
+				{
+					// Comet's stack default alignment is Fill → flexbox stretch: children fill the
+					// cross axis, so a Text gets a definite width and wraps (grows in height) rather
+					// than measuring at single-line intrinsic width.
+					node.AlignItems = YogaFlexAlign.Stretch;
 
-				if (view is IStackLayout stack && stack.Spacing > 0)
-					node.SetGap(YogaGutter.All, (float)stack.Spacing);
+					if (view is IStackLayout stack && stack.Spacing > 0)
+						node.SetGap(YogaGutter.All, (float)stack.Spacing);
+				}
 
 				// Comet Padding insets children (Yoga container padding); the native .padding()
 				// is not applied in absolute mode, so the engine owns it.
@@ -94,7 +112,12 @@ namespace Comet.Backend
 
 				var children = ((IContainerView)view).GetChildren();
 				for (int i = 0; i < children.Count; i++)
-					node.InsertChild(Build(children[i], direction), node.ChildCount);
+				{
+					var childNode = Build(children[i], direction);
+					if (isDepth)
+						ApplyZStackOverlay(childNode, children[i], (ContainerView)view);
+					node.InsertChild(childNode, node.ChildCount);
+				}
 			}
 			else
 			{
@@ -117,6 +140,40 @@ namespace Comet.Backend
 			}
 
 			return node;
+		}
+
+		// Positions a ZStack child as a Compose Box layer: absolute, with its Comet alignment
+		// translated to Yoga insets so it overlaps the siblings rather than stacking in flow —
+		// Fill stretches edge-to-edge, Start/End pins to one edge, Center/unset defers to the
+		// container's centered justify/align. Insets win over justify/align in Yoga, so an
+		// edge-pinned overlay and a centered base layer coexist (e.g. a full-bleed background
+		// with a bottom-right FAB floating over it).
+		static void ApplyZStackOverlay(YogaNode child, View childView, ContainerView zstack)
+		{
+			child.PositionType = Comet.Layout.Yoga.FlexPositionType.Absolute;
+			ApplyOverlayInset(child, childView.GetHorizontalLayoutAlignment(zstack, LayoutAlignment.Center),
+				YogaEdge.Left, YogaEdge.Right);
+			ApplyOverlayInset(child, childView.GetVerticalLayoutAlignment(zstack, LayoutAlignment.Center),
+				YogaEdge.Top, YogaEdge.Bottom);
+		}
+
+		static void ApplyOverlayInset(YogaNode child, LayoutAlignment alignment, YogaEdge start, YogaEdge end)
+		{
+			switch (alignment)
+			{
+				case LayoutAlignment.Fill:   // both edges pinned → stretch to fill the container
+					child.SetPosition(start, YogaValue.Point(0));
+					child.SetPosition(end, YogaValue.Point(0));
+					break;
+				case LayoutAlignment.Start:
+					child.SetPosition(start, YogaValue.Point(0));
+					break;
+				case LayoutAlignment.End:
+					child.SetPosition(end, YogaValue.Point(0));
+					break;
+				// Center (and unset, which defaults to Center here): no inset — the container's
+				// Center justify/align positions the child.
+			}
 		}
 
 		static void Arrange(View view, YogaNode node)

@@ -4,62 +4,99 @@ using Comet;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Primitives;
+using T = CometSamples.Jetchat.JetchatTheme;
 using C = CometSamples.Jetchat.JetchatConversation;
 
 namespace CometSamples.Jetchat
 {
 	/// <summary>
-	/// The Jetchat profile detail screen (the C# port of <c>ProfileScreen.kt</c>): a back bar, a
-	/// full-width hero photo, the name + position, info sections, and a Message button. It's a real
-	/// navigation destination — pushed onto the <see cref="NavigationView"/> stack by a drawer
-	/// profile tap and popped by the back arrow / Message button.
+	/// The Jetchat profile detail screen — the C# port of <c>profile/Profile.kt</c>: a circular
+	/// avatar, the name (headlineSmall) + position (bodyLarge / onSurfaceVariant), a column of
+	/// <c>ProfileProperty</c> rows (each preceded by a divider; the Twitter value is a primary-colored
+	/// link), and a bottom-right tertiaryContainer FAB ("Message" for others, "Edit Profile" for me).
+	/// Pushed onto the <see cref="NavigationView"/> stack by a drawer profile tap; the FAB / back arrow pop.
 	/// </summary>
 	static class JetchatProfile
 	{
+		// ProfileScreenState (data/FakeData.kt): the "me" profile and the single colleague profile.
+		sealed record Data(string Photo, string Name, string Status, string DisplayName,
+			string Position, string Twitter, string TimeZone, bool IsMe);
+
+		static Data For(string name) => name == "Ali Conors"
+			? new Data(C.AvatarMe, "Ali Conors", "Online", "aliconors",
+				"Senior Android Dev at Yearin\nGoogle Developer Expert", "twitter.com/aliconors", "In your timezone", true)
+			: new Data(C.AvatarOther, "Taylor Brooks", "Away", "taylor",
+				"Senior Android Dev at Openlane", "twitter.com/taylorbrookscodes",
+				"12:25 AM local time (Eastern Daylight Time)", false);
+
 		public static View Screen(string name, double topInset, double bottomInset, Action onBack)
 		{
-			bool isMe = name == "Ali Conors";
-			var avatar = isMe ? C.AvatarMe : C.AvatarOther;
+			var d = For(name);
 
-			return new VStack(spacing: 0f)
+			// The gold standard is a Box: a full-bleed scrolling Column with a FloatingActionButton
+			// aligned BottomEnd, floating over the content. A ZStack reproduces that — the scroll is
+			// the base layer (fills), the FAB the overlay (pinned bottom-right, overlapping the scroll).
+			return new ZStack
 			{
-				// Top bar with a back arrow that pops the navigation stack.
-				new HStack(spacing: 0f)
+				new VStack(spacing: 0f)
 				{
-					new Icon("back").Color(C.OnSurface).IconSize(24)
-						.Padding(new Thickness(12, topInset + 8, 12, 8))
-						.OnTap(_ => onBack()),
-					new HStack().FlexGrow(1),
-				}.Background(C.Surface),
-
-				new ScrollView
-				{
-					new VStack(spacing: 0f)
+					// Back arrow (the app bar's navigation icon).
+					new HStack(spacing: 0f)
 					{
-						new Image(avatar).Frame(height: 320),  // full-width hero photo
-						new VStack(spacing: 6f)
+						new Icon("back").Color(T.OnSurface).IconSize(24)
+							.Margin(left: 8, top: (float)(topInset + 8)).OnTap(_ => onBack()),
+						new HStack().FlexGrow(1),
+					}.Background(T.Surface).Padding(new Thickness(0, 0, 0, 8)),
+
+					new ScrollView
+					{
+						new VStack(spacing: 0f)
 						{
-							new Text(name).Color(C.OnSurface).FontSize(24).FontWeight(FontWeight.Bold),
-							new Text("Senior Android Dev at Google").Color(C.OnSurfaceVariant).FontSize(14),
+							// Circular avatar: fillMaxWidth − 16dp each side, square (AspectRatio 1),
+							// clipped to a circle (a corner radius past 50% clamps to a circle in Compose).
+							new Image(d.Photo).FillHorizontal().AspectRatio(1).FlexShrink(0)
+								.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
 
-							new HStack().Frame(height: 12),
-							Section("Display name", name.Replace(" ", "").ToLowerInvariant()),
-							Section("Status", isMe ? "Away" : "Online"),
-							Section("Twitter", "@" + name.Replace(" ", "").ToLowerInvariant()),
-							Section("Timezone", "In your timezone"),
+							// Name + position.
+							new VStack(spacing: 0f)
+							{
+								new Text(d.Name).Color(T.OnSurface).HeadlineSmall(),
+								new Text(d.Position).Color(T.OnSurfaceVariant).BodyLarge(),
+							}.Padding(new Thickness(16, 8, 16, 20)),
 
-							new HStack().Frame(height: 16),
-							new Button("Message", () => onBack()),
-						}.Padding(new Thickness(24, 16, 24, 24 + bottomInset)),
-					},
-				}.FillVertical(),
-			}.Background(C.Surface);
+							// Property rows, each preceded by a divider; Twitter is a primary-colored link.
+							Property("Display name", d.DisplayName, isLink: false),
+							Property("Status", d.Status, isLink: false),
+							Property("Twitter", d.Twitter, isLink: true),
+							Property("Timezone", d.TimeZone, isLink: false),
+						},
+					}.FillVertical(),
+				}.FillHorizontal().FillVertical().Background(T.Surface),
+
+				// The FloatingActionButton, floating bottom-right over the scroll (the ZStack overlay).
+				Fab(d.IsMe ? "Edit Profile" : "Message", d.IsMe ? "create" : "chat", onBack)
+					.HorizontalLayoutAlignment(LayoutAlignment.End)
+					.VerticalLayoutAlignment(LayoutAlignment.End)
+					.Margin(right: 16, bottom: (float)(24 + bottomInset)),
+			};
 		}
 
-		static View Section(string label, string value) => new VStack(spacing: 2f)
+		static View Property(string label, string value, bool isLink) => new VStack(spacing: 0f)
 		{
-			new Text(label).Color(C.OnSurfaceVariant).FontSize(12).FontWeight(FontWeight.Medium),
-			new Text(value).Color(C.OnSurface).FontSize(16),
-		}.Padding(new Thickness(0, 12, 0, 0));
+			Divider(),
+			new Text(label).Color(T.OnSurfaceVariant).BodySmall().Padding(new Thickness(0, 12, 0, 0)),
+			new Text(value).Color(isLink ? T.Primary : T.OnSurface).BodyLarge(),
+		}.Padding(new Thickness(16, 0, 16, 12));
+
+		static View Divider() => new HStack().Frame(height: 1).Background(T.Divider);
+
+		// FloatingActionButton: a tertiaryContainer pill with an icon + label, popping the stack.
+		static View Fab(string text, string icon, Action onTap) => new HStack(spacing: 12f)
+		{
+			new Icon(icon).Color(T.OnTertiaryContainer).IconSize(20).VerticalLayoutAlignment(LayoutAlignment.Center),
+			new Text(text).Color(T.OnTertiaryContainer).LabelLarge().VerticalLayoutAlignment(LayoutAlignment.Center),
+		}
+			.Padding(new Thickness(20, 0, 20, 0)).Frame(height: 48)
+			.Background(T.TertiaryContainer).CornerRadius(16).OnTap(_ => onTap());
 	}
 }
