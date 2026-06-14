@@ -22,7 +22,7 @@ namespace CometSamples.Jetchat
 			// Header
 			new HStack(spacing: 12f)
 			{
-				new Icon("account").Color(C.Primary).IconSize(28),
+				new Icon("jetchat").Color(C.Primary).IconSize(28),
 				new Text("Jetchat").Color(C.Primary).TitleLarge()
 					.VerticalLayoutAlignment(LayoutAlignment.Center),
 			}.Padding(new Thickness(20, topInset + 12, 16, 16)),
