@@ -18,7 +18,10 @@ namespace CometSamples.Jetchat
 		static readonly Color Blue40 = Color.FromArgb("#1546F6");
 		static readonly Color Blue80 = Color.FromArgb("#B8C3FF");
 		static readonly Color Blue90 = Color.FromArgb("#DDE1FF");
+		static readonly Color DarkBlue40 = Color.FromArgb("#3648EA");
+		static readonly Color Yellow10 = Color.FromArgb("#261900");
 		static readonly Color Yellow40 = Color.FromArgb("#7A5900");
+		static readonly Color Yellow90 = Color.FromArgb("#FFDE9C");
 		static readonly Color Grey10 = Color.FromArgb("#191C1D");
 		static readonly Color Grey99 = Color.FromArgb("#FBFDFD");
 		static readonly Color BlueGrey30 = Color.FromArgb("#45464F");
@@ -29,6 +32,7 @@ namespace CometSamples.Jetchat
 		public static readonly Color Primary = Blue40;
 		public static readonly Color OnPrimary = Colors.White;
 		public static readonly Color PrimaryContainer = Blue90;
+		public static readonly Color Secondary = DarkBlue40;       // footer Surface contentColor
 		public static readonly Color Surface = Grey99;
 		public static readonly Color OnSurface = Grey10;
 		public static readonly Color SurfaceVariant = BlueGrey90;
@@ -36,12 +40,14 @@ namespace CometSamples.Jetchat
 		public static readonly Color Background = Grey99;
 		public static readonly Color Tertiary = Yellow40;
 		public static readonly Color Outline = BlueGrey50;
-		// The profile FAB's tertiaryContainer (light pink in the sampled build) + its content color.
-		public static readonly Color TertiaryContainer = Color.FromArgb("#F8D8F0");
-		public static readonly Color OnTertiaryContainer = Color.FromArgb("#3A2A33");
+		// The profile FAB roles (tertiaryContainer / onTertiaryContainer) — Themes.kt JetchatLightColorScheme.
+		public static readonly Color TertiaryContainer = Yellow90;   // #FFDE9C (was sampled pink #F8D8F0)
+		public static readonly Color OnTertiaryContainer = Yellow10; // #261900
 
-		// Surface at tonal elevation (the header/footer bars) + a 12% divider + disabled grey.
-		public static readonly Color SurfaceTinted = Color.FromArgb("#E7E9F8");
+		// The footer bar = Surface(tonalElevation = 2.dp): primary composited over surface at the M3
+		// 2dp overlay alpha (≈0.0694) = #EBF0FD. The HEADER (CenterAlignedTopAppBar) is plain Surface.
+		// TODO(T2): compute surfaceColorAtElevation at runtime from the active (dynamic) scheme.
+		public static readonly Color SurfaceTinted = Color.FromArgb("#EBF0FD");
 		public static readonly Color Divider = Color.FromArgb("#1F191C1D");
 		public static readonly Color Disabled = Color.FromArgb("#C4C6D0");
 

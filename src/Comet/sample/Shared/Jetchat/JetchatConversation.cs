@@ -23,6 +23,7 @@ namespace CometSamples.Jetchat
 		// these are local aliases so the screen reads tokens, not hardcoded hex.
 		internal static readonly Color Primary = JetchatTheme.Primary;
 		internal static readonly Color OnPrimary = JetchatTheme.OnPrimary;
+		internal static readonly Color Secondary = JetchatTheme.Secondary;
 		internal static readonly Color Surface = JetchatTheme.Surface;
 		internal static readonly Color OnSurface = JetchatTheme.OnSurface;
 		internal static readonly Color SurfaceVariant = JetchatTheme.SurfaceVariant;
@@ -163,7 +164,7 @@ namespace CometSamples.Jetchat
 				BarIcon("search").Margin(right: 20),
 				BarIcon("info"),
 			}.FlexGrow(1).FlexBasis(0),
-		}.Padding(new Thickness(16, topInset + 12, 16, 12)).Background(BarSurface);
+		}.Padding(new Thickness(16, topInset + 12, 16, 12)).Background(Surface);   // CenterAlignedTopAppBar = plain surface
 
 		// A real Material Icon (ImageVector / SF Symbol), 24dp, tinted onSurfaceVariant, centered.
 		static View BarIcon(string symbol) =>
@@ -317,7 +318,7 @@ namespace CometSamples.Jetchat
 			}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
 		}.Background(BarSurface);
 
-		static View InputIcon(string symbol) => new Icon(symbol).Color(Primary).IconSize(24)
+		static View InputIcon(string symbol) => new Icon(symbol).Color(Secondary).IconSize(24)
 			.VerticalLayoutAlignment(LayoutAlignment.Center);
 
 		static View Spacer() => new HStack().FlexGrow(1);
