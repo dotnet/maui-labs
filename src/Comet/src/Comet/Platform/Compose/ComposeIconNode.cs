@@ -36,6 +36,20 @@ namespace Comet.Platform.Compose
 		public override void Render(IComposer composer)
 		{
 			_ = _iconVersion.Value;
+
+			// A bundled multicolor vector drawable named "ic_<symbol>" (e.g. ic_jetchat) renders as
+			// an Image (painterResource keeps its own colors); everything else is a tinted Material
+			// Icon from the ImageVector set.
+			var ctx = global::Android.App.Application.Context;
+			int resId = ctx.Resources!.GetIdentifier("ic_" + _symbol.Value, "drawable", ctx.PackageName);
+			if (resId != 0)
+			{
+				var image = new AndroidX.Compose.Image(resId, _symbol.Value);
+				((ComposableNode)image).Modifier = BuildNodeModifier();
+				image.Render(composer);
+				return;
+			}
+
 			var icon = new ComposeIcon(Resolve(_symbol.Value), _symbol.Value);
 			if (_tint is { } t)
 				icon.Tint = ToComposeColor(t);

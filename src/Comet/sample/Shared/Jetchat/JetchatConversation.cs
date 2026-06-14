@@ -82,8 +82,8 @@ namespace CometSamples.Jetchat
 		// background tint separates it from the body). 16dp edge margins; bold title.
 		static View ChannelNameBar(double topInset) => new HStack(spacing: 0f)
 		{
-			new Icon("people").Color(Primary).IconSize(24).Padding(new Thickness(16, 16, 8, 16))
-				.OnTap(_ => DrawerOpen.Value = true),   // jetchat logo → open the nav drawer
+			new Icon("jetchat").Color(Primary).IconSize(28).Padding(new Thickness(16, 14, 8, 14))
+				.OnTap(_ => DrawerOpen.Value = true),   // the real jetchat logo → open the nav drawer
 			new VStack(spacing: 0f)
 			{
 				new Text("#composers").Color(OnSurface).TitleMedium()

@@ -280,6 +280,7 @@ private func sfSymbol(_ name: String) -> String {
     case "place", "location": return "mappin"
     case "person": return "person.crop.circle"
     case "people": return "person.2.fill"
+    case "jetchat": return "bubble.left.and.bubble.right.fill"   // logo stand-in (no bundled vector on iOS yet)
     case "account": return "person.crop.circle.fill"
     case "call", "phone": return "phone.fill"
     case "email", "mail": return "envelope"
