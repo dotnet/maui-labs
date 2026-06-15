@@ -278,7 +278,7 @@ struct CometLeafContent: View {
                     }
                 }
                 .clipped()
-            } else if let ui = UIImage(named: node.imageUrl) {
+            } else if let ui = bundledImage(node.imageUrl) {
                 Image(uiImage: ui).resizable().aspectRatio(contentMode: .fill).clipped()
             } else {
                 Color.gray.opacity(0.25)
@@ -289,6 +289,19 @@ struct CometLeafContent: View {
                 .modifier(FontModifier(node: node))
         }
     }
+}
+
+// A bundled image by bare name: the asset catalog / .png via UIImage(named:), else a loose
+// resource file (e.g. someone_else.jpg) found by trying common extensions in the main bundle.
+private func bundledImage(_ name: String) -> UIImage? {
+    if let img = UIImage(named: name) { return img }
+    for ext in ["png", "jpg", "jpeg"] {
+        if let path = Bundle.main.path(forResource: name, ofType: ext),
+           let img = UIImage(contentsOfFile: path) {
+            return img
+        }
+    }
+    return nil
 }
 
 // Cross-platform symbol name → SF Symbol (the iOS counterpart of the Compose Icons mapping).
@@ -480,6 +493,13 @@ struct CometNodeView: View {
         // NOT SwiftUI's center default — so any subtree not yet Yoga-arranged still aligns like Android
         // instead of centering. Spacing is 0 because Yoga owns gaps (the arranged path bakes them into
         // the child offsets); the native default 8pt would double them where the fallback is hit.
+        case "fab":
+            // A Material-FAB-shaped row (icon + label), centered in its frame; the node's frame
+            // positions + sizes it (from Yoga), and the CometNodeView modifiers add the capsule
+            // background + tap. Not a Yoga container (its icon/label aren't Yoga-arranged).
+            HStack(spacing: 8) { ForEach(node.children) { CometNodeView(node: $0) } }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, node.padding)
         case "hstack":
             HStack(alignment: .top, spacing: 0) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":

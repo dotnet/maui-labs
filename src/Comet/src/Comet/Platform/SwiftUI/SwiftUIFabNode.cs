@@ -7,12 +7,16 @@ using Microsoft.Maui.Graphics;
 namespace Comet.Platform.SwiftUI
 {
 	/// <summary>iOS has no Material FAB, so the native idiom for a floating action button is an
-	/// <c>HStack</c>(icon + label) with a capsule background and a tap — composed from native SwiftUI
-	/// primitives (not a styled cross-platform pill). This owns its content (icon + label) and styles
-	/// itself as the FAB. NOTE: pending on-device (simulator) verification — the Android side drives
-	/// the real Material <c>FloatingActionButton</c>.</summary>
+	/// icon + label row with a capsule background and a tap, composed from native SwiftUI primitives
+	/// (the "fab" shim kind). Owns its content; positions + sizes itself from the Yoga frame
+	/// (<see cref="Measure"/> reports the content's intrinsic size so the parent can corner-pin it,
+	/// <see cref="Arrange"/> pushes the frame down). Content colour is applied to the icon/label
+	/// directly since SwiftUI has no LocalContentColor inheritance from the capsule.</summary>
 	sealed class SwiftUIFabNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
 	{
+		// FAB content insets (matches the "fab" shim render: .padding(.horizontal, 16) + HStack spacing 8).
+		const double PadH = 16, Gap = 8;
+
 		readonly Fab _fab;
 		readonly BackendContext _context;
 		readonly CometNode _native;
@@ -24,7 +28,7 @@ namespace Comet.Platform.SwiftUI
 		{
 			_fab = fab;
 			_context = context;
-			_native = CometSwiftUIHost.MakeNode("hstack");
+			_native = CometSwiftUIHost.MakeNode("fab");
 			CometSwiftUIHost.SetTapHandler(_native, () => _sink?.OnEvent(EventIds.Clicked));
 			BuildContent();
 		}
@@ -39,13 +43,20 @@ namespace Comet.Platform.SwiftUI
 			if (_fab.ContainerColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 
-			// Capsule: corner radius = half the height; standard FAB content padding.
+			// The icon/label inherit the FAB content colour (no SwiftUI LocalContentColor): tint both.
+			if (_fab.ContentColor is { } fc)
+			{
+				CometSwiftUIHost.SetColor(icon.Native, "textcolor", ToArgb(fc));
+				CometSwiftUIHost.SetColor(label.Native, "textcolor", ToArgb(fc));
+			}
+
+			// Capsule: corner radius = half the height.
 			float r = (float)(_fab.Height / 2);
 			CometSwiftUIHost.SetDouble(_native, "corner.tl", r);
 			CometSwiftUIHost.SetDouble(_native, "corner.tr", r);
 			CometSwiftUIHost.SetDouble(_native, "corner.br", r);
 			CometSwiftUIHost.SetDouble(_native, "corner.bl", r);
-			CometSwiftUIHost.SetDouble(_native, "padding", 16);
+			CometSwiftUIHost.SetDouble(_native, "padding", PadH);
 		}
 
 		static uint ToArgb(Color c) =>
@@ -56,8 +67,19 @@ namespace Comet.Platform.SwiftUI
 		public void InsertChild(int index, ICometBackendNode child) { }
 		public void RemoveChildAt(int index) { }
 		public void MoveChild(int fromIndex, int toIndex) { }
-		public Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
-		public void Arrange(Rect frame) { }
+
+		// Intrinsic size for the parent's Yoga layout: the real content (icon/label measured via
+		// SwiftUI sizeThatFits) + the FAB's content insets. Height is the gold's pinned value.
+		public Size Measure(double widthConstraint, double heightConstraint)
+		{
+			var icon = CometBackendLayoutEngine.Measure(_fab.IconView);
+			var label = CometBackendLayoutEngine.Measure(_fab.LabelView);
+			return new Size(PadH * 2 + icon.Width + Gap + label.Width, _fab.Height);
+		}
+
+		public void Arrange(Rect frame) =>
+			CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
+
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 		public void Dispose() { }
 	}
