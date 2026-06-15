@@ -179,6 +179,23 @@ These are wrong *values* in `sample/Shared/Jetchat/JetchatTheme.cs`; the widgets
 
 ---
 
+## Parked (need framework infrastructure that isn't built yet)
+- **I1/I2/I3 — InputSelector state machine + expandable selector panel + emoji table.** The panel
+  appears below the input and swaps content by selector (EMOJI table / "not available" panel), with
+  the active icon highlighted. The icon highlight is reactive-property (doable), but the **panel's
+  appear/collapse + content-swap is a structural reactive change** — clean only via root-Component
+  structural re-render (**task #28**, still open) or a new conditional-content "expandable panel"
+  node (the AlertDialog/Drawer pattern: always in the tree, renders the active panel from a
+  MutableState). Parked to avoid a half-built unverifiable state unattended. The DM selector already
+  shows the real `NotAvailablePopup` (I4).
+- **P2 — parallax profile photo.** Needs a **ScrollView scroll-offset bridge** (the C1 pattern, but
+  for `ComposeScrollNode`'s `ScrollState.Value` → drive the photo's translation at half speed).
+  Buildable; parked as a lower-value flourish.
+- **I7 (advanced) — TextField caret/selection + IME action + insert-at-cursor.** Basic input + send +
+  clear works (I5); the advanced `TextFieldValue` selection/IME coordination is facade-deep and feeds
+  I1/I3 (insert emoji at cursor). Parked with I1.
+- **I6 — voice record (mic).** Long-press + drag + animated overlay. Largest input item; later.
+
 ## Out of scope (not a Comet in-app gap)
 - **"Add Widget to Home Page"** launches a **Glance home-screen App Widget** (`widget/`), an OS/launcher feature, not in-app UI. N/A for Comet UI parity.
 

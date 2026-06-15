@@ -52,9 +52,11 @@ namespace CometSamples.Jetchat
 					{
 						new VStack(spacing: 0f)
 						{
-							// Circular avatar: fillMaxWidth − 16dp each side, square (AspectRatio 1),
-							// clipped to a circle (a corner radius past 50% clamps to a circle in Compose).
-							new Image(d.Photo).FillHorizontal().AspectRatio(1).FlexShrink(0)
+							// Profile photo: fillMaxWidth − 16dp each side, a wide box capped near half the
+							// screen, ContentScale.Crop, clipped to an OVAL (ProfileHeader.kt:
+							// heightIn(max = containerHeight/2).fillMaxWidth().clip(CircleShape) — a circle
+							// clip on a non-square image renders as a horizontal ellipse, not a circle).
+							new Image(d.Photo).FillHorizontal().Frame(height: 240).FlexShrink(0)
 								.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
 
 							// Name + position (NameAndPosition): each text baseline-anchored — the name's
