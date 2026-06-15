@@ -30,6 +30,7 @@ import SwiftUI
     @Published var borderColorARGB: UInt32 = 0   // stroke color
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     @Published var drawerOpen: Bool = false     // Drawer: side panel shown
+    @Published var scrollToken: Int = 0          // List: bumped to animate the log to the newest row
     // AlertDialog (presented as a native SwiftUI .alert).
     @Published var dialogOpen: Bool = false
     @Published var dialogMessage: String = ""
@@ -112,6 +113,12 @@ import SwiftUI
         case "borderwidth": node.borderWidth = CGFloat(value)
         default: break
         }
+    }
+
+    // Animate a "list" node to its newest row (the ScrollViewReader observes scrollToken).
+    @objc(scrollNodeToBottom:)
+    public static func scrollToBottom(_ node: CometNode) {
+        node.scrollToken &+= 1
     }
 
     @objc(setTapHandler:handler:)
@@ -464,15 +471,26 @@ struct CometNodeView: View {
             .animation(.easeInOut(duration: 0.25), value: node.drawerOpen)
         case "list":
             // Full-bleed, separator-free rows so a Yoga-laid-out row (which already carries its
-            // own padding) spans edge-to-edge exactly like the Compose LazyColumn.
-            List {
-                ForEach(node.children) { child in
-                    CometNodeView(node: child)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
+            // own padding) spans edge-to-edge exactly like the Compose LazyColumn. Wrapped in a
+            // ScrollViewReader so C# can animate the log to the newest message (JumpToBottom /
+            // after-send) by bumping node.scrollToken — the native counterpart of the Compose
+            // LazyListState scroller (Comet's IListView.ScrollToBottom -> scrollNodeToBottom).
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(node.children) { child in
+                        CometNodeView(node: child)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .id(child.id)
+                    }
+                }
+                .listStyle(.plain)
+                .onChange(of: node.scrollToken) { _ in
+                    if let last = node.children.last {
+                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
                 }
             }
-            .listStyle(.plain)
         case "scroll":
             // The single content view is laid out (by Yoga) taller than the viewport and
             // self-positions, so a plain vertical ScrollView hosting it scrolls as one piece.

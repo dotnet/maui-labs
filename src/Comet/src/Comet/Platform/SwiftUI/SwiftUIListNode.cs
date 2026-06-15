@@ -29,6 +29,10 @@ namespace Comet.Platform.SwiftUI
 			_list = list;
 			_context = context;
 			_native = CometSwiftUIHost.MakeNode("list");
+
+			// Drive ScrollToBottom (JumpToBottom FAB / after-send) through the native
+			// ScrollViewReader — the iOS counterpart of the Compose LazyListState scroller.
+			_list.RegisterScroller(() => CometSwiftUIHost.ScrollToBottom(_native));
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)

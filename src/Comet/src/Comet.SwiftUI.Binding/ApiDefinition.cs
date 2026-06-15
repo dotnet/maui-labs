@@ -32,6 +32,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setDouble:property:value:")]
 		void SetDouble(CometNode node, string property, double value);
 
+		[Static, Export("scrollNodeToBottom:")]
+		void ScrollToBottom(CometNode node);
+
 		[Static, Export("setTapHandler:handler:")]
 		void SetTapHandler(CometNode node, Action handler);
 
