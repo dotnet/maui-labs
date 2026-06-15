@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Comet.Backend;
 using Comet.SwiftUI.Interop;
 using Microsoft.Maui.Graphics;
+using UIKit;
 
 namespace Comet.Platform.SwiftUI
 {
@@ -66,6 +67,12 @@ namespace Comet.Platform.SwiftUI
 			var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(top, _context, _nav);
 			CometSwiftUIHost.InsertChild(_native, 0, node.Native);
 			_shown = top;
+
+			// Lay the screen out full-screen with the shared Yoga engine (mirrors ComposeNavigationNode):
+			// without this the screen's whole subtree has no Yoga frame and falls back to native SwiftUI
+			// layout (which centers on the cross axis), instead of the Yoga-arranged absolute frames.
+			var b = UIScreen.MainScreen.Bounds;
+			CometBackendLayoutEngine.Layout(top, new Size(b.Width, b.Height));
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value) { }

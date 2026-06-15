@@ -476,12 +476,16 @@ struct CometNodeView: View {
                     set: { node.dialogOpen = $0; if !$0 { node.onDialogDismiss?() } })) {
                     Button(node.dialogButton, role: .cancel) {}
                 }
+        // Cross-axis alignment matches Yoga's flex-start default (and Compose's Row=Top / Column=Start),
+        // NOT SwiftUI's center default — so any subtree not yet Yoga-arranged still aligns like Android
+        // instead of centering. Spacing is 0 because Yoga owns gaps (the arranged path bakes them into
+        // the child offsets); the native default 8pt would double them where the fallback is hit.
         case "hstack":
-            HStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
+            HStack(alignment: .top, spacing: 0) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":
-            ZStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
+            ZStack(alignment: .topLeading) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "vstack":
-            VStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
+            VStack(alignment: .leading, spacing: 0) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         default:
             CometLeafContent(node: node)
         }
