@@ -605,6 +605,7 @@ internal static partial class ComposeBridges
     [ComposeFacade]
     public static partial void FloatingActionButton(IFunction0 onClick, IModifier? modifier,
                                                     Shape? shape,
+                                                    Color? containerColor, Color? contentColor,
                                                     IFunction2 content, IComposer composer);
 
     // androidx.compose.material3.FloatingActionButtonKt.SmallFloatingActionButton-X-z6DiA
@@ -657,6 +658,7 @@ internal static partial class ComposeBridges
         IModifier? modifier,
         bool       expanded,
         Shape?     shape,
+        Color?     containerColor, Color? contentColor,
         IComposer  composer);
 
     // androidx.compose.material3.SurfaceKt.Surface-T9BRK9s (non-interactive)

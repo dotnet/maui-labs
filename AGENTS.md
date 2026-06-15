@@ -106,13 +106,22 @@ pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
 - **Gold standard is local**: `~/work/compose-samples` (android/compose-samples —
   Jetchat/JetNews/Reply). Read the Kotlin directly; don't WebFetch GitHub.
 
-### Matching the gold standard (fidelity rules)
-The point of the Comet sample work is proving Comet drives the EXACT Jetpack
-Compose widget the sample uses — the sample is the proof, not the goal.
-- Before claiming a screen matches, open the actual Kotlin for that component and
-  enumerate every widget + modifier; match the widget (a `Button` is a Button,
-  not a styled `Text`) and reproduce real modifiers (e.g. `baselineHeight`),
-  not look-alikes.
+### Matching the gold standard (fidelity rules) — TOP PRIORITY
+The point of the Comet sample work is proving Comet drives the **EXACT native
+control** the sample uses — the real Jetpack Compose widget on Android AND the
+real native SwiftUI control on iOS. The sample is the proof, not the goal.
+**A styled look-alike is a DEFECT even when it looks and behaves identically.**
+- **Before building/claiming any control, open the gold `.kt` and read which
+  composable it actually uses** (`grep -n "<Control>" <component>.kt`), then drive
+  that exact widget — a `Button` is a `Button` (not a styled `Text`/`HStack`), a
+  FAB is a `FloatingActionButton`, a confirm is a `TextButton`. Don't assume which
+  control; VERIFY in source (the gold may hand-roll a row rather than use a Material
+  item — only the source tells you).
+- If the facade lacks the control or a needed param (e.g. FAB `containerColor`),
+  **EXTEND the facade** — that's the "fill out Comet" work, not a license to ship a
+  look-alike. Reproduce real modifiers too (`baselineHeight`, `clip(CircleShape)`).
+- **Same standard on iOS/SwiftUI** — drive the native SwiftUI control, never leave a
+  stub/placeholder where a native control exists.
 - Don't report "faithful / pixel-exact / done" without a side-by-side against the
   gold image; state what you verified and on which device.
 - Never assert an environment fact (device locked, network up, the cause of a
