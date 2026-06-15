@@ -122,16 +122,37 @@ namespace CometSamples.Jetchat
 		/// it over ANY destination — the conversation or a profile. Tapping a drawer profile closes the
 		/// drawer and <c>Navigate</c>s the profile detail onto the stack; the profile's Message FAB
 		/// <c>Pop</c>s it.</summary>
+		// The drawer's current destination (a channel key like "composers" or a profile name), so the
+		// drawer highlights the active item; "composers" is the initial channel.
+		static readonly Comet.Reactive.Signal<string> Selected = new("composers");
+		static string _lastChannel = "composers";
+
 		public static View Build(double topInset = 24, double bottomInset = 0)
 		{
 			var nav = new NavigationView();
+			int depth = 0;   // profiles currently pushed above the conversation
+
+			// A drawer channel tap: return to the messages view (pop any profiles) and mark it selected.
+			void SelectChannel(string name)
+			{
+				Selected.Value = name;
+				_lastChannel = name;
+				while (depth > 0) { nav.Pop(); depth--; }
+				DrawerOpen.Value = false;
+			}
+			// A drawer profile tap: mark it selected and push the profile detail (the Message FAB /
+			// back restores the last channel as the selection).
 			void OpenProfile(string profileName)
 			{
-				DrawerOpen.Value = false;                                  // close the drawer …
-				nav.Navigate(JetchatProfile.Screen(profileName, topInset, bottomInset, () => nav.Pop())); // … and push the profile
+				Selected.Value = profileName;
+				DrawerOpen.Value = false;
+				depth++;
+				nav.Navigate(JetchatProfile.Screen(profileName, topInset, bottomInset,
+					() => { nav.Pop(); depth--; Selected.Value = _lastChannel; }));
 			}
+
 			nav.Content = ConversationView(topInset, bottomInset);
-			return new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, OpenProfile), nav);
+			return new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, Selected, SelectChannel, OpenProfile), nav);
 		}
 
 		/// <summary>The conversation screen (the drawer's content slot / nav root screen).</summary>
