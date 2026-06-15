@@ -172,7 +172,7 @@ namespace CometSamples.Jetchat
 			// Left zone (flex): the jetchat logo at the start; the spacer balances the right zone.
 			new HStack(spacing: 0f)
 			{
-				new Icon("jetchat").Color(Primary).IconSize(28)
+				new Icon("jetchat").IconSize(28)   // multicolor brand logo (no tint → keeps its colors)
 					.VerticalLayoutAlignment(LayoutAlignment.Center)
 					.OnTap(_ => DrawerOpen.Value = true),   // tap the logo → open the nav drawer
 				Spacer(),

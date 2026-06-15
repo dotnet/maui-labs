@@ -34,9 +34,11 @@ Verified Pixel 5: fades in at top / on scroll-up, animates to bottom on tap, fad
 **Follow-up C1a:** the FAB is a styled Comet view (like the profile FAB); a real
 `ExtendedFloatingActionButton` *control* (Comet view → facade node) is deferred (same lift as the
 I-cluster "real widget" work). Box child `align`/`fillMaxSize` for the overlay handled by the existing
-ZStack engine path (no new unknowns). Follow-up (D1 color): the drawer chat-icon should be the jetchat
-logo TINTED monochrome (`onSurfaceVariant`/`primary`) — needs Icon force-tint of a multicolor asset
-(explicit `.Color()` on a multicolor asset → tinted Icon path, not the Image path).
+ZStack engine path (no new unknowns). ✅ Follow-up (D1 color) DONE: the drawer chat-icon is now the
+jetchat logo TINTED monochrome (`onSurfaceVariant`, or `primary` when selected). `ComposeIconNode`
+routes a multicolor asset through the tinted Icon path WHEN an explicit `.Color()` is set (else the
+untinted Image path keeps its colors), so the channel-bar logo stays multicolor (dropped its no-op
+`.Color`) while the drawer rows tint. Verified Pixel 5.
 
 **Reframing finding:** the captured screenshots are rose/maroon because Jetchat runs
 `JetchatTheme(isDynamicColor = true)` → `dynamicLightColorScheme(context)` (`theme/Themes.kt:91`),

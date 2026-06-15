@@ -48,7 +48,7 @@ namespace CometSamples.Jetchat
 		// one fills with the (dynamic) primaryContainer and tints its content primary.
 		static View ChatItem(string name, bool selected) => new HStack(spacing: 0f)
 		{
-			new Icon("jetchat").IconSize(24).FlexShrink(0)
+			new Icon("jetchat").Color(selected ? C.Primary : C.OnSurfaceVariant).IconSize(24).FlexShrink(0)
 				.Margin(left: 16, top: 16, bottom: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
 			new Text(name).Color(selected ? C.Primary : C.OnSurface).BodyMedium()
 				.VerticalLayoutAlignment(LayoutAlignment.Center).Margin(left: 12),

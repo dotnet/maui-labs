@@ -50,7 +50,10 @@ namespace Comet.Platform.Compose
 			int resId = ctx.Resources!.GetIdentifier("ic_" + _symbol.Value, "drawable", ctx.PackageName);
 			if (resId != 0)
 			{
-				if (MulticolorAssets.Contains(_symbol.Value))
+				// A multicolor brand logo renders as an Image to keep its own colors — UNLESS an
+				// explicit .Color() asks for a tint, in which case it routes through the tinted Icon
+				// path and renders monochrome (e.g. the drawer's chat-row logo, tinted onSurfaceVariant).
+				if (MulticolorAssets.Contains(_symbol.Value) && _tint is null)
 				{
 					var image = new AndroidX.Compose.Image(resId, _symbol.Value);
 					((ComposableNode)image).Modifier = BuildNodeModifier();
