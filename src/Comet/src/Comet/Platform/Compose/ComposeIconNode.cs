@@ -92,6 +92,7 @@ namespace Comet.Platform.Compose
 			"settings" => Icons.Filled.Settings,
 			"share" => Icons.Filled.Share,
 			"back" => Icons.AutoMirrored.Default.ArrowBack,
+			"arrow_down" or "arrow_downward" or "expand_more" => Icons.Filled.KeyboardArrowDown,
 			"add" => Icons.Filled.Add,
 			"edit" => Icons.Filled.Edit,
 			// Nearest-available stand-ins for Jetchat's extended footer icons:

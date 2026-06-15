@@ -21,6 +21,16 @@ namespace Comet
 		View FooterFor(int section);
 		bool ShouldDisposeViews { get; }
 		void OnSelected(int section, int index);
+
+		/// <summary>Node-backend scroll-state bridge (Compose <c>LazyColumn</c>). The backend node
+		/// writes <c>true</c> while the list is scrolled away from the bottom (more content below);
+		/// a view (e.g. a JumpToBottom button) reads it to show/hide reactively. No-op on the
+		/// classic MAUI handler path.</summary>
+		Comet.Reactive.Signal<bool> ScrolledAway { get; }
+
+		/// <summary>The backend node registers a delegate that animates the list to its end; calling
+		/// <see cref="ListView.ScrollToBottom"/> invokes it. Null until the node has rendered.</summary>
+		void RegisterScroller(System.Action scrollToBottom);
 	}
 
 	public class ListView<T> : ListView
@@ -161,6 +171,18 @@ namespace Comet
 		public View Footer { get; set; }
 
 		public Action<(object item,int section, int row)> ItemSelected { get; set; }
+
+		/// <summary>Reactive "scrolled away from the bottom" flag, driven by the node backend's
+		/// <c>LazyListState</c>. Bind a JumpToBottom affordance's visibility to this.</summary>
+		public Comet.Reactive.Signal<bool> ScrolledAway { get; } = new(false);
+
+		System.Action _scrollToBottom;
+
+		void IListView.RegisterScroller(System.Action scrollToBottom) => _scrollToBottom = scrollToBottom;
+
+		/// <summary>Animate the list to its end (newest message). No-op until the backend node has
+		/// rendered and registered its scroller.</summary>
+		public void ScrollToBottom() => _scrollToBottom?.Invoke();
 
 		protected virtual int GetSections() => 1;
 

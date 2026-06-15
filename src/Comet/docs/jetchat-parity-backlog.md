@@ -23,13 +23,20 @@ VISIBILITY** (show/hide the button from the signal without re-running the whole 
 conversation tree is static; needs a `.Visible(signal)`/opacity node property or AnimatedVisibility.
 That's the real capability C1 unblocks (and it generalizes).
 ✅ **D1 drawer structure** (`<commit>`): "Chats" + leading logo pills + "(you)" + Settings, verified.
-**C1 facade is fully verified/ready** (no facade change): `LazyListState.AnimateScrollToItemAsync`
-returns a `Task` (call straight from C#, no coroutine scope), `ExtendedFloatingActionButton` exists,
-`Modifier.Alpha` exists, Comet already emits `Opacity`/`IsVisible` (ComposeNode just needs to honor
-them → `.Alpha` + skip-clickable-when-0 = the reactive-visibility capability). Remaining C1 unknowns
-are minor: Box child `align`/`fillMaxSize` for the overlay. Follow-up (D1 color): the drawer chat-icon
-should be the jetchat logo TINTED monochrome (`onSurfaceVariant`/`primary`) — needs Icon force-tint of
-a multicolor asset (explicit `.Color()` on a multicolor asset → tinted Icon path, not the Image path).
+✅ **C1 scroll-state + reactive visibility** (`<this commit>`): `ComposeNode` now honors `Opacity`/
+`IsVisible` → `Modifier.Alpha` + skip-clickable-when-faded (the **reactive-visibility capability**);
+`View.Backend` emits `Opacity` whenever explicitly set (even =1) so a toggle back to default reaches
+the node. `IListView` gained a scroll bridge (`ScrolledAway` signal + `RegisterScroller`/`ScrollToBottom`);
+`ComposeListNode` remembers a `LazyListState`, reads `CanScrollForward` in composition (boundary-
+triggered) → marshals to `ScrolledAway`, and registers an `AnimateScrollToItemAsync(last)` scroller.
+The Jetchat **JumpToBottom** FAB binds its opacity to `ScrolledAway` and taps → `ScrollToBottom()`.
+Verified Pixel 5: fades in at top / on scroll-up, animates to bottom on tap, fades out at the bottom.
+**Follow-up C1a:** the FAB is a styled Comet view (like the profile FAB); a real
+`ExtendedFloatingActionButton` *control* (Comet view → facade node) is deferred (same lift as the
+I-cluster "real widget" work). Box child `align`/`fillMaxSize` for the overlay handled by the existing
+ZStack engine path (no new unknowns). Follow-up (D1 color): the drawer chat-icon should be the jetchat
+logo TINTED monochrome (`onSurfaceVariant`/`primary`) — needs Icon force-tint of a multicolor asset
+(explicit `.Color()` on a multicolor asset → tinted Icon path, not the Image path).
 
 **Reframing finding:** the captured screenshots are rose/maroon because Jetchat runs
 `JetchatTheme(isDynamicColor = true)` → `dynamicLightColorScheme(context)` (`theme/Themes.kt:91`),
@@ -83,7 +90,7 @@ These are wrong *values* in `sample/Shared/Jetchat/JetchatTheme.cs`; the widgets
 
 ## Conversation screen (`conversation/Conversation.kt`, `JumpToBottom.kt`)
 
-### C1 — Jump-to-bottom button  ⭐ (unlocks scroll-state capability)
+### C1 — Jump-to-bottom button  ✅ (unlocked the scroll-state + reactive-visibility capabilities)
 - **Source:** `JumpToBottom.kt` — `ExtendedFloatingActionButton`, icon `ic_arrow_downward` (height 18dp), text `R.string.jumpBottom` ("Jump to bottom"), `containerColor = surface`, `contentColor = primary`, height **36dp**, visibility via `updateTransition` + `animateDp` offset between **-32dp** (gone) and **32dp** (visible). Trigger: `firstVisibleItemIndex != 0 || firstVisibleItemScrollOffset > 56.dp` (`Conversation.kt:329–336`, `JumpToBottomThreshold = 56.dp:563`), `align(BottomCenter)`.
 - **Comet gap:** expose `LazyListState` (first-visible index/offset) + `scrollToItem(0)` from `ListView`/`ComposeListNode`, plus animated show/hide. Today our list has no scroll awareness.
 

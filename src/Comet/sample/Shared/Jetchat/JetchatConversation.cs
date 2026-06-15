@@ -126,15 +126,30 @@ namespace CometSamples.Jetchat
 		}
 
 		/// <summary>The conversation screen (the drawer's content slot / nav root screen).</summary>
-		internal static View ConversationView(double topInset, double bottomInset) => new VStack(spacing: 0f)
+		internal static View ConversationView(double topInset, double bottomInset)
 		{
-			ChannelNameBar(topInset),
+			var log = MessageLog();
 
-			// The message log (a LazyColumn) scrolls itself between the fixed bars.
-			MessageLog(),
+			return new VStack(spacing: 0f)
+			{
+				ChannelNameBar(topInset),
 
-			UserInput(bottomInset),
-		}.Background(Surface);
+				// The message log (a LazyColumn) scrolls itself between the fixed bars; the
+				// JumpToBottom FAB floats over its bottom-center (a ZStack overlay = Jetchat's
+				// Messages() Box), fading in only while the log is scrolled away from the newest
+				// message — the reactive-visibility + scroll-state capability (JumpToBottom.kt).
+				new ZStack
+				{
+					log.FillHorizontal().FillVertical(),
+					JumpToBottom(log)
+						.HorizontalLayoutAlignment(LayoutAlignment.Center)
+						.VerticalLayoutAlignment(LayoutAlignment.End)
+						.Margin(bottom: 16),
+				}.FillVertical(),
+
+				UserInput(bottomInset),
+			}.Background(Surface);
+		}
 
 		// ── Channel bar: ‹jetchat-logo⟩  ⟨#composers / 42 members⟩  ⌕  ⓘ ── (no bottom line; the
 		// background tint separates it from the body). Mirrors a CenterAlignedTopAppBar: equal-flex
@@ -175,7 +190,7 @@ namespace CometSamples.Jetchat
 
 		// ── Message log: a real virtualized LazyColumn (Comet ListView), exactly like the gold
 		// standard's Messages() — each row template is materialized only when it scrolls into view. ──
-		static View MessageLog() => new ListView<Row>(() => Rows)
+		static ListView<Row> MessageLog() => new ListView<Row>(() => Rows)
 		{
 			ViewFor = r => r switch
 			{
@@ -183,7 +198,32 @@ namespace CometSamples.Jetchat
 				MsgRow m => MessageRow(m.M, m.TopOfGroup, m.BottomSpace),
 				_ => new VStack(),
 			},
-		}.FillVertical();
+		};
+
+		// ── JumpToBottom (JumpToBottom.kt): an ExtendedFloatingActionButton — surface container,
+		// primary content, 36dp tall, a down-arrow + "Jump to bottom". Hidden until the log scrolls
+		// away from the newest message, then it fades in (reactive Opacity bound to the list's
+		// ScrolledAway signal); tapping animates the log to the bottom (LazyListState scroller).
+		// Styled as a Comet view here; a real ExtendedFloatingActionButton control is a follow-up. ──
+		static View JumpToBottom(ListView list)
+		{
+			var fab = new HStack(spacing: 8f)
+			{
+				new Icon("arrow_down").Color(Primary).IconSize(18).VerticalLayoutAlignment(LayoutAlignment.Center),
+				new Text("Jump to bottom").Color(Primary).LabelSmall().VerticalLayoutAlignment(LayoutAlignment.Center),
+			}
+				.Padding(new Thickness(16, 0, 16, 0)).Frame(height: 36)
+				.Background(Surface).CornerRadius(18).Elevation(6)
+				.Opacity(0)                                  // hidden until the log is scrolled away
+				.OnTap(_ => list.ScrollToBottom());
+
+			// Reactive show/hide: the backend node drives ScrolledAway from the LazyListState; mirror
+			// it onto the FAB's opacity (UpdateBackendNode re-emits Opacity → ComposeNode .Alpha).
+			list.ScrolledAway.PropertyChanged += (_, __) =>
+				fab.Opacity(list.ScrolledAway.Peek() ? 1.0 : 0.0);
+
+			return fab;
+		}
 
 		static View MessageRow(Msg m, bool topOfGroup, double bottomSpace)
 		{

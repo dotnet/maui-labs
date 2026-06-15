@@ -41,10 +41,13 @@ namespace Comet
 		/// </summary>
 		protected internal virtual void ApplyAllSetProperties(ICometBackendNode node)
 		{
-			// Visual
-			var opacity = this.GetOpacity();
-			if (opacity != 1d)
-				node.ApplyProperty(PropertyIds.Opacity, PropertyValue.From(opacity));
+			// Visual. Emit Opacity whenever it was *explicitly* set (env key present), even when it
+			// equals 1 — a reactive toggle back to 1 must still reach the node (the set-only patch
+			// would otherwise drop it and leave a faded node stuck). Views that never set opacity
+			// emit nothing, preserving the defaults-don't-cross contract.
+			var opacity = this.GetEnvironment<double?>(EnvironmentKeys.View.Opacity);
+			if (opacity is { } op)
+				node.ApplyProperty(PropertyIds.Opacity, PropertyValue.From(op));
 
 			if (!IsVisible)
 				node.ApplyProperty(PropertyIds.IsVisible, PropertyValue.From(false));

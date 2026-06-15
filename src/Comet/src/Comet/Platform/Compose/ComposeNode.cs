@@ -37,6 +37,11 @@ namespace Comet.Platform.Compose
 		float _elevation;
 		float _borderWidth;
 		Microsoft.Maui.Graphics.Color? _borderColor;
+		// Reactive visibility: opacity (1 = opaque) and IsVisible. A fully-transparent or
+		// invisible node fades out AND stops receiving taps, so a hidden overlay (e.g. the
+		// JumpToBottom FAB) doesn't intercept touches. Driven by a reactive property push.
+		float _opacity = 1f;
+		bool _isVisible = true;
 		readonly MutableState<int> _styleVersion = new(0);
 
 		// Yoga-driven layout (when the engine runs): parent-relative frame in Dp + a version
@@ -80,6 +85,16 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
+			else if (id == PropertyIds.Opacity)
+			{
+				_opacity = (float)value.AsDouble;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.IsVisible)
+			{
+				_isVisible = value.AsBool;
+				_styleVersion.Value++;
+			}
 			else if (id == PropertyIds.BackgroundColor)
 			{
 				_background = value.AsColor;
@@ -134,6 +149,12 @@ namespace Comet.Platform.Compose
 					.AbsoluteOffset(new Dp(_fx), new Dp(_fy))
 					.Size(new Dp(_fw), new Dp(_fh));
 
+			// Reactive visibility: fade the whole node (background + content) — applied early so
+			// everything painted below inherits the alpha. An invisible node collapses to alpha 0.
+			float alpha = _isVisible ? _opacity : 0f;
+			if (alpha < 1f)
+				m = (m ?? Modifier.Companion).Alpha(alpha);
+
 			// baselineHeight: inset the content down within the (already-grown) box so the text's
 			// first baseline lands at the requested offset. Applied after Size so it insets inside.
 			if (_contentTopInset > 0)
@@ -164,7 +185,8 @@ namespace Comet.Platform.Compose
 				m = (m is null ? Modifier.Companion : m)
 					.Padding((float)p.Left, (float)p.Top, (float)p.Right, (float)p.Bottom);
 
-			if (_hasTap.Value)
+			// Skip the clickable when faded out / invisible so a hidden overlay doesn't eat taps.
+			if (_hasTap.Value && alpha > 0f)
 			{
 				var clickable = Modifier.Clickable(() =>
 					Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default)));
