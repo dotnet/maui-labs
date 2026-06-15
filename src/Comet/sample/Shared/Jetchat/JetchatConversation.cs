@@ -234,25 +234,29 @@ namespace CometSamples.Jetchat
 			},
 		};
 
-		// ── JumpToBottom (JumpToBottom.kt): an ExtendedFloatingActionButton — surface container,
+		// ── JumpToBottom (JumpToBottom.kt): a real Material FloatingActionButton — surface container,
 		// primary content, 36dp tall, a down-arrow + "Jump to bottom". Hidden until the log scrolls
-		// away from the newest message, then it fades in (reactive Opacity bound to the list's
-		// ScrolledAway signal); tapping animates the log to the bottom (LazyListState scroller).
-		// Styled as a Comet view here; a real ExtendedFloatingActionButton control is a follow-up. ──
+		// away from the newest message (reactive Opacity bound to the list's ScrolledAway signal);
+		// tapping animates the log to the bottom (LazyListState scroller). The icon/label carry no
+		// colour so they inherit the FAB's primary content colour.
+		// NOTE: the gold uses ExtendedFloatingActionButton; the facade's ExtendedFAB renders its
+		// icon/text slots empty (a real facade bug, separate from the opacity gating — confirmed it
+		// stays empty even composed + visible). Drive the regular FloatingActionButton meanwhile
+		// (still a real Material FAB, not a styled pill); ExtendedFAB content is a facade follow-up. ──
 		static View JumpToBottom(ListView list)
 		{
-			var fab = new HStack(spacing: 8f)
-			{
-				new Icon("arrow_down").Color(Primary).IconSize(18).VerticalLayoutAlignment(LayoutAlignment.Center),
-				new Text("Jump to bottom").Color(Primary).LabelSmall().VerticalLayoutAlignment(LayoutAlignment.Center),
-			}
-				.Padding(new Thickness(16, 0, 16, 0)).Frame(height: 36)
-				.Background(Surface).CornerRadius(18).Elevation(6)
-				.Opacity(0)                                  // hidden until the log is scrolled away
-				.OnTap(_ => list.ScrollToBottom());
+			var fab = new Comet.Fab(
+				icon: new Icon("arrow_down").IconSize(18),
+				label: new Text("Jump to bottom").LabelSmall(),
+				onClick: () => list.ScrollToBottom(),
+				height: 36,
+				containerColor: Surface,
+				contentColor: Primary,
+				extended: false)
+				.Opacity(0);   // hidden until the log is scrolled away from the newest message
 
 			// Reactive show/hide: the backend node drives ScrolledAway from the LazyListState; mirror
-			// it onto the FAB's opacity (UpdateBackendNode re-emits Opacity → ComposeNode .Alpha).
+			// it onto the FAB's opacity (ComposeFabNode keeps it composed but pushes it off-screen).
 			list.ScrolledAway.PropertyChanged += (_, __) =>
 				fab.Opacity(list.ScrolledAway.Peek() ? 1.0 : 0.0);
 

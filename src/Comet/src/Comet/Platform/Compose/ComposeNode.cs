@@ -67,6 +67,17 @@ namespace Comet.Platform.Compose
 		protected float FrameX => _fx;
 		protected float FrameY => _fy;
 
+		/// <summary>For nodes that build their own modifier (bypassing <see cref="BuildNodeModifier"/>):
+		/// subscribe to style + frame changes so a reactive opacity/visibility/position update
+		/// recomposes, and return the effective alpha (<c>IsVisible ? Opacity : 0</c>). A fully
+		/// transparent node should not be rendered at all (so it doesn't intercept input).</summary>
+		protected float SubscribeAndGetAlpha()
+		{
+			_ = _styleVersion.Value;
+			_ = _frameVersion.Value;
+			return _isVisible ? _opacity : 0f;
+		}
+
 		/// <summary>True when a non-zero corner radius was set (so a subclass can apply
 		/// <see cref="CornerShape"/> to a composable that takes an explicit shape, e.g. a Button).</summary>
 		protected bool HasRoundedCorners => !_corners.IsZero;

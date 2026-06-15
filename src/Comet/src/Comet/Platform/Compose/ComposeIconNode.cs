@@ -41,6 +41,15 @@ namespace Comet.Platform.Compose
 		{
 			_ = _iconVersion.Value;
 
+			// Honor IconSize even when the engine hasn't given this node a frame (e.g. an icon inside a
+			// native control's slot — a FAB — which lays its own content out). With a frame, the size
+			// already comes from the frame; without one, pin it here so the glyph isn't the default 24dp.
+			Modifier IconModifier()
+			{
+				var m = BuildNodeModifier() ?? Modifier.Companion;
+				return HasFrame ? m : m.Size(new Dp(_size), new Dp(_size));
+			}
+
 			// A bundled vector drawable named "ic_<symbol>" wins over the built-in ImageVector set,
 			// so apps can ship exact assets (e.g. Jetchat's own footer icons). Multicolor brand
 			// logos (jetchat) render as an Image so painterResource keeps their own colors;
@@ -56,7 +65,7 @@ namespace Comet.Platform.Compose
 				if (MulticolorAssets.Contains(_symbol.Value) && _tint is null)
 				{
 					var image = new AndroidX.Compose.Image(resId, _symbol.Value);
-					((ComposableNode)image).Modifier = BuildNodeModifier();
+					((ComposableNode)image).Modifier = IconModifier();
 					image.Render(composer);
 					return;
 				}
@@ -64,7 +73,7 @@ namespace Comet.Platform.Compose
 				var bundled = new ComposeIcon(resId, _symbol.Value);
 				if (_tint is { } bt)
 					bundled.Tint = ToComposeColor(bt);
-				((ComposableNode)bundled).Modifier = BuildNodeModifier();
+				((ComposableNode)bundled).Modifier = IconModifier();
 				bundled.Render(composer);
 				return;
 			}
@@ -72,7 +81,7 @@ namespace Comet.Platform.Compose
 			var icon = new ComposeIcon(Resolve(_symbol.Value), _symbol.Value);
 			if (_tint is { } t)
 				icon.Tint = ToComposeColor(t);
-			((ComposableNode)icon).Modifier = BuildNodeModifier();
+			((ComposableNode)icon).Modifier = IconModifier();
 			icon.Render(composer);
 		}
 

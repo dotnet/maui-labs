@@ -21,7 +21,8 @@ namespace Comet.Platform.Compose
 
 		readonly Fab _fab;
 		readonly BackendContext _context;
-		ComposeNode? _icon, _label;
+		ComposeNode? _icon, _label;   // extended-FAB slots
+		ComposeNode? _content;        // regular-FAB content (a persistent icon+label row)
 		bool _built;
 
 		public ComposeFabNode(Fab fab, BackendContext context)
@@ -37,8 +38,18 @@ namespace Comet.Platform.Compose
 			if (_built)
 				return;
 			_built = true;
-			_icon = (ComposeNode)CometBackendBridge.Materialize(_fab.IconView, _context);
-			_label = (ComposeNode)CometBackendBridge.Materialize(_fab.LabelView, _context);
+			if (_fab.Extended)
+			{
+				_icon = (ComposeNode)CometBackendBridge.Materialize(_fab.IconView, _context);
+				_label = (ComposeNode)CometBackendBridge.Materialize(_fab.LabelView, _context);
+			}
+			else
+			{
+				// One persistent content node (an icon+label row) so it survives the FAB node
+				// recomposing for reactive visibility — recreating the content each render drops it.
+				var row = new HStack(spacing: Gap) { _fab.IconView, _fab.LabelView };
+				_content = (ComposeNode)CometBackendBridge.Materialize(row, _context);
+			}
 		}
 
 		// Intrinsic size for the parent's Yoga layout: the real content's measured width + the FAB's
@@ -57,16 +68,25 @@ namespace Comet.Platform.Compose
 		{
 			EnsureContent();
 
+			// Reactive visibility. Keep the FAB COMPOSED even when hidden — leaving/re-entering
+			// composition discards the slot content's state and it renders empty on return — so apply
+			// alpha instead, and push the hidden FAB off-screen so it doesn't intercept taps (mirrors
+			// the gold's offset slide). Subscribing here recomposes when Opacity/IsVisible flips.
+			float alpha = SubscribeAndGetAlpha();
+			float offsetY = alpha <= 0f ? FrameY + 2000f : FrameY;
+
 			// Position at the Yoga offset but let the FAB self-size its width (the native control
-			// measures its own content); pin only the gold's height.
-			var modifier = Modifier.Companion
-				.AbsoluteOffset(new Dp(FrameX), new Dp(FrameY))
-				.Height(new Dp((float)_fab.Height));
+			// measures its own content). Fade via Alpha when < 1.
+			var baseModifier = Modifier.Companion.AbsoluteOffset(new Dp(FrameX), new Dp(offsetY));
+			if (alpha < 1f)
+				baseModifier = baseModifier.Alpha(alpha);
 
 			void OnClick() => Sink?.OnEvent(EventIds.Clicked);
 
 			if (_fab.Extended)
 			{
+				// The extended FAB sizes its own content (Material won't fit it into a forced 36dp the
+				// way the gold's height-18 icon does), so don't pin the height — let it self-size.
 				var fab = new ExtendedFloatingActionButton(onClick: OnClick, expanded: true)
 				{
 					Icon = _icon!,
@@ -74,20 +94,18 @@ namespace Comet.Platform.Compose
 				};
 				if (_fab.ContainerColor is { } cc) fab.ContainerColor = ToComposeColor(cc);
 				if (_fab.ContentColor is { } fc) fab.ContentColor = ToComposeColor(fc);
-				((ComposableNode)fab).Modifier = modifier;
+				((ComposableNode)fab).Modifier = baseModifier;
 				fab.Render(composer);
 			}
 			else
 			{
-				var row = new Row(Arrangement.SpacedBy(new Dp(Gap)), AndroidX.Compose.Alignment.Vertical.CenterVertically);
-				row.Add(_icon!);
-				row.Add(_label!);
-
 				var fab = new FloatingActionButton(OnClick);
 				if (_fab.ContainerColor is { } cc) fab.ContainerColor = ToComposeColor(cc);
 				if (_fab.ContentColor is { } fc) fab.ContentColor = ToComposeColor(fc);
-				((ComposableNode)fab).Modifier = modifier.WidthIn(min: new Dp(MinWidth));
-				fab.Add(row);
+				((ComposableNode)fab).Modifier = baseModifier
+					.Height(new Dp((float)_fab.Height))
+					.WidthIn(min: new Dp(MinWidth));
+				fab.Add(_content!);
 				fab.Render(composer);
 			}
 		}
