@@ -112,5 +112,8 @@ namespace Comet.Backend
 
 		// --- Drawer (208–223) ---
 		public static readonly PropertyId Drawer_IsOpen = new(208);
+
+		// --- Dialog / AlertDialog (224–239) ---
+		public static readonly PropertyId Dialog_IsOpen = new(224);
 	}
 }

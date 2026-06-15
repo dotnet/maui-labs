@@ -109,6 +109,10 @@ namespace CometSamples.Jetchat
 		/// are the platform safe-area insets (status bar / home indicator) in Dp.</summary>
 		internal static readonly Comet.Reactive.Signal<bool> DrawerOpen = new(false);
 
+		// Drives the "Functionality not available 🙊" AlertDialog (Jetchat's NotAvailablePopup),
+		// opened from the DM ("@") input selector — exactly `InputSelector.DM -> NotAvailablePopup`.
+		static readonly Comet.Reactive.Signal<bool> NotAvailableOpen = new(false);
+
 		/// <summary>The Jetchat sample, rooted in a real <see cref="NavigationView"/> (the C# port of
 		/// Jetchat's NavActivity nav graph): the conversation-behind-the-drawer is the root screen;
 		/// tapping a drawer profile closes the drawer and <c>Navigate</c>s the profile detail onto the
@@ -145,6 +149,10 @@ namespace CometSamples.Jetchat
 						.HorizontalLayoutAlignment(LayoutAlignment.Center)
 						.VerticalLayoutAlignment(LayoutAlignment.End)
 						.Margin(bottom: 16),
+
+					// The NotAvailable popup lives here as a zero-size overlay; it's a real Material
+					// AlertDialog (its own window + scrim) that pops over everything when opened.
+					NotAvailablePopup(),
 				}.FillVertical(),
 
 				UserInput(bottomInset),
@@ -346,7 +354,9 @@ namespace CometSamples.Jetchat
 				.Padding(new Thickness(20, 14, 20, 10)),
 			new HStack(spacing: 0f)
 			{
-				InputIcon("mood"), Spacer(), InputIcon("at"), Spacer(), InputIcon("photo"),
+				InputIcon("mood"), Spacer(),
+				// The DM selector → "Functionality not available" popup (InputSelector.DM in the gold).
+				InputIcon("at", () => NotAvailableOpen.Value = true), Spacer(), InputIcon("photo"),
 				Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
 				// Disabled Send: a real Material OutlinedButton (bordered, no fill) with grey
 				// content — exactly the sample's disabled Send button, not a styled label.
@@ -360,8 +370,20 @@ namespace CometSamples.Jetchat
 			}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
 		}.Background(BarSurface);
 
-		static View InputIcon(string symbol) => new Icon(symbol).Color(Secondary).IconSize(24)
-			.VerticalLayoutAlignment(LayoutAlignment.Center);
+		static View InputIcon(string symbol, System.Action? onTap = null)
+		{
+			var icon = new Icon(symbol).Color(Secondary).IconSize(24)
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
+			return onTap is null ? icon : icon.OnTap(_ => onTap());
+		}
+
+		// ── NotAvailablePopup (UiExtras.kt FunctionalityNotAvailablePopup): a real Material
+		// AlertDialog — body text + a "CLOSE" confirm button — shown when the DM selector is picked.
+		// The CLOSE button and the scrim/back both clear the open signal. ──
+		static View NotAvailablePopup() => new AlertDialog(
+			NotAvailableOpen,
+			text: new Text("Functionality not available \U0001F648").Color(OnSurface).BodyMedium(),
+			confirmButton: new Button("CLOSE", () => NotAvailableOpen.Value = false).Color(Primary).LabelLarge());
 
 		static View Spacer() => new HStack().FlexGrow(1);
 

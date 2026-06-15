@@ -27,6 +27,12 @@ namespace Comet
 			=> new ComposeDrawerNode(this, context);
 	}
 
+	public partial class AlertDialog
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeAlertDialogNode(this, context);
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
