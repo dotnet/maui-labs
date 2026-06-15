@@ -74,6 +74,7 @@ jobs:
       (needs.pre_activation.outputs.activated == 'true') && (((github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch') &&
       github.repository_owner == 'dotnet') && ((github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)))
     runs-on: ubuntu-slim
+    environment: maui-labs
     permissions:
       contents: read
     outputs:
@@ -281,6 +282,7 @@ jobs:
   agent:
     needs: activation
     runs-on: ubuntu-latest
+    environment: maui-labs
     permissions:
       contents: read
       issues: read
@@ -962,6 +964,7 @@ jobs:
       - safe_outputs
     if: (always()) && (needs.agent.result != 'skipped')
     runs-on: ubuntu-slim
+    environment: maui-labs
     permissions:
       contents: read
       issues: write
@@ -1044,6 +1047,7 @@ jobs:
       ((github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch') && github.repository_owner == 'dotnet') &&
       ((github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id))
     runs-on: ubuntu-slim
+    environment: maui-labs
     outputs:
       activated: ${{ steps.check_membership.outputs.is_team_member == 'true' }}
       matched_command: ''
@@ -1069,6 +1073,7 @@ jobs:
     needs: agent
     if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (needs.agent.outputs.detection_success == 'true')
     runs-on: ubuntu-slim
+    environment: maui-labs
     permissions:
       contents: read
       issues: write
@@ -1128,4 +1133,3 @@ jobs:
           name: safe-output-items
           path: /tmp/safe-output-items.jsonl
           if-no-files-found: warn
-

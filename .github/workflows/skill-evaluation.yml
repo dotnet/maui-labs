@@ -147,6 +147,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
+    environment: maui-labs
     permissions:
       contents: read
       pull-requests: write
