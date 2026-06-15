@@ -30,10 +30,9 @@ namespace Comet
 
 	public partial class AlertDialog
 	{
-		// SwiftUI alert deferred (Android-first) — empty own-content placeholder so the shared
-		// tree still materializes on iOS without rendering the dialog's slots inline.
+		// Native SwiftUI .alert (the dialog's Text/ConfirmButton flatten to message + button label).
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
-			=> new SwiftUIAlertDialogNode();
+			=> new SwiftUIAlertDialogNode(this);
 	}
 
 	public partial class Fab

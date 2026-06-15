@@ -30,6 +30,10 @@ import SwiftUI
     @Published var borderColorARGB: UInt32 = 0   // stroke color
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     @Published var drawerOpen: Bool = false     // Drawer: side panel shown
+    // AlertDialog (presented as a native SwiftUI .alert).
+    @Published var dialogOpen: Bool = false
+    @Published var dialogMessage: String = ""
+    @Published var dialogButton: String = "OK"
     // Yoga-computed parent-relative layout frame. hasFrame flips true once C# arranges this
     // node; until then the view uses native SwiftUI layout (so rendering is unchanged).
     @Published var frame: CGRect = .zero
@@ -40,6 +44,7 @@ import SwiftUI
     var onChangeString: ((String) -> Void)?
     var onChangeBool: ((Bool) -> Void)?
     var onChangeDouble: ((Double) -> Void)?
+    var onDialogDismiss: (() -> Void)?  // native .alert dismissed (-> DialogDismissed)
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -65,6 +70,8 @@ import SwiftUI
         case "imageurl": node.imageUrl = value
         case "icon": node.iconName = value
         case "fontfamily": node.fontFamily = value
+        case "dialogmessage": node.dialogMessage = value
+        case "dialogbutton": node.dialogButton = value
         default: break
         }
     }
@@ -75,6 +82,7 @@ import SwiftUI
         case "ison": node.isOn = value
         case "hastapgesture": node.hasTapGesture = value
         case "draweropen": node.drawerOpen = value
+        case "dialogopen": node.dialogOpen = value
         default: break
         }
     }
@@ -129,6 +137,11 @@ import SwiftUI
     @objc(setDoubleChangeHandler:handler:)
     public static func setDoubleChangeHandler(_ node: CometNode, handler: @escaping @convention(block) (Double) -> Void) {
         node.onChangeDouble = handler
+    }
+
+    @objc(setDialogDismissHandler:handler:)
+    public static func setDialogDismissHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
+        node.onDialogDismiss = handler
     }
 
     @objc(insertChild:atIndex:child:)
@@ -254,14 +267,22 @@ struct CometLeafContent: View {
                 .font(.system(size: node.fontSize > 0 ? node.fontSize : 24))
                 .modifier(ForegroundModifier(argb: node.textColorARGB))
         case "image":
-            AsyncImage(url: URL(string: node.imageUrl)) { phase in
-                if let image = phase.image {
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    Color.gray.opacity(0.25)
+            // A bundled image (a bare name like "ali") renders from the app bundle — the iOS
+            // counterpart of Compose's painterResource; an http(s) source loads asynchronously.
+            if node.imageUrl.lowercased().hasPrefix("http") {
+                AsyncImage(url: URL(string: node.imageUrl)) { phase in
+                    if let image = phase.image {
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        Color.gray.opacity(0.25)
+                    }
                 }
+                .clipped()
+            } else if let ui = UIImage(named: node.imageUrl) {
+                Image(uiImage: ui).resizable().aspectRatio(contentMode: .fill).clipped()
+            } else {
+                Color.gray.opacity(0.25)
             }
-            .clipped()
         default: // "text" and unknown leaves
             Text(node.text)
                 .modifier(ForegroundModifier(argb: node.textColorARGB))
@@ -288,6 +309,7 @@ private func sfSymbol(_ name: String) -> String {
     case "settings": return "gearshape"
     case "share": return "square.and.arrow.up"
     case "back": return "chevron.left"
+    case "arrow_down", "arrow_downward", "expand_more": return "chevron.down"
     case "add": return "plus"
     case "edit": return "pencil"
     case "mood", "emoji": return "face.smiling"
@@ -444,6 +466,16 @@ struct CometNodeView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 ForEach(node.children) { CometNodeView(node: $0) }
             }
+        case "alert":
+            // Native SwiftUI .alert (the iOS counterpart of Compose's AlertDialog): a zero-size
+            // host that presents modally when C# opens the dialog; the button / scrim dismiss
+            // routes back to C# (DialogDismissed).
+            Color.clear.frame(width: 0, height: 0)
+                .alert(node.dialogMessage, isPresented: Binding(
+                    get: { node.dialogOpen },
+                    set: { node.dialogOpen = $0; if !$0 { node.onDialogDismiss?() } })) {
+                    Button(node.dialogButton, role: .cancel) {}
+                }
         case "hstack":
             HStack { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":

@@ -47,6 +47,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setDoubleChangeHandler:handler:")]
 		void SetDoubleChangeHandler(CometNode node, Action<double> handler);
 
+		[Static, Export("setDialogDismissHandler:handler:")]
+		void SetDialogDismissHandler(CometNode node, Action handler);
+
 		[Static, Export("insertChild:atIndex:child:")]
 		void InsertChild(CometNode node, nint index, CometNode child);
 
