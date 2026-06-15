@@ -269,7 +269,7 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
             displayName: {Product} - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -319,7 +319,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -343,7 +343,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
