@@ -378,15 +378,11 @@ namespace CometSamples.Jetchat
 		}
 
 		// ── NotAvailablePopup (UiExtras.kt FunctionalityNotAvailablePopup): a real Material
-		// AlertDialog — body text + a "CLOSE" confirm button — shown when the DM selector is picked.
-		// The CLOSE button and the scrim/back both clear the open signal.
-		// NOTE: the gold uses bodyMedium (Montserrat Medium), but the probe bundles a SINGLE
-		// Montserrat.ttf and synthesizes weights, so a synthesized 500 renders too thin/pale to read
-		// as the intended dark onSurface. SemiBold (labelLarge) synthesizes closer to the real
-		// Montserrat Medium weight, so the body text lands legibly dark. ──
+		// AlertDialog — bodyMedium text + a "CLOSE" confirm button — shown when the DM selector is
+		// picked. The CLOSE button and the scrim/back both clear the open signal. ──
 		static View NotAvailablePopup() => new AlertDialog(
 			NotAvailableOpen,
-			text: new Text("Functionality not available \U0001F648").Color(OnSurface).LabelLarge(),
+			text: new Text("Functionality not available \U0001F648").Color(OnSurface).BodyMedium(),
 			confirmButton: new Button("CLOSE", () => NotAvailableOpen.Value = false).Color(Primary).LabelLarge());
 
 		static View Spacer() => new HStack().FlexGrow(1);

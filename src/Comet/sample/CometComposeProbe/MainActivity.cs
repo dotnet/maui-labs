@@ -29,12 +29,19 @@ namespace CometComposeProbe
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
 
 			// Load Jetchat's real fonts (Montserrat titles/labels, Karla body) from bundled assets
-			// and register them so the Compose backend renders them (degrades to the default font
-			// if anything fails). Variable TTFs — weights are derived per use.
+			// and register them per weight so the Compose backend renders the true outlines. Jetchat
+			// ships distinct weight files; synthesizing weights from a single base TTF makes the
+			// intermediate weights (e.g. Montserrat Medium) render thin/pale, so register each.
 			try
 			{
-				ComposeFontRegistry.Register("Montserrat", Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/Montserrat.ttf"));
-				ComposeFontRegistry.Register("Karla", Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/Karla.ttf"));
+				Android.Graphics.Typeface Asset(string name) =>
+					Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/" + name);
+
+				ComposeFontRegistry.Register("Montserrat", 400, Asset("montserrat_regular.ttf"));
+				ComposeFontRegistry.Register("Montserrat", 500, Asset("montserrat_medium.ttf"));
+				ComposeFontRegistry.Register("Montserrat", 600, Asset("montserrat_semibold.ttf"));
+				ComposeFontRegistry.Register("Karla", 400, Asset("karla_regular.ttf"));
+				ComposeFontRegistry.Register("Karla", 700, Asset("karla_bold.ttf"));
 			}
 			catch (Exception ex)
 			{
