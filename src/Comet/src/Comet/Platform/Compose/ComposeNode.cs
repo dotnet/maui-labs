@@ -61,6 +61,12 @@ namespace Comet.Platform.Compose
 		/// nodes (list, scroll) use it to lay their own content out to the host's width.</summary>
 		protected float FrameWidth => _fw;
 
+		/// <summary>The Yoga-arranged parent-relative position in Dp (0 until arranged). A self-sizing
+		/// native control (e.g. a FAB overlay) positions itself at this offset WITHOUT applying the
+		/// Yoga size, so the real control measures + lays out its own content (Option C / overlays).</summary>
+		protected float FrameX => _fx;
+		protected float FrameY => _fy;
+
 		/// <summary>True when a non-zero corner radius was set (so a subclass can apply
 		/// <see cref="CornerShape"/> to a composable that takes an explicit shape, e.g. a Button).</summary>
 		protected bool HasRoundedCorners => !_corners.IsZero;

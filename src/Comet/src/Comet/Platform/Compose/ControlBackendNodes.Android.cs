@@ -33,6 +33,12 @@ namespace Comet
 			=> new ComposeAlertDialogNode(this, context);
 	}
 
+	public partial class Fab
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeFabNode(this, context);
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

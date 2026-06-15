@@ -80,8 +80,8 @@ namespace CometSamples.Jetchat
 					}.FillVertical(),
 				}.FillHorizontal().FillVertical().Background(T.Surface),
 
-				// The FloatingActionButton, floating bottom-right over the scroll (the ZStack overlay).
-				Fab(d.IsMe ? "Edit Profile" : "Message", d.IsMe ? "create" : "chat", onBack)
+				// The real Material FloatingActionButton, floating bottom-right over the scroll.
+				ProfileFab(d.IsMe ? "Edit Profile" : "Message", d.IsMe ? "create" : "chat", onBack)
 					.HorizontalLayoutAlignment(LayoutAlignment.End)
 					.VerticalLayoutAlignment(LayoutAlignment.End)
 					.Margin(right: 16, bottom: (float)(24 + bottomInset)),
@@ -99,13 +99,16 @@ namespace CometSamples.Jetchat
 
 		static View Divider() => new HStack().Frame(height: 1).Background(T.Divider);
 
-		// FloatingActionButton: a tertiaryContainer pill with an icon + label, popping the stack.
-		static View Fab(string text, string icon, Action onTap) => new HStack(spacing: 12f)
-		{
-			new Icon(icon).Color(T.OnTertiaryContainer).IconSize(20).VerticalLayoutAlignment(LayoutAlignment.Center),
-			new Text(text).Color(T.OnTertiaryContainer).LabelLarge().VerticalLayoutAlignment(LayoutAlignment.Center),
-		}
-			.Padding(new Thickness(20, 0, 20, 0)).Frame(height: 48)
-			.Background(T.TertiaryContainer).CornerRadius(16).OnTap(_ => onTap());
+		// The real Material 3 FloatingActionButton (Profile.kt ProfileFab): tertiaryContainer
+		// container, an icon + label, height 48. The icon/label carry no colour so they inherit the
+		// FAB's onTertiaryContainer content colour (LocalContentColor).
+		static View ProfileFab(string text, string icon, Action onTap) => new Comet.Fab(
+			icon: new Icon(icon).IconSize(24),
+			label: new Text(text).LabelLarge(),
+			onClick: onTap,
+			height: 48,
+			containerColor: T.TertiaryContainer,
+			contentColor: T.OnTertiaryContainer,
+			extended: false);
 	}
 }

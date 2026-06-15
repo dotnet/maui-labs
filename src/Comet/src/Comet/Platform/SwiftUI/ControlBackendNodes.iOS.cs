@@ -36,6 +36,13 @@ namespace Comet
 			=> new SwiftUIAlertDialogNode();
 	}
 
+	public partial class Fab
+	{
+		// Native SwiftUI composition (iOS has no Material FAB); pending simulator verification.
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIFabNode(this, context);
+	}
+
 	public partial class VStack
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

@@ -67,6 +67,21 @@ namespace Comet.Backend
 			return new Size(yoga.LayoutWidth, yoga.LayoutHeight);
 		}
 
+		/// <summary>Measures <paramref name="content"/>'s natural (unconstrained) size — both axes
+		/// wrap to the content. This is the intrinsic-size source for a composite NATIVE control that
+		/// sizes itself (a FAB, a chip): the engine measures the real Comet sub-tree (so text width
+		/// comes from the actual font/measure path, not an estimate), and the node adds the control's
+		/// documented insets. It does NOT arrange the content (no frames pushed) — the native control
+		/// lays its own content out; this only reports the size up to the parent's Yoga layout.</summary>
+		public static Size Measure(View content)
+		{
+			if (content is null) throw new ArgumentNullException(nameof(content));
+
+			var yoga = Build(content, YogaFlexDirection.Column);
+			yoga.CalculateLayout(float.NaN, float.NaN);   // NaN/NaN ⇒ both axes size to content
+			return new Size(yoga.LayoutWidth, yoga.LayoutHeight);
+		}
+
 		static YogaNode Build(View view, YogaFlexDirection parentDirection)
 		{
 			var node = new YogaNode();
