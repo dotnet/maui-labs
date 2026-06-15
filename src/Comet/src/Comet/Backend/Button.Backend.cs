@@ -22,6 +22,17 @@ namespace Comet
 			// filled reaches the node — the set-only patch would otherwise leave it stuck outlined.
 			if (this.GetEnvironment<bool?>(this, "Comet.ButtonOutlined", false) is { } outlined)
 				node.ApplyProperty(PropertyIds.Button_Outlined, PropertyValue.From(outlined));
+
+			if (this.GetEnvironment<bool?>(this, "Comet.ButtonTextButton", false) == true)
+				node.ApplyProperty(PropertyIds.Button_TextButton, PropertyValue.From(true));
+		}
+
+		/// <summary>Renders this button as a Material <c>TextButton</c> (no fill, no border — just the
+		/// label in the content color), the gold standard's dialog/confirm button style.</summary>
+		public Button TextButton()
+		{
+			this.SetEnvironment("Comet.ButtonTextButton", true, false);
+			return this;
 		}
 
 		/// <summary>Renders this button as a Material <c>OutlinedButton</c> (a bordered, no-fill

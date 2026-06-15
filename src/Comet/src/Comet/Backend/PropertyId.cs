@@ -74,6 +74,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Button_TextColor = new(81);
 		public static readonly PropertyId Button_FontSize = new(82);
 		public static readonly PropertyId Button_Outlined = new(83);
+		public static readonly PropertyId Button_TextButton = new(84);   // Material TextButton (no fill/border)
 
 		// --- TextField / Entry (96–111) ---
 		public static readonly PropertyId TextField_Text = new(96);

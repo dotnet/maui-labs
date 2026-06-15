@@ -438,7 +438,7 @@ namespace CometSamples.Jetchat
 		static View NotAvailablePopup() => new AlertDialog(
 			NotAvailableOpen,
 			text: new Text("Functionality not available \U0001F648").Color(OnSurface).BodyMedium(),
-			confirmButton: new Button("CLOSE", () => NotAvailableOpen.Value = false).Color(Primary).LabelLarge());
+			confirmButton: new Button("CLOSE", () => NotAvailableOpen.Value = false).TextButton().Color(Primary).LabelLarge());
 
 		static View Spacer() => new HStack().FlexGrow(1);
 

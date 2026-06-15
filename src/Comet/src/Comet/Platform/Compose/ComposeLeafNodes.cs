@@ -238,6 +238,7 @@ namespace Comet.Platform.Compose
 		readonly MutableState<string> _text = new(string.Empty);
 		Microsoft.Maui.Graphics.Color? _textColor;
 		bool _outlined;
+		bool _textButton;
 		readonly MutableState<int> _styleVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -252,6 +253,11 @@ namespace Comet.Platform.Compose
 			else if (id == PropertyIds.Button_Outlined)
 			{
 				_outlined = value.AsBool;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Button_TextButton)
+			{
+				_textButton = value.AsBool;
 				_styleVersion.Value++;
 			}
 		}
@@ -272,7 +278,22 @@ namespace Comet.Platform.Compose
 			var label = new ComposeText(_text.Value);
 			void OnClick() => Sink?.OnEvent(EventIds.Clicked);
 
-			if (_outlined)
+			if (_textButton)
+			{
+				// Material TextButton: no fill, no border — the gold's dialog/confirm button. The
+				// container is transparent (TextButton's default); .Color() drives the content color.
+				var button = new AndroidX.Compose.TextButton(OnClick);
+				if (_textColor is { } tc)
+					button.Colors = composer.ButtonColors(
+						containerColor: (long)ToComposeColor(Microsoft.Maui.Graphics.Colors.Transparent),
+						contentColor: (long)ToComposeColor(tc));
+				if (HasRoundedCorners)
+					button.Shape = CornerShape();
+				((ComposableNode)button).Modifier = BuildNodeModifier();
+				button.Add(label);
+				button.Render(composer);
+			}
+			else if (_outlined)
 			{
 				var button = new AndroidX.Compose.OutlinedButton(OnClick);
 				if (_textColor is { } tc)
