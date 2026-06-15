@@ -494,12 +494,18 @@ struct CometNodeView: View {
         // instead of centering. Spacing is 0 because Yoga owns gaps (the arranged path bakes them into
         // the child offsets); the native default 8pt would double them where the fallback is hit.
         case "fab":
-            // A Material-FAB-shaped row (icon + label), centered in its frame; the node's frame
-            // positions + sizes it (from Yoga), and the CometNodeView modifiers add the capsule
-            // background + tap. Not a Yoga container (its icon/label aren't Yoga-arranged).
-            HStack(spacing: 8) { ForEach(node.children) { CometNodeView(node: $0) } }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, node.padding)
+            // iOS has no Material FAB, so the native idiom is a real Button (so it raises the
+            // tap, gets the system press feedback, and reads as a button to accessibility) whose
+            // label is the icon + label row. The node's frame positions + sizes it (from Yoga);
+            // the CometNodeView modifiers add the capsule background. .plain keeps our styling.
+            Button(action: { node.onTap?() }) {
+                HStack(spacing: 8) { ForEach(node.children) { CometNodeView(node: $0) } }
+                    .fixedSize(horizontal: true, vertical: false)   // the label is single-line — never wrap it
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // center the row within the capsule frame
+                    .padding(.horizontal, node.padding)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         case "hstack":
             HStack(alignment: .top, spacing: 0) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "zstack":

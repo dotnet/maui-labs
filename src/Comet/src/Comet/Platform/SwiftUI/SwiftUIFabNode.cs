@@ -74,7 +74,10 @@ namespace Comet.Platform.SwiftUI
 		{
 			var icon = CometBackendLayoutEngine.Measure(_fab.IconView);
 			var label = CometBackendLayoutEngine.Measure(_fab.LabelView);
-			return new Size(PadH * 2 + icon.Width + Gap + label.Width, _fab.Height);
+			// Round the content width up: the shim renders the label single-line (.fixedSize), so any
+			// sub-pixel shortfall here would clip the last glyph against the capsule instead of wrapping.
+			var width = System.Math.Ceiling(PadH * 2 + icon.Width + Gap + label.Width);
+			return new Size(width, _fab.Height);
 		}
 
 		public void Arrange(Rect frame) =>
