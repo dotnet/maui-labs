@@ -113,6 +113,10 @@ namespace CometSamples.Jetchat
 		// opened from the DM ("@") input selector — exactly `InputSelector.DM -> NotAvailablePopup`.
 		static readonly Comet.Reactive.Signal<bool> NotAvailableOpen = new(false);
 
+		// The composer's text, two-way bound to the input field. The Send button reads it to toggle
+		// enabled/style, and a send appends a "me" message + clears it (UserInput.kt sendMessageEnabled).
+		static readonly Comet.Reactive.Signal<string> InputText = new(string.Empty);
+
 		/// <summary>The Jetchat sample, rooted in a real <see cref="NavigationView"/> (the C# port of
 		/// Jetchat's NavActivity nav graph): the conversation-behind-the-drawer is the root screen;
 		/// tapping a drawer profile closes the drawer and <c>Navigate</c>s the profile detail onto the
@@ -155,7 +159,7 @@ namespace CometSamples.Jetchat
 					NotAvailablePopup(),
 				}.FillVertical(),
 
-				UserInput(bottomInset),
+				UserInput(bottomInset, log),
 			}.Background(Surface);
 		}
 
@@ -346,29 +350,58 @@ namespace CometSamples.Jetchat
 		}.Padding(new Thickness(16, 8, 16, 8));
 
 		// ── Bottom input bar (same tint as the header; no top line). Row 1: a borderless,
-		// full-width text field. Row 2: the blue action icons spread evenly to a disabled Send. ──
-		static View UserInput(double bottomInset) => new VStack(spacing: 0f)
+		// full-width text field bound two-way to InputText. Row 2: the blue action icons spread
+		// evenly to a Send button that reacts to whether there's text (UserInput.kt). ──
+		static View UserInput(double bottomInset, ListView log)
 		{
-			new TextField(new Comet.Reactive.Signal<string>(string.Empty), "Message #composers")
-				.Borderless().Color(OnSurface)
-				.Padding(new Thickness(20, 14, 20, 10)),
-			new HStack(spacing: 0f)
+			// The Send button: empty → a bordered, grey OutlinedButton (the gold's disabled Send);
+			// once there's text → a filled primary Button. The style is flipped reactively from the
+			// InputText signal (mirrors `enabled = sendMessageEnabled`).
+			var send = new Button("Send", () => Send(log))
+				.LabelLarge().CornerRadius(18).Frame(height: 36)
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
+
+			void Restyle()
 			{
-				InputIcon("mood"), Spacer(),
-				// The DM selector → "Functionality not available" popup (InputSelector.DM in the gold).
-				InputIcon("at", () => NotAvailableOpen.Value = true), Spacer(), InputIcon("photo"),
-				Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
-				// Disabled Send: a real Material OutlinedButton (bordered, no fill) with grey
-				// content — exactly the sample's disabled Send button, not a styled label.
-				new Button("Send", () => { })
-					.Outlined()
-					.LabelLarge()
-					.Color(Disabled)
-					.CornerRadius(18)
-					.Frame(height: 36)
-					.VerticalLayoutAlignment(LayoutAlignment.Center),
-			}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
-		}.Background(BarSurface);
+				if (string.IsNullOrWhiteSpace(InputText.Peek()))
+					send.Outlined(true).Color(Disabled);     // empty → bordered, grey (disabled look)
+				else
+					send.Outlined(false).Color(OnPrimary);   // text present → filled primary
+			}
+			Restyle();
+			InputText.PropertyChanged += (_, __) => Restyle();
+
+			return new VStack(spacing: 0f)
+			{
+				SignalExtensions.TextField(InputText, "Message #composers")
+					.Borderless().Color(OnSurface)
+					.Padding(new Thickness(20, 14, 20, 10)),
+				new HStack(spacing: 0f)
+				{
+					InputIcon("mood"), Spacer(),
+					// The DM selector → "Functionality not available" popup (InputSelector.DM in the gold).
+					InputIcon("at", () => NotAvailableOpen.Value = true), Spacer(), InputIcon("photo"),
+					Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
+					send,
+				}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
+			}.Background(BarSurface);
+		}
+
+		// Append the composed text as a "me" message, clear the field, and scroll to the newest
+		// (the C1 LazyListState scroller). Mirrors UserInput.kt onMessageSent + resetScroll.
+		static void Send(ListView log)
+		{
+			var text = InputText.Peek();
+			if (string.IsNullOrWhiteSpace(text))
+				return;
+
+			bool topOfGroup = Rows.Count == 0 || Rows[Rows.Count - 1] is not MsgRow last || last.M.Author != "me";
+			Rows.Add(new MsgRow(new Msg("me", text.Trim(), System.DateTime.Now.ToString("h:mm tt")), topOfGroup, 8));
+
+			InputText.Value = string.Empty;   // two-way binding clears the field
+			log.ReloadData();                 // recompose the LazyColumn against the new row
+			log.ScrollToBottom();             // animate to the newest message
+		}
 
 		static View InputIcon(string symbol, System.Action? onTap = null)
 		{

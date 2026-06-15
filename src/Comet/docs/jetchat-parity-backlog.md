@@ -94,9 +94,10 @@ These are wrong *values* in `sample/Shared/Jetchat/JetchatTheme.cs`; the widgets
 - **Source:** `JumpToBottom.kt` — `ExtendedFloatingActionButton`, icon `ic_arrow_downward` (height 18dp), text `R.string.jumpBottom` ("Jump to bottom"), `containerColor = surface`, `contentColor = primary`, height **36dp**, visibility via `updateTransition` + `animateDp` offset between **-32dp** (gone) and **32dp** (visible). Trigger: `firstVisibleItemIndex != 0 || firstVisibleItemScrollOffset > 56.dp` (`Conversation.kt:329–336`, `JumpToBottomThreshold = 56.dp:563`), `align(BottomCenter)`.
 - **Comet gap:** expose `LazyListState` (first-visible index/offset) + `scrollToItem(0)` from `ListView`/`ComposeListNode`, plus animated show/hide. Today our list has no scroll awareness.
 
-### C2 — reverseLayout + auto-scroll on send
+### C2 — reverseLayout + auto-scroll on send  ◑ (auto-scroll-on-send done; reverseLayout pending)
 - **Source:** `Messages(...)` uses a `LazyColumn(reverseLayout = true)` (newest at bottom); `UserInput(resetScroll = { scope.launch { scrollState.scrollToItem(0) } })`.
-- **Comet gap:** `reverseLayout` list + programmatic scroll (shares C1 capability).
+- **Done (with I5, `<this commit>`):** Send appends a "me" `MsgRow`, `ListView.ReloadData()` (now also drives the node backend via `UpdateBackendNode` → re-emit `List_Version` → recompose) rebuilds the LazyColumn, and `ScrollToBottom()` (C1 scroller) animates to the new message; the field clears via the two-way `InputText` signal.
+- **Pending:** `reverseLayout` (open at the newest message instead of the top) — needs the list to expose `ReverseLayout` + open scrolled-to-bottom.
 
 ### C3 — Date day-headers by real date
 - **Source:** `Conversation.kt:300–306` emit `DayHeader("20 Aug")` and `DayHeader("Today")`; `DayHeader` (`:445`): row of `DayHeaderLine` + Text `labelSmall`, `onSurfaceVariant`, `padding(vertical=8, horizontal=16).height(16)`; divider color `onSurface.copy(alpha=0.12f)` (`:463`). We hardcode a single "Today".
@@ -130,9 +131,9 @@ These are wrong *values* in `sample/Shared/Jetchat/JetchatTheme.cs`; the widgets
 - **Source:** `NotAvailablePopup` (`:381`) = Material `AlertDialog` "Functionality not available 🙊" + CLOSE (`UiExtras.kt` `FunctionalityNotAvailablePopup`); `FunctionalityNotAvailablePanel` (`:237`) = "Functionality currently not available / Grab a beverage and check back later!" (panel, not dialog).
 - **Done:** new Comet `AlertDialog` control (`Controls/AlertDialog.cs`: `Signal<bool> IsOpen` + Text/ConfirmButton/Title?/DismissButton? slot Views) → `ComposeAlertDialogNode` renders the real Material 3 `AlertDialog` (own window + scrim) only while open, materializing the slot Views and dropping them into the facade `ConfirmButton`/`Text`/`Title`/`DismissButton` slots (laid out by Material, no Yoga). `Dialog_IsOpen` prop (224) + `DialogDismissed` event (12), wired exactly like Drawer (signal→node, onDismissRequest→event→IsOpen=false). `IBackendManagesOwnContent` so it's a zero-size leaf in its parent layout — can sit anywhere. iOS = empty placeholder node (SwiftUI `.alert` deferred, Android-first). Triggered faithfully from the DM "@" selector (`InputSelector.DM -> NotAvailablePopup`). Verified Pixel 5: opens on "@", dismisses via CLOSE button AND scrim tap. **Follow-up I4a:** `FunctionalityNotAvailablePanel` (the inline panel, not the dialog) + a `TextButton` variant for CLOSE (currently a plain styled Button).
 
-### I5 — Send button reactive enabled/disabled
+### I5 — Send button reactive enabled/disabled  ✅ (`<this commit>`)
 - **Source:** `Button` `height(36)`, `enabled = sendMessageEnabled`, `border = if(!enabled) BorderStroke(1.dp, onSurface.copy(0.3f)) else null`, `contentPadding = PaddingValues(0)`, `colors = ButtonDefaults.buttonColors(disabledContentColor = onSurface.copy(0.3f))`, Text `padding(horizontal=16)` (`:265` block). Empty → outlined/transparent; text present → filled `primary`.
-- **Comet gap:** reactive `enabled` + style swap on text presence. Today our Send is a static disabled `OutlinedButton`.
+- **Done:** the composer text is a two-way `Signal<string> InputText` (bound via `SignalExtensions.TextField`); the Send button restyles reactively from it (subscribe `PropertyChanged` → `send.Outlined(false).Color(OnPrimary)` filled when text present, `Outlined(true).Color(Disabled)` bordered-grey when empty). Added `Button.Outlined(bool)` + made `Button_Outlined` emit both ways (the set-only patch would otherwise leave it stuck outlined — same fix as Opacity). Verified Pixel 5: empty=outlined/grey, type→filled primary, send→clears→back to outlined.
 
 ### I6 — Voice record (mic): long-press + drag + animated overlay
 - **Source:** `RecordButton.kt`; `RecordingIndicator` (`UserInput.kt:505`) — press-and-hold record, swipe-to-cancel, pulsing dot.

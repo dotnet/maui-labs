@@ -206,6 +206,9 @@ namespace Comet
 		public virtual void ReloadData()
 		{
 			ViewHandler?.Invoke(nameof(ReloadData));
+			// Node backend (Compose/SwiftUI): re-emit the list version so the LazyColumn recomposes
+			// against the current rows (the classic handler path uses ViewHandler.Invoke above).
+			UpdateBackendNode();
 		}
 
 		protected virtual void OnSelected(int section, int index)
