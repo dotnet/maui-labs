@@ -254,7 +254,7 @@ namespace CometSamples.Jetchat
 						.Padding(new Thickness(3))
 						.Background(Surface)
 						.CornerRadius(21)
-						.Border(2, isMe ? Primary : Tertiary)
+						.Border(1.5, isMe ? Primary : Tertiary)   // Conversation.kt: border(1.5.dp, borderColor)
 						.Margin(left: 16, right: 16)
 						.VerticalLayoutAlignment(LayoutAlignment.Start)   // stay 42×42, don't stretch to row height
 				: new HStack().Frame(width: 74).FlexShrink(0);
