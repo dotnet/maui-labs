@@ -40,11 +40,14 @@ namespace CometSamples.Jetchat
 			{
 				new VStack(spacing: 0f)
 				{
-					// Back arrow (the app bar's navigation icon).
+					// App-bar nav icon = the jetchat logo (JetchatAppBar.kt), which opens the drawer —
+					// NOT a back button. The drawer wraps the whole nav stack, so it slides over the
+					// profile just like in the original app.
 					new HStack(spacing: 0f)
 					{
-						new Icon("back").Color(T.OnSurface).IconSize(24)
-							.Margin(left: 8, top: (float)(topInset + 8)).OnTap(_ => onBack()),
+						new Icon("jetchat").IconSize(32)
+							.Margin(left: 16, top: (float)(topInset + 12))
+							.OnTap(_ => C.DrawerOpen.Value = true),
 						new HStack().FlexGrow(1),
 					}.Background(T.Surface).Padding(new Thickness(0, 0, 0, 8)),
 

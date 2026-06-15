@@ -117,10 +117,11 @@ namespace CometSamples.Jetchat
 		// enabled/style, and a send appends a "me" message + clears it (UserInput.kt sendMessageEnabled).
 		static readonly Comet.Reactive.Signal<string> InputText = new(string.Empty);
 
-		/// <summary>The Jetchat sample, rooted in a real <see cref="NavigationView"/> (the C# port of
-		/// Jetchat's NavActivity nav graph): the conversation-behind-the-drawer is the root screen;
-		/// tapping a drawer profile closes the drawer and <c>Navigate</c>s the profile detail onto the
-		/// stack; the profile's back arrow <c>Pop</c>s it.</summary>
+		/// <summary>The Jetchat sample. The drawer wraps the whole <see cref="NavigationView"/> stack
+		/// (like the gold's <c>ModalNavigationDrawer</c> around the NavHost), so the jetchat logo opens
+		/// it over ANY destination — the conversation or a profile. Tapping a drawer profile closes the
+		/// drawer and <c>Navigate</c>s the profile detail onto the stack; the profile's Message FAB
+		/// <c>Pop</c>s it.</summary>
 		public static View Build(double topInset = 24, double bottomInset = 0)
 		{
 			var nav = new NavigationView();
@@ -129,8 +130,8 @@ namespace CometSamples.Jetchat
 				DrawerOpen.Value = false;                                  // close the drawer …
 				nav.Navigate(JetchatProfile.Screen(profileName, topInset, bottomInset, () => nav.Pop())); // … and push the profile
 			}
-			nav.Content = new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, OpenProfile), ConversationView(topInset, bottomInset));
-			return nav;
+			nav.Content = ConversationView(topInset, bottomInset);
+			return new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, OpenProfile), nav);
 		}
 
 		/// <summary>The conversation screen (the drawer's content slot / nav root screen).</summary>
