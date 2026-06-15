@@ -109,6 +109,7 @@
     <PackageVersion Include="Microsoft.OpenApi" Version="$(MicrosoftOpenApiVersion)" />
     <PackageVersion Include="YamlDotNet" Version="$(YamlDotNetVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.52.0" />
   </ItemGroup>
 
   <!-- Source Link -->

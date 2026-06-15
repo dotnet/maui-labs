@@ -83,4 +83,10 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="DevFlow\Inspector\Web\**\*" LogicalName="Microsoft.Maui.Cli.DevFlow.Inspector.Web.%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>
