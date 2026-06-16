@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/AIControls/**'
-      - 'tests/Microsoft.AspNetCore.Components.AI.*/**'
+      - 'tests/Microsoft.Maui.AI.Chat*/**'
       - 'tests/Microsoft.Maui.AI.Chat.Controls.Tests/**'
       - 'samples/AiControls*/**'
       - 'eng/**'
@@ -19,7 +19,7 @@ on:
     branches: [main]
     paths:
       - 'src/AIControls/**'
-      - 'tests/Microsoft.AspNetCore.Components.AI.*/**'
+      - 'tests/Microsoft.Maui.AI.Chat*/**'
       - 'tests/Microsoft.Maui.AI.Chat.Controls.Tests/**'
       - 'samples/AiControls*/**'
       - 'eng/**'

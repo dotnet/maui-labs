@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls;
 
 namespace AiControlsSample;

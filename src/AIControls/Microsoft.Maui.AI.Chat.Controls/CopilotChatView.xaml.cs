@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Controls.Shapes;
 
@@ -284,7 +284,7 @@ public partial class CopilotChatView : TemplatedView
         // when the LLM emits multiple tool calls in a single turn.
         var pendingActions = Session.Turns
             .SelectMany(t => t.ResponseBlocks)
-            .OfType<Microsoft.AspNetCore.Components.AI.UIActionBlock>()
+            .OfType<Microsoft.Maui.AI.Chat.UIActionBlock>()
             .Where(b => !b.IsComplete)
             .ToList();
 
