@@ -407,7 +407,7 @@ namespace CometSamples.Jetchat
 						.Borderless().Color(OnSurface).FillHorizontal()
 						.VerticalLayoutAlignment(LayoutAlignment.Center)
 						.Padding(new Thickness(20, 0, 8, 0)),
-					new Icon("mic").Color(Secondary).IconSize(24)
+					new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
 						.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
 				}.Frame(height: 64),
 				// Selector row: icon buttons + Send, with breathing room above so it clears the input row.
@@ -440,7 +440,9 @@ namespace CometSamples.Jetchat
 
 		static View InputIcon(string symbol, System.Action? onTap = null)
 		{
-			var icon = new Icon(symbol).Color(Secondary).IconSize(24)
+			// onSurfaceVariant (the gold's inactive-selector content colour) — a neutral with good
+			// contrast on the footer, not the low-chroma Secondary which reads faded.
+			var icon = new Icon(symbol).Color(OnSurfaceVariant).IconSize(24)
 				.VerticalLayoutAlignment(LayoutAlignment.Center);
 			return onTap is null ? icon : icon.OnTap(_ => onTap());
 		}
