@@ -19,13 +19,16 @@ namespace CometSamples.Jetchat
 	static class JetchatProfile
 	{
 		// ProfileScreenState (data/FakeData.kt): the "me" profile and the single colleague profile.
-		sealed record Data(string Photo, string Name, string Status, string DisplayName,
+		// PhotoAspect = the photo's width/height — the gold sizes the header image fillMaxWidth and lets
+		// CircleShape clip it, so a square photo (ali 432x431) renders a CIRCLE and a landscape photo
+		// (someone_else 640x427) a wide oval. Drives the box shape via AspectRatio (no intrinsic image size).
+		sealed record Data(string Photo, double PhotoAspect, string Name, string Status, string DisplayName,
 			string Position, string Twitter, string TimeZone, bool IsMe);
 
 		static Data For(string name) => name == "Ali Conors"
-			? new Data(C.AvatarMe, "Ali Conors", "Online", "aliconors",
+			? new Data(C.AvatarMe, 432.0 / 431.0, "Ali Conors", "Online", "aliconors",
 				"Senior Android Dev at Yearin\nGoogle Developer Expert", "twitter.com/aliconors", "In your timezone", true)
-			: new Data(C.AvatarOther, "Taylor Brooks", "Away", "taylor",
+			: new Data(C.AvatarOther, 640.0 / 427.0, "Taylor Brooks", "Away", "taylor",
 				"Senior Android Dev at Openlane", "twitter.com/taylorbrookscodes",
 				"12:25 AM local time (Eastern Daylight Time)", false);
 
@@ -55,11 +58,11 @@ namespace CometSamples.Jetchat
 					{
 						new VStack(spacing: 0f)
 						{
-							// Profile photo: fillMaxWidth − 16dp each side, a wide box capped near half the
-							// screen, ContentScale.Crop, clipped to an OVAL (ProfileHeader.kt:
-							// heightIn(max = containerHeight/2).fillMaxWidth().clip(CircleShape) — a circle
-							// clip on a non-square image renders as a horizontal ellipse, not a circle).
-							new Image(d.Photo).FillHorizontal().Frame(height: 240).FlexShrink(0)
+							// Profile photo (ProfileHeader.kt): fillMaxWidth − 16dp each side, height from the
+							// photo's aspect (AspectRatio), ContentScale.Crop, clipped CircleShape. A square
+							// photo (ali) → a CIRCLE; a landscape photo (taylor) → a wide oval. CornerRadius
+							// clamps to half the shorter side, so it's the circle/ellipse clip.
+							new Image(d.Photo).FillHorizontal().AspectRatio(d.PhotoAspect).FlexShrink(0)
 								.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
 
 							// Name + position (NameAndPosition): each text baseline-anchored — the name's
