@@ -20,6 +20,11 @@ import SwiftUI
     @Published var fontWeight: Int = 0          // 0 = default; otherwise Maui FontWeight (100–900)
     @Published var fontFamily: String = ""      // custom font family (e.g. "Montserrat"); "" = system
     @Published var padding: CGFloat = 0
+    // Per-edge content padding (Yoga sizes the frame to include it; leaves inset their content by it).
+    @Published var padTop: CGFloat = 0
+    @Published var padLeading: CGFloat = 0
+    @Published var padBottom: CGFloat = 0
+    @Published var padTrailing: CGFloat = 0
     // Per-corner radii (top-left, top-right, bottom-right, bottom-left); clips content.
     @Published var cornerTL: CGFloat = 0
     @Published var cornerTR: CGFloat = 0
@@ -106,6 +111,10 @@ import SwiftUI
     public static func setDouble(_ node: CometNode, property: String, value: Double) {
         switch property {
         case "padding": node.padding = CGFloat(value)
+        case "pad.t": node.padTop = CGFloat(value)
+        case "pad.l": node.padLeading = CGFloat(value)
+        case "pad.b": node.padBottom = CGFloat(value)
+        case "pad.r": node.padTrailing = CGFloat(value)
         case "value": node.doubleValue = value
         case "corner.tl": node.cornerTL = CGFloat(value)
         case "corner.tr": node.cornerTR = CGFloat(value)
@@ -262,7 +271,7 @@ struct CometLeafContent: View {
                 Text(node.text)
                     .modifier(ForegroundModifier(argb: node.textColorARGB))
                     .modifier(FontModifier(node: node))
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 22)
                     .padding(.vertical, 8)
                     .overlay {
                         if node.outlined {
@@ -555,6 +564,13 @@ struct CometNodeView: View {
             ZStack(alignment: .topLeading) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
         case "vstack":
             VStack(alignment: .leading, spacing: 0) { ForEach(node.children) { CometNodeView(node: $0) } }.padding(node.padding)
+        case "textfield":
+            // Inset the field's content by its (Yoga-sized) padding so the placeholder/text sit padded
+            // in, matching the gold (e.g. the footer input's 20/14/20/10). Render-only — the measure
+            // path hosts CometLeafContent directly, so the padding isn't double-counted into the frame.
+            CometLeafContent(node: node)
+                .padding(EdgeInsets(top: node.padTop, leading: node.padLeading,
+                                    bottom: node.padBottom, trailing: node.padTrailing))
         default:
             CometLeafContent(node: node)
         }

@@ -83,7 +83,13 @@ namespace Comet.Platform.SwiftUI
 			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 			else if (id == PropertyIds.Padding && value.AsObject is Microsoft.Maui.Thickness t)
-				CometSwiftUIHost.SetDouble(_native, "padding", t.Left);
+			{
+				CometSwiftUIHost.SetDouble(_native, "padding", t.Left);   // uniform value used by stacks
+				CometSwiftUIHost.SetDouble(_native, "pad.l", t.Left);
+				CometSwiftUIHost.SetDouble(_native, "pad.t", t.Top);
+				CometSwiftUIHost.SetDouble(_native, "pad.r", t.Right);
+				CometSwiftUIHost.SetDouble(_native, "pad.b", t.Bottom);
+			}
 			else if (id == PropertyIds.CornerRadius && value.AsObject is CornerRadii corners)
 			{
 				// Four SetDouble calls (reusing the bound host fn) carry per-corner radii.
