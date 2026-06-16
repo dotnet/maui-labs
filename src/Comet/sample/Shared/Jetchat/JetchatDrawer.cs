@@ -17,13 +17,16 @@ namespace CometSamples.Jetchat
 	static class JetchatDrawer
 	{
 		public static View Content(double topInset, Comet.Reactive.Signal<string> selected,
-			System.Action<string> onChannel, System.Action<string> onProfile) => new VStack(spacing: 0f)
+			System.Action<string> onChannel, System.Action<string> onProfile, System.Action onSettings) => new VStack(spacing: 0f)
 		{
-			// DrawerHeader: the jetchat brand logo (multicolor Image).
+			// DrawerHeader: Row(padding 16) with the jetchat brand logo at 24dp (JetchatDrawer.kt).
 			new HStack(spacing: 0f)
 			{
-				new Icon("jetchat").IconSize(36),
-			}.Padding(new Thickness(20, topInset + 16, 16, 16)),
+				new Icon("jetchat").IconSize(24),
+			}.Padding(new Thickness(16, topInset + 16, 16, 16)),
+
+			// Edge-to-edge divider under the header (the gold's first DividerItem() has no inset).
+			FullDivider(),
 
 			// DrawerItemHeader("Chats") + 56dp ChatItem pills (leading logo + label, no '#'). Tapping
 			// a channel returns to the messages view; the current destination is highlighted.
@@ -31,20 +34,24 @@ namespace CometSamples.Jetchat
 			ChatItem("composers", selected, onChannel),
 			ChatItem("droidcon-nyc", selected, onChannel),
 
-			DividerItem(),
+			InsetDivider(),
 			SectionTitle("Recent Profiles"),
 			ProfileItem("Ali Conors (you)", "Ali Conors", C.AvatarMe, selected, onProfile),
 			ProfileItem("Taylor Brooks", "Taylor Brooks", C.AvatarOther, selected, onProfile),
 
-			DividerItem(),
+			InsetDivider(),
 			SectionTitle("Settings"),
-			SettingItem("Add Widget to Home Page"),
+			SettingItem("Add Widget to Home Page", onSettings),
 		}.Background(C.Surface);
 
-		// DrawerItemHeader: bodySmall / onSurfaceVariant, horizontal 28dp.
+		// DrawerItemHeader: a 52dp row, text vertically centred, bodySmall / onSurfaceVariant, start
+		// 28dp — so the header text left-aligns with the menu rows' icon column (12 row + 16 icon = 28).
 		static View SectionTitle(string text) =>
-			new Text(text).Color(C.OnSurfaceVariant).BodySmall()
-				.Padding(new Thickness(28, 12, 16, 8));
+			new HStack(spacing: 0f)
+			{
+				new Text(text).Color(C.OnSurfaceVariant).BodySmall()
+					.VerticalLayoutAlignment(LayoutAlignment.Center),
+			}.Frame(height: 52).Padding(new Thickness(28, 0, 16, 0));
 
 		// ChatItem: a 56dp stadium pill — leading jetchat logo + label (bodyMedium). The pill, logo
 		// tint, and label colour track the <paramref name="selected"/> destination signal reactively
@@ -100,12 +107,21 @@ namespace CometSamples.Jetchat
 			return pill;
 		}
 
-		// A settings row (WidgetDiscoverability): bodyLarge, horizontal 28dp.
-		static View SettingItem(string text) =>
-			new Text(text).Color(C.OnSurface).BodyLarge().Padding(new Thickness(28, 16, 16, 16));
+		// WidgetDiscoverability: a 56dp clickable pill (no icon), bodyMedium label at start 12 — same
+		// row shape as the chat/profile items. Tapping invokes the supplied action (the gold adds a
+		// home-screen widget; on iOS that surfaces the "not available" popup).
+		static View SettingItem(string text, System.Action onTap) =>
+			new HStack(spacing: 0f)
+			{
+				new Text(text).Color(C.OnSurface).BodyMedium()
+					.VerticalLayoutAlignment(LayoutAlignment.Center).Margin(left: 12),
+			}
+				.Frame(height: 56).CornerRadius(28).Margin(new Thickness(12, 0, 12, 0))
+				.OnTap(_ => onTap());
 
-		// DividerItem: a hairline between sections, inset 28dp.
-		static View DividerItem() => new HStack().Frame(height: 1).Background(C.Divider)
-			.Margin(new Thickness(28, 8, 28, 8));
+		// DividerItem (onSurface @ 12%): edge-to-edge under the header, inset 28dp between sections.
+		static View FullDivider() => new HStack().FillHorizontal().Frame(height: 1).Background(C.Divider);
+		static View InsetDivider() => new HStack().FillHorizontal().Frame(height: 1).Background(C.Divider)
+			.Margin(new Thickness(28, 0, 28, 0));
 	}
 }

@@ -662,7 +662,12 @@ struct CometNodeView: View {
                 .padding(EdgeInsets(top: node.padTop, leading: node.padLeading,
                                     bottom: node.padBottom, trailing: node.padTrailing))
         default:
+            // Leaves honour their own (Yoga-sized) content padding — e.g. a section-header Text
+            // padded 28 in / 18 tall. Render-only (the measure path hosts CometLeafContent directly,
+            // so the padding isn't double-counted into the frame).
             CometLeafContent(node: node)
+                .padding(EdgeInsets(top: node.padTop, leading: node.padLeading,
+                                    bottom: node.padBottom, trailing: node.padTrailing))
         }
     }
 }

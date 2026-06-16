@@ -152,7 +152,10 @@ namespace CometSamples.Jetchat
 			}
 
 			nav.Content = ConversationView(topInset, bottomInset);
-			return new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, Selected, SelectChannel, OpenProfile), nav);
+			// Settings → the gold adds a home-screen widget; iOS has no equivalent, so surface the
+			// "functionality not available" popup (same as the DM selector).
+			void OpenSettings() => NotAvailableOpen.Value = true;
+			return new Drawer(DrawerOpen, JetchatDrawer.Content(topInset, Selected, SelectChannel, OpenProfile, OpenSettings), nav);
 		}
 
 		/// <summary>The conversation screen (the drawer's content slot / nav root screen).</summary>
