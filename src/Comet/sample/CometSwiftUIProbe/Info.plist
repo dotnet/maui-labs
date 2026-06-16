@@ -37,6 +37,7 @@
 	<array>
 		<string>Fonts/Montserrat.ttf</string>
 		<string>Fonts/Karla.ttf</string>
+		<string>Fonts/MaterialIcons-Regular.ttf</string>
 	</array>
 </dict>
 </plist>

@@ -58,6 +58,10 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetString(_native, "imageurl", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Icon_Symbol)
 				CometSwiftUIHost.SetString(_native, "icon", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Icon_Glyph)
+				CometSwiftUIHost.SetString(_native, "iconglyph", value.AsString ?? string.Empty);
+			else if (id == PropertyIds.Icon_FontFamily)
+				CometSwiftUIHost.SetString(_native, "iconfontfamily", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Icon_Tint && value.AsColor is { } it)
 				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(it));
 			else if (id == PropertyIds.Icon_Size)

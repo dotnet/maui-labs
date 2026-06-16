@@ -399,16 +399,18 @@ namespace CometSamples.Jetchat
 
 			return new VStack(spacing: 0f)
 			{
-				// Input row: the borderless field (grows to fill) + a trailing mic — the gold's
-				// UserInputText + RecordButton row.
+				// Input row: a fixed 64dp row (the gold's UserInputText height) with the borderless
+				// field (grows to fill, vertically centered) + a trailing mic — the gold's RecordButton.
 				new HStack(spacing: 0f)
 				{
 					SignalExtensions.TextField(InputText, "Message #composers")
 						.Borderless().Color(OnSurface).FillHorizontal()
-						.Padding(new Thickness(20, 22, 20, 22)),   // gold's UserInput row is 64dp tall
+						.VerticalLayoutAlignment(LayoutAlignment.Center)
+						.Padding(new Thickness(20, 0, 8, 0)),
 					new Icon("mic").Color(Secondary).IconSize(24)
 						.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
-				},
+				}.Frame(height: 64),
+				// Selector row: icon buttons + Send, with breathing room above so it clears the input row.
 				new HStack(spacing: 0f)
 				{
 					InputIcon("mood"), Spacer(),
@@ -416,7 +418,7 @@ namespace CometSamples.Jetchat
 					InputIcon("at", () => NotAvailableOpen.Value = true), Spacer(), InputIcon("photo"),
 					Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
 					send,
-				}.Padding(new Thickness(16, 4, 16, 12 + bottomInset)),
+				}.Padding(new Thickness(16, 8, 16, 12 + bottomInset)),
 			}.Background(BarSurface);
 		}
 

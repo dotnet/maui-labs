@@ -45,6 +45,10 @@ namespace CometSwiftUIProbe
 			_agent = new CometDevAgent(CometDevAgent.DevFlowPort, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
 
+			// Use Google's Material Icons font (bundled, registered via Info.plist UIAppFonts) as the
+			// cross-platform icon set, so Icon("mic") etc. draw the SAME Material glyph as Android.
+			CometSamples.Jetchat.JetchatIcons.Register();
+
 			// Generate the Material 3 scheme from the Comet theme using Google's material-color-utilities
 			// (the SAME algorithm as Android's Material You) so iOS renders a real tonal scheme — identical
 			// to Android when both seed from the same input. Must run BEFORE BuildUi() (the tree reads the

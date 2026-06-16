@@ -5,6 +5,7 @@ using AndroidX.Compose.Runtime;
 using AndroidX.Compose.UI.Graphics.Vector;
 using Comet.Backend;
 using ComposeIcon = AndroidX.Compose.Icon;
+using ComposeText = AndroidX.Compose.Text;
 
 namespace Comet.Platform.Compose
 {
@@ -13,6 +14,8 @@ namespace Comet.Platform.Compose
 	sealed class ComposeIconNode : ComposeNode
 	{
 		readonly MutableState<string> _symbol = new(string.Empty);
+		readonly MutableState<string> _glyph = new(string.Empty);       // icon-font codepoint, if any
+		readonly MutableState<string> _glyphFont = new(string.Empty);   // icon-font family
 		Microsoft.Maui.Graphics.Color? _tint;
 		float _size = 24f;
 		readonly MutableState<int> _iconVersion = new(0);
@@ -25,6 +28,10 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.Icon_Symbol)
 				_symbol.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Icon_Glyph)
+				_glyph.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Icon_FontFamily)
+				_glyphFont.Value = value.AsString ?? string.Empty;
 			else if (id == PropertyIds.Icon_Tint)
 			{
 				_tint = value.AsColor;
@@ -48,6 +55,22 @@ namespace Comet.Platform.Compose
 			{
 				var m = BuildNodeModifier() ?? Modifier.Companion;
 				return HasFrame ? m : m.Size(new Dp(_size), new Dp(_size));
+			}
+
+			// An icon-font glyph (e.g. Material Icons) renders as a tinted, sized character in the
+			// registered font — the SAME glyph the iOS backend draws, so the icon set is identical
+			// cross-platform. Wins over the native ImageVector/drawable path when a glyph is set.
+			if (!string.IsNullOrEmpty(_glyph.Value))
+			{
+				var glyph = new ComposeText(_glyph.Value);
+				if (_tint is { } gc)
+					glyph.Color = ToComposeColor(gc);
+				glyph.FontSize = new AndroidX.Compose.Sp((int)_size);
+				if (ComposeFontRegistry.Resolve(_glyphFont.Value, 400) is { } r)
+					glyph.FontFamily = r.Family;
+				((ComposableNode)glyph).Modifier = IconModifier();
+				glyph.Render(composer);
+				return;
 			}
 
 			// A bundled vector drawable named "ic_<symbol>" wins over the built-in ImageVector set,

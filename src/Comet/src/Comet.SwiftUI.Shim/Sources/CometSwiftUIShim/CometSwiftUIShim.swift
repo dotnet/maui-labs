@@ -11,6 +11,8 @@ import SwiftUI
     @Published var placeholder: String = ""
     @Published var imageUrl: String = ""
     @Published var iconName: String = ""        // cross-platform symbol name → SF Symbol
+    @Published var iconGlyph: String = ""        // icon-font codepoint (when an icon font is used)
+    @Published var iconFontFamily: String = ""   // icon-font family name
     @Published var isOn: Bool = false
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
@@ -77,6 +79,8 @@ import SwiftUI
         case "placeholder": node.placeholder = value
         case "imageurl": node.imageUrl = value
         case "icon": node.iconName = value
+        case "iconglyph": node.iconGlyph = value
+        case "iconfontfamily": node.iconFontFamily = value
         case "fontfamily": node.fontFamily = value
         case "dialogmessage": node.dialogMessage = value
         case "dialogbutton": node.dialogButton = value
@@ -303,10 +307,18 @@ struct CometLeafContent: View {
                 get: { node.doubleValue },
                 set: { node.doubleValue = $0; node.onChangeDouble?($0) }))
         case "icon":
-            // Real SF Symbol, tinted + sized — the iOS counterpart of Compose's Material Icon.
-            Image(systemName: sfSymbol(node.iconName))
-                .font(.system(size: node.fontSize > 0 ? node.fontSize : 24))
-                .modifier(ForegroundModifier(argb: node.textColorARGB))
+            if !node.iconGlyph.isEmpty {
+                // Icon-font glyph (e.g. Material Icons) — the SAME glyph the Android backend draws,
+                // rendered as a sized + tinted character in the registered icon font.
+                Text(node.iconGlyph)
+                    .font(.custom(node.iconFontFamily, size: node.fontSize > 0 ? node.fontSize : 24))
+                    .modifier(ForegroundModifier(argb: node.textColorARGB))
+            } else {
+                // Real SF Symbol, tinted + sized — the iOS native icon idiom.
+                Image(systemName: sfSymbol(node.iconName))
+                    .font(.system(size: node.fontSize > 0 ? node.fontSize : 24))
+                    .modifier(ForegroundModifier(argb: node.textColorARGB))
+            }
         case "image":
             // A bundled image (a bare name like "ali") renders from the app bundle — the iOS
             // counterpart of Compose's painterResource; an http(s) source loads asynchronously.

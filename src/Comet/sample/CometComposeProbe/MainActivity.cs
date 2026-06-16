@@ -42,6 +42,10 @@ namespace CometComposeProbe
 				ComposeFontRegistry.Register("Montserrat", 600, Asset("montserrat_semibold.ttf"));
 				ComposeFontRegistry.Register("Karla", 400, Asset("karla_regular.ttf"));
 				ComposeFontRegistry.Register("Karla", 700, Asset("karla_bold.ttf"));
+
+				// Google's Material Icons font as the cross-platform icon set (same glyphs as iOS).
+				ComposeFontRegistry.Register(CometSamples.Jetchat.JetchatIcons.Font, 400, Asset("material_icons.ttf"));
+				CometSamples.Jetchat.JetchatIcons.Register();
 			}
 			catch (Exception ex)
 			{

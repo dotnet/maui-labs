@@ -25,6 +25,7 @@
     <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
     <BundleResource Include="Fonts\Montserrat.ttf" />
     <BundleResource Include="Fonts\Karla.ttf" />
+    <BundleResource Include="Fonts\MaterialIcons-Regular.ttf" />
     <!-- Jetchat avatars/sticker at the bundle root so UIImage(named:) finds them. -->
     <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\someone_else.jpg"><LogicalName>someone_else.jpg</LogicalName></BundleResource>
