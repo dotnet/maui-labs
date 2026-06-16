@@ -492,10 +492,25 @@ private func uiFontWeight(_ w: Int) -> UIFont.Weight {
 // A registered custom font (e.g. Montserrat/Karla, bundled + listed in UIAppFonts) at the given
 // weight, or nil if not available. Derives the weight on a variable font via the descriptor.
 private func customUIFont(_ family: String, _ size: CGFloat, _ weight: Int) -> UIFont? {
+    // Prefer the real per-weight face by PostScript name (e.g. "Montserrat-Medium", "Karla-Bold") so
+    // the actual weight renders rather than a synthesized one.
+    if let f = UIFont(name: weightedFontName(family, weight), size: size) { return f }
     guard let base = UIFont(name: family, size: size) else { return nil }
     let traits: [UIFontDescriptor.TraitKey: Any] = [.weight: uiFontWeight(weight)]
     let descriptor = base.fontDescriptor.addingAttributes([.traits: traits])
     return UIFont(descriptor: descriptor, size: size)
+}
+
+// "<Family>-<Weight>" PostScript-name convention for the bundled per-weight faces.
+private func weightedFontName(_ family: String, _ weight: Int) -> String {
+    let suffix: String
+    switch weight {
+    case 700...: suffix = "Bold"
+    case 600..<700: suffix = "SemiBold"
+    case 500..<600: suffix = "Medium"
+    default: suffix = "Regular"
+    }
+    return "\(family)-\(suffix)"
 }
 
 // Applies an explicit font (custom family if set, else system) at the Comet size/weight.

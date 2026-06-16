@@ -23,8 +23,11 @@
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
     <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
-    <BundleResource Include="Fonts\Montserrat.ttf" />
-    <BundleResource Include="Fonts\Karla.ttf" />
+    <BundleResource Include="Fonts\Montserrat-Regular.ttf" />
+    <BundleResource Include="Fonts\Montserrat-Medium.ttf" />
+    <BundleResource Include="Fonts\Montserrat-SemiBold.ttf" />
+    <BundleResource Include="Fonts\Karla-Regular.ttf" />
+    <BundleResource Include="Fonts\Karla-Bold.ttf" />
     <BundleResource Include="Fonts\MaterialIcons-Regular.ttf" />
     <!-- Jetchat avatars/sticker at the bundle root so UIImage(named:) finds them. -->
     <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>

@@ -35,8 +35,11 @@
 	<string>17.0</string>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Fonts/Montserrat.ttf</string>
-		<string>Fonts/Karla.ttf</string>
+		<string>Fonts/Montserrat-Regular.ttf</string>
+		<string>Fonts/Montserrat-Medium.ttf</string>
+		<string>Fonts/Montserrat-SemiBold.ttf</string>
+		<string>Fonts/Karla-Regular.ttf</string>
+		<string>Fonts/Karla-Bold.ttf</string>
 		<string>Fonts/MaterialIcons-Regular.ttf</string>
 	</array>
 </dict>
