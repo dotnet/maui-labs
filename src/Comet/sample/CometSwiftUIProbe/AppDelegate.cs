@@ -50,11 +50,15 @@ namespace CometSwiftUIProbe
 			// to Android when both seed from the same input. Must run BEFORE BuildUi() (the tree reads the
 			// theme tokens at build time). Brand seed by default; flip SeedFromContent to derive the scheme
 			// from the user's profile photo (content-based Material You — same generator, image seed).
+			// Follow the system light/dark setting (the gold's isSystemInDarkTheme) so the generated
+			// scheme is the light OR dark M3 mapping. Read at startup; a live toggle would need the
+			// structural re-render (re-apply the scheme + rebuild the tree).
+			bool dark = UIScreen.MainScreen.TraitCollection.UserInterfaceStyle == UIUserInterfaceStyle.Dark;
 			const bool SeedFromContent = false;
 			if (SeedFromContent && PixelsFromBundle("ali") is { } pixels)
-				CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(pixels);
+				CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(pixels, dark);
 			else
-				CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
+				CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor, dark);
 
 			// A real Comet view tree, rendered as SwiftUI through the node protocol —
 			// no MAUI handlers in the render path.

@@ -53,11 +53,18 @@ namespace CometComposeProbe
 			// and SAME seed as iOS — so the app is theme-driven and looks identical cross-platform.
 			// Flip UseWallpaperMaterialYou to instead adopt the device's Material You (gold-faithful to
 			// Themes.kt's isDynamicColor=true, but diverges from iOS, which can't read the wallpaper).
+			// Follow the system light/dark setting (the gold's isSystemInDarkTheme) so the generated
+			// scheme is the light OR dark M3 mapping. Read at startup (a live toggle would re-create
+			// the activity, which rebuilds anyway).
+			bool dark = (Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask)
+				== Android.Content.Res.UiMode.NightYes;
+
 			const bool UseWallpaperMaterialYou = false;
 			AndroidX.Compose.Material3.ColorScheme scheme;
 			if (UseWallpaperMaterialYou && Build.VERSION.SdkInt >= BuildVersionCodes.S)
 			{
-				scheme = AndroidX.Compose.MaterialTheme.DynamicLightColorScheme(this);
+				scheme = dark ? AndroidX.Compose.MaterialTheme.DynamicDarkColorScheme(this)
+					: AndroidX.Compose.MaterialTheme.DynamicLightColorScheme(this);
 				try { ApplySchemeToTheme(scheme); }
 				catch (Exception ex) { Android.Util.Log.Warn("CometProbe", "scheme read-back failed, using static theme: " + ex); }
 			}
@@ -71,9 +78,9 @@ namespace CometComposeProbe
 				const bool SeedFromContent = false;
 				MaterialColorUtilities.Schemes.Scheme<uint> s =
 					SeedFromContent && PixelsFromDrawable(Resource.Drawable.ali) is { } px
-						? CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(px)
-						: CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
-				scheme = ComposeSchemeFromSeed(s);
+						? CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(px, dark)
+						: CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor, dark);
+				scheme = ComposeSchemeFromSeed(s, dark);
 			}
 
 			// System bars match the (now dynamic) surface so the status/nav areas blend edge-to-edge.
@@ -81,9 +88,10 @@ namespace CometComposeProbe
 			var barTint = Android.Graphics.Color.Argb(255, (int)(surf.Red * 255), (int)(surf.Green * 255), (int)(surf.Blue * 255));
 			Window!.SetStatusBarColor(barTint);
 			Window.SetNavigationBarColor(barTint);
-			const int light = (int)Android.Views.WindowInsetsControllerAppearance.LightStatusBars
+			// Light bars (dark icons) on a light surface; in dark mode clear the flags for light icons.
+			const int lightBars = (int)Android.Views.WindowInsetsControllerAppearance.LightStatusBars
 				| (int)Android.Views.WindowInsetsControllerAppearance.LightNavigationBars;
-			Window.InsetsController?.SetSystemBarsAppearance(light, light);
+			Window.InsetsController?.SetSystemBarsAppearance(dark ? 0 : lightBars, lightBars);
 
 			var root = BuildUi();
 
@@ -120,16 +128,23 @@ namespace CometComposeProbe
 		// Build the Compose MaterialTheme ColorScheme from the seed-generated M3 roles so the real
 		// Material controls (Button, ripples) match the Comet views (which read the same roles from the
 		// C# theme tokens). Mirrors the role subset the static scheme used.
-		static AndroidX.Compose.Material3.ColorScheme ComposeSchemeFromSeed(MaterialColorUtilities.Schemes.Scheme<uint> s)
+		static AndroidX.Compose.Material3.ColorScheme ComposeSchemeFromSeed(MaterialColorUtilities.Schemes.Scheme<uint> s, bool dark)
 		{
 			static AndroidX.Compose.Color C(uint argb) =>
 				AndroidX.Compose.Color.FromArgb(0xFF, (byte)((argb >> 16) & 0xFF), (byte)((argb >> 8) & 0xFF), (byte)(argb & 0xFF));
-			return AndroidX.Compose.MaterialTheme.LightColorScheme(
-				primary: C(s.Primary), onPrimary: C(s.OnPrimary),
-				surface: C(s.Surface), onSurface: C(s.OnSurface),
-				surfaceVariant: C(s.SurfaceVariant), onSurfaceVariant: C(s.OnSurfaceVariant),
-				background: C(s.Background), onBackground: C(s.OnBackground),
-				tertiary: C(s.Tertiary));
+			return dark
+				? AndroidX.Compose.MaterialTheme.DarkColorScheme(
+					primary: C(s.Primary), onPrimary: C(s.OnPrimary),
+					surface: C(s.Surface), onSurface: C(s.OnSurface),
+					surfaceVariant: C(s.SurfaceVariant), onSurfaceVariant: C(s.OnSurfaceVariant),
+					background: C(s.Background), onBackground: C(s.OnBackground),
+					tertiary: C(s.Tertiary))
+				: AndroidX.Compose.MaterialTheme.LightColorScheme(
+					primary: C(s.Primary), onPrimary: C(s.OnPrimary),
+					surface: C(s.Surface), onSurface: C(s.OnSurface),
+					surfaceVariant: C(s.SurfaceVariant), onSurfaceVariant: C(s.OnSurfaceVariant),
+					background: C(s.Background), onBackground: C(s.OnBackground),
+					tertiary: C(s.Tertiary));
 		}
 
 		// Read the scheme's role colors back into the C# theme tokens (facade Color exposes A/R/G/B).
