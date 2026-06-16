@@ -65,8 +65,14 @@ namespace CometComposeProbe
 			{
 				// Generate the M3 scheme in shared C# (applies it to the C# theme tokens the Comet views
 				// read), then build the matching Compose ColorScheme so the real Material controls
-				// (Button, ripples) are seeded identically.
-				var s = CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
+				// (Button, ripples) are seeded identically. Brand seed by default; flip SeedFromContent to
+				// derive the scheme from the profile photo (content-based Material You — same generator,
+				// image seed — identical to iOS's SeedFromContent path).
+				const bool SeedFromContent = false;
+				MaterialColorUtilities.Schemes.Scheme<uint> s =
+					SeedFromContent && PixelsFromDrawable(Resource.Drawable.ali) is { } px
+						? CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(px)
+						: CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
 				scheme = ComposeSchemeFromSeed(s);
 			}
 
@@ -94,6 +100,21 @@ namespace CometComposeProbe
 			};
 			var composeView = backend.CreateView(this, root);
 			SetContentView(composeView);
+		}
+
+		// Decode a drawable to a small AARRGGBB pixel buffer for content-based theming (the
+		// material-color-utilities Quantize+Score wants raw pixels). Downscaled for a fast seed extract.
+		uint[]? PixelsFromDrawable(int resId, int max = 64)
+		{
+			using var bmp = Android.Graphics.BitmapFactory.DecodeResource(Resources, resId);
+			if (bmp is null) return null;
+			int w = System.Math.Min(max, bmp.Width), h = System.Math.Min(max, bmp.Height);
+			using var scaled = Android.Graphics.Bitmap.CreateScaledBitmap(bmp, w, h, true);
+			var ints = new int[w * h];
+			scaled!.GetPixels(ints, 0, w, 0, 0, w, h);   // ARGB ints
+			var px = new uint[ints.Length];
+			for (int i = 0; i < ints.Length; i++) px[i] = (uint)ints[i];
+			return px;
 		}
 
 		// Build the Compose MaterialTheme ColorScheme from the seed-generated M3 roles so the real

@@ -45,11 +45,16 @@ namespace CometSwiftUIProbe
 			_agent = new CometDevAgent(CometDevAgent.DevFlowPort, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
 
-			// Generate the Material 3 scheme from the Comet brand seed using Google's
-			// material-color-utilities (the SAME algorithm as Android's Material You) so iOS renders a
-			// real tonal scheme — identical to Android when both seed from this color — instead of the
-			// static palette. Must run BEFORE BuildUi() (the tree reads the theme tokens at build time).
-			CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
+			// Generate the Material 3 scheme from the Comet theme using Google's material-color-utilities
+			// (the SAME algorithm as Android's Material You) so iOS renders a real tonal scheme — identical
+			// to Android when both seed from the same input. Must run BEFORE BuildUi() (the tree reads the
+			// theme tokens at build time). Brand seed by default; flip SeedFromContent to derive the scheme
+			// from the user's profile photo (content-based Material You — same generator, image seed).
+			const bool SeedFromContent = false;
+			if (SeedFromContent && PixelsFromBundle("ali") is { } pixels)
+				CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(pixels);
+			else
+				CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
 
 			// A real Comet view tree, rendered as SwiftUI through the node protocol —
 			// no MAUI handlers in the render path.
@@ -63,6 +68,24 @@ namespace CometSwiftUIProbe
 		// The faithful Jetchat conversation screen (shared tree, identical on Android). iPhone
 		// safe-area insets: status bar / Dynamic Island ~50dp top, home indicator ~28dp bottom.
 		View BuildUi() => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28);
+
+		// Decode a bundled image to a small AARRGGBB pixel buffer for content-based theming (the
+		// material-color-utilities Quantize+Score wants raw pixels). Downscaled for a fast seed extract.
+		static uint[]? PixelsFromBundle(string name, int max = 64)
+		{
+			using var img = UIImage.FromBundle(name);
+			if (img?.CGImage is not CoreGraphics.CGImage cg) return null;
+			int w = System.Math.Min(max, (int)cg.Width), h = System.Math.Min(max, (int)cg.Height);
+			if (w <= 0 || h <= 0) return null;
+			var bytes = new byte[w * h * 4];
+			using (var cs = CoreGraphics.CGColorSpace.CreateDeviceRGB())
+			using (var ctx = new CoreGraphics.CGBitmapContext(bytes, w, h, 8, w * 4, cs, CoreGraphics.CGImageAlphaInfo.PremultipliedLast))
+				ctx.DrawImage(new CoreGraphics.CGRect(0, 0, w, h), cg);
+			var px = new uint[w * h];
+			for (int i = 0; i < px.Length; i++)
+				px[i] = ((uint)bytes[i * 4 + 3] << 24) | ((uint)bytes[i * 4] << 16) | ((uint)bytes[i * 4 + 1] << 8) | bytes[i * 4 + 2];
+			return px;
+		}
 
 		// Interactive controls with AutomationIds (clean `--automationId` selector targets) plus
 		// a Navigate button, so the dev tree pruning across push/pop is observable.

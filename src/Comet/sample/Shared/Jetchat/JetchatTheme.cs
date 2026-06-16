@@ -80,6 +80,16 @@ namespace CometSamples.Jetchat
 			return s;
 		}
 
+		/// <summary>Content-based theming: extract a Material You seed from image pixels (AARRGGBB) via
+		/// material-color-utilities' Quantize + Score, then apply the generated scheme — e.g. theme the
+		/// whole app from a profile photo, the same content-based mode Material You offers. Falls back to
+		/// the brand <see cref="SeedColor"/> when no usable seed is found.</summary>
+		public static MaterialColorUtilities.Schemes.Scheme<uint> ApplyDynamicSchemeFromPixels(uint[] argbPixels, bool dark = false)
+		{
+			var seeds = MaterialColorUtilities.Utils.ImageUtils.ColorsFromImage(argbPixels);
+			return ApplyDynamicScheme(seeds.Count > 0 ? FromArgbUint(seeds[0]) : SeedColor, dark);
+		}
+
 		// material-color-utilities works in AARRGGBB uints; convert to/from Maui colors.
 		static uint ToArgbUint(Color c) =>
 			((uint)System.Math.Round(c.Alpha * 255) << 24) | ((uint)System.Math.Round(c.Red * 255) << 16) |
