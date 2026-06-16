@@ -5,8 +5,19 @@ import SwiftUI
 // C# drives these through the @objc host functions; SwiftUI observes them so a property
 // or child change re-renders the narrowest scope. @Published vars are Swift-only (the C#
 // side mutates them via the host functions, never directly).
+// A styled slice of a FormattedText (the Comet TextRun): text + optional colour, monospace face,
+// background highlight, and underline — assembled into an AttributedString for rendering.
+struct CometTextRun {
+    let text: String
+    let color: Color?
+    let mono: Bool
+    let background: Color?
+    let underline: Bool
+}
+
 @objc(CometNode) public class CometNode: NSObject, ObservableObject, Identifiable {
     @objc public let kind: String
+    @Published var runs: [CometTextRun] = []   // FormattedText styled runs (empty => plain text)
     @Published var text: String = ""
     @Published var placeholder: String = ""
     @Published var imageUrl: String = ""
@@ -136,6 +147,23 @@ import SwiftUI
     @objc(scrollNodeToBottom:)
     public static func scrollToBottom(_ node: CometNode) {
         node.scrollToken &+= 1
+    }
+
+    // FormattedText styled runs (rebuilt on each Text_Runs change).
+    @objc(clearTextRuns:)
+    public static func clearTextRuns(_ node: CometNode) {
+        node.runs.removeAll()
+    }
+
+    @objc(addTextRun:text:colorArgb:hasColor:mono:bgArgb:hasBg:underline:)
+    public static func addTextRun(_ node: CometNode, text: String, colorArgb: UInt32, hasColor: Bool,
+                                  mono: Bool, bgArgb: UInt32, hasBg: Bool, underline: Bool) {
+        node.runs.append(CometTextRun(
+            text: text,
+            color: hasColor ? colorFromARGB(colorArgb) : nil,
+            mono: mono,
+            background: hasBg ? colorFromARGB(bgArgb) : nil,
+            underline: underline))
     }
 
     @objc(setTapHandler:handler:)
@@ -337,9 +365,16 @@ struct CometLeafContent: View {
                 Color.gray.opacity(0.25)
             }
         default: // "text" and unknown leaves
-            Text(node.text)
-                .modifier(ForegroundModifier(argb: node.textColorARGB))
-                .modifier(FontModifier(node: node))
+            if !node.runs.isEmpty {
+                // FormattedText: styled runs (the gold's AnnotatedString) → concatenated Text, so
+                // per-run colour / code / link styling renders (e.g. white text on the primary bubble).
+                runsText(node)
+                    .modifier(FontModifier(node: node))
+            } else {
+                Text(node.text)
+                    .modifier(ForegroundModifier(argb: node.textColorARGB))
+                    .modifier(FontModifier(node: node))
+            }
         }
     }
 }
@@ -355,6 +390,23 @@ private func bundledImage(_ name: String) -> UIImage? {
         }
     }
     return nil
+}
+
+// Assemble a FormattedText's styled runs by concatenating SwiftUI Text segments (this measures
+// reliably via sizeThatFits, unlike Text(AttributedString)). Per-run colour wins; monospace runs
+// use a system monospaced face at the base size; underline = links. (Per-run background — code-span
+// highlight — isn't expressible via Text concatenation, so it's dropped; the mono face still reads.)
+private func runsText(_ node: CometNode) -> Text {
+    let baseSize = node.fontSize > 0 ? node.fontSize : 16
+    var combined = Text(verbatim: "")
+    for run in node.runs {
+        var seg = Text(verbatim: run.text)
+        if let c = run.color { seg = seg.foregroundColor(c) }
+        if run.mono { seg = seg.font(.system(size: baseSize, design: .monospaced)) }
+        if run.underline { seg = seg.underline() }
+        combined = combined + seg
+    }
+    return combined
 }
 
 // Cross-platform symbol name → SF Symbol (the iOS counterpart of the Compose Icons mapping).

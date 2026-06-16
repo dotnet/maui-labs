@@ -35,6 +35,12 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("scrollNodeToBottom:")]
 		void ScrollToBottom(CometNode node);
 
+		[Static, Export("clearTextRuns:")]
+		void ClearTextRuns(CometNode node);
+
+		[Static, Export("addTextRun:text:colorArgb:hasColor:mono:bgArgb:hasBg:underline:")]
+		void AddTextRun(CometNode node, string text, uint colorArgb, bool hasColor, bool mono, uint bgArgb, bool hasBg, bool underline);
+
 		[Static, Export("setTapHandler:handler:")]
 		void SetTapHandler(CometNode node, Action handler);
 

@@ -51,7 +51,18 @@ namespace Comet.Platform.SwiftUI
 			if (id == PropertyIds.Text_Value || id == PropertyIds.Button_Text || id == PropertyIds.TextField_Text)
 				CometSwiftUIHost.SetString(_native, "text", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Text_Runs && value.AsObject is System.Collections.Generic.IReadOnlyList<TextRun> runs)
+			{
+				// FormattedText: push the styled runs so the shim renders per-run colour/monospace/
+				// underline; also set the flattened text as a measure baseline + fallback if runs are empty.
 				CometSwiftUIHost.SetString(_native, "text", string.Concat(System.Linq.Enumerable.Select(runs, r => r.Text)));
+				CometSwiftUIHost.ClearTextRuns(_native);
+				foreach (var r in runs)
+					CometSwiftUIHost.AddTextRun(_native, r.Text ?? string.Empty,
+						r.Color is { } c ? ToArgb(c) : 0, r.Color is not null,
+						r.Monospace,
+						r.Background is { } bg ? ToArgb(bg) : 0, r.Background is not null,
+						r.Underline);
+			}
 			else if (id == PropertyIds.TextField_Placeholder)
 				CometSwiftUIHost.SetString(_native, "placeholder", value.AsString ?? string.Empty);
 			else if (id == PropertyIds.Image_Source)
