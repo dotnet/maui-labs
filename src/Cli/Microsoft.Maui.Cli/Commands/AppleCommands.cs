@@ -787,7 +787,16 @@ public static class AppleCommands
 				if (useJson)
 					formatter.Write(new SimulatorPrivacyResult { Udid = udid, Action = action, Service = SimulatorPrivacy.ToSimctlServiceName(permission), BundleIdentifier = bundleId, Success = true });
 				else
-					formatter.WriteSuccess($"Permission '{permissionText}' {action}ed on simulator '{udid}'" + (bundleId != null ? $" for {bundleId}." : "."));
+				{
+					var pastTense = action switch
+					{
+						"grant" => "granted",
+						"revoke" => "revoked",
+						"reset" => "reset",
+						_ => $"{action}ed"
+					};
+					formatter.WriteSuccess($"Permission '{permissionText}' {pastTense} on simulator '{udid}'" + (bundleId != null ? $" for {bundleId}." : "."));
+				}
 				return 0;
 			});
 
@@ -1339,13 +1348,13 @@ public static class AppleCommands
 	{
 		var udidArg = new Argument<string>("udid") { Description = "Simulator UDID" };
 		var outputArg = new Argument<string>("output-path") { Description = "Path to write the recorded video to" };
-		var formatOption = new Option<string?>("--format") { Description = "Video format: mp4 (default), h264, fmp4, gif" };
+		var codecOption = new Option<string?>("--codec") { Description = "Video codec: h264 (default) or hevc" };
 		var forceOption = new Option<bool>("--force") { Description = "Overwrite the output file if it already exists" };
 
 		// Recording streams until interrupted (Ctrl-C), mirroring the upstream
 		// "dispose to stop" model. This keeps the CLI process alive for the
 		// duration of the recording without a separate session-tracking store.
-		var recordCommand = new Command("record-video", "Record a video from a simulator until interrupted (Ctrl-C)") { udidArg, outputArg, formatOption, forceOption };
+		var recordCommand = new Command("record-video", "Record a video from a simulator until interrupted (Ctrl-C)") { udidArg, outputArg, codecOption, forceOption };
 		recordCommand.SetAction((ParseResult parseResult) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
@@ -1359,24 +1368,28 @@ public static class AppleCommands
 			var appleProvider = Program.AppleProvider;
 			var udid = parseResult.GetValue(udidArg)!;
 			var outputPath = parseResult.GetValue(outputArg)!;
-			var formatText = parseResult.GetValue(formatOption);
+			var codecText = parseResult.GetValue(codecOption);
 			var force = parseResult.GetValue(forceOption);
 
-			VideoRecordingFormat? format = null;
-			if (formatText is not null)
+			string? codec = null;
+			if (codecText is not null)
 			{
-				if (!SimulatorEnumParsing.TryParseVideoFormat(formatText, out var parsedFormat))
+				if (!SimulatorEnumParsing.TryParseVideoCodec(codecText, out var parsedCodec))
 				{
-					formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown video format '{formatText}'. Use mp4, h264, fmp4, or gif."));
+					formatter.WriteError(new MauiToolException(ErrorCodes.InvalidArgument, $"Unknown video codec '{codecText}'. Use h264 or hevc."));
 					return 1;
 				}
-				format = parsedFormat;
+				codec = parsedCodec;
 			}
 
 			if (!ValidateSimulator(appleProvider, udid, formatter))
 				return 1;
 
-			var options = new RecordingOptions { Format = format, Force = force };
+			// Note: RecordingOptions.Format is not set because modern simctl uses --codec
+			// (h264|hevc) rather than the legacy --type flag. The upstream package will
+			// need updating to support --codec; for now we pass Force only and rely on
+			// simctl's default codec (h264).
+			var options = new RecordingOptions { Force = force };
 			var session = appleProvider.StartRecording(udid, outputPath, options);
 			if (session is null)
 			{
@@ -1388,7 +1401,7 @@ public static class AppleCommands
 
 			// Emit a "recording started" signal so JSON consumers know we're active.
 			if (useJson)
-				formatter.WriteInfo("{\"status\":\"recording\",\"udid\":\"" + udid + "\",\"output_path\":\"" + outputPath.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"}");
+				formatter.Write(new SimulatorRecordingStartedResult { Udid = udid, OutputPath = outputPath, Status = "recording" });
 			else
 				formatter.WriteInfo($"Recording simulator '{udid}' to '{outputPath}'. Press Ctrl-C to stop.");
 
@@ -1411,7 +1424,7 @@ public static class AppleCommands
 			}
 
 			if (useJson)
-				formatter.Write(new SimulatorRecordingResult { Udid = udid, OutputPath = outputPath, Format = format is { } f ? SimulatorScreenCapture.ToSimctlVideoFormatName(f) : null, Success = true });
+				formatter.Write(new SimulatorRecordingResult { Udid = udid, OutputPath = outputPath, Codec = codec, Success = true });
 			else
 				formatter.WriteSuccess($"Recording saved to '{outputPath}'.");
 			return 0;

@@ -587,6 +587,13 @@ public class AppleSimulatorCommandsTests
 		Assert.Contains(screenshot.Options, o => o.Name == "--format");
 	}
 
+	[Fact]
+	public void RecordVideoCommand_HasCodecOption()
+	{
+		var recordVideo = Simulator().Subcommands.First(c => c.Name == "record-video");
+		Assert.Contains(recordVideo.Options, o => o.Name == "--codec");
+	}
+
 	// --- SimulatorEnumParsing ---
 
 	[Theory]
@@ -628,6 +635,27 @@ public class AppleSimulatorCommandsTests
 	{
 		Assert.True(SimulatorEnumParsing.TryParseDataNetwork(token, out var network));
 		Assert.Equal(expected, network);
+	}
+
+	[Theory]
+	[InlineData("h264", "h264")]
+	[InlineData("H264", "h264")]
+	[InlineData("hevc", "hevc")]
+	[InlineData("HEVC", "hevc")]
+	public void TryParseVideoCodec_ParsesKnownTokens(string token, string expected)
+	{
+		Assert.True(SimulatorEnumParsing.TryParseVideoCodec(token, out var codec));
+		Assert.Equal(expected, codec);
+	}
+
+	[Theory]
+	[InlineData("mp4")]
+	[InlineData("gif")]
+	[InlineData("fmp4")]
+	[InlineData("invalid")]
+	public void TryParseVideoCodec_RejectsUnsupportedValues(string token)
+	{
+		Assert.False(SimulatorEnumParsing.TryParseVideoCodec(token, out _));
 	}
 
 	// --- FakeAppleProvider tracking ---

@@ -284,6 +284,18 @@ internal sealed record SimulatorScreenshotResult
 	public bool Success { get; init; }
 }
 
+internal sealed record SimulatorRecordingStartedResult
+{
+	[JsonPropertyName("udid")]
+	public required string Udid { get; init; }
+
+	[JsonPropertyName("output_path")]
+	public required string OutputPath { get; init; }
+
+	[JsonPropertyName("status")]
+	public required string Status { get; init; }
+}
+
 internal sealed record SimulatorRecordingResult
 {
 	[JsonPropertyName("udid")]
@@ -292,9 +304,9 @@ internal sealed record SimulatorRecordingResult
 	[JsonPropertyName("output_path")]
 	public required string OutputPath { get; init; }
 
-	[JsonPropertyName("format")]
+	[JsonPropertyName("codec")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-	public string? Format { get; init; }
+	public string? Codec { get; init; }
 
 	[JsonPropertyName("success")]
 	public bool Success { get; init; }

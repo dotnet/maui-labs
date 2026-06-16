@@ -81,6 +81,22 @@ public static class SimulatorEnumParsing
 		}
 	}
 
+	/// <summary>
+	/// Parses a video codec token accepted by modern <c>simctl io recordVideo</c>.
+	/// Only <c>h264</c> and <c>hevc</c> are supported; older format names are rejected.
+	/// Returns the codec string for downstream use.
+	/// </summary>
+	public static bool TryParseVideoCodec(string value, out string codec)
+	{
+		codec = "h264";
+		switch (Normalize(value))
+		{
+			case "h264": codec = "h264"; return true;
+			case "hevc": codec = "hevc"; return true;
+			default: return false;
+		}
+	}
+
 	/// <summary>Parses a battery state token (charging, charged, discharging).</summary>
 	public static bool TryParseBatteryState(string value, out SimulatorBatteryState state)
 	{
