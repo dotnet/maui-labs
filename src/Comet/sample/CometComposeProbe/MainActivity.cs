@@ -48,13 +48,27 @@ namespace CometComposeProbe
 				Android.Util.Log.Warn("CometProbe", "Font load failed: " + ex);
 			}
 
-			// Build the active Material 3 ColorScheme: Material You (dynamicLightColorScheme) on
-			// Android 12+, else Jetchat's static light scheme — exactly Themes.kt's
-			// JetchatTheme(isDynamicColor = true). Mirror its roles into the C# theme tokens BEFORE
-			// building the tree so the views' explicit .Color()s are the dynamic ones too.
-			var scheme = BuildColorScheme();
-			try { ApplySchemeToTheme(scheme); }
-			catch (Exception ex) { Android.Util.Log.Warn("CometProbe", "scheme read-back failed, using static theme: " + ex); }
+			// Material 3 color. By DEFAULT we seed the scheme from the Comet brand color via the
+			// shared material-color-utilities path (JetchatTheme.ApplyDynamicScheme) — the SAME algorithm
+			// and SAME seed as iOS — so the app is theme-driven and looks identical cross-platform.
+			// Flip UseWallpaperMaterialYou to instead adopt the device's Material You (gold-faithful to
+			// Themes.kt's isDynamicColor=true, but diverges from iOS, which can't read the wallpaper).
+			const bool UseWallpaperMaterialYou = false;
+			AndroidX.Compose.Material3.ColorScheme scheme;
+			if (UseWallpaperMaterialYou && Build.VERSION.SdkInt >= BuildVersionCodes.S)
+			{
+				scheme = AndroidX.Compose.MaterialTheme.DynamicLightColorScheme(this);
+				try { ApplySchemeToTheme(scheme); }
+				catch (Exception ex) { Android.Util.Log.Warn("CometProbe", "scheme read-back failed, using static theme: " + ex); }
+			}
+			else
+			{
+				// Generate the M3 scheme in shared C# (applies it to the C# theme tokens the Comet views
+				// read), then build the matching Compose ColorScheme so the real Material controls
+				// (Button, ripples) are seeded identically.
+				var s = CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
+				scheme = ComposeSchemeFromSeed(s);
+			}
 
 			// System bars match the (now dynamic) surface so the status/nav areas blend edge-to-edge.
 			var surf = CometSamples.Jetchat.JetchatTheme.Surface;
@@ -82,26 +96,19 @@ namespace CometComposeProbe
 			SetContentView(composeView);
 		}
 
-		AndroidX.Compose.Material3.ColorScheme BuildColorScheme()
+		// Build the Compose MaterialTheme ColorScheme from the seed-generated M3 roles so the real
+		// Material controls (Button, ripples) match the Comet views (which read the same roles from the
+		// C# theme tokens). Mirrors the role subset the static scheme used.
+		static AndroidX.Compose.Material3.ColorScheme ComposeSchemeFromSeed(MaterialColorUtilities.Schemes.Scheme<uint> s)
 		{
-			if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
-				return AndroidX.Compose.MaterialTheme.DynamicLightColorScheme(this);
-			return JetchatStaticColorScheme();
-		}
-
-		static AndroidX.Compose.Material3.ColorScheme JetchatStaticColorScheme()
-		{
-			static AndroidX.Compose.Color C(string hex)
-			{
-				int v = System.Convert.ToInt32(hex, 16);
-				return AndroidX.Compose.Color.FromArgb(0xFF, (byte)((v >> 16) & 0xFF), (byte)((v >> 8) & 0xFF), (byte)(v & 0xFF));
-			}
+			static AndroidX.Compose.Color C(uint argb) =>
+				AndroidX.Compose.Color.FromArgb(0xFF, (byte)((argb >> 16) & 0xFF), (byte)((argb >> 8) & 0xFF), (byte)(argb & 0xFF));
 			return AndroidX.Compose.MaterialTheme.LightColorScheme(
-				primary: C("1546F6"), onPrimary: C("FFFFFF"),
-				surface: C("FBFDFD"), onSurface: C("191C1D"),
-				surfaceVariant: C("E2E1EC"), onSurfaceVariant: C("45464F"),
-				background: C("FBFDFD"), onBackground: C("191C1D"),
-				tertiary: C("7A5900"));
+				primary: C(s.Primary), onPrimary: C(s.OnPrimary),
+				surface: C(s.Surface), onSurface: C(s.OnSurface),
+				surfaceVariant: C(s.SurfaceVariant), onSurfaceVariant: C(s.OnSurfaceVariant),
+				background: C(s.Background), onBackground: C(s.OnBackground),
+				tertiary: C(s.Tertiary));
 		}
 
 		// Read the scheme's role colors back into the C# theme tokens (facade Color exposes A/R/G/B).

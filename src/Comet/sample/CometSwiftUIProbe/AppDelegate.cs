@@ -45,6 +45,12 @@ namespace CometSwiftUIProbe
 			_agent = new CometDevAgent(CometDevAgent.DevFlowPort, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
 
+			// Generate the Material 3 scheme from the Comet brand seed using Google's
+			// material-color-utilities (the SAME algorithm as Android's Material You) so iOS renders a
+			// real tonal scheme — identical to Android when both seed from this color — instead of the
+			// static palette. Must run BEFORE BuildUi() (the tree reads the theme tokens at build time).
+			CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor);
+
 			// A real Comet view tree, rendered as SwiftUI through the node protocol —
 			// no MAUI handlers in the render path.
 			var backend = new SwiftUIBackendRoot(new EmptyServiceProvider()) { UseYogaLayout = true };

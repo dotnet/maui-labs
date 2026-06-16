@@ -53,6 +53,41 @@ namespace CometSamples.Jetchat
 		public static Color Divider { get; private set; } = Grey10.WithAlpha(0.12f);   // onSurface @ 12%
 		public static readonly Color Disabled = Color.FromArgb("#C4C6D0");
 
+		/// <summary>The Jetchat brand seed (Blue40). Both platforms generate their Material 3 scheme
+		/// from THIS color via <see cref="ApplyDynamicScheme"/>, so the look is theme-driven and identical
+		/// cross-platform (the gold seeds from the device wallpaper, which no iOS app can read).</summary>
+		public static readonly Color SeedColor = Color.FromArgb("#1546F6");
+
+		/// <summary>Generate a full Material 3 tonal scheme from a single <paramref name="seed"/> using
+		/// Google's material-color-utilities algorithm (HCT → tonal palettes → roles — the SAME math
+		/// Android's Material You uses) and apply it. The cross-platform "dynamic color" path: seed from
+		/// the brand color (consistent) or from content (a photo). Call BEFORE building the view tree.
+		/// Returns the role colors so a platform can also feed them to its native theme (Compose MaterialTheme).</summary>
+		public static MaterialColorUtilities.Schemes.Scheme<uint> ApplyDynamicScheme(Color seed, bool dark = false)
+		{
+			var core = MaterialColorUtilities.Palettes.CorePalette.Of(ToArgbUint(seed));
+			MaterialColorUtilities.Schemes.Scheme<uint> s = dark
+				? new MaterialColorUtilities.Schemes.DarkSchemeMapper().Map(core)
+				: new MaterialColorUtilities.Schemes.LightSchemeMapper().Map(core);
+			ApplyScheme(
+				primary: FromArgbUint(s.Primary), onPrimary: FromArgbUint(s.OnPrimary),
+				primaryContainer: FromArgbUint(s.PrimaryContainer), secondary: FromArgbUint(s.Secondary),
+				surface: FromArgbUint(s.Surface), onSurface: FromArgbUint(s.OnSurface),
+				surfaceVariant: FromArgbUint(s.SurfaceVariant), onSurfaceVariant: FromArgbUint(s.OnSurfaceVariant),
+				background: FromArgbUint(s.Background), tertiary: FromArgbUint(s.Tertiary),
+				tertiaryContainer: FromArgbUint(s.TertiaryContainer), onTertiaryContainer: FromArgbUint(s.OnTertiaryContainer),
+				outline: FromArgbUint(s.Outline));
+			return s;
+		}
+
+		// material-color-utilities works in AARRGGBB uints; convert to/from Maui colors.
+		static uint ToArgbUint(Color c) =>
+			((uint)System.Math.Round(c.Alpha * 255) << 24) | ((uint)System.Math.Round(c.Red * 255) << 16) |
+			((uint)System.Math.Round(c.Green * 255) << 8) | (uint)System.Math.Round(c.Blue * 255);
+
+		public static Color FromArgbUint(uint argb) => new Color(
+			((argb >> 16) & 0xFF) / 255f, ((argb >> 8) & 0xFF) / 255f, (argb & 0xFF) / 255f, ((argb >> 24) & 0xFF) / 255f);
+
 		/// <summary>Swap the semantic roles to a platform <c>ColorScheme</c> (Material You) at startup,
 		/// mirroring <c>JetchatTheme(isDynamicColor = true)</c> in Themes.kt. Call BEFORE building the
 		/// view tree. Derived roles (the tonal footer + the 12% divider) are recomputed from the new
