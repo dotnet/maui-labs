@@ -23,8 +23,9 @@
   </Folder>
   <Folder Name="/src/AIControls/">
     <Project Path="src/AIControls/Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
-    <Project Path="src/AIControls/Microsoft.AspNetCore.Components.AI.Core/Microsoft.AspNetCore.Components.AI.Core.csproj" />
-    <Project Path="src/AIControls/Microsoft.AspNetCore.Components.AI.SourceGenerators/Microsoft.AspNetCore.Components.AI.SourceGenerators.csproj" />
+    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat/Microsoft.Maui.AI.Chat.csproj" />
+    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat.Blazor/Microsoft.Maui.AI.Chat.Blazor.csproj" />
+    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat.SourceGenerators/Microsoft.Maui.AI.Chat.SourceGenerators.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />

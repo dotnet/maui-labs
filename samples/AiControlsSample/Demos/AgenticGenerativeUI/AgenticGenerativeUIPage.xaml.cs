@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
-using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 
 namespace AiControlsSample;

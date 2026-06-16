@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 using Microsoft.Maui.Controls.Xaml;

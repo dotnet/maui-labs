@@ -44,8 +44,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Core\Microsoft.AspNetCore.Components.AI.Core.csproj" />
-		<ProjectReference Include="..\..\src\AIControls\Microsoft.AspNetCore.Components.AI.Blazor\Microsoft.AspNetCore.Components.AI.Blazor.csproj" />
+		<ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+		<ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat.Blazor\Microsoft.Maui.AI.Chat.Blazor.csproj" />
 		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
 
