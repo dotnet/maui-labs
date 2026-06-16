@@ -21,6 +21,11 @@
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <!-- Let the latest packaged tool TFM run on newer major runtimes. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
