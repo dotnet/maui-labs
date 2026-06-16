@@ -322,7 +322,12 @@ public class BrokerServer : IDisposable
         catch { }
         finally
         {
-            if (_agents.TryRemove(connection.Registration.Id, out _))
+            // Use the KeyValuePair overload so a reconnecting agent that
+            // re-registered with the same ID isn't accidentally evicted by
+            // this stale monitor loop (which would also dispose the new
+            // inspector via the line below). We only release the port and
+            // inspector that actually belong to *this* connection.
+            if (_agents.TryRemove(new KeyValuePair<string, AgentConnection>(connection.Registration.Id, connection)))
             {
                 ReleasePort(connection.Registration.Port);
                 if (_inspectors.TryRemove(connection.Registration.Id, out var inspector))
@@ -508,7 +513,11 @@ public class BrokerServer : IDisposable
     {
         // Routes:
         //   /inspector          → list agents with inspector links
-        //   /inspector/{id}     → serve inspector HTML for that agent
+        //   /inspector/{id}     → 301 redirect to /inspector/{id}/ so that
+        //                         relative asset URLs in inspector.html
+        //                         (devflow.css, devflow.js) resolve against
+        //                         the per-agent base rather than the broker root.
+        //   /inspector/{id}/    → serve inspector HTML for that agent
         //   /inspector/{id}/... → proxy sub-routes to the per-agent InspectorServer
 
         var segments = path.TrimStart('/').Split('/', 3);
@@ -517,6 +526,20 @@ public class BrokerServer : IDisposable
         {
             // List agents with inspector links
             await ServeAgentListPage(context);
+            return;
+        }
+
+        // /inspector/{id} (no trailing slash, no sub-path) → redirect so that
+        // <link href="devflow.css"> on the inspector page resolves to
+        // /inspector/{id}/devflow.css instead of /inspector/devflow.css
+        // (which the broker would otherwise try to route as agent id "devflow.css").
+        if (segments.Length == 2 && !string.IsNullOrEmpty(segments[1]) && !path.EndsWith('/'))
+        {
+            // Preserve the query string on the redirect.
+            var query = context.Request.Url?.Query ?? string.Empty;
+            context.Response.StatusCode = 301;
+            context.Response.RedirectLocation = $"/inspector/{segments[1]}/{query}";
+            context.Response.Close();
             return;
         }
 
@@ -532,8 +555,13 @@ public class BrokerServer : IDisposable
         // to either "com.example.FooApp" or "com.example.FooBarApp".
         if (!_agents.TryGetValue(agentId, out var connection))
         {
-            if (_agents.Count == 1)
-                connection = _agents.Values.First();
+            // Snapshot the dictionary atomically — between a `_agents.Count == 1`
+            // check and a subsequent `_agents.Values.First()`, the sole agent
+            // could disconnect on another thread and `First()` would throw
+            // InvalidOperationException on an empty collection.
+            var snapshot = _agents.Values.ToArray();
+            if (snapshot.Length == 1)
+                connection = snapshot[0];
         }
 
         if (connection == null)

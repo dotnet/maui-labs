@@ -60,6 +60,36 @@ public sealed class InspectorServer : IDisposable
     }
 
     /// <summary>
+    /// Safely extract the "elements" array from a hit-test response. Returns false if
+    /// the agent returned malformed JSON, missing the property, or wrong shape — in which
+    /// case the inspector should fall back to a "no element here" path instead of crashing
+    /// and leaking the exception text to the browser.
+    /// </summary>
+    private static bool TryParseHitTestElements(string? hitResult, out JsonDocument? doc, out JsonElement elements)
+    {
+        doc = null;
+        elements = default;
+        if (string.IsNullOrEmpty(hitResult)) return false;
+        try
+        {
+            doc = JsonDocument.Parse(hitResult);
+            if (!doc.RootElement.TryGetProperty("elements", out elements) || elements.ValueKind != JsonValueKind.Array)
+            {
+                doc.Dispose();
+                doc = null;
+                return false;
+            }
+            return true;
+        }
+        catch (JsonException)
+        {
+            doc?.Dispose();
+            doc = null;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Handles an HTTP request from the broker, routing it through the inspector logic.
     /// This allows the broker to serve inspector pages without a separate listener.
     /// </summary>
@@ -214,6 +244,14 @@ public sealed class InspectorServer : IDisposable
             var agentToClient = RelayLoopAsync(agentWs, clientWs, ct);
             var clientToAgent = RelayLoopAsync(clientWs, agentWs, ct);
             await Task.WhenAny(agentToClient, clientToAgent);
+            // Cancel the linked CTS so the surviving relay task unblocks via
+            // cooperative cancellation (OperationCanceledException) before the
+            // finally block disposes the sockets out from under it. Without
+            // this, the abandoned ReceiveAsync only wakes up with
+            // ObjectDisposedException when CloseAsync below tears the socket
+            // down — slower, noisier, and the catch {} below would have to
+            // swallow that distinct exception type.
+            try { linkedCts.Cancel(); } catch { }
         }
         catch { }
         finally
@@ -264,14 +302,23 @@ public sealed class InspectorServer : IDisposable
             await _listenTask.ConfigureAwait(false);
     }
 
+    private int _disposed;
+
     public void Dispose()
     {
+        // Make Dispose idempotent. CancellationTokenSource.Dispose() throws
+        // ObjectDisposedException on a second call, and InspectorServer can
+        // be disposed from multiple places: the broker eviction path and a
+        // direct CLI shutdown. A guard is cheaper than try/catching every
+        // member.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
         try { _lifetimeCts.Cancel(); } catch { }
-        _cts?.Cancel();
-        _listener?.Stop();
-        _cts?.Dispose();
-        _lifetimeCts.Dispose();
-        _client.Dispose();
+        try { _cts?.Cancel(); } catch { }
+        try { _listener?.Stop(); } catch { }
+        try { _cts?.Dispose(); } catch { }
+        try { _lifetimeCts.Dispose(); } catch { }
+        try { _client.Dispose(); } catch { }
     }
 
     private async Task AcceptLoop(CancellationToken ct)
@@ -367,7 +414,12 @@ public sealed class InspectorServer : IDisposable
         }
         catch (Exception ex)
         {
-            return (500, "text/plain", Encoding.UTF8.GetBytes($"Error: {ex.Message}"));
+            // Don't leak exception detail (which can include host/port info,
+            // file paths, or full stack traces if the message was built by
+            // an inner library) to the inspector browser. Log to stderr so
+            // an operator can still see what went wrong locally.
+            Console.Error.WriteLine($"[inspector] route '{request.Path}' failed: {ex}");
+            return (500, "text/plain", Encoding.UTF8.GetBytes("Internal Server Error"));
         }
     }
 
@@ -408,7 +460,13 @@ public sealed class InspectorServer : IDisposable
         lock (_cacheLock)
         {
             _rootPageId = rootPageId;
-            _cachedScreenshot = null; // force fresh screenshot
+            // Do NOT invalidate the screenshot cache here. The 200ms TTL on
+            // GetCachedScreenshotAsync exists precisely so that the
+            // 500ms AJAX poll plus any concurrent root-page request can
+            // share one capture. Forcing a refresh on every state call
+            // defeats that and triples per-second screenshot load. The
+            // cache key already includes elementId, so root/state requests
+            // with different rootPageIds don't poison each other.
         }
         var screenshot = await GetCachedScreenshotAsync(rootPageId);
         var hasScreenshot = screenshot?.Length > 0;
@@ -535,21 +593,29 @@ public sealed class InspectorServer : IDisposable
             var hitResult = await _client.HitTestAsync(x, y);
 
             // Parse hit-test result — response is { elements: [{ id, ... }, ...] }
-            using var hitDoc = JsonDocument.Parse(hitResult);
-            var elements = hitDoc.RootElement.GetProperty("elements");
-            if (elements.GetArrayLength() > 0)
+            // The agent may return malformed JSON or omit "elements" if it
+            // encountered an internal error; treat that as "no element here"
+            // rather than leaking the JsonException text to the browser.
+            if (TryParseHitTestElements(hitResult, out var hitDoc, out var elements))
             {
-                // Try elements from most specific to most general until one accepts tap
-                for (int i = 0; i < elements.GetArrayLength(); i++)
+                using (hitDoc)
                 {
-                    var elementId = elements[i].GetProperty("id").GetString();
-                    if (!string.IsNullOrEmpty(elementId))
+                    if (elements.GetArrayLength() > 0)
                     {
-                        var success = await _client.TapAsync(elementId);
-                        if (success)
+                        // Try elements from most specific to most general until one accepts tap
+                        for (int i = 0; i < elements.GetArrayLength(); i++)
                         {
-                            InvalidateScreenshotCache();
-                            return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                            if (!elements[i].TryGetProperty("id", out var idProp)) continue;
+                            var elementId = idProp.GetString();
+                            if (!string.IsNullOrEmpty(elementId))
+                            {
+                                var success = await _client.TapAsync(elementId);
+                                if (success)
+                                {
+                                    InvalidateScreenshotCache();
+                                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                                }
+                            }
                         }
                     }
                 }
@@ -589,20 +655,24 @@ public sealed class InspectorServer : IDisposable
         if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
         {
             var hitResult = await _client.HitTestAsync(xProp.GetDouble(), yProp.GetDouble());
-            using var hitDoc = JsonDocument.Parse(hitResult);
-            var elements = hitDoc.RootElement.GetProperty("elements");
-
-            // Try each element from most specific to general until one accepts scroll
-            for (int i = 0; i < elements.GetArrayLength(); i++)
+            if (TryParseHitTestElements(hitResult, out var hitDoc, out var elements))
             {
-                var elementId = elements[i].GetProperty("id").GetString();
-                if (!string.IsNullOrEmpty(elementId))
+                using (hitDoc)
                 {
-                    var success = await _client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
-                    if (success)
+                    // Try each element from most specific to general until one accepts scroll
+                    for (int i = 0; i < elements.GetArrayLength(); i++)
                     {
-                        InvalidateScreenshotCache();
-                        return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                        if (!elements[i].TryGetProperty("id", out var idProp)) continue;
+                        var elementId = idProp.GetString();
+                        if (!string.IsNullOrEmpty(elementId))
+                        {
+                            var success = await _client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
+                            if (success)
+                            {
+                                InvalidateScreenshotCache();
+                                return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                            }
+                        }
                     }
                 }
             }
@@ -760,8 +830,14 @@ public sealed class InspectorServer : IDisposable
                 }
             }, linkedCt);
 
-            // Relay agent messages to browser
+            // Relay agent messages to browser. Accumulate fragments into a
+            // single payload before forwarding so that one logical agent
+            // message becomes one WebSocket frame on the wire — otherwise
+            // SendWebSocketFrameAsync (which always sets FIN) would split
+            // long messages into multiple FIN-bit frames and the browser
+            // would see partial JSON.
             var buffer = new byte[8192];
+            using var assembled = new MemoryStream();
             while (!linkedCt.IsCancellationRequested && agentWs.State == System.Net.WebSockets.WebSocketState.Open)
             {
                 System.Net.WebSockets.WebSocketReceiveResult result;
@@ -772,8 +848,13 @@ public sealed class InspectorServer : IDisposable
 
                 if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
                 {
-                    var payload = buffer.AsMemory(0, result.Count).ToArray();
-                    await SendWebSocketFrameAsync(clientStream, payload, linkedCt);
+                    assembled.Write(buffer, 0, result.Count);
+                    if (result.EndOfMessage)
+                    {
+                        var payload = assembled.ToArray();
+                        assembled.SetLength(0);
+                        await SendWebSocketFrameAsync(clientStream, payload, linkedCt);
+                    }
                 }
             }
         }

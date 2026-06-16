@@ -42,7 +42,7 @@ public class InspectorPageTests : IAsyncLifetime
         _playwright.Dispose();
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ViewportUsesWindowDimensionsFromAgent()
     {
         await _page.GotoAsync(BaseUrl);
@@ -73,7 +73,7 @@ public class InspectorPageTests : IAsyncLifetime
             $"DOM data-height {h} should match /api/state viewportHeight {apiH}");
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ViewportHasFixedDimensions()
     {
         await _page.GotoAsync(BaseUrl);
@@ -86,7 +86,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Contains("height:", style);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ScreenshotImageIsPresent()
     {
         await _page.GotoAsync(BaseUrl);
@@ -97,7 +97,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Contains("screenshot.png", src);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task NoInspectorChromeRendered()
     {
         await _page.GotoAsync(BaseUrl);
@@ -108,7 +108,7 @@ public class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#connection-status")).ToHaveCountAsync(0);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ElementsRenderedAsPositionedDivs()
     {
         await _page.GotoAsync(BaseUrl);
@@ -124,7 +124,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.NotNull(type);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ElementPositionsMatchAppCoordinates()
     {
         await _page.GotoAsync(BaseUrl);
@@ -141,7 +141,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Matches(@"top:\d", style);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ElementTreeIsFlatNotNested()
     {
         await _page.GotoAsync(BaseUrl);
@@ -154,7 +154,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Equal(0, await nested.CountAsync());
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task DataAttributesUseCamelCase()
     {
         // CSS attribute selectors like [data-isVisible] are case-insensitive in HTML,
@@ -172,7 +172,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.DoesNotContain("data-isenabled", html);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task CssServedSeparately()
     {
         var response = await _page.APIRequest.GetAsync(ResolveUrl("devflow.css"));
@@ -184,7 +184,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.DoesNotContain(":hover", text);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ClickSendsTapToAgent()
     {
         await _page.GotoAsync(BaseUrl);
@@ -205,7 +205,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Contains("?t=", screenshotAfter);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ClickOnElementSendsTapAtCorrectCoordinates()
     {
         await _page.GotoAsync(BaseUrl);
@@ -261,7 +261,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.True(y >= 0, $"Tap y should be non-negative, got {y}");
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task ScreenshotEndpointReturnsPng()
     {
         var response = await _page.APIRequest.GetAsync(ResolveUrl("screenshot.png"));
@@ -275,7 +275,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Equal(0x47, body[3]); // G
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task StateEndpointReturnsJsonWithElements()
     {
         var response = await _page.APIRequest.GetAsync(ResolveUrl("api/state"));
@@ -296,7 +296,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.True(vh.GetDouble() > 0);
     }
 
-    [Fact]
+    [LiveInspectorFact]
     public async Task AjaxRefreshUpdatesElementsWithoutReload()
     {
         await _page.GotoAsync(BaseUrl);

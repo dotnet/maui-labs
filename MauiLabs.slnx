@@ -52,6 +52,7 @@
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Driver/Microsoft.Maui.DevFlow.Driver.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Logging/Microsoft.Maui.DevFlow.Logging.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Tests/Microsoft.Maui.DevFlow.Tests.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj" />
   </Folder>
   <Folder Name="/src/AppProjectReference/">
     <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference/Microsoft.Maui.Build.AppProjectReference.csproj" />
