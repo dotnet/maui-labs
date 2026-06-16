@@ -30,6 +30,7 @@
     <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\someone_else.jpg"><LogicalName>someone_else.jpg</LogicalName></BundleResource>
     <BundleResource Include="Resources\sticker.png"><LogicalName>sticker.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetchat.png"><LogicalName>jetchat.png</LogicalName></BundleResource>
   </ItemGroup>
 
   <!-- Link + embed the Swift framework directly in the app so the static registrar's

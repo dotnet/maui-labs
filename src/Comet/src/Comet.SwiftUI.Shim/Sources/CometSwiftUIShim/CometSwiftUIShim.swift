@@ -341,6 +341,19 @@ struct CometLeafContent: View {
                 Text(node.iconGlyph)
                     .font(.custom(node.iconFontFamily, size: node.fontSize > 0 ? node.fontSize : 24))
                     .modifier(ForegroundModifier(argb: node.textColorARGB))
+            } else if let logo = bundledImage(node.iconName) {
+                // A bundled brand logo (e.g. the jetchat mark) — colourful when untinted (header),
+                // a tinted template when a colour is set (the mono chat-row logo). Mirrors the Android
+                // multicolor-asset path. Pinned to the icon size so it measures + can't overflow the text.
+                let logoSize = node.fontSize > 0 ? node.fontSize : 24
+                if node.textColorARGB != 0 {
+                    Image(uiImage: logo).renderingMode(.template).resizable().aspectRatio(contentMode: .fit)
+                        .frame(width: logoSize, height: logoSize)
+                        .modifier(ForegroundModifier(argb: node.textColorARGB))
+                } else {
+                    Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit)
+                        .frame(width: logoSize, height: logoSize)
+                }
             } else {
                 // Real SF Symbol, tinted + sized — the iOS native icon idiom.
                 Image(systemName: sfSymbol(node.iconName))
