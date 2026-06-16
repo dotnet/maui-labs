@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls;
 

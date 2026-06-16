@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using Microsoft.AspNetCore.Components.AI;
+using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 
 namespace AiControlsSample;
