@@ -47,7 +47,22 @@ namespace Comet.Platform.SwiftUI
 				}
 			});
 
+			// Shrink the laid-out height when the keyboard is up so the footer rises above it
+			// (SwiftUI's auto-avoidance doesn't reach our absolute-positioned nodes).
+			CometSwiftUIKeyboard.EnsureStarted();
+			CometSwiftUIKeyboard.Changed += RelayoutTop;
+
 			ShowTop();
+		}
+
+		// Lay the current top screen out to the keyboard-adjusted height (full width, height minus
+		// whatever the keyboard covers) — the single place the screen's available height is decided.
+		void RelayoutTop()
+		{
+			if (_shown is not { } top)
+				return;
+			var b = UIScreen.MainScreen.Bounds;
+			CometBackendLayoutEngine.Layout(top, new Size(b.Width, b.Height - CometSwiftUIKeyboard.Inset));
 		}
 
 		void ShowTop()
@@ -68,11 +83,10 @@ namespace Comet.Platform.SwiftUI
 			CometSwiftUIHost.InsertChild(_native, 0, node.Native);
 			_shown = top;
 
-			// Lay the screen out full-screen with the shared Yoga engine (mirrors ComposeNavigationNode):
-			// without this the screen's whole subtree has no Yoga frame and falls back to native SwiftUI
-			// layout (which centers on the cross axis), instead of the Yoga-arranged absolute frames.
-			var b = UIScreen.MainScreen.Bounds;
-			CometBackendLayoutEngine.Layout(top, new Size(b.Width, b.Height));
+			// Lay the screen out with the shared Yoga engine (mirrors ComposeNavigationNode): without
+			// this the screen's whole subtree has no Yoga frame and falls back to native SwiftUI layout
+			// (which centers on the cross axis). Height is keyboard-adjusted so the footer stays visible.
+			RelayoutTop();
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value) { }

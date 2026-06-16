@@ -112,6 +112,7 @@ namespace Comet.Platform.Compose
 			"at" => Icons.Filled.Email,
 			"photo" or "image" => Icons.Filled.AccountBox,
 			"video" or "duo" => Icons.Filled.Call,
+			"mic" or "microphone" => Icons.Filled.Phone,   // core set has no Mic glyph (stand-in)
 			_ => Icons.Filled.Star,
 		};
 	}

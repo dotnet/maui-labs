@@ -399,9 +399,16 @@ namespace CometSamples.Jetchat
 
 			return new VStack(spacing: 0f)
 			{
-				SignalExtensions.TextField(InputText, "Message #composers")
-					.Borderless().Color(OnSurface)
-					.Padding(new Thickness(20, 14, 20, 10)),
+				// Input row: the borderless field (grows to fill) + a trailing mic — the gold's
+				// UserInputText + RecordButton row.
+				new HStack(spacing: 0f)
+				{
+					SignalExtensions.TextField(InputText, "Message #composers")
+						.Borderless().Color(OnSurface).FillHorizontal()
+						.Padding(new Thickness(20, 22, 20, 22)),   // gold's UserInput row is 64dp tall
+					new Icon("mic").Color(Secondary).IconSize(24)
+						.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
+				},
 				new HStack(spacing: 0f)
 				{
 					InputIcon("mood"), Spacer(),

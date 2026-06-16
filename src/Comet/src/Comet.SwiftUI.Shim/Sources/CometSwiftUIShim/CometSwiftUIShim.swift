@@ -347,12 +347,17 @@ private func bundledImage(_ name: String) -> UIImage? {
 
 // Cross-platform symbol name → SF Symbol (the iOS counterpart of the Compose Icons mapping).
 private func sfSymbol(_ name: String) -> String {
+    // Cross-platform GENERIC names (the shared sample uses Android/Material-ish names) → the closest
+    // SF Symbol. Anything not listed falls through and, if it's itself a real SF Symbol name, is used
+    // verbatim — so the WHOLE SF Symbol library is available (e.g. Icon("mic.fill"), Icon("paperplane"))
+    // without adding a case here.
     switch name {
     case "search": return "magnifyingglass"
     case "info": return "info.circle"
     case "menu": return "line.3.horizontal"
     case "send": return "paperplane.fill"
-    case "place", "location": return "mappin"
+    case "place", "location": return "mappin.circle.fill"
+    case "mic", "microphone": return "mic"
     case "person": return "person.crop.circle"
     case "people": return "person.2.fill"
     case "jetchat": return "bubble.left.and.bubble.right.fill"   // logo stand-in (no bundled vector on iOS yet)
@@ -370,7 +375,9 @@ private func sfSymbol(_ name: String) -> String {
     case "at": return "at"
     case "photo", "image": return "photo"
     case "video", "duo": return "video"
-    default: return "star"
+    default:
+        // Pass the name through if it's a valid SF Symbol; otherwise a clear "unknown" glyph.
+        return UIImage(systemName: name) != nil ? name : "questionmark.square.dashed"
     }
 }
 
@@ -488,7 +495,13 @@ struct CometNodeView: View {
     private var nativeContent: some View {
         switch node.kind {
         case "navigation":
-            if let top = node.children.last { CometNodeView(node: top) } else { EmptyView() }
+            // Pin the screen to the TOP of the nav area: when the keyboard shrinks the screen's
+            // laid-out height below the nav's full height, the shorter screen must stay top-aligned
+            // (so its footer sits just above the keyboard) instead of centering in the leftover space.
+            ZStack(alignment: .topLeading) {
+                if let top = node.children.last { CometNodeView(node: top) } else { EmptyView() }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         case "drawer":
             // children[0] = content (full screen); children[1] = side panel. Scrim + slide-in.
             ZStack(alignment: .topLeading) {
