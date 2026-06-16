@@ -390,9 +390,9 @@ namespace CometSamples.Jetchat
 			void Restyle()
 			{
 				if (string.IsNullOrWhiteSpace(InputText.Peek()))
-					send.Outlined(true).Color(Disabled);     // empty → bordered, grey (disabled look)
+					send.Outlined(true).Color(Disabled).Background(Colors.Transparent);  // empty → bordered, grey
 				else
-					send.Outlined(false).Color(OnPrimary);   // text present → filled primary
+					send.Outlined(false).Color(OnPrimary).Background(Primary);            // text → filled primary
 			}
 			Restyle();
 			InputText.PropertyChanged += (_, __) => Restyle();

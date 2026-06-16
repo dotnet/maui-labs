@@ -29,6 +29,8 @@ import SwiftUI
     @Published var borderWidth: CGFloat = 0      // stroke width (e.g. avatar ring)
     @Published var borderColorARGB: UInt32 = 0   // stroke color
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
+    @Published var borderless: Bool = false      // TextField: no rounded-border box (foundation field)
+    @Published var outlined: Bool = false        // Button: OutlinedButton (bordered, no fill) vs filled
     @Published var drawerOpen: Bool = false     // Drawer: side panel shown
     @Published var scrollToken: Int = 0          // List: bumped to animate the log to the newest row
     // AlertDialog (presented as a native SwiftUI .alert).
@@ -82,6 +84,8 @@ import SwiftUI
         switch property {
         case "ison": node.isOn = value
         case "hastapgesture": node.hasTapGesture = value
+        case "borderless": node.borderless = value
+        case "outlined": node.outlined = value
         case "draweropen": node.drawerOpen = value
         case "dialogopen": node.dialogOpen = value
         default: break
@@ -251,14 +255,35 @@ struct CometLeafContent: View {
     var body: some View {
         switch node.kind {
         case "button":
-            Button(action: { node.onTap?() }) { Text(node.text) }
-                .modifier(ForegroundModifier(argb: node.textColorARGB))
-                .modifier(FontModifier(node: node))
+            // .plain so SwiftUI doesn't tint the label with the system accent (the Comet .Color() is
+            // authoritative). The pill FILL + corner clip come from the wrapper (background + surface
+            // modifiers, the filled Material Button); an OutlinedButton draws its own border instead.
+            Button(action: { node.onTap?() }) {
+                Text(node.text)
+                    .modifier(ForegroundModifier(argb: node.textColorARGB))
+                    .modifier(FontModifier(node: node))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .overlay {
+                        if node.outlined {
+                            Capsule().stroke(colorFromARGB(node.textColorARGB), lineWidth: 1)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
         case "textfield":
-            TextField(node.placeholder, text: Binding(
-                get: { node.text },
-                set: { node.text = $0; node.onChangeString?($0) }))
-                .textFieldStyle(.roundedBorder)
+            // Borderless = the gold's foundation BasicTextField (no rounded box) — the footer input.
+            if node.borderless {
+                TextField(node.placeholder, text: Binding(
+                    get: { node.text }, set: { node.text = $0; node.onChangeString?($0) }))
+                    .textFieldStyle(.plain)
+                    .modifier(ForegroundModifier(argb: node.textColorARGB))
+                    .modifier(FontModifier(node: node))
+            } else {
+                TextField(node.placeholder, text: Binding(
+                    get: { node.text }, set: { node.text = $0; node.onChangeString?($0) }))
+                    .textFieldStyle(.roundedBorder)
+            }
         case "toggle":
             Toggle("", isOn: Binding(
                 get: { node.isOn },

@@ -68,7 +68,11 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetDouble(_native, "value", value.AsDouble);
 			else if (id == PropertyIds.HasTapGesture)
 				CometSwiftUIHost.SetBool(_native, "hastapgesture", value.AsBool);
-			else if (id == PropertyIds.Text_Color && value.AsColor is { } tc)
+			else if (id == PropertyIds.TextField_Borderless)
+				CometSwiftUIHost.SetBool(_native, "borderless", value.AsBool);
+			else if (id == PropertyIds.Button_Outlined)
+				CometSwiftUIHost.SetBool(_native, "outlined", value.AsBool);
+			else if ((id == PropertyIds.Text_Color || id == PropertyIds.Button_TextColor) && value.AsColor is { } tc)
 				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(tc));
 			else if (id == PropertyIds.Text_FontSize)
 				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
