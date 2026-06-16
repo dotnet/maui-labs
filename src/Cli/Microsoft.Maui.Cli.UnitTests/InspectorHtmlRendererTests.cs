@@ -89,4 +89,46 @@ public class InspectorHtmlRendererTests
             CultureInfo.CurrentCulture = original;
         }
     }
+
+    [Fact]
+    public void RenderElements_SubtractsRootOffset_ForModalCoordinateSpace()
+    {
+        // Simulates a modal page at WindowBounds (0, 100) — the screenshot is
+        // captured from the modal's origin, so overlays must subtract the offset.
+        var tree = new List<ElementInfo>
+        {
+            new()
+            {
+                Id = "modal_btn",
+                Type = "Button",
+                WindowBounds = new BoundsInfo { X = 20, Y = 150, Width = 100, Height = 40 },
+            },
+        };
+
+        // With rootOffsetY = 100, the button at Y=150 should render at top:50px
+        var html = HtmlRenderer.RenderElements(tree, elementScale: 1, rootOffsetX: 0, rootOffsetY: 100);
+
+        Assert.Contains("top:50px", html);
+        Assert.Contains("left:20px", html);
+    }
+
+    [Fact]
+    public void RenderElements_ZeroOffset_PreservesOriginalCoordinates()
+    {
+        var tree = new List<ElementInfo>
+        {
+            new()
+            {
+                Id = "btn",
+                Type = "Button",
+                WindowBounds = new BoundsInfo { X = 30, Y = 80, Width = 100, Height = 40 },
+            },
+        };
+
+        // With zero offset (default), coordinates pass through unchanged
+        var html = HtmlRenderer.RenderElements(tree);
+
+        Assert.Contains("top:80px", html);
+        Assert.Contains("left:30px", html);
+    }
 }

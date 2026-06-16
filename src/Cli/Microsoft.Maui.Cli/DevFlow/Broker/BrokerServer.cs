@@ -544,6 +544,19 @@ public class BrokerServer : IDisposable
         }
 
         var agentId = segments[1];
+
+        // Redirect /inspector/{id} → /inspector/{id}/ so the browser resolves
+        // relative URLs (devflow.css, devflow.js, screenshot.png) correctly.
+        // Without the trailing slash, the browser treats {id} as a filename and
+        // resolves relatives against /inspector/ instead of /inspector/{id}/.
+        if (segments.Length == 2 && !path.EndsWith('/'))
+        {
+            context.Response.StatusCode = 301;
+            context.Response.Headers.Set("Location", path + "/");
+            context.Response.Close();
+            return;
+        }
+
         var subPath = segments.Length > 2 ? "/" + segments[2] : "/";
 
         // Resolve the agent. Two acceptable lookups:

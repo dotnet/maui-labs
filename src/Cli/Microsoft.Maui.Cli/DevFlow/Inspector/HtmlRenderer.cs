@@ -16,13 +16,14 @@ public static class HtmlRenderer
 {
     private static readonly Lazy<string> _templateCache = new(LoadTemplate, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0, double density = 1, double elementScale = 1)
+    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0, double density = 1, double elementScale = 1, double rootOffsetX = 0, double rootOffsetY = 0)
     {
         var template = _templateCache.Value;
         var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);
 
-        // Build the elements HTML (flat list — all elements use window-absolute bounds)
-        var elementsHtml = RenderElements(tree, elementScale);
+        // Build the elements HTML (flat list — all elements use window-absolute bounds,
+        // shifted by rootOffset so they align with the root page screenshot)
+        var elementsHtml = RenderElements(tree, elementScale, rootOffsetX, rootOffsetY);
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
@@ -43,13 +44,16 @@ public static class HtmlRenderer
 
     /// <summary>
     /// Renders just the element divs (no template wrapping) for AJAX state updates.
+    /// When rootOffsetX/Y are provided, element positions are shifted so that the
+    /// root page's window origin aligns with the screenshot origin (coordinate-space fix
+    /// for modals, sheets, and safe-area offsets).
     /// </summary>
-    public static string RenderElements(List<ElementInfo> tree, double elementScale = 1)
+    public static string RenderElements(List<ElementInfo> tree, double elementScale = 1, double rootOffsetX = 0, double rootOffsetY = 0)
     {
         var sb = new StringBuilder();
         foreach (var element in tree)
         {
-            RenderElementsFlat(sb, element, elementScale);
+            RenderElementsFlat(sb, element, elementScale, rootOffsetX, rootOffsetY);
         }
         return sb.ToString();
     }
@@ -79,28 +83,30 @@ public static class HtmlRenderer
     /// <summary>
     /// Renders all elements as flat siblings (no nesting) using window-absolute bounds.
     /// </summary>
-    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale)
+    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY)
     {
-        RenderSingleElement(sb, element, scale);
+        RenderSingleElement(sb, element, scale, rootOffsetX, rootOffsetY);
         if (element.Children != null)
         {
             foreach (var child in element.Children)
             {
-                RenderElementsFlat(sb, child, scale);
+                RenderElementsFlat(sb, child, scale, rootOffsetX, rootOffsetY);
             }
         }
     }
 
-    private static void RenderSingleElement(StringBuilder sb, ElementInfo element, double scale)
+    private static void RenderSingleElement(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY)
     {
-        // Build style for positioning using window-absolute bounds
-        // (windowBounds is absolute within the window; bounds is relative to parent)
+        // Build style for positioning using window-absolute bounds, adjusted by the
+        // root page offset so overlays align with the per-page screenshot.
         var bounds = element.WindowBounds ?? element.Bounds;
         if (bounds == null || (bounds.Width <= 0 && bounds.Height <= 0))
             return; // Skip elements with no meaningful bounds
 
+        var left = (bounds.X - rootOffsetX) * scale;
+        var top = (bounds.Y - rootOffsetY) * scale;
         var style = string.Create(CultureInfo.InvariantCulture,
-            $"position:absolute;left:{bounds.X * scale:F0}px;top:{bounds.Y * scale:F0}px;width:{bounds.Width * scale:F0}px;height:{bounds.Height * scale:F0}px;");
+            $"position:absolute;left:{left:F0}px;top:{top:F0}px;width:{bounds.Width * scale:F0}px;height:{bounds.Height * scale:F0}px;");
 
         // Build data attributes
         var attrs = new StringBuilder();

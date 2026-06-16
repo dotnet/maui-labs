@@ -29,6 +29,11 @@ public sealed class InspectorServer : IDisposable
     private string? _cachedScreenshotElementId;
     private DateTime _screenshotCacheTime;
     private string? _rootPageId;
+    // The window-absolute offset of the screenshotted root page element.
+    // Used to translate between viewport coordinates (relative to the screenshot)
+    // and window coordinates (used by the agent's hit-test/tap/scroll APIs).
+    private double _rootOffsetX;
+    private double _rootOffsetY;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
 
     // Cap request bodies to avoid local DoS via huge POST payloads.
@@ -432,7 +437,13 @@ public sealed class InspectorServer : IDisposable
         // bounds are relative to the page content. By screenshotting the page element
         // directly we get a 1:1 match between pixel coordinates and element bounds.
         var rootPageId = FindRootPageId(tree);
-        lock (_cacheLock) { _rootPageId = rootPageId; }
+        var (rootOffsetX, rootOffsetY) = GetRootPageOffset(tree, rootPageId);
+        lock (_cacheLock)
+        {
+            _rootPageId = rootPageId;
+            _rootOffsetX = rootOffsetX;
+            _rootOffsetY = rootOffsetY;
+        }
         var screenshot = await GetCachedScreenshotAsync(rootPageId);
         var hasScreenshot = screenshot?.Length > 0;
 
@@ -444,7 +455,7 @@ public sealed class InspectorServer : IDisposable
             viewportHeight = ph;
         }
 
-        var html = HtmlRenderer.Render(tree, hasScreenshot, (int)viewportWidth, (int)viewportHeight, 1, 1);
+        var html = HtmlRenderer.Render(tree, hasScreenshot, (int)viewportWidth, (int)viewportHeight, 1, 1, rootOffsetX, rootOffsetY);
         return (200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
     }
 
@@ -457,9 +468,12 @@ public sealed class InspectorServer : IDisposable
         var tree = await _client.GetTreeAsync();
 
         var rootPageId = FindRootPageId(tree);
+        var (rootOffsetX, rootOffsetY) = GetRootPageOffset(tree, rootPageId);
         lock (_cacheLock)
         {
             _rootPageId = rootPageId;
+            _rootOffsetX = rootOffsetX;
+            _rootOffsetY = rootOffsetY;
             // Do NOT invalidate the screenshot cache here. The 200ms TTL on
             // GetCachedScreenshotAsync exists precisely so that the
             // 500ms AJAX poll plus any concurrent root-page request can
@@ -479,7 +493,7 @@ public sealed class InspectorServer : IDisposable
             viewportHeight = ph;
         }
 
-        var elementsHtml = HtmlRenderer.RenderElements(tree, 1);
+        var elementsHtml = HtmlRenderer.RenderElements(tree, 1, rootOffsetX, rootOffsetY);
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var json = JsonSerializer.Serialize(new
@@ -505,6 +519,23 @@ public sealed class InspectorServer : IDisposable
         if (window.Children is not { Count: > 0 }) return null;
         // Last child is the topmost (modal pages are added after the shell)
         return window.Children[^1].Id;
+    }
+
+    /// <summary>
+    /// Returns the window-absolute offset of the root page element that is being
+    /// screenshotted. When the screenshot targets a modal or a page with a safe-area
+    /// offset, its WindowBounds.X/Y are non-zero. Overlay positions and hit-test
+    /// coordinates must be adjusted by this offset to stay in sync.
+    /// </summary>
+    private static (double x, double y) GetRootPageOffset(List<ElementInfo> tree, string? rootPageId)
+    {
+        if (rootPageId == null || tree.Count == 0) return (0, 0);
+        var window = tree[0];
+        if (window.Children == null) return (0, 0);
+        var rootPage = window.Children.FirstOrDefault(c => c.Id == rootPageId);
+        if (rootPage == null) return (0, 0);
+        var bounds = rootPage.WindowBounds ?? rootPage.Bounds;
+        return (bounds?.X ?? 0, bounds?.Y ?? 0);
     }
 
     /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23) after validating PNG signature.</summary>
@@ -584,11 +615,14 @@ public sealed class InspectorServer : IDisposable
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        // Support coordinate-based tap: hit-test first, then tap the element
+        // Support coordinate-based tap: translate viewport coords to window coords
+        // (add root offset back) then hit-test and tap the element
         if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
         {
-            var x = xProp.GetDouble();
-            var y = yProp.GetDouble();
+            double offsetX, offsetY;
+            lock (_cacheLock) { offsetX = _rootOffsetX; offsetY = _rootOffsetY; }
+            var x = xProp.GetDouble() + offsetX;
+            var y = yProp.GetDouble() + offsetY;
 
             var hitResult = await _client.HitTestAsync(x, y);
 
@@ -651,10 +685,13 @@ public sealed class InspectorServer : IDisposable
         var deltaX = root.TryGetProperty("deltaX", out var dxProp) ? dxProp.GetDouble() : 0;
         var deltaY = root.TryGetProperty("deltaY", out var dyProp) ? dyProp.GetDouble() : 0;
 
-        // If coordinates provided, hit-test and try each element for scroll
+        // If coordinates provided, translate viewport coords to window coords
+        // (add root offset back) then hit-test and try each element for scroll
         if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
         {
-            var hitResult = await _client.HitTestAsync(xProp.GetDouble(), yProp.GetDouble());
+            double offsetX, offsetY;
+            lock (_cacheLock) { offsetX = _rootOffsetX; offsetY = _rootOffsetY; }
+            var hitResult = await _client.HitTestAsync(xProp.GetDouble() + offsetX, yProp.GetDouble() + offsetY);
             if (TryParseHitTestElements(hitResult, out var hitDoc, out var elements))
             {
                 using (hitDoc)

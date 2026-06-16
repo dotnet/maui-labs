@@ -9,6 +9,7 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.Playwright" />
     <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
   <ItemGroup>

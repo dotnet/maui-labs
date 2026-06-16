@@ -12,8 +12,13 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 ///
 /// The default URL points to the broker's single-agent fallback route
 /// (the broker uses the only connected agent when the id segment doesn't match).
+///
+/// These tests are categorized as "Integration" and excluded from normal CI runs
+/// (which cannot spin up a broker + connected agent). Run them locally with:
+///   dotnet test --filter "Category=Integration"
 /// </summary>
 [Collection("Inspector")]
+[Trait("Category", "Integration")]
 public class InspectorPageTests : IAsyncLifetime
 {
     private IPlaywright _playwright = null!;
