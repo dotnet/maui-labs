@@ -5,13 +5,20 @@ using Microsoft.Maui.Graphics;
 namespace Comet
 {
 	/// <summary>A styled run within a <see cref="FormattedText"/> — a slice of text with optional
-	/// color, a monospace ("code") face, a background highlight, and an underline (link).</summary>
+	/// color, a monospace ("code") face, a background highlight, an underline/strikethrough, bold or
+	/// italic weight, a per-run font size, and an optional tap handler (clickable @mention / link).
+	/// The Comet analog of a single Compose <c>SpanStyle</c> (+ <c>LinkAnnotation</c> when tappable).</summary>
 	public sealed record TextRun(
 		string Text,
 		Color? Color = null,
 		bool Monospace = false,
 		Color? Background = null,
-		bool Underline = false);
+		bool Underline = false,
+		bool Bold = false,
+		bool Italic = false,
+		bool Strikethrough = false,
+		double? FontSize = null,
+		System.Action? OnTap = null);
 
 	/// <summary>
 	/// Inline rich text: a single wrapping paragraph composed of styled <see cref="TextRun"/>s

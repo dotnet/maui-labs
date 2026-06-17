@@ -67,12 +67,34 @@ namespace Comet.Platform.Compose
 					style.FontFamily = FontFamily.Monospace;
 				if (run.Background is { } bg)
 					style.Background = ToComposeColor(bg);
-				if (run.Underline)
+				if (run.Bold)
+					style.FontWeight = AndroidX.Compose.FontWeight.Bold;
+				if (run.Italic)
+					style.FontStyle = AndroidX.Compose.FontStyle.Italic;
+				// Strikethrough and underline are mutually exclusive in practice; strike wins.
+				if (run.Strikethrough)
+					style.Decoration = TextDecoration.LineThrough;
+				else if (run.Underline)
 					style.Decoration = TextDecoration.Underline;
+				if (run.FontSize is { } fsz)
+					style.FontSize = new AndroidX.Compose.Sp((int)System.Math.Round(fsz));
 
-				int idx = builder.PushStyle(style);
-				builder.Append(run.Text);
-				builder.Pop(idx);
+				// A run with a tap handler becomes a clickable LinkAnnotation (the SpanStyle rides
+				// along as the link's range style) so Compose's Text fires the click — mirrors the
+				// gold's ClickableText @mention/link annotations. Otherwise a plain styled span.
+				if (run.OnTap is { } onTap)
+				{
+					var link = LinkAnnotation.Clickable(string.Empty, _ => onTap(), style);
+					int li = builder.PushLink(link);
+					builder.Append(run.Text);
+					builder.Pop(li);
+				}
+				else
+				{
+					int idx = builder.PushStyle(style);
+					builder.Append(run.Text);
+					builder.Pop(idx);
+				}
 			}
 
 			var text = new ComposeAnnotatedText(builder.ToAnnotatedString()) { Modifier = BuildNodeModifier() };

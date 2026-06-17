@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using Comet;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
@@ -25,6 +26,7 @@ namespace CometSamples.Jetchat
 		// JetchatTheme.ApplyScheme) reaches these before the tree is built.
 		internal static Color Primary => JetchatTheme.Primary;
 		internal static Color OnPrimary => JetchatTheme.OnPrimary;
+		internal static Color InversePrimary => JetchatTheme.InversePrimary;
 		internal static Color Secondary => JetchatTheme.Secondary;
 		internal static Color Surface => JetchatTheme.Surface;
 		internal static Color OnSurface => JetchatTheme.OnSurface;
@@ -150,6 +152,9 @@ namespace CometSamples.Jetchat
 				nav.Navigate(JetchatProfile.Screen(profileName, topInset, bottomInset,
 					() => { nav.Pop(); depth--; Selected.Value = _lastChannel; }));
 			}
+
+			// A @mention tap (from the message formatter) resolves its handle to a profile and pushes it.
+			NavigateToProfile = handle => { if (ProfileForHandle(handle) is { } n) OpenProfile(n); };
 
 			nav.Content = ConversationView(topInset, bottomInset);
 			// Settings → the gold adds a home-screen widget; iOS has no equivalent, so surface the
@@ -323,39 +328,72 @@ namespace CometSamples.Jetchat
 			.CornerRadius(JetchatTheme.BubbleTopStart, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther, JetchatTheme.BubbleOther)
 			.HorizontalLayoutAlignment(LayoutAlignment.Start);
 
-		// The C# port of Jetchat's messageFormatter: @mentions and links take the accent color
-		// (links underlined), `code` spans render monospace in a tonal box. On my (primary) bubbles
-		// the accent is the on-primary color; on others it's the primary blue.
+		// The C# port of Jetchat's messageFormatter (MessageFormatter.kt). One pass over the gold
+		// symbolPattern: links + `code` + @mentions + *bold* + _italic_ + ~strike~. @mentions are
+		// bold and tap to the author's profile; links tap to the browser (no underline — gold colors
+		// only); `code` is monospace 12sp in a tonal box. The accent is inversePrimary on my (primary)
+		// bubbles and primary on others; the code box is secondary(me)/surface(other) — all from source.
+		static readonly Regex SymbolPattern = new(
+			@"(https?://[^\s\t\n]+)|(`[^`]+`)|(@\w+)|(\*[\w]+\*)|(_[\w]+_)|(~[\w]+~)",
+			RegexOptions.Compiled);
+
 		static System.Collections.Generic.IReadOnlyList<TextRun> FormatMessage(string content, bool isMe)
 		{
 			var baseColor = isMe ? OnPrimary : OnSurface;
-			var accent = isMe ? OnPrimary : Primary;
-			var codeBg = isMe ? Color.FromArgb("#33FFFFFF") : Color.FromArgb("#14000000");
+			var accent = isMe ? InversePrimary : Primary;     // gold: inversePrimary(me) / primary(other)
+			var codeBg = isMe ? Secondary : Surface;          // gold: secondary(me) / surface(other)
 
 			var runs = new System.Collections.Generic.List<TextRun>();
-			var parts = content.Split('`');
-			for (int i = 0; i < parts.Length; i++)
+			int cursor = 0;
+			foreach (Match m in SymbolPattern.Matches(content))
 			{
-				if (i % 2 == 1)             // odd segments are between backticks → code
+				if (m.Index > cursor)
+					runs.Add(new TextRun(content.Substring(cursor, m.Index - cursor), Color: baseColor));
+
+				string tok = m.Value;
+				switch (tok[0])
 				{
-					if (parts[i].Length > 0)
-						runs.Add(new TextRun(parts[i], Color: baseColor, Monospace: true, Background: codeBg));
-					continue;
+					case '@':
+						string handle = tok.Substring(1);
+						runs.Add(new TextRun(tok, Color: accent, Bold: true,
+							OnTap: () => NavigateToProfile?.Invoke(handle)));
+						break;
+					case '`':
+						runs.Add(new TextRun(tok.Trim('`'), Color: baseColor, Monospace: true,
+							FontSize: 12, Background: codeBg));
+						break;
+					case '*':
+						runs.Add(new TextRun(tok.Trim('*'), Color: baseColor, Bold: true));
+						break;
+					case '_':
+						runs.Add(new TextRun(tok.Trim('_'), Color: baseColor, Italic: true));
+						break;
+					case '~':
+						runs.Add(new TextRun(tok.Trim('~'), Color: baseColor, Strikethrough: true));
+						break;
+					default:    // http(s) link
+						runs.Add(new TextRun(tok, Color: accent, OnTap: () => OpenUrl?.Invoke(tok)));
+						break;
 				}
-				foreach (var token in System.Text.RegularExpressions.Regex.Split(parts[i], @"(\s+)"))
-				{
-					if (token.Length == 0)
-						continue;
-					if (token.StartsWith("@"))
-						runs.Add(new TextRun(token, Color: accent));
-					else if (token.StartsWith("http"))
-						runs.Add(new TextRun(token, Color: accent, Underline: true));
-					else
-						runs.Add(new TextRun(token, Color: baseColor));
-				}
+				cursor = m.Index + m.Length;
 			}
+			if (cursor < content.Length)
+				runs.Add(new TextRun(content.Substring(cursor), Color: baseColor));
 			return runs;
 		}
+
+		// Tap hooks, wired in Build(). A @mention resolves its handle to a profile and navigates;
+		// a link opens the URL (the host wires a real browser-open). Both no-op until Build() runs.
+		internal static System.Action<string>? NavigateToProfile;
+		internal static System.Action<string>? OpenUrl;
+
+		// The seed data's only mention is @aliconors; map the known handles to their profile names.
+		static string? ProfileForHandle(string handle) => handle.ToLowerInvariant() switch
+		{
+			"aliconors" => "Ali Conors",
+			"taylor" or "taylorbrookscodes" => "Taylor Brooks",
+			_ => null,
+		};
 
 		static View StickerBubble(bool isMe) => new VStack(spacing: 0f)
 		{

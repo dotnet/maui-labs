@@ -35,6 +35,9 @@ namespace CometSamples.Jetchat
 		public static Color Primary { get; private set; } = Blue40;
 		public static Color OnPrimary { get; private set; } = Colors.White;
 		public static Color PrimaryContainer { get; private set; } = Blue90;
+		// inversePrimary (Themes.kt JetchatLightColorScheme): the accent for @mentions/links rendered
+		// ON a primary (me) bubble, where plain primary would lack contrast. Light = Blue80.
+		public static Color InversePrimary { get; private set; } = Blue80;
 		public static Color Secondary { get; private set; } = DarkBlue40;       // footer Surface contentColor
 		public static Color Surface { get; private set; } = Grey99;
 		public static Color OnSurface { get; private set; } = Grey10;
@@ -77,6 +80,7 @@ namespace CometSamples.Jetchat
 				background: FromArgbUint(s.Background), tertiary: FromArgbUint(s.Tertiary),
 				tertiaryContainer: FromArgbUint(s.TertiaryContainer), onTertiaryContainer: FromArgbUint(s.OnTertiaryContainer),
 				outline: FromArgbUint(s.Outline));
+			InversePrimary = FromArgbUint(s.InversePrimary);
 			return s;
 		}
 

@@ -102,6 +102,13 @@ namespace CometComposeProbe
 
 			var root = BuildUi();
 
+			// Link taps in chat bubbles open the system browser (the gold's uriHandler.openUri).
+			CometSamples.Jetchat.JetchatConversation.OpenUrl = url =>
+			{
+				try { StartActivity(new Android.Content.Intent(Android.Content.Intent.ActionView, Android.Net.Uri.Parse(url))); }
+				catch (Exception ex) { Android.Util.Log.Warn("CometProbe", "open url failed: " + ex.Message); }
+			};
+
 			var backend = new ComposeBackendRoot(new EmptyServiceProvider())
 			{
 				UseYogaLayout = true,
