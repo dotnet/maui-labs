@@ -28,4 +28,11 @@
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.
+       Agent.Core is pure .NET (no UseMaui required): broker registration + HTTP server.
+       ComposeProbeAgentService subclass provides Android PixelCopy screenshot. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="..\..\..\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+  </ItemGroup>
+
 </Project>

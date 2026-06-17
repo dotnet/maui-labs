@@ -87,11 +87,14 @@ namespace CometComposeProbe
 				scheme = ComposeSchemeFromSeed(s, dark);
 			}
 
-			// System bars match the (now dynamic) surface so the status/nav areas blend edge-to-edge.
+			// Status bar: Surface (matches the header bar).
+			// Nav bar: SurfaceTinted (matches the footer/UserInput bar so the background is seamless).
 			var surf = CometSamples.Jetchat.JetchatTheme.Surface;
-			var barTint = Android.Graphics.Color.Argb(255, (int)(surf.Red * 255), (int)(surf.Green * 255), (int)(surf.Blue * 255));
-			Window!.SetStatusBarColor(barTint);
-			Window.SetNavigationBarColor(barTint);
+			var statusTint = Android.Graphics.Color.Argb(255, (int)(surf.Red * 255), (int)(surf.Green * 255), (int)(surf.Blue * 255));
+			var footerSurf = CometSamples.Jetchat.JetchatTheme.SurfaceTinted;
+			var navTint = Android.Graphics.Color.Argb(255, (int)(footerSurf.Red * 255), (int)(footerSurf.Green * 255), (int)(footerSurf.Blue * 255));
+			Window!.SetStatusBarColor(statusTint);
+			Window.SetNavigationBarColor(navTint);
 			// Light bars (dark icons) on a light surface; in dark mode clear the flags for light icons.
 			const int lightBars = (int)Android.Views.WindowInsetsControllerAppearance.LightStatusBars
 				| (int)Android.Views.WindowInsetsControllerAppearance.LightNavigationBars;
@@ -112,6 +115,9 @@ namespace CometComposeProbe
 			};
 			var composeView = backend.CreateView(this, root);
 			SetContentView(composeView);
+#if DEBUG
+			DevFlowHelper.Start(this, composeView);
+#endif
 		}
 
 		// Decode a drawable to a small AARRGGBB pixel buffer for content-based theming (the
