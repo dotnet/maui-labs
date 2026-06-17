@@ -8,7 +8,6 @@ description: >-
   handlers. DO NOT USE FOR: non-visual platform APIs, full Xamarin migration,
   native SDK bindings, or MAUI platform backend implementation.
 ---
----
 
 # MAUI Custom Handlers
 
@@ -28,7 +27,7 @@ large native SDK surfaces to slim bindings.
 
 | Need | Prefer |
 | --- | --- |
-| Tweak an existing control for the whole app | `Handler.Mapper.AppendToMapping` in `MauiProgram.cs` |
+| Tweak an existing control for the whole app | `EntryHandler.Mapper.AppendToMapping` in `MauiProgram.cs` (or the matching concrete control handler mapper) |
 | Tweak only specific control instances | Subclass the control and guard mapper logic with `if (view is MyControl)` |
 | Add a reusable cross-platform control | Custom `ViewHandler<TVirtualView,TPlatformView>` |
 | Map bindable properties to native properties | `PropertyMapper` entries |

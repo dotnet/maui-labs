@@ -5,7 +5,7 @@ description: >-
   IChatClient registration, NLEmbeddingGenerator semantic search, local/on-device
   chat, wiring app tools into local chat via UseFunctionInvocation, privacy/offline
   UX, and platform fallback planning. DO NOT USE FOR: source-generating AI tool
-  bindings, cloud-only AI setup, AI debugging, or non-MAUI
+  bindings, cloud-only AI setup, AI debugging (use maui-devflow-debug), or non-MAUI
   Microsoft.Extensions.AI apps.
 ---
 
@@ -45,6 +45,9 @@ Embedding support:
 | macOS 10.15+ | NaturalLanguage embeddings |
 | Android | Not supported |
 | Windows | Not supported |
+
+Version numbers for Apple Intelligence support reflect currently announced OS
+versions; verify final released platform versions before shipping.
 
 Design fallback behavior for unsupported platforms. Do not silently route private
 data to a cloud model unless the user explicitly wants a cloud fallback.

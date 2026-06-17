@@ -104,10 +104,13 @@ if (status != PermissionStatus.Granted)
 
 if (status != PermissionStatus.Granted)
 {
-    await Shell.Current.DisplayAlert(
-        "Camera permission required",
-        "Enable camera access in Settings to use this feature.",
-        "OK");
+    if (Shell.Current is not null)
+    {
+        await Shell.Current.DisplayAlert(
+            "Camera permission required",
+            "Enable camera access in Settings to use this feature.",
+            "OK");
+    }
     return;
 }
 ```

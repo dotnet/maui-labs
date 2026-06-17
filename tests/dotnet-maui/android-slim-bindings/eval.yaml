@@ -31,6 +31,7 @@ scenarios:
       - "Recommends the slim/NLI approach over traditional full bindings given the user only needs a subset"
       - "Shows a Java or Kotlin wrapper class with a Dotnet prefix that exposes only animation playback"
       - "Includes Gradle project structure with the lottie Maven dependency in build.gradle.kts"
+      - "Includes build.gradle.kts content explicitly in the response, not only a high-level mention"
       - "Shows the C# binding project referencing the built AAR via AndroidLibrary"
       - "Uses simple marshallable types in the wrapper API (no Kotlin coroutines or lambdas)"
     timeout: 240
