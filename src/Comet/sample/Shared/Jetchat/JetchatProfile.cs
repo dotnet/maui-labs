@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using Comet;
+using Comet.Reactive;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Primitives;
@@ -39,6 +40,40 @@ namespace CometSamples.Jetchat
 			// The gold standard is a Box: a full-bleed scrolling Column with a FloatingActionButton
 			// aligned BottomEnd, floating over the content. A ZStack reproduces that — the scroll is
 			// the base layer (fills), the FAB the overlay (pinned bottom-right, overlapping the scroll).
+			// The scroll's AtTop signal drives the FAB: extended at top (scrollState.value == 0),
+			// contracted when scrolled away — matching the gold's derivedStateOf { scrollState.value == 0 }.
+			var scroll = new ScrollView
+			{
+				new VStack(spacing: 0f)
+				{
+					// Profile photo (ProfileHeader.kt): fillMaxWidth − 16dp each side, height from the
+					// photo's aspect (AspectRatio), ContentScale.Crop, clipped CircleShape. A square
+					// photo (ali) → a CIRCLE; a landscape photo (taylor) → a wide oval. CornerRadius
+					// clamps to half the shorter side, so it's the circle/ellipse clip.
+					new Image(d.Photo).FillHorizontal().AspectRatio(d.PhotoAspect).FlexShrink(0)
+						.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
+
+					// Name + position (NameAndPosition): each text baseline-anchored — the name's
+					// first baseline 32dp from its top, the position's 24dp, +20dp below.
+					new VStack(spacing: 0f)
+					{
+						new Text(d.Name).Color(T.OnSurface).HeadlineSmall().BaselineHeight(32),
+						new Text(d.Position).Color(T.OnSurfaceVariant).BodyLarge()
+							.BaselineHeight(24).Margin(bottom: 20),
+					}.Padding(new Thickness(16, 8, 16, 0)),
+
+					// Property rows, each preceded by a divider; Twitter is a primary-colored link.
+					Property("Display name", d.DisplayName, isLink: false),
+					Property("Status", d.Status, isLink: false),
+					Property("Twitter", d.Twitter, isLink: true),
+					Property("Timezone", d.TimeZone, isLink: false),
+				},
+			}.FillVertical();
+
+			// FAB is extended while at top, contracted when scrolled (gold: derivedStateOf { scrollState.value == 0 }).
+			var fab = ProfileFab(d.IsMe ? "Edit Profile" : "Message", d.IsMe ? "create" : "chat", onBack)
+				.ExtendedWhen(scroll.AtTop);
+
 			return new ZStack
 			{
 				new VStack(spacing: 0f)
@@ -54,37 +89,11 @@ namespace CometSamples.Jetchat
 						new HStack().FlexGrow(1),
 					}.Background(T.Surface).Padding(new Thickness(0, 0, 0, 8)),
 
-					new ScrollView
-					{
-						new VStack(spacing: 0f)
-						{
-							// Profile photo (ProfileHeader.kt): fillMaxWidth − 16dp each side, height from the
-							// photo's aspect (AspectRatio), ContentScale.Crop, clipped CircleShape. A square
-							// photo (ali) → a CIRCLE; a landscape photo (taylor) → a wide oval. CornerRadius
-							// clamps to half the shorter side, so it's the circle/ellipse clip.
-							new Image(d.Photo).FillHorizontal().AspectRatio(d.PhotoAspect).FlexShrink(0)
-								.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
-
-							// Name + position (NameAndPosition): each text baseline-anchored — the name's
-							// first baseline 32dp from its top, the position's 24dp, +20dp below.
-							new VStack(spacing: 0f)
-							{
-								new Text(d.Name).Color(T.OnSurface).HeadlineSmall().BaselineHeight(32),
-								new Text(d.Position).Color(T.OnSurfaceVariant).BodyLarge()
-									.BaselineHeight(24).Margin(bottom: 20),
-							}.Padding(new Thickness(16, 8, 16, 0)),
-
-							// Property rows, each preceded by a divider; Twitter is a primary-colored link.
-							Property("Display name", d.DisplayName, isLink: false),
-							Property("Status", d.Status, isLink: false),
-							Property("Twitter", d.Twitter, isLink: true),
-							Property("Timezone", d.TimeZone, isLink: false),
-						},
-					}.FillVertical(),
+					scroll,
 				}.FillHorizontal().FillVertical().Background(T.Surface),
 
-				// The real Material FloatingActionButton, floating bottom-right over the scroll.
-				ProfileFab(d.IsMe ? "Edit Profile" : "Message", d.IsMe ? "create" : "chat", onBack)
+				// The real Material ExtendedFloatingActionButton, floating bottom-right over the scroll.
+				fab
 					.HorizontalLayoutAlignment(LayoutAlignment.End)
 					.VerticalLayoutAlignment(LayoutAlignment.End)
 					.Margin(right: 16, bottom: (float)(24 + bottomInset)),
@@ -104,14 +113,15 @@ namespace CometSamples.Jetchat
 
 		// The real Material 3 FloatingActionButton (Profile.kt ProfileFab): tertiaryContainer
 		// container, an icon + label, height 48. The icon/label carry no colour so they inherit the
-		// FAB's onTertiaryContainer content colour (LocalContentColor).
-		static View ProfileFab(string text, string icon, Action onTap) => new Comet.Fab(
+		// FAB's onTertiaryContainer content colour. Starts extended (at-top); ExtendedWhen(scroll.AtTop)
+		// is wired by the caller to contract when scrolled — matching AnimatingFabContent in the gold.
+		static Comet.Fab ProfileFab(string text, string icon, Action onTap) => new Comet.Fab(
 			icon: new Icon(icon).IconSize(24),
 			label: new Text(text).LabelLarge(),
 			onClick: onTap,
 			height: 48,
 			containerColor: T.TertiaryContainer,
 			contentColor: T.OnTertiaryContainer,
-			extended: false);
+			extended: true);
 	}
 }

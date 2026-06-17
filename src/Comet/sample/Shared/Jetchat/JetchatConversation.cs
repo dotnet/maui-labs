@@ -177,7 +177,7 @@ namespace CometSamples.Jetchat
 					JumpToBottom(log)
 						.HorizontalLayoutAlignment(LayoutAlignment.Center)
 						.VerticalLayoutAlignment(LayoutAlignment.End)
-						.Margin(bottom: 16),
+						.Margin(bottom: 32),
 
 					// The NotAvailable popup lives here as a zero-size overlay; it's a real Material
 					// AlertDialog (its own window + scrim) that pops over everything when opened.
@@ -237,15 +237,13 @@ namespace CometSamples.Jetchat
 			},
 		};
 
-		// ── JumpToBottom (JumpToBottom.kt): a real Material FloatingActionButton — surface container,
-		// primary content, 36dp tall, a down-arrow + "Jump to bottom". Hidden until the log scrolls
-		// away from the newest message (reactive Opacity bound to the list's ScrolledAway signal);
-		// tapping animates the log to the bottom (LazyListState scroller). The icon/label carry no
-		// colour so they inherit the FAB's primary content colour.
-		// NOTE: the gold uses ExtendedFloatingActionButton; the facade's ExtendedFAB renders its
-		// icon/text slots empty (a real facade bug, separate from the opacity gating — confirmed it
-		// stays empty even composed + visible). Drive the regular FloatingActionButton meanwhile
-		// (still a real Material FAB, not a styled pill); ExtendedFAB content is a facade follow-up. ──
+		// ── JumpToBottom (JumpToBottom.kt): a real Material ExtendedFloatingActionButton — surface
+		// container, primary content, 36dp tall, a down-arrow + "Jump to bottom". Hidden until the
+		// log scrolls away from the newest message (reactive Opacity bound to the list's ScrolledAway
+		// signal); tapping animates the log to the bottom (LazyListState scroller). The icon/label
+		// carry no colour so they inherit the FAB's primary content colour. The gold uses
+		// ExtendedFloatingActionButton (always extended — never contracted); we match that here now
+		// that the ExtendedFAB slot bug is fixed via the RenderDirect bridge path. ──
 		static View JumpToBottom(ListView list)
 		{
 			var fab = new Comet.Fab(
@@ -255,8 +253,8 @@ namespace CometSamples.Jetchat
 				height: 36,
 				containerColor: Surface,
 				contentColor: Primary,
-				extended: false)
-				.Opacity(0);   // hidden until the log is scrolled away from the newest message
+				extended: true)    // always extended — the gold's ExtendedFloatingActionButton never contracts
+				.Opacity(0);       // hidden until the log is scrolled away from the newest message
 
 			// Reactive show/hide: the backend node drives ScrolledAway from the LazyListState; mirror
 			// it onto the FAB's opacity (ComposeFabNode keeps it composed but pushes it off-screen).
@@ -413,7 +411,8 @@ namespace CometSamples.Jetchat
 					new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
 						.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
 				}.Frame(height: 64),
-				// Selector row: icon buttons + Send, with breathing room above so it clears the input row.
+				// Selector row: 72dp tall with 16dp bottom padding — matches UserInputSelector's
+				// height(72.dp).padding(start=16, end=16, bottom=16) from the gold source.
 				new HStack(spacing: 0f)
 				{
 					InputIcon("mood"), Spacer(),
@@ -421,7 +420,9 @@ namespace CometSamples.Jetchat
 					InputIcon("at", () => NotAvailableOpen.Value = true), Spacer(), InputIcon("photo"),
 					Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
 					send,
-				}.Padding(new Thickness(16, 8, 16, 12 + bottomInset)),
+				}.Frame(height: 72).Padding(new Thickness(16, 0, 16, 16)),
+				// Safe-area fill: extends BarSurface behind the system navigation bar / home indicator.
+				new HStack().Frame(height: (float)bottomInset),
 			}.Background(BarSurface);
 		}
 
