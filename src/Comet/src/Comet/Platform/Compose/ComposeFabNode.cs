@@ -8,12 +8,14 @@ using Microsoft.Maui.Graphics;
 namespace Comet.Platform.Compose
 {
 	/// <summary>Renders a Comet <see cref="Comet.Fab"/> as the REAL Material 3
-	/// <c>FloatingActionButton</c> (or <c>ExtendedFloatingActionButton</c> when extended) — not a
-	/// styled pill. The FAB is a self-sizing native overlay (Option C): <see cref="Measure"/> reports
-	/// its intrinsic size (the real content measured by the engine + the FAB's documented insets) so
-	/// the parent's Yoga layout can corner-pin it, then <see cref="Render"/> positions it at that
-	/// offset and lets the native FAB size + lay out its own content, pinning only the gold's height.
-	/// Owns its content (<see cref="IBackendManagesOwnContent"/>).</summary>
+	/// <c>ExtendedFloatingActionButton</c> — never a styled pill. Uses
+	/// <see cref="ExtendedFloatingActionButton.RenderDirect"/> to call the Kotlin bridge with
+	/// <c>ComposableLambda</c>-wrapped slot content directly, bypassing the generated
+	/// slot-property wiring that had an empty-render bug. The FAB is a self-sizing native overlay
+	/// (Option C): <see cref="Measure"/> reports its intrinsic size (the real content measured
+	/// by the engine + the FAB's documented insets) so the parent's Yoga layout can corner-pin
+	/// it, then <see cref="Render"/> positions it at that offset and lets the native FAB size +
+	/// lay out its own content. Owns its content (<see cref="IBackendManagesOwnContent"/>).</summary>
 	sealed class ComposeFabNode : ComposeNode, IBackendManagesOwnContent
 	{
 		// Material extended-FAB content insets (dp): start 16, icon→text gap 12, end 20.
@@ -21,14 +23,26 @@ namespace Comet.Platform.Compose
 
 		readonly Fab _fab;
 		readonly BackendContext _context;
-		ComposeNode? _icon, _label;   // extended-FAB slots
-		ComposeNode? _content;        // regular-FAB content (a persistent icon+label row)
+		readonly MutableState<bool> _extended;
+		ComposeNode? _icon, _label;
 		bool _built;
 
 		public ComposeFabNode(Fab fab, BackendContext context)
 		{
 			_fab = fab;
 			_context = context;
+			_extended = new MutableState<bool>(fab.Extended);
+
+			// Subscribe to the reactive extended signal so Compose recomposes when it changes.
+			if (fab.ExtendedSignal is { } sig)
+			{
+				_extended.Value = sig.Peek();
+				sig.PropertyChanged += (_, __) =>
+				{
+					bool v = sig.Peek();
+					Comet.ThreadHelper.RunOnMainThread(() => _extended.Value = v);
+				};
+			}
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
@@ -38,23 +52,22 @@ namespace Comet.Platform.Compose
 			if (_built)
 				return;
 			_built = true;
-			if (_fab.Extended)
-			{
-				_icon = (ComposeNode)CometBackendBridge.Materialize(_fab.IconView, _context);
-				_label = (ComposeNode)CometBackendBridge.Materialize(_fab.LabelView, _context);
-			}
-			else
-			{
-				// One persistent content node (an icon+label row) so it survives the FAB node
-				// recomposing for reactive visibility — recreating the content each render drops it.
-				var row = new HStack(spacing: Gap) { _fab.IconView, _fab.LabelView };
-				_content = (ComposeNode)CometBackendBridge.Materialize(row, _context);
-			}
+			// Always build both slot nodes — ExtendedFloatingActionButton uses them in both
+			// expanded and contracted states (icon shows in both; label only shows when expanded).
+			_icon = (ComposeNode)CometBackendBridge.Materialize(_fab.IconView, _context);
+			_label = (ComposeNode)CometBackendBridge.Materialize(_fab.LabelView, _context);
+			// The icon/label inherit Opacity=0 from the parent FAB's environment (the FAB starts
+			// hidden via .Opacity(0)). Their visibility is driven by the FAB's own alpha modifier
+			// on the ExtendedFloatingActionButton composable — reset slot content to full opacity.
+			var fullOpacity = PropertyValue.From(1.0);
+			_icon.ApplyProperty(PropertyIds.Opacity, in fullOpacity);
+			_label.ApplyProperty(PropertyIds.Opacity, in fullOpacity);
 		}
 
-		// Intrinsic size for the parent's Yoga layout: the real content's measured width + the FAB's
-		// content insets (the icon/label come from the engine's measure, so the label width reflects
-		// the actual font). Height is the gold's pinned value.
+		// Intrinsic size for the parent's Yoga layout: the real content's measured width + the
+		// FAB's content insets. Always returns the extended (full) width so Yoga can corner-pin
+		// the FAB; the FAB self-sizes when contracted (the parent layout is unaffected since it's
+		// an overlay, not in flow). Height is the gold's pinned value.
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
 			EnsureContent();
@@ -68,46 +81,39 @@ namespace Comet.Platform.Compose
 		{
 			EnsureContent();
 
-			// Reactive visibility. Keep the FAB COMPOSED even when hidden — leaving/re-entering
-			// composition discards the slot content's state and it renders empty on return — so apply
-			// alpha instead, and push the hidden FAB off-screen so it doesn't intercept taps (mirrors
-			// the gold's offset slide). Subscribing here recomposes when Opacity/IsVisible flips.
+			// Subscribe to _extended so Compose recomposes when the extended state changes.
+			bool fabExtended = _extended.Value;
+
+			// Reactive visibility: keep the FAB COMPOSED even when hidden — leaving/re-entering
+			// composition discards the slot content's state and it renders empty on return — so
+			// apply alpha + push off-screen to keep it alive but invisible and non-interactive.
 			float alpha = SubscribeAndGetAlpha();
 			float offsetY = alpha <= 0f ? FrameY + 2000f : FrameY;
 
-			// Position at the Yoga offset but let the FAB self-size its width (the native control
-			// measures its own content). Fade via Alpha when < 1.
-			var baseModifier = Modifier.Companion.AbsoluteOffset(new Dp(FrameX), new Dp(offsetY));
+			// When contracted, Compose shrinks the FAB to a square of _fab.Height dp.
+			// Yoga computed FrameX for the extended (wide) FAB; shift right by the width difference
+			// so the RIGHT edge stays pinned (BottomEnd alignment is preserved in both states).
+			float adjustedX = fabExtended ? FrameX : FrameX + FrameWidth - (float)_fab.Height;
+			var modifier = Modifier.Companion.AbsoluteOffset(new Dp(adjustedX), new Dp(offsetY));
 			if (alpha < 1f)
-				baseModifier = baseModifier.Alpha(alpha);
+				modifier = modifier.Alpha(alpha);
 
 			void OnClick() => Sink?.OnEvent(EventIds.Clicked);
 
-			if (_fab.Extended)
-			{
-				// The extended FAB sizes its own content (Material won't fit it into a forced 36dp the
-				// way the gold's height-18 icon does), so don't pin the height — let it self-size.
-				var fab = new ExtendedFloatingActionButton(onClick: OnClick, expanded: true)
-				{
-					Icon = _icon!,
-					Text = _label!,
-				};
-				if (_fab.ContainerColor is { } cc) fab.ContainerColor = ToComposeColor(cc);
-				if (_fab.ContentColor is { } fc) fab.ContentColor = ToComposeColor(fc);
-				((ComposableNode)fab).Modifier = baseModifier;
-				fab.Render(composer);
-			}
-			else
-			{
-				var fab = new FloatingActionButton(OnClick);
-				if (_fab.ContainerColor is { } cc) fab.ContainerColor = ToComposeColor(cc);
-				if (_fab.ContentColor is { } fc) fab.ContentColor = ToComposeColor(fc);
-				((ComposableNode)fab).Modifier = baseModifier
-					.Height(new Dp((float)_fab.Height))
-					.WidthIn(min: new Dp(MinWidth));
-				fab.Add(_content!);
-				fab.Render(composer);
-			}
+			// Drive the real ExtendedFloatingActionButton via the direct bridge path. The
+			// `expanded` parameter animates between extended (icon+label pill) and contracted
+			// (icon-only rounded square) states — matching AnimatingFabContent's behaviour in
+			// the gold. Both FABs use this path: ProfileFab (reactive extended) and
+			// JumpToBottom (always extended = always showing icon + label).
+			ExtendedFloatingActionButton.RenderDirect(
+				icon:           _icon!,
+				text:           _label!,
+				onClick:        OnClick,
+				expanded:       fabExtended,
+				containerColor: _fab.ContainerColor is { } cc ? ToComposeColor(cc) : null,
+				contentColor:   _fab.ContentColor is { } fc ? ToComposeColor(fc) : null,
+				modifier:       modifier,
+				composer:       composer);
 		}
 	}
 }

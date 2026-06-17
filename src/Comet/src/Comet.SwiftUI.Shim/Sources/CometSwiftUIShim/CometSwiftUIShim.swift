@@ -50,6 +50,7 @@ struct CometTextRun {
     @Published var borderless: Bool = false      // TextField: no rounded-border box (foundation field)
     @Published var outlined: Bool = false        // Button: OutlinedButton (bordered, no fill) vs filled
     @Published var drawerOpen: Bool = false     // Drawer: side panel shown
+    @Published var fabExtended: Bool = true     // Fab: true = show label (pill); false = icon-only
     @Published var scrollToken: Int = 0          // List: bumped to animate the log to the newest row
     // AlertDialog (presented as a native SwiftUI .alert).
     @Published var dialogOpen: Bool = false
@@ -107,6 +108,7 @@ struct CometTextRun {
         case "borderless": node.borderless = value
         case "outlined": node.outlined = value
         case "draweropen": node.drawerOpen = value
+        case "fabextended": node.fabExtended = value
         case "dialogopen": node.dialogOpen = value
         default: break
         }
@@ -653,14 +655,22 @@ struct CometNodeView: View {
         case "fab":
             // iOS has no Material FAB, so the native idiom is a real Button (so it raises the
             // tap, gets the system press feedback, and reads as a button to accessibility) whose
-            // label is the icon + label row. The node's frame positions + sizes it (from Yoga);
-            // the CometNodeView modifiers add the capsule background. .plain keeps our styling.
+            // content is an icon + optional label row. The node's frame positions + sizes it
+            // (from Yoga); the CometNodeView modifiers add the capsule background.
+            // fabExtended drives label show/hide with a 200ms easeInOut — matching the gold's
+            // AnimatingFabContent transition duration (transitionDuration = 200).
             Button(action: { node.onTap?() }) {
-                HStack(spacing: 8) { ForEach(node.children) { CometNodeView(node: $0) } }
-                    .fixedSize(horizontal: true, vertical: false)   // the label is single-line — never wrap it
-                    .frame(maxWidth: .infinity, maxHeight: .infinity) // center the row within the capsule frame
-                    .padding(.horizontal, node.padding)
-                    .contentShape(Rectangle())
+                HStack(spacing: 8) {
+                    if let icon = node.children.first { CometNodeView(node: icon) }
+                    if node.fabExtended, node.children.count > 1 {
+                        CometNodeView(node: node.children[1])
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: node.fabExtended)
+                .fixedSize(horizontal: true, vertical: false)   // the label is single-line — never wrap it
+                .frame(maxWidth: .infinity, maxHeight: .infinity) // center the row within the capsule frame
+                .padding(.horizontal, node.padding)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         case "hstack":

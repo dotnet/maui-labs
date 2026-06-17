@@ -11,7 +11,9 @@ namespace Comet.Platform.SwiftUI
 	/// (the "fab" shim kind). Owns its content; positions + sizes itself from the Yoga frame
 	/// (<see cref="Measure"/> reports the content's intrinsic size so the parent can corner-pin it,
 	/// <see cref="Arrange"/> pushes the frame down). Content colour is applied to the icon/label
-	/// directly since SwiftUI has no LocalContentColor inheritance from the capsule.</summary>
+	/// directly since SwiftUI has no LocalContentColor inheritance from the capsule.
+	/// <see cref="Comet.Fab.ExtendedSignal"/> drives <c>fabExtended</c> on the native node so the
+	/// shim can animate label show/hide.</summary>
 	sealed class SwiftUIFabNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
 	{
 		// FAB content insets (matches the "fab" shim render: .padding(.horizontal, 16) + HStack spacing 8).
@@ -31,6 +33,19 @@ namespace Comet.Platform.SwiftUI
 			_native = CometSwiftUIHost.MakeNode("fab");
 			CometSwiftUIHost.SetTapHandler(_native, () => _sink?.OnEvent(EventIds.Clicked));
 			BuildContent();
+
+			// Subscribe to the reactive extended signal so the shim can animate the label.
+			if (fab.ExtendedSignal is { } sig)
+			{
+				CometSwiftUIHost.SetBool(_native, "fabextended", sig.Peek());
+				sig.PropertyChanged += (_, __) =>
+					CometSwiftUIHost.SetBool(_native, "fabextended", sig.Peek());
+			}
+			else
+			{
+				// No reactive signal → use the static extended value.
+				CometSwiftUIHost.SetBool(_native, "fabextended", fab.Extended);
+			}
 		}
 
 		void BuildContent()
@@ -70,12 +85,14 @@ namespace Comet.Platform.SwiftUI
 
 		// Intrinsic size for the parent's Yoga layout: the real content (icon/label measured via
 		// SwiftUI sizeThatFits) + the FAB's content insets. Height is the gold's pinned value.
+		// Always measures the full extended width so the parent's Yoga frame can corner-pin the
+		// FAB; the FAB visually contracts on iOS by hiding the label.
 		public Size Measure(double widthConstraint, double heightConstraint)
 		{
 			var icon = CometBackendLayoutEngine.Measure(_fab.IconView);
 			var label = CometBackendLayoutEngine.Measure(_fab.LabelView);
 			// Round the content width up: the shim renders the label single-line (.fixedSize), so any
-			// sub-pixel shortfall here would clip the last glyph against the capsule instead of wrapping.
+			// sub-pixel shortfall here would clip the last glyph against the capsule.
 			var width = System.Math.Ceiling(PadH * 2 + icon.Width + Gap + label.Width);
 			return new Size(width, _fab.Height);
 		}

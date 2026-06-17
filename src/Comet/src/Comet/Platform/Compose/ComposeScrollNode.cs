@@ -22,6 +22,7 @@ namespace Comet.Platform.Compose
 		readonly ScrollState _scrollState = new();
 		ComposeNode? _content;
 		View? _contentView;
+		bool? _lastAtTop;
 
 		public ComposeScrollNode(IContainerView scroll, BackendContext context)
 		{
@@ -68,6 +69,19 @@ namespace Comet.Platform.Compose
 			((ComposableNode)box).Modifier = modifier;
 			box.Add(content);
 			((ComposableNode)box).Render(composer);
+
+			// Marshal scroll-at-top state to the ScrollView's signal so overlays (e.g. ProfileFab)
+			// can reactively extend/contract. atTop is true when the content is at its natural top.
+			bool atTop = _scrollState.Value == 0;
+			if (atTop != _lastAtTop)
+			{
+				_lastAtTop = atTop;
+				if (_scroll is Comet.ScrollView sv)
+				{
+					var signal = sv.AtTop;
+					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = atTop);
+				}
+			}
 		}
 	}
 }

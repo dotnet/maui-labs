@@ -34,11 +34,11 @@ namespace Comet.Platform.Compose
 		int _cachedVersion = -1;
 		double _cachedWidth = -1;
 
-		// Scroll-state bridge: a remembered LazyListState surfaces scroll position to C#. We read
-		// CanScrollForward inside composition (boundary-triggered, so no per-frame churn) and marshal
-		// it to the list's ScrolledAway signal; a registered scroller animates to the end on demand.
+		// Scroll-state bridge: a remembered LazyListState surfaces scroll position to C#. A
+		// LaunchedEffect + snapshotFlow watches CanScrollBackward outside the untracked root
+		// composable scope, so ScrolledAway fires correctly on scroll; a registered scroller
+		// animates to index 0 (newest = top of a newest-first list) on demand.
 		bool _scrollerRegistered;
-		bool? _lastScrolledAway;
 
 		public ComposeListNode(IListView list, BackendContext context)
 		{
@@ -56,10 +56,8 @@ namespace Comet.Platform.Compose
 		{
 			int version = _version.Value; // subscribe so data changes recompose the list
 
-			// Remembered scroll state (survives recomposition). Read CanScrollForward HERE, inside
-			// composition, so this list recomposes when it flips at the boundary; then push it to the
-			// ScrolledAway signal so a JumpToBottom affordance can react. The first time, hand the
-			// list a scroller that animates to the last row (the bottom of a normal-layout chat log).
+			// Remembered scroll state (survives recomposition). The first time, register a scroller
+			// that animates to the last item (newest = bottom of a forward-order list).
 			var listState = composer.RememberLazyListState();
 			if (!_scrollerRegistered)
 			{
@@ -67,11 +65,25 @@ namespace Comet.Platform.Compose
 				var captured = listState;
 				_list.RegisterScroller(() =>
 				{
-					int last = (_list.Sections() > 0 ? _list.Rows(0) : 0) - 1;
-					if (last >= 0)
-						_ = captured.AnimateScrollToItemAsync(last);
+					int lastIndex = _list.Sections() > 0 ? System.Math.Max(0, _list.Rows(0) - 1) : 0;
+					_ = captured.AnimateScrollToItemAsync(lastIndex);
 				});
 			}
+
+			// snapshotFlow tracks canScrollForward: true when the newest messages are below the
+			// viewport (user has scrolled up). LaunchedEffect(true) starts once and cancels when
+			// the list leaves the composition.
+			var capturedList = _list;
+			var capturedState = listState;
+			composer.LaunchedEffect(true, async ct =>
+			{
+				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
+					.WithCancellation(ct))
+				{
+					var signal = capturedList.ScrolledAway;
+					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
+				}
+			});
 
 			// Single-section (the common case); multi-section flattening is a follow-up.
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
@@ -114,18 +126,6 @@ namespace Comet.Platform.Compose
 			// remaining height) so it scrolls within its slot rather than laying out at the origin.
 			((ComposableNode)lazy).Modifier = BuildNodeModifier();
 			lazy.Render(composer);
-
-			// Marshal the scroll position to the list's signal. CanScrollForward is false only when the
-			// last row is fully visible (at the bottom); true ⇒ scrolled away ⇒ show JumpToBottom.
-			// Defer the write off the composition pass (we're on the UI thread) so we don't mutate Comet
-			// reactive state mid-compose; the guard makes it a no-op except at the boundary flip.
-			bool away = listState.CanScrollForward;
-			if (away != _lastScrolledAway)
-			{
-				_lastScrolledAway = away;
-				var signal = _list.ScrolledAway;
-				Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
-			}
 		}
 	}
 }

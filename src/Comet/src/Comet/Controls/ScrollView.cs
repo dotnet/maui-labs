@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using Comet.Reactive;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui;
 
@@ -14,6 +15,11 @@ namespace Comet
 		}
 
 		public Orientation Orientation { get; }
+
+		/// <summary>True while the scroll content is at the very top (scroll offset == 0); false
+		/// once the user has scrolled away. The backend node drives this from the native scroll
+		/// state so a floating button (e.g. ProfileFab) can reactively extend/contract.</summary>
+		public Signal<bool> AtTop { get; } = new(true);
 
 		ScrollBarVisibility IScrollView.HorizontalScrollBarVisibility => this.GetPropertyValue<ScrollBarVisibility?>() ?? ScrollBarVisibility.Default;
 
