@@ -134,10 +134,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -158,10 +155,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -182,10 +176,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -210,10 +201,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -311,10 +299,7 @@ extends:
                 Release:
                   _BuildConfig: Release
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: |
                 sudo apt-get update
                 sudo apt-get install -y \
