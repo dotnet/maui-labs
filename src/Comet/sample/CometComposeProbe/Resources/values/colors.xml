@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand logo fill colors referenced by ic_jetchat_back.xml / ic_jetchat_front.xml (from the gold
+     Jetchat colors.xml: yellow_logo=yellow700, blue_logo=blue500). The two-layer JetchatIcon tints
+     each layer via a colorFilter, so these are only the untinted fallback fills. -->
+<resources>
+    <color name="yellow_logo">#F3B711</color>
+    <color name="blue_logo">#0540F2</color>
+</resources>

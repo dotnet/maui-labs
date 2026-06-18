@@ -19,10 +19,13 @@ namespace CometSamples.Jetchat
 		public static View Content(double topInset, Comet.Reactive.Signal<string> selected,
 			System.Action<string> onChannel, System.Action<string> onProfile, System.Action onSettings) => new VStack(spacing: 0f)
 		{
-			// DrawerHeader: Row(padding 16) with the jetchat brand logo at 24dp (JetchatDrawer.kt).
+			// DrawerHeader (JetchatDrawer.kt): Row(padding 16){ JetchatIcon(24dp) + jetchat_logo wordmark }.
+			// The two-layer tinted brand mark beside the "jetchat" wordmark image (87x24).
 			new HStack(spacing: 0f)
 			{
-				new Icon("jetchat").IconSize(24),
+				C.JetchatIcon(24).VerticalLayoutAlignment(LayoutAlignment.Center),
+				new Image("jetchat_logo").Frame(width: 87, height: 24).FlexShrink(0)
+					.Margin(left: 8).VerticalLayoutAlignment(LayoutAlignment.Center),
 			}.Padding(new Thickness(16, topInset + 16, 16, 16)),
 
 			// Edge-to-edge divider under the header (the gold's first DividerItem() has no inset).

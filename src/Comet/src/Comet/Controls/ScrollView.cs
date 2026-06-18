@@ -21,6 +21,11 @@ namespace Comet
 		/// state so a floating button (e.g. ProfileFab) can reactively extend/contract.</summary>
 		public Signal<bool> AtTop { get; } = new(true);
 
+		/// <summary>The continuous vertical scroll offset in Dp (0 at the top), driven by the backend
+		/// node from the native scroll state — for a parallax header that translates with the scroll
+		/// (e.g. the profile photo moving at half the scroll speed).</summary>
+		public Signal<double> ScrollOffset { get; } = new(0);
+
 		ScrollBarVisibility IScrollView.HorizontalScrollBarVisibility => this.GetPropertyValue<ScrollBarVisibility?>() ?? ScrollBarVisibility.Default;
 
 		ScrollBarVisibility IScrollView.VerticalScrollBarVisibility => this.GetPropertyValue<ScrollBarVisibility?>() ?? ScrollBarVisibility.Default;

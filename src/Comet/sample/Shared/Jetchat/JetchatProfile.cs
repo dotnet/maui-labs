@@ -42,16 +42,17 @@ namespace CometSamples.Jetchat
 			// the base layer (fills), the FAB the overlay (pinned bottom-right, overlapping the scroll).
 			// The scroll's AtTop signal drives the FAB: extended at top (scrollState.value == 0),
 			// contracted when scrolled away — matching the gold's derivedStateOf { scrollState.value == 0 }.
+			// Profile photo (ProfileHeader.kt): fillMaxWidth − 16dp each side, height from the photo's
+			// aspect (AspectRatio), ContentScale.Crop, clipped CircleShape. A square photo (ali) → a
+			// CIRCLE; a landscape photo (taylor) → a wide oval. Extracted so the parallax can translate it.
+			var photo = new Image(d.Photo).FillHorizontal().AspectRatio(d.PhotoAspect).FlexShrink(0)
+				.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8);
+
 			var scroll = new ScrollView
 			{
 				new VStack(spacing: 0f)
 				{
-					// Profile photo (ProfileHeader.kt): fillMaxWidth − 16dp each side, height from the
-					// photo's aspect (AspectRatio), ContentScale.Crop, clipped CircleShape. A square
-					// photo (ali) → a CIRCLE; a landscape photo (taylor) → a wide oval. CornerRadius
-					// clamps to half the shorter side, so it's the circle/ellipse clip.
-					new Image(d.Photo).FillHorizontal().AspectRatio(d.PhotoAspect).FlexShrink(0)
-						.CornerRadius(1000).Margin(left: 16, top: 8, right: 16, bottom: 8),
+					photo,
 
 					// Name + position (NameAndPosition): each text baseline-anchored — the name's
 					// first baseline 32dp from its top, the position's 24dp, +20dp below.
@@ -69,6 +70,14 @@ namespace CometSamples.Jetchat
 					Property("Timezone", d.TimeZone, isLink: false),
 				},
 			}.FillVertical();
+
+			// NOTE: the gold ProfileHeader parallaxes the photo via padding(top = scrollState.value / 2),
+			// which GROWS the photo's slot so the content below stays clear. The infrastructure for it is
+			// in place — ScrollView.ScrollOffset (a continuous Dp signal the scroll node marshals) plus
+			// general TranslationY transform support on the nodes — but a faithful (no-overlap) parallax
+			// needs the layout-grow approach (a per-frame reflow), deferred to avoid scroll jank on the
+			// profile's baseline-measured text. A pure TranslationY transform makes the photo overlap the
+			// rows below, so it's not wired here.
 
 			// FAB is extended while at top, contracted when scrolled (gold: derivedStateOf { scrollState.value == 0 }).
 			var fab = ProfileFab(d.IsMe ? "Edit Profile" : "Message", d.IsMe ? "create" : "chat", onBack)

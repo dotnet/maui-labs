@@ -22,7 +22,6 @@ namespace Comet.Platform.Compose
 		readonly ScrollState _scrollState = new();
 		ComposeNode? _content;
 		View? _contentView;
-		bool? _lastAtTop;
 
 		public ComposeScrollNode(IContainerView scroll, BackendContext context)
 		{
@@ -70,17 +69,27 @@ namespace Comet.Platform.Compose
 			box.Add(content);
 			((ComposableNode)box).Render(composer);
 
-			// Marshal scroll-at-top state to the ScrollView's signal so overlays (e.g. ProfileFab)
-			// can reactively extend/contract. atTop is true when the content is at its natural top.
-			bool atTop = _scrollState.Value == 0;
-			if (atTop != _lastAtTop)
+			// Continuously marshal the scroll offset (Dp) + at-top flag to the ScrollView's signals: a
+			// parallax header translates with the offset, and overlays (ProfileFab) extend/contract from
+			// at-top. SnapshotFlow tracks the live scrollState.value (px); LaunchedEffect(true) starts once
+			// and cancels when the scroll leaves the composition. Mirrors ComposeListNode's scroll bridge.
+			if (_scroll is Comet.ScrollView sv)
 			{
-				_lastAtTop = atTop;
-				if (_scroll is Comet.ScrollView sv)
+				var captured = _scrollState;
+				var offsetSignal = sv.ScrollOffset;
+				var atTopSignal = sv.AtTop;
+				composer.LaunchedEffect(true, async ct =>
 				{
-					var signal = sv.AtTop;
-					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = atTop);
-				}
+					await foreach (var px in ComposeExtensions.SnapshotFlow(() => captured.Value).WithCancellation(ct))
+					{
+						double dp = px / ComposeNode.Density;
+						Comet.ThreadHelper.RunOnMainThread(() =>
+						{
+							offsetSignal.Value = dp;
+							atTopSignal.Value = px == 0;
+						});
+					}
+				});
 			}
 		}
 	}

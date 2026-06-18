@@ -84,10 +84,15 @@ namespace Comet
 					node.ApplyProperty(PropertyIds.Border, PropertyValue.FromObject(new BorderSpec(strokeWidth, strokeColor)));
 			}
 
-			// Transforms — emit only when they differ from identity.
+			// Transforms. Translation is emitted whenever explicitly set (env key present), even back
+			// to 0 — so a reactive parallax that returns to the origin clears rather than sticking at the
+			// last offset (the same always-emit reasoning as Opacity above). Scale/rotation keep the
+			// identity-skip (not driven reactively here).
 			var t = (ITransform)this;
-			if (t.TranslationX != 0) node.ApplyProperty(PropertyIds.TranslationX, PropertyValue.From(t.TranslationX));
-			if (t.TranslationY != 0) node.ApplyProperty(PropertyIds.TranslationY, PropertyValue.From(t.TranslationY));
+			if (this.GetEnvironment<double?>(nameof(ITransform.TranslationX)) is { } tx)
+				node.ApplyProperty(PropertyIds.TranslationX, PropertyValue.From(tx));
+			if (this.GetEnvironment<double?>(nameof(ITransform.TranslationY)) is { } ty)
+				node.ApplyProperty(PropertyIds.TranslationY, PropertyValue.From(ty));
 			if (t.ScaleX != 1) node.ApplyProperty(PropertyIds.ScaleX, PropertyValue.From(t.ScaleX));
 			if (t.ScaleY != 1) node.ApplyProperty(PropertyIds.ScaleY, PropertyValue.From(t.ScaleY));
 			if (t.Rotation != 0) node.ApplyProperty(PropertyIds.Rotation, PropertyValue.From(t.Rotation));

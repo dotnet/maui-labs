@@ -251,6 +251,16 @@ namespace CometSamples.Jetchat
 			}.FlexGrow(1).FlexBasis(0),
 		}.Padding(new Thickness(16, topInset + 12, 16, 12)).Background(Surface);   // CenterAlignedTopAppBar = plain surface
 
+		// JetchatIcon (components/JetchatIcon.kt): the two-layer, theme-TINTED brand mark — ic_jetchat_back
+		// (primaryContainer) under ic_jetchat_front (primary), stacked. Unlike the static multicolor
+		// ic_jetchat, it tints with the Material scheme (so it tracks Material You / the brand seed). Both
+		// layers are tinted Icons (non-multicolor → the tinted Icon path = the gold's colorFilter.tint).
+		internal static View JetchatIcon(double size = 24) => new ZStack
+		{
+			new Icon("jetchat_back").Color(JetchatTheme.PrimaryContainer).IconSize(size),
+			new Icon("jetchat_front").Color(Primary).IconSize(size),
+		}.Frame(width: (float)size, height: (float)size).FlexShrink(0);
+
 		// A real Material Icon (ImageVector / SF Symbol), 24dp, tinted onSurfaceVariant, centered.
 		// Search/info tap the "functionality not available" popup (Conversation.kt clickable actions).
 		static View BarIcon(string symbol, System.Action? onTap = null)

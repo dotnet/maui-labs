@@ -37,6 +37,9 @@ namespace Comet.Platform.Compose
 		float _elevation;
 		float _borderWidth;
 		Microsoft.Maui.Graphics.Color? _borderColor;
+		// Reactive translation (Dp): a render-time offset (no parent reflow) for transforms such as the
+		// profile-photo parallax. Folded into the Yoga frame offset in BuildNodeModifier.
+		float _translationX, _translationY;
 		// Reactive visibility: opacity (1 = opaque) and IsVisible. A fully-transparent or
 		// invisible node fades out AND stops receiving taps, so a hidden overlay (e.g. the
 		// JumpToBottom FAB) doesn't intercept touches. Driven by a reactive property push.
@@ -141,6 +144,16 @@ namespace Comet.Platform.Compose
 				}
 				_styleVersion.Value++;
 			}
+			else if (id == PropertyIds.TranslationX)
+			{
+				_translationX = (float)value.AsDouble;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.TranslationY)
+			{
+				_translationY = (float)value.AsDouble;
+				_styleVersion.Value++;
+			}
 			else
 				ApplyControlProperty(id, in value);
 		}
@@ -160,11 +173,14 @@ namespace Comet.Platform.Compose
 			Modifier? m = null;
 
 			// Yoga-positioned: place + size this node absolutely within its (Box) parent. Applied
-			// first so background/clickable cover the arranged frame.
+			// first so background/clickable cover the arranged frame. A reactive translation shifts the
+			// render position without a parent reflow (the photo parallax).
 			if (_hasFrame)
 				m = Modifier.Companion
-					.AbsoluteOffset(new Dp(_fx), new Dp(_fy))
+					.AbsoluteOffset(new Dp(_fx + _translationX), new Dp(_fy + _translationY))
 					.Size(new Dp(_fw), new Dp(_fh));
+			else if (_translationX != 0f || _translationY != 0f)
+				m = Modifier.Companion.AbsoluteOffset(new Dp(_translationX), new Dp(_translationY));
 
 			// Reactive visibility: fade the whole node (background + content) — applied early so
 			// everything painted below inherits the alpha. An invisible node collapses to alpha 0.
