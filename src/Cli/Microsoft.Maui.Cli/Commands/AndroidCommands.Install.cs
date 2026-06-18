@@ -177,10 +177,21 @@ public static partial class AndroidCommands
 						var pkgTask = ctx.AddTask($"Installing packages (0/{pkgList.Count})");
 						pkgTask.Update(0, $"Installing packages (0/{pkgList.Count})...");
 						await androidProvider.InstallPackagesAsync(pkgList, acceptLicenses,
-							onProgress: (pkg, idx, total) =>
+							onProgress: (AndroidPackageInstallProgress p) =>
 							{
-								var pct = (double)idx / total * 100;
-								pkgTask.Update(pct, $"Installing {pkg} ({idx}/{total})");
+								// Map per-package phase/percent onto the overall bar so large
+								// downloads/extractions show real movement instead of sitting at 100%.
+								var completed = p.PackageIndex - 1;
+								var within = p.Percent >= 0 ? p.Percent / 100.0 : 0;
+								var overall = (completed + within) / p.PackageTotal * 100;
+
+								var label = string.IsNullOrEmpty(p.Phase)
+									? $"Installing {p.Package} ({p.PackageIndex}/{p.PackageTotal})"
+									: p.Percent >= 0
+										? $"{p.Phase} {p.Package} ({p.PackageIndex}/{p.PackageTotal}) — {p.Percent}%"
+										: $"{p.Phase} {p.Package} ({p.PackageIndex}/{p.PackageTotal})";
+
+								pkgTask.Update(overall, label);
 							},
 							cancellationToken);
 						pkgTask.Complete($"{pkgList.Count} packages installed");
