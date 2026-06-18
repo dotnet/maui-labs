@@ -94,17 +94,37 @@ namespace CometSamples.Jetchat
 
 		static readonly List<Row> Rows = BuildRows();
 
+		// Display = [9 gold messages][~100 history]. Render history (older) first, then the gold's two
+		// hardcoded day dividers ("20 Aug" + "Today") around the 9-message conversation — so the newest
+		// real message ("Check it out!") is the LAST row and the list opens scrolled to it (Conversation.kt
+		// reverseLayout + the index==size-1 / index==2 DayHeaders).
+		const int GoldCount = 9;
+
 		static List<Row> BuildRows()
 		{
-			var rows = new List<Row> { new HeaderRow("Today") };
-			for (int i = 0; i < Display.Count; i++)
+			var real = Display.GetRange(0, GoldCount);
+			var history = Display.GetRange(GoldCount, Display.Count - GoldCount);
+
+			var rows = new List<Row>();
+			AddMessageRows(rows, history);                              // older history (top)
+			rows.Add(new HeaderRow("20 Aug"));
+			AddMessageRows(rows, real.GetRange(0, 3));                  // John 8:12, Taylor 8:10, Shangeeth 8:08
+			rows.Add(new HeaderRow("Today"));
+			AddMessageRows(rows, real.GetRange(3, real.Count - 3));     // me 8:03 … Check it out 8:07
+			return rows;
+		}
+
+		// Append message rows for one contiguous segment, computing author-grouping within it (the
+		// first row starts a new group — a header/segment boundary precedes it).
+		static void AddMessageRows(List<Row> rows, IReadOnlyList<Msg> msgs)
+		{
+			for (int i = 0; i < msgs.Count; i++)
 			{
-				var m = Display[i];
-				bool topOfGroup = i == 0 || Display[i - 1].Author != m.Author;       // avatar + name here
-				bool bottomOfGroup = i == Display.Count - 1 || Display[i + 1].Author != m.Author;
+				var m = msgs[i];
+				bool topOfGroup = i == 0 || msgs[i - 1].Author != m.Author;             // avatar + name here
+				bool bottomOfGroup = i == msgs.Count - 1 || msgs[i + 1].Author != m.Author;
 				rows.Add(new MsgRow(m, topOfGroup, bottomOfGroup ? 8 : 4));
 			}
-			return rows;
 		}
 
 		/// <summary>Builds the conversation screen. <paramref name="topInset"/>/<paramref name="bottomInset"/>
@@ -220,15 +240,19 @@ namespace CometSamples.Jetchat
 			new HStack(spacing: 0f)
 			{
 				Spacer(),
-				BarIcon("search").Margin(right: 20),
-				BarIcon("info"),
+				BarIcon("search", () => NotAvailableOpen.Value = true).Margin(right: 20),
+				BarIcon("info", () => NotAvailableOpen.Value = true),
 			}.FlexGrow(1).FlexBasis(0),
 		}.Padding(new Thickness(16, topInset + 12, 16, 12)).Background(Surface);   // CenterAlignedTopAppBar = plain surface
 
 		// A real Material Icon (ImageVector / SF Symbol), 24dp, tinted onSurfaceVariant, centered.
-		static View BarIcon(string symbol) =>
-			new Icon(symbol).Color(OnSurfaceVariant).IconSize(24)
+		// Search/info tap the "functionality not available" popup (Conversation.kt clickable actions).
+		static View BarIcon(string symbol, System.Action? onTap = null)
+		{
+			var icon = new Icon(symbol).Color(OnSurfaceVariant).IconSize(24)
 				.VerticalLayoutAlignment(LayoutAlignment.Center);
+			return onTap is null ? icon : icon.OnTap(_ => onTap());
+		}
 
 		// ── Message log: a real virtualized LazyColumn (Comet ListView), exactly like the gold
 		// standard's Messages() — each row template is materialized only when it scrolls into view. ──

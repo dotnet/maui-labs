@@ -77,6 +77,13 @@ namespace Comet.Platform.Compose
 			var capturedState = listState;
 			composer.LaunchedEffect(true, async ct =>
 			{
+				// Open at the newest message (bottom) — the gold's reverseLayout initial position.
+				// Instant (not animated) so launch doesn't visibly scroll through the older history;
+				// scrollToItem(last) clamps to the maximum, landing the newest row at the bottom.
+				int lastIndex = capturedList.Sections() > 0 ? System.Math.Max(0, capturedList.Rows(0) - 1) : 0;
+				if (lastIndex > 0)
+					await capturedState.ScrollToItemAsync(lastIndex);
+
 				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
 					.WithCancellation(ct))
 				{
