@@ -84,6 +84,7 @@ namespace Comet.Backend
 		public static readonly PropertyId TextField_IsPassword = new(100);
 		public static readonly PropertyId TextField_Keyboard = new(101);
 		public static readonly PropertyId TextField_Borderless = new(102);
+		public static readonly PropertyId TextField_ReturnType = new(103);   // soft-keyboard action key (ImeAction)
 
 		// --- Image (112–127) ---
 		public static readonly PropertyId Image_Source = new(112);

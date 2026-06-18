@@ -21,6 +21,14 @@ public sealed class BasicTextField : ComposableNode
     /// <summary>Optional <c>TextStyle</c> (Kotlin <c>textStyle</c>) — text color, size, weight, etc.</summary>
     public TextStyle? TextStyle { get; set; }
 
+    /// <summary>Optional IME config (Kotlin <c>keyboardOptions</c>) — keyboard type + the soft-keyboard
+    /// action key (e.g. ImeAction.Send). Null keeps Compose's default.</summary>
+    public AndroidX.Compose.Foundation.Text.KeyboardOptions? KeyboardOptions { get; set; }
+
+    /// <summary>Optional per-IME-action callbacks (Kotlin <c>keyboardActions</c>) — e.g. an onSend handler
+    /// fired when the keyboard's Send key is pressed. Build via <see cref="KeyboardActionsHelper"/>.</summary>
+    public AndroidX.Compose.Foundation.Text.KeyboardActions? KeyboardActions { get; set; }
+
     /// <summary>Whether the field is constrained to a single line.</summary>
     public bool? SingleLine { get; set; }
 
@@ -41,6 +49,6 @@ public sealed class BasicTextField : ComposableNode
     public override void Render(IComposer composer)
     {
         var onValueChange = new ComposableLambda1(v => _onValueChange(v?.ToString() ?? string.Empty));
-        ComposeBridges.BasicTextField(_value, onValueChange, BuildModifier(), TextStyle?.Build(), SingleLine, composer);
+        ComposeBridges.BasicTextField(_value, onValueChange, BuildModifier(), TextStyle?.Build(), KeyboardOptions, KeyboardActions, SingleLine, composer);
     }
 }

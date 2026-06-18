@@ -18,6 +18,7 @@ namespace Comet.Platform.Compose
 		readonly MutableState<string> _placeholder = new(string.Empty);
 		readonly MutableState<bool> _borderless = new(false);
 		Microsoft.Maui.Graphics.Color? _textColor;
+		Comet.ReturnType _returnType = Comet.ReturnType.Default;
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
@@ -29,7 +30,20 @@ namespace Comet.Platform.Compose
 				_borderless.Value = value.AsBool;
 			else if (id == PropertyIds.TextField_TextColor)
 				_textColor = value.AsColor;
+			else if (id == PropertyIds.TextField_ReturnType)
+				_returnType = (Comet.ReturnType)value.AsInt;
 		}
+
+		// Map Comet's ReturnType (the soft-keyboard action key) to a Compose ImeAction int.
+		static int MapImeAction(Comet.ReturnType rt) => rt switch
+		{
+			Comet.ReturnType.Send => AndroidX.Compose.ImeAction.Send,
+			Comet.ReturnType.Done => AndroidX.Compose.ImeAction.Done,
+			Comet.ReturnType.Go => AndroidX.Compose.ImeAction.Go,
+			Comet.ReturnType.Next => AndroidX.Compose.ImeAction.Next,
+			Comet.ReturnType.Search => AndroidX.Compose.ImeAction.Search,
+			_ => AndroidX.Compose.ImeAction.Default,
+		};
 
 		// A Material TextField fills the available width and is ~56dp tall; give Yoga that intrinsic
 		// size so it doesn't collapse to zero height. A borderless field is sized to its text plus
@@ -80,22 +94,6 @@ namespace Comet.Platform.Compose
 			var box = new AndroidX.Compose.Box();
 			((ComposableNode)box).Modifier = BuildNodeModifier();   // Yoga frame (+ any background)
 
-			// Placeholder shows only while empty (this re-runs when _text changes, so it hides on type).
-			var placeholder = _placeholder.Value;
-			if (string.IsNullOrEmpty(_text.Value) && !string.IsNullOrEmpty(placeholder))
-			{
-				var ph = new AndroidX.Compose.Text(placeholder)
-				{
-					Modifier = contentMod,
-					FontSize = new AndroidX.Compose.Sp(BorderlessFontSp),
-					// Dim the text color for the hint (≈60% alpha) — reads like onSurfaceVariant.
-					Color = _textColor is { } c
-						? ToComposeColor(new Microsoft.Maui.Graphics.Color(c.Red, c.Green, c.Blue, 0.6f))
-						: AndroidX.Compose.Color.Gray,
-				};
-				box.Add(ph);
-			}
-
 			var field = new AndroidX.Compose.BasicTextField(
 				_text.Value, s => Sink?.OnEvent(EventIds.TextChanged, s))
 			{
@@ -103,7 +101,36 @@ namespace Comet.Platform.Compose
 				SingleLine = true,
 				TextStyle = new AndroidX.Compose.TextStyle { Color = textColor, FontSize = new AndroidX.Compose.Sp(BorderlessFontSp) },
 			};
+
+			// Soft-keyboard action key (e.g. Send): set the ImeAction and fire Completed when it's pressed
+			// (the gold's KeyboardActions { onMessageSent }). All action callbacks route to Completed —
+			// only the configured action's key is shown by the IME, so just one can fire.
+			if (_returnType != Comet.ReturnType.Default)
+			{
+				// Copy the default options overriding only imeAction. The binding strips Kotlin defaults,
+				// so pass all slots: capitalization None(0), autoCorrect default, keyboardType Text, the
+				// mapped action; the trailing platformImeOptions / showKeyboardOnFocus / hintLocales = null.
+				field.KeyboardOptions = AndroidX.Compose.KeyboardOptionsCompanion.Default.Copy(
+					0, null, AndroidX.Compose.KeyboardType.Text, MapImeAction(_returnType), null, null, null);
+				void Fire() => Sink?.OnEvent(EventIds.Completed);
+				field.KeyboardActions = AndroidX.Compose.KeyboardActionsHelper.Create(
+					onDone: Fire, onGo: Fire, onNext: Fire, onSearch: Fire, onSend: Fire);
+			}
+
+			// Field FIRST so it keeps a stable position (index 0) across text changes. The placeholder is
+			// ALWAYS present (blanked once there's input) and overlaid on top — adding/removing it instead
+			// would shift the field's index and make Compose drop focus + dismiss the keyboard mid-typing.
 			box.Add(field);
+			var hint = string.IsNullOrEmpty(_text.Value) ? (_placeholder.Value ?? string.Empty) : string.Empty;
+			box.Add(new AndroidX.Compose.Text(hint)
+			{
+				Modifier = contentMod,
+				FontSize = new AndroidX.Compose.Sp(BorderlessFontSp),
+				// Dim the hint (≈60% alpha) — reads like onSurfaceVariant.
+				Color = _textColor is { } c
+					? ToComposeColor(new Microsoft.Maui.Graphics.Color(c.Red, c.Green, c.Blue, 0.6f))
+					: AndroidX.Compose.Color.Gray,
+			});
 
 			((ComposableNode)box).Render(composer);
 		}

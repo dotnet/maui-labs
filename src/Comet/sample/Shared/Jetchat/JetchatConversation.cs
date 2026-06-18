@@ -498,7 +498,10 @@ namespace CometSamples.Jetchat
 				// field (grows to fill, vertically centered) + a trailing mic — the gold's RecordButton.
 				new HStack(spacing: 0f)
 				{
-					SignalExtensions.TextField(InputText, "Message #composers")
+					// Send-on-keyboard: the IME action key is a paper-plane "Send" that submits the message
+					// (gold UserInput.kt KeyboardOptions(imeAction = Send) + keyboardActions { onMessageSent }).
+					SignalExtensions.TextField(InputText, "Message #composers", completed: () => Send(log))
+						.SendOnReturn()
 						.Borderless().Color(OnSurface).FillHorizontal()
 						.VerticalLayoutAlignment(LayoutAlignment.Center)
 						.Padding(new Thickness(20, 0, 8, 0)),

@@ -853,6 +853,8 @@ internal static partial class ComposeBridges
         [Callback(typeof(string))] IFunction1 onValueChange,
         IModifier? modifier,
         AndroidX.Compose.UI.Text.TextStyle? textStyle,
+        AndroidX.Compose.Foundation.Text.KeyboardOptions? keyboardOptions,
+        AndroidX.Compose.Foundation.Text.KeyboardActions? keyboardActions,
         bool? singleLine,
         IComposer composer);
 
