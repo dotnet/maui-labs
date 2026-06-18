@@ -145,6 +145,12 @@ namespace CometSamples.Jetchat
 		const int SelNone = 0, SelMap = 1, SelDm = 2, SelEmoji = 3, SelPhone = 4, SelPicture = 5;
 		static readonly Comet.Reactive.Signal<int> CurrentSelector = new(SelNone);
 
+		// Voice-record indicator state (gold UserInput.kt RecordButton/RecordingIndicator). The live
+		// mm:ss elapsed time shown while the mic is held, reactively bound to the indicator's Text. The
+		// gold records no audio — RecordButton is a pure UI mock (it just toggles a flag) — and so do we;
+		// this is the gesture + indicator reproduction. Android-only: the iOS mic stays static.
+		static readonly Comet.Reactive.Signal<string> RecordDuration = new("00:00");
+
 		/// <summary>The Jetchat sample. The drawer wraps the whole <see cref="NavigationView"/> stack
 		/// (like the gold's <c>ModalNavigationDrawer</c> around the NavHost), so the jetchat logo opens
 		/// it over ANY destination — the conversation or a profile. Tapping a drawer profile closes the
@@ -492,24 +498,50 @@ namespace CometSamples.Jetchat
 				NotAvailablePanel(),   // PICTURE
 			}).Background(JetchatTheme.SurfaceTinted8).FillHorizontal();
 
+			// The borderless composer field — gold UserInputText. Send-on-keyboard: the IME action key is a
+			// paper-plane "Send" that submits (gold KeyboardOptions(imeAction = Send)); focusing it closes
+			// any open selector panel (gold onTextFieldFocused) so the keyboard never overlays it.
+			var field = SignalExtensions.TextField(InputText, "Message #composers", completed: () => Send(log))
+				.SendOnReturn()
+				.OnFocused(() => { CurrentSelector.Value = SelNone; log.ScrollToBottom(); })
+				.Borderless().Color(OnSurface).FillHorizontal()
+				.VerticalLayoutAlignment(LayoutAlignment.Center)
+				.Padding(new Thickness(20, 0, 8, 0));
+
+			// The recording indicator that replaces the field while the mic is held (gold RecordingIndicator):
+			// a red dot, the live mm:ss elapsed time, and a "Swipe to cancel" hint that fades as the drag
+			// nears the cancel threshold. Hidden (Opacity 0) until a long-press starts recording.
+			var swipeHint = new Text("Swipe to cancel").BodyLarge().Color(OnSurfaceVariant)
+				.HorizontalLayoutAlignment(LayoutAlignment.Center)
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
+			var indicator = new HStack(spacing: 12f)
+			{
+				new HStack().Frame(width: 10, height: 10).CornerRadius(5).Background(Colors.Red)
+					.VerticalLayoutAlignment(LayoutAlignment.Center),
+				new Text(RecordDuration).BodyLarge().Color(OnSurface)
+					.VerticalLayoutAlignment(LayoutAlignment.Center),
+				swipeHint.FillHorizontal(),
+			}.FillHorizontal().Padding(new Thickness(20, 0, 8, 0)).Opacity(0);
+
+			// The mic — gold RecordButton. A 48dp touch target (so the long-press lands easily) carrying the
+			// press-and-hold voice-record gesture: long-press starts, drag tracks the swipe offset, release
+			// finishes, swipe-left past the threshold cancels (gold detectDragGesturesAfterLongPress).
+			var micIcon = new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
+				.HorizontalLayoutAlignment(LayoutAlignment.Center)
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
+			var mic = new ZStack { micIcon }
+				.Frame(width: 48, height: 48).Margin(right: 8)
+				.VerticalLayoutAlignment(LayoutAlignment.Center)
+				.OnRecord(g => HandleRecord(g, field, indicator, swipeHint, micIcon));
+
 			return new VStack(spacing: 0f)
 			{
-				// Input row: a fixed 64dp row (the gold's UserInputText height) with the borderless
-				// field (grows to fill, vertically centered) + a trailing mic — the gold's RecordButton.
+				// Input row: a fixed 64dp row (the gold's UserInputText height). The field and the recording
+				// indicator share the leading cell (one fades out as the other fades in); the mic trails.
 				new HStack(spacing: 0f)
 				{
-					// Send-on-keyboard: the IME action key is a paper-plane "Send" that submits the message
-					// (gold UserInput.kt KeyboardOptions(imeAction = Send) + keyboardActions { onMessageSent }).
-					SignalExtensions.TextField(InputText, "Message #composers", completed: () => Send(log))
-						.SendOnReturn()
-						// Gold onTextFieldFocused: focusing the field closes the open selector panel so the
-						// keyboard never overlays it (and resets the log to the newest message).
-						.OnFocused(() => { CurrentSelector.Value = SelNone; log.ScrollToBottom(); })
-						.Borderless().Color(OnSurface).FillHorizontal()
-						.VerticalLayoutAlignment(LayoutAlignment.Center)
-						.Padding(new Thickness(20, 0, 8, 0)),
-					new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
-						.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
+					new ZStack { field, indicator }.FillHorizontal(),
+					mic,
 				}.Frame(height: 64),
 				// Selector row (gold UserInputSelector): five toggle icons packed at the start, a flexible
 				// gap, then Send. 72dp tall with 16dp bottom padding — height(72).padding(start=16, end=16,
@@ -544,6 +576,56 @@ namespace CometSamples.Jetchat
 			InputText.Value = string.Empty;   // two-way binding clears the field
 			log.ReloadData();                 // recompose the LazyColumn against the new row
 			log.ScrollToBottom();             // animate to the newest message
+		}
+
+		// Drive the voice-record indicator from the press-and-hold gesture (gold RecordButton's
+		// onStartRecording/onFinishRecording/onCancelRecording + RecordingIndicator). The gold records
+		// nothing — RecordButton is a pure UI mock — so this only swaps the field for the indicator, runs
+		// the elapsed timer, and fades the "Swipe to cancel" hint as the drag nears the threshold.
+		static void HandleRecord(RecordGesture g, View field, View indicator, View swipeHint, View micIcon)
+		{
+			switch (g.Status)
+			{
+				case Comet.GestureStatus.Started:
+					swipeHint.Opacity(1);
+					field.Opacity(0);          // fade the field out …
+					indicator.Opacity(1);      // … and the recording indicator in
+					micIcon.Color(Primary);    // tint the mic active (gold animates the icon colour)
+					StartRecordTimer();
+					break;
+				case Comet.GestureStatus.Running:
+					// Fade the hint as the leftward swipe approaches the 200dp cancel threshold (gold alpha).
+					double frac = System.Math.Min(1.0, System.Math.Abs(g.TotalX) / 200.0);
+					swipeHint.Opacity(1.0 - frac);
+					break;
+				case Comet.GestureStatus.Completed:
+				case Comet.GestureStatus.Canceled:
+					StopRecordTimer();
+					field.Opacity(1);          // restore the field
+					indicator.Opacity(0);
+					micIcon.Color(OnSurfaceVariant);
+					break;
+			}
+		}
+
+		// The recording elapsed-time ticker (gold RecordingIndicator's LaunchedEffect { while(true) delay(1000) }).
+		static System.Threading.Timer? _recordTimer;
+		static int _recordSeconds;
+		static void StartRecordTimer()
+		{
+			_recordSeconds = 0;
+			RecordDuration.Value = "00:00";
+			_recordTimer?.Dispose();
+			_recordTimer = new System.Threading.Timer(_ =>
+			{
+				_recordSeconds++;
+				RecordDuration.Value = $"{_recordSeconds / 60:00}:{_recordSeconds % 60:00}";
+			}, null, 1000, 1000);
+		}
+		static void StopRecordTimer()
+		{
+			_recordTimer?.Dispose();
+			_recordTimer = null;
 		}
 
 		// A selector icon (gold InputSelectorButton): a 48dp rounded touch target. When its selector is

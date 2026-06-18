@@ -105,6 +105,10 @@ namespace Comet
 			// Tap gestures become a clickable modifier on the backend node.
 			if (HasTapGesture())
 				node.ApplyProperty(PropertyIds.HasTapGesture, PropertyValue.From(true));
+
+			// A record gesture becomes a detectDragGesturesAfterLongPress modifier (gold RecordButton).
+			if (HasRecordGesture())
+				node.ApplyProperty(PropertyIds.HasRecordGesture, PropertyValue.From(true));
 		}
 
 		// Parse a ClipShape into the per-corner radii the backend nodes consume. Only the rounded
@@ -123,6 +127,17 @@ namespace Comet
 				return false;
 			for (int i = 0; i < gestures.Count; i++)
 				if (gestures[i] is TapGesture)
+					return true;
+			return false;
+		}
+
+		bool HasRecordGesture()
+		{
+			var gestures = Gestures;
+			if (gestures is null)
+				return false;
+			for (int i = 0; i < gestures.Count; i++)
+				if (gestures[i] is RecordGesture)
 					return true;
 			return false;
 		}
@@ -163,14 +178,36 @@ namespace Comet
 		/// clickable tap), invoking the matching Comet gesture recognizers.</summary>
 		protected internal virtual void OnBackendGesture(Backend.GestureKind kind, in Backend.GestureData data)
 		{
-			if (kind != Backend.GestureKind.Tap)
-				return;
 			var gestures = Gestures;
 			if (gestures is null)
 				return;
-			for (int i = 0; i < gestures.Count; i++)
-				if (gestures[i] is TapGesture tap)
-					tap.Invoke();
+
+			if (kind == Backend.GestureKind.Tap)
+			{
+				for (int i = 0; i < gestures.Count; i++)
+					if (gestures[i] is TapGesture tap)
+						tap.Invoke();
+				return;
+			}
+
+			// The voice-record drag arrives as a Pan with the long-press/drag/release phases;
+			// feed them to the RecordGesture, which accumulates the offset and applies the
+			// swipe-to-cancel threshold (gold RecordButton).
+			if (kind == Backend.GestureKind.Pan)
+			{
+				for (int i = 0; i < gestures.Count; i++)
+				{
+					if (gestures[i] is not RecordGesture rec)
+						continue;
+					switch (data.State)
+					{
+						case Backend.GestureState.Began: rec.Begin(); break;
+						case Backend.GestureState.Changed: rec.Drag(data.Delta.X, data.Delta.Y); break;
+						case Backend.GestureState.Ended: rec.End(); break;
+						case Backend.GestureState.Cancelled: rec.Cancel(); break;
+					}
+				}
+			}
 		}
 	}
 

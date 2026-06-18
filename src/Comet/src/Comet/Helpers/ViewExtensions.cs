@@ -136,6 +136,12 @@ namespace Comet
 		public static T OnPan<T>(this T view, Action<PanGesture> action) where T : View
 			=> view.AddGesture(new PanGesture(action));
 
+		/// <summary>Press-and-hold voice-record gesture (gold Jetchat RecordButton). The handler
+		/// is invoked through the phases of a <see cref="RecordGesture"/> — Started on long-press,
+		/// Running on each drag, Completed on release, Canceled on a swipe-to-cancel.</summary>
+		public static T OnRecord<T>(this T view, Action<RecordGesture> action) where T : View
+			=> view.AddGesture(new RecordGesture(action));
+
 		public static T OnPinch<T>(this T view, Action<PinchGesture> action) where T : View
 			=> view.AddGesture(new PinchGesture(action));
 

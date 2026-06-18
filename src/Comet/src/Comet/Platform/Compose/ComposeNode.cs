@@ -29,6 +29,7 @@ namespace Comet.Platform.Compose
 		readonly MutableState<int> _childVersion = new(0);
 		ICometEventSink? _sink;
 		readonly MutableState<bool> _hasTap = new(false);
+		readonly MutableState<bool> _hasRecord = new(false);
 		// Color/Thickness aren't Java-boxable, so they can't live in a Compose MutableState.
 		// They're held as plain fields and a style-version state drives recomposition.
 		Microsoft.Maui.Graphics.Color? _background;
@@ -105,6 +106,8 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
+			else if (id == PropertyIds.HasRecordGesture)
+				_hasRecord.Value = value.AsBool;
 			else if (id == PropertyIds.Opacity)
 			{
 				_opacity = (float)value.AsDouble;
@@ -224,6 +227,21 @@ namespace Comet.Platform.Compose
 				var clickable = Modifier.Clickable(() =>
 					Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default)));
 				m = m is null ? clickable : m.Then(clickable);
+			}
+
+			// Press-and-hold voice-record drag (gold RecordButton's detectDragGesturesAfterLongPress):
+			// long-press engages, per-frame deltas (converted px→dp) flow back as Pan phases, and the
+			// Comet RecordGesture accumulates the offset + applies the swipe-to-cancel threshold.
+			if (_hasRecord.Value && alpha > 0f)
+			{
+				float density = Density;
+				var record = Modifier.Companion.DetectDragGesturesAfterLongPress(
+					onDrag: d => Sink?.OnGesture(GestureKind.Pan, new GestureData(
+						GestureState.Changed, default, new Point(d.X / density, d.Y / density))),
+					onDragStart: _ => Sink?.OnGesture(GestureKind.Pan, new GestureData(GestureState.Began, default)),
+					onDragEnd: () => Sink?.OnGesture(GestureKind.Pan, new GestureData(GestureState.Ended, default)),
+					onDragCancel: () => Sink?.OnGesture(GestureKind.Pan, new GestureData(GestureState.Cancelled, default)));
+				m = m is null ? record : m.Then(record);
 			}
 
 			return m;

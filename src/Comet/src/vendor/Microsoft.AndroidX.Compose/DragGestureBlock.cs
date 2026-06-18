@@ -43,17 +43,22 @@ internal sealed class DragGestureBlock : Java.Lang.Object, IFunction2
     readonly UnitCallback? _onDragEnd;
     readonly UnitCallback? _onDragCancel;
     readonly DragCallback _onDrag;
+    // When true, forward to detectDragGesturesAfterLongPress (drag is only
+    // recognised after the long-press timeout) instead of detectDragGestures.
+    readonly bool _afterLongPress;
 
     public DragGestureBlock(
         OffsetCallback? onDragStart,
         UnitCallback? onDragEnd,
         UnitCallback? onDragCancel,
-        DragCallback onDrag)
+        DragCallback onDrag,
+        bool afterLongPress = false)
     {
-        _onDragStart  = onDragStart;
-        _onDragEnd    = onDragEnd;
-        _onDragCancel = onDragCancel;
-        _onDrag       = onDrag;
+        _onDragStart    = onDragStart;
+        _onDragEnd      = onDragEnd;
+        _onDragCancel   = onDragCancel;
+        _onDrag         = onDrag;
+        _afterLongPress = afterLongPress;
     }
 
     public Java.Lang.Object? Invoke(Java.Lang.Object? scope, Java.Lang.Object? cont)
@@ -82,13 +87,16 @@ internal sealed class DragGestureBlock : Java.Lang.Object, IFunction2
 
         try
         {
-            var resultHandle = ComposeBridges.DetectDragGestures(
-                scopeHandle,
-                _onDragStart  is null ? null : ((Java.Lang.Object)_onDragStart).Handle,
-                _onDragEnd    is null ? null : ((Java.Lang.Object)_onDragEnd).Handle,
-                _onDragCancel is null ? null : ((Java.Lang.Object)_onDragCancel).Handle,
-                ((Java.Lang.Object)_onDrag).Handle,
-                continuation);
+            var startHandle  = _onDragStart  is null ? (IntPtr?)null : ((Java.Lang.Object)_onDragStart).Handle;
+            var endHandle    = _onDragEnd    is null ? (IntPtr?)null : ((Java.Lang.Object)_onDragEnd).Handle;
+            var cancelHandle = _onDragCancel is null ? (IntPtr?)null : ((Java.Lang.Object)_onDragCancel).Handle;
+            var dragHandle   = ((Java.Lang.Object)_onDrag).Handle;
+
+            var resultHandle = _afterLongPress
+                ? ComposeBridges.DetectDragGesturesAfterLongPress(
+                    scopeHandle, startHandle, endHandle, cancelHandle, dragHandle, continuation)
+                : ComposeBridges.DetectDragGestures(
+                    scopeHandle, startHandle, endHandle, cancelHandle, dragHandle, continuation);
 
             if (resultHandle == IntPtr.Zero)
                 return null;

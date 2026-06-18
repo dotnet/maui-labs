@@ -182,6 +182,34 @@ internal static partial class ComposeBridges
         IntPtr  onDrag,
         IContinuation cont);
 
+    // androidx.compose.foundation.gestures.DragGestureDetectorKt
+    //     .detectDragGesturesAfterLongPress$default(
+    //         PointerInputScope scope,
+    //         ((Offset) -> Unit) onDragStart = {},
+    //         (() -> Unit)      onDragEnd   = {},
+    //         (() -> Unit)      onDragCancel = {},
+    //         ((PointerInputChange, Offset) -> Unit) onDrag,
+    //         Continuation cont, int $default, Object marker): Object
+    //
+    // Identical parameter layout to detectDragGestures (same class, same
+    // four callbacks in the same order) — the only behavioural difference
+    // is Kotlin waits for the long-press timeout before recognising the
+    // first drag, so the same DragGestureBlock tail-call shape and the
+    // same DetectDragGesturesDefault mask apply. The gold Jetchat
+    // RecordButton drives exactly this detector (RecordButton.kt:156).
+    [ComposeBridge(Suspend = true,
+        Class = "androidx/compose/foundation/gestures/DragGestureDetectorKt",
+        JvmName = "detectDragGesturesAfterLongPress$default",
+        Signature = "(Landroidx/compose/ui/input/pointer/PointerInputScope;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;",
+        Defaults = typeof(DetectDragGesturesDefault))]
+    internal static partial IntPtr DetectDragGesturesAfterLongPress(
+        IntPtr scope,
+        IntPtr? onDragStart,
+        IntPtr? onDragEnd,
+        IntPtr? onDragCancel,
+        IntPtr  onDrag,
+        IContinuation cont);
+
     // androidx.compose.foundation.gestures.TransformGestureDetectorKt
     //     .detectTransformGestures$default(
     //         PointerInputScope scope,

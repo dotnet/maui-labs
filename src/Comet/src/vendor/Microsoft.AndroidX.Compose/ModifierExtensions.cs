@@ -1261,6 +1261,41 @@ public static class ModifierExtensions
     }
 
     /// <summary>
+    /// <c>Modifier.pointerInput(key) { detectDragGesturesAfterLongPress(...) }</c>
+    /// — like <see cref="DetectDragGestures(Modifier, Action{Offset}, Action{Offset}?, Action?, Action?, object?)"/>
+    /// but the drag is only recognised <em>after</em> the system long-press
+    /// timeout (~500ms) while the finger is still down. This is the gesture
+    /// the gold Jetchat <c>RecordButton</c> uses for press-and-hold-to-record
+    /// with swipe-to-cancel (RecordButton.kt:156).
+    /// </summary>
+    /// <remarks>Same callback-freshness <paramref name="key"/> caveat as
+    /// <see cref="DetectDragGestures(Modifier, Action{Offset}, Action{Offset}?, Action?, Action?, object?)"/>.</remarks>
+    /// <param name="onDrag">Required. Per-frame drag delta once the long-press
+    /// has engaged. <see cref="Offset.X"/> / <see cref="Offset.Y"/> are pixel deltas.</param>
+    /// <param name="onDragStart">Fired once the long-press engages and the
+    /// first drag is recognised. Position is the pointer location.</param>
+    /// <param name="onDragEnd">Fired when the pointer lifts after dragging.</param>
+    /// <param name="onDragCancel">Fired when the gesture is cancelled.</param>
+    /// <param name="key">Identity key — see <see cref="DetectDragGestures(Modifier, Action{Offset}, Action{Offset}?, Action?, Action?, object?)"/>.</param>
+    public static Modifier DetectDragGesturesAfterLongPress(this Modifier modifier,
+        Action<Offset> onDrag,
+        Action<Offset>? onDragStart = null,
+        Action? onDragEnd = null,
+        Action? onDragCancel = null,
+        object? key = null)
+    {
+        ArgumentNullException.ThrowIfNull(onDrag);
+
+        var startCb  = onDragStart  is null ? null : new OffsetCallback(onDragStart);
+        var endCb    = onDragEnd    is null ? null : new UnitCallback(onDragEnd);
+        var cancelCb = onDragCancel is null ? null : new UnitCallback(onDragCancel);
+        var dragCb   = new DragCallback(onDrag);
+
+        var block = new DragGestureBlock(startCb, endCb, cancelCb, dragCb, afterLongPress: true);
+        return AppendPointerInput(modifier, key, block);
+    }
+
+    /// <summary>
     /// <c>Modifier.pointerInput(key) { detectTransformGestures(...) }</c>
     /// — detect multi-pointer transform gestures (pinch zoom, two-
     /// finger pan, rotate). The single <paramref name="onGesture"/>
