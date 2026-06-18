@@ -20,6 +20,7 @@ public static class ErrorCodes
 	public const string InvalidArgument = "E1004";
 	public const string DeviceNotFound = "E1006";
 	public const string PlatformNotSupported = "E1007";
+	public const string PortEnumerationFailed = "E1008";
 
 	// Platform/SDK errors - JDK (E20xx)
 	public const string JdkNotFound = "E2001";
