@@ -299,16 +299,23 @@ public class AndroidProvider : IAndroidProvider
 		return systemImages.FirstOrDefault()?.Package.Path;
 	}
 
-	static int ExtractApiLevel(string systemImagePath)
+	internal static int ExtractApiLevel(string systemImagePath)
 	{
 		// Parse "system-images;android-35;google_apis;arm64-v8a" -> 35
 		var parts = systemImagePath.Split(';');
 		if (parts.Length >= 2)
 		{
-			var androidPart = parts[1]; // "android-35"
+			var androidPart = parts[1]; // "android-35" or "android-37.0"
 			if (androidPart.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
 			{
 				var levelStr = androidPart.Substring(8); // Remove "android-"
+
+				// Some platforms carry a minor revision suffix (e.g. "android-37.0");
+				// compare on the major component so the image isn't silently dropped.
+				var dotIndex = levelStr.IndexOf('.');
+				if (dotIndex >= 0)
+					levelStr = levelStr.Substring(0, dotIndex);
+
 				if (int.TryParse(levelStr, out var level))
 					return level;
 			}
