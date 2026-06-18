@@ -312,6 +312,10 @@ public class AndroidProvider : IAndroidProvider
 
 				// Some platforms carry a minor revision suffix (e.g. "android-37.0");
 				// compare on the major component so the image isn't silently dropped.
+				// Two coexisting minor revisions (e.g. "37.0" and "37.1") both map to 37,
+				// so their relative ordering is input-order-dependent. Only ".0" has been
+				// observed in practice; if finer-grained ordering is ever required, switch
+				// to Version.TryParse on the full "major.minor" component.
 				var dotIndex = levelStr.IndexOf('.');
 				if (dotIndex >= 0)
 					levelStr = levelStr.Substring(0, dotIndex);

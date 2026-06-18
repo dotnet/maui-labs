@@ -210,6 +210,12 @@ public class AndroidProviderTests
 	{
 		// API 37 ships as "android-37.0" (with a minor revision suffix). Regression test
 		// ensuring such images are not silently dropped by API-level parsing.
+		//
+		// SdkManager is not mockable, so this mirrors the production filter from
+		// AndroidProvider.GetMostRecentSystemImageAsync while calling the real
+		// AndroidProvider.ExtractApiLevel. It is therefore an ExtractApiLevel integration
+		// test for the most-recent-image flow; ExtractApiLevel_ParsesApiLevel below covers
+		// the parser directly. Keep the filter here in sync with the production method.
 		var packages = new List<SdkPackage>
 		{
 			new SdkPackage { Path = "system-images;android-35;google_apis;arm64-v8a" },
