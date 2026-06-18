@@ -531,4 +531,72 @@ public class AndroidCommandsTests
 		Assert.Contains(installCommand.Options, o => o.Name == "--sdk-install-path");
 		Assert.DoesNotContain(installCommand.Options, o => o.Name == "--sdk-path");
 	}
+
+	// --- Handler-level tests for 'android sdk accept-licenses' exit code behaviour ---
+	// Verifies that the command returns non-zero when the user declines so that callers
+	// (e.g. the VS Code MAUI extension) can trust the exit code.
+
+	static async Task<int> InvokeAcceptLicensesJsonAsync(Action<FakeAndroidProvider> configure)
+	{
+		var fakeAndroid = new FakeAndroidProvider();
+		configure(fakeAndroid);
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk accept-licenses --json");
+			return await parseResult.InvokeAsync();
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task AcceptLicensesCommand_Json_ReturnsZero_WhenLicensesAlreadyAccepted()
+	{
+		var exitCode = await InvokeAcceptLicensesJsonAsync(f =>
+		{
+			f.LicensesAccepted = true;
+			f.LicenseAcceptanceCommand = ("sdkmanager", "--licenses");
+		});
+
+		Assert.Equal(0, exitCode);
+	}
+
+	[Fact]
+	public async Task AcceptLicensesCommand_Json_ReturnsOne_WhenSdkNotFound()
+	{
+		// When sdkmanager is not found the command returns 1 (sdk_not_found).
+		var exitCode = await InvokeAcceptLicensesJsonAsync(f =>
+		{
+			f.LicensesAccepted = false;
+			f.LicenseAcceptanceCommand = null;
+		});
+
+		Assert.Equal(1, exitCode);
+	}
+
+	// --- Handler-level tests for 'android install' interactive license decline ---
+	// Same sdkmanager exit-0-on-decline bug exists in the install flow.
+
+	[Fact]
+	public async Task InstallCommand_Json_FailsFast_WhenLicensesDeclinedInteractively()
+	{
+		// SDK is installed but licenses not accepted — simulates user typing 'n'.
+		// The install flow should abort with exit code 1, not proceed.
+		var (exitCode, fake) = await InvokeAndroidInstallJsonAsync(f =>
+		{
+			f.IsSdkInstalled = true;
+			f.SdkPath = Path.Combine(Path.GetTempPath(), "sdk-test");
+			f.LicensesAccepted = false;
+		});
+
+		Assert.Equal(1, exitCode);
+		Assert.Empty(fake.InstallCalls);
+	}
 }

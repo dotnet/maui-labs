@@ -108,6 +108,9 @@ public class Program
 		rootCommand.Add(AndroidCommands.Create());
 		rootCommand.Add(AppleCommands.Create());
 
+		// Port diagnostics
+		rootCommand.Add(PortCommands.Create());
+
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));
 
