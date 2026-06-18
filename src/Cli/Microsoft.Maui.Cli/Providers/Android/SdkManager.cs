@@ -2,6 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
+using System.Text.RegularExpressions;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
@@ -14,7 +16,7 @@ namespace Microsoft.Maui.Cli.Providers.Android;
 /// Wrapper for Android SDK Manager operations.
 /// Delegates to Xamarin.Android.Tools.SdkManager for core functionality.
 /// </summary>
-public class SdkManager : IDisposable
+public partial class SdkManager : IDisposable
 {
 	readonly Func<string?> _getSdkPath;
 	readonly Func<string?> _getJdkPath;
@@ -162,11 +164,20 @@ public class SdkManager : IDisposable
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses,
 		Action<string, int, int>? onProgress, CancellationToken cancellationToken = default)
 	{
-		// Adapt the coarse (package, index, total) callback onto the richer streaming
-		// overload so existing callers keep working while still driving one update per package.
+		// Adapt the coarse (package, index, total) callback onto the richer streaming overload.
+		// The streaming overload fires many times per package (once per progress line); collapse
+		// those back to a single call per package so this legacy callback keeps its original
+		// one-call-per-package contract (the seed update is the first event for each package).
+		var lastIndex = 0;
 		Action<AndroidPackageInstallProgress>? adapter = onProgress is null
 			? null
-			: p => onProgress(p.Package, p.PackageIndex, p.PackageTotal);
+			: p =>
+			{
+				if (p.PackageIndex == lastIndex)
+					return;
+				lastIndex = p.PackageIndex;
+				onProgress(p.Package, p.PackageIndex, p.PackageTotal);
+			};
 
 		await InstallPackagesAsync(packages, acceptLicenses, adapter, cancellationToken);
 	}
@@ -181,17 +192,17 @@ public class SdkManager : IDisposable
 
 		try
 		{
-			if (onProgress is null)
+			// Streaming the live progress requires answering any per-package license prompt on
+			// stdin. Without auto-accept, a prompt would deadlock behind the redirected stdout
+			// (the prompt text is parsed as progress and dropped). When we can't auto-accept,
+			// fall back to the upstream buffered install — it trades live progress for safety.
+			if (onProgress is null || !acceptLicenses)
 			{
 				await _sdkManager.InstallAsync(packageList, acceptLicenses, cancellationToken);
 				return;
 			}
 
-			var sdkManagerPath = SdkManagerPath
-				?? throw MauiToolException.AutoFixable(
-					ErrorCodes.AndroidSdkManagerNotFound,
-					"SDK Manager not found. Run 'maui android install' first.",
-					"maui android install");
+			var sdkManagerPath = SdkManagerPath!; // EnsureAvailable guarantees this is non-null.
 
 			// Install one package at a time so we can stream live progress for each. Installing
 			// individually also keeps the progress percentage meaningful (it resets per package).
@@ -303,6 +314,15 @@ public class SdkManager : IDisposable
 		// exit code; surface that as cancellation rather than a spurious install failure.
 		cancellationToken.ThrowIfCancellationRequested();
 
+		// On a clean (non-cancelled) exit, a faulted stdout reader means the progress callback threw
+		// (e.g. the live renderer was disposed). Surface it instead of reporting a false success.
+		if (stdoutTask.IsFaulted)
+		{
+			var fault = stdoutTask.Exception?.InnerException ?? stdoutTask.Exception;
+			if (fault is not null and not OperationCanceledException)
+				ExceptionDispatchInfo.Capture(fault).Throw();
+		}
+
 		if (process.ExitCode != 0)
 		{
 			throw new InvalidOperationException(
@@ -344,8 +364,7 @@ public class SdkManager : IDisposable
 			buffer.Append(chunk, 0, count);
 	}
 
-	static readonly (string Keyword, string Canonical)[] KnownPhases =
-	{
+	static readonly (string Keyword, string Canonical)[] KnownPhases =	{
 		("Downloading", "Downloading"),
 		("Unzipping", "Unzipping"),
 		("Installing", "Installing"),
@@ -369,7 +388,9 @@ public class SdkManager : IDisposable
 		if (string.IsNullOrWhiteSpace(line))
 			return false;
 
-		// sdkmanager rewrites the progress bar in place using '\r'; take the last segment.
+		// Defensive handling for direct callers (e.g. unit tests) that may pass a raw '\r'-joined
+		// buffer: take the last in-place segment. The streaming path never reaches here with a '\r'
+		// because ReadProgressStreamAsync already splits on it via ReadLineAsync.
 		var trimmed = line.Replace('\r', '\n');
 		var lastNewline = trimmed.LastIndexOf('\n');
 		if (lastNewline >= 0)
@@ -379,7 +400,7 @@ public class SdkManager : IDisposable
 		if (trimmed.Length == 0)
 			return false;
 
-		var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"(\d{1,3})\s*%");
+		var match = PercentRegex().Match(trimmed);
 		if (match.Success)
 		{
 			if (int.TryParse(match.Groups[1].Value, out var p))
@@ -400,6 +421,9 @@ public class SdkManager : IDisposable
 
 		return false;
 	}
+
+	[GeneratedRegex(@"(\d{1,3})\s*%")]
+	private static partial Regex PercentRegex();
 
 	static string ExtractPhase(string text)
 	{

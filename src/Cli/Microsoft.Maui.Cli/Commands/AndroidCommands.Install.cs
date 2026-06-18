@@ -176,6 +176,11 @@ public static partial class AndroidCommands
 					{
 						var pkgTask = ctx.AddTask($"Installing packages (0/{pkgList.Count})");
 						pkgTask.Update(0, $"Installing packages (0/{pkgList.Count})...");
+
+						// Phase transitions reset the per-package percent (e.g. Downloading 100% →
+						// Unzipping 0%), which would make the overall bar jump backwards. Clamp it to a
+						// high-water mark so the bar only ever moves forward.
+						var highWater = 0.0;
 						await androidProvider.InstallPackagesAsync(pkgList, acceptLicenses,
 							onProgress: (AndroidPackageInstallProgress p) =>
 							{
@@ -184,6 +189,7 @@ public static partial class AndroidCommands
 								var completed = p.PackageIndex - 1;
 								var within = p.Percent >= 0 ? p.Percent / 100.0 : 0;
 								var overall = (completed + within) / p.PackageTotal * 100;
+								highWater = Math.Max(highWater, overall);
 
 								var label = string.IsNullOrEmpty(p.Phase)
 									? $"Installing {p.Package} ({p.PackageIndex}/{p.PackageTotal})"
@@ -191,7 +197,7 @@ public static partial class AndroidCommands
 										? $"{p.Phase} {p.Package} ({p.PackageIndex}/{p.PackageTotal}) — {p.Percent}%"
 										: $"{p.Phase} {p.Package} ({p.PackageIndex}/{p.PackageTotal})";
 
-								pkgTask.Update(overall, label);
+								pkgTask.Update(highWater, label);
 							},
 							cancellationToken);
 						pkgTask.Complete($"{pkgList.Count} packages installed");
