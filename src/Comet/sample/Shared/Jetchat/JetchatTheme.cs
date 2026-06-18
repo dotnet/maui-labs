@@ -39,6 +39,9 @@ namespace CometSamples.Jetchat
 		// ON a primary (me) bubble, where plain primary would lack contrast. Light = Blue80.
 		public static Color InversePrimary { get; private set; } = Blue80;
 		public static Color Secondary { get; private set; } = DarkBlue40;       // footer Surface contentColor
+		// onSecondary: the contrasting tint for a selected input-selector icon (gold UserInput.kt
+		// contentColorFor(LocalContentColor=secondary)). Light scheme: white on the dark-blue secondary.
+		public static Color OnSecondary { get; private set; } = Colors.White;
 		public static Color Surface { get; private set; } = Grey99;
 		public static Color OnSurface { get; private set; } = Grey10;
 		public static Color SurfaceVariant { get; private set; } = BlueGrey90;
@@ -53,6 +56,9 @@ namespace CometSamples.Jetchat
 		// The footer bar = Surface(tonalElevation = 2.dp): primary composited over surface at the M3
 		// 2dp overlay alpha (≈0.0694). The HEADER (CenterAlignedTopAppBar) is plain Surface.
 		public static Color SurfaceTinted { get; private set; } = SurfaceAtElevation(Blue40, Grey99, 2);
+		// The expandable input-selector panel = Surface(tonalElevation = 8.dp): primary over surface at
+		// the M3 8dp overlay alpha (≈0.1189) — a touch more tinted than the 2dp footer bar.
+		public static Color SurfaceTinted8 { get; private set; } = SurfaceAtElevation(Blue40, Grey99, 8);
 		public static Color Divider { get; private set; } = Grey10.WithAlpha(0.12f);   // onSurface @ 12%
 		public static readonly Color Disabled = Color.FromArgb("#C4C6D0");
 
@@ -81,6 +87,7 @@ namespace CometSamples.Jetchat
 				tertiaryContainer: FromArgbUint(s.TertiaryContainer), onTertiaryContainer: FromArgbUint(s.OnTertiaryContainer),
 				outline: FromArgbUint(s.Outline));
 			InversePrimary = FromArgbUint(s.InversePrimary);
+			OnSecondary = FromArgbUint(s.OnSecondary);
 			return s;
 		}
 
@@ -115,6 +122,7 @@ namespace CometSamples.Jetchat
 			Background = background; Tertiary = tertiary; TertiaryContainer = tertiaryContainer;
 			OnTertiaryContainer = onTertiaryContainer; Outline = outline;
 			SurfaceTinted = SurfaceAtElevation(primary, surface, 2);
+			SurfaceTinted8 = SurfaceAtElevation(primary, surface, 8);
 			Divider = onSurface.WithAlpha(0.12f);
 		}
 
@@ -136,6 +144,7 @@ namespace CometSamples.Jetchat
 		public static T HeadlineSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 24, 32);
 		public static T TitleLarge<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 22, 28);
 		public static T TitleMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Semibold, 16, 24);
+		public static T TitleSmall<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Medium, 14, 20);
 		public static T BodyLarge<T>(this T v) where T : View => v.Type(Karla, FontWeight.Regular, 16, 24);
 		public static T BodyMedium<T>(this T v) where T : View => v.Type(Montserrat, FontWeight.Medium, 14, 20);
 		public static T BodySmall<T>(this T v) where T : View => v.Type(Karla, FontWeight.Bold, 12, 16);

@@ -49,9 +49,30 @@ namespace Comet.Platform.Compose
 					_version.Value++;
 				}
 			});
+
+			// Re-lay-out the current screen after every reactive flush so a hosted view whose intrinsic
+			// size changed (e.g. the input-selector panel expanding) reflows — the top-level RunLayout
+			// can't reach here because this node is own-content (a leaf to the engine), so the screen
+			// it hosts must drive its own reflow. Arrange only recomposes the nodes that actually moved.
+			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowTopScreen;
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
+
+		static Microsoft.Maui.Graphics.Size ScreenSizeDp()
+		{
+			var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
+			return new Microsoft.Maui.Graphics.Size(m.WidthPixels / ComposeNode.Density, m.HeightPixels / ComposeNode.Density);
+		}
+
+		void ReflowTopScreen()
+		{
+			if (_stack.Count == 0)
+				return;
+			var top = _stack[_stack.Count - 1];
+			if (_screens.ContainsKey(top))   // only once it's been materialized + first-laid-out
+				CometBackendLayoutEngine.Layout(top, ScreenSizeDp());
+		}
 
 		public override void Render(IComposer composer)
 		{
@@ -65,9 +86,7 @@ namespace Comet.Platform.Compose
 				// Materialize the screen, then lay it out full-screen with the Yoga engine (the
 				// pushed screen owns the whole viewport, just like the root did).
 				node = (ComposableNode)CometBackendBridge.Materialize(top, _context);
-				var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
-				CometBackendLayoutEngine.Layout(top, new Microsoft.Maui.Graphics.Size(
-					m.WidthPixels / ComposeNode.Density, m.HeightPixels / ComposeNode.Density));
+				CometBackendLayoutEngine.Layout(top, ScreenSizeDp());
 				_screens[top] = node;
 			}
 			node.Render(composer);

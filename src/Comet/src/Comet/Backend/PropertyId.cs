@@ -118,5 +118,9 @@ namespace Comet.Backend
 
 		// --- Dialog / AlertDialog (224–239) ---
 		public static readonly PropertyId Dialog_IsOpen = new(224);
+
+		// --- SelectorPanel (240–255) ---
+		// The active panel index (gold UserInput.kt InputSelector); 0 = collapsed.
+		public static readonly PropertyId SelectorPanel_Index = new(240);
 	}
 }

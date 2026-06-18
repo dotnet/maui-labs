@@ -35,6 +35,13 @@ namespace Comet
 			=> new SwiftUIAlertDialogNode(this);
 	}
 
+	public partial class SelectorPanel
+	{
+		// Android-first: the input-selector panel never expands on iOS (no-op twin).
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUISelectorPanelNode(this, context);
+	}
+
 	public partial class Fab
 	{
 		// Native SwiftUI composition (iOS has no Material FAB); pending simulator verification.

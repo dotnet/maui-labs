@@ -139,6 +139,12 @@ namespace CometSamples.Jetchat
 		// enabled/style, and a send appends a "me" message + clears it (UserInput.kt sendMessageEnabled).
 		static readonly Comet.Reactive.Signal<string> InputText = new(string.Empty);
 
+		// The active input selector (gold UserInput.kt InputSelector enum). Drives the expandable panel
+		// (emoji table / not-available pane — the F1 swap-panel capability) and the selected-icon
+		// highlight. The indices match the enum so the SelectorPanel slot list lines up with the icons.
+		const int SelNone = 0, SelMap = 1, SelDm = 2, SelEmoji = 3, SelPhone = 4, SelPicture = 5;
+		static readonly Comet.Reactive.Signal<int> CurrentSelector = new(SelNone);
+
 		/// <summary>The Jetchat sample. The drawer wraps the whole <see cref="NavigationView"/> stack
 		/// (like the gold's <c>ModalNavigationDrawer</c> around the NavHost), so the jetchat logo opens
 		/// it over ANY destination — the conversation or a profile. Tapping a drawer profile closes the
@@ -460,6 +466,22 @@ namespace CometSamples.Jetchat
 			Restyle();
 			InputText.PropertyChanged += (_, __) => Restyle();
 
+			// The expandable selector panel (gold UserInput.kt SelectorExpanded): one Surface that swaps
+			// content by the active InputSelector. Slot indices match the enum; null slots collapse it.
+			// EMOJI → the emoji table; MAP/PHONE/PICTURE → the 320dp "not available" pane; NONE/DM →
+			// nothing (DM opens the separate not-available dialog). Opening a panel grows the footer and
+			// shrinks the message list (the panel reports its height to the Yoga engine), exactly like
+			// the gold's bottom-anchored Surface; a system back press collapses it.
+			var panel = new SelectorPanel(CurrentSelector, new View?[]
+			{
+				null,                  // NONE
+				NotAvailablePanel(),   // MAP
+				null,                  // DM (separate dialog)
+				EmojiPanel(),          // EMOJI
+				NotAvailablePanel(),   // PHONE
+				NotAvailablePanel(),   // PICTURE
+			}).Background(JetchatTheme.SurfaceTinted8).FillHorizontal();
+
 			return new VStack(spacing: 0f)
 			{
 				// Input row: a fixed 64dp row (the gold's UserInputText height) with the borderless
@@ -473,16 +495,20 @@ namespace CometSamples.Jetchat
 					new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
 						.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center),
 				}.Frame(height: 64),
-				// Selector row: 72dp tall with 16dp bottom padding — matches UserInputSelector's
-				// height(72.dp).padding(start=16, end=16, bottom=16) from the gold source.
+				// Selector row (gold UserInputSelector): five toggle icons packed at the start, a flexible
+				// gap, then Send. 72dp tall with 16dp bottom padding — height(72).padding(start=16, end=16,
+				// bottom=16). Icon→selector: mood=EMOJI, at=DM, photo=PICTURE, place=MAP, video=PHONE.
 				new HStack(spacing: 0f)
 				{
-					InputIcon("mood"), Spacer(),
-					// The DM selector → "Functionality not available" popup (InputSelector.DM in the gold).
-					InputIcon("at", () => NotAvailableOpen.Value = true), Spacer(), InputIcon("photo"),
-					Spacer(), InputIcon("place"), Spacer(), InputIcon("video"), Spacer(),
+					SelectorButton("mood", SelEmoji),
+					SelectorButton("at", SelDm),
+					SelectorButton("photo", SelPicture),
+					SelectorButton("place", SelMap),
+					SelectorButton("video", SelPhone),
+					Spacer(),
 					send,
 				}.Frame(height: 72).Padding(new Thickness(16, 0, 16, 16)),
+				panel,
 				// Safe-area fill: extends BarSurface behind the system navigation bar / home indicator.
 				new HStack().Frame(height: (float)bottomInset),
 			}.Background(BarSurface);
@@ -504,14 +530,117 @@ namespace CometSamples.Jetchat
 			log.ScrollToBottom();             // animate to the newest message
 		}
 
-		static View InputIcon(string symbol, System.Action? onTap = null)
+		// A selector icon (gold InputSelectorButton): a 48dp rounded touch target. When its selector is
+		// active it fills with the footer's content colour (secondary) clipped to RoundedCornerShape(14)
+		// and the glyph flips to the contrasting onSecondary tint; otherwise a plain onSurfaceVariant
+		// glyph. The fill + tint flip reactively from the CurrentSelector signal (the same restyle
+		// pattern the Send button uses). The icon is centred in the box by a ZStack.
+		static View SelectorButton(string symbol, int selector)
 		{
-			// onSurfaceVariant (the gold's inactive-selector content colour) — a neutral with good
-			// contrast on the footer, not the low-chroma Secondary which reads faded.
-			var icon = new Icon(symbol).Color(OnSurfaceVariant).IconSize(24)
+			var icon = new Icon(symbol).IconSize(24).Color(OnSurfaceVariant)
+				.HorizontalLayoutAlignment(LayoutAlignment.Center)
 				.VerticalLayoutAlignment(LayoutAlignment.Center);
-			return onTap is null ? icon : icon.OnTap(_ => onTap());
+			var box = new ZStack { icon }
+				.Frame(width: 48, height: 48).CornerRadius(14)
+				.OnTap(_ => OnSelector(selector));
+
+			void Restyle()
+			{
+				bool sel = CurrentSelector.Peek() == selector;
+				box.Background(sel ? Secondary : Colors.Transparent);
+				icon.Color(sel ? JetchatTheme.OnSecondary : OnSurfaceVariant);
+			}
+			Restyle();
+			CurrentSelector.PropertyChanged += (_, __) => Restyle();
+			return box;
 		}
+
+		// Tap a selector icon. EMOJI/PICTURE/MAP/PHONE open that panel; DM closes any panel and shows the
+		// not-available dialog (gold InputSelector.DM -> NotAvailablePopup). Matches the gold's
+		// non-toggling onSelectorChange — the panel's BackHandler (or picking another selector) dismisses.
+		static void OnSelector(int selector)
+		{
+			if (selector == SelDm)
+			{
+				CurrentSelector.Value = SelNone;
+				NotAvailableOpen.Value = true;
+				return;
+			}
+			CurrentSelector.Value = selector;
+		}
+
+		// ── SelectorExpanded panes (gold UserInput.kt) ───────────────────────────────────────────────
+
+		// FunctionalityNotAvailablePanel: a 320dp pane with a vertically-centred title + subtitle, shown
+		// for the MAP / PHONE / PICTURE selectors.
+		static View NotAvailablePanel() => new VStack(spacing: 0f)
+		{
+			Spacer(),
+			new Text("Functionality currently not available").Color(OnSurface).TitleMedium()
+				.HorizontalLayoutAlignment(LayoutAlignment.Center),
+			new Text("Grab a beverage and check back later!").Color(OnSurfaceVariant).BodyMedium()
+				.HorizontalLayoutAlignment(LayoutAlignment.Center).Margin(top: 16),
+			Spacer(),
+		}.Frame(height: 320).FillHorizontal();
+
+		// EmojiSelector: Emojis/Stickers tabs over a 4×10 emoji table. The Emojis tab is always shown
+		// selected (the gold hardcodes selected=true); the Stickers tab pops the not-available dialog.
+		static View EmojiPanel() => new VStack(spacing: 0f)
+		{
+			new HStack(spacing: 0f)
+			{
+				EmojiTab("Emojis", selected: true, onTap: null),
+				EmojiTab("Stickers", selected: false, onTap: () => NotAvailableOpen.Value = true),
+			}.Padding(new Thickness(8, 0, 8, 0)),
+			EmojiTable(),
+		}.Padding(new Thickness(8)).FillHorizontal();
+
+		// ExtendedSelectorInnerButton: a real Material TextButton, titleSmall, that fills onSurface@8%
+		// when selected (else transparent). FlexGrow gives the two tabs equal width.
+		static View EmojiTab(string text, bool selected, System.Action? onTap)
+		{
+			var btn = new Button(text, () => onTap?.Invoke())
+				.TextButton().TitleSmall().Color(OnSurface)
+				.Frame(height: 36).FlexGrow(1).Margin(new Thickness(8)).CornerRadius(18);
+			if (selected)
+				btn.Background(OnSurface.WithAlpha(0.08f));   // gold: onSurface.copy(alpha = 0.08f)
+			return btn;
+		}
+
+		// 4 rows × EMOJI_COLUMNS cells; each emoji is a centred, tappable Text (a real Compose Text +
+		// clickable, like the gold's EmojiTable). FlexGrow gives the columns equal width.
+		static View EmojiTable()
+		{
+			var col = new VStack(spacing: 0f).FillHorizontal();
+			for (int x = 0; x < 4; x++)
+			{
+				var row = new HStack(spacing: 0f).FillHorizontal();
+				for (int y = 0; y < EmojiColumns; y++)
+				{
+					string e = Emojis[x * EmojiColumns + y];
+					row.Add(new ZStack { new Text(e).FontSize(18) }
+						.Frame(height: 44).FlexGrow(1).FlexBasis(0)
+						.OnTap(_ => AddEmoji(e)));
+				}
+				col.Add(row);
+			}
+			return col;
+		}
+
+		// Phase 3 appends the emoji to the field; Phase 4 (TextField caret/IME) will upgrade this to the
+		// gold's insert-at-cursor (TextFieldValue.addText → TextRange(len,len)).
+		static void AddEmoji(string emoji) => InputText.Value = InputText.Peek() + emoji;
+
+		const int EmojiColumns = 10;
+
+		// The gold's first 40 emojis (emojis[0..39] from UserInput.kt), as full code points.
+		static readonly string[] Emojis =
+		{
+			"\U0001F600", "\U0001F601", "\U0001F602", "\U0001F603", "\U0001F604", "\U0001F605", "\U0001F606", "\U0001F609", "\U0001F60A", "\U0001F60B",
+			"\U0001F60E", "\U0001F60D", "\U0001F618", "\U0001F617", "\U0001F619", "\U0001F61A", "☺", "\U0001F642", "\U0001F917", "\U0001F607",
+			"\U0001F913", "\U0001F914", "\U0001F610", "\U0001F611", "\U0001F636", "\U0001F644", "\U0001F60F", "\U0001F623", "\U0001F625", "\U0001F62E",
+			"\U0001F910", "\U0001F62F", "\U0001F62A", "\U0001F62B", "\U0001F634", "\U0001F60C", "\U0001F61B", "\U0001F61C", "\U0001F61D", "\U0001F612",
+		};
 
 		// ── NotAvailablePopup (UiExtras.kt FunctionalityNotAvailablePopup): a real Material
 		// AlertDialog — bodyMedium text + a "CLOSE" confirm button — shown when the DM selector is

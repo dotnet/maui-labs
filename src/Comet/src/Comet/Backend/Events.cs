@@ -39,6 +39,7 @@ namespace Comet.Backend
 		public static readonly EventId Unfocused = new(10);
 		public static readonly EventId DrawerClosed = new(11);   // user dismissed the drawer
 		public static readonly EventId DialogDismissed = new(12);// user dismissed an AlertDialog
+		public static readonly EventId SelectorPanelDismissed = new(13); // user back-dismissed an input-selector panel
 	}
 
 	/// <summary>The category of a recognized gesture flowing back from a backend node.</summary>

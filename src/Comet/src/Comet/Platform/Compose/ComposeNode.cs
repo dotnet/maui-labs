@@ -259,13 +259,17 @@ namespace Comet.Platform.Compose
 		}
 
 		// Yoga-computed parent-relative frame (in Dp); stored + recomposed so BuildNodeModifier
-		// positions this node absolutely.
+		// positions this node absolutely. Only bump the version when the frame actually changes, so a
+		// full-tree reflow (run after every reactive flush) recomposes just the nodes that moved/resized
+		// — not the whole subtree on every keystroke.
 		public void Arrange(Rect frame)
 		{
-			_fx = (float)frame.X; _fy = (float)frame.Y;
-			_fw = (float)frame.Width; _fh = (float)frame.Height;
+			float nx = (float)frame.X, ny = (float)frame.Y, nw = (float)frame.Width, nh = (float)frame.Height;
+			bool changed = !_hasFrame || nx != _fx || ny != _fy || nw != _fw || nh != _fh;
+			_fx = nx; _fy = ny; _fw = nw; _fh = nh;
 			_hasFrame = true;
-			_frameVersion.Value++;
+			if (changed)
+				_frameVersion.Value++;
 		}
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
