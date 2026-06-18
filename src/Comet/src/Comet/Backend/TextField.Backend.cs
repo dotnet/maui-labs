@@ -60,11 +60,23 @@ namespace Comet
 			}
 		}
 
+		System.Action? _onFocused;
+
+		/// <summary>Runs when the field gains focus (the gold's <c>onTextFieldFocused</c>) — e.g. close an
+		/// open input-selector panel so the soft keyboard doesn't overlay it.</summary>
+		public TextField OnFocused(System.Action onFocused)
+		{
+			_onFocused = onFocused;
+			return this;
+		}
+
 		protected internal override void OnBackendEvent(Backend.EventId id)
 		{
 			// The soft-keyboard action key was pressed (e.g. Send) — fire the field's Completed handler.
 			if (id == Backend.EventIds.Completed)
 				Completed?.Invoke();
+			else if (id == Backend.EventIds.Focused)
+				_onFocused?.Invoke();
 		}
 	}
 }

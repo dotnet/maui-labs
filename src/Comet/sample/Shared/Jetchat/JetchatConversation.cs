@@ -502,6 +502,9 @@ namespace CometSamples.Jetchat
 					// (gold UserInput.kt KeyboardOptions(imeAction = Send) + keyboardActions { onMessageSent }).
 					SignalExtensions.TextField(InputText, "Message #composers", completed: () => Send(log))
 						.SendOnReturn()
+						// Gold onTextFieldFocused: focusing the field closes the open selector panel so the
+						// keyboard never overlays it (and resets the log to the newest message).
+						.OnFocused(() => { CurrentSelector.Value = SelNone; log.ScrollToBottom(); })
 						.Borderless().Color(OnSurface).FillHorizontal()
 						.VerticalLayoutAlignment(LayoutAlignment.Center)
 						.Padding(new Thickness(20, 0, 8, 0)),
@@ -579,7 +582,9 @@ namespace CometSamples.Jetchat
 				NotAvailableOpen.Value = true;
 				return;
 			}
-			CurrentSelector.Value = selector;
+			// Tapping the already-open selector collapses it — a discoverable dismiss (the gold doesn't
+			// toggle, but its back-press + tap-the-field dismisses aren't obvious on a gesture-nav device).
+			CurrentSelector.Value = CurrentSelector.Peek() == selector ? SelNone : selector;
 		}
 
 		// ── SelectorExpanded panes (gold UserInput.kt) ───────────────────────────────────────────────

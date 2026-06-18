@@ -97,7 +97,9 @@ namespace Comet.Platform.Compose
 			var field = new AndroidX.Compose.BasicTextField(
 				_text.Value, s => Sink?.OnEvent(EventIds.TextChanged, s))
 			{
-				Modifier = contentMod,
+				// Report focus GAINED so the host can react (gold onTextFieldFocused — e.g. close an open
+				// input-selector panel so the keyboard doesn't overlay it).
+				Modifier = contentMod.OnFocusChanged(fs => { if (fs.IsFocused) Sink?.OnEvent(EventIds.Focused); }),
 				SingleLine = true,
 				TextStyle = new AndroidX.Compose.TextStyle { Color = textColor, FontSize = new AndroidX.Compose.Sp(BorderlessFontSp) },
 			};
