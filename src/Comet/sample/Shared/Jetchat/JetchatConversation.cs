@@ -508,40 +508,57 @@ namespace CometSamples.Jetchat
 				.VerticalLayoutAlignment(LayoutAlignment.Center)
 				.Padding(new Thickness(20, 0, 8, 0));
 
-			// The recording indicator that replaces the field while the mic is held (gold RecordingIndicator):
-			// a red dot, the live mm:ss elapsed time, and a "Swipe to cancel" hint that fades as the drag
-			// nears the cancel threshold. Hidden (Opacity 0) until a long-press starts recording.
-			var swipeHint = new Text("Swipe to cancel").BodyLarge().Color(OnSurfaceVariant)
-				.HorizontalLayoutAlignment(LayoutAlignment.Center)
-				.VerticalLayoutAlignment(LayoutAlignment.Center);
-			var indicator = new HStack(spacing: 12f)
+			// The voice-record UI is ANDROID-ONLY. It's the gold's Compose RecordButton — a press-and-hold
+			// gesture (detectDragGesturesAfterLongPress) that swaps the field for a live indicator. The
+			// SwiftUI backend has no record-gesture equivalent AND doesn't honour Opacity/IsVisible to hide
+			// an overlay, so on iOS we keep the plain field + a static mic (identical to before this
+			// feature). Pick the leading cell + the mic per platform.
+			View leadingCell;
+			View micView;
+			if (System.OperatingSystem.IsAndroid())
 			{
-				new HStack().Frame(width: 10, height: 10).CornerRadius(5).Background(Colors.Red)
-					.VerticalLayoutAlignment(LayoutAlignment.Center),
-				new Text(RecordDuration).BodyLarge().Color(OnSurface)
-					.VerticalLayoutAlignment(LayoutAlignment.Center),
-				swipeHint.FillHorizontal(),
-			}.FillHorizontal().Padding(new Thickness(20, 0, 8, 0)).Opacity(0);
+				// The recording indicator that replaces the field while the mic is held (gold
+				// RecordingIndicator): a red dot, the live mm:ss elapsed time, and a "Swipe to cancel" hint
+				// that fades as the drag nears the cancel threshold. Hidden (Opacity 0) until recording.
+				var swipeHint = new Text("Swipe to cancel").BodyLarge().Color(OnSurfaceVariant)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center)
+					.VerticalLayoutAlignment(LayoutAlignment.Center);
+				var indicator = new HStack(spacing: 12f)
+				{
+					new HStack().Frame(width: 10, height: 10).CornerRadius(5).Background(Colors.Red)
+						.VerticalLayoutAlignment(LayoutAlignment.Center),
+					new Text(RecordDuration).BodyLarge().Color(OnSurface)
+						.VerticalLayoutAlignment(LayoutAlignment.Center),
+					swipeHint.FillHorizontal(),
+				}.FillHorizontal().Padding(new Thickness(20, 0, 8, 0)).Opacity(0);
 
-			// The mic — gold RecordButton. A 48dp touch target (so the long-press lands easily) carrying the
-			// press-and-hold voice-record gesture: long-press starts, drag tracks the swipe offset, release
-			// finishes, swipe-left past the threshold cancels (gold detectDragGesturesAfterLongPress).
-			var micIcon = new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
-				.HorizontalLayoutAlignment(LayoutAlignment.Center)
-				.VerticalLayoutAlignment(LayoutAlignment.Center);
-			var mic = new ZStack { micIcon }
-				.Frame(width: 48, height: 48).Margin(right: 8)
-				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnRecord(g => HandleRecord(g, field, indicator, swipeHint, micIcon));
+				// The mic — gold RecordButton. A 48dp touch target (so the long-press lands easily) carrying
+				// the press-and-hold voice-record gesture: long-press starts, drag tracks the swipe offset,
+				// release finishes, swipe-left past the threshold cancels (gold detectDragGesturesAfterLongPress).
+				var micIcon = new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center)
+					.VerticalLayoutAlignment(LayoutAlignment.Center);
+				micView = new ZStack { micIcon }
+					.Frame(width: 48, height: 48).Margin(right: 8)
+					.VerticalLayoutAlignment(LayoutAlignment.Center)
+					.OnRecord(g => HandleRecord(g, field, indicator, swipeHint, micIcon));
+				leadingCell = new ZStack { field, indicator }.FillHorizontal();
+			}
+			else
+			{
+				// iOS / other: the plain field fills the leading cell + a static mic (pre-record-feature).
+				micView = new Icon("mic").Color(OnSurfaceVariant).IconSize(24)
+					.Margin(right: 16).VerticalLayoutAlignment(LayoutAlignment.Center);
+				leadingCell = field;
+			}
 
 			return new VStack(spacing: 0f)
 			{
-				// Input row: a fixed 64dp row (the gold's UserInputText height). The field and the recording
-				// indicator share the leading cell (one fades out as the other fades in); the mic trails.
+				// Input row: a fixed 64dp row (the gold's UserInputText height) — leading cell + trailing mic.
 				new HStack(spacing: 0f)
 				{
-					new ZStack { field, indicator }.FillHorizontal(),
-					mic,
+					leadingCell,
+					micView,
 				}.Frame(height: 64),
 				// Selector row (gold UserInputSelector): five toggle icons packed at the start, a flexible
 				// gap, then Send. 72dp tall with 16dp bottom padding — height(72).padding(start=16, end=16,
