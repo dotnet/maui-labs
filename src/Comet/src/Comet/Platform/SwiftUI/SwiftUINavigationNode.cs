@@ -52,6 +52,12 @@ namespace Comet.Platform.SwiftUI
 			CometSwiftUIKeyboard.EnsureStarted();
 			CometSwiftUIKeyboard.Changed += RelayoutTop;
 
+			// Re-lay-out the top screen after every reactive flush, so a nested own-content node that
+			// changes its measured height (e.g. the input-selector panel growing the footer / shrinking the
+			// message list) reflows. The global root reflow only re-lays the top-level layout root, not this
+			// nav's owned subtree — mirrors ComposeNavigationNode's AfterFlush hook (the P3 discovery).
+			Comet.Reactive.ReactiveScheduler.AfterFlush += RelayoutTop;
+
 			ShowTop();
 		}
 
@@ -96,7 +102,11 @@ namespace Comet.Platform.SwiftUI
 		public Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
 		public void Arrange(Rect frame) { }
 		public void SetEventSink(ICometEventSink? sink) { }
-		public void Dispose() { }
+		public void Dispose()
+		{
+			Comet.Reactive.ReactiveScheduler.AfterFlush -= RelayoutTop;
+			CometSwiftUIKeyboard.Changed -= RelayoutTop;
+		}
 	}
 }
 #endif
