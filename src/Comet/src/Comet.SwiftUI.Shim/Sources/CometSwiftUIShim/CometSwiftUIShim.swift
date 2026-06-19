@@ -28,6 +28,8 @@ struct CometTextRun {
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
+    @Published var opacity: CGFloat = 1         // Comet Opacity → SwiftUI .opacity(); 1 = opaque
+    @Published var isVisible: Bool = true       // Comet IsVisible; false => hidden + non-interactive
     @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
     @Published var fontSize: CGFloat = 0        // 0 = default (body)
     @Published var fontWeight: Int = 0          // 0 = default; otherwise Maui FontWeight (100–900)
@@ -107,6 +109,7 @@ struct CometTextRun {
         case "hastapgesture": node.hasTapGesture = value
         case "borderless": node.borderless = value
         case "outlined": node.outlined = value
+        case "isvisible": node.isVisible = value
         case "draweropen": node.drawerOpen = value
         case "fabextended": node.fabExtended = value
         case "dialogopen": node.dialogOpen = value
@@ -138,6 +141,7 @@ struct CometTextRun {
         case "corner.br": node.cornerBR = CGFloat(value)
         case "corner.bl": node.cornerBL = CGFloat(value)
         case "elevation": node.elevation = CGFloat(value)
+        case "opacity": node.opacity = CGFloat(value)
         case "fontsize": node.fontSize = CGFloat(value)
         case "fontweight": node.fontWeight = Int(value)
         case "borderwidth": node.borderWidth = CGFloat(value)
@@ -571,6 +575,8 @@ struct CometNodeView: View {
             .modifier(SurfaceModifier(node: node)) // rounded corners + elevation (Material card)
             .modifier(TapGestureModifier(node: node))
             .modifier(OffsetModifier(node: node))
+            .modifier(OpacityModifier(node: node)) // Comet Opacity / IsVisible (applied last so a
+                                                   // hidden node is also non-interactive)
     }
 
     @ViewBuilder
@@ -719,6 +725,19 @@ private struct OffsetModifier: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+// Applies Comet's Opacity / IsVisible. A node that is hidden (IsVisible == false) or fully
+// transparent (Opacity ~ 0) is also made non-interactive via allowsHitTesting(false), so an
+// invisible overlay in a ZStack lets touches fall through to the views beneath it.
+private struct OpacityModifier: ViewModifier {
+    @ObservedObject var node: CometNode
+    func body(content: Content) -> some View {
+        let alpha = node.isVisible ? node.opacity : 0
+        return content
+            .opacity(alpha)
+            .allowsHitTesting(alpha > 0.01)
     }
 }
 
