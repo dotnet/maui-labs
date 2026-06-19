@@ -38,11 +38,14 @@ namespace Comet.Platform.SwiftUI
 			CometSwiftUIHost.SetStringChangeHandler(_native, OnNativeTextChanged);
 			CometSwiftUIHost.SetBoolChangeHandler(_native, OnNativeToggled);
 			CometSwiftUIHost.SetDoubleChangeHandler(_native, OnNativeValueChanged);
+			CometSwiftUIHost.SetFocusHandler(_native, OnNativeFocused);
 		}
 
 		void OnNativeTap() => _sink?.OnEvent(EventIds.Clicked);
 		void OnNativeTapGesture() => _sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
 		void OnNativeTextChanged(string s) => _sink?.OnEvent(EventIds.TextChanged, s);
+		// TextField gained focus (gold onTextFieldFocused) → e.g. the composer closes an open selector panel.
+		void OnNativeFocused() => _sink?.OnEvent(EventIds.Focused);
 		void OnNativeToggled(bool b) => _sink?.OnEvent(EventIds.Toggled, b);
 		void OnNativeValueChanged(double d) => _sink?.OnEvent(EventIds.ValueChanged, d);
 

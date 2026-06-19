@@ -59,6 +59,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setDialogDismissHandler:handler:")]
 		void SetDialogDismissHandler(CometNode node, Action handler);
 
+		[Static, Export("setFocusHandler:handler:")]
+		void SetFocusHandler(CometNode node, Action handler);
+
 		[Static, Export("insertChild:atIndex:child:")]
 		void InsertChild(CometNode node, nint index, CometNode child);
 

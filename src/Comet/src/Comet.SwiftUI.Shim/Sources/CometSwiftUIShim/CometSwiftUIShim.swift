@@ -69,6 +69,7 @@ struct CometTextRun {
     var onChangeBool: ((Bool) -> Void)?
     var onChangeDouble: ((Double) -> Void)?
     var onDialogDismiss: (() -> Void)?  // native .alert dismissed (-> DialogDismissed)
+    var onFocused: (() -> Void)?        // TextField gained focus (-> Focused; gold onTextFieldFocused)
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -202,6 +203,11 @@ struct CometTextRun {
         node.onDialogDismiss = handler
     }
 
+    @objc(setFocusHandler:handler:)
+    public static func setFocusHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
+        node.onFocused = handler
+    }
+
     @objc(insertChild:atIndex:child:)
     public static func insertChild(_ node: CometNode, atIndex index: Int, child: CometNode) {
         let i = max(0, min(index, node.children.count))
@@ -298,6 +304,7 @@ struct CometTextRun {
 // UIHostingController.sizeThatFits, for the Yoga engine's intrinsic-size measurement.
 struct CometLeafContent: View {
     @ObservedObject var node: CometNode
+    @FocusState private var fieldFocused: Bool   // textfield focus → node.onFocused (gold onTextFieldFocused)
     @ViewBuilder
     var body: some View {
         switch node.kind {
@@ -324,12 +331,16 @@ struct CometLeafContent: View {
                 TextField(node.placeholder, text: Binding(
                     get: { node.text }, set: { node.text = $0; node.onChangeString?($0) }))
                     .textFieldStyle(.plain)
+                    .focused($fieldFocused)
+                    .onChange(of: fieldFocused) { now in if now { node.onFocused?() } }
                     .modifier(ForegroundModifier(argb: node.textColorARGB))
                     .modifier(FontModifier(node: node))
             } else {
                 TextField(node.placeholder, text: Binding(
                     get: { node.text }, set: { node.text = $0; node.onChangeString?($0) }))
                     .textFieldStyle(.roundedBorder)
+                    .focused($fieldFocused)
+                    .onChange(of: fieldFocused) { now in if now { node.onFocused?() } }
             }
         case "toggle":
             Toggle("", isOn: Binding(
