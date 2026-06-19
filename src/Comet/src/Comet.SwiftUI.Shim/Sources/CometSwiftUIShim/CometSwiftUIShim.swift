@@ -62,6 +62,7 @@ struct CometTextRun {
     // node; until then the view uses native SwiftUI layout (so rendering is unchanged).
     @Published var frame: CGRect = .zero
     @Published var hasFrame: Bool = false
+    @Published var contentTopInset: CGFloat = 0  // baseline-height inset (gold baselineHeight): pad content down
     // Callbacks into C# (set via host fns). ObjC blocks so .NET binds them as Actions.
     var onTap: (() -> Void)?            // Button action (-> Clicked)
     var onTapGesture: (() -> Void)?     // arbitrary-view tap gesture (-> OnGesture(Tap))
@@ -70,6 +71,7 @@ struct CometTextRun {
     var onChangeDouble: ((Double) -> Void)?
     var onDialogDismiss: (() -> Void)?  // native .alert dismissed (-> DialogDismissed)
     var onFocused: (() -> Void)?        // TextField gained focus (-> Focused; gold onTextFieldFocused)
+    var onScroll: ((Double) -> Void)?   // ScrollView scrolled (-> ScrollView.AtTop / ScrollOffset)
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -143,6 +145,7 @@ struct CometTextRun {
         case "corner.bl": node.cornerBL = CGFloat(value)
         case "elevation": node.elevation = CGFloat(value)
         case "opacity": node.opacity = CGFloat(value)
+        case "contenttopinset": node.contentTopInset = CGFloat(value)
         case "fontsize": node.fontSize = CGFloat(value)
         case "fontweight": node.fontWeight = Int(value)
         case "borderwidth": node.borderWidth = CGFloat(value)
@@ -206,6 +209,11 @@ struct CometTextRun {
     @objc(setFocusHandler:handler:)
     public static func setFocusHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
         node.onFocused = handler
+    }
+
+    @objc(setScrollHandler:handler:)
+    public static func setScrollHandler(_ node: CometNode, handler: @escaping @convention(block) (Double) -> Void) {
+        node.onScroll = handler
     }
 
     @objc(insertChild:atIndex:child:)
@@ -652,9 +660,18 @@ struct CometNodeView: View {
         case "scroll":
             // The single content view is laid out (by Yoga) taller than the viewport and
             // self-positions, so a plain vertical ScrollView hosting it scrolls as one piece.
+            // A GeometryReader probe + preference reports the scroll offset back to C# (-> the
+            // ScrollView's AtTop / ScrollOffset, which drive the profile FAB's collapse on scroll).
+            // PreferenceKey-based tracking works pre-iOS-17 (onScrollGeometryChange is iOS 18+).
             ScrollView(.vertical, showsIndicators: true) {
                 ForEach(node.children) { CometNodeView(node: $0) }
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(key: CometScrollOffsetKey.self,
+                                               value: -geo.frame(in: .named("cometScroll")).minY)
+                    })
             }
+            .coordinateSpace(name: "cometScroll")
+            .onPreferenceChange(CometScrollOffsetKey.self) { value in node.onScroll?(Double(value)) }
         case "alert":
             // Native SwiftUI .alert (the iOS counterpart of Compose's AlertDialog): a zero-size
             // host that presents modally when C# opens the dialog; the button / scrim dismiss
@@ -701,14 +718,14 @@ struct CometNodeView: View {
             // in, matching the gold (e.g. the footer input's 20/14/20/10). Render-only — the measure
             // path hosts CometLeafContent directly, so the padding isn't double-counted into the frame.
             CometLeafContent(node: node)
-                .padding(EdgeInsets(top: node.padTop, leading: node.padLeading,
+                .padding(EdgeInsets(top: node.padTop + node.contentTopInset, leading: node.padLeading,
                                     bottom: node.padBottom, trailing: node.padTrailing))
         default:
             // Leaves honour their own (Yoga-sized) content padding — e.g. a section-header Text
             // padded 28 in / 18 tall. Render-only (the measure path hosts CometLeafContent directly,
             // so the padding isn't double-counted into the frame).
             CometLeafContent(node: node)
-                .padding(EdgeInsets(top: node.padTop, leading: node.padLeading,
+                .padding(EdgeInsets(top: node.padTop + node.contentTopInset, leading: node.padLeading,
                                     bottom: node.padBottom, trailing: node.padTrailing))
         }
     }
@@ -750,6 +767,13 @@ private struct OpacityModifier: ViewModifier {
             .opacity(alpha)
             .allowsHitTesting(alpha > 0.01)
     }
+}
+
+// Carries the scroll content's offset (negative minY in the scroll coordinate space) up to the
+// ScrollView via a SwiftUI preference, so C# can mirror it onto AtTop / ScrollOffset.
+private struct CometScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 // Routes a SwiftUI tap on an arbitrary view to the node's gesture callback (the iOS

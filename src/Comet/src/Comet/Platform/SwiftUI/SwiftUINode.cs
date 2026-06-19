@@ -162,6 +162,10 @@ namespace Comet.Platform.SwiftUI
 		public void Arrange(Rect frame)
 			=> CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
 
+		// Baseline-height inset (gold baselineHeight): pad the leaf content down so its first baseline
+		// lands at the requested offset — the iOS counterpart of ComposeNode's _contentTopInset.
+		public void SetContentTopInset(double dp) => CometSwiftUIHost.SetDouble(_native, "contenttopinset", dp);
+
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 		public void Dispose() { }
 

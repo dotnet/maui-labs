@@ -125,8 +125,8 @@ namespace CometSamples.Jetchat
 		// FAB's onTertiaryContainer content colour. Starts extended (at-top); ExtendedWhen(scroll.AtTop)
 		// is wired by the caller to contract when scrolled — matching AnimatingFabContent in the gold.
 		static Comet.Fab ProfileFab(string text, string icon, Action onTap) => new Comet.Fab(
-			icon: new Icon(icon).IconSize(24),
-			label: new Text(text).LabelLarge(),
+			icon: new Icon(icon).IconSize(24).Color(T.OnTertiaryContainer),
+			label: new Text(text).LabelLarge().Color(T.OnTertiaryContainer),
 			onClick: onTap,
 			height: 48,
 			containerColor: T.TertiaryContainer,

@@ -28,7 +28,19 @@ namespace Comet.Platform.SwiftUI
 			_scroll = scroll;
 			_context = context;
 			_native = CometSwiftUIHost.MakeNode("scroll");
+			// Mirror the live scroll offset onto the ScrollView's AtTop / ScrollOffset signals (the gold's
+			// derivedStateOf { scrollState.value == 0 }) — e.g. collapsing the profile FAB on scroll.
+			CometSwiftUIHost.SetScrollHandler(_native, OnNativeScroll);
 			BuildContent();
+		}
+
+		void OnNativeScroll(double offset)
+		{
+			if (_scroll is Comet.ScrollView sv)
+			{
+				sv.ScrollOffset.Value = offset;
+				sv.AtTop.Value = offset <= 1.0;
+			}
 		}
 
 		void BuildContent()
