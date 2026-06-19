@@ -665,18 +665,33 @@ struct CometNodeView: View {
         case "scroll":
             // The single content view is laid out (by Yoga) taller than the viewport and
             // self-positions, so a plain vertical ScrollView hosting it scrolls as one piece.
-            // A GeometryReader probe + preference reports the scroll offset back to C# (-> the
-            // ScrollView's AtTop / ScrollOffset, which drive the profile FAB's collapse on scroll).
-            // PreferenceKey-based tracking works pre-iOS-17 (onScrollGeometryChange is iOS 18+).
-            ScrollView(.vertical, showsIndicators: true) {
-                ForEach(node.children) { CometNodeView(node: $0) }
-                    .background(GeometryReader { geo in
-                        Color.clear.preference(key: CometScrollOffsetKey.self,
-                                               value: -geo.frame(in: .named("cometScroll")).minY)
-                    })
+            // The scroll offset is reported back to C# (-> the ScrollView's AtTop / ScrollOffset,
+            // which drive the profile FAB's collapse on scroll).
+            if #available(iOS 18.0, *) {
+                // onScrollGeometryChange observes the live scroll geometry, so it fires for BOTH a
+                // finger scroll and a programmatic contentOffset change. A GeometryReader/preference
+                // (the fallback below) only re-fires on a SwiftUI layout pass, which a UIScrollView
+                // contentOffset change does NOT trigger — so it silently misses programmatic scrolls.
+                ScrollView(.vertical, showsIndicators: true) {
+                    ForEach(node.children) { CometNodeView(node: $0) }
+                }
+                .onScrollGeometryChange(for: Double.self) { geo in
+                    Double(geo.contentOffset.y + geo.contentInsets.top)
+                } action: { _, newValue in
+                    node.onScroll?(newValue)
+                }
+            } else {
+                // Pre-iOS-18 fallback: GeometryReader probe + preference (onScrollGeometryChange is iOS 18+).
+                ScrollView(.vertical, showsIndicators: true) {
+                    ForEach(node.children) { CometNodeView(node: $0) }
+                        .background(GeometryReader { geo in
+                            Color.clear.preference(key: CometScrollOffsetKey.self,
+                                                   value: -geo.frame(in: .named("cometScroll")).minY)
+                        })
+                }
+                .coordinateSpace(name: "cometScroll")
+                .onPreferenceChange(CometScrollOffsetKey.self) { value in node.onScroll?(Double(value)) }
             }
-            .coordinateSpace(name: "cometScroll")
-            .onPreferenceChange(CometScrollOffsetKey.self) { value in node.onScroll?(Double(value)) }
         case "alert":
             // Native SwiftUI .alert (the iOS counterpart of Compose's AlertDialog): a zero-size
             // host that presents modally when C# opens the dialog; the button / scrim dismiss

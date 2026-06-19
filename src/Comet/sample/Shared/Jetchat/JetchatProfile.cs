@@ -68,6 +68,12 @@ namespace CometSamples.Jetchat
 					Property("Status", d.Status, isLink: false),
 					Property("Twitter", d.Twitter, isLink: true),
 					Property("Timezone", d.TimeZone, isLink: false),
+
+					// Trailing scroll room — the gold ProfileHeader pads a containerHeight−320 spacer so
+					// the column always overflows (for the parallax + the FAB contract). Without it the
+					// profile content fits the screen, the ScrollView never scrolls, AtTop never flips,
+					// and the FAB can't contract. This guarantees overflow so the contract triggers.
+					new HStack().Frame(height: 240).FlexShrink(0),
 				},
 			}.FillVertical();
 

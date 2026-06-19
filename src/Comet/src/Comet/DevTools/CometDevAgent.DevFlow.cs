@@ -64,9 +64,14 @@ namespace Comet.DevTools
 					});
 
 				case ("POST", "/api/v1/ui/actions/focus"):
-				case ("POST", "/api/v1/ui/actions/scroll"):
-					// SwiftUI/Compose own scrolling + focus; accept as a no-op so the CLI succeeds.
+					// SwiftUI owns keyboard focus; accept as a no-op so the CLI succeeds.
 					return ActionOk();
+
+				case ("POST", "/api/v1/ui/actions/scroll"):
+					// Drive the underlying native scroll view so the shim's scroll-offset detection
+					// (GeometryReader/onScroll on iOS) fires exactly as it does for a finger — which is
+					// what reactive scroll-driven UI (JumpToBottom show/hide, profile FAB contract) needs.
+					return RunOnMain(() => ScrollAction(body));
 
 				case ("POST", "/api/v1/ui/actions/back"):
 					return RunOnMain(() =>
@@ -90,6 +95,68 @@ namespace Comet.DevTools
 		}
 
 		static string ActionOk() => "{\"success\":true}";
+
+		// Drives the frontmost scrollable native UIScrollView (the view backing the SwiftUI
+		// ScrollView/List) by the requested delta. A real content-offset change makes SwiftUI
+		// republish its scroll geometry, so the shim's onScroll preference fires and Comet's
+		// AtTop/ScrolledAway signals update — the same path a finger drives. dy>0 scrolls toward the
+		// end (content moves up). No-op off iOS (Compose/Android owns its own scrolling).
+		static string ScrollAction(string body)
+		{
+#if IOS
+			var sv = FindScrollableView();
+			if (sv is not null)
+			{
+				double dy = TryGetDouble(body, "dy");
+				double dx = TryGetDouble(body, "dx");
+				var o = sv.ContentOffset;
+				var inset = sv.AdjustedContentInset;
+				double minY = -(double)inset.Top;
+				double maxY = System.Math.Max(minY, (double)(sv.ContentSize.Height - sv.Bounds.Height + inset.Bottom));
+				double ny = System.Math.Clamp((double)o.Y + dy, minY, maxY);
+				sv.SetContentOffset(new CoreGraphics.CGPoint((double)o.X + dx, ny), animated: false);
+				sv.LayoutIfNeeded();
+			}
+#endif
+			return ActionOk();
+		}
+
+#if IOS
+		static double TryGetDouble(string body, string key)
+		{
+			try { return GetDouble(body, key); } catch { return 0; }
+		}
+
+		// The largest visible UIScrollView in the key window whose content overflows its bounds (the
+		// on-screen scroll). SwiftUI ScrollView and List both render through a UIScrollView, so this
+		// resolves either of Comet's scroll/list nodes without an id mapping.
+		static UIKit.UIScrollView? FindScrollableView()
+		{
+			UIKit.UIWindow? window = null;
+			var windows = UIKit.UIApplication.SharedApplication.Windows;
+			foreach (var w in windows)
+				if (w.IsKeyWindow) { window = w; break; }
+			if (window is null && windows.Length > 0) window = windows[0];
+			if (window is null) return null;
+
+			UIKit.UIScrollView? best = null;
+			double bestArea = 0;
+			var stack = new Stack<UIKit.UIView>();
+			stack.Push(window);
+			while (stack.Count > 0)
+			{
+				var v = stack.Pop();
+				if (v is UIKit.UIScrollView sv && !sv.Hidden && sv.Alpha > 0.01
+					&& sv.ContentSize.Height > sv.Bounds.Height + 1)
+				{
+					double area = (double)(sv.Bounds.Width * sv.Bounds.Height);
+					if (area > bestArea) { bestArea = area; best = sv; }
+				}
+				foreach (var sub in v.Subviews) stack.Push(sub);
+			}
+			return best;
+		}
+#endif
 
 		// Resolves the CLI's selector query (?type=&text=&automationId=) to matching elements.
 		// Returns a flat List<ElementInfo> JSON array; the CLI takes the id(s) and acts by id.
@@ -179,7 +246,7 @@ namespace Comet.DevTools
 			"{\"agent\":{\"name\":\"Comet.DevTools.CometDevAgent\",\"version\":\"1\",\"framework\":\"comet\"}," +
 			"\"capabilities\":{" +
 			"\"ui.tree\":{\"version\":1,\"features\":[\"type\",\"text\",\"accessibility-id\"]}," +
-			"\"ui.actions\":{\"version\":1,\"features\":[\"tap\",\"fill\",\"clear\",\"back\"]}}}";
+			"\"ui.actions\":{\"version\":1,\"features\":[\"tap\",\"fill\",\"clear\",\"back\",\"scroll\"]}}}";
 
 		// Builds the nested ElementInfo tree the CLI expects (single root + children[]),
 		// resolving the registry's flat parentId list into a hierarchy.
