@@ -64,8 +64,15 @@ namespace Comet.DevTools
 					});
 
 				case ("POST", "/api/v1/ui/actions/focus"):
-					// SwiftUI owns keyboard focus; accept as a no-op so the CLI succeeds.
-					return ActionOk();
+					// Fire the element's Focused event — the same endpoint the native @FocusState
+					// callback routes to (shim onFocused -> sink OnEvent(Focused) -> View.OnBackendEvent),
+					// so focus-reactive UI runs exactly as for a real focus (e.g. focusing the input
+					// dismisses the active selector panel). Mirrors tap/fill driving Comet backend events.
+					return RunOnMain(() =>
+					{
+						ResolveElement(body).OnBackendEvent(EventIds.Focused);
+						return ActionOk();
+					});
 
 				case ("POST", "/api/v1/ui/actions/scroll"):
 					// Drive the underlying native scroll view so the shim's scroll-offset detection
@@ -246,7 +253,7 @@ namespace Comet.DevTools
 			"{\"agent\":{\"name\":\"Comet.DevTools.CometDevAgent\",\"version\":\"1\",\"framework\":\"comet\"}," +
 			"\"capabilities\":{" +
 			"\"ui.tree\":{\"version\":1,\"features\":[\"type\",\"text\",\"accessibility-id\"]}," +
-			"\"ui.actions\":{\"version\":1,\"features\":[\"tap\",\"fill\",\"clear\",\"back\",\"scroll\"]}}}";
+			"\"ui.actions\":{\"version\":1,\"features\":[\"tap\",\"fill\",\"clear\",\"back\",\"scroll\",\"focus\"]}}}";
 
 		// Builds the nested ElementInfo tree the CLI expects (single root + children[]),
 		// resolving the registry's flat parentId list into a hierarchy.
