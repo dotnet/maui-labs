@@ -33,6 +33,11 @@ namespace Comet.Platform.SwiftUI
 			// Drive ScrollToBottom (JumpToBottom FAB / after-send) through the native
 			// ScrollViewReader — the iOS counterpart of the Compose LazyListState scroller.
 			_list.RegisterScroller(() => CometSwiftUIHost.ScrollToBottom(_native));
+
+			// The shim reports last-row visibility (0 = newest on screen / at bottom, 1 = scrolled away);
+			// mirror it onto IListView.ScrolledAway so the JumpToBottom FAB shows/hides on scroll — the
+			// iOS counterpart of ComposeListNode's snapshotFlow(CanScrollBackward).
+			CometSwiftUIHost.SetScrollHandler(_native, away => _list.ScrolledAway.Value = away > 0.5);
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)

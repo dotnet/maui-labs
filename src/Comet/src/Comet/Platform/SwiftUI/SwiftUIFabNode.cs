@@ -86,7 +86,16 @@ namespace Comet.Platform.SwiftUI
 			((uint)(c.Alpha * 255) << 24) | ((uint)(c.Red * 255) << 16) |
 			((uint)(c.Green * 255) << 8) | (uint)(c.Blue * 255);
 
-		public void ApplyProperty(PropertyId id, in PropertyValue value) { }
+		public void ApplyProperty(PropertyId id, in PropertyValue value)
+		{
+			// Honour Opacity / IsVisible so the JumpToBottom FAB can actually hide: its visibility is
+			// driven by fab.Opacity(0/1) off the list's ScrolledAway signal. Without this the capsule's
+			// own opacity is never applied and the FAB stays permanently visible.
+			if (id == PropertyIds.Opacity)
+				CometSwiftUIHost.SetDouble(_native, "opacity", value.AsDouble);
+			else if (id == PropertyIds.IsVisible)
+				CometSwiftUIHost.SetBool(_native, "isvisible", value.AsBool);
+		}
 		public void InsertChild(int index, ICometBackendNode child) { }
 		public void RemoveChildAt(int index) { }
 		public void MoveChild(int fromIndex, int toIndex) { }

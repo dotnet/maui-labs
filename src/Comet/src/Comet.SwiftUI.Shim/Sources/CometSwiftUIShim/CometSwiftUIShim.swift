@@ -648,6 +648,11 @@ struct CometNodeView: View {
                             .listRowInsets(EdgeInsets())
                             .listRowSeparator(.hidden)
                             .id(child.id)
+                            // Drive ScrolledAway (the JumpToBottom FAB): the newest message is the last
+                            // child — when it's on screen we're at the bottom (0), when it scrolls off
+                            // we're scrolled away (1). The C# list node maps this onto IListView.ScrolledAway.
+                            .onAppear { if child.id == node.children.last?.id { node.onScroll?(0) } }
+                            .onDisappear { if child.id == node.children.last?.id { node.onScroll?(1) } }
                     }
                 }
                 .listStyle(.plain)
