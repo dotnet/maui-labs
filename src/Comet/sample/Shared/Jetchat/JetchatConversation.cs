@@ -298,8 +298,11 @@ namespace CometSamples.Jetchat
 		static View JumpToBottom(ListView list)
 		{
 			var fab = new Comet.Fab(
-				icon: new Icon("arrow_down").IconSize(18),
-				label: new Text("Jump to bottom").LabelSmall(),
+				// Colour the icon + label explicitly (not just via the FAB's contentColor): Compose's
+				// ExtendedFAB tints its slot content through LocalContentColor, but the SwiftUI FAB renders
+				// the children directly, so without an explicit colour the iOS label rendered invisible.
+				icon: new Icon("arrow_down").IconSize(18).Color(Primary),
+				label: new Text("Jump to bottom").LabelSmall().Color(Primary),
 				onClick: () => list.ScrollToBottom(),
 				height: 36,
 				containerColor: Surface,
