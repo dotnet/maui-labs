@@ -55,6 +55,14 @@ namespace Comet.Platform.SwiftUI
 			CometSwiftUIHost.InsertChild(_native, 0, icon.Native);
 			CometSwiftUIHost.InsertChild(_native, 1, label.Native);
 
+			// The slots materialize INHERITING the FAB's env opacity — and the JumpToBottom FAB starts at
+			// Opacity(0) (hidden until scrolled away), so without this the icon/label stay at opacity 0 even
+			// after the FAB reactively fades in: the capsule shows but the label is invisible. Reset them to
+			// fully opaque — the FAB container's own opacity controls visibility. The iOS twin of the
+			// ComposeFabNode slot-opacity-inheritance fix. (Now reachable because iOS honours Opacity.)
+			CometSwiftUIHost.SetDouble(icon.Native, "opacity", 1.0);
+			CometSwiftUIHost.SetDouble(label.Native, "opacity", 1.0);
+
 			if (_fab.ContainerColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 
