@@ -20,12 +20,20 @@ namespace CometSamples.Jetchat
 			System.Action<string> onChannel, System.Action<string> onProfile, System.Action onSettings) => new VStack(spacing: 0f)
 		{
 			// DrawerHeader (JetchatDrawer.kt): Row(padding 16){ JetchatIcon(24dp) + jetchat_logo wordmark }.
-			// The two-layer tinted brand mark beside the "jetchat" wordmark image (87x24).
+			// Android renders the gold two-layer tinted mark (ic_jetchat_back/front) + the jetchat_logo
+			// wordmark image (87x24). iOS's bundle has only jetchat.png (the square mark) — the back/front
+			// glyphs and the wordmark vector aren't there — so it shows the working jetchat mark + a text
+			// wordmark. (Drop in iOS jetchat_back/front/jetchat_logo PNGs to make both platforms identical.)
 			new HStack(spacing: 0f)
 			{
-				C.JetchatIcon(24).VerticalLayoutAlignment(LayoutAlignment.Center),
-				new Image("jetchat_logo").Frame(width: 87, height: 24).FlexShrink(0)
-					.Margin(left: 8).VerticalLayoutAlignment(LayoutAlignment.Center),
+				System.OperatingSystem.IsAndroid()
+					? (View)C.JetchatIcon(24).VerticalLayoutAlignment(LayoutAlignment.Center)
+					: new Icon("jetchat").IconSize(24).VerticalLayoutAlignment(LayoutAlignment.Center),
+				System.OperatingSystem.IsAndroid()
+					? (View)new Image("jetchat_logo").Frame(width: 87, height: 24).FlexShrink(0)
+						.Margin(left: 8).VerticalLayoutAlignment(LayoutAlignment.Center)
+					: new Text("jetchat").HeadlineSmall().Color(C.OnSurface)
+						.Margin(left: 8).VerticalLayoutAlignment(LayoutAlignment.Center),
 			}.Padding(new Thickness(16, topInset + 16, 16, 16)),
 
 			// Edge-to-edge divider under the header (the gold's first DividerItem() has no inset).
