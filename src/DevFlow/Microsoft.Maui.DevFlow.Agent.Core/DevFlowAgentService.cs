@@ -546,6 +546,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _server.MapPut("/api/v1/storage/files/{path}", HandleFileUpload);
         _server.MapDelete("/api/v1/storage/files/{path}", HandleFileDelete);
 
+        // Application menus (MAUI MenuBarItems + native NSMenu / UIKit menus)
+        _server.MapGet("/api/v1/ui/menus", HandleMenusList);
+        _server.MapPost("/api/v1/ui/menus/invoke", HandleMenuInvoke);
+
         // Invoke / reflection
         _server.MapGet("/api/v1/invoke/actions", HandleListActions);
         _server.MapPost("/api/v1/invoke/actions/{name}", HandleInvokeAction);
@@ -652,6 +656,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     storage = true,
                     profiler = IsProfilerFeatureAvailable,
                     jobs = IsJobsSupported,
+                    menus = true,
                     theme = true,
                 },
                 running = _app != null,
@@ -692,6 +697,13 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.tree"] = new { version = 1, features = new[] { "css-selector", "type", "text", "accessibility-id" } };
         capabilities["ui.actions"] = new { version = 1, features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties" } };
         capabilities["ui.screenshot"] = new { version = 1, features = new[] { "element", "fullscreen", "selector" } };
+        capabilities["ui.menus"] = new
+        {
+            version = 1,
+            features = new[] { "list", "invoke" },
+            maui = true,
+            native = IsNativeMenusSupported,
+        };
 
         if (_cdpWebViews.Count > 0)
             capabilities["webview"] = new { version = 1, features = new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" } };

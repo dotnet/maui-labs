@@ -284,6 +284,103 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/ui/menus:
+    get:
+      operationId: listMenus
+      tags: [ui]
+      summary: List application menus
+      description: >
+        Returns the application menu bar: the cross-platform MAUI MenuBarItems
+        tree plus, where supported, the platform's native application menu
+        (macOS AppKit NSMenu or Mac Catalyst responder-chain key commands). The
+        native menu bar is not part of the MAUI visual tree returned by the tree
+        endpoint.
+      parameters:
+        - name: window
+          in: query
+          description: Window index to scope the MAUI menu walk. Defaults to all windows.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The application menus.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  platform:
+                    type: string
+                  mauiSupported:
+                    type: boolean
+                  nativeSupported:
+                    type: boolean
+                  menuBar:
+                    type: object
+                    description: The cross-platform MAUI MenuBarItems tree.
+                  native:
+                    description: The platform native menu, or null when unavailable.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/menus/invoke:
+    post:
+      operationId: invokeMenu
+      tags: [ui]
+      summary: Invoke an application menu item
+      description: >
+        Invokes an application menu item identified by id, path (slash-joined
+        titles), title, or key plus modifiers. The target selects the menu
+        layer: auto (default, tries the MAUI menu then the native menu), maui,
+        or native.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Stable menu item id from the list endpoint.
+                path:
+                  type: string
+                  description: Slash-joined title path, e.g. "File/Save".
+                title:
+                  type: string
+                  description: Menu item title (first match).
+                key:
+                  type: string
+                  description: Key equivalent (combine with modifiers).
+                modifiers:
+                  type: string
+                  description: Comma or plus separated modifiers, e.g. "cmd,shift".
+                target:
+                  type: string
+                  enum: [auto, maui, native]
+                  default: auto
+      responses:
+        "200":
+          description: The menu item was invoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  source:
+                    type: string
+                  title:
+                    type: string
+                  path:
+                    type: string
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   # ─────────────────────────── UI Actions ──────────────────────────────
   /api/v1/ui/actions/tap:
     post:

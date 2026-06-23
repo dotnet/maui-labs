@@ -101,6 +101,7 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
+- **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and Mac Catalyst key commands
 - **Screenshots** — capture PNG screenshots from any platform (full window or per-element)
 - **Screen Recording** — start/stop video recording of app sessions
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
@@ -122,7 +123,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 
 | Command Group | Description |
 |---------------|-------------|
-| `ui` | Visual tree, element interaction, screenshots, alerts, assertions |
+| `ui` | Visual tree, element interaction, screenshots, alerts, assertions, application menus |
 | `recording` | Start, stop, and manage screen recordings of app sessions |
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
 | `logs` | Fetch and stream application logs |

@@ -130,6 +130,10 @@
         "jobs": {
           "type": "boolean",
           "description": "Whether platform background jobs are supported by this agent."
+        },
+        "menus": {
+          "type": "boolean",
+          "description": "Whether application menu inspection and invocation are supported by this agent."
         }
       },
       "additionalProperties": true
