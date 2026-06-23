@@ -878,6 +878,57 @@ public class DevFlowCliIntegrationTests
     }
 
     [Fact]
+    public async Task DeviceInfo_WithMultipleAgents_LabelsResolvedTargetOnStderr()
+    {
+        // device info goes through the SimpleGetAsync raw-HTTP path (not CreateAgentClientAsync),
+        // so this guards that those commands now label which app produced the output too (#343 #1).
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "TargetApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            },
+            new AgentRegistration
+            {
+                Id = "agent-ios",
+                Project = "/src/Other.csproj",
+                Tfm = "net10.0-ios",
+                Platform = "iOS",
+                AppName = "OtherApp",
+                Port = server.Port + 1,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "device", "device-info", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            // stdout stays the raw agent JSON; the target label is written to stderr only.
+            Assert.Contains("target:", result.StdErr);
+            Assert.Contains("TargetApp", result.StdErr);
+            Assert.DoesNotContain("target:", result.StdOut);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
+
+    [Fact]
     public async Task ExtensionsList_WithMultipleAgents_LabelsResolvedTargetOnStderr()
     {
         // `extensions list` constructs its AgentClient via the shared CreateAgentClientAsync

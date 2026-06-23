@@ -97,6 +97,68 @@ public class DevFlowSelectAgentPortTests
 
         Assert.Equal(0, DevFlowCommands.SelectAgentPort(agents, csprojPath: "/src/Unrelated.csproj", configPort: null));
     }
+
+    // ----- Issue #343 follow-up: remote --agent-host must skip the local-broker ambiguity -----
+
+    [Fact]
+    public void RemoteHost_AmbiguousLocalAgents_DoesNotRefuse_UsesDefaultPort()
+    {
+        // The same agent set returns the refusal sentinel for a local host...
+        AgentRegistration[] agents =
+        [
+            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net10.0-android", "Android", 7001)
+        ];
+        Assert.Equal(0, DevFlowCommands.SelectAgentPort(agents, csprojPath: null, configPort: null));
+
+        // ...but the local broker is irrelevant for an explicit remote host, so it must resolve
+        // to the default rather than refusing (the agent count on THIS machine doesn't apply).
+        Assert.Equal(9223, DevFlowCommands.SelectAgentPort("10.0.0.5", agents, csprojPath: null, configPort: null));
+    }
+
+    [Fact]
+    public void RemoteHost_AmbiguousLocalAgents_WithConfigPort_UsesConfigPort()
+    {
+        AgentRegistration[] agents =
+        [
+            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000),
+            Agent("b", "/src/Other.csproj", "net10.0-android", "Android", 7001)
+        ];
+
+        Assert.Equal(5500, DevFlowCommands.SelectAgentPort("remote.example.com", agents, csprojPath: null, configPort: 5500));
+    }
+
+    [Fact]
+    public void RemoteHost_IgnoresLocalCsprojMatch()
+    {
+        // Even a unique local csproj match must not bind a remote target to a local agent's port.
+        AgentRegistration[] agents =
+        [
+            Agent("a", "/src/App.csproj", "net10.0-ios", "iOS", 7000)
+        ];
+
+        Assert.Equal(9223, DevFlowCommands.SelectAgentPort("192.168.1.20", agents, csprojPath: "/src/App.csproj", configPort: null));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("localhost")]
+    [InlineData("LocalHost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("::1")]
+    [InlineData("[::1]")]
+    public void IsLocalAgentHost_LoopbackVariants_AreLocal(string? host)
+        => Assert.True(DevFlowCommands.IsLocalAgentHost(host));
+
+    [Theory]
+    [InlineData("10.0.0.5")]
+    [InlineData("192.168.1.20")]
+    [InlineData("remote.example.com")]
+    [InlineData("device.local")]
+    public void IsLocalAgentHost_RemoteHosts_AreNotLocal(string host)
+        => Assert.False(DevFlowCommands.IsLocalAgentHost(host));
 }
 
 /// <summary>
