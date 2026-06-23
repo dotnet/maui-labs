@@ -1586,8 +1586,7 @@ public class DevFlowCommands
     {
         try
         {
-            EnsureAgentPortResolved(port);
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var extensions = await client.GetExtensionsAsync();
             if (json)
             {
@@ -1624,8 +1623,7 @@ public class DevFlowCommands
     {
         try
         {
-            EnsureAgentPortResolved(port);
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var extensions = await client.GetExtensionsAsync();
             if (!extensions.TryGetValue(ns, out var extension))
             {
@@ -1659,8 +1657,7 @@ public class DevFlowCommands
     {
         try
         {
-            EnsureAgentPortResolved(port);
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var extensions = await client.GetExtensionsAsync();
             if (!extensions.TryGetValue(ns, out var extension))
             {
