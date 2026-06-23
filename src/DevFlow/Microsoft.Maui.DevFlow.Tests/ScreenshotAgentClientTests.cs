@@ -7,6 +7,10 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class ScreenshotAgentClientTests
 {
+    // Guards the test server's accept call so a missed client connection fails fast
+    // instead of hanging CI indefinitely.
+    private static readonly TimeSpan AcceptTimeout = TimeSpan.FromSeconds(10);
+
     private static readonly byte[] SamplePng =
     {
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02, 0x03, 0x04
@@ -21,7 +25,7 @@ public class ScreenshotAgentClientTests
 
         var serverTask = Task.Run(async () =>
         {
-            using var client = await listener.AcceptTcpClientAsync();
+            using var client = await AcceptAsync(listener);
             using var stream = client.GetStream();
             var request = await ReadRequestAsync(stream);
             Assert.Contains("GET /api/v1/ui/screenshot", request, StringComparison.Ordinal);
@@ -65,7 +69,7 @@ public class ScreenshotAgentClientTests
 
         var serverTask = Task.Run(async () =>
         {
-            using var client = await listener.AcceptTcpClientAsync();
+            using var client = await AcceptAsync(listener);
             using var stream = client.GetStream();
             await ReadRequestAsync(stream);
             await WriteResponseAsync(stream, 409, "Conflict", "application/json", Encoding.UTF8.GetBytes(body));
@@ -101,7 +105,7 @@ public class ScreenshotAgentClientTests
 
         var serverTask = Task.Run(async () =>
         {
-            using var client = await listener.AcceptTcpClientAsync();
+            using var client = await AcceptAsync(listener);
             using var stream = client.GetStream();
             await ReadRequestAsync(stream);
             await WriteResponseAsync(stream, 409, "Conflict", "application/json", Encoding.UTF8.GetBytes(body));
@@ -125,7 +129,7 @@ public class ScreenshotAgentClientTests
 
         var serverTask = Task.Run(async () =>
         {
-            using var client = await listener.AcceptTcpClientAsync();
+            using var client = await AcceptAsync(listener);
             using var stream = client.GetStream();
             await ReadRequestAsync(stream);
             await WriteResponseAsync(stream, 200, "OK", "image/png", SamplePng);
@@ -139,6 +143,12 @@ public class ScreenshotAgentClientTests
         Assert.Equal(SamplePng, data);
 
         await serverTask;
+    }
+
+    private static async Task<TcpClient> AcceptAsync(TcpListener listener)
+    {
+        using var cts = new CancellationTokenSource(AcceptTimeout);
+        return await listener.AcceptTcpClientAsync(cts.Token);
     }
 
     private static async Task<string> ReadRequestAsync(NetworkStream stream)

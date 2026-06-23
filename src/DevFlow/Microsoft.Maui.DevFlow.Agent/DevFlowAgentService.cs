@@ -605,13 +605,14 @@ public class PlatformAgentService : DevFlowAgentService
                         var pdfData = contentView.DataWithPdfInsideRect(bounds);
                         if (pdfData != null)
                         {
-                            var image = new NSImage(pdfData);
+                            using var image = new NSImage(pdfData);
                             var tiffData = image.AsTiff();
                             if (tiffData != null)
                             {
-                                var bitmapRep = new NSBitmapImageRep(tiffData);
+                                using var bitmapRep = new NSBitmapImageRep(tiffData);
+                                using var pngProperties = new NSDictionary();
                                 var pngData = bitmapRep.RepresentationUsingTypeProperties(
-                                    NSBitmapImageFileType.Png, new NSDictionary());
+                                    NSBitmapImageFileType.Png, pngProperties);
                                 return pngData?.ToArray();
                             }
                         }

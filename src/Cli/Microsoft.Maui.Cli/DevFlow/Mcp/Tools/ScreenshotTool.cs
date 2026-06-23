@@ -26,7 +26,7 @@ public sealed class ScreenshotTool
 			var message = result.Error
 				?? "Screenshot failed — no image data returned. Is the agent connected and the app visible?";
 			if (result.Suggestions is { Count: > 0 })
-				message += " " + string.Join(" ", result.Suggestions);
+				message += "\n" + string.Join("\n", result.Suggestions);
 			throw new McpException(message);
 		}
 
