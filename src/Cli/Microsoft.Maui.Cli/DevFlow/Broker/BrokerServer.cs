@@ -17,8 +17,17 @@ public class BrokerServer : IDisposable
     public const int PortRangeStart = 10223;
     public const int PortRangeEnd = 10899;
 
+    /// <summary>Interval between agent liveness sweeps.</summary>
+    public static readonly TimeSpan DefaultReapInterval = TimeSpan.FromSeconds(10);
+
+    /// <summary>How often the broker sends WebSocket keep-alive pings to agents.</summary>
+    public static readonly TimeSpan DefaultKeepAliveInterval = TimeSpan.FromSeconds(15);
+
     private readonly int _port;
     private readonly TimeSpan _idleTimeout;
+    private readonly TimeSpan _reapInterval;
+    private readonly TimeSpan _keepAliveInterval;
+    private readonly Func<WebSocket, CancellationToken, Task<bool>> _agentLivenessCheck;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, AgentConnection> _agents = new();
@@ -26,6 +35,8 @@ public class BrokerServer : IDisposable
     private readonly object _portLock = new();
     private DateTime _lastActivity = DateTime.UtcNow;
     private Timer? _idleTimer;
+    private Timer? _reapTimer;
+    private int _reaping;
     private bool _disposed;
     private Action<string>? _log;
 
@@ -34,9 +45,23 @@ public class BrokerServer : IDisposable
     public bool IsRunning => _listener?.IsListening ?? false;
 
     public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null)
+        : this(port, idleTimeout, log, reapInterval: null, keepAliveInterval: null, agentLivenessCheck: null)
+    {
+    }
+
+    internal BrokerServer(
+        int port,
+        TimeSpan? idleTimeout,
+        Action<string>? log,
+        TimeSpan? reapInterval,
+        TimeSpan? keepAliveInterval,
+        Func<WebSocket, CancellationToken, Task<bool>>? agentLivenessCheck)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
+        _reapInterval = reapInterval ?? DefaultReapInterval;
+        _keepAliveInterval = keepAliveInterval ?? DefaultKeepAliveInterval;
+        _agentLivenessCheck = agentLivenessCheck ?? DefaultAgentLivenessCheckAsync;
         _log = log;
     }
 
@@ -65,6 +90,9 @@ public class BrokerServer : IDisposable
 
         // Start idle timer
         _idleTimer = new Timer(_ => CheckIdle(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+
+        // Start agent liveness reaper — evicts crashed/half-open agents promptly
+        _reapTimer = new Timer(_ => _ = ReapAgentsAsync(), null, _reapInterval, _reapInterval);
 
         try
         {
@@ -134,7 +162,7 @@ public class BrokerServer : IDisposable
         WebSocketContext wsContext;
         try
         {
-            wsContext = await context.AcceptWebSocketAsync(null);
+            wsContext = await context.AcceptWebSocketAsync(subProtocol: null, _keepAliveInterval);
         }
         catch (Exception ex)
         {
@@ -199,11 +227,22 @@ public class BrokerServer : IDisposable
                 ConnectedAt = DateTime.UtcNow
             };
 
+            // Send registration response before publishing the agent so the reaper
+            // (the only other sender) can never race with this handshake write.
+            var response = CliJson.SerializeUntyped(new JsonObject
+            {
+                ["type"] = "registered",
+                ["id"] = id,
+                ["port"] = assignedPort
+            }, indented: false);
+            await ws.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, CancellationToken.None);
+
             // Remove existing registration for same id (app restarted)
             if (_agents.TryRemove(id, out var existing))
             {
                 if (existing.Registration.Port != assignedPort)
                     ReleasePort(existing.Registration.Port);
+                try { existing.WebSocket.Abort(); } catch { }
                 try { existing.WebSocket.Dispose(); } catch { }
                 Log($"Agent replaced: {agent.AppName}|{agent.Tfm} (was port {existing.Registration.Port})");
             }
@@ -212,15 +251,6 @@ public class BrokerServer : IDisposable
             _agents[id] = connection;
 
             Log($"Agent connected: {agent.AppName}|{agent.Tfm} → port {assignedPort} (id: {id})");
-
-            // Send registration response
-            var response = CliJson.SerializeUntyped(new JsonObject
-            {
-                ["type"] = "registered",
-                ["id"] = id,
-                ["port"] = assignedPort
-            }, indented: false);
-            await ws.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, CancellationToken.None);
 
             // Keep connection alive — wait for disconnect
             await MonitorAgentConnection(connection);
@@ -248,12 +278,88 @@ public class BrokerServer : IDisposable
         catch { }
         finally
         {
-            if (_agents.TryRemove(connection.Registration.Id, out _))
+            EvictAgent(connection, "connection closed");
+        }
+    }
+
+    /// <summary>
+    /// Periodically probes registered agents and evicts those whose connection is dead.
+    /// This catches crashed apps that leave a half-open socket the receive loop never notices.
+    /// </summary>
+    private async Task ReapAgentsAsync()
+    {
+        // Non-reentrant: a slow probe must not overlap the next timer tick.
+        if (Interlocked.Exchange(ref _reaping, 1) == 1) return;
+
+        try
+        {
+            if (_disposed || (_cts?.Token.IsCancellationRequested ?? true)) return;
+
+            foreach (var connection in _agents.Values.ToArray())
             {
-                ReleasePort(connection.Registration.Port);
-                Log($"Agent disconnected: {connection.Registration.AppName}|{connection.Registration.Tfm}");
+                if (_disposed || (_cts?.Token.IsCancellationRequested ?? true)) return;
+
+                bool alive;
+                if (connection.WebSocket.State != WebSocketState.Open)
+                {
+                    alive = false;
+                }
+                else
+                {
+                    try
+                    {
+                        using var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                        alive = await _agentLivenessCheck(connection.WebSocket, probeCts.Token);
+                    }
+                    catch
+                    {
+                        alive = false;
+                    }
+                }
+
+                if (!alive)
+                    EvictAgent(connection, "liveness probe failed");
             }
         }
+        finally
+        {
+            Interlocked.Exchange(ref _reaping, 0);
+        }
+    }
+
+    /// <summary>
+    /// Default liveness probe: write a tiny keep-alive frame to the agent. A write is what
+    /// surfaces a half-open/crashed peer; agents harmlessly ignore unknown inbound frames.
+    /// </summary>
+    private static async Task<bool> DefaultAgentLivenessCheckAsync(WebSocket ws, CancellationToken ct)
+    {
+        if (ws.State != WebSocketState.Open) return false;
+        try
+        {
+            var ping = Encoding.UTF8.GetBytes("{\"type\":\"ping\"}");
+            await ws.SendAsync(ping, WebSocketMessageType.Text, true, ct);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes an agent from the registry. <see cref="ConcurrentDictionary{TKey,TValue}.TryRemove(TKey, out TValue)"/>
+    /// is the single authority, so the monitor loop and the reaper can never double-release a port.
+    /// </summary>
+    private bool EvictAgent(AgentConnection connection, string reason)
+    {
+        if (!_agents.TryRemove(new KeyValuePair<string, AgentConnection>(connection.Registration.Id, connection)))
+            return false;
+
+        ReleasePort(connection.Registration.Port);
+        try { connection.WebSocket.Abort(); } catch { }
+        try { connection.WebSocket.Dispose(); } catch { }
+        Log($"Agent disconnected: {connection.Registration.AppName}|{connection.Registration.Tfm} ({reason})");
+        return true;
     }
 
     private string HandleListAgents()
@@ -328,6 +434,7 @@ public class BrokerServer : IDisposable
     private void Shutdown()
     {
         _idleTimer?.Dispose();
+        _reapTimer?.Dispose();
 
         // Close all agent WebSockets
         foreach (var agent in _agents.Values)
@@ -405,6 +512,7 @@ public class BrokerServer : IDisposable
         _disposed = true;
         _cts?.Cancel();
         _idleTimer?.Dispose();
+        _reapTimer?.Dispose();
         try { _listener?.Close(); } catch { }
         _cts?.Dispose();
     }
