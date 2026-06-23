@@ -757,4 +757,123 @@ public class DevFlowCliIntegrationTests
         Assert.Equal("POST", request.Method);
         Assert.Contains("Browser.getVersion", request.Body);
     }
+
+    // ── issue #343: multi-agent ambiguity refusal + resolved-target labeling ──
+
+    [Fact]
+    public async Task UiTree_WithSentinelPort_RefusesAndExitsNonZero()
+    {
+        // --agent-port 0 simulates the ambiguous multi-agent case (SelectAgentPort sentinel).
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeRawAsync("devflow", "ui", "tree", "--agent-port", "0", "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        var combined = result.StdOut + result.StdErr;
+        Assert.Contains("--agent-port", combined);
+        Assert.Contains("Multiple", combined);
+        // The command must not have reached the agent.
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/tree");
+    }
+
+    [Fact]
+    public async Task UiScreenshot_WithSentinelPort_RefusesAndExitsNonZero()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeRawAsync("devflow", "ui", "screenshot", "--agent-port", "0", "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        var combined = result.StdOut + result.StdErr;
+        Assert.Contains("--agent-port", combined);
+    }
+
+    [Fact]
+    public async Task UiStatus_WithMultipleAgents_LabelsResolvedTargetOnStderr()
+    {
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "TargetApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            },
+            new AgentRegistration
+            {
+                Id = "agent-ios",
+                Project = "/src/Other.csproj",
+                Tfm = "net10.0-ios",
+                Platform = "iOS",
+                AppName = "OtherApp",
+                Port = server.Port + 1,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "status", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            // stdout stays clean JSON; the target label is written to stderr only.
+            var json = result.ParseJsonOutput();
+            Assert.True(json.GetProperty("running").GetBoolean());
+            Assert.Contains("target:", result.StdErr);
+            Assert.Contains("TargetApp", result.StdErr);
+            Assert.DoesNotContain("target:", result.StdOut);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
+
+    [Fact]
+    public async Task UiStatus_WithSingleAgent_DoesNotLabel()
+    {
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "OnlyApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "status", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.DoesNotContain("target:", result.StdErr);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
 }

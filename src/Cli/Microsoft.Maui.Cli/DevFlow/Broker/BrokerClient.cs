@@ -116,7 +116,7 @@ public static class BrokerClient
         return ResolveAgent(agents, projectPath, tfm);
     }
 
-    static AgentRegistration? ResolveAgent(AgentRegistration[] agents, string? projectPath = null, string? tfm = null)
+    internal static AgentRegistration? ResolveAgent(AgentRegistration[] agents, string? projectPath = null, string? tfm = null)
     {
         // If project+TFM provided, look for exact match
         if (projectPath != null && tfm != null)
