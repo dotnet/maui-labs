@@ -29,6 +29,11 @@ public class WpfAgentService : DevFlowAgentService
     {
         try
         {
+            // Guard against path traversal: sharedName becomes part of a file name.
+            if (!string.IsNullOrEmpty(sharedName) &&
+                (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+                return null;
+
             // Mirror WPFPreferences' on-disk layout:
             // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
             var prefsDir = Path.Combine(
@@ -39,6 +44,7 @@ public class WpfAgentService : DevFlowAgentService
             if (!File.Exists(path))
                 return new List<string>();
 
+            // Best-effort read; parse failures degrade to complete=false.
             var json = File.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(json))
                 return new List<string>();

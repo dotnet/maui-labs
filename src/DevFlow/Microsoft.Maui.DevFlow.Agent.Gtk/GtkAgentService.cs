@@ -23,6 +23,11 @@ public class GtkAgentService : DevFlowAgentService
     {
         try
         {
+            // Guard against path traversal: sharedName becomes part of a file name.
+            if (!string.IsNullOrEmpty(sharedName) &&
+                (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+                return null;
+
             // Mirror LinuxPreferences' on-disk layout:
             // $XDG_CONFIG_HOME (or ~/.config) / {FriendlyName} / preferences[.{shared}].json
             var configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
@@ -49,6 +54,9 @@ public class GtkAgentService : DevFlowAgentService
         if (!global::System.IO.File.Exists(path))
             return new List<string>();
 
+        // Best-effort read: not synchronized with LinuxPreferences.Save, so a
+        // concurrent write may yield partial JSON. The caller's catch treats a
+        // parse failure as "cannot enumerate" (degrades to complete=false).
         var json = global::System.IO.File.ReadAllText(path);
         if (string.IsNullOrWhiteSpace(json))
             return new List<string>();

@@ -44,7 +44,9 @@ public class PreferencesTests : IntegrationTestBase
         await Client.SetPreferenceAsync(key, "list_value");
 
         var list = await Client.GetPreferencesAsync();
-        Assert.Contains(key, list.ToString());
+        var listedKeys = list.GetProperty("keys").EnumerateArray()
+            .Select(e => e.GetProperty("key").GetString());
+        Assert.Contains(key, listedKeys);
 
         await Client.DeletePreferenceAsync(key);
     }
@@ -69,7 +71,9 @@ public class PreferencesTests : IntegrationTestBase
 
             var list = await Client.GetPreferencesAsync();
 
-            Assert.Contains(key, list.ToString());
+            var listedKeys = list.GetProperty("keys").EnumerateArray()
+                .Select(e => e.GetProperty("key").GetString());
+            Assert.Contains(key, listedKeys);
             Assert.Equal("native", list.GetProperty("source").GetString());
             Assert.True(list.GetProperty("complete").GetBoolean());
         }
