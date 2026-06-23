@@ -32,7 +32,7 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 
 ```bash
 # All tests
-dotnet test MauiLabs.sln
+dotnet test MauiLabs.slnx
 
 # DevFlow tests
 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
