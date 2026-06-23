@@ -10,7 +10,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 | Product | Package / Tool | Description |
 |---------|---------------|-------------|
-| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`) | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, and the `maui devflow` automation surface. |
+| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`) | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, `maui port check` for TCP port diagnostics, and the `maui devflow` automation surface. |
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
@@ -41,7 +41,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 ```bash
 # Build everything
-dotnet build MauiLabs.sln
+dotnet build MauiLabs.slnx
 
 # Build a single product (recommended for focused development)
 dotnet build src/DevFlow/DevFlow.slnf
@@ -63,7 +63,7 @@ eng\common\cibuild.cmd -configuration Release -prepareMachine -projects src/DevF
 
 ```bash
 # All tests
-dotnet test MauiLabs.sln
+dotnet test MauiLabs.slnx
 
 # Per-product
 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
@@ -141,7 +141,7 @@ maui-labs/
 ├── Directory.Packages.props              # Central Package Management
 ├── global.json                           # SDK version pinning
 ├── NuGet.config                          # NuGet feed configuration
-└── MauiLabs.sln                          # Full solution
+└── MauiLabs.slnx                         # Full solution
 ```
 
 ### Key Configuration Files

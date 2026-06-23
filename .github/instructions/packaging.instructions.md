@@ -42,7 +42,7 @@ All NuGet package versions are defined in **`Directory.Packages.props`** at the 
    ```xml
    <FileSignInfo Include="ThirdParty.dll" CertificateName="3PartySHA2" />
    ```
-6. Add the project to the solution: `MauiLabs.sln` and the product's `.slnf`
+6. Add the project to the solution: `MauiLabs.slnx` and the product's `.slnf`
 7. Add to `DevFlow.slnf` if it should be built by CI
 
 ## Version Management
