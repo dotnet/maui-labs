@@ -166,11 +166,22 @@ public static class BrokerClient
 
     private static async Task<bool> IsBrokerAliveAsync(int port)
     {
+        // Mirror the sync IsBrokerAlive: probe IPv4 loopback then IPv6 loopback explicitly. Using the
+        // DNS name "localhost" here let the resolved family (and the 500ms budget) diverge from the
+        // sync path, so `diagnose` (async) could report broker_running:false while `agent status`
+        // (sync) saw the broker — issue #342's status-vs-diagnose contradiction. Probing both
+        // families with the same ordering as the sync path makes the two reports agree.
+        return await TryConnectAsync(IPAddress.Loopback, port).ConfigureAwait(false)
+            || await TryConnectAsync(IPAddress.IPv6Loopback, port).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> TryConnectAsync(IPAddress address, int port)
+    {
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync("localhost", port).WaitAsync(TimeSpan.FromMilliseconds(500));
-            return true;
+            using var client = new TcpClient(address.AddressFamily);
+            await client.ConnectAsync(address, port).WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+            return client.Connected;
         }
         catch
         {
