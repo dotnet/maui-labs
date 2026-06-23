@@ -1384,7 +1384,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             });
 
             if (pngData == null)
-                return HttpResponse.Error("Failed to capture screenshot");
+                return await BuildScreenshotFailureResponseAsync("Failed to capture screenshot");
 
             return HttpResponse.Png(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
         }
@@ -1420,6 +1420,50 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     protected virtual Task<byte[]?> CaptureFullScreenAsync()
     {
         return Task.FromResult<byte[]?>(null);
+    }
+
+    /// <summary>
+    /// Describes why the most recent screenshot capture returned null, when the platform
+    /// can determine an actionable, often-retryable cause (e.g. the app window is not the
+    /// frontmost application on macOS). Returns <c>null</c> when no specific cause is known,
+    /// in which case the caller falls back to a generic error.
+    /// Called on the UI thread.
+    /// </summary>
+    protected virtual ScreenshotCaptureFailure? DescribeScreenshotFailure() => null;
+
+    /// <summary>
+    /// Builds an HTTP error response for a failed screenshot capture, enriching it with an
+    /// actionable, retryable cause when the platform can describe one (see
+    /// <see cref="DescribeScreenshotFailure"/>). Falls back to <paramref name="defaultMessage"/>.
+    /// </summary>
+    private async Task<HttpResponse> BuildScreenshotFailureResponseAsync(string defaultMessage)
+    {
+        ScreenshotCaptureFailure? failure = null;
+        try
+        {
+            failure = await DispatchAsync(() => DescribeScreenshotFailure());
+        }
+        catch { }
+
+        if (failure == null)
+            return HttpResponse.Error(defaultMessage);
+
+        var details = new Dictionary<string, object?>
+        {
+            ["retryable"] = failure.Retryable
+        };
+        if (failure.Suggestions is { Length: > 0 })
+            details["suggestions"] = failure.Suggestions;
+
+        var message = string.IsNullOrWhiteSpace(failure.Message) ? defaultMessage : failure.Message;
+
+        // 409 Conflict signals a transient, retryable precondition (window focus/visibility);
+        // the structured body carries the authoritative retryable flag for clients.
+        return HttpResponse.Error(
+            message,
+            statusCode: failure.Retryable ? 409 : 400,
+            reason: failure.Reason,
+            details: details);
     }
 
     /// <summary>
@@ -6875,6 +6919,34 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         return HttpResponse.Json(result);
     }
+}
+
+/// <summary>
+/// Describes an actionable cause for a failed screenshot capture, used to return a clear,
+/// often-retryable error to clients instead of a generic failure. See
+/// <see cref="DevFlowAgentService.DescribeScreenshotFailure"/>.
+/// </summary>
+public sealed class ScreenshotCaptureFailure
+{
+    public ScreenshotCaptureFailure(string message, string reason, bool retryable, string[]? suggestions = null)
+    {
+        Message = message;
+        Reason = reason;
+        Retryable = retryable;
+        Suggestions = suggestions;
+    }
+
+    /// <summary>Human-readable, actionable error message.</summary>
+    public string Message { get; }
+
+    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-frontmost</c>).</summary>
+    public string Reason { get; }
+
+    /// <summary>Whether retrying (e.g. after foregrounding the app) may succeed.</summary>
+    public bool Retryable { get; }
+
+    /// <summary>Optional actionable suggestions for the caller.</summary>
+    public string[]? Suggestions { get; }
 }
 
 // Request DTOs

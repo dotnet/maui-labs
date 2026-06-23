@@ -328,6 +328,18 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<byte[]?> ScreenshotAsync(int? window = null, string? elementId = null, string? selector = null, int? maxWidth = null, string? scale = null)
     {
+        var result = await ScreenshotResultAsync(window, elementId, selector, maxWidth, scale);
+        return result.Success ? result.Data : null;
+    }
+
+    /// <summary>
+    /// Captures a screenshot and returns a structured <see cref="ScreenshotResult"/>. On failure,
+    /// the result carries the agent-provided error message, machine-readable reason, retryable
+    /// flag, and any actionable suggestions (e.g. the macOS app window not being frontmost),
+    /// instead of collapsing every failure into <c>null</c> as <see cref="ScreenshotAsync"/> does.
+    /// </summary>
+    public async Task<ScreenshotResult> ScreenshotResultAsync(int? window = null, string? elementId = null, string? selector = null, int? maxWidth = null, string? scale = null)
+    {
         try
         {
             var queryParams = new List<string>();
@@ -342,10 +354,58 @@ public class AgentClient : IDisposable
                 : $"{_baseUrl}{UiApi}/screenshot";
 
             using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
-            if (!response.IsSuccessStatusCode) return null;
-            return await response.Content.ReadAsByteArrayAsync();
+            if (response.IsSuccessStatusCode)
+                return ScreenshotResult.Ok(await response.Content.ReadAsByteArrayAsync());
+
+            var body = await response.Content.ReadAsStringAsync();
+            return ParseScreenshotError(body);
         }
-        catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
+    }
+
+    private static ScreenshotResult ParseScreenshotError(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return ScreenshotResult.Failure(null);
+
+        try
+        {
+            var json = DriverJson.ParseElement(body);
+            if (json.ValueKind != JsonValueKind.Object)
+                return ScreenshotResult.Failure(null);
+
+            var error = json.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String
+                ? e.GetString() : null;
+            var reason = json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String
+                ? r.GetString() : null;
+
+            var retryable = false;
+            IReadOnlyList<string>? suggestions = null;
+
+            if (json.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Object)
+            {
+                if (details.TryGetProperty("retryable", out var ret) &&
+                    (ret.ValueKind == JsonValueKind.True || ret.ValueKind == JsonValueKind.False))
+                    retryable = ret.GetBoolean();
+
+                if (details.TryGetProperty("suggestions", out var sugg) && sugg.ValueKind == JsonValueKind.Array)
+                {
+                    var list = new List<string>();
+                    foreach (var item in sugg.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String && item.GetString() is { } s)
+                            list.Add(s);
+                    }
+                    if (list.Count > 0) suggestions = list;
+                }
+            }
+
+            return ScreenshotResult.Failure(error, reason, retryable, suggestions);
+        }
+        catch
+        {
+            return ScreenshotResult.Failure(null);
+        }
     }
 
     /// <summary>
