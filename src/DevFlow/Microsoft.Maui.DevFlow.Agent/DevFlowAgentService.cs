@@ -60,6 +60,110 @@ public class PlatformAgentService : DevFlowAgentService
         }
     }
 
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        try
+        {
+#if IOS || MACCATALYST || MACOS
+            // NSUserDefaults: enumerate the app's persistent domain so we return
+            // only the app's own keys, not the global/system defaults search list.
+            var domain = !string.IsNullOrWhiteSpace(sharedName)
+                ? sharedName!
+                : NSBundle.MainBundle.BundleIdentifier;
+            if (string.IsNullOrEmpty(domain))
+                return null;
+
+            var representation = NSUserDefaults.StandardUserDefaults.PersistentDomainForName(domain);
+            if (representation is null)
+                return new List<string>();
+
+            var keys = new List<string>();
+            foreach (var key in representation.Keys)
+            {
+                var name = key?.ToString();
+                if (!string.IsNullOrEmpty(name))
+                    keys.Add(name!);
+            }
+            return keys;
+#elif ANDROID
+            // Mirror MAUI Essentials' store selection: default uses the default
+            // SharedPreferences, a sharedName uses a private named file.
+            var context = global::Android.App.Application.Context;
+            using var prefs = string.IsNullOrWhiteSpace(sharedName)
+#pragma warning disable CS0618 // GetDefaultSharedPreferences is the store Essentials uses
+                ? global::Android.Preferences.PreferenceManager.GetDefaultSharedPreferences(context)
+#pragma warning restore CS0618
+                : context.GetSharedPreferences(sharedName, global::Android.Content.FileCreationMode.Private);
+            var all = prefs?.All;
+            if (all is null)
+                return new List<string>();
+            return new List<string>(all.Keys);
+#elif WINDOWS
+            try
+            {
+                var localSettings = global::Windows.Storage.ApplicationData.Current.LocalSettings;
+                global::Windows.Storage.ApplicationDataContainer? container;
+                if (string.IsNullOrWhiteSpace(sharedName))
+                    container = localSettings;
+                else
+                    container = localSettings.Containers.ContainsKey(sharedName)
+                        ? localSettings.Containers[sharedName]
+                        : null;
+
+                if (container is null)
+                    return new List<string>();
+                return new List<string>(container.Values.Keys);
+            }
+            catch
+            {
+                // Unpackaged apps throw on ApplicationData.Current — fall back to the
+                // preferences.dat file MAUI Essentials writes for unpackaged apps.
+                return EnumerateUnpackagedWindowsPreferenceKeys(sharedName);
+            }
+#else
+            return base.EnumerateNativePreferenceKeys(sharedName);
+#endif
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+#if WINDOWS
+    private static IReadOnlyCollection<string>? EnumerateUnpackagedWindowsPreferenceKeys(string? sharedName)
+    {
+        try
+        {
+            var path = global::System.IO.Path.Combine(
+                Microsoft.Maui.Storage.FileSystem.AppDataDirectory, "..", "Settings", "preferences.dat");
+            if (!global::System.IO.File.Exists(path))
+                return new List<string>();
+
+            var json = global::System.IO.File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(json))
+                return new List<string>();
+
+            using var doc = global::System.Text.Json.JsonDocument.Parse(json);
+            var bucket = sharedName ?? string.Empty;
+            if (doc.RootElement.ValueKind == global::System.Text.Json.JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty(bucket, out var inner) &&
+                inner.ValueKind == global::System.Text.Json.JsonValueKind.Object)
+            {
+                var keys = new List<string>();
+                foreach (var prop in inner.EnumerateObject())
+                    keys.Add(prop.Name);
+                return keys;
+            }
+            return new List<string>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+#endif
+
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
     {
         try

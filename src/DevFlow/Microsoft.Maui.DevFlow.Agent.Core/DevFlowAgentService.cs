@@ -5567,19 +5567,58 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             SaveKnownPreferenceKeys(keys, sharedName);
     }
 
+    /// <summary>
+    /// Enumerate the preference keys actually present in the platform's backing
+    /// store (e.g. <c>NSUserDefaults</c>, Android <c>SharedPreferences</c>,
+    /// Windows <c>LocalSettings</c>) for the given <paramref name="sharedName"/>.
+    /// </summary>
+    /// <returns>
+    /// The keys present in the store (possibly empty) when the platform can
+    /// enumerate it, or <c>null</c> when it cannot. When <c>null</c> is returned,
+    /// <see cref="HandlePreferencesList"/> falls back to DevFlow's best-effort
+    /// tracked-key registry and reports the result as incomplete so callers know
+    /// app-written keys may be missing.
+    /// </returns>
+    protected virtual IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName) => null;
+
     private Task<HttpResponse> HandlePreferencesList(HttpRequest request)
     {
         try
         {
             request.QueryParams.TryGetValue("sharedName", out var sharedName);
-            var keys = GetKnownPreferenceKeys(sharedName);
+
+            var registryKeys = GetKnownPreferenceKeys(sharedName);
+
+            IReadOnlyCollection<string>? nativeKeys;
+            try
+            {
+                nativeKeys = EnumerateNativePreferenceKeys(sharedName);
+            }
+            catch
+            {
+                // Best-effort: any platform failure degrades to registry-only.
+                nativeKeys = null;
+            }
+
+            var merged = PreferenceKeyMerger.Merge(
+                registryKeys,
+                nativeKeys,
+                excludeKeys: new[] { PreferencesKeyRegistryKey });
+
             var entries = new List<object>();
-            foreach (var key in keys.OrderBy(k => k))
+            foreach (var key in merged.Keys)
             {
                 var (value, type) = ReadPreferenceValue(key, sharedName);
                 entries.Add(new { key, value, type, sharedName });
             }
-            return Task.FromResult(HttpResponse.Json(new { keys = entries }));
+
+            return Task.FromResult(HttpResponse.Json(new
+            {
+                keys = entries,
+                source = merged.Source,
+                complete = merged.Complete,
+                sharedName
+            }));
         }
         catch (Exception ex)
         {

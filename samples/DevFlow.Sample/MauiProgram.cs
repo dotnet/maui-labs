@@ -49,7 +49,7 @@ public static class MauiProgram
 				"com.example.diagnostics",
 				"Sample diagnostics extension",
 				"1.0.0",
-				new[] { "build_info", "echo" });
+				new[] { "build_info", "echo", "seed_pref" });
 
 			diagnostics.MapTool(
 				"build_info",
@@ -109,6 +109,66 @@ public static class MauiProgram
 				annotations: new ExtensionToolAnnotations
 				{
 					Idempotent = true,
+					Category = "diagnostics"
+				});
+
+			// Writes a preference directly via Microsoft.Maui.Storage.Preferences,
+			// bypassing DevFlow's /preferences endpoints (so the key is NOT recorded
+			// in DevFlow's tracked-key registry). Reproduces issue #344: such keys must
+			// still appear in `preferences list` via native store enumeration.
+			diagnostics.MapTool(
+				"seed_pref",
+				"Writes a preference directly via the app's Preferences store, bypassing DevFlow tracking.",
+				"POST",
+				"seed-pref",
+				request =>
+				{
+					using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(request.Body) ? "{}" : request.Body);
+					var root = document.RootElement;
+					var key = root.TryGetProperty("key", out var keyElement) ? keyElement.GetString() : null;
+					if (string.IsNullOrEmpty(key))
+						return Task.FromResult(HttpResponse.Error("'key' is required."));
+
+					var value = root.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
+					var sharedName = root.TryGetProperty("sharedName", out var sharedElement) ? sharedElement.GetString() : null;
+
+					if (string.IsNullOrEmpty(sharedName))
+						Microsoft.Maui.Storage.Preferences.Default.Set(key, value ?? string.Empty);
+					else
+						Microsoft.Maui.Storage.Preferences.Default.Set(key, value ?? string.Empty, sharedName);
+
+					return Task.FromResult(HttpResponse.Json(new
+					{
+						key,
+						value = value ?? string.Empty,
+						sharedName,
+						seeded = true
+					}));
+				},
+				parameters: JsonDocument.Parse("""
+				{
+				  "type": "object",
+				  "properties": {
+				    "key": { "type": "string" },
+				    "value": { "type": "string" },
+				    "sharedName": { "type": "string" }
+				  },
+				  "required": ["key"]
+				}
+				""").RootElement.Clone(),
+				returns: JsonDocument.Parse("""
+				{
+				  "type": "object",
+				  "properties": {
+				    "key": { "type": "string" },
+				    "value": { "type": "string" },
+				    "sharedName": { "type": "string" },
+				    "seeded": { "type": "boolean" }
+				  }
+				}
+				""").RootElement.Clone(),
+				annotations: new ExtensionToolAnnotations
+				{
 					Category = "diagnostics"
 				});
 		});
