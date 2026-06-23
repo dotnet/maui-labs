@@ -21,11 +21,11 @@ public class AgentClient : IDisposable
     private const string NetworkApi = $"{ApiV1}/network";
 
     /// <summary>
-    /// Per-address connect timeout for the loopback happy-eyeballs dial (see
-    /// <see cref="ConnectLoopbackHappyEyeballsAsync"/>). A loopback refusal returns an RST almost
-    /// instantly, so this only bounds the rare case of a silently-dropped connect (e.g. a broken
-    /// VPN/tunnel adapter). It is deliberately kept well under <see cref="HttpClient.Timeout"/> so
-    /// that even if the first family stalls there is ample budget left to try the other one.
+    /// Per-address connect timeout for the loopback dial (see <see cref="ConnectLoopbackAsync"/>),
+    /// which attempts the IPv4 and IPv6 loopback addresses in turn. A loopback refusal returns an
+    /// RST almost instantly, so this only bounds the rare case of a silently-dropped connect (e.g. a
+    /// broken VPN/tunnel adapter). It is deliberately kept well under <see cref="HttpClient.Timeout"/>
+    /// so that even if the first family stalls there is ample budget left to try the other one.
     /// </summary>
     private static readonly TimeSpan LoopbackConnectAttemptTimeout = TimeSpan.FromSeconds(5);
 
@@ -78,9 +78,8 @@ public class AgentClient : IDisposable
 
     /// <summary>
     /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
-    /// <c>localhost</c> alias, a custom connect callback performs loopback "happy-eyeballs":
-    /// it attempts both the IPv4 (<c>127.0.0.1</c>) and IPv6 (<c>::1</c>) loopback addresses and
-    /// uses whichever accepts the connection first.
+    /// <c>localhost</c> alias, a custom connect callback attempts both the IPv4 (<c>127.0.0.1</c>)
+    /// and IPv6 (<c>::1</c>) loopback addresses and uses whichever accepts the connection first.
     /// </summary>
     /// <remarks>
     /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
@@ -97,7 +96,7 @@ public class AgentClient : IDisposable
 
         var handler = new SocketsHttpHandler
         {
-            ConnectCallback = ConnectLoopbackHappyEyeballsAsync
+            ConnectCallback = ConnectLoopbackAsync
         };
         return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
     }
@@ -105,7 +104,7 @@ public class AgentClient : IDisposable
     private static bool IsLoopbackAlias(string host)
         => string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
 
-    private static async ValueTask<Stream> ConnectLoopbackHappyEyeballsAsync(
+    private static async ValueTask<Stream> ConnectLoopbackAsync(
         SocketsHttpConnectionContext context, CancellationToken cancellationToken)
     {
         var port = context.DnsEndPoint.Port;

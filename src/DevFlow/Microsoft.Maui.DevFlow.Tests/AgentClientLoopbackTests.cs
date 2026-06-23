@@ -6,8 +6,8 @@ using Microsoft.Maui.DevFlow.Driver;
 namespace Microsoft.Maui.DevFlow.Tests;
 
 /// <summary>
-/// Verifies that <see cref="AgentClient"/> connecting to the <c>localhost</c> alias performs
-/// loopback "happy-eyeballs": it reaches the agent whether the agent listens on IPv4
+/// Verifies that <see cref="AgentClient"/> connecting to the <c>localhost</c> alias attempts both
+/// loopback address families: it reaches the agent whether the agent listens on IPv4
 /// (<c>127.0.0.1</c>) or IPv6 (<c>::1</c>) loopback only, without forcing a single family.
 /// Regression coverage for dotnet/maui-labs#341.
 /// </summary>
