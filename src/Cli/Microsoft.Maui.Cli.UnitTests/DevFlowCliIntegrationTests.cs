@@ -927,4 +927,23 @@ public class DevFlowCliIntegrationTests
             DevFlowCommands.ResetBrokerClientForTests();
         }
     }
+
+    [Fact]
+    public async Task Batch_WithSentinelPort_RefusesBeforeRunningAnyCommand()
+    {
+        // Regression guard: BatchAsync injects one resolved port into every sub-command, so an
+        // ambiguous target (sentinel 0) must fail fast before the loop rather than throwing
+        // mid-iteration and aborting the batch in a way that bypasses --continue-on-error.
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeRawAsync("devflow", "batch", "--agent-port", "0");
+
+        Assert.Equal(1, result.ExitCode);
+        var combined = result.StdOut + result.StdErr;
+        Assert.Contains("--agent-port", combined);
+        Assert.Contains("Multiple", combined);
+        // The batch must never have reached the agent for any sub-command.
+        Assert.Empty(server.RecordedRequests);
+    }
 }

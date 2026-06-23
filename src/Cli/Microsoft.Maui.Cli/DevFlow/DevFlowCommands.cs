@@ -42,6 +42,8 @@ public class DevFlowCommands
         ListBrokerAgentsAsync = Broker.BrokerClient.ListAgentsAsync;
         CreateAndroidPortForwarder = AndroidDevFlowPortForwarder.CreateDefault;
         IsAndroidAdbLikelyAvailable = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
+        _errorOccurred = false;
+        _agentLabelEmitted = false;
     }
 
     /// <summary>
@@ -4771,6 +4773,12 @@ public class DevFlowCommands
 
     private static async Task BatchAsync(string host, int port, int delayMs, bool continueOnError, bool human)
     {
+        // Fail fast before the loop: batch injects this single resolved port into every
+        // sub-command, so if the target is ambiguous (sentinel 0, issue #343) none of them
+        // can run. Guarding here also keeps the refusal from propagating mid-loop and
+        // aborting the batch in a way that bypasses --continue-on-error.
+        EnsureAgentPortResolved(port);
+
         var commandIndex = 0;
         var succeeded = 0;
         var failed = 0;
