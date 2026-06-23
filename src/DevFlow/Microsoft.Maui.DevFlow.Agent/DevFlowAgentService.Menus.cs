@@ -110,6 +110,16 @@ public partial class PlatformAgentService
 
             if (NativeItemMatches(item, id, path, request))
             {
+                if (!item.Enabled)
+                    return new
+                    {
+                        success = false,
+                        source = "appkit",
+                        title = item.Title,
+                        path,
+                        error = "disabled",
+                    };
+
                 var invoked = PerformNativeMenuItem(menu, item, i);
                 return new
                 {
@@ -253,6 +263,10 @@ public partial class PlatformAgentService
             else if (!string.IsNullOrWhiteSpace(request.Title) || !string.IsNullOrWhiteSpace(request.Path))
             {
                 var wanted = (request.Title ?? request.Path)!.Trim();
+                // On Catalyst the responder-chain key commands are flat (path == title), so a
+                // hierarchical path like "File/Save" is matched by its last segment.
+                if (string.IsNullOrWhiteSpace(request.Title) && wanted.Contains('/'))
+                    wanted = wanted[(wanted.LastIndexOf('/') + 1)..].Trim();
                 matches = string.Equals(wanted, command.Title?.Trim(), StringComparison.OrdinalIgnoreCase);
             }
             else if (!string.IsNullOrWhiteSpace(request.Key))

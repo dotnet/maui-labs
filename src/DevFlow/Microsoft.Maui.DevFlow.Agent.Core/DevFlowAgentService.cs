@@ -656,7 +656,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     storage = true,
                     profiler = IsProfilerFeatureAvailable,
                     jobs = IsJobsSupported,
-                    menus = true,
+                    menus = IsMenusSupported,
                     theme = true,
                 },
                 running = _app != null,

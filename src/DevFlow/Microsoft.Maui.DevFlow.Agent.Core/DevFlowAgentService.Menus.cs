@@ -23,6 +23,11 @@ public partial class DevFlowAgentService
     /// </summary>
     protected virtual bool IsNativeMenusSupported => false;
 
+    // The cross-platform MAUI MenuBarItems backbone works on every platform (returning a
+    // valid, possibly-empty tree), so the menus capability is advertised everywhere. Per-layer
+    // fidelity (native vs. MAUI) is reported by the ui.menus capability's maui/native flags.
+    protected virtual bool IsMenusSupported => true;
+
     /// <summary>
     /// Returns the native application-menu payload, or <c>null</c> when the platform has
     /// no inspectable native menu. Override in platform agents (macOS AppKit / Mac Catalyst).
@@ -418,7 +423,7 @@ public partial class DevFlowAgentService
 }
 
 /// <summary>Request body for invoking an application menu item.</summary>
-public class MenuInvokeRequest
+public sealed class MenuInvokeRequest
 {
     /// <summary>Stable id from the menu listing (e.g. <c>maui:w0/1/2</c>).</summary>
     public string? Id { get; set; }
