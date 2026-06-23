@@ -31,7 +31,10 @@ public class AgentClientLoopbackTests
     public async Task GetStatus_LocalhostReachesIPv6OnlyAgent()
     {
         if (!Socket.OSSupportsIPv6)
-            return; // No IPv6 loopback available on this host — nothing to assert.
+            return; // No IPv6 loopback on this host. xUnit v2 lacks a runtime Assert.Skip, so this
+                    // shows as "passed" rather than "skipped" — the repo-wide convention (see the
+                    // platform guards in AppleSimulatorCommandsTests). The IPv4-only test above
+                    // already exercises the core localhost fallback on such hosts.
 
         // Proves we do not force IPv4: an agent bound to ::1 only is still reachable via localhost.
         await using var agent = CannedAgent.Start(IPAddress.IPv6Loopback);

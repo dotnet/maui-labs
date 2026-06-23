@@ -19,6 +19,16 @@ public class AgentClient : IDisposable
     private const string StorageApi = $"{ApiV1}/storage";
     private const string DeviceApi = $"{ApiV1}/device";
     private const string NetworkApi = $"{ApiV1}/network";
+
+    /// <summary>
+    /// Per-address connect timeout for the loopback happy-eyeballs dial (see
+    /// <see cref="ConnectLoopbackHappyEyeballsAsync"/>). A loopback refusal returns an RST almost
+    /// instantly, so this only bounds the rare case of a silently-dropped connect (e.g. a broken
+    /// VPN/tunnel adapter). It is deliberately kept well under <see cref="HttpClient.Timeout"/> so
+    /// that even if the first family stalls there is ample budget left to try the other one.
+    /// </summary>
+    private static readonly TimeSpan LoopbackConnectAttemptTimeout = TimeSpan.FromSeconds(5);
+
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private bool _disposed;
@@ -112,7 +122,7 @@ public class AgentClient : IDisposable
             try
             {
                 using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                attemptCts.CancelAfter(TimeSpan.FromSeconds(5));
+                attemptCts.CancelAfter(LoopbackConnectAttemptTimeout);
                 await socket.ConnectAsync(address, port, attemptCts.Token).ConfigureAwait(false);
                 return new NetworkStream(socket, ownsSocket: true);
             }
@@ -120,6 +130,15 @@ public class AgentClient : IDisposable
             {
                 socket.Dispose();
                 throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // The per-attempt timeout fired while the caller's token is still valid. Record a
+                // descriptive reason (rather than a bare "operation canceled", which reads like a
+                // user-initiated cancellation) before falling through to the next loopback family.
+                socket.Dispose();
+                (failures ??= new List<Exception>()).Add(new TimeoutException(
+                    $"Connect to [{address}]:{port} timed out after {LoopbackConnectAttemptTimeout.TotalSeconds:0}s."));
             }
             catch (Exception ex)
             {
@@ -148,7 +167,7 @@ public class AgentClient : IDisposable
                     ordered.Add(address);
             }
         }
-        catch (Exception ex) when (ex is SocketException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is (SocketException or OperationCanceledException) && !cancellationToken.IsCancellationRequested)
         {
             // DNS lookup failed (unusual for "localhost") — fall through to the explicit loopbacks below.
         }
