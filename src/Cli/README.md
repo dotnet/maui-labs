@@ -15,7 +15,7 @@ A command-line tool for .NET MAUI development environment setup and device manag
 ### 1. Install the CLI tool
 
 ```bash
-dotnet tool install -g Microsoft.Maui.Cli
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
 ### 2. Check your environment
