@@ -4225,21 +4225,17 @@ public class DevFlowCommands
     /// </summary>
     private static string BuildMultipleAgentsMessage()
     {
-        var sb = new StringBuilder();
-        sb.Append("Multiple MAUI DevFlow agents are connected and no target was specified. ");
-        sb.Append("Re-run with --agent-port <port> to choose which app to target.");
         try
         {
             var brokerPort = Broker.BrokerClient.GetRunningBrokerPort();
             var agents = brokerPort.HasValue ? Broker.BrokerClient.ListAgents(brokerPort.Value) : null;
-            if (agents is { Length: > 0 })
-            {
-                foreach (var a in agents.OrderBy(a => a.Port))
-                    sb.Append($"{Environment.NewLine}  --agent-port {a.Port}  {a.AppName} ({a.Platform} {a.Tfm})");
-            }
+            return Broker.BrokerClient.BuildMultiAgentTargetingMessage(agents ?? []);
         }
-        catch { /* best effort: broker may be unavailable */ }
-        return sb.ToString();
+        catch
+        {
+            // best effort: broker may be unavailable — still return the base guidance
+            return Broker.BrokerClient.BuildMultiAgentTargetingMessage([]);
+        }
     }
 
     /// <summary>
