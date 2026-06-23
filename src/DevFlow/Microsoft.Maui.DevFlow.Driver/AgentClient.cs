@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -62,8 +63,108 @@ public class AgentClient : IDisposable
     public AgentClient(string host = "localhost", int port = 9223)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = CreateHttpClient(host);
     }
+
+    /// <summary>
+    /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
+    /// <c>localhost</c> alias, a custom connect callback performs loopback "happy-eyeballs":
+    /// it attempts both the IPv4 (<c>127.0.0.1</c>) and IPv6 (<c>::1</c>) loopback addresses and
+    /// uses whichever accepts the connection first.
+    /// </summary>
+    /// <remarks>
+    /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
+    /// may resolve <c>localhost</c> to IPv6 <c>::1</c> first and fail with "connection refused"
+    /// without falling back to IPv4 (see dotnet/maui-labs#341). Rather than forcing a single
+    /// address family — which has caused target-specific problems — this honors the OS-preferred
+    /// resolution order and falls back to the other loopback family on refusal. Explicit hosts
+    /// (a literal IP or a real hostname) are left on the default connect path unchanged.
+    /// </remarks>
+    private static HttpClient CreateHttpClient(string host)
+    {
+        if (!IsLoopbackAlias(host))
+            return new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+
+        var handler = new SocketsHttpHandler
+        {
+            ConnectCallback = ConnectLoopbackHappyEyeballsAsync
+        };
+        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
+    private static bool IsLoopbackAlias(string host)
+        => string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
+
+    private static async ValueTask<Stream> ConnectLoopbackHappyEyeballsAsync(
+        SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+    {
+        var port = context.DnsEndPoint.Port;
+        var candidates = await ResolveLoopbackCandidatesAsync(context.DnsEndPoint.Host, cancellationToken)
+            .ConfigureAwait(false);
+
+        List<Exception>? failures = null;
+        foreach (var address in candidates)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            try
+            {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attemptCts.CancelAfter(TimeSpan.FromSeconds(5));
+                await socket.ConnectAsync(address, port, attemptCts.Token).ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                socket.Dispose();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                socket.Dispose();
+                (failures ??= new List<Exception>()).Add(ex);
+            }
+        }
+
+        throw failures is { Count: > 0 }
+            ? new SocketException((int)SocketError.ConnectionRefused, BuildLoopbackFailureMessage(failures))
+            : new SocketException((int)SocketError.ConnectionRefused);
+    }
+
+    private static async Task<List<IPAddress>> ResolveLoopbackCandidatesAsync(string host, CancellationToken cancellationToken)
+    {
+        var ordered = new List<IPAddress>();
+
+        try
+        {
+            // Honor the OS-preferred resolution order (e.g. macOS commonly yields ::1 first).
+            foreach (var address in await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
+            {
+                if ((address.AddressFamily == AddressFamily.InterNetwork
+                        || address.AddressFamily == AddressFamily.InterNetworkV6)
+                    && !ordered.Contains(address))
+                    ordered.Add(address);
+            }
+        }
+        catch (Exception ex) when (ex is SocketException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            // DNS lookup failed (unusual for "localhost") — fall through to the explicit loopbacks below.
+        }
+
+        // Guarantee both loopback families are attempted, regardless of hosts-file quirks.
+        if (!ordered.Contains(IPAddress.Loopback))
+            ordered.Add(IPAddress.Loopback);
+        if (Socket.OSSupportsIPv6 && !ordered.Contains(IPAddress.IPv6Loopback))
+            ordered.Add(IPAddress.IPv6Loopback);
+
+        return ordered;
+    }
+
+    private static string BuildLoopbackFailureMessage(List<Exception> failures)
+        => "Could not connect to the DevFlow agent on any loopback address. "
+            + string.Join("; ", failures.Select(f => f.Message));
 
     /// <summary>
     /// Check if the agent is reachable.
