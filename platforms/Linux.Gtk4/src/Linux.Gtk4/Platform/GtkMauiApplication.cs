@@ -12,15 +12,6 @@ public abstract class GtkMauiApplication : IPlatformApplication
 	private const string DefaultApplicationId = "com.maui.linux";
 	private const string MauiApplicationIdMetadataKey = "MauiApplicationId";
 
-	// The backend calls gtk_css_provider_load_from_string (GTK 4.12+) and uses
-	// Gtk.FileDialog (GTK 4.10+). On older GTK these resolve to missing native
-	// entry points and the app crashes with a cryptic EntryPointNotFoundException.
-	private const uint MinimumGtkMajor = 4;
-	private const uint MinimumGtkMinor = 12;
-
-	// Log prefix derived from the assembly name instead of a hardcoded string.
-	private static readonly string LogPrefix = $"[{typeof(GtkMauiApplication).Assembly.GetName().Name}]";
-
 	private Gtk.Application _gtkApp = null!;
 	private IApplication _mauiApp = null!;
 	private GtkMauiContext _applicationContext = null!;
@@ -43,22 +34,11 @@ public abstract class GtkMauiApplication : IPlatformApplication
 
 	public void Run(string[] args)
 	{
+		// Fail fast with a friendly message before any GirCore GTK initialization.
+		GtkRuntime.EnsureSupported();
+
 		var applicationId = string.IsNullOrWhiteSpace(ApplicationId) ? null : ApplicationId;
-
-		try
-		{
-			_gtkApp = Gtk.Application.New(applicationId, Gio.ApplicationFlags.DefaultFlags);
-		}
-		catch (Exception ex) when (IsGtkLibraryMissing(ex))
-		{
-			var notFound = "GTK 4 was not found. Please install GTK 4.12 or newer and try again.";
-			Console.Error.WriteLine($"{LogPrefix} {notFound}");
-			throw new PlatformNotSupportedException(notFound, ex);
-		}
-
-		// Application.New succeeded, so GirCore is initialized and its native calls
-		// resolve — only now is it safe to query the runtime GTK version.
-		EnsureSupportedGtkVersion();
+		_gtkApp = Gtk.Application.New(applicationId, Gio.ApplicationFlags.DefaultFlags);
 
 		_gtkApp.OnActivate += OnActivate;
 		_gtkApp.OnShutdown += OnShutdown;
@@ -66,37 +46,6 @@ public abstract class GtkMauiApplication : IPlatformApplication
 		var exitCode = _gtkApp.Run(args);
 		Environment.ExitCode = exitCode;
 	}
-
-	/// <summary>
-	/// Verifies the GTK runtime is new enough for this backend and fails fast with
-	/// an actionable message otherwise. Without this, an old GTK produces a cryptic
-	/// <c>EntryPointNotFoundException</c> deep inside the first handler that loads CSS.
-	/// </summary>
-	/// <remarks>
-	/// Must be called after <c>Gtk.Application.New</c> has succeeded — that
-	/// initializes GirCore so the version functions resolve.
-	/// </remarks>
-	private static void EnsureSupportedGtkVersion()
-	{
-		var major = Gtk.Functions.GetMajorVersion();
-		var minor = Gtk.Functions.GetMinorVersion();
-
-		if (major > MinimumGtkMajor || (major == MinimumGtkMajor && minor >= MinimumGtkMinor))
-			return;
-
-		var micro = Gtk.Functions.GetMicroVersion();
-		var message =
-			$"This app needs GTK {MinimumGtkMajor}.{MinimumGtkMinor} or newer, but the installed " +
-			$"version is {major}.{minor}.{micro}. Please update GTK and try again.";
-
-		Console.Error.WriteLine($"{LogPrefix} {message}");
-		throw new PlatformNotSupportedException(message);
-	}
-
-	// A missing libgtk surfaces either directly as DllNotFoundException or wrapped
-	// in a TypeInitializationException when thrown from GirCore's type initializer.
-	private static bool IsGtkLibraryMissing(Exception ex) =>
-		ex is DllNotFoundException || ex.InnerException is DllNotFoundException;
 
 	private void OnActivate(Gio.Application sender, EventArgs args)
 	{
