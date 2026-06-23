@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
@@ -87,6 +88,56 @@ public class BrokerServerReaperTests
                 var secondPort = await RegisterAgentAndGetPortAsync(port, "/proj/App.csproj", "net10.0-macos");
                 Assert.Equal(firstPort, secondPort);
             });
+    }
+
+    [Fact]
+    public async Task Reaper_BrokerHttpEndpoints_AgreeAndDropStaleAgent_AfterCrash()
+    {
+        // Regression for the issue #342 contradiction: `agent status`/`agents` (read /api/agents)
+        // must never list an agent that `broker status`/`diagnose` (read /api/health agent count)
+        // report as gone. Both endpoints read the same _agents store, so once the reaper evicts a
+        // crashed agent they agree — there is a single source of truth with a single liveness filter.
+        await WithBrokerAsync(
+            reapInterval: TimeSpan.FromMilliseconds(150),
+            liveness: null, // real WebSocket ping-based liveness
+            body: async (broker, port) =>
+            {
+                var agent = await RegisterAgentAsync(port, "/proj/App.csproj", "net10.0-macos");
+                await WaitUntilAsync(() => broker.AgentCount == 1, TimeSpan.FromSeconds(2));
+
+                // Before the crash both endpoints agree the agent is present.
+                Assert.Equal(1, await GetHealthAgentCountAsync(port));
+                Assert.Equal(1, await GetAgentsListLengthAsync(port));
+
+                // Simulate an app crash: tear the socket down with no clean close handshake.
+                agent.Abort();
+                agent.Dispose();
+
+                await WaitUntilAsync(() => broker.AgentCount == 0, TimeSpan.FromSeconds(10));
+
+                // After eviction the two endpoints still agree — and the stale agent is gone from both.
+                var healthCount = await GetHealthAgentCountAsync(port);
+                var agentsLength = await GetAgentsListLengthAsync(port);
+                Assert.Equal(0, healthCount);
+                Assert.Equal(0, agentsLength);
+                Assert.Equal(healthCount, agentsLength);
+            });
+    }
+
+    private static async Task<int> GetHealthAgentCountAsync(int brokerPort)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var body = await http.GetStringAsync($"http://localhost:{brokerPort}/api/health");
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("agents").GetInt32();
+    }
+
+    private static async Task<int> GetAgentsListLengthAsync(int brokerPort)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var body = await http.GetStringAsync($"http://localhost:{brokerPort}/api/agents");
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetArrayLength();
     }
 
     private static async Task WithBrokerAsync(
