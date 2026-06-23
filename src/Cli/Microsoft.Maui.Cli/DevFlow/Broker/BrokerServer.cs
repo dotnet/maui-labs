@@ -36,7 +36,7 @@ public class BrokerServer : IDisposable
     private DateTime _lastActivity = DateTime.UtcNow;
     private Timer? _idleTimer;
     private Timer? _reapTimer;
-    private int _reaping;
+    private readonly SemaphoreSlim _reapLock = new(1, 1);
     private bool _disposed;
     private Action<string>? _log;
 
@@ -92,7 +92,7 @@ public class BrokerServer : IDisposable
         _idleTimer = new Timer(_ => CheckIdle(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
         // Start agent liveness reaper — evicts crashed/half-open agents promptly
-        _reapTimer = new Timer(_ => _ = ReapAgentsAsync(), null, _reapInterval, _reapInterval);
+        _reapTimer = new Timer(_ => _ = ReapOnTimerAsync(), null, _reapInterval, _reapInterval);
 
         try
         {
@@ -125,6 +125,12 @@ public class BrokerServer : IDisposable
                 await HandleAgentWebSocket(context);
                 return;
             }
+
+            // Reap dead agents before any read of agent state so `agent status`, `agents`, and
+            // `diagnose` reflect reality immediately after a crash — not only after the next timer
+            // sweep — and all read the same post-reap registry (a single source of truth).
+            if (method == "GET" && (path == "/api/health" || path == "/api/agents"))
+                await ReapAgentsAsync(_cts?.Token ?? CancellationToken.None);
 
             // HTTP endpoints for CLI
             var (statusCode, body) = (method, path) switch
@@ -283,47 +289,65 @@ public class BrokerServer : IDisposable
     }
 
     /// <summary>
-    /// Periodically probes registered agents and evicts those whose connection is dead.
-    /// This catches crashed apps that leave a half-open socket the receive loop never notices.
+    /// Timer-driven sweep. Skipped when a sweep is already in flight so ticks can't pile up.
     /// </summary>
-    private async Task ReapAgentsAsync()
+    private async Task ReapOnTimerAsync()
     {
-        // Non-reentrant: a slow probe must not overlap the next timer tick.
-        if (Interlocked.Exchange(ref _reaping, 1) == 1) return;
+        if (!await _reapLock.WaitAsync(0)) return;
+        try { await ReapOnceAsync(); }
+        finally { _reapLock.Release(); }
+    }
 
-        try
+    /// <summary>
+    /// Read-driven sweep. Waits for any in-flight sweep then runs a fresh one so the caller reads a
+    /// fully reconciled registry. Serialized with the timer sweep so the broker stays the only
+    /// WebSocket sender (preserving the single-outstanding-send contract).
+    /// </summary>
+    private async Task ReapAgentsAsync(CancellationToken cancellationToken)
+    {
+        try { await _reapLock.WaitAsync(cancellationToken); }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
+
+        try { await ReapOnceAsync(); }
+        finally
+        {
+            try { _reapLock.Release(); } catch (ObjectDisposedException) { }
+        }
+    }
+
+    /// <summary>
+    /// Probes every registered agent and evicts the dead ones. Catches crashed apps that leave a
+    /// half-open socket the receive loop never notices.
+    /// </summary>
+    private async Task ReapOnceAsync()
+    {
+        if (_disposed || (_cts?.Token.IsCancellationRequested ?? true)) return;
+
+        foreach (var connection in _agents.Values.ToArray())
         {
             if (_disposed || (_cts?.Token.IsCancellationRequested ?? true)) return;
 
-            foreach (var connection in _agents.Values.ToArray())
+            bool alive;
+            if (connection.WebSocket.State != WebSocketState.Open)
             {
-                if (_disposed || (_cts?.Token.IsCancellationRequested ?? true)) return;
-
-                bool alive;
-                if (connection.WebSocket.State != WebSocketState.Open)
+                alive = false;
+            }
+            else
+            {
+                try
+                {
+                    using var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    alive = await _agentLivenessCheck(connection.WebSocket, probeCts.Token);
+                }
+                catch
                 {
                     alive = false;
                 }
-                else
-                {
-                    try
-                    {
-                        using var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                        alive = await _agentLivenessCheck(connection.WebSocket, probeCts.Token);
-                    }
-                    catch
-                    {
-                        alive = false;
-                    }
-                }
-
-                if (!alive)
-                    EvictAgent(connection, "liveness probe failed");
             }
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _reaping, 0);
+
+            if (!alive)
+                EvictAgent(connection, "liveness probe failed");
         }
     }
 
@@ -513,6 +537,7 @@ public class BrokerServer : IDisposable
         _cts?.Cancel();
         _idleTimer?.Dispose();
         _reapTimer?.Dispose();
+        try { _reapLock.Dispose(); } catch { }
         try { _listener?.Close(); } catch { }
         _cts?.Dispose();
     }

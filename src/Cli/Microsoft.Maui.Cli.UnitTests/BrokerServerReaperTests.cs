@@ -140,6 +140,29 @@ public class BrokerServerReaperTests
         return doc.RootElement.GetArrayLength();
     }
 
+    [Fact]
+    public async Task ReadEndpoints_EvictDeadAgentOnRead_WithoutWaitingForTimerSweep()
+    {
+        // The timer sweep is effectively disabled (10 min), so any eviction observed here can only
+        // come from the read-time liveness filter that `agent status`/`agents`/`diagnose` rely on.
+        await WithBrokerAsync(
+            reapInterval: TimeSpan.FromMinutes(10),
+            liveness: static (_, _) => Task.FromResult(false), // every probe reports the agent dead
+            body: async (broker, port) =>
+            {
+                using var agent = await RegisterAgentAsync(port, "/proj/App.csproj", "net10.0-macos");
+                Assert.Equal(1, broker.AgentCount);
+
+                // A single read of either endpoint must filter the dead agent out — and both agree.
+                var agentsLength = await GetAgentsListLengthAsync(port);
+                var healthCount = await GetHealthAgentCountAsync(port);
+
+                Assert.Equal(0, agentsLength);
+                Assert.Equal(0, healthCount);
+                Assert.Equal(0, broker.AgentCount);
+            });
+    }
+
     private static async Task WithBrokerAsync(
         TimeSpan reapInterval,
         Func<WebSocket, CancellationToken, Task<bool>>? liveness,
