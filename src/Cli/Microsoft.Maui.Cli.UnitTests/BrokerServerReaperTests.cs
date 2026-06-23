@@ -163,10 +163,52 @@ public class BrokerServerReaperTests
             });
     }
 
+    [Fact]
+    public async Task Handshake_ReleasesAssignedPort_WhenAgentVanishesBeforePublish()
+    {
+        // Regression for the port leak that the handshake reorder (send `registered` before publishing
+        // to _agents) could open (#342): if that handshake write fails — the agent crashed right after
+        // sending its register frame — the agent is never published, so neither EvictAgent nor the
+        // reaper can ever reclaim its port. The broker must release the freshly assigned port inline,
+        // or repeated early disconnects slowly exhaust the pool. This path is distinct from the
+        // post-publish eviction the other reaper tests cover.
+        var failNextHandshake = 1;
+        Func<WebSocket, byte[], CancellationToken, Task> sender = async (ws, payload, ct) =>
+        {
+            // Fail only the first handshake, simulating the agent vanishing mid-register; later
+            // registrations send normally.
+            if (Interlocked.Exchange(ref failNextHandshake, 0) == 1)
+                throw new WebSocketException("simulated handshake send failure");
+            await ws.SendAsync(payload, WebSocketMessageType.Text, true, ct);
+        };
+
+        await WithBrokerAsync(
+            reapInterval: TimeSpan.FromMinutes(10), // isolate the assertion from the timer sweep
+            liveness: static (_, _) => Task.FromResult(true),
+            handshakeResponseSender: sender,
+            body: async (broker, port) =>
+            {
+                // First registration: the broker assigns a port, the handshake send fails, and the
+                // agent is never published. With the fix the assigned port is released (no leak).
+                await TryRegisterExpectingNoResponseAsync(port, "/proj/App.csproj", "net10.0-macos");
+
+                await WaitUntilAsync(() => broker.AssignedPortCount == 0, TimeSpan.FromSeconds(5));
+                Assert.Equal(0, broker.AgentCount);
+                Assert.Equal(0, broker.AssignedPortCount);
+
+                // A subsequent healthy registration succeeds and holds exactly one port — proving the
+                // failed handshake stranded nothing.
+                using var agent = await RegisterAgentAsync(port, "/proj/App.csproj", "net10.0-macos");
+                Assert.Equal(1, broker.AgentCount);
+                Assert.Equal(1, broker.AssignedPortCount);
+            });
+    }
+
     private static async Task WithBrokerAsync(
         TimeSpan reapInterval,
         Func<WebSocket, CancellationToken, Task<bool>>? liveness,
-        Func<BrokerServer, int, Task> body)
+        Func<BrokerServer, int, Task> body,
+        Func<WebSocket, byte[], CancellationToken, Task>? handshakeResponseSender = null)
     {
         var tempDir = Directory.CreateTempSubdirectory("maui-broker-reaper-");
         var previousOverride = BrokerPaths.ConfigDirOverride;
@@ -180,7 +222,8 @@ public class BrokerServerReaperTests
             log: null,
             reapInterval: reapInterval,
             keepAliveInterval: TimeSpan.FromSeconds(30),
-            agentLivenessCheck: liveness);
+            agentLivenessCheck: liveness,
+            handshakeResponseSender: handshakeResponseSender);
 
         var runTask = Task.Run(() => broker.RunAsync(cts.Token));
         try
@@ -241,8 +284,39 @@ public class BrokerServerReaperTests
         var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
         using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(buffer, 0, result.Count));
         var assignedPort = doc.RootElement.GetProperty("port").GetInt32();
+        // Close cleanly so this helper drives eviction through the reaper rather than the
+        // monitor-loop abort path, keeping the port-reuse assertion unambiguous.
+        try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "test done", CancellationToken.None); }
+        catch { }
         ws.Dispose();
         return assignedPort;
+    }
+
+    /// <summary>
+    /// Registers an agent but expects the broker to tear the connection down without a `registered`
+    /// reply (used to drive the handshake-send-failure path). Never throws.
+    /// </summary>
+    private static async Task TryRegisterExpectingNoResponseAsync(int brokerPort, string project, string tfm)
+    {
+        using var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri($"ws://localhost:{brokerPort}/ws/agent"), CancellationToken.None);
+
+        var registration = JsonSerializer.Serialize(new
+        {
+            type = "register",
+            project,
+            tfm,
+            platform = "macOS",
+            appName = "ReaperTestApp"
+        });
+        await ws.SendAsync(Encoding.UTF8.GetBytes(registration), WebSocketMessageType.Text, true, CancellationToken.None);
+
+        try
+        {
+            var buffer = new byte[1024];
+            await ws.ReceiveAsync(buffer, CancellationToken.None);
+        }
+        catch { /* expected: broker aborted the connection after the failed handshake */ }
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)

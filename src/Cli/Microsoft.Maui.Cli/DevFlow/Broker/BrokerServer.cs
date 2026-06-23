@@ -28,6 +28,7 @@ public class BrokerServer : IDisposable
     private readonly TimeSpan _reapInterval;
     private readonly TimeSpan _keepAliveInterval;
     private readonly Func<WebSocket, CancellationToken, Task<bool>> _agentLivenessCheck;
+    private readonly Func<WebSocket, byte[], CancellationToken, Task> _handshakeResponseSender;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, AgentConnection> _agents = new();
@@ -44,6 +45,9 @@ public class BrokerServer : IDisposable
     public int AgentCount => _agents.Count;
     public bool IsRunning => _listener?.IsListening ?? false;
 
+    /// <summary>Number of ports currently reserved. Used by tests to assert no port leaks.</summary>
+    internal int AssignedPortCount { get { lock (_portLock) { return _assignedPorts.Count; } } }
+
     public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null)
         : this(port, idleTimeout, log, reapInterval: null, keepAliveInterval: null, agentLivenessCheck: null)
     {
@@ -55,13 +59,15 @@ public class BrokerServer : IDisposable
         Action<string>? log,
         TimeSpan? reapInterval,
         TimeSpan? keepAliveInterval,
-        Func<WebSocket, CancellationToken, Task<bool>>? agentLivenessCheck)
+        Func<WebSocket, CancellationToken, Task<bool>>? agentLivenessCheck,
+        Func<WebSocket, byte[], CancellationToken, Task>? handshakeResponseSender = null)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         _reapInterval = reapInterval ?? DefaultReapInterval;
         _keepAliveInterval = keepAliveInterval ?? DefaultKeepAliveInterval;
         _agentLivenessCheck = agentLivenessCheck ?? DefaultAgentLivenessCheckAsync;
+        _handshakeResponseSender = handshakeResponseSender ?? DefaultSendHandshakeResponseAsync;
         _log = log;
     }
 
@@ -91,8 +97,15 @@ public class BrokerServer : IDisposable
         // Start idle timer
         _idleTimer = new Timer(_ => CheckIdle(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
-        // Start agent liveness reaper — evicts crashed/half-open agents promptly
-        _reapTimer = new Timer(_ => _ = ReapOnTimerAsync(), null, _reapInterval, _reapInterval);
+        // Start agent liveness reaper — evicts crashed/half-open agents promptly. The timer callback
+        // is fire-and-forget, so surface any sweep fault to the log instead of silently swallowing it.
+        _reapTimer = new Timer(
+            _ => _ = ReapOnTimerAsync().ContinueWith(
+                t => Log($"Agent liveness sweep failed: {t.Exception?.GetBaseException().Message}"),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default),
+            null, _reapInterval, _reapInterval);
 
         try
         {
@@ -199,6 +212,7 @@ public class BrokerServer : IDisposable
 
             // If the agent already has an HTTP listener (late reconnection), use its current port
             int assignedPort;
+            bool portNewlyAssigned = false;
             if (registration.CurrentPort is > 0)
             {
                 assignedPort = registration.CurrentPort.Value;
@@ -218,6 +232,7 @@ public class BrokerServer : IDisposable
                     return;
                 }
                 assignedPort = newPort.Value;
+                portNewlyAssigned = true;
             }
 
             var agent = new AgentRegistration
@@ -241,7 +256,21 @@ public class BrokerServer : IDisposable
                 ["id"] = id,
                 ["port"] = assignedPort
             }, indented: false);
-            await ws.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, CancellationToken.None);
+            try
+            {
+                await _handshakeResponseSender(ws, Encoding.UTF8.GetBytes(response), CancellationToken.None);
+            }
+            catch
+            {
+                // The agent vanished before the handshake completed (e.g. crashed right after sending
+                // its register frame). It was never published to _agents, so neither EvictAgent nor the
+                // reaper can ever reclaim its port — release it here to avoid a permanent leak that would
+                // eventually exhaust the port pool. Only release a port we actually assigned, never a
+                // re-registration that reused the agent's existing CurrentPort. (#342)
+                if (portNewlyAssigned)
+                    ReleasePort(assignedPort);
+                throw;
+            }
 
             // Remove existing registration for same id (app restarted)
             if (_agents.TryRemove(id, out var existing))
@@ -352,8 +381,11 @@ public class BrokerServer : IDisposable
     }
 
     /// <summary>
-    /// Default liveness probe: write a tiny keep-alive frame to the agent. A write is what
-    /// surfaces a half-open/crashed peer; agents harmlessly ignore unknown inbound frames.
+    /// Default liveness probe: write a tiny keep-alive frame to the agent. A *failed* write surfaces an
+    /// already-broken connection right away; an abruptly crashed/half-open peer is not detected
+    /// instantly, however — a successful write only enqueues into the OS TCP send buffer, so detection
+    /// depends on the OS retransmit/keep-alive timeout and is realized over the next several seconds via
+    /// the WebSocket keep-alive and repeated reaps. Agents harmlessly ignore unknown inbound frames.
     /// </summary>
     private static async Task<bool> DefaultAgentLivenessCheckAsync(WebSocket ws, CancellationToken ct)
     {
@@ -369,6 +401,9 @@ public class BrokerServer : IDisposable
             return false;
         }
     }
+
+    private static async Task DefaultSendHandshakeResponseAsync(WebSocket ws, byte[] payload, CancellationToken ct)
+        => await ws.SendAsync(payload, WebSocketMessageType.Text, true, ct);
 
     /// <summary>
     /// Removes an agent from the registry. <see cref="ConcurrentDictionary{TKey,TValue}.TryRemove(TKey, out TValue)"/>
