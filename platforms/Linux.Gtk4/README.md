@@ -107,7 +107,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 | Requirement | Version |
 |---|---|
 | .NET SDK | 10.0+ |
-| GTK 4 libraries | 4.x (system package) |
+| GTK 4 libraries | 4.12+ (system package) |
 | WebKitGTK *(Blazor only)* | 6.x (system package) |
 
 ### Install GTK4 & WebKitGTK (Debian / Ubuntu)
