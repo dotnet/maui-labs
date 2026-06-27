@@ -957,34 +957,40 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         if (iconSource is FileImageSource fileSource && !string.IsNullOrEmpty(fileSource.File))
             image = NSImage.GetSystemSymbol(fileSource.File, null) ?? new NSImage(fileSource.File);
 
+        // Both icon and text items use an NSButton view with the Activated event. Native
+        // NSToolbarItem.Action/Target selector dispatch does NOT fire on real mouse clicks in
+        // .NET macOS bindings (accessibility/AXPress activation works, but the mouse path is dead),
+        // so routing every clickable item through NSButton.Activated is the only reliable mechanism.
+        var button = new NSButton
+        {
+            BezelStyle = NSBezelStyle.TexturedRounded,
+        };
+        button.SetButtonType(NSButtonType.MomentaryPushIn);
+
         if (image != null)
         {
-            // Icon items: use native NSToolbarItem rendering (Action/Target works)
+            // Icon item: render the symbol only. The NSToolbarItem.Label (set above to mauiItem.Text)
+            // still provides the accessibility name and the overflow/customization palette label, so the
+            // button itself stays icon-only for a tight, native toolbar look.
             nsItem.Image = image;
-            nsItem.Target = this;
-            nsItem.Action = new ObjCRuntime.Selector("toolbarItemClicked:");
+            button.Image = image;
+            button.Title = string.Empty;
+            button.ImagePosition = NSCellImagePosition.ImageOnly;
         }
         else
         {
-            // Text-only items: need an NSButton view for visible text rendering.
-            // Use Activated event on the button since Action/Target on view-based
-            // toolbar items doesn't dispatch reliably in .NET macOS bindings.
-            var button = new NSButton
-            {
-                BezelStyle = NSBezelStyle.TexturedRounded,
-                Title = mauiItem.Text ?? string.Empty,
-            };
-            button.SetButtonType(NSButtonType.MomentaryPushIn);
-
-            var capturedMauiItem = mauiItem;
-            button.Activated += (s, e) =>
-            {
-                if (capturedMauiItem.IsEnabled)
-                    ((IMenuItemController)capturedMauiItem).Activate();
-            };
-
-            nsItem.View = button;
+            // Text-only item.
+            button.Title = mauiItem.Text ?? string.Empty;
         }
+
+        var capturedMauiItem = mauiItem;
+        button.Activated += (s, e) =>
+        {
+            if (capturedMauiItem.IsEnabled)
+                ((IMenuItemController)capturedMauiItem).Activate();
+        };
+
+        nsItem.View = button;
 
         return nsItem;
     }
