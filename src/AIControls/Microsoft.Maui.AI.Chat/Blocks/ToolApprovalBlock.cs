@@ -10,8 +10,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// Call <see cref="Approve"/> or <see cref="Reject(string?)"/> to resume the conversation.
 /// </summary>
 /// <remarks>
-/// Emitted by <see cref="ToolApprovalHandler"/> when M.E.AI surfaces a <c>ToolApprovalRequestContent</c>
-/// (produced by wrapping a tool in an <c>ApprovalRequiredAIFunction</c>). As an
+/// Emitted by <see cref="ToolApprovalHandler"/> when M.E.AI surfaces a <see cref="ToolApprovalRequestContent"/>
+/// (produced by wrapping a tool in an <see cref="ApprovalRequiredAIFunction"/>). As an
 /// <see cref="IInteractiveBlock"/>, <see cref="AgentContext"/> awaits the user's decision and sends the
 /// corresponding response back to the chat client.
 /// </remarks>
