@@ -5,8 +5,8 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
-/// <summary>Built-in handler mapping M.E.AI <c>DataContent</c> (and image-generation results) into a <see cref="MediaContentBlock"/>.</summary>
-/// <remarks>Also extracts generated images from <c>ImageGenerationToolResultContent.Outputs</c>.</remarks>
+/// <summary>Built-in handler mapping M.E.AI <see cref="DataContent"/> (and image-generation results) into a <see cref="MediaContentBlock"/>.</summary>
+/// <remarks>Also extracts generated images from <see cref="ImageGenerationToolResultContent"/>.Outputs.</remarks>
 internal sealed class MediaContentHandler : ContentBlockHandler<MediaContentBlock>
 {
     public override BlockMappingResult<MediaContentBlock> Handle(

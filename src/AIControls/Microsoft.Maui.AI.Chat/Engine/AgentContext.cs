@@ -14,7 +14,7 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Drives the tool/approval loop: after streaming from the <see cref="UIAgent"/> it invokes any pending
 /// backend tools and awaits <see cref="IInteractiveBlock"/>s (e.g. approvals), then feeds the results
-/// back for another round. Rendered by the Controls layer's <c>CopilotChatView</c>.
+/// back for another round.
 /// </remarks>
 public class AgentContext(UIAgent agent) : IDisposable
 {

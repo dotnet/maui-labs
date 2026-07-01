@@ -8,7 +8,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// helpers (role, tool name, approval state) for templates and views to bind against.
 /// </summary>
 /// <remarks>
-/// One <c>ContentContext</c> is created per block by <c>CopilotChatView</c>; a
+/// One <see cref="ContentContext"/> is created per block by <see cref="CopilotChatView"/>; a
 /// <see cref="ContentTemplateSelector"/> then picks the <see cref="ContentTemplate"/> that renders it.
 /// </remarks>
 public sealed class ContentContext

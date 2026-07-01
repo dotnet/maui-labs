@@ -13,7 +13,7 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Blocks are produced by a <see cref="ContentBlockHandler{TState}"/> from raw
 /// Microsoft.Extensions.AI content, grouped into a <see cref="ConversationTurn"/> by
-/// <see cref="AgentContext"/>, and rendered by a <c>ContentTemplate</c> in the Controls layer.
+/// <see cref="AgentContext"/>, and surfaced to the UI for rendering.
 /// </remarks>
 public abstract class ContentBlock
 {

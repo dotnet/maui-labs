@@ -10,7 +10,7 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Not produced by the pipeline: <see cref="AgentContext"/> adds it at the start of a streaming round
 /// and dismisses it (<see cref="Dismiss"/>) as soon as real content arrives or the turn completes.
-/// It renders as an assistant bubble via the Controls layer, just like any other block.
+/// It surfaces to the UI as an assistant message like any other block.
 /// </remarks>
 public sealed class ThinkingContentBlock : ContentBlock
 {
