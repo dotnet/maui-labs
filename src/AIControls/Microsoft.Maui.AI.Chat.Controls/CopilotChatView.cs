@@ -171,14 +171,12 @@ public partial class CopilotChatView : TemplatedView
         if (_sendButtonPart is not null)
             _sendButtonPart.Clicked += OnSendButtonClicked;
 
-        // Wire the nested message list — forward session, templates and options.
+        // Wire the nested message list — forward session and templates.
         if (_messageListPart is not null)
         {
             _messageListPart.ItemsChanged -= OnMessageItemsChanged;
             _messageListPart.ItemsChanged += OnMessageItemsChanged;
             _messageListPart.Session = Session;
-            _messageListPart.ShowToolCalls = ShowToolCalls;
-            _messageListPart.ShowToolResults = ShowToolResults;
             SyncContentTemplates();
         }
 

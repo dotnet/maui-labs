@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 [ContentProperty(nameof(Templates))]
@@ -7,32 +5,25 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// Picks a <see cref="ContentTemplate"/> for each <see cref="ContentContext"/> by asking every
 /// registered template's <c>When(...)</c> and choosing the highest-priority match.
 /// </summary>
-/// <remarks>Drives the <see cref="CopilotChatView"/> message list; falls back to a diagnostic label when nothing matches.</remarks>
+/// <remarks>
+/// The registered templates act as an allow-list: a block is only rendered if some template matches it.
+/// When nothing matches, the block renders as an empty (zero-size) view — omitting a template is how you
+/// suppress a block kind (e.g. leave out <see cref="FunctionInvocationTemplate"/> to hide tool calls). To
+/// render unexpected blocks with a catch-all instead, register a low-priority <see cref="DefaultContentTemplate"/>.
+/// </remarks>
 public class ContentTemplateSelector : DataTemplateSelector
 {
-    private static readonly DataTemplate FallbackTemplate =
-        new(() =>
-        {
-            var label = new Label
-            {
-                FontSize = 12,
-                Padding = new Thickness(4),
-                TextColor = Colors.Gray,
-            };
-
-            label.SetBinding(
-                Label.TextProperty,
-                new Binding(path: ".", converter: MissingTemplateTextConverter.Instance));
-
-            return label;
-        });
+    // Renders nothing: an unmatched block occupies no visible space. Templates are the
+    // allow-list — to show a block kind, register a matching template; to hide it, omit one.
+    private static readonly DataTemplate EmptyTemplate =
+        new(() => new ContentView { IsVisible = false, HeightRequest = 0 });
 
     public IList<ContentTemplate> Templates { get; } = new List<ContentTemplate>();
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
     {
         if (item is not ContentContext context)
-            return FallbackTemplate;
+            return EmptyTemplate;
 
         ContentTemplate? selectedTemplate = null;
         var highestPriority = int.MinValue;
@@ -50,19 +41,6 @@ public class ContentTemplateSelector : DataTemplateSelector
             }
         }
 
-        return selectedTemplate?.GetTemplate() ?? FallbackTemplate;
-    }
-
-    private sealed class MissingTemplateTextConverter : IValueConverter
-    {
-        public static MissingTemplateTextConverter Instance { get; } = new();
-
-        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-            value is ContentContext context
-                ? $"No content template registered for {context.Block.GetType().Name}."
-                : "No content template registered.";
-
-        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-            throw new NotSupportedException();
+        return selectedTemplate?.GetTemplate() ?? EmptyTemplate;
     }
 }
