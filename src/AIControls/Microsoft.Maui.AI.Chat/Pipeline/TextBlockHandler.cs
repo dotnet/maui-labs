@@ -5,6 +5,8 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>Built-in fallback handler: accumulates M.E.AI <c>TextContent</c> into a <see cref="TextContentBlock"/>.</summary>
+/// <remarks>Registered last in the <see cref="BlockMappingPipeline"/>, so it claims any text no other handler took.</remarks>
 internal sealed class TextBlockHandler : ContentBlockHandler<TextContentBlock>
 {
     public override BlockMappingResult<TextContentBlock> Handle(

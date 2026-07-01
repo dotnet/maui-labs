@@ -4,6 +4,8 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
+/// <summary>Matches a <see cref="Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock"/> once its result is available, optionally filtered by tool name.</summary>
+/// <remarks>Set <c>ViewType</c> to a custom view (e.g. a weather card) to render a specific tool's result.</remarks>
 public class FunctionResultTemplate : ContentTemplate
 {
     public string? ToolName { get; set; }

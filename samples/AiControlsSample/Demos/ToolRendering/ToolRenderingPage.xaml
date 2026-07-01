@@ -29,7 +29,6 @@
             <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />
             <chat:ToolApprovalTemplate ToolName="create_plan" ViewType="{x:Type local:PlanStepsView}" />
             <chat:FunctionResultTemplate />
-            <chat:ErrorContentTemplate />
             <chat:DefaultContentTemplate />
         </controls:CopilotChatView.ContentTemplates>
     </controls:CopilotChatView>

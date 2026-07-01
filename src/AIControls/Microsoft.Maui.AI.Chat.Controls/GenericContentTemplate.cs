@@ -34,7 +34,7 @@ public class GenericContentTemplate : ContentTemplate
     }
 
     /// <summary>
-    /// Optional tool name filter. Matches FunctionInvocationContentBlock or FunctionApprovalBlock tool name.
+    /// Optional tool name filter. Matches FunctionInvocationContentBlock or ToolApprovalBlock tool name.
     /// </summary>
     public string? ToolName
     {

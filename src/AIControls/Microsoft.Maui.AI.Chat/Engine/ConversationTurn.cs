@@ -3,6 +3,11 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// One exchange in a conversation: the request blocks (the user message) and the response blocks
+/// produced for it.
+/// </summary>
+/// <remarks>Created and populated by <see cref="AgentContext"/>.</remarks>
 public class ConversationTurn
 {
     private readonly List<ContentBlock> _requestBlocks = new();

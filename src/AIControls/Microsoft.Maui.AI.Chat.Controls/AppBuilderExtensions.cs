@@ -5,6 +5,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <summary>
 /// Extension methods for registering the AI Chat Controls library.
 /// </summary>
+/// <summary>MAUI app-builder extensions that register the chat control's services and resources (call <c>UseChatControls</c>).</summary>
 public static class AppBuilderExtensions
 {
     /// <summary>
