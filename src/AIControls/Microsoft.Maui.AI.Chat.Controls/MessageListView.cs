@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using System.Linq;
+using System.Collections.Specialized;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat;
 
@@ -28,13 +28,51 @@ public partial class MessageListView : TemplatedView
             typeof(MessageListView),
             propertyChanged: OnSessionChanged);
 
+    public static readonly BindableProperty ContentTemplatesProperty =
+        BindableProperty.Create(
+            nameof(ContentTemplates),
+            typeof(IList<ContentTemplate>),
+            typeof(MessageListView),
+            defaultValueCreator: _ => new ObservableCollection<ContentTemplate>(),
+            propertyChanged: (b, o, n) =>
+            {
+                var self = (MessageListView)b;
+                if (o is INotifyCollectionChanged oldNcc)
+                    oldNcc.CollectionChanged -= self.OnContentTemplatesChanged;
+                if (n is INotifyCollectionChanged newNcc)
+                    newNcc.CollectionChanged += self.OnContentTemplatesChanged;
+                self.RebuildTemplateSelector();
+            });
+
+    private static readonly BindablePropertyKey ItemsPropertyKey =
+        BindableProperty.CreateReadOnly(
+            nameof(Items),
+            typeof(ReadOnlyObservableCollection<ContentContext>),
+            typeof(MessageListView),
+            null);
+
+    public static readonly BindableProperty ItemsProperty = ItemsPropertyKey.BindableProperty;
+
     public AgentContext? Session
     {
         get => (AgentContext?)GetValue(SessionProperty);
         set => SetValue(SessionProperty, value);
     }
 
-    private readonly ObservableCollection<ContentTemplate> _contentTemplates = [];
+    /// <summary>The content templates used to render each block; the highest matching priority wins.</summary>
+    public IList<ContentTemplate> ContentTemplates
+    {
+        get => (IList<ContentTemplate>)GetValue(ContentTemplatesProperty);
+        set => SetValue(ContentTemplatesProperty, value);
+    }
+
+    /// <summary>
+    /// The rendered items, in order (including any transient thinking/error items). This is an observable,
+    /// read-only collection — a container can bind its <c>ItemsSource</c> to it and track live changes.
+    /// </summary>
+    public ReadOnlyObservableCollection<ContentContext> Items =>
+        (ReadOnlyObservableCollection<ContentContext>)GetValue(ItemsProperty);
+
     private readonly ObservableCollection<ContentContext> _items = [];
 
     private CollectionView? _messagesPart;
@@ -48,23 +86,18 @@ public partial class MessageListView : TemplatedView
     private ContentContext? _thinkingItem;   // transient tail while streaming
     private Exception? _shownError;           // dedupe: the error currently rendered
 
-    /// <summary>The content templates used to render each block, highest matching priority wins.</summary>
-    public IList<ContentTemplate> ContentTemplates => _contentTemplates;
-
-    /// <summary>The number of items currently rendered (including any transient thinking/error items).</summary>
-    public int ItemCount => _items.Count;
-
-    /// <summary>The blocks currently rendered, in order. Exposed for tests.</summary>
-    internal IReadOnlyList<ContentBlock> RenderedBlocks => _items.Select(i => i.Block).ToList();
-
-    /// <summary>Raised whenever the rendered item count changes (block added, removed, or rebuilt).</summary>
-    public event EventHandler? ItemsChanged;
-
     public MessageListView()
     {
-        _contentTemplates.CollectionChanged += (_, _) => RebuildTemplateSelector();
+        SetValue(ItemsPropertyKey, new ReadOnlyObservableCollection<ContentContext>(_items));
+
+        if (ContentTemplates is INotifyCollectionChanged ncc)
+            ncc.CollectionChanged += OnContentTemplatesChanged;
+
         SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.MessageListViewTemplate);
     }
+
+    private void OnContentTemplatesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        RebuildTemplateSelector();
 
     protected override void OnParentSet()
     {
@@ -97,7 +130,7 @@ public partial class MessageListView : TemplatedView
             return;
 
         var selector = new ContentTemplateSelector();
-        foreach (var t in _contentTemplates)
+        foreach (var t in ContentTemplates)
             selector.Templates.Add(t);
         _messagesPart.ItemTemplate = selector;
     }
@@ -155,7 +188,6 @@ public partial class MessageListView : TemplatedView
             RemoveThinkingItem();
             _shownError = ex;
             _items.Add(new ContentContext(Session, new ErrorContentBlock(ex.Message)));
-            NotifyItemsChanged();
             ScrollToLatestMessage();
             return;
         }
@@ -173,7 +205,6 @@ public partial class MessageListView : TemplatedView
 
         _items.Add(new ContentContext(Session, block));
         _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
-        NotifyItemsChanged();
 
         UpdateThinkingItem();
         ScrollToLatestMessage();
@@ -210,7 +241,6 @@ public partial class MessageListView : TemplatedView
 
         if (Session is null)
         {
-            NotifyItemsChanged();
             return;
         }
 
@@ -235,7 +265,6 @@ public partial class MessageListView : TemplatedView
             _items.Add(new ContentContext(Session, new ErrorContentBlock(ex.Message)));
         }
 
-        NotifyItemsChanged();
         UpdateThinkingItem();
         ScrollToLatestMessage();
     }
@@ -251,7 +280,6 @@ public partial class MessageListView : TemplatedView
         {
             _thinkingItem = new ContentContext(Session!, new ThinkingContentBlock());
             _items.Add(_thinkingItem);
-            NotifyItemsChanged();
             ScrollToLatestMessage();
         }
         else if (!want && _thinkingItem is not null)
@@ -267,7 +295,6 @@ public partial class MessageListView : TemplatedView
 
         _items.Remove(_thinkingItem);
         _thinkingItem = null;
-        NotifyItemsChanged();
     }
 
     private bool ShouldShowThinking()
@@ -295,8 +322,6 @@ public partial class MessageListView : TemplatedView
             && block is TextContentBlock or MediaContentBlock;
         return !isAssistantContent;
     }
-
-    private void NotifyItemsChanged() => ItemsChanged?.Invoke(this, EventArgs.Empty);
 
     private void ScrollToLatestMessage()
     {
