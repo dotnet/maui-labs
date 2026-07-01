@@ -25,7 +25,7 @@ public class BlockMappingPipelineTests
     }
 
     [Fact]
-    public async Task Process_SingleTextUpdate_EmitsOneRichContentBlock()
+    public async Task Process_SingleTextUpdate_EmitsOneTextContentBlock()
     {
         var pipeline = CreatePipelineWithTextHandler();
         var update = new ChatResponseUpdate
@@ -38,7 +38,7 @@ public class BlockMappingPipelineTests
         var blocks = await ProcessAsync(pipeline, update);
 
         Assert.Single(blocks);
-        var block = Assert.IsType<RichContentBlock>(blocks[0]);
+        var block = Assert.IsType<TextContentBlock>(blocks[0]);
         Assert.Equal("Hello", block.RawText);
         Assert.Equal("msg-1", block.Id);
         Assert.Equal(ChatRole.Assistant, block.Role);
@@ -68,7 +68,7 @@ public class BlockMappingPipelineTests
         var blocks2 = await ProcessAsync(pipeline, update2);
         Assert.Empty(blocks2);
 
-        var block = Assert.IsType<RichContentBlock>(blocks1[0]);
+        var block = Assert.IsType<TextContentBlock>(blocks1[0]);
         Assert.Equal("Hello world", block.RawText);
     }
 
@@ -155,7 +155,7 @@ public class BlockMappingPipelineTests
         var blocks = await ProcessAsync(pipeline, update2);
 
         Assert.Single(blocks);
-        var block = Assert.IsType<RichContentBlock>(blocks[0]);
+        var block = Assert.IsType<TextContentBlock>(blocks[0]);
         Assert.Equal("Second", block.RawText);
         Assert.Equal("msg-2", block.Id);
     }

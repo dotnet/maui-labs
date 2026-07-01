@@ -48,14 +48,14 @@ public class MessageListTests
     }
 
     [Fact]
-    public async Task MessageContent_IsAccessibleViaRichContentBlock()
+    public async Task MessageContent_IsAccessibleViaTextContentBlock()
     {
         var session = SessionFactory.Create("World!");
         await session.SendMessageAsync("Hello");
 
         var turn = session.Turns[0];
-        var userBlock = turn.RequestBlocks.OfType<RichContentBlock>().First();
-        var assistantBlock = turn.ResponseBlocks.OfType<RichContentBlock>().First();
+        var userBlock = turn.RequestBlocks.OfType<TextContentBlock>().First();
+        var assistantBlock = turn.ResponseBlocks.OfType<TextContentBlock>().First();
 
         Assert.Equal("Hello", userBlock.RawText);
         Assert.Equal("World!", assistantBlock.RawText);
@@ -92,7 +92,7 @@ public class MessageListTests
 
     /// <summary>
     /// Mirrors Blazor: StreamingBlock_ShowsAccumulatedText.
-    /// Multiple streamed tokens should accumulate into a single RichContentBlock.
+    /// Multiple streamed tokens should accumulate into a single TextContentBlock.
     /// </summary>
     [Fact]
     public async Task StreamingTokens_AccumulateInSingleBlock()
@@ -103,7 +103,7 @@ public class MessageListTests
         await session.SendMessageAsync("Hi");
 
         var turn = session.Turns[0];
-        var responseBlocks = turn.ResponseBlocks.OfType<RichContentBlock>().ToList();
+        var responseBlocks = turn.ResponseBlocks.OfType<TextContentBlock>().ToList();
 
         // Streaming tokens accumulate into block(s) — the text should all be present
         var allText = string.Join("", responseBlocks.Select(b => b.RawText));

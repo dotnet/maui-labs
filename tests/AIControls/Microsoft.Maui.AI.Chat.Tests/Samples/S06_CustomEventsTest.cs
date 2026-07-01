@@ -55,7 +55,7 @@ public class S06_CustomEventsTest
         Assert.Equal("info", notification.Level);
         Assert.Equal("Task started", notification.Message);
 
-        var textBlock = turn.ResponseBlocks.OfType<RichContentBlock>().Single();
+        var textBlock = turn.ResponseBlocks.OfType<TextContentBlock>().Single();
         Assert.Equal("Task complete.", textBlock.RawText);
     }
 
@@ -84,7 +84,7 @@ public class S06_CustomEventsTest
 
         var turn = context.Turns[0];
         Assert.Empty(turn.ResponseBlocks.OfType<NotificationBlock>());
-        var textBlock = turn.ResponseBlocks.OfType<RichContentBlock>().Single();
+        var textBlock = turn.ResponseBlocks.OfType<TextContentBlock>().Single();
         Assert.Equal("Hello!", textBlock.RawText);
     }
 

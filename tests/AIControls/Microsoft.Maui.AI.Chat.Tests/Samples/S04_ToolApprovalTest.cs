@@ -53,7 +53,7 @@ public class S04_ToolApprovalTest
             ConversationStatus.Idle,
         }, statuses);
 
-        var textBlock = context.Turns[0].ResponseBlocks.OfType<RichContentBlock>().Single();
+        var textBlock = context.Turns[0].ResponseBlocks.OfType<TextContentBlock>().Single();
         Assert.Contains("deleted", textBlock.RawText);
     }
 

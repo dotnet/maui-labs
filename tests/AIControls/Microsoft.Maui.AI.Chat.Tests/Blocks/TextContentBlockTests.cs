@@ -3,12 +3,12 @@
 
 namespace Microsoft.Maui.AI.Chat.Tests.Blocks;
 
-public class RichContentBlockTests
+public class TextContentBlockTests
 {
     [Fact]
     public void AppendText_AccumulatesTokens()
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         block.AppendText("Hello");
         block.AppendText(", ");
         block.AppendText("world!");
@@ -19,14 +19,14 @@ public class RichContentBlockTests
     [Fact]
     public void RawText_EmptyByDefault()
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         Assert.Equal(string.Empty, block.RawText);
     }
 
     [Fact]
     public void RawText_CachesResult()
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         block.AppendText("Hello");
 
         var first = block.RawText;
@@ -38,7 +38,7 @@ public class RichContentBlockTests
     [Fact]
     public void RawText_InvalidatesCacheOnAppend()
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         block.AppendText("Hello");
         var first = block.RawText;
 

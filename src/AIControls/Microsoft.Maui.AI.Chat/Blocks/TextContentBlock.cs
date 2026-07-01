@@ -3,7 +3,7 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
-public class RichContentBlock : ContentBlock
+public class TextContentBlock : ContentBlock
 {
     private readonly List<string> _segments = new();
     private string? _cachedText;
