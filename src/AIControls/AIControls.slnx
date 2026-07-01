@@ -3,9 +3,9 @@
   <Project Path="Microsoft.Maui.AI.Chat.Blazor/Microsoft.Maui.AI.Chat.Blazor.csproj" />
   <Project Path="Microsoft.Maui.AI.Chat.SourceGenerators/Microsoft.Maui.AI.Chat.SourceGenerators.csproj" />
   <Project Path="Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
-  <Project Path="../../tests/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
-  <Project Path="../../tests/Microsoft.Maui.AI.Chat.Blazor.Tests/Microsoft.Maui.AI.Chat.Blazor.Tests.csproj" />
-  <Project Path="../../tests/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
+  <Project Path="../../tests/AIControls/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
+  <Project Path="../../tests/AIControls/Microsoft.Maui.AI.Chat.Blazor.Tests/Microsoft.Maui.AI.Chat.Blazor.Tests.csproj" />
+  <Project Path="../../tests/AIControls/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
   <Project Path="../../samples/AiControlsSample/AiControlsSample.csproj" />
   <Project Path="../../samples/AiControlsBlazorSample/AiControlsBlazorSample.csproj" />
 </Solution>
