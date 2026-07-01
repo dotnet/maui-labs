@@ -77,7 +77,7 @@ public class UIAgentRecordedTests
     }
 
     [Fact]
-    public async Task TextStreaming_SingleTurn_ProducesRichContentBlock()
+    public async Task TextStreaming_SingleTurn_ProducesTextContentBlock()
     {
         const string baseline = "TextStreaming_SingleTurn.recording.json";
         var client = CreateReplayOrRecordClient(baseline);
@@ -94,7 +94,7 @@ public class UIAgentRecordedTests
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.NotEmpty(assistantBlocks);
-        var textBlock = Assert.IsType<RichContentBlock>(assistantBlocks[0]);
+        var textBlock = Assert.IsType<TextContentBlock>(assistantBlocks[0]);
         Assert.False(string.IsNullOrEmpty(textBlock.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, textBlock.LifecycleState);
     }
@@ -114,7 +114,7 @@ public class UIAgentRecordedTests
             turn1Blocks.Add(block);
         }
 
-        var text1 = turn1Blocks.OfType<RichContentBlock>()
+        var text1 = turn1Blocks.OfType<TextContentBlock>()
             .First(b => b.Role == ChatRole.Assistant);
         Assert.False(string.IsNullOrEmpty(text1.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, text1.LifecycleState);
@@ -127,7 +127,7 @@ public class UIAgentRecordedTests
             turn2Blocks.Add(block);
         }
 
-        var text2 = turn2Blocks.OfType<RichContentBlock>()
+        var text2 = turn2Blocks.OfType<TextContentBlock>()
             .First(b => b.Role == ChatRole.Assistant);
         Assert.False(string.IsNullOrEmpty(text2.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, text2.LifecycleState);
@@ -168,7 +168,7 @@ public class UIAgentRecordedTests
         Assert.Equal("GetWeather", toolBlock!.ToolName);
 
         // Should have text content after the tool call completes
-        var hasText = assistantBlocks.OfType<RichContentBlock>().Any(b => !string.IsNullOrEmpty(b.RawText));
+        var hasText = assistantBlocks.OfType<TextContentBlock>().Any(b => !string.IsNullOrEmpty(b.RawText));
         Assert.True(hasText, $"Expected text content. Block types: {string.Join(", ", assistantBlocks.Select(b => b.GetType().Name))}");
     }
 
@@ -206,7 +206,7 @@ public class UIAgentRecordedTests
 
         // After approval, should have continued to produce text
         var lastTurn = context.Turns[^1];
-        var textBlock = lastTurn.ResponseBlocks.OfType<RichContentBlock>().LastOrDefault();
+        var textBlock = lastTurn.ResponseBlocks.OfType<TextContentBlock>().LastOrDefault();
         Assert.NotNull(textBlock);
         Assert.False(string.IsNullOrEmpty(textBlock!.RawText));
     }

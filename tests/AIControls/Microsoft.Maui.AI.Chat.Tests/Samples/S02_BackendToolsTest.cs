@@ -49,7 +49,7 @@ public class S02_BackendToolsTest
         Assert.Equal("SearchRestaurants", invocationBlock.ToolName);
         Assert.True(invocationBlock.HasResult);
 
-        var textBlock = turn.ResponseBlocks.OfType<RichContentBlock>().Single();
+        var textBlock = turn.ResponseBlocks.OfType<TextContentBlock>().Single();
         Assert.Contains("Pizza Place", textBlock.RawText);
     }
 

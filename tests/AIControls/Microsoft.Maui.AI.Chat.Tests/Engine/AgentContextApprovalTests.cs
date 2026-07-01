@@ -179,7 +179,7 @@ public class AgentContextApprovalTests
         // Same turn should have both the approval block and the continuation text
         Assert.Single(context.Turns);
         var turn = context.Turns[0];
-        var textBlock = turn.ResponseBlocks.OfType<RichContentBlock>().SingleOrDefault();
+        var textBlock = turn.ResponseBlocks.OfType<TextContentBlock>().SingleOrDefault();
         Assert.NotNull(textBlock);
         Assert.Equal("Done!", textBlock!.RawText);
     }

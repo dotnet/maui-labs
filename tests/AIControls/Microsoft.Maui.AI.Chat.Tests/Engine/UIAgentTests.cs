@@ -27,12 +27,12 @@ public class UIAgentTests
 
         var userBlocks = blocks.Where(b => b.Role == ChatRole.User).ToList();
         Assert.NotEmpty(userBlocks);
-        var userBlock = Assert.IsType<RichContentBlock>(userBlocks[0]);
+        var userBlock = Assert.IsType<TextContentBlock>(userBlocks[0]);
         Assert.Equal("Hello", userBlock.RawText);
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.NotEmpty(assistantBlocks);
-        var assistantBlock = Assert.IsType<RichContentBlock>(assistantBlocks[0]);
+        var assistantBlock = Assert.IsType<TextContentBlock>(assistantBlocks[0]);
         Assert.Equal("Hi there!", assistantBlock.RawText);
     }
 
@@ -53,7 +53,7 @@ public class UIAgentTests
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.Single(assistantBlocks);
-        var rich = Assert.IsType<RichContentBlock>(assistantBlocks[0]);
+        var rich = Assert.IsType<TextContentBlock>(assistantBlocks[0]);
         Assert.Equal("Hello world!", rich.RawText);
     }
 

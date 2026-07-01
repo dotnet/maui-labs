@@ -47,7 +47,7 @@ public class UIAgentCustomHandlerTests
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.Contains(assistantBlocks, b => b is CitationBlock);
-        Assert.Contains(assistantBlocks, b => b is RichContentBlock);
+        Assert.Contains(assistantBlocks, b => b is TextContentBlock);
 
         static async IAsyncEnumerable<ChatResponseUpdate> EmitCitations(
             [EnumeratorCancellation] CancellationToken ct)

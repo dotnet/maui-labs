@@ -63,7 +63,7 @@ public class AgentContextTests
 
         await context.SendMessageAsync("My message");
 
-        var userBlock = Assert.IsType<RichContentBlock>(context.Turns[0].RequestBlocks[0]);
+        var userBlock = Assert.IsType<TextContentBlock>(context.Turns[0].RequestBlocks[0]);
         Assert.Equal("My message", userBlock.RawText);
     }
 
@@ -244,7 +244,7 @@ public class AgentContextTests
 
         await context.SendMessageAsync("Hello world");
 
-        var userBlock = Assert.IsType<RichContentBlock>(context.Turns[0].RequestBlocks[0]);
+        var userBlock = Assert.IsType<TextContentBlock>(context.Turns[0].RequestBlocks[0]);
         Assert.Equal("Hello world", userBlock.RawText);
     }
 }

@@ -26,7 +26,7 @@ public class UIAgentBaselineTests
 
         var assistantBlocks1 = turn1Blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.NotEmpty(assistantBlocks1);
-        var text1 = Assert.IsType<RichContentBlock>(assistantBlocks1[0]);
+        var text1 = Assert.IsType<TextContentBlock>(assistantBlocks1[0]);
         Assert.False(string.IsNullOrEmpty(text1.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, text1.LifecycleState);
 
@@ -40,7 +40,7 @@ public class UIAgentBaselineTests
 
         var assistantBlocks2 = turn2Blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.NotEmpty(assistantBlocks2);
-        var text2 = Assert.IsType<RichContentBlock>(assistantBlocks2[0]);
+        var text2 = Assert.IsType<TextContentBlock>(assistantBlocks2[0]);
         Assert.False(string.IsNullOrEmpty(text2.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, text2.LifecycleState);
     }

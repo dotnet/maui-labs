@@ -121,7 +121,7 @@ public class CustomBlockHandlerTests
         // but passes on it. Built-in text handler then claims it.
         Assert.True(customHandlerSawText);
         Assert.Single(blocks);
-        Assert.IsType<RichContentBlock>(blocks[0]);
+        Assert.IsType<TextContentBlock>(blocks[0]);
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class CustomBlockHandlerTests
         var blocks = await ProcessAsync(pipeline, update);
 
         Assert.Equal(2, blocks.Count);
-        Assert.Contains(blocks, b => b is RichContentBlock);
+        Assert.Contains(blocks, b => b is TextContentBlock);
         Assert.Contains(blocks, b => b is CitationBlock);
     }
 
