@@ -6,25 +6,28 @@
              xmlns:local="clr-namespace:AiControlsSample"
              x:Class="AiControlsSample.ToolRenderingPage"
              x:Name="ThisPage"
-             Title="Tool Rendering">
+             Title="AI Chat">
 
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="🗑️" Clicked="OnClearClicked" />
     </ContentPage.ToolbarItems>
 
     <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
-            WelcomeMessage="Ask me about weather, math, facts, or app info. Weather results show a rich card!"
+            WelcomeMessage="Try the core features: formatted text, image generation, a tool call, and an approval."
             WelcomeIcon="🔧">
             <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Give me 3 tips for a tidy desk with **bold** keywords</x:String>
+                <x:String>Draw a watercolor sunset over mountains</x:String>
                 <x:String>What's the weather in Tokyo?</x:String>
-                <x:String>Calculate (42 * 3) + 7</x:String>
-                <x:String>Tell me a random fact</x:String>
+                <x:String>Create a plan to organize my desk</x:String>
             </controls:CopilotChatView.SuggestionPrompts>
         <controls:CopilotChatView.ContentTemplates>
             <chat:TextContentTemplate Role="User" />
-            <chat:TextContentTemplate Role="Assistant" />
+            <chat:TextContentTemplate Role="Assistant" ViewType="{x:Type local:FormattedTextView}" />
+            <chat:MediaContentTemplate />
             <chat:FunctionCallTemplate />
             <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />
+            <chat:ToolApprovalTemplate ToolName="create_plan" ViewType="{x:Type local:PlanStepsView}" />
             <chat:FunctionResultTemplate />
             <chat:ErrorContentTemplate />
             <chat:DefaultContentTemplate />

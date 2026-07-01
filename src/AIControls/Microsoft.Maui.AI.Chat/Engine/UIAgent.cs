@@ -48,6 +48,12 @@ public class UIAgent : IDisposable
         _logger = (ILogger?)loggerFactory?.CreateLogger<BlockMappingPipeline>() ?? NullLogger.Instance;
     }
 
+    /// <summary>Clears the accumulated chat history so the next message starts a fresh conversation.</summary>
+    public void ClearHistory()
+    {
+        _history.Clear();
+    }
+
     public async IAsyncEnumerable<ContentBlock> SendMessageAsync(
         ChatMessage message,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -55,7 +61,6 @@ public class UIAgent : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         _history.Add(message);
-
         var pipeline = new BlockMappingPipeline(_options, _logger);
 
         // Process user message through pipeline

@@ -45,6 +45,29 @@ public class MediaContentHandlerTests
     }
 
     [Fact]
+    public async Task ImageGenerationToolResult_EmitsMediaContentBlockFromOutputs()
+    {
+        var pipeline = CreatePipeline();
+        var imageBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var result = new ImageGenerationToolResultContent("call-1")
+        {
+            Outputs = [new DataContent(imageBytes, "image/png")]
+        };
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Tool,
+            MessageId = "msg-img",
+            Contents = [result]
+        };
+
+        var blocks = await ProcessAsync(pipeline, update);
+
+        var block = Assert.IsType<MediaContentBlock>(Assert.Single(blocks));
+        Assert.Single(block.Items);
+        Assert.Equal("image/png", block.Items[0].MediaType);
+    }
+
+    [Fact]
     public async Task MultipleDataContents_SingleBlockAccumulates()
     {
         var pipeline = CreatePipeline();
