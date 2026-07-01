@@ -43,7 +43,9 @@ public class MessageListTests
 
         // 2 user blocks + 2 assistant blocks = 4 minimum
         Assert.True(blocks.Count >= 4, $"Expected >=4 blocks, got {blocks.Count}");
-        var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
+        var assistantBlocks = blocks
+            .Where(b => b.Role == ChatRole.Assistant && b is not ThinkingContentBlock)
+            .ToList();
         Assert.Equal(2, assistantBlocks.Count);
     }
 

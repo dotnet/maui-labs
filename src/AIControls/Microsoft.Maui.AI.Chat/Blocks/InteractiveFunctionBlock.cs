@@ -10,14 +10,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// <see cref="FunctionInvocationContentBlock"/> that holds the call and result.
 /// </summary>
 /// <remarks>Base of <see cref="ToolApprovalBlock"/>; pairs with <see cref="IInteractiveBlock"/>.</remarks>
-public abstract class InteractiveFunctionBlock : ContentBlock
+public abstract class InteractiveFunctionBlock(FunctionInvocationContentBlock innerBlock) : ContentBlock
 {
-    protected InteractiveFunctionBlock(FunctionInvocationContentBlock innerBlock)
-    {
-        InnerBlock = innerBlock;
-    }
-
-    public FunctionInvocationContentBlock InnerBlock { get; }
+    public FunctionInvocationContentBlock InnerBlock { get; } = innerBlock;
 
     public FunctionCallContent? Call => InnerBlock.Call;
 

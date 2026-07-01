@@ -7,8 +7,8 @@ namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>One or more media items (typically images).</summary>
 /// <remarks>
-/// Emitted by <see cref="MediaContentHandler"/> from M.E.AI <c>DataContent</c>, including images
-/// produced by an image-generation tool (extracted from <c>ImageGenerationToolResultContent</c>).
+/// Emitted by <see cref="MediaContentHandler"/> from M.E.AI <see cref="DataContent"/>, including images
+/// produced by an image-generation tool (extracted from <see cref="ImageGenerationToolResultContent"/>).
 /// Rendered by the Controls layer's <c>MediaContentView</c>.
 /// </remarks>
 public class MediaContentBlock : ContentBlock

@@ -362,6 +362,8 @@ public partial class CopilotChatView : TemplatedView
 
     private bool ShouldShowBlock(ContentBlock block)
     {
+        if (block is ThinkingContentBlock thinking && thinking.IsDismissed)
+            return false;
         if (!ShowToolCalls && block is FunctionInvocationContentBlock ficb && ficb.Result is null)
             return false;
         if (!ShowToolResults && block is FunctionInvocationContentBlock ficbr && ficbr.Result is not null)

@@ -22,6 +22,7 @@
                 <x:String>Create a plan to organize my desk</x:String>
             </controls:CopilotChatView.SuggestionPrompts>
         <controls:CopilotChatView.ContentTemplates>
+            <chat:ThinkingContentTemplate />
             <chat:TextContentTemplate Role="User" />
             <chat:GenericContentTemplate BlockType="{x:Type local:FormattedTextBlock}" ViewType="{x:Type local:FormattedTextView}" />
             <chat:MediaContentTemplate />
@@ -29,6 +30,7 @@
             <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />
             <chat:ToolApprovalTemplate ToolName="create_plan" ViewType="{x:Type local:PlanStepsView}" />
             <chat:FunctionResultTemplate />
+            <chat:ErrorContentTemplate />
             <chat:DefaultContentTemplate />
         </controls:CopilotChatView.ContentTemplates>
     </controls:CopilotChatView>
