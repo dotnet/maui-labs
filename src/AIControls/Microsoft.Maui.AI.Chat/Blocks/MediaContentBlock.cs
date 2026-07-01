@@ -9,7 +9,6 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Emitted by <see cref="MediaContentHandler"/> from M.E.AI <see cref="DataContent"/>, including images
 /// produced by an image-generation tool (extracted from <see cref="ImageGenerationToolResultContent"/>).
-/// Rendered by the Controls layer's <c>MediaContentView</c>.
 /// </remarks>
 public class MediaContentBlock : ContentBlock
 {

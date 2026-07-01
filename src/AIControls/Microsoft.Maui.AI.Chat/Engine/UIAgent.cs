@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
-/// Wraps a Microsoft.Extensions.AI <c>IChatClient</c>: sends messages, streams the response, owns the
+/// Wraps a Microsoft.Extensions.AI <see cref="IChatClient"/>: sends messages, streams the response, owns the
 /// chat history, and runs each update through the <see cref="BlockMappingPipeline"/> to yield
 /// <see cref="ContentBlock"/>s.
 /// </summary>
