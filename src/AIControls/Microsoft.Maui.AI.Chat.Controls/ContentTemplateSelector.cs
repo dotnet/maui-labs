@@ -7,7 +7,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// Picks a <see cref="ContentTemplate"/> for each <see cref="ContentContext"/> by asking every
 /// registered template's <c>When(...)</c> and choosing the highest-priority match.
 /// </summary>
-/// <remarks>Drives the <c>CopilotChatView</c> message list; falls back to a diagnostic label when nothing matches.</remarks>
+/// <remarks>Drives the <see cref="CopilotChatView"/> message list; falls back to a diagnostic label when nothing matches.</remarks>
 public class ContentTemplateSelector : DataTemplateSelector
 {
     private static readonly DataTemplate FallbackTemplate =

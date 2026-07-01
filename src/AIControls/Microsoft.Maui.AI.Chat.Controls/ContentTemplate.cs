@@ -4,7 +4,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
 /// Maps a <see cref="ContentContext"/> to a view via the <see cref="When"/> predicate and a
-/// <c>ViewType</c>. Declare instances in XAML inside <c>CopilotChatView.ContentTemplates</c>.
+/// <c>ViewType</c>. Declare instances in XAML inside <see cref="CopilotChatView"/>.ContentTemplates.
 /// </summary>
 /// <remarks>
 /// The <see cref="ContentTemplateSelector"/> evaluates all templates and picks the highest-priority

@@ -9,7 +9,7 @@ namespace Microsoft.Maui.AI.Chat;
 /// </summary>
 /// <remarks>
 /// Added to the current turn by <see cref="AgentContext"/> when streaming throws (alongside setting
-/// <see cref="ConversationStatus.Error"/>). Rendered by the Controls layer like any other block.
+/// <see cref="ConversationStatus.Error"/>). It surfaces to the UI as a message like any other block.
 /// </remarks>
 public sealed class ErrorContentBlock : ContentBlock
 {
