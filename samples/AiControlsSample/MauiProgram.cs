@@ -58,6 +58,7 @@ public static class MauiProgram
         var apiKey = aiSection["ApiKey"];
         var endpoint = aiSection["Endpoint"];
         var deploymentName = aiSection["DeploymentName"];
+        var imageDeploymentName = aiSection["ImageDeploymentName"];
 
         if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName))
         {
@@ -68,6 +69,7 @@ public static class MauiProgram
                   dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
+                  dotnet user-secrets --id ai-attributes-secrets set "AI:ImageDeploymentName" "<your-image-deployment>"
                 """);
         }
 
@@ -76,14 +78,32 @@ public static class MauiProgram
             new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
 
+        // Optional image-generation deployment (e.g. gpt-image-1). When configured,
+        // UseImageGeneration lets the chat model produce images inline in the same
+        // conversation; the image arrives as DataContent and renders as a MediaContentBlock.
+        IImageGenerator? imageGenerator = null;
+        if (!string.IsNullOrEmpty(imageDeploymentName))
+        {
+            imageGenerator = azureClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
+        }
+
         builder.Services.AddSingleton<IChatClient>(sp =>
         {
             var lf = sp.GetRequiredService<ILoggerFactory>();
-            return chatClient.AsIChatClient()
+            var clientBuilder = chatClient.AsIChatClient()
                 .AsBuilder()
-                .UseLogging(lf)
-                .UseFunctionInvocation()
-                .Build(sp);
+                .UseLogging(lf);
+
+            // Image generation must be registered BEFORE function invocation so the
+            // hosted image tool is handled beneath the function-invocation loop.
+            if (imageGenerator is not null)
+            {
+                clientBuilder.UseImageGeneration(imageGenerator);
+            }
+
+            clientBuilder.UseFunctionInvocation();
+
+            return clientBuilder.Build(sp);
         });
 
         return builder;
