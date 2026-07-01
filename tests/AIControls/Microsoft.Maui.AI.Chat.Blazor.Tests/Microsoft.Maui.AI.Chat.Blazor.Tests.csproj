@@ -18,9 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
-    <ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat.Blazor\Microsoft.Maui.AI.Chat.Blazor.csproj" />
-    <ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat.SourceGenerators\Microsoft.Maui.AI.Chat.SourceGenerators.csproj"
+    <ProjectReference Include="..\..\..\src\AIControls\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <ProjectReference Include="..\..\..\src\AIControls\Microsoft.Maui.AI.Chat.Blazor\Microsoft.Maui.AI.Chat.Blazor.csproj" />
+    <ProjectReference Include="..\..\..\src\AIControls\Microsoft.Maui.AI.Chat.SourceGenerators\Microsoft.Maui.AI.Chat.SourceGenerators.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
@@ -30,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\tests\Microsoft.Maui.AI.Chat.Tests\Baselines\**\*.json"
+    <Content Include="..\Microsoft.Maui.AI.Chat.Tests\Baselines\**\*.json"
              Link="Baselines\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
