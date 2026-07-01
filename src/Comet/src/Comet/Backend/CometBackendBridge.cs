@@ -36,12 +36,21 @@ namespace Comet.Backend
 			if (view is null) throw new ArgumentNullException(nameof(view));
 			if (factory is null) throw new ArgumentNullException(nameof(factory));
 
-			// Components with a Body render to their concrete subtree first.
-			var rendered = view.HasContent ? view.GetView() : view;
+			// Components and [Body] views render to their concrete subtree first (GetView
+			// runs CheckForBody, so a lazily-discovered [Body] materializes correctly);
+			// plain views return themselves.
+			var rendered = view.GetView();
 
 			var node = factory(rendered);
 			rendered.Node = node;
 			node.SetEventSink(new ViewEventSink(rendered));
+
+			// A Component/[Body] view collapses to its rendered subtree and never owns a
+			// node, so it wouldn't register as a hot-reload target through the Node setter.
+			// Register it explicitly: TriggerReload must call ITS Reload() so the replaced
+			// type re-renders and diffs onto the retained nodes.
+			if (!ReferenceEquals(rendered, view))
+				Microsoft.Maui.HotReload.MauiHotReloadHelper.AddActiveView(view);
 
 			// Track for the in-process dev agent (no-op unless enabled) BEFORE applying
 			// properties: own-content nodes (lists) materialize their children during

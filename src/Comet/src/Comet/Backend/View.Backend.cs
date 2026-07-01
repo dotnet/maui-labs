@@ -21,8 +21,43 @@ namespace Comet
 	/// </remarks>
 	public partial class View
 	{
+		ICometBackendNode? backendNode;
+
 		/// <summary>The retained backend node for this view, if it has been materialized.</summary>
-		internal ICometBackendNode? Node { get; set; }
+		internal ICometBackendNode? Node
+		{
+			get => backendNode;
+			set
+			{
+				backendNode = value;
+				// Mirror the legacy ViewHandler setter: a view that owns a live backend node
+				// is an active view for hot reload (MauiHotReloadHelper.TriggerReload targets
+				// registered active views; without this, reload never reaches the node path).
+				if (value is not null)
+					Microsoft.Maui.HotReload.MauiHotReloadHelper.AddActiveView(this);
+				else
+					Microsoft.Maui.HotReload.MauiHotReloadHelper.UnRegister(this);
+			}
+		}
+
+		/// <summary>
+		/// Node-backend twin of the ViewHandler transfer in <c>UpdateFromOldView</c>: the new
+		/// view adopts the old view's retained node, events rebind to the new view, and the
+		/// new view's set properties are re-emitted (unchanged values no-op on the backend's
+		/// retained state, changed values patch through and recompose).
+		/// </summary>
+		internal void TransferBackendNodeFrom(View oldView)
+		{
+			var node = oldView.Node;
+			if (node is null)
+				return;
+
+			oldView.Node = null;
+			Node = node;
+			node.SetEventSink(new ViewEventSink(this));
+			node.OnOwnerViewChanged(this);
+			ApplyChangedProperties(oldView, node);
+		}
 
 		/// <summary>
 		/// Creates the platform backend node for this control. Overridden by each

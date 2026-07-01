@@ -302,3 +302,44 @@ registrar never sees them and they trim.
 Non-breaking: the default (`true`) build is unchanged — maccatalyst compiles and
 the host suite stays 875 pass / 1 known-fail. Windows/MacCatalyst keep the legacy
 path; iOS/Android node-backend apps opt out for the smaller, fully-trimmed binary.
+
+## Hot reload on the node backend (gate: "hot reload preserved") — 2026-07-01
+
+The plan's Phase 1/2 exit criterion, verified for the first time on the node
+backend — and it required real fixes: the reload path still assumed the legacy
+handler contract (handlers lazily re-render, so a rebuilt tree "eventually"
+appears). The node backend pushes patches at diff time, so the reload path had
+to transfer the retained node tree explicitly:
+
+- `UpdateFromOldView` now transfers `Node` (adopt + event-sink rebind to the new
+  view + re-emit set properties) — the node twin of the ViewHandler transfer.
+- Views with a live `Node` register as hot-reload targets (`AddActiveView`), and
+  a Component/[Body] view that collapses to its rendered subtree registers at
+  materialize time (`TriggerReload` only reloads `Parent == null` roots).
+- A fresh hot-reload replacement has never rendered; the diff now force-builds it
+  when retained nodes are in play, and `GetRenderView`'s replacement branch diffs
+  the outgoing built tree into the replacement so the nodes carry over.
+- `TryMergeComponents` reuses an already-installed replacement instead of
+  constructing a second instance (which stranded the transferred node).
+- `ComposeBackendRoot` re-resolves its layout root per pass (read-only
+  `BuiltView`; a captured tree goes stale after reload — and building views on a
+  background flush thread crashes).
+- New protocol hook `ICometBackendNode.OnOwnerViewChanged(View)`: own-content
+  nodes (Drawer, NavigationView, ListView) re-point at the reloaded view and
+  re-materialize the content they built from the old tree.
+
+Verified: 4 host tests (`Backend/BackendHotReloadTests.cs` — prop patch onto the
+SAME retained node, event rebind, root-type replacement via TriggerReload,
+component replacement preserving `Component<TState>` state) + on-device demo
+(emulator, `CometComposeProbe`): `adb shell am broadcast -n
+com.comet.composeprobe/.HotReloadDemoReceiver` swaps `JetchatRoot→JetchatRootV2`
+(the exact two calls `CometMetadataUpdateHandler` makes when the runtime applies
+an EnC delta); the running Jetchat re-renders with the new inset, the typed
+composer text survives, and the emoji selector still opens (events + reactive
+re-layout intact through the re-materialized drawer content).
+
+KNOWN LIMITATIONS: (1) structural child insert/remove in a reloaded tree does
+not re-materialize nodes yet (a brand-new view with no same-type pair renders
+nothing — legacy recreated handlers lazily, the node path needs explicit
+Insert/RemoveChild materialization; follow-up); (2) the SwiftUI nodes inherit
+the no-op `OnOwnerViewChanged` — iOS needs the same own-content pass.

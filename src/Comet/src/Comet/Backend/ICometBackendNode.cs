@@ -64,6 +64,14 @@ namespace Comet.Backend
 
 		/// <summary>Sets (or clears) the sink that receives this node's events and gestures.</summary>
 		void SetEventSink(ICometEventSink? sink);
+
+		/// <summary>
+		/// Called when a (hot) reload rebuilt the view tree and this retained node was adopted
+		/// by the new view instance (see <c>View.TransferBackendNodeFrom</c>). Own-content nodes
+		/// that hold a view reference re-point to <paramref name="newView"/> and invalidate any
+		/// content they materialized from the old tree. Default no-op.
+		/// </summary>
+		void OnOwnerViewChanged(View newView) { }
 	}
 
 	/// <summary>

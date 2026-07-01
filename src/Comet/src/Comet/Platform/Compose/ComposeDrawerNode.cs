@@ -20,9 +20,10 @@ namespace Comet.Platform.Compose
 		// Material 3 ModalDrawerSheet is 360dp wide.
 		const float SheetWidthDp = 360f;
 
-		readonly Drawer _drawer;
+		Drawer _drawer;
 		readonly BackendContext _context;
 		readonly MutableState<bool> _open = new(false);
+		readonly MutableState<int> _contentVersion = new(0);
 		readonly DrawerStateHolder _holder = new(AndroidX.Compose.Material3.DrawerValue.Closed);
 		ComposeNode? _sideNode, _contentNode;
 
@@ -30,6 +31,18 @@ namespace Comet.Platform.Compose
 		{
 			_drawer = drawer;
 			_context = context;
+		}
+
+		/// <summary>A (hot) reload swapped the view tree: re-point at the new Drawer and
+		/// re-materialize its side/content subtrees (they were built from the old tree).</summary>
+		public override void OnOwnerViewChanged(View newView)
+		{
+			if (newView is not Drawer drawer)
+				return;
+			_drawer = drawer;
+			_sideNode = null;
+			_contentNode = null;
+			_contentVersion.Value++;
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -56,6 +69,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			_ = _contentVersion.Value;   // subscribe: a reload re-materializes content
 			EnsureContent();
 
 			bool open = _open.Value;

@@ -22,6 +22,11 @@ namespace Comet.Platform.Compose
 		View? _layoutRoot;
 		Microsoft.Maui.Graphics.Size _availableDp;
 
+		/// <summary>The logical root view: the layout target is re-resolved from it on every
+		/// pass because a (hot) reload rebuilds the view tree — a captured built tree would
+		/// go stale and the reloaded views would never be laid out.</summary>
+		View? _logicalRoot;
+
 		public ComposeBackendRoot(IServiceProvider services)
 			=> _context = new BackendContext(services);
 
@@ -45,7 +50,7 @@ namespace Comet.Platform.Compose
 
 			if (UseYogaLayout)
 			{
-				_layoutRoot = view.HasContent ? view.GetView() : view;
+				_logicalRoot = view;
 				_availableDp = new Microsoft.Maui.Graphics.Size(
 					metrics.WidthPixels / metrics.Density,
 					metrics.HeightPixels / metrics.Density);
@@ -61,6 +66,10 @@ namespace Comet.Platform.Compose
 
 		void RunLayout()
 		{
+			// Re-resolve the layout target: a (hot) reload rebuilds the view tree, so a
+			// captured built tree goes stale. Read-only (BuiltView, never GetView) — a
+			// flush can run off the main thread and building views there is not safe.
+			_layoutRoot = _logicalRoot?.BuiltView ?? _logicalRoot;
 			if (_layoutRoot is not null)
 				CometBackendLayoutEngine.Layout(_layoutRoot, _availableDp);
 		}

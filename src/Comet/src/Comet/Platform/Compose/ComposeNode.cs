@@ -308,6 +308,10 @@ namespace Comet.Platform.Compose
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 
+		/// <summary>A (hot) reload adopted this retained node onto a rebuilt view. Own-content
+		/// subclasses re-point their view reference and invalidate materialized content.</summary>
+		public virtual void OnOwnerViewChanged(View newView) { }
+
 		public void Dispose() { }
 
 		// Composition helpers --------------------------------------------------

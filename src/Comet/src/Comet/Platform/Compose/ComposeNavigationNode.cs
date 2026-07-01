@@ -16,7 +16,7 @@ namespace Comet.Platform.Compose
 	/// </summary>
 	sealed class ComposeNavigationNode : ComposeNode, IBackendManagesOwnContent
 	{
-		readonly NavigationView _nav;
+		NavigationView _nav;
 		readonly BackendContext _context;
 		readonly List<View> _stack = new();
 		// Each screen is materialized + laid out once and kept while it's on the stack, so pushing
@@ -58,6 +58,22 @@ namespace Comet.Platform.Compose
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
+
+		/// <summary>A (hot) reload swapped the view tree: re-point at the new NavigationView,
+		/// reset the stack to its content, and drop the materialized screens (old tree).
+		/// The new view's Navigate/Pop delegates were carried over by <c>UpdateFromOldView</c>'s
+		/// NavigationView transfer, so they still drive this node.</summary>
+		public override void OnOwnerViewChanged(View newView)
+		{
+			if (newView is not NavigationView nav)
+				return;
+			_nav = nav;
+			_stack.Clear();
+			_screens.Clear();
+			if (nav.Content is { } root)
+				_stack.Add(root);
+			_version.Value++;
+		}
 
 		static Microsoft.Maui.Graphics.Size ScreenSizeDp()
 		{

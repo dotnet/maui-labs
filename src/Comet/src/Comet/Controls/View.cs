@@ -252,6 +252,7 @@ namespace Comet
 				var oldView = view.ViewHandler;
 				this.ReloadHandler = view.ReloadHandler;
 				this.Gestures = view.Gestures;
+				TransferBackendNodeFrom(view);
 				view.ViewHandler = null;
 				view.replacedView?.Dispose();
 				this.ViewHandler = oldView;
@@ -295,6 +296,9 @@ namespace Comet
 				animations?.ForEach(x => x.Dispose());
 				ViewHandler?.SetVirtualView(this);
 				ReloadHandler?.Reload();
+				// On the node backend a reload can change intrinsic sizes without any signal
+				// flush; schedule one so the backend roots' AfterFlush re-layout runs.
+				Reactive.ReactiveScheduler.EnsureFlushScheduled();
 			}
 			finally
 			{
@@ -326,6 +330,8 @@ namespace Comet
 		public bool HasContent => Body is not null;
 		public View GetView() => GetRenderView();
 		View replacedView;
+		/// <summary>The hot-reload replacement installed on this view, if any (see <see cref="SetHotReloadReplacement"/>).</summary>
+		internal View HotReloadReplacedView => replacedView;
 		internal void SetHotReloadReplacement(View replacement, bool transferState = true)
 		{
 			if (replacement is null || replacement == this)
@@ -354,8 +360,16 @@ namespace Comet
 				: null;
 			if (replaced is not null && replaced != this)
 			{
+				// Diff the replacement's render against the outgoing built view so retained
+				// state transfers — on the node backend this moves the ICometBackendNode to
+				// the new subtree (patches are pushed at diff time; there is no lazy platform
+				// pull that would otherwise pick the new render up).
+				var outgoingBuilt = builtView;
 				SetHotReloadReplacement(replaced);
-				return builtView = replacedView.GetRenderView();
+				var newBuilt = replacedView.GetRenderView();
+				if (outgoingBuilt is not null && newBuilt is not null && newBuilt != outgoingBuilt)
+					newBuilt = newBuilt.Diff(outgoingBuilt, true);
+				return builtView = newBuilt;
 			}
 			CheckForBody();
 			if (Body is null)

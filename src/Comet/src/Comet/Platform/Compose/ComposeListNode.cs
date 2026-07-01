@@ -22,7 +22,7 @@ namespace Comet.Platform.Compose
 	/// </remarks>
 	sealed class ComposeListNode : ComposeNode
 	{
-		readonly IListView _list;
+		IListView _list;
 		readonly BackendContext _context;
 		readonly MutableState<int> _version = new(0);
 
@@ -44,6 +44,19 @@ namespace Comet.Platform.Compose
 		{
 			_list = list;
 			_context = context;
+		}
+
+		/// <summary>A (hot) reload swapped the view tree: re-point at the new list view and
+		/// drop the row cache (rows were materialized from the old tree).</summary>
+		public override void OnOwnerViewChanged(View newView)
+		{
+			if (newView is not IListView list)
+				return;
+			_list = list;
+			_rowCache.Clear();
+			_cachedVersion = -1;
+			_scrollerRegistered = false;
+			_version.Value++;
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)

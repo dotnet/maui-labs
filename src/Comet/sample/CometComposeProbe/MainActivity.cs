@@ -21,12 +21,23 @@ namespace CometComposeProbe
 	[Activity(Label = "Comet+Compose", MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
+#if DEBUG
+		/// <summary>The logical root, exposed so the hot-reload demo receiver can log reload state.</summary>
+		internal static View? RootView;
+#endif
+
 		protected override void OnCreate(Bundle? savedInstanceState)
 		{
 			base.OnCreate(savedInstanceState);
 			ActionBar?.Hide();
 
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
+
+#if DEBUG
+			// Must be on BEFORE any View is constructed: view registration and the
+			// active-view list (what TriggerReload targets) are gated on IsEnabled.
+			Microsoft.Maui.HotReload.MauiHotReloadHelper.IsEnabled = true;
+#endif
 
 			// Load Jetchat's real fonts (Montserrat titles/labels, Karla body) from bundled assets
 			// and register them per weight so the Compose backend renders the true outlines. Jetchat
@@ -101,6 +112,9 @@ namespace CometComposeProbe
 			Window.InsetsController?.SetSystemBarsAppearance(dark ? 0 : lightBars, lightBars);
 
 			var root = BuildUi();
+#if DEBUG
+			RootView = root;
+#endif
 
 			// Link taps in chat bubbles open the system browser (the gold's uriHandler.openUri).
 			CometSamples.Jetchat.JetchatConversation.OpenUrl = url =>
@@ -180,7 +194,12 @@ namespace CometComposeProbe
 
 		// The faithful Jetchat conversation screen (shared tree, identical on iOS). A ~24dp top
 		// inset clears the status bar.
+#if DEBUG
+		// A [Body] root is what hot reload targets (see HotReloadDemo.cs).
+		View BuildUi() => new JetchatRoot();
+#else
 		View BuildUi() => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24);
+#endif
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{
