@@ -19,15 +19,6 @@ public class ThinkingContentBlockTests
     {
         Assert.Equal("Working…", new ThinkingContentBlock("Working…").Text);
     }
-
-    [Fact]
-    public void Dismiss_SetsIsDismissed()
-    {
-        var block = new ThinkingContentBlock();
-        Assert.False(block.IsDismissed);
-        block.Dismiss();
-        Assert.True(block.IsDismissed);
-    }
 }
 
 public class AgentContextStatusBlockTests
@@ -54,6 +45,23 @@ public class AgentContextStatusBlockTests
         var turn = context.Turns[^1];
         Assert.DoesNotContain(turn.ResponseBlocks, b => b is ThinkingContentBlock);
         Assert.Contains(turn.ResponseBlocks, b => b is TextContentBlock);
+    }
+
+    [Fact]
+    public async Task Streaming_RaisesBlockRemoved_ForThinking()
+    {
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((msgs, opts, ct) => ResponseEmitters.EmitTextResponse("Hello", ct));
+
+        var context = new AgentContext(new UIAgent(client));
+        var removed = new List<ContentBlock>();
+        context.RegisterOnBlockRemoved((_, block) => removed.Add(block));
+
+        await context.SendMessageAsync("Hi");
+
+        // The transient thinking block is removed via the block-removed callback,
+        // not by mutating a "dismissed" flag the UI has to filter on.
+        Assert.Contains(removed, b => b is ThinkingContentBlock);
     }
 
     [Fact]
