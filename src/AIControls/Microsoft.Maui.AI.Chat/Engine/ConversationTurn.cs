@@ -29,6 +29,11 @@ public class ConversationTurn
         _responseBlocks.Add(block);
     }
 
+    internal void RemoveResponseBlock(ContentBlock block)
+    {
+        _responseBlocks.Remove(block);
+    }
+
     internal void ClearResponseBlocks()
     {
         _responseBlocks.Clear();
