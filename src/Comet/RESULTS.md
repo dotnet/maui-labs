@@ -343,3 +343,23 @@ not re-materialize nodes yet (a brand-new view with no same-type pair renders
 nothing — legacy recreated handlers lazily, the node path needs explicit
 Insert/RemoveChild materialization; follow-up); (2) the SwiftUI nodes inherit
 the no-op `OnOwnerViewChanged` — iOS needs the same own-content pass.
+
+## Backend patch-stream benchmarks (host, BenchmarkDotNet) — 2026-07-01
+
+`tests/Comet.Benchmarks/BackendMutationBenchmarks.cs` (the plan's verification
+item): pure Comet-side overhead of the diff→backend contract against a no-op
+recording node (no Compose/SwiftUI interop in the loop). net11.0, ShortRunJob,
+MemoryDiagnoser (allocated = per single op):
+
+| Scenario | Mean | Allocated |
+|---|---:|---:|
+| `SignalChange_PatchesNode` (steady-state reactive patch: signal → flush → one property to the retained node) | **657 ns** | 1.52 KB |
+| `Materialize_SmallTree` (5-view tree → nodes, set-only property emission) | 358 µs | 151 KB |
+| `Reload_DiffsOntoRetainedNodes` ([Body] rebuild + diff + node transfer — the hot-reload path) | 279 µs | 119 KB |
+
+The steady-state loop (what runs per user interaction) is sub-microsecond with
+~1.5 KB/op (dominated by the bound string interpolation). Reload of a small
+Body sits ~350× under the plan's 100 ms hot-reload budget. Materialization is
+one-time-per-view; its 151 KB (env/context dictionaries) is the number to
+revisit when the typed-storage conversion of the remaining string-keyed
+environment happens.
