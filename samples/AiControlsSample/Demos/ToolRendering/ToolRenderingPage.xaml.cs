@@ -23,6 +23,8 @@ public partial class ToolRenderingPage : ContentPage
         var agent = new UIAgent(chatClient, options =>
         {
             options.ChatOptions = chatOptions;
+            // Map raw M.E.AI weather content into a strongly-typed WeatherToolBlock.
+            options.AddBlockHandler(new WeatherToolBlockHandler());
         });
         Session = new AgentContext(agent);
 

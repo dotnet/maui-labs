@@ -12,40 +12,24 @@ public partial class WeatherResultView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        // The GetCurrentWeather tool returns a JSON object as its result.
-        // Parse it directly from the FunctionInvocationContentBlock and render a rich card.
-        if (ContentContext?.Block is FunctionInvocationContentBlock ficb && ficb.Result is { } resultContent)
+        // The WeatherToolBlockHandler projects the raw M.E.AI content into a
+        // strongly-typed WeatherToolBlock, so the view binds to typed properties.
+        if (ContentContext?.Block is WeatherToolBlock weather && weather.HasResult)
         {
-            if (TryParseWeatherJson(resultContent.Result?.ToString()))
-                return;
+            CityLabel.Text = weather.Location ?? weather.City ?? "Unknown";
+            TempLabel.Text = $"{weather.Temperature}°C";
+            ConditionLabel.Text = weather.Conditions ?? "--";
+            IconLabel.Text = weather.ConditionIcon ?? "🌡️";
+            HumidityLabel.Text = weather.Humidity != 0 ? $"{weather.Humidity}%" : "--";
+            WindLabel.Text = weather.WindSpeed != 0 ? $"{weather.WindSpeed} km/h" : "--";
+            FeelsLikeLabel.Text = weather.FeelsLike != 0 ? $"{weather.FeelsLike}°C" : "--";
+            return;
         }
 
-        // Nothing to render yet (call in flight or no result).
-        CityLabel.Text = "…";
-    }
-
-    private bool TryParseWeatherJson(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return false;
-
-        try
+        // Call in flight (no result yet) — show what we know.
+        if (ContentContext?.Block is WeatherToolBlock pending)
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            CityLabel.Text = root.TryGetProperty("location", out var loc) ? loc.GetString() : "Unknown";
-            TempLabel.Text = root.TryGetProperty("temperature", out var temp) ? $"{temp}°C" : "--";
-            ConditionLabel.Text = root.TryGetProperty("conditions", out var cond) ? cond.GetString() : "--";
-            IconLabel.Text = root.TryGetProperty("conditionIcon", out var icon) ? icon.GetString() : "🌡️";
-            HumidityLabel.Text = root.TryGetProperty("humidity", out var hum) ? $"{hum}%" : "--";
-            WindLabel.Text = root.TryGetProperty("windSpeed", out var wind) ? $"{wind} km/h" : "--";
-            FeelsLikeLabel.Text = root.TryGetProperty("feelsLike", out var feels) ? $"{feels}°C" : "--";
-            return true;
-        }
-        catch
-        {
-            return false;
+            CityLabel.Text = pending.City ?? "…";
         }
     }
 }
