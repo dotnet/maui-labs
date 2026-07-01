@@ -22,6 +22,7 @@ public class AgentContext(UIAgent agent) : IDisposable
     private readonly List<Action<ConversationTurn>> _turnAddedCallbacks = new();
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
+    private readonly List<Action<ConversationTurn, ContentBlock>> _blockRemovedCallbacks = new();
     private CancellationTokenSource? _streamingCts;
     private bool _disposed;
 
@@ -82,7 +83,7 @@ public class AgentContext(UIAgent agent) : IDisposable
 
         void EnsureThinking()
         {
-            if (thinking is { IsDismissed: false })
+            if (thinking is not null)
                 return;
             thinking = new ThinkingContentBlock
             {
@@ -96,11 +97,10 @@ public class AgentContext(UIAgent agent) : IDisposable
 
         void DismissThinking()
         {
-            if (thinking is null || thinking.IsDismissed)
+            if (thinking is null)
                 return;
-            thinking.Dismiss();
             turn.RemoveResponseBlock(thinking);
-            thinking.InvokeNotifyChanged();
+            NotifyBlockRemoved(turn, thinking);
             thinking = null;
         }
 
@@ -287,6 +287,13 @@ public class AgentContext(UIAgent agent) : IDisposable
         return new CallbackRegistration<Action<ConversationTurn, ContentBlock>>(_blockAddedCallbacks, callback);
     }
 
+    /// <summary>Registers a callback invoked when a transient block (e.g. the "Thinking…" placeholder) is removed.</summary>
+    public IDisposable RegisterOnBlockRemoved(Action<ConversationTurn, ContentBlock> callback)
+    {
+        _blockRemovedCallbacks.Add(callback);
+        return new CallbackRegistration<Action<ConversationTurn, ContentBlock>>(_blockRemovedCallbacks, callback);
+    }
+
     private void NotifyStatusChanged()
     {
         var snapshot = _statusChangedCallbacks.ToArray();
@@ -308,6 +315,15 @@ public class AgentContext(UIAgent agent) : IDisposable
     private void NotifyBlockAdded(ConversationTurn turn, ContentBlock block)
     {
         var snapshot = _blockAddedCallbacks.ToArray();
+        foreach (var cb in snapshot)
+        {
+            cb(turn, block);
+        }
+    }
+
+    private void NotifyBlockRemoved(ConversationTurn turn, ContentBlock block)
+    {
+        var snapshot = _blockRemovedCallbacks.ToArray();
         foreach (var cb in snapshot)
         {
             cb(turn, block);
