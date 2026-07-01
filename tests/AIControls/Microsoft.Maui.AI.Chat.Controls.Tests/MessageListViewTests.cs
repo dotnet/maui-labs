@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 
@@ -69,5 +70,39 @@ public class MessageListViewTests
         view.Session = null;
 
         Assert.Equal(0, view.ItemCount);
+    }
+
+    [Fact]
+    public async Task CompletedTurn_HasNoThinkingOrErrorItems()
+    {
+        var session = SessionFactory.Create("Hello!");
+        await session.SendMessageAsync("Hi");
+
+        var view = new MessageListView { Session = session };
+
+        // After a successful turn, only real content is rendered — no transient status items.
+        Assert.DoesNotContain(view.RenderedBlocks, b => b is ThinkingContentBlock);
+        Assert.DoesNotContain(view.RenderedBlocks, b => b is ErrorContentBlock);
+    }
+
+    [Fact]
+    public async Task FailedTurn_RendersErrorItem_NotInEngineTurns()
+    {
+        // A client that throws so the session enters the error state.
+        var client = new TestChatClient((_, _, _) =>
+            throw new InvalidOperationException("boom"));
+        var session = SessionFactory.Create(client);
+        await session.SendMessageAsync("Hi");
+
+        Assert.Equal(ConversationStatus.Error, session.Status);
+
+        // A view bound to the failed session re-projects the error as a UI-only item.
+        var view = new MessageListView { Session = session };
+
+        var error = Assert.Single(view.RenderedBlocks.OfType<ErrorContentBlock>());
+        Assert.Contains("boom", error.Message);
+
+        // ...but the engine's turns never contained an error block (thread stays clean).
+        Assert.DoesNotContain(session.Turns.SelectMany(t => t.ResponseBlocks), b => b is ErrorContentBlock);
     }
 }
