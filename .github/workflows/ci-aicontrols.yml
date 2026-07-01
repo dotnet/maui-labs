@@ -5,8 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/AIControls/**'
-      - 'tests/Microsoft.Maui.AI.Chat*/**'
-      - 'tests/Microsoft.Maui.AI.Chat.Controls.Tests/**'
+      - 'tests/AIControls/**'
       - 'samples/AiControls*/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -19,8 +18,7 @@ on:
     branches: [main]
     paths:
       - 'src/AIControls/**'
-      - 'tests/Microsoft.Maui.AI.Chat*/**'
-      - 'tests/Microsoft.Maui.AI.Chat.Controls.Tests/**'
+      - 'tests/AIControls/**'
       - 'samples/AiControls*/**'
       - 'eng/**'
       - 'Directory.Build.props'
