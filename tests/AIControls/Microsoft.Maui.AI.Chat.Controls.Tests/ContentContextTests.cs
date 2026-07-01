@@ -120,7 +120,7 @@ public class ContentContextTests
             Call = new FunctionCallContent("call-1", "delete_file", null)
         };
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        var block = new FunctionApprovalBlock(innerBlock, request);
+        var block = new ToolApprovalBlock(innerBlock, request);
         block.Role = ChatRole.Assistant;
         block.Approve();
 
@@ -140,7 +140,7 @@ public class ContentContextTests
             Call = new FunctionCallContent("call-1", "delete_file", null)
         };
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        var block = new FunctionApprovalBlock(innerBlock, request);
+        var block = new ToolApprovalBlock(innerBlock, request);
         block.Role = ChatRole.Assistant;
         block.Reject();
 

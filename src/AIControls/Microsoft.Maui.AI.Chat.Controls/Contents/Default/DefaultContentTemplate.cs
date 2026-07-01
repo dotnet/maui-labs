@@ -2,6 +2,7 @@ using Microsoft.Maui.AI.Chat.Controls.Themes;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
+/// <summary>The lowest-priority fallback template; matches any block when no other template does.</summary>
 public class DefaultContentTemplate : ContentTemplate
 {
     public override bool When(ContentContext context) => true;

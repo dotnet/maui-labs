@@ -3,9 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Maps a <see cref="ContentContext"/> to a view type via the <see cref="When"/> predicate.
-/// Declare in XAML inside <c>CopilotChatView.ContentTemplates</c>.
+/// Maps a <see cref="ContentContext"/> to a view via the <see cref="When"/> predicate and a
+/// <c>ViewType</c>. Declare instances in XAML inside <c>CopilotChatView.ContentTemplates</c>.
 /// </summary>
+/// <remarks>
+/// The <see cref="ContentTemplateSelector"/> evaluates all templates and picks the highest-priority
+/// match. Subclasses target a specific <see cref="ContentBlock"/> kind (text, tool call/result, media,
+/// approval); <see cref="GenericContentTemplate"/> matches declaratively by role/tool/block type.
+/// </remarks>
 public abstract class ContentTemplate : BindableObject
 {
     public static readonly BindableProperty ViewTypeProperty =

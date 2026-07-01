@@ -31,7 +31,7 @@ public class AgentContextApprovalTests
             if (s == ConversationStatus.AwaitingInput)
             {
                 var turn = context.Turns[^1];
-                var block = turn.ResponseBlocks.OfType<FunctionApprovalBlock>().Single();
+                var block = turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single();
                 block.Approve();
             }
         });
@@ -42,7 +42,7 @@ public class AgentContextApprovalTests
     }
 
     [Fact]
-    public async Task ApprovalBlock_EmittedAsFunctionApprovalBlock()
+    public async Task ApprovalBlock_EmittedAsToolApprovalBlock()
     {
         var (agent, client) = CreateAgent();
         var callCount = 0;
@@ -57,13 +57,13 @@ public class AgentContextApprovalTests
         });
         var context = new AgentContext(agent);
 
-        FunctionApprovalBlock? capturedBlock = null;
+        ToolApprovalBlock? capturedBlock = null;
         context.RegisterOnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {
                 var turn = context.Turns[^1];
-                capturedBlock = turn.ResponseBlocks.OfType<FunctionApprovalBlock>().First();
+                capturedBlock = turn.ResponseBlocks.OfType<ToolApprovalBlock>().First();
                 capturedBlock.Approve();
             }
         });
@@ -98,7 +98,7 @@ public class AgentContextApprovalTests
             if (s == ConversationStatus.AwaitingInput)
             {
                 var turn = context.Turns[^1];
-                turn.ResponseBlocks.OfType<FunctionApprovalBlock>().Single().Approve();
+                turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
             }
         });
 
@@ -137,7 +137,7 @@ public class AgentContextApprovalTests
             if (s == ConversationStatus.AwaitingInput)
             {
                 var turn = context.Turns[^1];
-                turn.ResponseBlocks.OfType<FunctionApprovalBlock>().Single().Reject("Not safe");
+                turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Reject("Not safe");
             }
         });
 
@@ -145,7 +145,7 @@ public class AgentContextApprovalTests
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
         var turn = Assert.Single(context.Turns);
-        var approvalBlock = turn.ResponseBlocks.OfType<FunctionApprovalBlock>().Single();
+        var approvalBlock = turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single();
         Assert.Equal(ApprovalStatus.Rejected, approvalBlock.Status);
     }
 
@@ -170,7 +170,7 @@ public class AgentContextApprovalTests
             if (s == ConversationStatus.AwaitingInput)
             {
                 var turn = context.Turns[^1];
-                turn.ResponseBlocks.OfType<FunctionApprovalBlock>().Single().Approve();
+                turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
             }
         });
 

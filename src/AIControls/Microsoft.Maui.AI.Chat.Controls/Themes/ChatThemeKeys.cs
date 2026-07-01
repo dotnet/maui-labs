@@ -4,13 +4,13 @@ namespace Microsoft.Maui.AI.Chat.Controls.Themes;
 /// Well-known resource keys used by the built-in chat theme.
 /// Host apps can override any of these keys in their own resource dictionaries.
 /// </summary>
+/// <summary>Resource keys for the control templates defined in <c>ChatTheme.xaml</c> (used by the built-in views).</summary>
 public static class ChatThemeKeys
 {
     // ControlTemplates
     public const string ChatMessageTemplate = "ExtensionsAI.ChatMessageTemplate";
     public const string FunctionCallTemplate = "ExtensionsAI.FunctionCallTemplate";
     public const string FunctionResultTemplate = "ExtensionsAI.FunctionResultTemplate";
-    public const string ErrorTemplate = "ExtensionsAI.ErrorTemplate";
     public const string DefaultTemplate = "ExtensionsAI.DefaultTemplate";
     public const string ToolApprovalTemplate = "ExtensionsAI.ToolApprovalTemplate";
 

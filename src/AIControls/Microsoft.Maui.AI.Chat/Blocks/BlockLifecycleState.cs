@@ -3,6 +3,10 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// Lifecycle of a <see cref="ContentBlock"/>: <c>Pending</c> (created), <c>Active</c> (currently
+/// receiving streamed updates), or <c>Inactive</c> (finished).
+/// </summary>
 public enum BlockLifecycleState
 {
     Pending,

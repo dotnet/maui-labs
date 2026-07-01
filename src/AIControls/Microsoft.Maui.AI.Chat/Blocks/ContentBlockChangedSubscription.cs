@@ -3,6 +3,10 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// A disposable subscription returned by <see cref="ContentBlock.OnChanged"/>; dispose it to stop
+/// receiving change notifications for that block.
+/// </summary>
 public readonly struct ContentBlockChangedSubscription : IDisposable
 {
     private readonly ContentBlock _owner;

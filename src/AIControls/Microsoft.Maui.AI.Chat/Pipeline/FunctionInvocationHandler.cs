@@ -5,6 +5,8 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>Built-in handler mapping M.E.AI tool calls/results into a <see cref="FunctionInvocationContentBlock"/>.</summary>
+/// <remarks>Matches a <c>FunctionCallContent</c>, then its <c>FunctionResultContent</c> by <c>CallId</c>.</remarks>
 internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionInvocationContentBlock>
 {
     public override BlockMappingResult<FunctionInvocationContentBlock> Handle(

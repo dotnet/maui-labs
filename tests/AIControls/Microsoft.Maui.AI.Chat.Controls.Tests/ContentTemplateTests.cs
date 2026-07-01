@@ -177,17 +177,6 @@ public class ContentTemplateTests
         Assert.False(weatherResult.When(calcContext));
     }
 
-    // ── ErrorContentTemplate ──
-
-    [Fact]
-    public void ErrorContentTemplate_ReturnsFalse_CoreSurfacesErrorsViaStatus()
-    {
-        var template = new ErrorContentTemplate();
-        // Error template always returns false — Core surfaces errors via status
-        var context = MakeTextContext("User");
-        Assert.False(template.When(context));
-    }
-
     // ── DefaultContentTemplate ──
 
     [Fact]

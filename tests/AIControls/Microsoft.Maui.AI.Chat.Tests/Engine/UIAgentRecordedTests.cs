@@ -185,13 +185,13 @@ public class UIAgentRecordedTests
         var agent = new UIAgent(chatClient, options => options.ChatOptions = new ChatOptions { Tools = [tool] }, _loggerFactory);
 
         var context = new AgentContext(agent);
-        FunctionApprovalBlock? approvalBlock = null;
+        ToolApprovalBlock? approvalBlock = null;
         context.RegisterOnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {
                 var turn = context.Turns[^1];
-                approvalBlock = turn.ResponseBlocks.OfType<FunctionApprovalBlock>().FirstOrDefault();
+                approvalBlock = turn.ResponseBlocks.OfType<ToolApprovalBlock>().FirstOrDefault();
                 approvalBlock?.Approve();
             }
         });
