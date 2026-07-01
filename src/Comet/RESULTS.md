@@ -363,3 +363,28 @@ Body sits ~350× under the plan's 100 ms hot-reload budget. Materialization is
 one-time-per-view; its 151 KB (env/context dictionaries) is the number to
 revisit when the typed-storage conversion of the remaining string-keyed
 environment happens.
+
+## FPS/GC on-device A/B — DEFERRED to hardware
+
+The dual-flavor scroll FPS + GC A/B (legacy handlers vs node backend, gfxinfo
+first-pass methodology) needs the physical Pixel 5; emulator frame numbers are
+not meaningful and are deliberately not recorded. Run it from tag
+`comet-pre-phase5-delete` (the last commit with the legacy render path present)
+when the device is available. The Jetchat scroll numbers already on record
+(100% jank / 350ms 90th → 3% / 12ms after the LazyColumn row cache, Pixel 5,
+Release) stand as the node-backend-only measurement.
+
+## NativeAOT (iOS) — gate: "NativeAOT where supported" — 2026-07-01
+
+`CometSwiftUIProbe` (full shared Jetchat sample) publishes under NativeAOT:
+`dotnet publish -f net11.0-ios -c Release -p:RuntimeIdentifier=ios-arm64
+-p:EnableProbeAot=true` (the probe csproj maps that to `PublishAot=true`
+app-side only — a global `-p:PublishAot` leaks into plain-classlib
+dependencies and fails with NETSDK1203, the PublishTrimmed trap again).
+
+ILC compiles end-to-end and produces the package: **7.2 MB .ipa** (17 MB .app,
+15.9 MB single native executable — no separate IL assemblies, no JIT).
+Remaining trim warnings come from MAUI's `HybridWebViewHandler` (legacy
+Microsoft.Maui.Controls dependency — goes away with the Phase 5 delete) and
+Comet's debug-only hot-reload reflection (IL2104, suppressed by design).
+Simulator RIDs don't support AOT (NETSDK1203) — device RID only.

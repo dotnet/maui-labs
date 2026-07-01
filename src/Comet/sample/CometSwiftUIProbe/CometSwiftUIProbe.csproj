@@ -13,6 +13,10 @@
     <ApplicationTitle>CometSwiftUI</ApplicationTitle>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- NativeAOT smoke test (gate: "NativeAOT where supported"): opt in per-app so the
+         property doesn't leak into plain-classlib dependencies (NETSDK1203) — the same
+         global-property trap Phase 4 hit with PublishTrimmed. -->
+    <PublishAot Condition="'$(EnableProbeAot)' == 'true'">true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
