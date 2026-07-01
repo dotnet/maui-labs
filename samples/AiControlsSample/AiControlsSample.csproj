@@ -59,7 +59,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
-		<ProjectReference Include="..\..\src\AIControls\Microsoft.Maui.AI.Chat.SourceGenerators\Microsoft.Maui.AI.Chat.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
 

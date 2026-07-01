@@ -23,8 +23,6 @@ public partial class ToolRenderingPage : ContentPage
         var agent = new UIAgent(chatClient, options =>
         {
             options.ChatOptions = chatOptions;
-            // Register source-generated tool block handlers (e.g. WeatherToolBlock)
-            options.AddGeneratedToolBlocks();
         });
         Session = new AgentContext(agent);
 

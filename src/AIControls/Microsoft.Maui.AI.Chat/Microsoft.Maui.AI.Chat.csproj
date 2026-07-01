@@ -17,9 +17,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Tests" />
-    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Tests" />
-    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Blazor.Tests" />
-    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Blazor" />
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls" />
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
   </ItemGroup>
