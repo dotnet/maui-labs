@@ -94,14 +94,12 @@ public partial class CopilotChatView : TemplatedView
 
     public CopilotChatView()
     {
-        InitializeComponent();
         _contentTemplates.CollectionChanged += (_, _) => SyncContentTemplates();
 
         // Bind the default ControlTemplate via DynamicResource so it resolves
-        // once the theme dictionary is available in the resource tree.
-        // The actual theme loading is done by UseChatControls() at startup
-        // or deferred to OnParentSet to avoid mutating app resources during
-        // XAML parsing (which causes NullRef in the generated InitializeComponent).
+        // once the theme dictionary is available in the resource tree. The actual
+        // theme loading is done by UseChatControls() at startup or deferred to
+        // OnParentSet to avoid mutating app resources while the tree is being built.
         SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.CopilotChatViewTemplate);
 
         // Subscribe to collection changes on the default ObservableCollection so
@@ -303,8 +301,8 @@ public partial class CopilotChatView : TemplatedView
                 BackgroundColor = Color.FromArgb("#EEF2FF"),
                 TextColor = Color.FromArgb("#4338CA"),
             };
-            chip.SetDynamicResource(Button.BackgroundColorProperty, "ExtensionsAI.Suggestion.Background");
-            chip.SetDynamicResource(Button.TextColorProperty, "ExtensionsAI.Suggestion.TextColor");
+            chip.SetDynamicResource(Button.BackgroundColorProperty, Themes.ChatThemeKeys.SuggestionBackground);
+            chip.SetDynamicResource(Button.TextColorProperty, Themes.ChatThemeKeys.SuggestionTextColor);
             chip.Clicked += async (_, _) =>
             {
                 if (Session is not null && !IsBusy)

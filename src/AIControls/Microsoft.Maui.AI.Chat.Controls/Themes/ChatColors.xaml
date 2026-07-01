@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    x:Class="Microsoft.Maui.AI.Chat.Controls.Themes.ChatColors">
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- Shared design tokens (colors + sizes).                          -->
+    <!-- Every key is prefixed "MauiAIChat." so it never collides with   -->
+    <!-- the host app's own resources once this dictionary is merged      -->
+    <!-- into Application.Resources. Override any key in your App to      -->
+    <!-- restyle the chat controls.                                       -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- Messages -->
+    <Color x:Key="MauiAIChat.User.Background">#5B8C5A</Color>
+    <Color x:Key="MauiAIChat.User.TextColor">White</Color>
+    <Color x:Key="MauiAIChat.Assistant.Background">#F0EBE3</Color>
+    <Color x:Key="MauiAIChat.Assistant.TextColor">#2C2416</Color>
+    <Color x:Key="MauiAIChat.FunctionCall.Background">#E8E0D4</Color>
+    <Color x:Key="MauiAIChat.FunctionCall.TextColor">#7A7062</Color>
+    <Color x:Key="MauiAIChat.FunctionResult.Background">#EDF6EC</Color>
+    <Color x:Key="MauiAIChat.FunctionResult.TextColor">#7A7062</Color>
+    <Color x:Key="MauiAIChat.Default.TextColor">#7A7062</Color>
+    <Color x:Key="MauiAIChat.Approval.Background">#FFFBF0</Color>
+    <Color x:Key="MauiAIChat.Approval.Border">#E8D9B5</Color>
+    <Color x:Key="MauiAIChat.Approval.HeaderColor">#8B7340</Color>
+    <Color x:Key="MauiAIChat.Button.Approve">#5B8C5A</Color>
+    <Color x:Key="MauiAIChat.Button.Reject">#C75050</Color>
+
+    <!-- Input area -->
+    <Color x:Key="MauiAIChat.Input.Background">#F0EBE3</Color>
+    <Color x:Key="MauiAIChat.Send.Background">#5B8C5A</Color>
+    <Color x:Key="MauiAIChat.Send.TextColor">White</Color>
+
+    <!-- Suggestion chips -->
+    <Color x:Key="MauiAIChat.Suggestion.Background">#EEF2FF</Color>
+    <Color x:Key="MauiAIChat.Suggestion.TextColor">#4338CA</Color>
+
+    <!-- Timestamps -->
+    <Color x:Key="MauiAIChat.Timestamp.TextColor">#9CA3AF</Color>
+    <x:Double x:Key="MauiAIChat.Timestamp.FontSize">10</x:Double>
+
+    <!-- Bubble -->
+    <x:Double x:Key="MauiAIChat.Bubble.MaxWidth">340</x:Double>
+
+</ResourceDictionary>
