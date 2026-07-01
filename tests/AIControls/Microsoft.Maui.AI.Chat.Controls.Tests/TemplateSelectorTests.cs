@@ -46,16 +46,29 @@ public class TemplateSelectorTests
     }
 
     [Fact]
-    public void SelectTemplate_UnknownBlock_ReturnsFallback()
+    public void SelectTemplate_UnknownBlock_RendersNothing()
     {
         var selector = new ContentTemplateSelector();
-        // Empty selector with no templates — should return the fallback
+        // Empty selector with no templates — an unmatched block renders nothing.
         var context = BlockFactory.MakeText("Assistant", "Hello");
 
         var template = selector.SelectTemplate(context, null!);
 
-        // Fallback is always non-null (shows "No content template registered" label)
-        Assert.NotNull(template);
+        AssertRendersNothing(template);
+    }
+
+    [Fact]
+    public void SelectTemplate_BlockWithNoMatchingTemplate_RendersNothing()
+    {
+        // Only a text template is registered; a tool-call block has no match, so it renders
+        // nothing (templates are the allow-list — omitting FunctionInvocationTemplate hides tools).
+        var selector = new ContentTemplateSelector();
+        selector.Templates.Add(new TextContentTemplate { ViewType = typeof(Label) });
+
+        var toolCall = BlockFactory.MakeToolCall("get_weather");
+        var template = selector.SelectTemplate(toolCall, null!);
+
+        AssertRendersNothing(template);
     }
 
     [Fact]
@@ -102,24 +115,31 @@ public class TemplateSelectorTests
     }
 
     [Fact]
-    public void SelectTemplate_NonContentContext_ReturnsFallback()
+    public void SelectTemplate_NonContentContext_RendersNothing()
     {
         var selector = CreateDefaultSelector();
 
-        // Passing a non-ContentContext object should return fallback
+        // Passing a non-ContentContext object renders nothing
         var template = selector.SelectTemplate("not a ContentContext", null!);
 
-        Assert.NotNull(template);
+        AssertRendersNothing(template);
     }
 
     [Fact]
-    public void SelectTemplate_NullItem_ReturnsFallback()
+    public void SelectTemplate_NullItem_RendersNothing()
     {
         var selector = CreateDefaultSelector();
 
         var template = selector.SelectTemplate(null!, null!);
 
+        AssertRendersNothing(template);
+    }
+
+    private static void AssertRendersNothing(DataTemplate template)
+    {
         Assert.NotNull(template);
+        var view = Assert.IsType<ContentView>(template.CreateContent());
+        Assert.False(view.IsVisible);
     }
 
     [Fact]

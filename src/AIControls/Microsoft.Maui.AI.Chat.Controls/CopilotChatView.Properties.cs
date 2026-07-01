@@ -131,24 +131,6 @@ public partial class CopilotChatView
         set => SetValue(ShowTimestampsProperty, value);
     }
 
-    public static readonly BindableProperty ShowToolCallsProperty =
-        BindableProperty.Create(nameof(ShowToolCalls), typeof(bool), typeof(CopilotChatView), true);
-
-    public bool ShowToolCalls
-    {
-        get => (bool)GetValue(ShowToolCallsProperty);
-        set => SetValue(ShowToolCallsProperty, value);
-    }
-
-    public static readonly BindableProperty ShowToolResultsProperty =
-        BindableProperty.Create(nameof(ShowToolResults), typeof(bool), typeof(CopilotChatView), true);
-
-    public bool ShowToolResults
-    {
-        get => (bool)GetValue(ShowToolResultsProperty);
-        set => SetValue(ShowToolResultsProperty, value);
-    }
-
     // ═══════════════════════════════════════════════════════════════
     //  MESSAGE BUBBLE STYLING
     // ═══════════════════════════════════════════════════════════════
