@@ -25,13 +25,13 @@ public class S01_BasicChatTest
 
         // Request side: user text block
         Assert.Single(turn.RequestBlocks);
-        var requestBlock = Assert.IsType<RichContentBlock>(turn.RequestBlocks[0]);
+        var requestBlock = Assert.IsType<TextContentBlock>(turn.RequestBlocks[0]);
         Assert.Equal(ChatRole.User, requestBlock.Role);
         Assert.Equal("Hi there", requestBlock.RawText);
 
         // Response side: assistant text block
         Assert.Single(turn.ResponseBlocks);
-        var responseBlock = Assert.IsType<RichContentBlock>(turn.ResponseBlocks[0]);
+        var responseBlock = Assert.IsType<TextContentBlock>(turn.ResponseBlocks[0]);
         Assert.Equal(ChatRole.Assistant, responseBlock.Role);
         Assert.Equal("Hello! How can I help you?", responseBlock.RawText);
     }
@@ -49,7 +49,7 @@ public class S01_BasicChatTest
         await context.SendMessageAsync("What's the weather?");
 
         var turn = context.Turns[0];
-        var responseBlock = Assert.IsType<RichContentBlock>(turn.ResponseBlocks.Single());
+        var responseBlock = Assert.IsType<TextContentBlock>(turn.ResponseBlocks.Single());
         Assert.Equal("The weather is sunny.", responseBlock.RawText);
     }
 
@@ -92,8 +92,8 @@ public class S01_BasicChatTest
         await context.SendMessageAsync("How are you?");
 
         Assert.Equal(2, context.Turns.Count);
-        Assert.Equal("Hi!", context.Turns[0].ResponseBlocks.OfType<RichContentBlock>().Single().RawText);
-        Assert.Equal("I'm fine!", context.Turns[1].ResponseBlocks.OfType<RichContentBlock>().Single().RawText);
+        Assert.Equal("Hi!", context.Turns[0].ResponseBlocks.OfType<TextContentBlock>().Single().RawText);
+        Assert.Equal("I'm fine!", context.Turns[1].ResponseBlocks.OfType<TextContentBlock>().Single().RawText);
     }
 
     [Fact]

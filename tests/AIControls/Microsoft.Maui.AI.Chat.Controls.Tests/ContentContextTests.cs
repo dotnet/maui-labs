@@ -36,7 +36,7 @@ public class ContentContextTests
     // ── Text content ──
 
     [Fact]
-    public void TextContent_ReturnsRawText_ForRichContentBlock()
+    public void TextContent_ReturnsRawText_ForTextContentBlock()
     {
         var ctx = BlockFactory.MakeText("User", "Hello World");
         Assert.Equal("Hello World", ctx.TextContent);
@@ -176,7 +176,7 @@ public class ContentContextTests
     [Fact]
     public void Constructor_ThrowsOnNullAgentContext()
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         Assert.Throws<ArgumentNullException>(() => new ContentContext(null!, block));
     }
 

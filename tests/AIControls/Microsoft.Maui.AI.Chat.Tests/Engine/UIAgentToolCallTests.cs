@@ -71,9 +71,9 @@ public class UIAgentToolCallTests
         }
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
-        // Should have at least a FunctionInvocationContentBlock and a RichContentBlock
+        // Should have at least a FunctionInvocationContentBlock and a TextContentBlock
         Assert.Contains(assistantBlocks, b => b is FunctionInvocationContentBlock);
-        Assert.Contains(assistantBlocks, b => b is RichContentBlock);
+        Assert.Contains(assistantBlocks, b => b is TextContentBlock);
 
         static async IAsyncEnumerable<ChatResponseUpdate> YieldMixed(
             [EnumeratorCancellation] CancellationToken ct)

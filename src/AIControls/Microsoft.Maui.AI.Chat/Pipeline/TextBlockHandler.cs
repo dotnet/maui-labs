@@ -5,10 +5,10 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
-internal sealed class TextBlockHandler : ContentBlockHandler<RichContentBlock>
+internal sealed class TextBlockHandler : ContentBlockHandler<TextContentBlock>
 {
-    public override BlockMappingResult<RichContentBlock> Handle(
-        BlockMappingContext context, RichContentBlock state)
+    public override BlockMappingResult<TextContentBlock> Handle(
+        BlockMappingContext context, TextContentBlock state)
     {
         TextContent? textContent = null;
         foreach (var content in context.UnhandledContents)
@@ -24,10 +24,10 @@ internal sealed class TextBlockHandler : ContentBlockHandler<RichContentBlock>
         {
             if (state.Id != string.Empty)
             {
-                return BlockMappingResult<RichContentBlock>.Complete();
+                return BlockMappingResult<TextContentBlock>.Complete();
             }
 
-            return BlockMappingResult<RichContentBlock>.Pass();
+            return BlockMappingResult<TextContentBlock>.Pass();
         }
 
         context.MarkHandled(textContent);
@@ -36,11 +36,11 @@ internal sealed class TextBlockHandler : ContentBlockHandler<RichContentBlock>
         if (state.Id == string.Empty)
         {
             state.Id = context.Update.MessageId ?? Guid.NewGuid().ToString("N");
-            return BlockMappingResult<RichContentBlock>.Emit(state, state);
+            return BlockMappingResult<TextContentBlock>.Emit(state, state);
         }
         else
         {
-            return BlockMappingResult<RichContentBlock>.Update(state);
+            return BlockMappingResult<TextContentBlock>.Update(state);
         }
     }
 }

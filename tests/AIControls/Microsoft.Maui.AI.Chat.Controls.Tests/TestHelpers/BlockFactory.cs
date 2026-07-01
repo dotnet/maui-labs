@@ -18,7 +18,7 @@ internal static class BlockFactory
 
     public static ContentContext MakeText(string role, string text)
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         block.AppendText(text);
         block.Role = role == "User" ? ChatRole.User : ChatRole.Assistant;
         return new ContentContext(CreateSession(), block);

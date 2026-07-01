@@ -48,6 +48,8 @@ public partial class ToolRenderingPage : ContentPage
             options.ChatOptions = chatOptions;
             // Map raw M.E.AI weather content into a strongly-typed WeatherToolBlock.
             options.AddBlockHandler(new WeatherToolBlockHandler());
+            // Parse assistant text into a formatted rich-text block (sample pattern).
+            options.AddBlockHandler(new FormattedTextHandler());
         });
         Session = new AgentContext(agent);
 

@@ -44,7 +44,7 @@ public class GenericContentTemplate : ContentTemplate
 
     /// <summary>
     /// Optional block type filter. Matches the concrete type of the ContentBlock.
-    /// Use <c>{x:Type ai:RichContentBlock}</c> syntax in XAML.
+    /// Use <c>{x:Type ai:TextContentBlock}</c> syntax in XAML.
     /// </summary>
     public Type? BlockType
     {

@@ -34,7 +34,7 @@ internal class BlockMappingPipeline
         _handlers.Add(new HandlerEntry<MediaContentBlock>(new MediaContentHandler()));
 
         // Built-in text handler is always last (fallback)
-        _handlers.Add(new HandlerEntry<RichContentBlock>(new TextBlockHandler()));
+        _handlers.Add(new HandlerEntry<TextContentBlock>(new TextBlockHandler()));
     }
 
     internal async IAsyncEnumerable<ContentBlock> Process(

@@ -13,7 +13,7 @@ public class TextContentTemplate : ContentTemplate
 
     public override bool When(ContentContext context)
     {
-        if (context.Block is not RichContentBlock)
+        if (context.Block is not TextContentBlock)
             return false;
 
         if (Role is not null)

@@ -15,7 +15,7 @@ public class ContentTemplateTests
 
     private static ContentContext MakeTextContext(string role)
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         block.AppendText("hello");
         block.Role = role == "User" ? ChatRole.User : ChatRole.Assistant;
         var ctx = CreateAgentContext();
@@ -57,7 +57,7 @@ public class ContentTemplateTests
     // ── TextContentTemplate ──
 
     [Fact]
-    public void TextContentTemplate_MatchesRichContentBlock()
+    public void TextContentTemplate_MatchesTextContentBlock()
     {
         var template = new TextContentTemplate();
         var context = MakeTextContext("User");
@@ -235,7 +235,7 @@ public class ContentTemplateTests
     [Fact]
     public void ContentContext_ExposesBlockProperties()
     {
-        var block = new RichContentBlock();
+        var block = new TextContentBlock();
         block.AppendText("test");
         block.Role = ChatRole.User;
         var agentCtx = CreateAgentContext();

@@ -14,7 +14,7 @@ public class BlockRendererTests
     // ── Template resolution by block type ──
 
     [Fact]
-    public void TextTemplate_MatchesUserRichContentBlock()
+    public void TextTemplate_MatchesUserTextContentBlock()
     {
         var template = new TextContentTemplate { ViewType = typeof(Label) };
         var context = BlockFactory.MakeText("User", "Hello");
@@ -23,7 +23,7 @@ public class BlockRendererTests
     }
 
     [Fact]
-    public void TextTemplate_MatchesAssistantRichContentBlock()
+    public void TextTemplate_MatchesAssistantTextContentBlock()
     {
         var template = new TextContentTemplate { ViewType = typeof(Label) };
         var context = BlockFactory.MakeText("Assistant", "Hi there");
