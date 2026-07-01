@@ -40,6 +40,7 @@ public partial class MessageListView : TemplatedView
     private IDisposable? _turnAddedReg;
     private IDisposable? _statusChangedReg;
     private IDisposable? _blockAddedReg;
+    private IDisposable? _blockRemovedReg;
     private readonly List<IDisposable> _blockSubscriptions = [];
 
     /// <summary>The content templates used to render each block, highest matching priority wins.</summary>
@@ -115,6 +116,9 @@ public partial class MessageListView : TemplatedView
 
         _blockAddedReg = ctx.RegisterOnBlockAdded((turn, block) =>
             Dispatcher.Dispatch(() => OnBlockAdded(turn, block)));
+
+        _blockRemovedReg = ctx.RegisterOnBlockRemoved((turn, block) =>
+            Dispatcher.Dispatch(() => OnBlockRemoved(block)));
     }
 
     private void UnsubscribeFromSession()
@@ -122,9 +126,11 @@ public partial class MessageListView : TemplatedView
         _turnAddedReg?.Dispose();
         _statusChangedReg?.Dispose();
         _blockAddedReg?.Dispose();
+        _blockRemovedReg?.Dispose();
         _turnAddedReg = null;
         _statusChangedReg = null;
         _blockAddedReg = null;
+        _blockRemovedReg = null;
 
         foreach (var sub in _blockSubscriptions)
             sub.Dispose();
@@ -143,20 +149,26 @@ public partial class MessageListView : TemplatedView
         if (Session is null)
             return;
 
-        if (!ShouldShowBlock(block))
-        {
-            // Still subscribe — the block may become visible later (e.g., tool result arrives).
-            var pending = block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
-            _blockSubscriptions.Add(pending);
-            return;
-        }
-
         _items.Add(new ContentContext(Session, block));
         NotifyItemsChanged();
         ScrollToLatestMessage();
 
         var subscription = block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
         _blockSubscriptions.Add(subscription);
+    }
+
+    private void OnBlockRemoved(ContentBlock block)
+    {
+        // A transient block (e.g. the "Thinking…" placeholder) was removed from its turn.
+        for (int i = 0; i < _items.Count; i++)
+        {
+            if (ReferenceEquals(_items[i].Block, block))
+            {
+                _items.RemoveAt(i);
+                NotifyItemsChanged();
+                return;
+            }
+        }
     }
 
     private void OnBlockChanged(ContentBlock block)
@@ -168,26 +180,10 @@ public partial class MessageListView : TemplatedView
         {
             if (ReferenceEquals(_items[i].Block, block))
             {
-                if (!ShouldShowBlock(block))
-                {
-                    _items.RemoveAt(i);
-                    NotifyItemsChanged();
-                }
-                else
-                {
-                    _items[i] = new ContentContext(Session, block);
-                    ScrollToLatestMessage();
-                }
+                _items[i] = new ContentContext(Session, block);
+                ScrollToLatestMessage();
                 return;
             }
-        }
-
-        // Block isn't in the list yet — check if it should now be shown.
-        if (ShouldShowBlock(block))
-        {
-            _items.Add(new ContentContext(Session, block));
-            NotifyItemsChanged();
-            ScrollToLatestMessage();
         }
     }
 
@@ -209,34 +205,18 @@ public partial class MessageListView : TemplatedView
         {
             foreach (var block in turn.RequestBlocks)
             {
-                if (ShouldShowBlock(block))
-                {
-                    _items.Add(new ContentContext(Session, block));
-                    _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
-                }
+                _items.Add(new ContentContext(Session, block));
+                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
             }
             foreach (var block in turn.ResponseBlocks)
             {
-                if (ShouldShowBlock(block))
-                {
-                    _items.Add(new ContentContext(Session, block));
-                    _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
-                }
+                _items.Add(new ContentContext(Session, block));
+                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
             }
         }
 
         NotifyItemsChanged();
         ScrollToLatestMessage();
-    }
-
-    private bool ShouldShowBlock(ContentBlock block)
-    {
-        // A dismissed "Thinking…" block should be removed from the list. Everything else is
-        // shown; whether it renders is decided by the templates (an unmatched block renders
-        // nothing), so hiding a block kind is done by omitting its template.
-        if (block is ThinkingContentBlock thinking && thinking.IsDismissed)
-            return false;
-        return true;
     }
 
     private void NotifyItemsChanged() => ItemsChanged?.Invoke(this, EventArgs.Empty);
