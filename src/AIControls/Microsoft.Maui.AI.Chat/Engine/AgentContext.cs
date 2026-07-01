@@ -110,8 +110,6 @@ public class AgentContext(UIAgent agent) : IDisposable
 
             while (currentMessage is not null)
             {
-                EnsureThinking();
-
                 var interactiveBlocks = new List<IInteractiveBlock>();
                 var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
 
@@ -128,7 +126,8 @@ public class AgentContext(UIAgent agent) : IDisposable
                         uninvokedToolBlocks.Add(ficb);
                     }
 
-                    if (block.Role == currentMessage.Role)
+                    var isRequest = block.Role == currentMessage.Role;
+                    if (isRequest)
                     {
                         turn.AddRequestBlock(block);
                     }
@@ -140,6 +139,12 @@ public class AgentContext(UIAgent agent) : IDisposable
                     }
 
                     NotifyBlockAdded(turn, block);
+
+                    // Show "Thinking…" only after the user's message, while awaiting the response.
+                    if (isRequest)
+                    {
+                        EnsureThinking();
+                    }
                 }
 
                 currentMessage = null;

@@ -16,7 +16,12 @@ public class SampleTools
         AIFunctionFactory.Create(Calculate),
         AIFunctionFactory.Create(GetRandomFact),
         AIFunctionFactory.Create(GetAppInfo),
+        AIFunctionFactory.Create(TriggerError),
     ];
+
+    [Description("Trigger a simulated failure. Call this only when the user explicitly asks to test error handling.")]
+    private static string TriggerError() =>
+        throw new InvalidOperationException("Simulated tool failure for testing the error UI.");
 
     [Description("Get the current weather for a city. Returns temperature, condition, humidity, wind speed, and feels-like temperature as JSON.")]
     private static string GetCurrentWeather(
