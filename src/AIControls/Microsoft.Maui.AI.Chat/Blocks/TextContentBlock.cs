@@ -17,7 +17,7 @@ public class TextContentBlock : ContentBlock
 
     public string RawText => _cachedText ??= string.Concat(_segments);
 
-    public void AppendText(string text)
+    public virtual void AppendText(string text)
     {
         _segments.Add(text);
         _cachedText = null;

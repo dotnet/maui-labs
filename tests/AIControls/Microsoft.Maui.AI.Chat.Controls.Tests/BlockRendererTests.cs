@@ -47,37 +47,28 @@ public class BlockRendererTests
     }
 
     [Fact]
-    public void FunctionCallTemplate_MatchesPendingToolCall()
+    public void FunctionInvocationTemplate_MatchesPendingToolCall()
     {
-        var template = new FunctionCallTemplate { ViewType = typeof(Label) };
+        var template = new FunctionInvocationTemplate { ViewType = typeof(Label) };
         var context = BlockFactory.MakeToolCall("get_weather");
 
         Assert.True(template.When(context));
     }
 
     [Fact]
-    public void FunctionCallTemplate_DoesNotMatchCompletedCall()
+    public void FunctionInvocationTemplate_MatchesCompletedToolCall()
     {
-        var template = new FunctionCallTemplate { ViewType = typeof(Label) };
-        var context = BlockFactory.MakeToolResult("get_weather", "Sunny");
-
-        Assert.False(template.When(context));
-    }
-
-    [Fact]
-    public void FunctionResultTemplate_MatchesCompletedToolCall()
-    {
-        var template = new FunctionResultTemplate { ViewType = typeof(Label) };
+        var template = new FunctionInvocationTemplate { ViewType = typeof(Label) };
         var context = BlockFactory.MakeToolResult("get_weather", "Sunny 72°F");
 
         Assert.True(template.When(context));
     }
 
     [Fact]
-    public void FunctionResultTemplate_DoesNotMatchPendingCall()
+    public void FunctionInvocationTemplate_DoesNotMatchNonInvocation()
     {
-        var template = new FunctionResultTemplate { ViewType = typeof(Label) };
-        var context = BlockFactory.MakeToolCall("get_weather");
+        var template = new FunctionInvocationTemplate { ViewType = typeof(Label) };
+        var context = BlockFactory.MakeApproval("delete_file");
 
         Assert.False(template.When(context));
     }
@@ -94,10 +85,10 @@ public class BlockRendererTests
     // ── Tool-name-specific overrides ──
 
     [Fact]
-    public void FunctionCallTemplate_WithToolName_OnlyMatchesThatTool()
+    public void FunctionInvocationTemplate_WithToolName_OnlyMatchesThatTool()
     {
-        var weatherTemplate = new FunctionCallTemplate { ToolName = "get_weather", ViewType = typeof(Label) };
-        var calcTemplate = new FunctionCallTemplate { ToolName = "calculate", ViewType = typeof(Label) };
+        var weatherTemplate = new FunctionInvocationTemplate { ToolName = "get_weather", ViewType = typeof(Label) };
+        var calcTemplate = new FunctionInvocationTemplate { ToolName = "calculate", ViewType = typeof(Label) };
 
         var weatherCtx = BlockFactory.MakeToolCall("get_weather");
         var calcCtx = BlockFactory.MakeToolCall("calculate");
@@ -109,9 +100,9 @@ public class BlockRendererTests
     }
 
     [Fact]
-    public void FunctionResultTemplate_WithToolName_OnlyMatchesThatTool()
+    public void FunctionInvocationTemplate_WithToolName_MatchesResultPhase()
     {
-        var weatherResult = new FunctionResultTemplate { ToolName = "get_weather", ViewType = typeof(Label) };
+        var weatherResult = new FunctionInvocationTemplate { ToolName = "get_weather", ViewType = typeof(Label) };
 
         var weatherCtx = BlockFactory.MakeToolResult("get_weather", "Sunny");
         var otherCtx = BlockFactory.MakeToolResult("calculate", "42");
@@ -126,8 +117,8 @@ public class BlockRendererTests
     public void ToolSpecific_BeatGeneric_BeatDefault()
     {
         var defaultTemplate = new DefaultContentTemplate { ViewType = typeof(Label) };
-        var genericCall = new FunctionCallTemplate { ViewType = typeof(Label) };
-        var specificCall = new FunctionCallTemplate { ToolName = "get_weather", ViewType = typeof(Label) };
+        var genericCall = new FunctionInvocationTemplate { ViewType = typeof(Label) };
+        var specificCall = new FunctionInvocationTemplate { ToolName = "get_weather", ViewType = typeof(Label) };
 
         var context = BlockFactory.MakeToolCall("get_weather");
 
