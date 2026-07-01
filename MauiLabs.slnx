@@ -28,8 +28,10 @@
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes.Generators/Microsoft.Maui.AI.Attributes.Generators.csproj" />
+    <Project Path="src/AIExtensions/Microsoft.Maui.AI.Navigation/Microsoft.Maui.AI.Navigation.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
+    <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Navigation.Tests/Microsoft.Maui.AI.Navigation.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />

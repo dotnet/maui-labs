@@ -8,11 +8,11 @@ public partial class AppShell : Shell
     {
         InitializeComponent();
 
-        // Detail pages under products — pushed on top of their parent tab
+        // Detail pages under products — friendly URLs: /products/product?sku=X
         Routing.RegisterRoute("product", typeof(ProductDetailPage));
-        // Review modal — slides up from product detail
+        // Review modal — /products/product/review?sku=X
         Routing.RegisterRoute("review", typeof(ProductReviewPage));
-        // Order detail — pushed on top of orders tab
+        // Order detail — /orders/order?orderId=X
         Routing.RegisterRoute("order", typeof(OrderDetailPage));
         // Cart stays modal — slides up from anywhere
         Routing.RegisterRoute("cart", typeof(CartPage));
