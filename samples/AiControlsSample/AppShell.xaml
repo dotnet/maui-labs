@@ -11,7 +11,7 @@
     Shell.ForegroundColor="White"
     Shell.TitleColor="White">
 
-    <ShellContent Title="🔧  Tool Rendering"
+    <ShellContent Title="🔧  AI Chat"
                   Route="tool-rendering"
                   ContentTemplate="{DataTemplate local:ToolRenderingPage}" />
 

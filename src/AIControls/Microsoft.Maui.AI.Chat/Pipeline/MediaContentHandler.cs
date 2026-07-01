@@ -10,17 +10,39 @@ internal sealed class MediaContentHandler : ContentBlockHandler<MediaContentBloc
     public override BlockMappingResult<MediaContentBlock> Handle(
         BlockMappingContext context, MediaContentBlock state)
     {
-        DataContent? dataContent = null;
+        AIContent? claimed = null;
+        var images = new List<DataContent>();
+
         foreach (var content in context.UnhandledContents)
         {
             if (content is DataContent dc)
             {
-                dataContent = dc;
+                claimed = content;
+                images.Add(dc);
                 break;
+            }
+
+            // Image-generation results (e.g. from a HostedImageGenerationTool) wrap
+            // their generated images as DataContent items in Outputs.
+            if (content is ImageGenerationToolResultContent igr && igr.Outputs is { Count: > 0 })
+            {
+                foreach (var output in igr.Outputs)
+                {
+                    if (output is DataContent odc)
+                    {
+                        images.Add(odc);
+                    }
+                }
+
+                if (images.Count > 0)
+                {
+                    claimed = content;
+                    break;
+                }
             }
         }
 
-        if (dataContent is null)
+        if (claimed is null)
         {
             if (state.Items.Count > 0)
             {
@@ -29,18 +51,20 @@ internal sealed class MediaContentHandler : ContentBlockHandler<MediaContentBloc
             return BlockMappingResult<MediaContentBlock>.Pass();
         }
 
-        context.MarkHandled(dataContent);
+        context.MarkHandled(claimed);
 
-        if (state.Items.Count == 0)
+        var wasEmpty = state.Items.Count == 0;
+        foreach (var image in images)
         {
-            state.AddContent(dataContent);
+            state.AddContent(image);
+        }
+
+        if (wasEmpty)
+        {
             state.Id = context.Update.MessageId ?? Guid.NewGuid().ToString("N");
             return BlockMappingResult<MediaContentBlock>.Emit(state, state);
         }
-        else
-        {
-            state.AddContent(dataContent);
-            return BlockMappingResult<MediaContentBlock>.Update(state);
-        }
+
+        return BlockMappingResult<MediaContentBlock>.Update(state);
     }
 }

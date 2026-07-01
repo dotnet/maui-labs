@@ -37,6 +37,7 @@ public class AgentContext : IDisposable
         _streamingCts?.Dispose();
         _streamingCts = null;
         _turns.Clear();
+        _agent.ClearHistory();
         Error = null;
         Status = ConversationStatus.Idle;
         NotifyStatusChanged();
