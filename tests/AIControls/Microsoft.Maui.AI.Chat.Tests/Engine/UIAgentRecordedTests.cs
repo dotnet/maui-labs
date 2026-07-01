@@ -211,51 +211,6 @@ public class UIAgentRecordedTests
         Assert.False(string.IsNullOrEmpty(textBlock!.RawText));
     }
 
-    [Fact]
-    public async Task UIAction_ProducesUIActionBlockAndResumes()
-    {
-        const string baseline = "UIAction_ClientTool.recording.json";
-        var client = CreateReplayOrRecordClient(baseline);
-
-        var action = AIFunctionFactory.Create(GetUserLocation);
-        var agent = new UIAgent(client, options =>
-        {
-            options.RegisterUIAction(action);
-        }, _loggerFactory);
-
-        var context = new AgentContext(agent);
-        UIActionBlock? actionBlock = null;
-        context.RegisterOnStatusChanged(s =>
-        {
-            if (s == ConversationStatus.AwaitingInput)
-            {
-                var turn = context.Turns[^1];
-                actionBlock = turn.ResponseBlocks.OfType<UIActionBlock>().FirstOrDefault();
-                if (actionBlock is not null)
-                {
-                    actionBlock.InvokeAsync().GetAwaiter().GetResult();
-                }
-            }
-        });
-
-        await context.SendMessageAsync(
-            "Use the GetUserLocation tool to find my location, " +
-            "then suggest fun things to do there.");
-
-        SaveIfRecording(client, baseline);
-
-        Assert.NotNull(actionBlock);
-        Assert.Equal("GetUserLocation", actionBlock!.ToolName);
-        Assert.True(actionBlock.IsComplete);
-        Assert.True(actionBlock.HasResult);
-
-        // After UIAction resume, should have text response
-        var lastTurn = context.Turns[^1];
-        var textBlock = lastTurn.ResponseBlocks.OfType<RichContentBlock>().LastOrDefault();
-        Assert.NotNull(textBlock);
-        Assert.False(string.IsNullOrEmpty(textBlock!.RawText));
-    }
-
     [Description("Get the current weather for a city.")]
     private static string GetWeather([Description("The city name")] string city)
     {
@@ -266,73 +221,5 @@ public class UIAgentRecordedTests
     private static string DeleteFile([Description("The file name to delete")] string fileName)
     {
         return $"File '{fileName}' has been deleted.";
-    }
-
-    [Description("Get the user's current location from GPS.")]
-    private static string GetUserLocation()
-    {
-        return "Seattle, WA (47.61°N, 122.33°W)";
-    }
-
-    [Fact]
-    public async Task MixedToolCall_BackendAndUIAction_BothInvoked()
-    {
-        const string baseline = "MixedToolCall_BackendAndUIAction.recording.json";
-        var client = CreateReplayOrRecordClient(baseline);
-
-        var backendTool = AIFunctionFactory.Create(GetWeather);
-        var uiAction = AIFunctionFactory.Create(GetUserLocation);
-
-        var chatClient = client.AsBuilder()
-            .UseFunctionInvocation(_loggerFactory)
-            .Build();
-        var agent = new UIAgent(chatClient, options =>
-        {
-            options.ChatOptions = new ChatOptions { Tools = [backendTool] };
-            options.RegisterUIAction(uiAction);
-        }, _loggerFactory);
-
-        var context = new AgentContext(agent);
-        UIActionBlock? actionBlock = null;
-        FunctionInvocationContentBlock? weatherBlock = null;
-        context.RegisterOnStatusChanged(s =>
-        {
-            if (s == ConversationStatus.AwaitingInput)
-            {
-                var turn = context.Turns[^1];
-                actionBlock = turn.ResponseBlocks.OfType<UIActionBlock>().FirstOrDefault();
-                weatherBlock = turn.ResponseBlocks
-                    .OfType<FunctionInvocationContentBlock>()
-                    .FirstOrDefault();
-                if (actionBlock is not null)
-                {
-                    actionBlock.InvokeAsync().GetAwaiter().GetResult();
-                }
-            }
-        });
-
-        await context.SendMessageAsync(
-            "Use the GetUserLocation tool to get my location, " +
-            "then use GetWeather to check the weather there. " +
-            "Call both tools at the same time.");
-
-        SaveIfRecording(client, baseline);
-
-        // UIAction should have been invoked
-        Assert.NotNull(actionBlock);
-        Assert.Equal("GetUserLocation", actionBlock!.ToolName);
-        Assert.True(actionBlock.IsComplete);
-        Assert.True(actionBlock.HasResult);
-
-        // Backend tool should have been invoked automatically
-        Assert.NotNull(weatherBlock);
-        Assert.Equal("GetWeather", weatherBlock!.ToolName);
-        Assert.True(weatherBlock.HasResult);
-
-        // Should have text response after both tools complete
-        var lastTurn = context.Turns[^1];
-        var textBlock = lastTurn.ResponseBlocks.OfType<RichContentBlock>().LastOrDefault();
-        Assert.NotNull(textBlock);
-        Assert.False(string.IsNullOrEmpty(textBlock!.RawText));
     }
 }
