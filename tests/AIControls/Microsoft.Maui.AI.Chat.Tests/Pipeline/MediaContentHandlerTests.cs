@@ -111,7 +111,7 @@ public class MediaContentHandlerTests
 
         Assert.Equal(2, blocks.Count);
         Assert.IsType<MediaContentBlock>(blocks[0]);
-        Assert.IsType<RichContentBlock>(blocks[1]);
+        Assert.IsType<TextContentBlock>(blocks[1]);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class MediaContentHandlerTests
         Assert.Equal(BlockLifecycleState.Inactive, mediaBlock.LifecycleState);
 
         Assert.Single(textBlocks);
-        Assert.IsType<RichContentBlock>(textBlocks[0]);
+        Assert.IsType<TextContentBlock>(textBlocks[0]);
     }
 
     [Fact]

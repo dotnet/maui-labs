@@ -23,7 +23,7 @@
             </controls:CopilotChatView.SuggestionPrompts>
         <controls:CopilotChatView.ContentTemplates>
             <chat:TextContentTemplate Role="User" />
-            <chat:TextContentTemplate Role="Assistant" ViewType="{x:Type local:FormattedTextView}" />
+            <chat:GenericContentTemplate BlockType="{x:Type local:FormattedTextBlock}" ViewType="{x:Type local:FormattedTextView}" />
             <chat:MediaContentTemplate />
             <chat:FunctionCallTemplate />
             <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />

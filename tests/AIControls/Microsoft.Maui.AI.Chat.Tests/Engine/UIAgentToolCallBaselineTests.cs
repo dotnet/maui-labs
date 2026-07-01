@@ -31,8 +31,8 @@ public class UIAgentToolCallBaselineTests
         Assert.Equal("call_abc123", toolBlock.Id);
         Assert.True(toolBlock.HasResult);
 
-        // Should also have a RichContentBlock (text response describing results)
-        var textBlock = assistantBlocks.OfType<RichContentBlock>().FirstOrDefault();
+        // Should also have a TextContentBlock (text response describing results)
+        var textBlock = assistantBlocks.OfType<TextContentBlock>().FirstOrDefault();
         Assert.NotNull(textBlock);
         Assert.False(string.IsNullOrEmpty(textBlock.RawText));
     }
