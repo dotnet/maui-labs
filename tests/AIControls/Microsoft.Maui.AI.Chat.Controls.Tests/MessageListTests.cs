@@ -43,8 +43,9 @@ public class MessageListTests
 
         // 2 user blocks + 2 assistant blocks = 4 minimum
         Assert.True(blocks.Count >= 4, $"Expected >=4 blocks, got {blocks.Count}");
+        // The engine emits only real content — no transient thinking blocks to filter out.
         var assistantBlocks = blocks
-            .Where(b => b.Role == ChatRole.Assistant && b is not ThinkingContentBlock)
+            .Where(b => b.Role == ChatRole.Assistant)
             .ToList();
         Assert.Equal(2, assistantBlocks.Count);
     }

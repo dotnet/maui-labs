@@ -22,7 +22,6 @@ public class AgentContext(UIAgent agent) : IDisposable
     private readonly List<Action<ConversationTurn>> _turnAddedCallbacks = new();
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
-    private readonly List<Action<ConversationTurn, ContentBlock>> _blockRemovedCallbacks = new();
     private CancellationTokenSource? _streamingCts;
     private bool _disposed;
 
@@ -78,32 +77,6 @@ public class AgentContext(UIAgent agent) : IDisposable
         Error = null;
         NotifyStatusChanged();
 
-        // Transient "Thinking…" placeholder shown while waiting for the model.
-        ThinkingContentBlock? thinking = null;
-
-        void EnsureThinking()
-        {
-            if (thinking is not null)
-                return;
-            thinking = new ThinkingContentBlock
-            {
-                Role = ChatRole.Assistant,
-                Id = Guid.NewGuid().ToString("N"),
-                LifecycleState = BlockLifecycleState.Active,
-            };
-            turn.AddResponseBlock(thinking);
-            NotifyBlockAdded(turn, thinking);
-        }
-
-        void DismissThinking()
-        {
-            if (thinking is null)
-                return;
-            turn.RemoveResponseBlock(thinking);
-            NotifyBlockRemoved(turn, thinking);
-            thinking = null;
-        }
-
         try
         {
             ChatMessage? currentMessage = message;
@@ -133,18 +106,10 @@ public class AgentContext(UIAgent agent) : IDisposable
                     }
                     else
                     {
-                        // A real response block arrived — drop the "Thinking…" placeholder.
-                        DismissThinking();
                         turn.AddResponseBlock(block);
                     }
 
                     NotifyBlockAdded(turn, block);
-
-                    // Show "Thinking…" only after the user's message, while awaiting the response.
-                    if (isRequest)
-                    {
-                        EnsureThinking();
-                    }
                 }
 
                 currentMessage = null;
@@ -176,15 +141,8 @@ public class AgentContext(UIAgent agent) : IDisposable
                     Status = ConversationStatus.AwaitingInput;
                     NotifyStatusChanged();
                 }
-                else
-                {
-                    // Backend tools are running — keep showing "Thinking…".
-                    EnsureThinking();
-                }
 
                 var results = await Task.WhenAll(resultTasks);
-
-                DismissThinking();
 
                 if (results.Length > 0)
                 {
@@ -198,8 +156,6 @@ public class AgentContext(UIAgent agent) : IDisposable
                 NotifyStatusChanged();
             }
 
-            DismissThinking();
-
             Status = ConversationStatus.Idle;
             if (cancellationToken.IsCancellationRequested)
             {
@@ -209,25 +165,15 @@ public class AgentContext(UIAgent agent) : IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            DismissThinking();
             turn.ClearResponseBlocks();
             Status = ConversationStatus.Idle;
             NotifyStatusChanged();
         }
         catch (Exception ex)
         {
-            DismissThinking();
+            // Failures surface via Status/Error only — the UI renders them. No block is
+            // added to the turn, so the persistable message thread stays clean.
             Error = ex;
-
-            // Surface the failure as a message bubble in the conversation.
-            var errorBlock = new ErrorContentBlock(ex.Message)
-            {
-                Role = ChatRole.Assistant,
-                Id = Guid.NewGuid().ToString("N"),
-            };
-            turn.AddResponseBlock(errorBlock);
-            NotifyBlockAdded(turn, errorBlock);
-
             Status = ConversationStatus.Error;
             NotifyStatusChanged();
         }
@@ -287,13 +233,6 @@ public class AgentContext(UIAgent agent) : IDisposable
         return new CallbackRegistration<Action<ConversationTurn, ContentBlock>>(_blockAddedCallbacks, callback);
     }
 
-    /// <summary>Registers a callback invoked when a transient block (e.g. the "Thinking…" placeholder) is removed.</summary>
-    public IDisposable RegisterOnBlockRemoved(Action<ConversationTurn, ContentBlock> callback)
-    {
-        _blockRemovedCallbacks.Add(callback);
-        return new CallbackRegistration<Action<ConversationTurn, ContentBlock>>(_blockRemovedCallbacks, callback);
-    }
-
     private void NotifyStatusChanged()
     {
         var snapshot = _statusChangedCallbacks.ToArray();
@@ -315,15 +254,6 @@ public class AgentContext(UIAgent agent) : IDisposable
     private void NotifyBlockAdded(ConversationTurn turn, ContentBlock block)
     {
         var snapshot = _blockAddedCallbacks.ToArray();
-        foreach (var cb in snapshot)
-        {
-            cb(turn, block);
-        }
-    }
-
-    private void NotifyBlockRemoved(ConversationTurn turn, ContentBlock block)
-    {
-        var snapshot = _blockRemovedCallbacks.ToArray();
         foreach (var cb in snapshot)
         {
             cb(turn, block);
