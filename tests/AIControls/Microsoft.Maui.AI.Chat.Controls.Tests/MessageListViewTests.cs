@@ -15,7 +15,7 @@ public class MessageListViewTests
     public void NewView_HasNoItems()
     {
         var view = new MessageListView();
-        Assert.Equal(0, view.ItemCount);
+        Assert.Empty(view.Items);
     }
 
     [Fact]
@@ -39,23 +39,23 @@ public class MessageListViewTests
         var view = new MessageListView { Session = session };
 
         // At minimum the user prompt block and the assistant response block are rendered.
-        Assert.True(view.ItemCount >= 2, $"Expected >= 2 items, got {view.ItemCount}");
+        Assert.True(view.Items.Count >= 2, $"Expected >= 2 items, got {view.Items.Count}");
     }
 
     [Fact]
-    public async Task SettingSession_RaisesItemsChanged()
+    public async Task SettingSession_RaisesItemsCollectionChanged()
     {
         var session = SessionFactory.Create("Hello!");
         await session.SendMessageAsync("Hi");
 
         var view = new MessageListView();
         var raised = 0;
-        view.ItemsChanged += (_, _) => raised++;
+        ((System.Collections.Specialized.INotifyCollectionChanged)view.Items).CollectionChanged += (_, _) => raised++;
 
         view.Session = session;
 
         Assert.True(raised > 0);
-        Assert.True(view.ItemCount > 0);
+        Assert.True(view.Items.Count > 0);
     }
 
     [Fact]
@@ -65,11 +65,11 @@ public class MessageListViewTests
         await session.SendMessageAsync("Hi");
 
         var view = new MessageListView { Session = session };
-        Assert.True(view.ItemCount > 0);
+        Assert.True(view.Items.Count > 0);
 
         view.Session = null;
 
-        Assert.Equal(0, view.ItemCount);
+        Assert.Empty(view.Items);
     }
 
     [Fact]
@@ -81,8 +81,8 @@ public class MessageListViewTests
         var view = new MessageListView { Session = session };
 
         // After a successful turn, only real content is rendered — no transient status items.
-        Assert.DoesNotContain(view.RenderedBlocks, b => b is ThinkingContentBlock);
-        Assert.DoesNotContain(view.RenderedBlocks, b => b is ErrorContentBlock);
+        Assert.DoesNotContain(view.Items, c => c.Block is ThinkingContentBlock);
+        Assert.DoesNotContain(view.Items, c => c.Block is ErrorContentBlock);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class MessageListViewTests
         // A view bound to the failed session re-projects the error as a UI-only item.
         var view = new MessageListView { Session = session };
 
-        var error = Assert.Single(view.RenderedBlocks.OfType<ErrorContentBlock>());
+        var error = Assert.Single(view.Items.Select(c => c.Block).OfType<ErrorContentBlock>());
         Assert.Contains("boom", error.Message);
 
         // ...but the engine's turns never contained an error block (thread stays clean).
