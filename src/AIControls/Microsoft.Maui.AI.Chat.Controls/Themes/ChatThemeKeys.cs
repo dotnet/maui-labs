@@ -9,8 +9,7 @@ public static class ChatThemeKeys
 {
     // ControlTemplates
     public const string ChatMessageTemplate = "ExtensionsAI.ChatMessageTemplate";
-    public const string FunctionCallTemplate = "ExtensionsAI.FunctionCallTemplate";
-    public const string FunctionResultTemplate = "ExtensionsAI.FunctionResultTemplate";
+    public const string FunctionInvocationTemplate = "ExtensionsAI.FunctionInvocationTemplate";
     public const string DefaultTemplate = "ExtensionsAI.DefaultTemplate";
     public const string ToolApprovalTemplate = "ExtensionsAI.ToolApprovalTemplate";
 
@@ -52,4 +51,5 @@ public static class ChatThemeKeys
 
     // CopilotChatView
     public const string CopilotChatViewTemplate = "ExtensionsAI.CopilotChatViewTemplate";
+    public const string MessageListViewTemplate = "ExtensionsAI.MessageListViewTemplate";
 }
