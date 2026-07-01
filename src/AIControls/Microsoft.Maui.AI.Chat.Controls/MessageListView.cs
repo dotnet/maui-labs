@@ -26,32 +26,10 @@ public partial class MessageListView : TemplatedView
             typeof(MessageListView),
             propertyChanged: OnSessionChanged);
 
-    public static readonly BindableProperty ShowToolCallsProperty =
-        BindableProperty.Create(nameof(ShowToolCalls), typeof(bool), typeof(MessageListView), true,
-            propertyChanged: (b, _, _) => ((MessageListView)b).RebuildFromSession());
-
-    public static readonly BindableProperty ShowToolResultsProperty =
-        BindableProperty.Create(nameof(ShowToolResults), typeof(bool), typeof(MessageListView), true,
-            propertyChanged: (b, _, _) => ((MessageListView)b).RebuildFromSession());
-
     public AgentContext? Session
     {
         get => (AgentContext?)GetValue(SessionProperty);
         set => SetValue(SessionProperty, value);
-    }
-
-    /// <summary>When <see langword="false"/>, pending tool calls (no result yet) are hidden.</summary>
-    public bool ShowToolCalls
-    {
-        get => (bool)GetValue(ShowToolCallsProperty);
-        set => SetValue(ShowToolCallsProperty, value);
-    }
-
-    /// <summary>When <see langword="false"/>, completed tool results are hidden.</summary>
-    public bool ShowToolResults
-    {
-        get => (bool)GetValue(ShowToolResultsProperty);
-        set => SetValue(ShowToolResultsProperty, value);
     }
 
     private readonly ObservableCollection<ContentTemplate> _contentTemplates = [];
@@ -253,11 +231,10 @@ public partial class MessageListView : TemplatedView
 
     private bool ShouldShowBlock(ContentBlock block)
     {
+        // A dismissed "Thinking…" block should be removed from the list. Everything else is
+        // shown; whether it renders is decided by the templates (an unmatched block renders
+        // nothing), so hiding a block kind is done by omitting its template.
         if (block is ThinkingContentBlock thinking && thinking.IsDismissed)
-            return false;
-        if (!ShowToolCalls && block is FunctionInvocationContentBlock ficb && ficb.Result is null)
-            return false;
-        if (!ShowToolResults && block is FunctionInvocationContentBlock ficbr && ficbr.Result is not null)
             return false;
         return true;
     }

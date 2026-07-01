@@ -18,14 +18,6 @@ public class MessageListViewTests
     }
 
     [Fact]
-    public void NewView_ShowToolCallsAndResults_DefaultToTrue()
-    {
-        var view = new MessageListView();
-        Assert.True(view.ShowToolCalls);
-        Assert.True(view.ShowToolResults);
-    }
-
-    [Fact]
     public void ContentTemplates_IsTheContentProperty_AndMutable()
     {
         var view = new MessageListView();
@@ -77,20 +69,5 @@ public class MessageListViewTests
         view.Session = null;
 
         Assert.Equal(0, view.ItemCount);
-    }
-
-    [Fact]
-    public async Task TogglingShowToolResults_RebuildsAndRaisesItemsChanged()
-    {
-        var session = SessionFactory.Create("Hello!");
-        await session.SendMessageAsync("Hi");
-
-        var view = new MessageListView { Session = session };
-        var raised = 0;
-        view.ItemsChanged += (_, _) => raised++;
-
-        view.ShowToolResults = false;
-
-        Assert.True(raised > 0);
     }
 }
