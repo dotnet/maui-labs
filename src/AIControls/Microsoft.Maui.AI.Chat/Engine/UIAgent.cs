@@ -94,8 +94,7 @@ public class UIAgent : IDisposable
         var chatOptions = _options.ChatOptions;
 
         var updateIndex = 0;
-        await foreach (var update in _chatClient.GetStreamingResponseAsync(
-            _history, chatOptions, cancellationToken).ConfigureAwait(false))
+        await foreach (var update in _chatClient.GetStreamingResponseAsync(_history, chatOptions, cancellationToken).ConfigureAwait(false))
         {
             var contentTypes = string.Join(", ", update.Contents.Select(c => c.GetType().Name));
             UIAgentLog.ReceivedUpdate(_logger, updateIndex++, update.Role?.Value, contentTypes);

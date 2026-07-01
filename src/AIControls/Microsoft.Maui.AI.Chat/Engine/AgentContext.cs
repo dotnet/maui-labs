@@ -16,20 +16,14 @@ namespace Microsoft.Maui.AI.Chat;
 /// backend tools and awaits <see cref="IInteractiveBlock"/>s (e.g. approvals), then feeds the results
 /// back for another round. Rendered by the Controls layer's <c>CopilotChatView</c>.
 /// </remarks>
-public class AgentContext : IDisposable
+public class AgentContext(UIAgent agent) : IDisposable
 {
-    private readonly UIAgent _agent;
     private readonly List<ConversationTurn> _turns = new();
     private readonly List<Action<ConversationTurn>> _turnAddedCallbacks = new();
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
     private CancellationTokenSource? _streamingCts;
     private bool _disposed;
-
-    public AgentContext(UIAgent agent)
-    {
-        _agent = agent;
-    }
 
     public IReadOnlyList<ConversationTurn> Turns => _turns;
 
@@ -47,7 +41,7 @@ public class AgentContext : IDisposable
         _streamingCts?.Dispose();
         _streamingCts = null;
         _turns.Clear();
-        _agent.ClearHistory();
+        agent.ClearHistory();
         Error = null;
         Status = ConversationStatus.Idle;
         NotifyStatusChanged();
@@ -83,17 +77,45 @@ public class AgentContext : IDisposable
         Error = null;
         NotifyStatusChanged();
 
+        // Transient "Thinking…" placeholder shown while waiting for the model.
+        ThinkingContentBlock? thinking = null;
+
+        void EnsureThinking()
+        {
+            if (thinking is { IsDismissed: false })
+                return;
+            thinking = new ThinkingContentBlock
+            {
+                Role = ChatRole.Assistant,
+                Id = Guid.NewGuid().ToString("N"),
+                LifecycleState = BlockLifecycleState.Active,
+            };
+            turn.AddResponseBlock(thinking);
+            NotifyBlockAdded(turn, thinking);
+        }
+
+        void DismissThinking()
+        {
+            if (thinking is null || thinking.IsDismissed)
+                return;
+            thinking.Dismiss();
+            turn.RemoveResponseBlock(thinking);
+            thinking.InvokeNotifyChanged();
+            thinking = null;
+        }
+
         try
         {
             ChatMessage? currentMessage = message;
 
             while (currentMessage is not null)
             {
+                EnsureThinking();
+
                 var interactiveBlocks = new List<IInteractiveBlock>();
                 var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
 
-                await foreach (var block in _agent.SendMessageAsync(currentMessage, cancellationToken)
-                    .WithCancellation(cancellationToken))
+                await foreach (var block in agent.SendMessageAsync(currentMessage, cancellationToken).WithCancellation(cancellationToken))
                 {
                     if (block is IInteractiveBlock interactive)
                     {
@@ -112,6 +134,8 @@ public class AgentContext : IDisposable
                     }
                     else
                     {
+                        // A real response block arrived — drop the "Thinking…" placeholder.
+                        DismissThinking();
                         turn.AddResponseBlock(block);
                     }
 
@@ -147,8 +171,15 @@ public class AgentContext : IDisposable
                     Status = ConversationStatus.AwaitingInput;
                     NotifyStatusChanged();
                 }
+                else
+                {
+                    // Backend tools are running — keep showing "Thinking…".
+                    EnsureThinking();
+                }
 
                 var results = await Task.WhenAll(resultTasks);
+
+                DismissThinking();
 
                 if (results.Length > 0)
                 {
@@ -162,6 +193,8 @@ public class AgentContext : IDisposable
                 NotifyStatusChanged();
             }
 
+            DismissThinking();
+
             Status = ConversationStatus.Idle;
             if (cancellationToken.IsCancellationRequested)
             {
@@ -171,13 +204,25 @@ public class AgentContext : IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            DismissThinking();
             turn.ClearResponseBlocks();
             Status = ConversationStatus.Idle;
             NotifyStatusChanged();
         }
         catch (Exception ex)
         {
+            DismissThinking();
             Error = ex;
+
+            // Surface the failure as a message bubble in the conversation.
+            var errorBlock = new ErrorContentBlock(ex.Message)
+            {
+                Role = ChatRole.Assistant,
+                Id = Guid.NewGuid().ToString("N"),
+            };
+            turn.AddResponseBlock(errorBlock);
+            NotifyBlockAdded(turn, errorBlock);
+
             Status = ConversationStatus.Error;
             NotifyStatusChanged();
         }
@@ -187,7 +232,7 @@ public class AgentContext : IDisposable
         FunctionInvocationContentBlock block,
         CancellationToken cancellationToken)
     {
-        var result = await _agent.InvokeToolAsync(block.Call!, cancellationToken);
+        var result = await agent.InvokeToolAsync(block.Call!, cancellationToken);
         block.Result = result;
         block.InvokeNotifyChanged();
         return result;
