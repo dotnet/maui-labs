@@ -9,8 +9,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// </summary>
 /// <remarks>
 /// Not produced by the pipeline: <see cref="AgentContext"/> adds it at the start of a streaming round
-/// and dismisses it (<see cref="Dismiss"/>) as soon as real content arrives or the turn completes.
-/// It surfaces to the UI as an assistant message like any other block.
+/// and removes it (raising the block-removed callback) as soon as real content arrives or the turn
+/// completes. It renders inline as an assistant message like any other block.
 /// </remarks>
 public sealed class ThinkingContentBlock : ContentBlock
 {
@@ -20,12 +20,4 @@ public sealed class ThinkingContentBlock : ContentBlock
     }
 
     public string Text { get; }
-
-    /// <summary>True once the block has been dismissed; the UI removes it when this becomes true.</summary>
-    public bool IsDismissed { get; private set; }
-
-    internal void Dismiss()
-    {
-        IsDismissed = true;
-    }
 }
