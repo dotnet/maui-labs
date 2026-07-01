@@ -9,7 +9,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <code>
 /// &lt;chat:GenericContentTemplate Role="Assistant" ViewType="{x:Type local:MyAssistantView}" /&gt;
 /// &lt;chat:GenericContentTemplate ToolName="GetWeather" ViewType="{x:Type local:WeatherView}" /&gt;
-/// &lt;chat:GenericContentTemplate BlockType="{x:Type ai:ReasoningContentBlock}" ViewType="{x:Type local:ReasoningView}" /&gt;
+/// &lt;chat:GenericContentTemplate BlockType="{x:Type ai:MediaContentBlock}" ViewType="{x:Type local:MyMediaView}" /&gt;
 /// </code>
 /// All filter properties are optional; when multiple are set, ALL must match (AND logic).
 /// </summary>

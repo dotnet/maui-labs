@@ -24,21 +24,11 @@ internal class BlockMappingPipeline
             _handlers.Add(registration.CreateEntry());
         }
 
-        // Built-in UI action handler (claims FunctionCallContent for registered UI actions)
-        if (options.UIActions.Count > 0)
-        {
-            _handlers.Add(new HandlerEntry<UIActionHandler.UIActionHandlerState>(
-                new UIActionHandler(options.UIActions)));
-        }
-
         // Built-in approval handler (before function invocation so it claims ToolApprovalRequestContent first)
         _handlers.Add(new HandlerEntry<FunctionApprovalHandler.ApprovalHandlerState>(new FunctionApprovalHandler()));
 
         // Built-in function invocation handler
         _handlers.Add(new HandlerEntry<FunctionInvocationContentBlock>(new FunctionInvocationHandler()));
-
-        // Built-in reasoning handler (before text so reasoning completes before text takes over)
-        _handlers.Add(new HandlerEntry<ReasoningContentBlock>(new ReasoningHandler()));
 
         // Built-in media handler (before text so DataContent is claimed before fallback)
         _handlers.Add(new HandlerEntry<MediaContentBlock>(new MediaContentHandler()));

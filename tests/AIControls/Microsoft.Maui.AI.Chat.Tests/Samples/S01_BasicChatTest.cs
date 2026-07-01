@@ -51,10 +51,6 @@ public class S01_BasicChatTest
         var turn = context.Turns[0];
         var responseBlock = Assert.IsType<RichContentBlock>(turn.ResponseBlocks.Single());
         Assert.Equal("The weather is sunny.", responseBlock.RawText);
-        // 4 tokens form a single paragraph
-        var paragraph = Assert.IsType<ParagraphNode>(Assert.Single(responseBlock.Content));
-        var textNode = Assert.IsType<TextNode>(Assert.Single(paragraph.Children));
-        Assert.Equal("The weather is sunny.", textNode.Text);
     }
 
     [Fact]

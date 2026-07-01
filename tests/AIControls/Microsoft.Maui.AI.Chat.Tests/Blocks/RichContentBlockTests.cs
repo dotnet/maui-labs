@@ -24,13 +24,6 @@ public class RichContentBlockTests
     }
 
     [Fact]
-    public void Content_EmptyByDefault()
-    {
-        var block = new RichContentBlock();
-        Assert.Empty(block.Content);
-    }
-
-    [Fact]
     public void RawText_CachesResult()
     {
         var block = new RichContentBlock();

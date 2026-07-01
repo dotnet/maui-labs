@@ -9,24 +9,13 @@ public class UIAgentOptions
 {
     public ChatOptions? ChatOptions { get; set; }
 
-    public Func<StateMapperContext, bool>? StateMapper { get; set; }
-
-    public IConversationThread? Thread { get; set; }
-
     internal List<IHandlerRegistration> HandlerRegistrations { get; } = new();
-
-    internal Dictionary<string, AIFunction> UIActions { get; } = new();
 
     public void AddBlockHandler<TState>(ContentBlockHandler<TState> handler)
         where TState : new()
     {
         ArgumentNullException.ThrowIfNull(handler);
         HandlerRegistrations.Add(new HandlerRegistration<TState>(handler));
-    }
-
-    public void RegisterUIAction(AIFunction function)
-    {
-        UIActions.Add(function.Name, function);
     }
 
     internal interface IHandlerRegistration

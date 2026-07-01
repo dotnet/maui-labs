@@ -46,17 +46,6 @@ public class TemplateSelectorTests
     }
 
     [Fact]
-    public void SelectTemplate_ReasoningBlock_MatchesReasoningTemplate()
-    {
-        var selector = CreateDefaultSelector();
-        var context = BlockFactory.MakeReasoning("Thinking...");
-
-        var template = selector.SelectTemplate(context, null!);
-
-        Assert.NotNull(template);
-    }
-
-    [Fact]
     public void SelectTemplate_UnknownBlock_ReturnsFallback()
     {
         var selector = new ContentTemplateSelector();
@@ -189,7 +178,6 @@ public class TemplateSelectorTests
         selector.Templates.Add(new TextContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new FunctionCallTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new FunctionResultTemplate { ViewType = typeof(Label) });
-        selector.Templates.Add(new ReasoningContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new MediaContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new DefaultContentTemplate { ViewType = typeof(Label) });
         return selector;
