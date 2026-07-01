@@ -1,4 +1,4 @@
-﻿namespace AiControlsSample;
+namespace AiControlsSample;
 
 public partial class AppShell : Shell
 {
