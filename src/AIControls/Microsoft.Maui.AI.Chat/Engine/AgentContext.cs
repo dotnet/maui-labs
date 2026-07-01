@@ -14,7 +14,6 @@ public class AgentContext : IDisposable
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
     private CancellationTokenSource? _streamingCts;
-    private ChatMessage? _lastMessage;
     private bool _disposed;
 
     public AgentContext(UIAgent agent)
@@ -38,7 +37,6 @@ public class AgentContext : IDisposable
         _streamingCts?.Dispose();
         _streamingCts = null;
         _turns.Clear();
-        _lastMessage = null;
         Error = null;
         Status = ConversationStatus.Idle;
         NotifyStatusChanged();
@@ -56,8 +54,6 @@ public class AgentContext : IDisposable
             throw new InvalidOperationException("A message is already being processed.");
         }
 
-        _lastMessage = message;
-
         var turn = new ConversationTurn();
         _turns.Add(turn);
         NotifyTurnAdded(turn);
@@ -65,38 +61,6 @@ public class AgentContext : IDisposable
         _streamingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         await StreamIntoTurnAsync(message, turn, _streamingCts.Token);
-    }
-
-    public async Task RestoreAsync(CancellationToken cancellationToken = default)
-    {
-        if (Status == ConversationStatus.Streaming)
-        {
-            throw new InvalidOperationException("A message is already being processed.");
-        }
-
-        var blocks = await _agent.RestoreAsync(cancellationToken);
-
-        ConversationTurn? currentTurn = null;
-
-        foreach (var block in blocks)
-        {
-            if (block.Role == ChatRole.User)
-            {
-                currentTurn = new ConversationTurn();
-                _turns.Add(currentTurn);
-                currentTurn.AddRequestBlock(block);
-            }
-            else
-            {
-                if (currentTurn is null)
-                {
-                    currentTurn = new ConversationTurn();
-                    _turns.Add(currentTurn);
-                }
-
-                currentTurn.AddResponseBlock(block);
-            }
-        }
     }
 
     private async Task StreamIntoTurnAsync(
@@ -216,22 +180,6 @@ public class AgentContext : IDisposable
         block.Result = result;
         block.InvokeNotifyChanged();
         return result;
-    }
-
-    public async Task RetryAsync(CancellationToken cancellationToken = default)
-    {
-        if (Status != ConversationStatus.Error)
-        {
-            throw new InvalidOperationException(
-                $"RetryAsync requires Status == Error, but Status is {Status}.");
-        }
-
-        var turn = _turns[^1];
-        turn.ClearResponseBlocks();
-
-        _streamingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        await StreamIntoTurnAsync(_lastMessage!, turn, _streamingCts.Token);
     }
 
     public Task CancelAsync()

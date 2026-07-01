@@ -83,24 +83,6 @@ public class BlockRendererTests
     }
 
     [Fact]
-    public void ReasoningTemplate_MatchesReasoningBlock()
-    {
-        var template = new ReasoningContentTemplate { ViewType = typeof(Label) };
-        var context = BlockFactory.MakeReasoning("Let me think about this...");
-
-        Assert.True(template.When(context));
-    }
-
-    [Fact]
-    public void ReasoningTemplate_DoesNotMatchTextBlock()
-    {
-        var template = new ReasoningContentTemplate { ViewType = typeof(Label) };
-        var context = BlockFactory.MakeText("Assistant", "Not reasoning");
-
-        Assert.False(template.When(context));
-    }
-
-    [Fact]
     public void ToolApprovalTemplate_MatchesApprovalBlock()
     {
         var template = new ToolApprovalTemplate { ViewType = typeof(Label) };

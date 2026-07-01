@@ -60,14 +60,6 @@ internal static class BlockFactory
         return new ContentContext(CreateSession(), block);
     }
 
-    public static ContentContext MakeReasoning(string text)
-    {
-        var block = new ReasoningContentBlock();
-        block.AppendText(text);
-        block.Role = ChatRole.Assistant;
-        return new ContentContext(CreateSession(), block);
-    }
-
     public static ContentContext MakeMedia()
     {
         var block = new MediaContentBlock();
