@@ -29,16 +29,15 @@ public class MediaContentView : ContentContextView
             {
                 var image = new Image
                 {
-                    HeightRequest = 200,
+                    HeightRequest = 240,
                     Aspect = Aspect.AspectFit,
                     Margin = new Thickness(0, 4),
+                    HorizontalOptions = LayoutOptions.Start,
                 };
 
-                // DataContent.Uri is always a valid URI string (may be data: URI)
-                if (!string.IsNullOrEmpty(item.Uri))
-                {
-                    image.Source = ImageSource.FromUri(new Uri(item.Uri));
-                }
+                // Render from the raw bytes (efficient for large generated images).
+                var bytes = item.Data.ToArray();
+                image.Source = ImageSource.FromStream(() => new MemoryStream(bytes));
 
                 _layout.Children.Add(image);
             }

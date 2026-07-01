@@ -11,6 +11,7 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<NoWarn>$(NoWarn);MEAI001</NoWarn>
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 		<ValidateXcodeVersion>false</ValidateXcodeVersion>
 
