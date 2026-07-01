@@ -4,8 +4,13 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Thin MAUI wrapper around a <see cref="ContentBlock"/> from the Core engine.
+/// Thin MAUI wrapper around a <see cref="ContentBlock"/> from the Core engine, exposing UI-friendly
+/// helpers (role, tool name, approval state) for templates and views to bind against.
 /// </summary>
+/// <remarks>
+/// One <c>ContentContext</c> is created per block by <c>CopilotChatView</c>; a
+/// <see cref="ContentTemplateSelector"/> then picks the <see cref="ContentTemplate"/> that renders it.
+/// </remarks>
 public sealed class ContentContext
 {
     public ContentContext(AgentContext agentContext, ContentBlock block)
@@ -34,7 +39,7 @@ public sealed class ContentContext
     public string? ToolName => Block switch
     {
         FunctionInvocationContentBlock ficb => ficb.Call?.Name,
-        FunctionApprovalBlock fab => fab.ToolName,
+        ToolApprovalBlock fab => fab.ToolName,
         _ => null,
     };
 
@@ -44,8 +49,8 @@ public sealed class ContentContext
     /// <summary>Gets the text content if this is a TextContentBlock.</summary>
     public string? TextContent => Block is TextContentBlock rcb ? rcb.RawText : null;
 
-    /// <summary>Approval status for FunctionApprovalBlock, null otherwise.</summary>
-    public ApprovalStatus? ApprovalState => Block is FunctionApprovalBlock fab ? fab.Status : null;
+    /// <summary>Approval status for ToolApprovalBlock, null otherwise.</summary>
+    public ApprovalStatus? ApprovalState => Block is ToolApprovalBlock fab ? fab.Status : null;
 
     /// <summary>Whether approval has been resolved (approved or rejected).</summary>
     public bool ApprovalResolved =>

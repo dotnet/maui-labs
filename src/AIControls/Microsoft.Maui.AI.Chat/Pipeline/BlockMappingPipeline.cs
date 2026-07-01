@@ -9,6 +9,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// Runs the registered <see cref="ContentBlockHandler{TState}"/>s over each streamed
+/// <c>ChatResponseUpdate</c>, letting handlers claim content and emit, update, or complete
+/// <see cref="ContentBlock"/>s.
+/// </summary>
+/// <remarks>
+/// Built by <see cref="UIAgent"/> for each message. Active (streaming) blocks get first chance at new
+/// content; unclaimed content then falls through to inactive handlers, ending at the text fallback.
+/// </remarks>
 internal class BlockMappingPipeline
 {
     private readonly List<IHandlerEntry> _handlers = new();
@@ -25,7 +34,7 @@ internal class BlockMappingPipeline
         }
 
         // Built-in approval handler (before function invocation so it claims ToolApprovalRequestContent first)
-        _handlers.Add(new HandlerEntry<FunctionApprovalHandler.ApprovalHandlerState>(new FunctionApprovalHandler()));
+        _handlers.Add(new HandlerEntry<ToolApprovalHandler.ApprovalHandlerState>(new ToolApprovalHandler()));
 
         // Built-in function invocation handler
         _handlers.Add(new HandlerEntry<FunctionInvocationContentBlock>(new FunctionInvocationHandler()));

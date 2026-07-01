@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
+/// <summary>Matches a <see cref="Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock"/> that has no result yet, rendering the pending tool call.</summary>
 public class FunctionCallTemplate : ContentTemplate
 {
     public string? ToolName { get; set; }

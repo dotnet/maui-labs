@@ -3,6 +3,7 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>Pairs a <see cref="ContentBlockHandler{TState}"/> with its per-block state for one pipeline run.</summary>
 internal sealed class HandlerEntry<TState> : IHandlerEntry where TState : new()
 {
     private readonly ContentBlockHandler<TState> _handler;

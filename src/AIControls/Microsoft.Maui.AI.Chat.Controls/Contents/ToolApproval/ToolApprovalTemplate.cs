@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Matches <see cref="FunctionApprovalBlock"/> items in the chat.
+/// Matches <see cref="ToolApprovalBlock"/> items in the chat.
 /// Optionally filters by tool name.
 /// Set <see cref="ContentTemplate.ViewType"/> to a custom inner content view;
 /// leave null for the default arguments display.
@@ -17,7 +17,7 @@ public class ToolApprovalTemplate : ContentTemplate
 
     public override bool When(ContentContext context)
     {
-        if (context.Block is not FunctionApprovalBlock fab)
+        if (context.Block is not ToolApprovalBlock fab)
             return false;
 
         if (ToolName is not null && !string.Equals(fab.ToolName, ToolName, StringComparison.OrdinalIgnoreCase))

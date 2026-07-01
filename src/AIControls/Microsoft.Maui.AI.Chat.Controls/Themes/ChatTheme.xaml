@@ -15,8 +15,6 @@
     <Color x:Key="ExtensionsAI.FunctionCall.TextColor">#7A7062</Color>
     <Color x:Key="ExtensionsAI.FunctionResult.Background">#EDF6EC</Color>
     <Color x:Key="ExtensionsAI.FunctionResult.TextColor">#7A7062</Color>
-    <Color x:Key="ExtensionsAI.Error.Background">#FDE8E8</Color>
-    <Color x:Key="ExtensionsAI.Error.TextColor">#C75050</Color>
     <Color x:Key="ExtensionsAI.Default.TextColor">#7A7062</Color>
     <Color x:Key="ExtensionsAI.Approval.Background">#FFFBF0</Color>
     <Color x:Key="ExtensionsAI.Approval.Border">#E8D9B5</Color>
@@ -136,22 +134,6 @@
                 <Label Text="{TemplateBinding ResultText}" FontSize="11"
                        LineBreakMode="WordWrap" MaximumWidthRequest="300"
                        TextColor="{DynamicResource ExtensionsAI.FunctionResult.TextColor}" />
-            </Border>
-        </Grid>
-    </ControlTemplate>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- ControlTemplate: ErrorMessageView                             -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <ControlTemplate x:Key="ExtensionsAI.ErrorTemplate">
-        <Grid Padding="0,4">
-            <Border Padding="12,10" MaximumWidthRequest="340" HorizontalOptions="Start"
-                    BackgroundColor="{DynamicResource ExtensionsAI.Error.Background}" StrokeThickness="0">
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="12" />
-                </Border.StrokeShape>
-                <Label Text="{TemplateBinding ErrorMessageText}" FontSize="14"
-                       TextColor="{DynamicResource ExtensionsAI.Error.TextColor}" />
             </Border>
         </Grid>
     </ControlTemplate>
@@ -286,10 +268,6 @@
 
     <Style TargetType="chat:FunctionResultMessageView">
         <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.FunctionResultTemplate}" />
-    </Style>
-
-    <Style TargetType="chat:ErrorMessageView">
-        <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.ErrorTemplate}" />
     </Style>
 
     <Style TargetType="chat:DefaultMessageView">

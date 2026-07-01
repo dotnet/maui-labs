@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
+/// <summary>Matches a <see cref="Microsoft.Maui.AI.Chat.TextContentBlock"/> (optionally filtered by role) and renders a <see cref="ChatMessageView"/> bubble.</summary>
 public class TextContentTemplate : ContentTemplate
 {
     /// <summary>

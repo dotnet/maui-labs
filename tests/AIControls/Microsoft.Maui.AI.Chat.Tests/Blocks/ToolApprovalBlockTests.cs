@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Blocks;
 
-public class FunctionApprovalBlockTests
+public class ToolApprovalBlockTests
 {
     [Fact]
     public void CreatedWithPendingStatus()
@@ -15,7 +15,7 @@ public class FunctionApprovalBlockTests
             Call = new FunctionCallContent("call-1", "DeleteFile", null)
         };
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        var block = new FunctionApprovalBlock(innerBlock, request);
+        var block = new ToolApprovalBlock(innerBlock, request);
 
         Assert.Equal(ApprovalStatus.Pending, block.Status);
         Assert.Same(innerBlock, block.InnerBlock);
@@ -82,13 +82,13 @@ public class FunctionApprovalBlockTests
         Assert.True(block.GetResultAsync().IsCompleted);
     }
 
-    private static FunctionApprovalBlock CreateBlock()
+    private static ToolApprovalBlock CreateBlock()
     {
         var innerBlock = new FunctionInvocationContentBlock
         {
             Call = new FunctionCallContent("call-1", "DeleteFile", null)
         };
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        return new FunctionApprovalBlock(innerBlock, request);
+        return new ToolApprovalBlock(innerBlock, request);
     }
 }

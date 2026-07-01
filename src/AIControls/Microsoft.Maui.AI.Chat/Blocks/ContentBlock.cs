@@ -5,10 +5,20 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// Base class for every renderable unit in a conversation. Owns an <see cref="Id"/>, a
+/// <see cref="LifecycleState"/>, a <see cref="Role"/>, and a change-notification used to stream
+/// incremental updates to the UI.
+/// </summary>
+/// <remarks>
+/// Blocks are produced by a <see cref="ContentBlockHandler{TState}"/> from raw
+/// Microsoft.Extensions.AI content, grouped into a <see cref="ConversationTurn"/> by
+/// <see cref="AgentContext"/>, and rendered by a <c>ContentTemplate</c> in the Controls layer.
+/// </remarks>
 public abstract class ContentBlock
 {
-    // TODO: Upstream change - setter made public for source generator compatibility
-    // (generated handlers in consumer assemblies need to set Id from FunctionCallContent.CallId)
+    // Public setter so custom block handlers (e.g. in the sample) can assign Id
+    // from a FunctionCallContent.CallId when projecting M.E.AI content into a block.
     public string Id { get; set; } = string.Empty;
 
     public BlockLifecycleState LifecycleState { get; internal set; }

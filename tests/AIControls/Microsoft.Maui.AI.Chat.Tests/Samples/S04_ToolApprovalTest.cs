@@ -35,7 +35,7 @@ public class S04_ToolApprovalTest
             if (s == ConversationStatus.AwaitingInput)
             {
                 var block = context.Turns[^1].ResponseBlocks
-                    .OfType<FunctionApprovalBlock>().Single();
+                    .OfType<ToolApprovalBlock>().Single();
                 Assert.Equal(ApprovalStatus.Pending, block.Status);
                 Assert.Equal("DeleteFile", block.ToolName);
                 block.Approve();
@@ -80,7 +80,7 @@ public class S04_ToolApprovalTest
             if (s == ConversationStatus.AwaitingInput)
             {
                 context.Turns[^1].ResponseBlocks
-                    .OfType<FunctionApprovalBlock>().Single()
+                    .OfType<ToolApprovalBlock>().Single()
                     .Reject("User declined");
             }
         });
@@ -90,7 +90,7 @@ public class S04_ToolApprovalTest
         Assert.Equal(ConversationStatus.Idle, context.Status);
 
         var approvalBlock = context.Turns[0].ResponseBlocks
-            .OfType<FunctionApprovalBlock>().Single();
+            .OfType<ToolApprovalBlock>().Single();
         Assert.Equal(ApprovalStatus.Rejected, approvalBlock.Status);
     }
 }

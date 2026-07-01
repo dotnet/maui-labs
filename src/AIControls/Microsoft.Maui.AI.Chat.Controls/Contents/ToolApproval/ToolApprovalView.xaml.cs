@@ -185,7 +185,7 @@ public class ToolApprovalView : ContentContextView
 
     private View BuildDefaultArgsView()
     {
-        if (ContentContext?.Block is not FunctionApprovalBlock fab ||
+        if (ContentContext?.Block is not ToolApprovalBlock fab ||
             fab.Arguments is null || fab.Arguments.Count == 0)
         {
             return ApplyStyleResource(
@@ -225,13 +225,13 @@ public class ToolApprovalView : ContentContextView
 
     private void Approve()
     {
-        if (ContentContext?.Block is FunctionApprovalBlock fab && fab.Status == ApprovalStatus.Pending)
+        if (ContentContext?.Block is ToolApprovalBlock fab && fab.Status == ApprovalStatus.Pending)
             fab.Approve();
     }
 
     private void Reject()
     {
-        if (ContentContext?.Block is FunctionApprovalBlock fab && fab.Status == ApprovalStatus.Pending)
+        if (ContentContext?.Block is ToolApprovalBlock fab && fab.Status == ApprovalStatus.Pending)
             fab.Reject();
     }
 }

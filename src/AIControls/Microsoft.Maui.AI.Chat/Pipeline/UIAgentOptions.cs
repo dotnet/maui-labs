@@ -5,6 +5,11 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// Configuration for a <see cref="UIAgent"/>: the <c>ChatOptions</c> (instructions and tools) plus any
+/// custom block handlers.
+/// </summary>
+/// <remarks>Use <see cref="AddBlockHandler{TState}"/> to plug a custom <see cref="ContentBlockHandler{TState}"/> into the pipeline.</remarks>
 public class UIAgentOptions
 {
     public ChatOptions? ChatOptions { get; set; }

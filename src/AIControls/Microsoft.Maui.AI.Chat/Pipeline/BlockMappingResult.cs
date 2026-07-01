@@ -3,6 +3,10 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// The outcome a <see cref="ContentBlockHandler{TState}"/> returns: <c>Pass</c> (not mine), <c>Emit</c>
+/// (a new block), <c>Update</c> (more streamed content for my active block), or <c>Complete</c> (done).
+/// </summary>
 public readonly struct BlockMappingResult<TState>
 {
     internal enum ResultKind { Pass, Emit, Update, Complete }

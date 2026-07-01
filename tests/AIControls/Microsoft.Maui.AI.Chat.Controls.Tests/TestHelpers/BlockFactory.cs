@@ -55,7 +55,7 @@ internal static class BlockFactory
         };
         innerBlock.Role = ChatRole.Assistant;
         var request = new ToolApprovalRequestContent("req-1", innerBlock.Call);
-        var block = new FunctionApprovalBlock(innerBlock, request);
+        var block = new ToolApprovalBlock(innerBlock, request);
         block.Role = ChatRole.Assistant;
         return new ContentContext(CreateSession(), block);
     }
