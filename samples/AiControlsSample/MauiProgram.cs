@@ -101,7 +101,8 @@ public static class MauiProgram
                 clientBuilder.UseImageGeneration(imageGenerator);
             }
 
-            clientBuilder.UseFunctionInvocation();
+            // Fail fast on tool errors so the error demo surfaces immediately (default is 3 retries).
+            clientBuilder.UseFunctionInvocation(lf, fic => fic.MaximumConsecutiveErrorsPerRequest = 0);
 
             return clientBuilder.Build(sp);
         });
