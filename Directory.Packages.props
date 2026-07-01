@@ -85,7 +85,7 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
     <!-- Sample app: additional packages (pinned) -->
     <PackageVersion Include="Markdig" Version="0.31.0" />
-    <PackageVersion Include="OpenAI" Version="2.9.1" />
+    <PackageVersion Include="OpenAI" Version="2.11.0" />
     <!-- Unit tests -->
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <!-- Benchmarks -->
