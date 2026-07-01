@@ -20,6 +20,7 @@
                 <x:String>Draw a watercolor sunset over mountains</x:String>
                 <x:String>What's the weather in Tokyo?</x:String>
                 <x:String>Create a plan to organize my desk</x:String>
+                <x:String>Trigger an error to test error handling</x:String>
             </controls:CopilotChatView.SuggestionPrompts>
         <controls:CopilotChatView.ContentTemplates>
             <chat:ThinkingContentTemplate />

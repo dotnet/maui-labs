@@ -38,6 +38,7 @@ public partial class ToolRenderingPage : ContentPage
                   The user must approve it before it runs. If rejected, ask what to change
                   and do NOT repeat the plan.
                 - To draw or generate a picture, use image generation.
+                - To test error handling, call TriggerError.
                 - Format text answers with **bold** for emphasis and "- " bullets for lists.
                 """,
             Tools = [.. tools]
