@@ -3,6 +3,11 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>Plain user or assistant text, accumulated as it streams in.</summary>
+/// <remarks>
+/// Emitted by the built-in <see cref="TextBlockHandler"/> from M.E.AI <c>TextContent</c>. This is
+/// the pipeline's fallback block: any text no earlier handler claims ends up here.
+/// </remarks>
 public class TextContentBlock : ContentBlock
 {
     private readonly List<string> _segments = new();

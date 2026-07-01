@@ -3,6 +3,7 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>The result of invoking an already-active handler: <c>Pass</c>, <c>Update</c>, or <c>Complete</c>.</summary>
 internal readonly struct HandleResult
 {
     internal enum ResultKind { Pass, Update, Complete }

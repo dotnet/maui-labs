@@ -5,12 +5,12 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
-public class FunctionApprovalHandlerTests
+public class ToolApprovalHandlerTests
 {
     [Fact]
-    public void ToolApprovalRequestContent_EmitsFunctionApprovalBlock()
+    public void ToolApprovalRequestContent_EmitsToolApprovalBlock()
     {
-        var handler = new FunctionApprovalHandler();
+        var handler = new ToolApprovalHandler();
 
         var toolCall = new FunctionCallContent("call-1", "DeleteFile",
             new Dictionary<string, object?> { ["path"] = "/data.txt" });
@@ -21,13 +21,13 @@ public class FunctionApprovalHandlerTests
             Contents = [approvalRequest]
         };
         var context = new BlockMappingContext(update);
-        var state = new FunctionApprovalHandler.ApprovalHandlerState();
+        var state = new ToolApprovalHandler.ApprovalHandlerState();
 
         var result = handler.Handle(context, state);
 
-        Assert.Equal(BlockMappingResult<FunctionApprovalHandler.ApprovalHandlerState>.ResultKind.Emit,
+        Assert.Equal(BlockMappingResult<ToolApprovalHandler.ApprovalHandlerState>.ResultKind.Emit,
             result.Kind);
-        var block = Assert.IsType<FunctionApprovalBlock>(result.Block);
+        var block = Assert.IsType<ToolApprovalBlock>(result.Block);
         Assert.Equal(ApprovalStatus.Pending, block.Status);
         Assert.Equal("DeleteFile", block.InnerBlock.ToolName);
         Assert.Equal("call-1", block.Id);
@@ -56,7 +56,7 @@ public class FunctionApprovalHandlerTests
         }
 
         Assert.Single(blocks);
-        var approvalBlock = Assert.IsType<FunctionApprovalBlock>(blocks[0]);
+        var approvalBlock = Assert.IsType<ToolApprovalBlock>(blocks[0]);
         Assert.NotNull(approvalBlock.InnerBlock);
         Assert.Equal("GetWeather", approvalBlock.InnerBlock.ToolName);
         Assert.NotNull(approvalBlock.InnerBlock.Call);
@@ -66,7 +66,7 @@ public class FunctionApprovalHandlerTests
     [Fact]
     public void NonApprovalContent_PassesThrough()
     {
-        var handler = new FunctionApprovalHandler();
+        var handler = new ToolApprovalHandler();
 
         var update = new ChatResponseUpdate
         {
@@ -74,11 +74,11 @@ public class FunctionApprovalHandlerTests
             Contents = [new TextContent("Hello")]
         };
         var context = new BlockMappingContext(update);
-        var state = new FunctionApprovalHandler.ApprovalHandlerState();
+        var state = new ToolApprovalHandler.ApprovalHandlerState();
 
         var result = handler.Handle(context, state);
 
-        Assert.Equal(BlockMappingResult<FunctionApprovalHandler.ApprovalHandlerState>.ResultKind.Pass,
+        Assert.Equal(BlockMappingResult<ToolApprovalHandler.ApprovalHandlerState>.ResultKind.Pass,
             result.Kind);
     }
 
@@ -86,7 +86,7 @@ public class FunctionApprovalHandlerTests
     public void FallbackInnerBlock_WhenNoHandlerMatches()
     {
         // Without inactive handlers, CreateInnerBlock returns null → fallback path
-        var handler = new FunctionApprovalHandler();
+        var handler = new ToolApprovalHandler();
 
         var toolCall = new FunctionCallContent("call-1", "DeleteFile", null);
         var approvalRequest = new ToolApprovalRequestContent("req-1", toolCall);
@@ -97,13 +97,13 @@ public class FunctionApprovalHandlerTests
         };
         // Context without inactive handlers (no pipeline)
         var context = new BlockMappingContext(update);
-        var state = new FunctionApprovalHandler.ApprovalHandlerState();
+        var state = new ToolApprovalHandler.ApprovalHandlerState();
 
         var result = handler.Handle(context, state);
 
-        Assert.Equal(BlockMappingResult<FunctionApprovalHandler.ApprovalHandlerState>.ResultKind.Emit,
+        Assert.Equal(BlockMappingResult<ToolApprovalHandler.ApprovalHandlerState>.ResultKind.Emit,
             result.Kind);
-        var block = Assert.IsType<FunctionApprovalBlock>(result.Block);
+        var block = Assert.IsType<ToolApprovalBlock>(result.Block);
         Assert.NotNull(block.InnerBlock);
         Assert.Equal("DeleteFile", block.InnerBlock.ToolName);
     }

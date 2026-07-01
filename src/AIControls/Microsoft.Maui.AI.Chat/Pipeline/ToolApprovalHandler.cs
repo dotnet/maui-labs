@@ -5,7 +5,9 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
-internal sealed class FunctionApprovalHandler : ContentBlockHandler<FunctionApprovalHandler.ApprovalHandlerState>
+/// <summary>Built-in handler mapping a M.E.AI <c>ToolApprovalRequestContent</c> into a <see cref="ToolApprovalBlock"/>.</summary>
+/// <remarks>Runs before <see cref="FunctionInvocationHandler"/> so it claims approval requests first.</remarks>
+internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHandler.ApprovalHandlerState>
 {
     public override BlockMappingResult<ApprovalHandlerState> Handle(
         BlockMappingContext context, ApprovalHandlerState state)
@@ -40,7 +42,7 @@ internal sealed class FunctionApprovalHandler : ContentBlockHandler<FunctionAppr
             }
         }
 
-        var block = new FunctionApprovalBlock(innerBlock, approvalRequest);
+        var block = new ToolApprovalBlock(innerBlock, approvalRequest);
         block.Id = approvalRequest.ToolCall is FunctionCallContent fcc
             ? fcc.CallId
             : Guid.NewGuid().ToString("N");

@@ -5,6 +5,11 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// The per-update context handed to each <see cref="ContentBlockHandler{TState}"/>: exposes the current
+/// <c>ChatResponseUpdate</c> and its not-yet-claimed content, and lets a handler mark content as handled.
+/// </summary>
+/// <remarks>Handlers iterate <see cref="UnhandledContents"/> and call <see cref="MarkHandled"/> to claim items.</remarks>
 public class BlockMappingContext
 {
     private readonly bool[] _handled;

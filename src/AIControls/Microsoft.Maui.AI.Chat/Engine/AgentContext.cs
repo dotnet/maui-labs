@@ -6,6 +6,16 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>
+/// The stateful conversation object the UI binds to. Groups <see cref="ContentBlock"/>s into
+/// <see cref="ConversationTurn"/>s, tracks <see cref="Status"/>, and raises callbacks as turns and
+/// blocks arrive.
+/// </summary>
+/// <remarks>
+/// Drives the tool/approval loop: after streaming from the <see cref="UIAgent"/> it invokes any pending
+/// backend tools and awaits <see cref="IInteractiveBlock"/>s (e.g. approvals), then feeds the results
+/// back for another round. Rendered by the Controls layer's <c>CopilotChatView</c>.
+/// </remarks>
 public class AgentContext : IDisposable
 {
     private readonly UIAgent _agent;

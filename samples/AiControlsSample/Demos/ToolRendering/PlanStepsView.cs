@@ -12,7 +12,7 @@ public class PlanStepsView : ContentView, IContentContextAware
 {
     public void ApplyContentContext(ContentContext context)
     {
-        if (context.Block is not FunctionApprovalBlock fab || fab.Arguments is null)
+        if (context.Block is not ToolApprovalBlock fab || fab.Arguments is null)
         {
             Content = new Label { Text = "(no plan steps)" };
             return;

@@ -3,6 +3,7 @@
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>State of a <see cref="ToolApprovalBlock"/>: <c>Pending</c>, <c>Approved</c>, or <c>Rejected</c>.</summary>
 public enum ApprovalStatus
 {
     Pending,
