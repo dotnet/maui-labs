@@ -7,6 +7,7 @@ using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Navigation;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.Garden;
@@ -49,6 +50,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IOrderArchive, PreferencesOrderArchive>();
         builder.Services.AddSingleton<CurrentCart>();
         builder.Services.AddSingleton<ReviewStore>();
+        builder.Services.AddSingleton<ShellNavigationService>();
+        builder.Services.AddSingleton<AINavigationService>();
 
         builder.AddOpenAIServices();
 

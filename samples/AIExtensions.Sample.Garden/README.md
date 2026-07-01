@@ -9,10 +9,11 @@ past purchases using source-generated tools.
 
 - `Add 5 packs of tomato seeds and a trowel`
 - `Build me a basil starter bundle`
-- `Show compact cart`
-- `Open the catalog`
+- `Show me the basil seeds` — navigates to the product detail page
+- `Open the product catalog`
 - `Go to my past orders`
-- `Re-order my last order`
+- `Show compact cart`
+- `Rate the tomato seeds 5 stars`
 
 ## App behaviors
 
@@ -22,6 +23,8 @@ past purchases using source-generated tools.
   `GardenShopTools.Default.Tools`, so any new exported tool automatically appears there.
 - **Modal navigation** — catalog, cart, and orders open through Shell routes as
   animated modal overlays.
+- **Deep navigation** — the AI navigates directly to product detail and review
+  pages using template-style URIs via `Microsoft.Maui.AI.Navigation`.
 - **Approval flow** — checkout and destructive actions pause the chat and show an
   inline approve/reject banner.
 
@@ -38,7 +41,7 @@ assembly-wide context for the whole app.
 | `ProductCatalog` | static | Catalog browsing tools like `list_all_products`, `search_products`, and `get_product` |
 | `CurrentCart` | singleton | Cart inspection and mutation tools like `show_list`, `add_to_list`, `change_qty`, and `remove_from_list` |
 | `IOrderArchive` | singleton interface | Past-order lookup, `checkout_list`, `reorder`, and `clear_past_orders` |
-| `MainViewModel` | singleton | UI navigation tools: `navigate_to_page` and `dismiss_page` |
+| `AINavigationService` | singleton | Route-aware navigation: `get_routes`, `get_current_route`, `navigate` |
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
 
@@ -53,7 +56,7 @@ participate in a shared tool context while still writing through to singleton st
 | Cart management | `show_list`, `add_to_list`, `change_qty`, `remove_from_list`, `cancel_list` |
 | Cart presentation | `get_cart_mode`, `set_cart_mode` |
 | Orders | `list_past_orders`, `find_order`, `checkout_list`, `reorder`, `clear_past_orders` |
-| Page navigation | `navigate_to_page`, `dismiss_page` |
+| Page navigation | `get_routes`, `get_current_route`, `navigate` |
 | Recommendations | `recommend_bundle` |
 
 ## Feature showcase
@@ -68,7 +71,9 @@ participate in a shared tool context while still writing through to singleton st
 | `[FromServices]` parameter injection | `IOrderArchive.Checkout([FromServices] CurrentCart cart)` |
 | Accessor-level property tools | `ViewModels/Cart/CartViewModel.cs` → `get_cart_mode` / `set_cart_mode` |
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
-| Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
+| Shell modal navigation tools | `Services/Navigation/AINavigationService.cs` + `AppShell.xaml.cs` |
+| AI-library bridge wrapper | `AINavigationService` wraps `ShellNavigationService` from `Microsoft.Maui.AI.Navigation` |
+| Dynamic system prompt with route discovery | `ViewModels/Chat/ChatViewModel.cs` → `BuildSystemPrompt()` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 
 ## Approval flow
