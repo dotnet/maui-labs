@@ -73,6 +73,31 @@ public class BlockMappingPipelineTests
     }
 
     [Fact]
+    public async Task Process_SingleUpdate_TextAndToolCall_EmitsTwoBlocks()
+    {
+        // One assistant message that both says something AND calls a tool maps to two
+        // distinct blocks: a text block and a function-invocation block (one -> many).
+        var pipeline = CreatePipelineWithTextHandler();
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "msg-1",
+            Contents =
+            [
+                new TextContent("Let me check the weather."),
+                new FunctionCallContent("call-1", "GetWeather",
+                    new Dictionary<string, object?> { ["city"] = "Tokyo" }),
+            ]
+        };
+
+        var blocks = await ProcessAsync(pipeline, update);
+
+        Assert.Equal(2, blocks.Count);
+        Assert.Contains(blocks, b => b is TextContentBlock);
+        Assert.Contains(blocks, b => b is FunctionInvocationContentBlock);
+    }
+
+    [Fact]
     public async Task Process_TextUpdate_NotifyChangedOnUpdate()
     {
         var pipeline = CreatePipelineWithTextHandler();
