@@ -24,7 +24,7 @@ public class TemplateSelectorTests
     }
 
     [Fact]
-    public void SelectTemplate_ToolCallBlock_MatchesFunctionCallTemplate()
+    public void SelectTemplate_ToolCallBlock_MatchesFunctionInvocationTemplate()
     {
         var selector = CreateDefaultSelector();
         var context = BlockFactory.MakeToolCall("get_weather");
@@ -35,7 +35,7 @@ public class TemplateSelectorTests
     }
 
     [Fact]
-    public void SelectTemplate_ToolResultBlock_MatchesFunctionResultTemplate()
+    public void SelectTemplate_ToolResultBlock_MatchesFunctionInvocationTemplate()
     {
         var selector = CreateDefaultSelector();
         var context = BlockFactory.MakeToolResult("get_weather", "Sunny");
@@ -83,8 +83,8 @@ public class TemplateSelectorTests
     [Fact]
     public void SelectTemplate_ToolNameSpecific_WinsOverGenericToolCall()
     {
-        var genericTool = new FunctionCallTemplate { ViewType = typeof(Label) };
-        var weatherTool = new FunctionCallTemplate { ToolName = "get_weather", ViewType = typeof(Entry) };
+        var genericTool = new FunctionInvocationTemplate { ViewType = typeof(Label) };
+        var weatherTool = new FunctionInvocationTemplate { ToolName = "get_weather", ViewType = typeof(Entry) };
 
         var selector = new ContentTemplateSelector();
         selector.Templates.Add(genericTool);
@@ -130,7 +130,7 @@ public class TemplateSelectorTests
         Assert.Empty(selector.Templates);
 
         selector.Templates.Add(new TextContentTemplate { ViewType = typeof(Label) });
-        selector.Templates.Add(new FunctionCallTemplate { ViewType = typeof(Label) });
+        selector.Templates.Add(new FunctionInvocationTemplate { ViewType = typeof(Label) });
 
         Assert.Equal(2, selector.Templates.Count);
     }
@@ -176,8 +176,7 @@ public class TemplateSelectorTests
     {
         var selector = new ContentTemplateSelector();
         selector.Templates.Add(new TextContentTemplate { ViewType = typeof(Label) });
-        selector.Templates.Add(new FunctionCallTemplate { ViewType = typeof(Label) });
-        selector.Templates.Add(new FunctionResultTemplate { ViewType = typeof(Label) });
+        selector.Templates.Add(new FunctionInvocationTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new MediaContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new DefaultContentTemplate { ViewType = typeof(Label) });
         return selector;

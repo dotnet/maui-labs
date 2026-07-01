@@ -1,21 +1,24 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
-using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Matches a <see cref="Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock"/> that has no result yet, rendering the pending tool call.</summary>
-public class FunctionCallTemplate : ContentTemplate
+/// <summary>
+/// Matches a <see cref="Microsoft.Maui.AI.Chat.FunctionInvocationContentBlock"/> regardless of whether its
+/// result has arrived yet, rendering a single view that starts as the pending call and updates to show the result.
+/// </summary>
+/// <remarks>
+/// Set <see cref="ContentTemplate.ViewType"/> to a custom view (e.g. a weather card) to render a specific
+/// tool, and set <see cref="ToolName"/> to scope the template to one tool. A tool-scoped template outranks the
+/// generic one via <see cref="GetPriority"/>, so the default invocation view stays as a catch-all fallback.
+/// </remarks>
+public class FunctionInvocationTemplate : ContentTemplate
 {
     public string? ToolName { get; set; }
 
     public override bool When(ContentContext context)
     {
         if (context.Block is not FunctionInvocationContentBlock ficb)
-            return false;
-
-        // Only match when result is NOT yet available (showing "calling...")
-        if (ficb.Result is not null)
             return false;
 
         if (ToolName is not null && !string.Equals(ficb.Call?.Name, ToolName, StringComparison.OrdinalIgnoreCase))
@@ -31,8 +34,8 @@ public class FunctionCallTemplate : ContentTemplate
 
         return _cachedTemplate ??= new DataTemplate(() =>
         {
-            var view = new FunctionCallMessageView();
-            view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.FunctionCallTemplate);
+            var view = new FunctionInvocationView();
+            view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.FunctionInvocationTemplate);
             return PrepareDataTemplateView(view);
         });
     }

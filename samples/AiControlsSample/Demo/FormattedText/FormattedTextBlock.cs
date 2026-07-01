@@ -5,23 +5,24 @@ namespace AiControlsSample;
 
 /// <summary>
 /// A sample rich-text block. This is NOT a library feature — it demonstrates the
-/// correct pattern for building rich text: a custom <see cref="ContentBlock"/> whose
+/// correct pattern for building rich text: a custom block whose
 /// <see cref="FormattedTextHandler"/> parses the raw Microsoft.Extensions.AI text into
 /// a structured model, so the view just renders (no parsing at render time).
 /// </summary>
-public sealed class FormattedTextBlock : ContentBlock
+/// <remarks>
+/// It derives from <see cref="TextContentBlock"/> so a basic text template (e.g. the
+/// right-hand raw view in the sample) still renders it as plain <see cref="TextContentBlock.RawText"/>,
+/// while a richer template can bind to the parsed <see cref="Lines"/>.
+/// </remarks>
+public sealed class FormattedTextBlock : TextContentBlock
 {
-    private readonly StringBuilder _raw = new();
-
-    public string RawText => _raw.ToString();
-
     /// <summary>The parsed lines, rebuilt as text streams in.</summary>
     public IReadOnlyList<FormattedLine> Lines { get; private set; } = [];
 
-    public void AppendText(string text)
+    public override void AppendText(string text)
     {
-        _raw.Append(text);
-        Lines = FormattedTextParser.Parse(_raw.ToString());
+        base.AppendText(text);
+        Lines = FormattedTextParser.Parse(RawText);
     }
 }
 
