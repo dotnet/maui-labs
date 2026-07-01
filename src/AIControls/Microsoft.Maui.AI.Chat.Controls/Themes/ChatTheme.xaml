@@ -100,11 +100,14 @@
     </ControlTemplate>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- ControlTemplate: FunctionCallMessageView                      -->
+    <!-- ControlTemplate: FunctionInvocationView                        -->
+    <!-- Starts as the pending call, then swaps to the result in place. -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <ControlTemplate x:Key="ExtensionsAI.FunctionCallTemplate">
+    <ControlTemplate x:Key="ExtensionsAI.FunctionInvocationTemplate">
         <Grid Padding="0,2">
+            <!-- Pending: "Calling <tool>..." -->
             <Border Padding="10,6" HorizontalOptions="Start"
+                    IsVisible="{TemplateBinding IsPending}"
                     BackgroundColor="{DynamicResource ExtensionsAI.FunctionCall.Background}"
                     StrokeThickness="0" Opacity="0.85">
                 <Border.StrokeShape>
@@ -117,23 +120,21 @@
                            TextColor="{DynamicResource ExtensionsAI.FunctionCall.TextColor}" />
                 </HorizontalStackLayout>
             </Border>
-        </Grid>
-    </ControlTemplate>
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- ControlTemplate: FunctionResultMessageView                    -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <ControlTemplate x:Key="ExtensionsAI.FunctionResultTemplate">
-        <Grid Padding="0,2">
+            <!-- Completed: result text -->
             <Border Padding="10,6" HorizontalOptions="Start"
+                    IsVisible="{TemplateBinding HasResult}"
                     BackgroundColor="{DynamicResource ExtensionsAI.FunctionResult.Background}"
                     StrokeThickness="0" Opacity="0.85">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="10" />
                 </Border.StrokeShape>
-                <Label Text="{TemplateBinding ResultText}" FontSize="11"
-                       LineBreakMode="WordWrap" MaximumWidthRequest="300"
-                       TextColor="{DynamicResource ExtensionsAI.FunctionResult.TextColor}" />
+                <HorizontalStackLayout Spacing="6">
+                    <Label Text="✅" FontSize="12" VerticalOptions="Start" />
+                    <Label Text="{TemplateBinding ResultText}" FontSize="11"
+                           LineBreakMode="WordWrap" MaximumWidthRequest="300"
+                           TextColor="{DynamicResource ExtensionsAI.FunctionResult.TextColor}" />
+                </HorizontalStackLayout>
             </Border>
         </Grid>
     </ControlTemplate>
@@ -262,12 +263,8 @@
         <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.ChatMessageTemplate}" />
     </Style>
 
-    <Style TargetType="chat:FunctionCallMessageView">
-        <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.FunctionCallTemplate}" />
-    </Style>
-
-    <Style TargetType="chat:FunctionResultMessageView">
-        <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.FunctionResultTemplate}" />
+    <Style TargetType="chat:FunctionInvocationView">
+        <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.FunctionInvocationTemplate}" />
     </Style>
 
     <Style TargetType="chat:DefaultMessageView">
@@ -283,6 +280,17 @@
     <!-- All named parts (PART_*) are optional — omit any to suppress  -->
     <!-- that section. Replace the whole template to redesign the chat. -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- ControlTemplate: MessageListView — just the messages, no chrome  -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <ControlTemplate x:Key="ExtensionsAI.MessageListViewTemplate">
+        <CollectionView x:Name="PART_Messages" AutomationId="ChatMessages" />
+    </ControlTemplate>
+
+    <Style TargetType="chat:MessageListView">
+        <Setter Property="ControlTemplate" Value="{DynamicResource ExtensionsAI.MessageListViewTemplate}" />
+    </Style>
+
     <ControlTemplate x:Key="ExtensionsAI.CopilotChatViewTemplate">
         <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto" RowSpacing="0">
 
@@ -303,10 +311,10 @@
                            Opacity="0.7" />
                 </VerticalStackLayout>
 
-                <!-- Messages list -->
-                <CollectionView x:Name="PART_Messages"
-                                AutomationId="ChatMessages"
-                                Margin="12,8,12,0" />
+                <!-- Messages list (a nested MessageListView renders the blocks) -->
+                <chat:MessageListView x:Name="PART_MessageList"
+                                      AutomationId="ChatMessages"
+                                      Margin="12,8,12,0" />
             </Grid>
 
             <!-- Row 3: Suggestion chips -->

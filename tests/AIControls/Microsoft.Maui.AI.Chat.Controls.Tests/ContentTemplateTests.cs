@@ -98,83 +98,55 @@ public class ContentTemplateTests
         Assert.True(specific.GetPriority(context) > generic.GetPriority(context));
     }
 
-    // ── FunctionCallTemplate ──
+    // ── FunctionInvocationTemplate ──
 
     [Fact]
-    public void FunctionCallTemplate_MatchesFunctionInvocationWithNoResult()
+    public void FunctionInvocationTemplate_MatchesFunctionInvocationWithNoResult()
     {
-        var template = new FunctionCallTemplate();
+        var template = new FunctionInvocationTemplate();
         var context = MakeFunctionCallContext();
         Assert.True(template.When(context));
     }
 
     [Fact]
-    public void FunctionCallTemplate_DoesNotMatchTextContent()
+    public void FunctionInvocationTemplate_MatchesFunctionInvocationWithResult()
     {
-        var template = new FunctionCallTemplate();
+        var template = new FunctionInvocationTemplate();
+        var context = MakeFunctionResultContext();
+        Assert.True(template.When(context));
+    }
+
+    [Fact]
+    public void FunctionInvocationTemplate_DoesNotMatchTextContent()
+    {
+        var template = new FunctionInvocationTemplate();
         var context = MakeTextContext("Assistant");
         Assert.False(template.When(context));
     }
 
     [Fact]
-    public void FunctionCallTemplate_DoesNotMatchWhenResultPresent()
+    public void FunctionInvocationTemplate_WithToolName_FiltersCorrectly()
     {
-        var template = new FunctionCallTemplate();
-        var context = MakeFunctionResultContext();
-        Assert.False(template.When(context));
-    }
+        var weatherTemplate = new FunctionInvocationTemplate { ToolName = "get_weather" };
 
-    [Fact]
-    public void FunctionCallTemplate_WithToolName_FiltersCorrectly()
-    {
-        var weatherTemplate = new FunctionCallTemplate { ToolName = "get_weather" };
-
-        var weatherContext = MakeFunctionCallContext("get_weather");
+        var weatherCall = MakeFunctionCallContext("get_weather");
+        var weatherResult = MakeFunctionResultContext("get_weather");
         var calcContext = MakeFunctionCallContext("calculate");
 
-        Assert.True(weatherTemplate.When(weatherContext));
+        Assert.True(weatherTemplate.When(weatherCall));
+        Assert.True(weatherTemplate.When(weatherResult));
         Assert.False(weatherTemplate.When(calcContext));
     }
 
     [Fact]
-    public void FunctionCallTemplate_ToolNameSpecific_HasHigherPriority()
+    public void FunctionInvocationTemplate_ToolNameSpecific_HasHigherPriority()
     {
-        var generic = new FunctionCallTemplate();
-        var specific = new FunctionCallTemplate { ToolName = "get_weather" };
+        var generic = new FunctionInvocationTemplate();
+        var specific = new FunctionInvocationTemplate { ToolName = "get_weather" };
 
         var context = MakeFunctionCallContext("get_weather");
 
         Assert.True(specific.GetPriority(context) > generic.GetPriority(context));
-    }
-
-    // ── FunctionResultTemplate ──
-
-    [Fact]
-    public void FunctionResultTemplate_MatchesFunctionInvocationWithResult()
-    {
-        var template = new FunctionResultTemplate();
-        var context = MakeFunctionResultContext();
-        Assert.True(template.When(context));
-    }
-
-    [Fact]
-    public void FunctionResultTemplate_DoesNotMatchWithNoResult()
-    {
-        var template = new FunctionResultTemplate();
-        var context = MakeFunctionCallContext();
-        Assert.False(template.When(context));
-    }
-
-    [Fact]
-    public void FunctionResultTemplate_WithToolName_FiltersCorrectly()
-    {
-        var weatherResult = new FunctionResultTemplate { ToolName = "get_weather" };
-
-        var weatherContext = MakeFunctionResultContext("get_weather");
-        var calcContext = MakeFunctionResultContext("calculate");
-
-        Assert.True(weatherResult.When(weatherContext));
-        Assert.False(weatherResult.When(calcContext));
     }
 
     // ── DefaultContentTemplate ──
@@ -261,8 +233,8 @@ public class ContentTemplateTests
     public void Priority_ToolNameSpecific_BeatsGeneric_BeatsDefault()
     {
         var defaultTemplate = new DefaultContentTemplate();
-        var genericResult = new FunctionResultTemplate();
-        var specificResult = new FunctionResultTemplate { ToolName = "get_weather" };
+        var genericResult = new FunctionInvocationTemplate();
+        var specificResult = new FunctionInvocationTemplate { ToolName = "get_weather" };
 
         var context = MakeFunctionResultContext("get_weather");
 

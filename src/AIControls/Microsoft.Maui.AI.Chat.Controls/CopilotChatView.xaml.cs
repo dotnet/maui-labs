@@ -14,7 +14,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </para>
 /// <list type="bullet">
 /// <item><c>PART_Header</c> — <see cref="ContentView"/> for header content</item>
-/// <item><c>PART_Messages</c> — <see cref="CollectionView"/> for chat messages</item>
+/// <item><c>PART_MessageList</c> — <see cref="MessageListView"/> that renders chat messages</item>
 /// <item><c>PART_WelcomePanel</c> — <see cref="View"/> shown when there are no messages</item>
 /// <item><c>PART_WelcomeIcon</c> — <see cref="Label"/> for the welcome icon</item>
 /// <item><c>PART_WelcomeMessage</c> — <see cref="Label"/> for the welcome text</item>
@@ -75,7 +75,7 @@ public partial class CopilotChatView : TemplatedView
     // ── Template parts (resolved in OnApplyTemplate) ──
 
     private ContentView? _headerPart;
-    private CollectionView? _messagesPart;
+    private MessageListView? _messageListPart;
     private View? _welcomePanelPart;
     private Label? _welcomeIconPart;
     private Label? _welcomeMessagePart;
@@ -87,19 +87,15 @@ public partial class CopilotChatView : TemplatedView
     private Border? _inputAreaPart;
 
     private readonly ObservableCollection<ContentTemplate> _contentTemplates = [];
-    private readonly ObservableCollection<ContentContext> _items = [];
 
-    private IDisposable? _turnAddedReg;
     private IDisposable? _statusChangedReg;
-    private IDisposable? _blockAddedReg;
-    private readonly List<IDisposable> _blockSubscriptions = [];
 
     public IList<ContentTemplate> ContentTemplates => _contentTemplates;
 
     public CopilotChatView()
     {
         InitializeComponent();
-        _contentTemplates.CollectionChanged += (_, _) => RebuildTemplateSelector();
+        _contentTemplates.CollectionChanged += (_, _) => SyncContentTemplates();
 
         // Bind the default ControlTemplate via DynamicResource so it resolves
         // once the theme dictionary is available in the resource tree.
@@ -160,7 +156,7 @@ public partial class CopilotChatView : TemplatedView
 
         // Resolve named parts
         _headerPart = GetTemplateChild("PART_Header") as ContentView;
-        _messagesPart = GetTemplateChild("PART_Messages") as CollectionView;
+        _messageListPart = GetTemplateChild("PART_MessageList") as MessageListView;
         _welcomePanelPart = GetTemplateChild("PART_WelcomePanel") as View;
         _welcomeIconPart = GetTemplateChild("PART_WelcomeIcon") as Label;
         _welcomeMessagePart = GetTemplateChild("PART_WelcomeMessage") as Label;
@@ -177,11 +173,15 @@ public partial class CopilotChatView : TemplatedView
         if (_sendButtonPart is not null)
             _sendButtonPart.Clicked += OnSendButtonClicked;
 
-        // Wire message list
-        if (_messagesPart is not null)
+        // Wire the nested message list — forward session, templates and options.
+        if (_messageListPart is not null)
         {
-            _messagesPart.ItemsSource = _items;
-            RebuildTemplateSelector();
+            _messageListPart.ItemsChanged -= OnMessageItemsChanged;
+            _messageListPart.ItemsChanged += OnMessageItemsChanged;
+            _messageListPart.Session = Session;
+            _messageListPart.ShowToolCalls = ShowToolCalls;
+            _messageListPart.ShowToolResults = ShowToolResults;
+            SyncContentTemplates();
         }
 
         // Apply state
@@ -190,23 +190,25 @@ public partial class CopilotChatView : TemplatedView
         ApplyFooterTemplate();
         UpdateWelcomeVisibility();
         OnIsBusyChanged();
-        RebuildFromSession();
     }
 
-    // ── Template selector ──
+    // ── Content templates ──
 
-    private void RebuildTemplateSelector()
+    private void SyncContentTemplates()
     {
-        if (_messagesPart is null)
+        if (_messageListPart is null)
             return;
 
-        var selector = new ContentTemplateSelector();
+        _messageListPart.ContentTemplates.Clear();
         foreach (var t in _contentTemplates)
-            selector.Templates.Add(t);
-        _messagesPart.ItemTemplate = selector;
+            _messageListPart.ContentTemplates.Add(t);
     }
 
+    private void OnMessageItemsChanged(object? sender, EventArgs e) => UpdateWelcomeVisibility();
+
     // ── Session management ──
+    // Message rendering lives in the nested MessageListView. Here we only
+    // track status to drive IsBusy and forward the session to the list.
 
     private static void OnSessionChanged(BindableObject bindable, object oldValue, object newValue)
     {
@@ -216,39 +218,22 @@ public partial class CopilotChatView : TemplatedView
         if (newValue is AgentContext ctx)
             control.SubscribeToSession(ctx);
 
-        control.RebuildFromSession();
+        if (control._messageListPart is not null)
+            control._messageListPart.Session = newValue as AgentContext;
+
+        control.UpdateWelcomeVisibility();
     }
 
     private void SubscribeToSession(AgentContext ctx)
     {
-        _turnAddedReg = ctx.RegisterOnTurnAdded(turn =>
-            Dispatcher.Dispatch(() => OnTurnAdded(turn)));
-
         _statusChangedReg = ctx.RegisterOnStatusChanged(status =>
             Dispatcher.Dispatch(() => OnStatusChanged(status)));
-
-        _blockAddedReg = ctx.RegisterOnBlockAdded((turn, block) =>
-            Dispatcher.Dispatch(() => OnBlockAdded(turn, block)));
     }
 
     private void UnsubscribeFromSession()
     {
-        _turnAddedReg?.Dispose();
         _statusChangedReg?.Dispose();
-        _blockAddedReg?.Dispose();
-        _turnAddedReg = null;
         _statusChangedReg = null;
-        _blockAddedReg = null;
-
-        // Dispose all per-block change subscriptions (Bug 1 fix: memory leak)
-        foreach (var sub in _blockSubscriptions)
-            sub.Dispose();
-        _blockSubscriptions.Clear();
-    }
-
-    private void OnTurnAdded(ConversationTurn turn)
-    {
-        // Blocks will arrive via OnBlockAdded
     }
 
     private void OnStatusChanged(ConversationStatus status)
@@ -260,122 +245,17 @@ public partial class CopilotChatView : TemplatedView
             System.Diagnostics.Debug.WriteLine($"[CopilotChatView] Error: {ex}");
         }
 
-        // If session was cleared (idle with no turns), rebuild to show welcome state
+        // When the session is cleared, refresh welcome/suggestions visibility.
         if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
-        {
-            RebuildFromSession();
-        }
-    }
-
-    private void OnBlockAdded(ConversationTurn turn, ContentBlock block)
-    {
-        if (Session is null)
-            return;
-
-        if (!ShouldShowBlock(block))
-        {
-            // Still subscribe — the block may become visible later (e.g., tool result arrives)
-            var sub = block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
-            _blockSubscriptions.Add(sub);
-            return;
-        }
-
-        _items.Add(new ContentContext(Session, block));
-        UpdateWelcomeVisibility();
-        ScrollToLatestMessage();
-
-        // Subscribe to block changes for streaming updates
-        var subscription = block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block)));
-        _blockSubscriptions.Add(subscription);
-    }
-
-    private void OnBlockChanged(ContentBlock block)
-    {
-        if (Session is null)
-            return;
-
-        // Check if this block is already displayed
-        for (int i = 0; i < _items.Count; i++)
-        {
-            if (ReferenceEquals(_items[i].Block, block))
-            {
-                if (!ShouldShowBlock(block))
-                {
-                    // Block should no longer be shown — remove it
-                    _items.RemoveAt(i);
-                    UpdateWelcomeVisibility();
-                }
-                else
-                {
-                    // Update the existing item to trigger UI refresh
-                    _items[i] = new ContentContext(Session, block);
-                    ScrollToLatestMessage();
-                }
-                return;
-            }
-        }
-
-        // Block isn't in the list yet — check if it should now be shown
-        // (e.g., tool result arrived when ShowToolResults=true but ShowToolCalls=false)
-        if (ShouldShowBlock(block))
-        {
-            _items.Add(new ContentContext(Session, block));
             UpdateWelcomeVisibility();
-            ScrollToLatestMessage();
-        }
-    }
-
-    private void RebuildFromSession()
-    {
-        // Dispose existing block subscriptions before clearing
-        foreach (var sub in _blockSubscriptions)
-            sub.Dispose();
-        _blockSubscriptions.Clear();
-
-        _items.Clear();
-
-        if (Session is null)
-        {
-            IsBusy = false;
-            UpdateWelcomeVisibility();
-            return;
-        }
-
-        foreach (var turn in Session.Turns)
-        {
-            foreach (var block in turn.RequestBlocks)
-            {
-                if (ShouldShowBlock(block))
-                    _items.Add(new ContentContext(Session, block));
-            }
-            foreach (var block in turn.ResponseBlocks)
-            {
-                if (ShouldShowBlock(block))
-                    _items.Add(new ContentContext(Session, block));
-            }
-        }
-
-        IsBusy = Session.Status == ConversationStatus.Streaming;
-        UpdateWelcomeVisibility();
-        ScrollToLatestMessage();
-    }
-
-    private bool ShouldShowBlock(ContentBlock block)
-    {
-        if (block is ThinkingContentBlock thinking && thinking.IsDismissed)
-            return false;
-        if (!ShowToolCalls && block is FunctionInvocationContentBlock ficb && ficb.Result is null)
-            return false;
-        if (!ShowToolResults && block is FunctionInvocationContentBlock ficbr && ficbr.Result is not null)
-            return false;
-        return true;
     }
 
     // ── Welcome ──
 
     internal void UpdateWelcomeVisibility()
     {
-        var showWelcome = !string.IsNullOrEmpty(WelcomeMessage) && _items.Count == 0;
+        var itemCount = _messageListPart?.ItemCount ?? 0;
+        var showWelcome = !string.IsNullOrEmpty(WelcomeMessage) && itemCount == 0;
 
         if (_welcomePanelPart is not null)
             _welcomePanelPart.IsVisible = showWelcome;
@@ -383,15 +263,16 @@ public partial class CopilotChatView : TemplatedView
             _welcomeIconPart.Text = WelcomeIcon;
         if (_welcomeMessagePart is not null)
             _welcomeMessagePart.Text = WelcomeMessage;
-        if (_messagesPart is not null)
-            _messagesPart.IsVisible = !showWelcome;
+        if (_messageListPart is not null)
+            _messageListPart.IsVisible = !showWelcome;
 
         UpdateSuggestionsVisibility();
     }
 
     private void UpdateSuggestionsVisibility()
     {
-        var showSuggestions = SuggestionPrompts is { Count: > 0 } && _items.Count == 0;
+        var itemCount = _messageListPart?.ItemCount ?? 0;
+        var showSuggestions = SuggestionPrompts is { Count: > 0 } && itemCount == 0;
 
         if (_suggestionsPart is not null)
         {
@@ -517,21 +398,5 @@ public partial class CopilotChatView : TemplatedView
         var nextMessage = Text.Trim();
         Text = string.Empty;
         await Session.SendMessageAsync(nextMessage);
-    }
-
-    // ── Scroll ──
-
-    private void ScrollToLatestMessage()
-    {
-        if (_messagesPart is null || _items.Count == 0)
-            return;
-
-        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), () =>
-        {
-            if (_items.Count == 0 || _messagesPart is null)
-                return;
-
-            _messagesPart.ScrollTo(_items.Count - 1, position: ScrollToPosition.End, animate: false);
-        });
     }
 }

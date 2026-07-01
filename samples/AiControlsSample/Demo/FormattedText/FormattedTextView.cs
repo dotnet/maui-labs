@@ -46,10 +46,20 @@ public sealed class FormattedTextView : ContentContextView
                 return label;
 
             case FormattedLineKind.Bullet:
-                var row = new HorizontalStackLayout { Spacing = 6 };
-                row.Add(new Label { Text = "•", FontAttributes = FontAttributes.Bold });
-                label.HorizontalOptions = LayoutOptions.Fill;
-                row.Add(label);
+                // Use a Grid (not HorizontalStackLayout) so the star column stays
+                // Auto-width and the text column takes the remaining space and wraps.
+                var row = new Grid
+                {
+                    ColumnDefinitions =
+                    {
+                        new ColumnDefinition(GridLength.Auto),
+                        new ColumnDefinition(GridLength.Star),
+                    },
+                    ColumnSpacing = 6,
+                };
+                var bullet = new Label { Text = "•", FontAttributes = FontAttributes.Bold };
+                row.Add(bullet, 0, 0);
+                row.Add(label, 1, 0);
                 return row;
 
             default:
