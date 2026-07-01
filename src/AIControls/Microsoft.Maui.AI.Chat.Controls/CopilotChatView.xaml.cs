@@ -260,44 +260,10 @@ public partial class CopilotChatView : TemplatedView
             System.Diagnostics.Debug.WriteLine($"[CopilotChatView] Error: {ex}");
         }
 
-        // Auto-invoke UIActionBlocks when the conversation pauses at AwaitingInput.
-        // This matches the upstream pattern (S10_UIActionsTest) where UIActions are
-        // automatically executed by the UI layer unless a ToolApprovalTemplate intercepts them.
-        if (status == ConversationStatus.AwaitingInput && Session is not null)
-        {
-            AutoInvokeUIActionsAsync();
-        }
-
         // If session was cleared (idle with no turns), rebuild to show welcome state
         if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
         {
             RebuildFromSession();
-        }
-    }
-
-    private async void AutoInvokeUIActionsAsync()
-    {
-        if (Session is null)
-            return;
-
-        // Invoke ALL pending UIActionBlocks (not just one) to avoid deadlock
-        // when the LLM emits multiple tool calls in a single turn.
-        var pendingActions = Session.Turns
-            .SelectMany(t => t.ResponseBlocks)
-            .OfType<Microsoft.Maui.AI.Chat.UIActionBlock>()
-            .Where(b => !b.IsComplete)
-            .ToList();
-
-        foreach (var action in pendingActions)
-        {
-            try
-            {
-                await action.InvokeAsync();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[CopilotChatView] UIAction invoke failed: {ex}");
-            }
         }
     }
 

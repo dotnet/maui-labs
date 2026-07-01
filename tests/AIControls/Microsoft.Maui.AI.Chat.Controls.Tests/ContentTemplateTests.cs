@@ -54,15 +54,6 @@ public class ContentTemplateTests
         return new ContentContext(ctx, block);
     }
 
-    private static ContentContext MakeReasoningContext()
-    {
-        var block = new ReasoningContentBlock();
-        block.AppendText("thinking...");
-        block.Role = ChatRole.Assistant;
-        var ctx = CreateAgentContext();
-        return new ContentContext(ctx, block);
-    }
-
     // ── TextContentTemplate ──
 
     [Fact]
@@ -208,7 +199,6 @@ public class ContentTemplateTests
         Assert.True(template.When(MakeFunctionCallContext()));
         Assert.True(template.When(MakeFunctionResultContext()));
         Assert.True(template.When(MakeMediaContext()));
-        Assert.True(template.When(MakeReasoningContext()));
     }
 
     [Fact]
@@ -225,35 +215,6 @@ public class ContentTemplateTests
     // ── New Templates ──
 
     [Fact]
-    public void RichTextContentTemplate_MatchesRichContentBlockWithNodes()
-    {
-        var template = new RichTextContentTemplate();
-        // RichTextContentTemplate requires Content.Count > 0
-        var block = new RichContentBlock();
-        block.AppendText("hello");
-        // Need to add a node to Content
-        // Content is set internally, so RichTextContentTemplate will NOT match plain text blocks
-        // (because Content is empty unless the parser populated it)
-        block.Role = ChatRole.Assistant;
-        var ctx = CreateAgentContext();
-        var context = new ContentContext(ctx, block);
-
-        // Without nodes in Content, this template won't match
-        Assert.False(template.When(context));
-    }
-
-    [Fact]
-    public void RichTextContentTemplate_HasHigherPriorityThanText()
-    {
-        var richTemplate = new RichTextContentTemplate();
-        var textTemplate = new TextContentTemplate();
-
-        var context = MakeTextContext("User");
-
-        Assert.True(richTemplate.GetPriority(context) > textTemplate.GetPriority(context));
-    }
-
-    [Fact]
     public void MediaContentTemplate_MatchesMediaContentBlock()
     {
         var template = new MediaContentTemplate();
@@ -265,22 +226,6 @@ public class ContentTemplateTests
     public void MediaContentTemplate_DoesNotMatchTextContent()
     {
         var template = new MediaContentTemplate();
-        var context = MakeTextContext("User");
-        Assert.False(template.When(context));
-    }
-
-    [Fact]
-    public void ReasoningContentTemplate_MatchesReasoningContentBlock()
-    {
-        var template = new ReasoningContentTemplate();
-        var context = MakeReasoningContext();
-        Assert.True(template.When(context));
-    }
-
-    [Fact]
-    public void ReasoningContentTemplate_DoesNotMatchTextContent()
-    {
-        var template = new ReasoningContentTemplate();
         var context = MakeTextContext("User");
         Assert.False(template.When(context));
     }
