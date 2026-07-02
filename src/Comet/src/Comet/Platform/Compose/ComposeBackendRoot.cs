@@ -27,6 +27,50 @@ namespace Comet.Platform.Compose
 		/// go stale and the reloaded views would never be laid out.</summary>
 		View? _logicalRoot;
 
+		// IME handling: the view's laid-out size and the soft-keyboard inset are tracked
+		// separately — under Android 15's forced edge-to-edge the window never resizes for
+		// the IME (AdjustResize is a no-op), the keyboard just overlays, so the available
+		// height is the view height minus the reported IME inset.
+		Microsoft.Maui.Graphics.Size _viewDp;
+		double _imeInsetDp;
+
+		void RecomputeAvailable()
+		{
+			if (_viewDp.Width <= 0 || _viewDp.Height <= 0)
+				return;
+			var avail = new Microsoft.Maui.Graphics.Size(_viewDp.Width, System.Math.Max(0, _viewDp.Height - _imeInsetDp));
+			if (avail == ComposeNode.AvailableSize)
+				return;
+			ComposeNode.AvailableSize = avail;
+			_availableDp = avail;
+			Comet.Reactive.ReactiveScheduler.EnsureFlushScheduled();
+		}
+
+		internal void SetImeInsetDp(double dp)
+		{
+			if (System.Math.Abs(dp - _imeInsetDp) < 0.5)
+				return;
+			_imeInsetDp = dp;
+			RecomputeAvailable();
+		}
+
+		/// <summary>Observes the IME inset at the decor level via the AndroidX compat
+		/// dispatch — the ComposeView consumes child-level insets, so a listener on the
+		/// view itself never fires.</summary>
+		sealed class ImeInsetListener : Java.Lang.Object, AndroidX.Core.View.IOnApplyWindowInsetsListener
+		{
+			readonly ComposeBackendRoot _owner;
+			public ImeInsetListener(ComposeBackendRoot owner) => _owner = owner;
+
+			public AndroidX.Core.View.WindowInsetsCompat OnApplyWindowInsets(
+				global::Android.Views.View v, AndroidX.Core.View.WindowInsetsCompat insets)
+			{
+				var ime = insets.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom;
+				_owner.SetImeInsetDp(ime / ComposeNode.Density);
+				return AndroidX.Core.View.ViewCompat.OnApplyWindowInsets(v, insets);
+			}
+		}
+
 		public ComposeBackendRoot(IServiceProvider services)
 			=> _context = new BackendContext(services);
 
@@ -61,6 +105,33 @@ namespace Comet.Platform.Compose
 
 			var composeView = new ComposeView(context);
 			composeView.SetContent(_ => WrapContent is null ? _root : WrapContent(_root));
+
+			// Track the view's ACTUAL size (rotation, split-screen, or an OS that still
+			// resizes for the keyboard). A change recomputes the available size and
+			// schedules a flush so the backend root AND nested own-content hosts
+			// (NavigationView) re-lay-out to it.
+			composeView.LayoutChange += (_, e) =>
+			{
+				var dp = new Microsoft.Maui.Graphics.Size(
+					(e.Right - e.Left) / ComposeNode.Density,
+					(e.Bottom - e.Top) / ComposeNode.Density);
+				if (dp.Width <= 0 || dp.Height <= 0 || dp == _viewDp)
+					return;
+				_viewDp = dp;
+				RecomputeAvailable();
+			};
+
+			// IME inset via the decor: shrinks the available height so the composer/footer
+			// lifts above the soft keyboard (P7). The window itself must do NOTHING for the
+			// IME — without AdjustNothing the system falls back to adjustPan and pans the
+			// whole window up (pushing the top bar off-screen) on top of our reflow.
+			if (context is global::Android.App.Activity activity && activity.Window is { } window)
+			{
+				window.SetSoftInputMode(global::Android.Views.SoftInput.AdjustNothing);
+				if (window.DecorView is { } decor)
+					AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(decor, new ImeInsetListener(this));
+			}
+
 			return composeView;
 		}
 

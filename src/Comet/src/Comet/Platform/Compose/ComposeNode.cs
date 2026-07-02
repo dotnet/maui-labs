@@ -59,6 +59,12 @@ namespace Comet.Platform.Compose
 		/// pixel measurements (e.g. text) into the Dp space Yoga computes in.</summary>
 		public static float Density { get; set; } = 1f;
 
+		/// <summary>The app's current available size in Dp — the ComposeView's actual laid-out
+		/// size, kept current by <see cref="ComposeBackendRoot"/> (shrinks when the soft
+		/// keyboard resizes the window under AdjustResize, changes on rotation). Zero until
+		/// the first layout; consumers fall back to DisplayMetrics then.</summary>
+		public static Microsoft.Maui.Graphics.Size AvailableSize { get; set; }
+
 		protected bool HasFrame => _hasFrame;
 
 		/// <summary>The Yoga-arranged width of this node in Dp (0 until arranged). Own-content

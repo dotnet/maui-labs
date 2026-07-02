@@ -59,9 +59,18 @@ namespace Comet.Platform.Compose
 			_sideNode = (ComposeNode)CometBackendBridge.Materialize(_drawer.Side, _context);
 			_contentNode = (ComposeNode)CometBackendBridge.Materialize(_drawer.Content, _context);
 
-			var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
-			double w = m.WidthPixels / ComposeNode.Density;
-			double h = m.HeightPixels / ComposeNode.Density;
+			double w, h;
+			if (ComposeNode.AvailableSize is { Width: > 0, Height: > 0 } avail)
+			{
+				w = avail.Width;
+				h = avail.Height;
+			}
+			else
+			{
+				var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
+				w = m.WidthPixels / ComposeNode.Density;
+				h = m.HeightPixels / ComposeNode.Density;
+			}
 
 			CometBackendLayoutEngine.Layout(_drawer.Content, new Microsoft.Maui.Graphics.Size(w, h));
 			CometBackendLayoutEngine.Layout(_drawer.Side, new Microsoft.Maui.Graphics.Size(SheetWidthDp, h));

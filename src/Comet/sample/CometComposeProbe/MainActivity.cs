@@ -31,6 +31,10 @@ namespace CometComposeProbe
 			base.OnCreate(savedInstanceState);
 			ActionBar?.Hide();
 
+			// P7 IME handling lives in ComposeBackendRoot (decor-level insets listener):
+			// no SoftInput mode needed — Android 15's forced edge-to-edge makes
+			// AdjustResize a no-op anyway, and the insets path works on every version.
+
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
 
 #if DEBUG

@@ -77,6 +77,10 @@ namespace Comet.Platform.Compose
 
 		static Microsoft.Maui.Graphics.Size ScreenSizeDp()
 		{
+			// The live available size (shrinks when the soft keyboard resizes the window
+			// under AdjustResize); DisplayMetrics fallback before the first layout.
+			if (ComposeNode.AvailableSize is { Width: > 0, Height: > 0 } avail)
+				return avail;
 			var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
 			return new Microsoft.Maui.Graphics.Size(m.WidthPixels / ComposeNode.Density, m.HeightPixels / ComposeNode.Density);
 		}
