@@ -28,13 +28,17 @@ scenarios:
       I own a MAUI app repo and need framework-upgrade guidance for upgrading our
       team from one MAUI
       release to the next. We pin the SDK in global.json and install workloads in
-      CI. What should the upgrade notes capture for app developers and build
-      engineers, and when should I use dotnet-workload-info for exact versions?
+      CI. Turn the release notes into exactly five repo/CI action items: global.json
+      SDK pin, workload install/update command with --version, Xcode/JDK/Android SDK
+      requirement check, one platform-specific CI change, and one concrete validation
+      step. When should I use dotnet-workload-info for exact versions?
     assertions:
       - type: "output_matches"
         pattern: "global\\.json|SDK"
       - type: "output_matches"
         pattern: "dotnet workload (install|update)|workload set|CI"
+      - type: "output_contains"
+        value: "--version"
       - type: "output_matches"
         pattern: "Xcode|JDK|Android SDK|tooling"
       - type: "output_matches"
@@ -42,6 +46,7 @@ scenarios:
     rubric:
       - "Translates framework release notes into repo and CI actions for an app team"
       - "Mentions SDK pinning, workload updates, and environment/tooling changes"
+      - "Shows workload install/update with a pinned --version value or placeholder"
       - "Keeps the focus on app adoption guidance instead of manifest/package publishing details"
       - "Includes validation steps for builds and critical app flows"
     timeout: 240

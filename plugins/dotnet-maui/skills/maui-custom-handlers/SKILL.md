@@ -1,7 +1,7 @@
 ---
 name: maui-custom-handlers
 description: >-
-  Implement or migrate MAUI visual handlers with mapper APIs. USE FOR: `AppendToMapping`, borderless Entry tweaks, `PropertyMapper`, `CommandMapper`, `ConnectHandler` or `DisconnectHandler`, custom `ViewHandler`, and renderer-to-handler migration. DO NOT USE FOR: non-visual platform APIs, full Xamarin migration, native SDK bindings, or backend implementation.
+  Implement/migrate MAUI visual handlers. USE FOR: `EntryHandler.Mapper.AppendToMapping`, scoped `BorderlessEntry` type guards, renderer-to-handler migration, `ConnectHandler`/`DisconnectHandler` cleanup, `PropertyMapper`, `CommandMapper`, custom `ViewHandler`, `ConfigureMauiHandlers`. DO NOT USE FOR: non-visual platform APIs, full Xamarin migration, native SDK bindings, or backend code.
 ---
 
 # MAUI Custom Handlers

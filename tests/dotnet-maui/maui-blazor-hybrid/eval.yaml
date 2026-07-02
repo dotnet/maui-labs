@@ -24,7 +24,8 @@ scenarios:
     prompt: |
       I have an existing HTML/JavaScript surface in a MAUI app, not Razor
       components. I need to send messages between JavaScript and .NET and keep it
-      trimming-safe. What should I use?
+      trimming-safe. Show the HybridWebView message boundary using SendRawMessage,
+      RawMessageReceived, DTOs, and a JsonSerializerContext rather than reflection.
     assertions:
       - type: "output_contains"
         value: "HybridWebView"
@@ -45,7 +46,8 @@ scenarios:
     prompt: |
       My MAUI Blazor Hybrid app navigates between Razor routes, but a component
       renders stale DOM after navigation. Which DevFlow WebView/CDP tools should
-      I use to inspect the active route and DOM?
+      I use to inspect the active route and DOM? Include the exact maui_cdp_webviews
+      first step and follow-up commands to inspect source/evaluate JavaScript.
     assertions:
       - type: "output_contains"
         value: "maui_cdp_webviews"

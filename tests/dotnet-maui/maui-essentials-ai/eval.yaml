@@ -4,7 +4,8 @@ scenarios:
       I want my MAUI app to use Microsoft.Maui.Essentials.AI local on-device chat
       on supported Apple devices
       through Microsoft.Extensions.AI abstractions. What package and registration
-      should I use, and what platform caveat should I show in the UI?
+      should I use, what runtime iOS/macOS/Mac Catalyst 26+ availability check is
+      needed, and what fallback should I show instead of calling a cloud model?
     assertions:
       - type: "output_contains"
         value: "Microsoft.Maui.Essentials.AI"
@@ -17,7 +18,7 @@ scenarios:
     rubric:
       - "Installs Microsoft.Maui.Essentials.AI as a prerelease package"
       - "Registers AppleIntelligenceChatClient as an IChatClient"
-      - "Mentions support on iOS/macOS/Mac Catalyst 26+ and fallback UI for unsupported platforms"
+      - "Mentions support on iOS/macOS/Mac Catalyst 26+ with runtime availability checks and fallback UI for unsupported platforms"
       - "Keeps chat consumption behind DI/view models rather than page-only code"
     timeout: 240
 
@@ -49,7 +50,7 @@ scenarios:
       like searching
       the user's garden catalog. How do I build the IChatClient pipeline with
       UseFunctionInvocation and AdditionalTools, and when should I use the AI
-      Attributes skill?
+      Attributes skill instead of hand-written tool delegates?
     assertions:
       - type: "output_contains"
         value: "UseFunctionInvocation"

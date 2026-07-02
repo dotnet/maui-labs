@@ -42,9 +42,10 @@ scenarios:
 
   - name: "Preserve state across stop resume and multi-window lifecycle"
     prompt: |
-      A MAUI app loses an in-progress draft when it goes to the background and
-      resumes later. What lifecycle events and state storage approach should I
-      use, and when should platform-specific lifecycle hooks be added?
+      A MAUI app with multiple windows loses an in-progress draft when one window
+      is stopped/destroyed and later resumed. Which cross-platform Window lifecycle
+      events should save/restore state, which storage choices fit small vs larger
+      drafts, and when should ConfigureLifecycleEvents be used instead?
     assertions:
       - type: "output_contains"
         value: "Window"
@@ -55,7 +56,7 @@ scenarios:
       - type: "output_matches"
         pattern: "Preferences|SQLite|app data"
     rubric:
-      - "Uses cross-platform Window lifecycle events for app/window state"
+      - "Uses cross-platform Window lifecycle events for per-window app/window state"
       - "Persists draft state before stop/destroy and restores on resume/startup"
       - "Chooses Preferences, app data files, or SQLite based on state size"
       - "Limits ConfigureLifecycleEvents to platform-specific lifecycle behavior"
@@ -65,7 +66,8 @@ scenarios:
     prompt: |
       I am migrating a Xamarin.Forms app with Android drawable-hdpi image folders,
       iOS asset catalogs, and plist font registrations. The images are used from
-      shared XAML. Where should these assets move in a MAUI single-project app?
+      shared XAML. Where should these assets move in a MAUI single-project app,
+      and what old iOS UIAppFonts entries should be removed when MAUI owns fonts?
     assertions:
       - type: "output_contains"
         value: "Resources/Images"

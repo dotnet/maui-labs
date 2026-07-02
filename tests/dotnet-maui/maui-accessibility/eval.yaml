@@ -1,9 +1,10 @@
 scenarios:
   - name: "Make icon-only button accessible"
     prompt: |
-      My MAUI toolbar uses an ImageButton with only a save icon. What
-      accessibility metadata and test hook should I add? I want to perform a
-      .NET MAUI accessibility audit on this.
+      My MAUI toolbar uses an ImageButton with only a save icon, and the adjacent
+      text label already reads "Save draft". What accessibility metadata and test
+      hook should I add to the ImageButton, and what duplicate metadata should I
+      avoid adding to the Label because its Text is already the accessible name?
     assertions:
       - type: "output_contains"
         value: "SemanticProperties.Description"
@@ -13,17 +14,21 @@ scenarios:
         pattern: "(?i)hint|SemanticProperties\\.Hint"
       - type: "output_matches"
         pattern: "(?i)accessible name|screen reader|a11y|accessibility label|semantic"
+      - type: "output_matches"
+        pattern: "(?i)Label.*Text.*already|redundant|duplicate"
     rubric:
       - "Adds SemanticProperties.Description for the accessible name"
       - "Adds SemanticProperties.Hint when the action needs clarification"
       - "Adds AutomationId for testing but does not treat it as the accessible label"
+      - "Avoids adding redundant SemanticProperties.Description to a Label whose Text already names it"
     timeout: 240
 
   - name: "Announce validation errors"
     prompt: |
       A MAUI form validates after the user taps Save. If the email field is
-      invalid, how should I tell screen reader users what happened using semantic
-      focus or announcements?
+      invalid and the password is missing, how should I tell screen reader users
+      what happened using semantic focus or announcements without announcing each
+      field separately?
     assertions:
       - type: "output_contains"
         value: "SemanticScreenReader.Announce"
@@ -31,17 +36,20 @@ scenarios:
         pattern: "focus|SetSemanticFocus|semantic focus"
       - type: "output_matches"
         pattern: "first invalid|invalid field|error summary|validation|Error:"
+      - type: "output_matches"
+        pattern: "(?i)summary|2 errors|count|batch|not.*every"
     rubric:
       - "Uses SemanticScreenReader.Announce for the validation result"
       - "Recommends moving focus to the error summary or first invalid field when helpful"
-      - "Avoids announcing every minor UI change"
+      - "Batches related validation errors into a summary instead of announcing every field separately"
     timeout: 240
 
   - name: "Mark headings and hide decorative image"
     prompt: |
-      My MAUI page has a big title label and a decorative background image. What
-      properties should I set so screen readers handle them correctly according
-      to WCAG-oriented UI fixes?
+      My MAUI CollectionView row has a title, price, decorative thumbnail, and a
+      favorite button. I also have a page title label. Which element should expose
+      row semantics, how do I avoid every decorative child being read, and what
+      heading property should the page title use?
     assertions:
       - type: "output_contains"
         value: "SemanticProperties.HeadingLevel"
@@ -49,8 +57,11 @@ scenarios:
         pattern: "AutomationProperties\\.IsInAccessibleTree"
       - type: "output_matches"
         pattern: "False|false"
+      - type: "output_matches"
+        pattern: "CollectionView|row|container|composite"
     rubric:
       - "Sets a semantic heading level on the title"
       - "Hides the decorative image from the accessibility tree"
       - "Does not hide meaningful interactive content"
+      - "Exposes a meaningful composite label for the CollectionView row instead of making every decorative child read separately"
     timeout: 240

@@ -1,7 +1,7 @@
 ---
 name: maui-app-architecture
 description: >-
-  Design MAUI app architecture around DI, MVVM, Shell routes, and testable services. USE FOR: `MauiProgram` registration, page or ViewModel wiring, `Shell.Current.GoToAsync`, trim-safe query handling, `x:DataType`, service lifetimes, and replacing `DependencyService` or service locators. DO NOT USE FOR: project layout, API currency checks, or debug tools.
+  Design MAUI architecture around DI, MVVM, Shell routes, and testable services. USE FOR: `MauiProgram`, `Routing.RegisterRoute`, `Shell.Current.GoToAsync`, `Uri.EscapeDataString`, trim-safe `IQueryAttributable` vs `[QueryProperty]`, `AddTransient` page/ViewModel lifetimes, `x:DataType`, avoiding `BuildServiceProvider`. DO NOT USE FOR: project layout, API currency, or debug tools.
 ---
 
 # MAUI App Architecture

@@ -12,6 +12,10 @@ scenarios:
     assertions:
       - type: "output_matches"
         pattern: "(?i)markdown|(?m)^##\\s|# DevFlow"
+      - type: "output_contains"
+        value: "## Environment"
+      - type: "output_contains"
+        value: "## Findings"
       - type: "output_matches"
         pattern: "maui_tap|maui_hittest|maui_screenshot"
       - type: "output_matches"
@@ -29,7 +33,7 @@ scenarios:
   - name: "Create markdown report for long Blazor WebView debugging session"
     prompt: |
       Please summarize this long MAUI Blazor Hybrid DevFlow session into a
-      markdown-only feedback report. Output the markdown report in the chat
+      DevFlow friction report in markdown only. Output the markdown report in the chat
       instead of saving a file. The repeated friction was around
       `maui_cdp_webviews`, `maui_cdp_source`, `maui devflow ui tree`, and a
       fallback to screenshots because the WebView list kept coming back empty.
@@ -55,7 +59,7 @@ scenarios:
 
   - name: "Draft scrubbed GitHub issue for dotnet/maui-labs"
     prompt: |
-      I want to file a GitHub issue from a DevFlow session review. The raw notes
+      I want to file a GitHub issue from a DevFlow session review/friction report. The raw notes
       mention `/Users/alex/src/MyCustomerApp`, `alex@example.com`, and a private
       staging URL. The useful product signal is that `maui_query --automationId`
       failed three times, then the agent dumped the full tree and manually found

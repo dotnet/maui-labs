@@ -4,7 +4,8 @@ scenarios:
       I am adding OAuth login to a .NET MAUI app with WebAuthenticator. The
       provider redirect URI is myapp://auth. What app code and platform setup do
       I need for Android and iOS/Mac Catalyst, and what should I avoid putting in
-      the mobile app?
+      the mobile app? Include CallbackUrl, Android intent filter callback activity,
+      and iOS/Mac Catalyst CFBundleURLTypes details.
     assertions:
       - type: "output_matches"
         pattern: "AuthenticateAsync|WebAuthenticatorOptions"
@@ -51,7 +52,8 @@ scenarios:
       My MAUI Blazor Hybrid app uses MSAL.NET for Microsoft Entra ID and a
       custom AuthenticationStateProvider for Razor components. What should the
       logout handler clear so the next user on a shared device cannot silently
-      reuse the previous user's session?
+      reuse the previous user's session? Include the MSAL account cache calls,
+      SecureStorage cleanup, and Blazor state notification.
     assertions:
       - type: "output_contains"
         value: "RemoveAsync"

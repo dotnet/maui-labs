@@ -2,10 +2,11 @@ scenarios:
   - name: "Audit migration blockers before porting"
     prompt: |
       I need a Xamarin.Forms migration audit before porting to .NET MAUI. I
-      inherited a Xamarin.Forms 5 app with DependencyService calls,
-      MessagingCenter messages, three custom renderers, and platform projects for
-      Android and iOS. I need an audit plan before we start moving code to .NET
-      MAUI.
+      inherited a Xamarin.Forms 5 app with DependencyService calls in 15 files,
+      MessagingCenter.Subscribe in 8 pages, three custom renderers (Entry border
+      tweak, camera preview, payment UI overlay), and platform projects for Android
+      and iOS with native permissions. Build the audit plan and name the MAUI
+      replacement/skill for each pattern before we start moving code.
     assertions:
       - type: "output_matches"
         pattern: "DependencyService.*(DI|dependency injection)|(DI|dependency injection).*DependencyService"
@@ -15,11 +16,14 @@ scenarios:
         pattern: "renderer|handler|PropertyMapper|ViewHandler"
       - type: "output_matches"
         pattern: "permissions|Info\\.plist|AndroidManifest|capabilit"
+      - type: "output_matches"
+        pattern: "maui-custom-handlers|maui-platform-invoke|slim-bindings|android-slim-bindings|ios-slim-bindings"
     rubric:
       - "Starts with a migration audit of packages, platform projects, renderers, DependencyService, MessagingCenter, permissions, and capabilities"
       - "Plans DependencyService replacement through DI registration and constructor injection"
       - "Plans MessagingCenter replacement with WeakReferenceMessenger, events, observable state, or explicit services"
-      - "Classifies custom renderers before choosing mapper customization or custom handlers"
+      - "Classifies custom renderers before choosing mapper customization, custom handlers, platform services, or slim bindings"
+      - "Names the follow-up MAUI skill or workstream for each migration blocker"
     timeout: 240
 
   - name: "Move Xamarin.Forms app into a new MAUI project"
@@ -27,7 +31,8 @@ scenarios:
       We are doing a fresh-project Xamarin.Forms to .NET MAUI migration and want
       to avoid dragging
       old project file cruft forward. What new-project migration workflow should
-      we use, and what namespaces/APIs should we update while copying code?
+      we use, what namespaces/APIs should we update while copying code, and what
+      does MauiProgram.cs replace from the old startup pattern?
     assertions:
       - type: "output_matches"
         pattern: "new .NET MAUI project|new MAUI project|dotnet new maui"

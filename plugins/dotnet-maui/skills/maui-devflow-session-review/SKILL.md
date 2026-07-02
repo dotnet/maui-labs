@@ -1,7 +1,7 @@
 ---
 name: maui-devflow-session-review
 description: >-
-  Review DevFlow sessions for feedback, friction, broken features, and workarounds. USE FOR: retrospective summaries, findings, and dotnet/maui-labs issues from session content. Uses session history plus `gh`; does not run live `maui devflow`. DO NOT USE FOR: fixing bugs, onboarding DevFlow, live debugging, or memory search.
+  Review past MAUI DevFlow sessions. USE FOR: DevFlow friction reports, classifying `maui_tap`/`maui_hittest`/`maui_screenshot`/`maui_cdp_webviews` issues vs app bugs, markdown Environment/Findings reports, scrubbed dotnet/maui-labs issue drafts, workaround summaries. Does not run live `maui devflow`. DO NOT USE FOR: fixing bugs, onboarding, live debugging, or memory search.
 ---
 
 # MAUI DevFlow Session Review

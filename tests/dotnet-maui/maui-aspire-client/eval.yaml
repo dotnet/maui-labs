@@ -3,7 +3,10 @@ scenarios:
     prompt: |
       My MAUI app consumes an Aspire-orchestrated apiservice project. Show the
       typed client and service discovery setup, and explain what must be true for
-      a service-name endpoint to resolve on emulator or device targets.
+      a service-name endpoint such as https+http://apiservice to resolve on
+      emulator or device targets. Also describe the fallback path if the app is
+      launched outside the Aspire AppHost and those Services__ environment values
+      are missing.
     assertions:
       - type: "output_contains"
         value: "AddServiceDiscovery"
@@ -20,6 +23,7 @@ scenarios:
       - "Registers a typed HttpClient"
       - "Uses the Aspire service name only when matching endpoint configuration is present"
       - "Explains emulator/device apps are not automatically injected with AppHost environment variables"
+      - "Provides a fallback plan for standalone launches where service discovery configuration is absent"
     timeout: 240
 
   - name: "Provide standalone fallback addresses per device type"

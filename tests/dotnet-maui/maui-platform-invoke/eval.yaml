@@ -5,6 +5,7 @@ scenarios:
       review prompt on iOS and
       Android. I don't want platform-specific code scattered through view
       models. How should I structure it as a DI platform service abstraction?
+      Why does this not belong in a visual handler?
     assertions:
       - type: "output_contains"
         value: "IAppReviewService"
@@ -28,7 +29,8 @@ scenarios:
       We are adding a MAUI platform service that invokes a small platform-specific
       camera metadata feature. What
       permission and platform file guidance should the MAUI implementation
-      include in AndroidManifest.xml and Info.plist?
+      include in AndroidManifest.xml and Info.plist? Show the Permissions.CheckStatusAsync
+      then Permissions.RequestAsync flow before invoking the native API.
     assertions:
       - type: "output_contains"
         value: "Permissions.CheckStatusAsync"

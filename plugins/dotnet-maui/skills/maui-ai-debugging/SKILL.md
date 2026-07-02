@@ -1,7 +1,7 @@
 ---
 name: maui-ai-debugging
 description: >-
-  Legacy alias for older clients that still ask for `maui-ai-debugging`. USE FOR: DevFlow debug loops, screenshots, visual tree inspection, Blazor CDP debugging, simulator or emulator management, and MAUI app debugging through `maui devflow`. DO NOT USE FOR: new DevFlow setup, generic desktop automation, AppleScript macros, or host-level `xdotool` control.
+  Legacy DevFlow debug skill. USE FOR: `maui-ai-debugging`, `maui devflow`, screenshots, visual tree, Blazor CDP, simulator/emulator debugging. DO NOT USE FOR: setup, desktop automation, AppleScript, host `xdotool`.
 ---
 
 # MAUI AI Debugging

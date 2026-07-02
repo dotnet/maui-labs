@@ -1,7 +1,7 @@
 ---
 name: maui-devflow-debug
 description: >-
-  Run DevFlow inspect-and-fix loops for MAUI apps with DevFlow integrated. USE FOR: app launch, device selection, agent recovery, broker, port, or adb issues, tree or screenshot inspection, Blazor CDP debugging, and iterative UI debugging. DO NOT USE FOR: first-time DevFlow setup or non-MAUI desktop automation. INVOKES: `maui devflow`, `dotnet`, `adb`, and `simctl`.
+  Run DevFlow inspect-and-fix loops for MAUI apps. USE FOR: launch, device selection, agent recovery, broker/port/adb, tree/screenshot, Blazor CDP, iterative UI debugging. DO NOT USE FOR: first-time setup or non-MAUI automation. INVOKES: `maui devflow`, `dotnet`, `adb`, `simctl`.
 ---
 
 # DevFlow Debug

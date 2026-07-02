@@ -1,7 +1,7 @@
 ---
 name: devflow-connect
 description: >-
-  Diagnose DevFlow agent connectivity issues between the `maui` CLI and running MAUI apps. USE FOR: `maui devflow` connection failures, agent not found, port conflicts, adb forwarding issues, and broker discovery problems. DO NOT USE FOR: app build failures, environment setup, visual tree inspection after connection succeeds, or Blazor CDP debugging.
+  Diagnose DevFlow agent connectivity. USE FOR: `maui devflow` connection failures, agent not found, ports, adb forwarding, broker. DO NOT USE FOR: build failures, setup, visual tree, or Blazor CDP.
 ---
 
 # DevFlow Connect

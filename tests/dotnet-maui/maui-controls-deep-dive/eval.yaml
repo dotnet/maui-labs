@@ -4,7 +4,8 @@ scenarios:
       I need MAUI controls deep-dive guidance for an orders screen with thousands
       of records. I need a CollectionView
       pattern with loading, empty state, incremental loading, and UI automation
-      hooks.
+      hooks. What happens if I wrap this CollectionView in a ScrollView, and which
+      property/command should trigger loading around 5% remaining?
     assertions:
       - type: "output_matches"
         pattern: "ItemsSource|ItemTemplate|SelectionMode|EmptyView"
@@ -14,8 +15,12 @@ scenarios:
         value: "EmptyView"
       - type: "output_contains"
         value: "AutomationId"
+      - type: "output_matches"
+        pattern: "(?i)do not|don't|avoid|should not"
+      - type: "output_contains"
+        value: "ScrollView"
     rubric:
-      - "Lets CollectionView own scrolling and avoids wrapping it in ScrollView"
+      - "Explains why CollectionView should own scrolling and must not be wrapped in ScrollView"
       - "Uses EmptyView and a visible loading state"
       - "Uses RemainingItemsThreshold or equivalent incremental load trigger"
       - "Adds stable AutomationIds for the list and key states"
@@ -46,8 +51,9 @@ scenarios:
   - name: "Design accessible GraphicsView drawing"
     prompt: |
       I need MAUI controls deep-dive guidance for a GraphicsView chart that
-      updates as sensor values arrive.
-      What drawing and accessibility guardrails should I follow?
+      updates every 500ms as sensor values arrive. What drawing and accessibility
+      guardrails should I follow? List three things that must not happen in Draw
+      because Draw is a hot path.
     assertions:
       - type: "output_contains"
         value: "IDrawable"
@@ -57,9 +63,11 @@ scenarios:
         value: "Invalidate"
       - type: "output_matches"
         pattern: "SemanticProperties|SemanticScreenReader|screen reader|AutomationId"
+      - type: "output_matches"
+        pattern: "hot path|allocat|blocking|I/O|LINQ|service lookup"
     rubric:
       - "Places drawing code in IDrawable and treats Draw as a hot path"
-      - "Invalidates only when state changes and avoids allocations/blocking work in Draw"
+      - "Invalidates only when state changes and avoids allocations, async/I/O, LINQ, service lookups, or blocking work in Draw"
       - "Keeps input handling/state outside the drawable as appropriate"
       - "Provides accessible surrounding UI or semantic alternatives for chart content"
     timeout: 240

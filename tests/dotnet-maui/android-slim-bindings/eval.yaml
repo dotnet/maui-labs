@@ -15,14 +15,18 @@ scenarios:
       I have a .NET MAUI app in MyMauiApp/. I need to use the Lottie animation
       library (com.airbnb.android:lottie:6.6.2) but I only need to play animations
       from JSON files — not the full API surface. Create a slim Android binding
-      project in LottieBinding/ with the Kotlin wrapper, Gradle build files, and
-      C# binding project. Show the important file tree and code snippets in your
-      chat response.
+      project in LottieBinding/. Show the complete build.gradle.kts content, the
+      DotnetLottiePlayer.kt wrapper with @JvmStatic methods, and the binding .csproj
+      with AndroidMavenLibrary/AndroidLibrary items directly in your chat response.
     assertions:
       - type: "output_matches"
         pattern: "(?i)slim.binding|native.library.interop|NLI|thin.wrapper|slim.wrapper"
       - type: "output_matches"
         pattern: "(?i)gradlew|gradle|build\\.gradle"
+      - type: "output_matches"
+        pattern: "build\\.gradle\\.kts[\\s\\S]*dependencies|dependencies[\\s\\S]*com\\.airbnb\\.android:lottie:6\\.6\\.2"
+      - type: "output_contains"
+        value: "@JvmStatic"
       - type: "output_matches"
         pattern: "AndroidLibrary|AndroidMavenLibrary|AAR|binding project"
       - type: "output_matches"

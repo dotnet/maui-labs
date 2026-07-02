@@ -1,7 +1,7 @@
 ---
 name: android-slim-bindings
 description: >-
-  Create Android slim bindings for MAUI or .NET for Android using wrapper libraries and Native Library Interop. USE FOR: Java or Kotlin wrappers, Gradle configuration, AAR or JAR integration, Maven dependencies, C# binding generation, and bridging native Android SDKs to .NET. DO NOT USE FOR: iOS or macOS bindings, general MAUI app work, or NuGet packaging issues.
+  Create Android slim bindings for MAUI/.NET Android. USE FOR: slim Android binding, Kotlin/Java wrappers, build.gradle.kts, Maven, AAR/JAR, AndroidMavenLibrary, AndroidLibrary, @JvmStatic, XA4241/XA4242, Xamarin.AndroidX/Kotlin NuGets. DO NOT USE FOR: iOS/macOS bindings, general MAUI apps, or NuGet packaging.
 ---
 
 # When to use this skill

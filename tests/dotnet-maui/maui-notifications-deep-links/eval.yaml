@@ -3,7 +3,8 @@ scenarios:
     prompt: |
       I need local reminder notifications in a MAUI app for Android and iOS.
       What platform setup and permission UX should I include before scheduling
-      notifications?
+      notifications? Include the denied/disabled state and make clear the permission
+      request happens before the first schedule attempt.
     assertions:
       - type: "output_contains"
         value: "NotificationChannel"
@@ -15,6 +16,8 @@ scenarios:
         pattern: "NotificationManager|Importance|channel ID"
       - type: "output_matches"
         pattern: "denied|disabled|Settings|in-app"
+      - type: "output_matches"
+        pattern: "(?i)before|prior|request.*schedule|schedule.*after.*permission"
     rubric:
       - "Creates Android notification channels for Android 8+"
       - "Requests Android 13+ POST_NOTIFICATIONS permission"
@@ -59,7 +62,8 @@ scenarios:
     prompt: |
       My MAUI app should open product pages from https://contoso.example/p/42 and
       also support myapp://product/42 as a fallback. What Android/iOS setup and
-      app-side routing should I implement?
+      app-side routing should I implement? If a push notification triggers the
+      deep link, what should the payload contain and what must it not contain?
     assertions:
       - type: "output_contains"
         value: "assetlinks.json"
@@ -71,10 +75,13 @@ scenarios:
         pattern: "CFBundleURLTypes|intent filter|intent-filter"
       - type: "output_matches"
         pattern: "Shell|GoToAsync|OnAppLinkRequestReceived|ConfigureLifecycleEvents"
+      - type: "output_matches"
+        pattern: "(?i)(entity ID|route|id only|no.*token|no.*secret|no.*PII)"
     rubric:
       - "Uses Android App Links with assetlinks.json for verified HTTPS links"
       - "Sets android:autoVerify=true on the Android App Links intent filter"
       - "Uses iOS Universal Links with apple-app-site-association"
       - "Adds custom URI scheme setup as a fallback"
       - "Normalizes deep links into Shell routes or an app navigation service"
+      - "Keeps push payloads to route/entity identifiers and excludes tokens, secrets, and PII"
     timeout: 240

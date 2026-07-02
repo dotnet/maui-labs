@@ -25,8 +25,9 @@ scenarios:
   - name: "Pick and persist an imported document"
     prompt: |
       My MAUI app imports a PDF with FilePicker. The file has to remain
-      available after app restart. What should the picker flow do for
-      cancellation and durable access?
+      available after app restart and work even if the original picker handle is
+      temporary. What should the FilePicker.PickAsync flow do for cancellation,
+      stream reading, and durable access in FileSystem.AppDataDirectory?
     assertions:
       - type: "output_matches"
         pattern: "PickAsync|FileResult"

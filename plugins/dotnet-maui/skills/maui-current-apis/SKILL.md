@@ -1,7 +1,7 @@
 ---
 name: maui-current-apis
 description: >-
-  Keep MAUI guidance on current APIs, not Xamarin.Forms-era or wrong-version suggestions. USE FOR: inspecting the target TFM before changes, replacing obsolete APIs, choosing safe-area, Shell, or window APIs for net8, net9, or net10, and avoiding .NET 10-only output on older targets. DO NOT USE FOR: workload discovery, runtime inspection, or migration planning.
+  Keep MAUI guidance on current, target-framework-safe APIs. USE FOR: inspecting `TargetFramework`/TFM, net8 vs net10 choices, `SafeAreaEdges` vs `On<iOS>().SetUseSafeArea`, replacing `Application.Current.MainPage`, Xamarin.Forms namespaces, Shell/window APIs, avoiding .NET 10-only output on older targets. DO NOT USE FOR: workload discovery, runtime inspection, or migration planning.
 ---
 
 # MAUI Current APIs

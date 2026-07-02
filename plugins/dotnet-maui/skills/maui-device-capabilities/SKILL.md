@@ -1,7 +1,7 @@
 ---
 name: maui-device-capabilities
 description: >-
-  Implement MAUI camera, photo/file picker, geolocation, and maps features with the required permissions and manifest or plist entries. USE FOR: `MediaPicker`, durable `FilePicker` storage, `GeolocationRequest`, Android 13+ photo picker changes, denied or cancelled flows, and permission requests. DO NOT USE FOR: notifications or deep links, auth, or UI layout.
+  Implement MAUI device features with permissions/declarations. USE FOR: camera/media, `MediaPicker.IsCaptureSupported`, `FilePicker.PickAsync` durable copy to `FileSystem.AppDataDirectory`, `GeolocationRequest`, `Permissions.LocationWhenInUse`, `UseMauiMaps`, Android `READ_MEDIA_IMAGES`/Photo Picker, `NSCameraUsageDescription`, denied/cancelled flows. DO NOT USE FOR: notifications/auth/layout.
 ---
 
 # MAUI Device Capabilities

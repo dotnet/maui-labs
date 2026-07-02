@@ -15,7 +15,8 @@ scenarios:
       480ms total startup time. But my app feels much slower on my physical device
       and users report 4+ second cold starts. I ran the profiler against the Debug
       build on an emulator. What am I doing wrong and what should I change to get
-      meaningful startup profiling data with `maui profile startup`?
+      meaningful startup profiling data with `maui profile startup`? Include the
+      Release configuration and physical-device requirement.
     assertions:
       - type: "output_contains"
         value: "maui profile startup"
@@ -53,16 +54,20 @@ scenarios:
   - name: "Optimize oversized image resources"
     prompt: |
       My MAUI app uses several 4000px PNG files directly in list rows and memory
-      spikes while scrolling. What resource and UI changes should I make?
+      spikes while scrolling. What resource and UI changes should I make? Include
+      when to use the MauiImage BaseSize attribute and when to create thumbnails.
     assertions:
       - type: "output_matches"
         pattern: "resize|thumbnail|downscale|display size"
       - type: "output_matches"
         pattern: "MauiImage|Resources/Images"
+      - type: "output_contains"
+        value: "BaseSize"
       - type: "output_matches"
         pattern: "memory|decode|full-resolution"
     rubric:
       - "Recommends using display-sized images or thumbnails"
       - "Mentions MAUI image resources/build-time resizing where applicable"
+      - "Mentions MAUI image resources/build-time resizing with BaseSize where applicable"
       - "Connects full-resolution image decode to memory and scrolling cost"
     timeout: 240

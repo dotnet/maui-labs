@@ -1,7 +1,7 @@
 ---
 name: maui-ui-patterns
 description: >-
-  Fix MAUI page layout and automation patterns. USE FOR: non-scrolling `CollectionView`, stable `AutomationId` values in `DataTemplate` items, Grid or FlexLayout sizing, binding-driven control state, and loading, empty, or error screens. DO NOT USE FOR: Shell routes, full accessibility audits, or vendor-specific control generation.
+  Fix MAUI page layout, state, and automation patterns. USE FOR: non-scrolling `CollectionView` (Grid row `Height="*"` not `Auto`, remove `ScrollView` parent), stable `AutomationId` bindings in `DataTemplate`, `x:DataType`, Grid/FlexLayout sizing, binding-driven state, loading/empty/error screens. DO NOT USE FOR: Shell routes, full accessibility audits, or vendor controls.
 ---
 
 # MAUI UI Patterns

@@ -1,7 +1,7 @@
 ---
 name: devflow-automation
 description: >-
-  Automate MAUI app state through registered DevFlow Actions. USE FOR: discovering `[DevFlowAction]` shortcuts, logging in users, seeding data, navigating to deep screens, and bypassing long UI flows. DO NOT USE FOR: arbitrary methods, DI or framework internals, basic tap or fill actions, tree or screenshot inspection, connectivity issues, or build/deploy problems.
+  Automate MAUI app state through DevFlow Actions. USE FOR: `[DevFlowAction]` shortcuts, login, seed data, deep screens. DO NOT USE FOR: arbitrary methods, DI internals, UI MCP tools, connectivity, or build/deploy issues.
 ---
 
 # DevFlow Automation - Actions

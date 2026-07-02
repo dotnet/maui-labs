@@ -1,7 +1,7 @@
 ---
 name: maui-accessibility
 description: >-
-  Make MAUI apps accessible with semantics, screen-reader metadata, focus, announcements, touch targets, and platform checks. USE FOR: accessibility audits, TalkBack, VoiceOver, or Narrator fixes, semantic focus, hiding decorative elements, and `AutomationProperties` updates. DO NOT USE FOR: layout generation, UI automation only, or generic performance tuning.
+  Make MAUI apps accessible. USE FOR: SemanticProperties.Description/Hint/HeadingLevel, SemanticScreenReader.Announce, SetSemanticFocus, Label Text redundancy, decorative IsInAccessibleTree=false, CollectionView row semantics, TalkBack/VoiceOver/Narrator audits, touch targets. DO NOT USE FOR: layout generation, UI automation only, or performance tuning.
 ---
 
 # MAUI Accessibility

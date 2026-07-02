@@ -18,7 +18,8 @@ scenarios:
       with the XcodeGen project.yml, Podfile, Swift wrapper, and C# binding project.
       Show the important file tree and code snippets in your chat response,
       including the Podfile static-linkage line and the Swift wrapper class
-      signature with @objc and NSObject.
+      signature with @objc and NSObject. Include BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+      in project.yml and the binding .csproj XcodeProject item with SchemeName.
     assertions:
       - type: "output_contains"
         value: "XcodeGen"
@@ -30,6 +31,10 @@ scenarios:
         pattern: "ApiDefinition\\.cs|BaseType"
       - type: "output_contains"
         value: "project.yml"
+      - type: "output_contains"
+        value: "BUILD_LIBRARY_FOR_DISTRIBUTION"
+      - type: "output_matches"
+        pattern: "<XcodeProject|SchemeName"
       - type: "output_contains"
         value: "Podfile"
       - type: "output_contains"

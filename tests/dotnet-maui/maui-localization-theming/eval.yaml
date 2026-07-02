@@ -45,7 +45,8 @@ scenarios:
     prompt: |
       Add a MAUI settings option for Light, Dark, and System theme. Which XAML
       resource patterns and runtime API should I use so already-created pages
-      update?
+      update? Explain why DynamicResource is required for live updates and why
+      StaticResource alone is insufficient.
     assertions:
       - type: "output_contains"
         value: "AppThemeBinding"
@@ -55,6 +56,8 @@ scenarios:
         value: "UserAppTheme"
       - type: "output_matches"
         pattern: "AppTheme\\.Unspecified"
+      - type: "output_matches"
+        pattern: "(?i)StaticResource.*(not|won't|does not)|DynamicResource.*runtime|already-created"
     rubric:
       - "Uses AppThemeBinding for light/dark resource values"
       - "Uses DynamicResource for values that must update at runtime"

@@ -1,7 +1,7 @@
 ---
 name: maui-unit-testing
 description: >-
-  Add MAUI tests for ViewModels, services, navigation, and platform abstractions. USE FOR: xUnit, ViewModel tests with fakes instead of `MauiProgram.CreateMauiApp`, injectable MAUI platform interfaces, `Microsoft.Maui.Build.AppProjectReference` for app references, and deciding what must run on device. DO NOT USE FOR: runtime UI automation or performance profiling.
+  Add MAUI unit tests for ViewModels/services/platform abstractions. USE FOR: xUnit fakes/mocks, rejecting `MauiProgram.CreateMauiApp` in pure ViewModel tests, injecting `IConnectivity`, `IPreferences`, `IFileSystem`, `ISecureStorage`, avoiding `PlatformNotSupportedException`, `Microsoft.Maui.Build.AppProjectReference`, device-test boundaries. DO NOT USE FOR: UI automation or profiling.
 ---
 
 # MAUI Unit Testing

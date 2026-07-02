@@ -1,7 +1,7 @@
 ---
 name: maui-project-structure
 description: >-
-  Configure MAUI project structure for icons, splash screens, resources, and app versions. USE FOR: `MauiIcon`, `MauiSplashScreen`, `Resources/Images/Fonts/Raw`, misplaced platform assets, `ApplicationDisplayVersion` or `ApplicationVersion`, Central Package Management, and avoiding misuse of `maui project version`. DO NOT USE FOR: UI debugging or workload info.
+  Configure MAUI single-project resources, icons, splash, and app versions. USE FOR: `MauiIcon`, `MauiSplashScreen`, `MauiImage`, `Resources/Images/Fonts/Raw`, misplaced `Platforms/Android/Resources/drawable`, `ApplicationDisplayVersion`/`ApplicationVersion`, Central Package Management, rejecting `maui project version` for app store versions. DO NOT USE FOR: UI debug or workload info.
 ---
 
 # MAUI Project Structure

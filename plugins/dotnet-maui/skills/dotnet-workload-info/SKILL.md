@@ -1,7 +1,7 @@
 ---
 name: dotnet-workload-info
 description: >-
-  Discover MAUI SDK and workload versions, manifests, toolchain requirements, and NuGet package versions from live sources. USE FOR: Xcode, JDK, or Android SDK versions for .NET 8/9/10, workload or manifest versions, CI package lists, and `packageid:Microsoft.Maui.Controls` lookups. DO NOT USE FOR: `dotnet workload install`, build debugging, or app version edits.
+  Discover MAUI workload metadata from live NuGet APIs. USE FOR: workload manifest lookup, WorkloadDependencies.json, v3-flatcontainer, CLI-to-NuGet version conversion, Xcode/JDK/Android SDK requirements, CI sdkmanager packages, `packageid:Microsoft.Maui.Controls`. DO NOT USE FOR: installing workloads, build debugging, or app version edits.
 ---
 
 # .NET Workload Info Discovery

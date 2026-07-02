@@ -5,6 +5,7 @@ scenarios:
       remove the native
       border/underline. Show how to implement this as a handler mapper without
       changing every Entry in the app using EntryHandler.Mapper.AppendToMapping.
+      What type guard prevents the global mapper from affecting normal Entry controls?
     assertions:
       - type: "output_matches"
         pattern: "EntryHandler\\.Mapper\\.AppendToMapping|AppendToMapping"
@@ -15,6 +16,7 @@ scenarios:
     rubric:
       - "Uses EntryHandler.Mapper.AppendToMapping or equivalent mapper customization"
       - "Scopes the customization to BorderlessEntry rather than all Entry controls"
+      - "Explains why the type guard protects other Entry controls from a global mapper side effect"
       - "Includes platform-specific native view code behind compile-time guards"
       - "Registers the mapper once rather than from repeated page constructors"
     timeout: 240
@@ -25,7 +27,8 @@ scenarios:
       native text-changed and
       focus events in OnElementChanged and removes them in Dispose. Convert the
       lifecycle idea to a MAUI custom handler with ConnectHandler and
-      DisconnectHandler, and show where PropertyMapper fits.
+      DisconnectHandler, and show where PropertyMapper fits. Show the unsubscribe
+      pattern and base.DisconnectHandler call.
     assertions:
       - type: "output_contains"
         value: "ConnectHandler"
@@ -35,6 +38,8 @@ scenarios:
         pattern: "-=|unsubscribe|remove"
       - type: "output_contains"
         value: "PropertyMapper"
+      - type: "output_matches"
+        pattern: "base\\.DisconnectHandler"
     rubric:
       - "Moves native event subscription/setup into ConnectHandler"
       - "Moves unsubscription and owned native cleanup into DisconnectHandler"

@@ -89,7 +89,7 @@ scenarios:
       My MAUI app compiles fine on my machine but a colleague targeting net8.0
       gets a build error saying SafeAreaEdges is not a valid attribute. Did I
       use an API that requires a newer MAUI version, and what should I use instead
-      on net8.0?
+      on net8.0? Inspect the project TargetFramework before recommending a replacement.
     assertions:
       - type: "output_contains"
         value: "net8.0"
@@ -101,4 +101,5 @@ scenarios:
       - "Identifies that SafeAreaEdges is a .NET 10+ API not available on net8"
       - "Suggests a net8-compatible safe area alternative"
       - "Inspects the project target framework to confirm the net8 constraint"
+      - "Does not apply the .NET 10 SafeAreaEdges fix to a net8 target"
     timeout: 240

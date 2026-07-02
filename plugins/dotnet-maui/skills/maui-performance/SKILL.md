@@ -1,7 +1,7 @@
 ---
 name: maui-performance
 description: >-
-  Fix measurable MAUI performance problems such as slow startup, janky `CollectionView`, reflection bindings, and oversized images. USE FOR: `maui profile startup`, Release builds on devices, removing nested `ScrollView`, adding `x:DataType`, and validating with measurements. DO NOT USE FOR: generic UI bugs, workload discovery, or non-performance architecture work.
+  Fix measurable MAUI performance. USE FOR: `maui profile startup` Release on physical devices, avoiding Debug/emulator measurements, janky `CollectionView`, removing nested `ScrollView`, `x:DataType`, shallow templates, oversized images, `MauiImage BaseSize`, 4000px decode memory, thumbnails, before/after validation. DO NOT USE FOR: generic UI bugs, workload discovery, architecture-only work.
 ---
 
 # MAUI Performance
