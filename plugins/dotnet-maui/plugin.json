@@ -1,6 +1,6 @@
 {
   "name": "dotnet-maui",
   "version": "0.5.0",
-  "description": "MAUI app skills: UI, DI, tests, perf, a11y, platform, DevFlow.",
+  "description": "MAUI specialist skills for DevFlow automation, session review, slim platform bindings, and workload diagnostics.",
   "skills": ["./skills/"]
 }

@@ -1,0 +1,54 @@
+scenarios:
+  - name: "Replace maui project version in release pipeline"
+    prompt: |
+      Our release pipeline for a MAUI single-project app runs
+      `maui project version set --version 2.0.0 --build 200` before uploading to
+      Google Play and App Store Connect. Is that the right source of truth for the
+      platform display/build version? Show the project properties the pipeline
+      should edit instead.
+    assertions:
+      - type: "output_contains"
+        value: "ApplicationDisplayVersion"
+      - type: "output_matches"
+        pattern: "ApplicationVersion"
+      - type: "output_matches"
+        pattern: "maui project version"
+      - type: "output_matches"
+        pattern: "(?i)(not|do not|don't|wrong|instead)"
+    rubric:
+      - "Explicitly rejects using maui project version for Google Play/App Store display or build versions"
+      - "Uses ApplicationDisplayVersion for the user-visible version"
+      - "Uses ApplicationVersion for the integer/platform build number"
+      - "Shows or describes editing the MAUI app project properties as the source of truth"
+    timeout: 240
+
+  - name: "Fix misuse of maui project version for app store versions"
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      In my MAUI single-project setup I ran `maui project version set --display-version
+      2.4.0 --build-number 240` but the Play Store still shows the old version.
+      What is `maui project version` actually for, and what should I do instead to
+      set my app's store display and build version?
+    assertions:
+      - type: "output_contains"
+        value: "ApplicationDisplayVersion"
+      - type: "output_contains"
+        value: "ApplicationVersion"
+      - type: "output_matches"
+        pattern: "(?i)maui project version.*(workload|package|sdk|version of maui|not for app|not set|does not set|manages maui)"
+      - type: "output_not_matches"
+        pattern: "(?im)^\\s*maui project version\\s+set\\b|^\\s*--display-version\\b|^\\s*--build-number\\b"
+    rubric:
+      - "Explains that maui project version manages the MAUI workload/package version, not app store versions"
+      - "Directs the user to ApplicationDisplayVersion and ApplicationVersion MSBuild properties instead"
+      - "Shows or describes the correct .csproj property syntax"
+    timeout: 240
