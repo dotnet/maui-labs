@@ -91,8 +91,30 @@ namespace Comet.Platform.SwiftUI
 				_width = frame.Width;
 				foreach (var row in _rows)
 					LayoutRow(row);
+
+				// Open at the newest message (bottom) — the iOS twin of ComposeListNode's
+				// one-shot ScrollToItem(last) seed. Nudged a few times because a
+				// ScrollViewReader scroll to a far target undershoots while rows are still
+				// realizing; each pass lands closer as more content exists.
+				if (!_seededToNewest && _rows.Count > 0)
+				{
+					_seededToNewest = true;
+					SeedToNewest();
+				}
 			}
 		}
+
+		bool _seededToNewest;
+
+		async void SeedToNewest()
+		{
+			foreach (var delay in new[] { 350, 900, 1700 })
+			{
+				await System.Threading.Tasks.Task.Delay(delay);
+				ThreadHelper.RunOnMainThread(() => CometSwiftUIHost.ScrollToBottom(_native));
+			}
+		}
+
 		public void SetEventSink(ICometEventSink? sink) { }
 		public void Dispose() { }
 	}

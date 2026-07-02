@@ -24,12 +24,19 @@ namespace Comet.Platform.SwiftUI
 	{
 		readonly CometNode _native;
 		readonly List<ICometBackendNode> _children = new();
+		readonly string _kind;
 		ICometEventSink? _sink;
+
+		// Tracked so MeasureBaseline can compute the first-baseline offset from UIFont
+		// metrics (the iOS counterpart of ComposeTextNode's TextMeasurer baseline).
+		double? _fontSize;
+		string? _fontFamily;
 
 		public CometNode Native => _native;
 
 		public SwiftUINode(string kind)
 		{
+			_kind = kind;
 			_native = CometSwiftUIHost.MakeNode(kind);
 			// Route native events back through the event sink. Harmless for kinds that
 			// don't raise a given event (their handler simply never fires).
@@ -97,11 +104,17 @@ namespace Comet.Platform.SwiftUI
 			else if ((id == PropertyIds.Text_Color || id == PropertyIds.Button_TextColor) && value.AsColor is { } tc)
 				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(tc));
 			else if (id == PropertyIds.Text_FontSize)
+			{
+				_fontSize = value.AsDouble;
 				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
+			}
 			else if (id == PropertyIds.Text_FontWeight)
 				CometSwiftUIHost.SetDouble(_native, "fontweight", value.AsInt);   // Int-kind, not Double
 			else if (id == PropertyIds.Text_FontFamily)
+			{
+				_fontFamily = value.AsString;
 				CometSwiftUIHost.SetString(_native, "fontfamily", value.AsString ?? string.Empty);
+			}
 			else if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
 				CometSwiftUIHost.SetColor(_native, "background", ToArgb(c));
 			else if (id == PropertyIds.Padding && value.AsObject is Microsoft.Maui.Thickness t)
@@ -161,6 +174,21 @@ namespace Comet.Platform.SwiftUI
 
 		public void Arrange(Rect frame)
 			=> CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
+
+		// First-baseline offset from UIFont metrics: the ascender is the distance from the
+		// top of the line box to the baseline, which is where SwiftUI draws a single-line
+		// Text's first baseline. Replaces the old null→height fallback so .AlignBaseline()
+		// and .BaselineHeight() rows line up on iOS too (Compose measures its own engine for
+		// exactness; UIFont metrics are the correct iOS analog).
+		public double? MeasureBaseline(double width, double height)
+		{
+			if (_kind != "text")
+				return null;
+			var size = (System.Runtime.InteropServices.NFloat)(_fontSize ?? 17.0);
+			var font = (_fontFamily is { Length: > 0 } family ? UIKit.UIFont.FromName(family, size) : null)
+				?? UIKit.UIFont.SystemFontOfSize(size);
+			return (double)font.Ascender;
+		}
 
 		// Baseline-height inset (gold baselineHeight): pad the leaf content down so its first baseline
 		// lands at the requested offset — the iOS counterpart of ComposeNode's _contentTopInset.

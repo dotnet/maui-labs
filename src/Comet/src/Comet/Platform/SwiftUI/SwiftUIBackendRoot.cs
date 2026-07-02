@@ -29,12 +29,16 @@ namespace Comet.Platform.SwiftUI
 			// Let the dev agent's /ui/screenshot endpoint snapshot the rendered SwiftUI window.
 			Comet.DevTools.CometDevRegistry.ScreenshotProvider = () => CometSwiftUIHost.ScreenshotPng()?.ToArray();
 
+			// Drive Comet's animation engine (view.Animate/FadeTo/…) from CADisplayLink —
+			// the iOS twin of the Compose backend's ChoreographerTicker.
+			Backend.CometAnimationDriver.Initialize(new DisplayLinkTicker());
+
 			var root = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context);
 			var controller = CometSwiftUIHost.HostController(root.Native);
 
 			if (UseYogaLayout)
 			{
-				_layoutRoot = view.HasContent ? view.GetView() : view;
+				_logicalRoot = view;
 				RunLayout();
 				// Reflow after each reactive flush: content whose size changed (e.g. a bound
 				// label) is re-measured and the tree re-arranged.
@@ -44,8 +48,14 @@ namespace Comet.Platform.SwiftUI
 			return controller;
 		}
 
+		/// <summary>The logical root: the layout target is re-resolved per pass because a
+		/// (hot) reload rebuilds the view tree (read-only BuiltView — building views on a
+		/// background flush thread is not safe). The iOS twin of the ComposeBackendRoot fix.</summary>
+		View? _logicalRoot;
+
 		void RunLayout()
 		{
+			_layoutRoot = _logicalRoot?.BuiltView ?? _logicalRoot;
 			if (_layoutRoot is null)
 				return;
 			var bounds = UIScreen.MainScreen.Bounds;

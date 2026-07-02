@@ -44,12 +44,40 @@ namespace Comet.DevTools
 			_dispatchToMain = dispatchToMain ?? throw new ArgumentNullException(nameof(dispatchToMain));
 		}
 
-		/// <summary>Enables tracking and starts the listener on a background thread.</summary>
+		/// <summary>The port the listener actually bound (may differ from the requested
+		/// port when it was already taken — see <see cref="Start"/>).</summary>
+		public int Port { get; private set; }
+
+		/// <summary>Enables tracking and starts the listener on a background thread.
+		/// A dev-tool port collision (another agent/app on the requested port — the sim
+		/// shares the host's loopback) must not crash the app: scan forward up to 10
+		/// ports and report the one that bound.</summary>
 		public void Start()
 		{
 			CometDevRegistry.Enabled = true;
-			_listener = new TcpListener(IPAddress.Loopback, _port);
-			_listener.Start();
+			SocketException? lastError = null;
+			for (int candidate = _port; candidate < _port + 10; candidate++)
+			{
+				try
+				{
+					var listener = new TcpListener(IPAddress.Loopback, candidate);
+					listener.Start();
+					_listener = listener;
+					Port = candidate;
+					break;
+				}
+				catch (SocketException ex)
+				{
+					lastError = ex;
+				}
+			}
+			if (_listener is null)
+			{
+				System.Diagnostics.Debug.WriteLine($"[CometDevAgent] no free port in {_port}..{_port + 9}: {lastError?.Message}");
+				return; // dev agent unavailable; the app runs fine without it
+			}
+			if (Port != _port)
+				Console.WriteLine($"[CometDevAgent] port {_port} in use; listening on {Port}");
 			_running = true;
 			var thread = new Thread(AcceptLoop) { IsBackground = true, Name = "CometDevAgent" };
 			thread.Start();
