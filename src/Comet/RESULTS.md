@@ -388,3 +388,24 @@ Remaining trim warnings come from MAUI's `HybridWebViewHandler` (legacy
 Microsoft.Maui.Controls dependency — goes away with the Phase 5 delete) and
 Comet's debug-only hot-reload reflection (IL2104, suppressed by design).
 Simulator RIDs don't support AOT (NETSDK1203) — device RID only.
+
+## Phase 5 COMPLETE: legacy MAUI render path DELETED — 2026-07-01
+
+The gate became a delete (approved): `Handlers/**`, `Maui/**`,
+`AppHostBuilderExtensions.cs`, and ALL native platform views
+(`Platform/{iOS,Android,MacOS,Windows,Standard}` handler bridges) are gone;
+the `CometLegacyRenderPath` MSBuild property and `COMET_LEGACY_RENDER_PATH`
+guards with them. The Compose/SwiftUI node backend is the only render path.
+Windows and the AppKit macOS heads are parked with it (TFMs removed);
+maccatalyst stays for the host suite. The 20 legacy samples
+(`UseCometApp`/`UseCometHandlers`) are parked as reference source —
+`sample/LEGACY-SAMPLES.md`; the last commit with the legacy path is tagged
+`comet-pre-phase5-delete`.
+
+Post-delete verification: all three TFM heads compile; host suite 886 pass /
+26 skip / 1 pre-existing known fail (4 handler-only NativeHost tests deleted
+with the interface they tested); CometComposeProbe renders on the Android
+emulator and CometSwiftUIProbe on the iPhone 16 Pro sim; Release
+TrimMode=full links Comet.dll at 265,728 B (larger than June's legacy-off
+202,752 B because P1–P7 + hot reload/IME/animations landed since — the point
+is the handlers can no longer be compiled in, let alone rooted).

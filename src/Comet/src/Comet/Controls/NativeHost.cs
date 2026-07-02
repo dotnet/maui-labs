@@ -133,13 +133,8 @@ namespace Comet
 
 		public bool TryGetNativeView<T>(out T resolvedView) where T : class
 		{
-#if COMET_LEGACY_RENDER_PATH
-			if (ViewHandler is Handlers.INativeHostHandler handler && handler.GetNativeView() is T typedView)
-			{
-				resolvedView = typedView;
-				return true;
-			}
-#endif
+			// The handler-hosted resolution went with the legacy render path (Phase 5); a
+			// node-backend host resolves through its own GetOrCreateNativeView instead.
 			resolvedView = null;
 			return false;
 		}
@@ -152,13 +147,7 @@ namespace Comet
 
 		void RequestNativeViewUpdate()
 		{
-#if COMET_LEGACY_RENDER_PATH
-			if (ViewHandler is Handlers.INativeHostHandler handler)
-			{
-				handler.SyncNativeView();
-				InvalidateMeasurement();
-			}
-#endif
+			// Handler-driven native sync went with the legacy render path (Phase 5).
 		}
 
 		public override Size GetDesiredSize(Size availableSize)
@@ -173,12 +162,6 @@ namespace Comet
 			if (TryMeasureOverride(availableSize, out measured))
 			{
 			}
-#if COMET_LEGACY_RENDER_PATH
-			else if (ViewHandler is Handlers.INativeHostHandler handler)
-			{
-				measured = handler.MeasureNativeView(availableSize);
-			}
-#endif
 			else
 			{
 				measured = new Size(

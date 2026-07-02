@@ -16,12 +16,8 @@
 	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 		<PackageReference Include="Redth.MauiDevFlow.Agent" Version="0.18.0" />
-		<!-- This debug host uses the legacy MAUI render path (UseCometHandlers/CometApp);
-		     skip it for node-backend apps built with CometLegacyRenderPath=false. -->
-		<Compile Include="$(MSBuildThisFileDirectory)Shared/RuntimeDebug/SampleRuntimeDebugExtensions.cs"
-		         Link="Shared/RuntimeDebug/SampleRuntimeDebugExtensions.cs"
-		         Condition="'$(CometLegacyRenderPath)' != 'false'"
-		         Visible="false" />
+		<!-- The RuntimeDebug host went with the legacy MAUI render path (Phase 5);
+		     node-backend apps use the in-app Comet/DevFlow agents instead. -->
 	</ItemGroup>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Debug' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">

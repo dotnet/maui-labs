@@ -202,18 +202,10 @@ namespace Comet
 		/// <returns></returns>
 		public static IMauiContext GetMauiContext(this View view)
 		{
-#if COMET_LEGACY_RENDER_PATH
-			//IF there is only one app, with one window, then there is only one context.
-			//Don't go hunting!
-			if (CometApp.CurrentApp.Windows.Count == 1)
-				return CometApp.MauiContext;
-			return view.FindParentOfType<IMauiContextHolder>()?.MauiContext ?? CometApp.MauiContext;
-#else
-			// The MAUI host (CometApp) is part of the legacy render path; the node backend
-			// (Compose/SwiftUI) does not run inside a MAUI MauiContext.
-			throw new System.NotSupportedException(
-				"GetMauiContext is unavailable when the legacy MAUI render path is disabled.");
-#endif
+			// The MAUI host (CometApp) was deleted with the legacy render path (Phase 5);
+			// the node backends (Compose/SwiftUI) never run inside a MauiContext. Null lets
+			// callers (e.g. the animation-manager probe) fall through to Comet-owned services.
+			return null;
 		}
 
 		public static T Aspect<T>(this T image, Aspect aspect) where T : Image =>

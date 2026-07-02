@@ -1,10 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+	<!-- Windows/macOS heads are parked with the legacy render path (Phase 5); the
+	     maccatalyst head stays for the host test suite. -->
 	<TargetFrameworks>net11.0-android;net11.0-ios;net11.0-maccatalyst</TargetFrameworks>
-	<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks>
-	<!-- net11.0-macos workload not yet available in .NET 11 preview; re-enable when shipped -->
-	<!-- <TargetFrameworks>$(TargetFrameworks);net11.0-macos</TargetFrameworks> -->
 	<UseMaui>true</UseMaui>
 	<Nullable>disable</Nullable>
 	<!-- CS0649: unassigned fields, CS0618: obsolete APIs, CS0108: hides inherited member -->
@@ -27,45 +26,13 @@
   </ItemGroup>
 
   <!--
-    Phase 5 decoupling: the legacy MAUI ViewHandler render path (per-control
-    ViewHandlers + the CometViewHandler host + UseCometHandlers + the native CUI*/
-    Comet* platform views) is compiled only when CometLegacyRenderPath=true
-    (default). With the new Compose/SwiftUI node backend it is dead code, and on
-    iOS its NSObject-derived handlers/views are force-rooted by the static
-    registrar (so they can't trim) — building with -p:CometLegacyRenderPath=false
-    excludes the cluster so it trims away. Windows/MacCatalyst still need it.
+    Phase 5 (2026-07-01): the legacy MAUI ViewHandler render path — per-control
+    ViewHandlers, the CometViewHandler host, UseCometHandlers/UseCometApp, and the
+    native CUI*/Comet* platform views — is DELETED. The Compose/SwiftUI node
+    backend is the only render path; Windows and the AppKit macOS head (which
+    rendered through it) are parked with it. The last commit with the legacy path
+    is tagged `comet-pre-phase5-delete`.
   -->
-  <PropertyGroup>
-	<CometLegacyRenderPath Condition="'$(CometLegacyRenderPath)' == ''">true</CometLegacyRenderPath>
-	<DefineConstants Condition="'$(CometLegacyRenderPath)' == 'true'">$(DefineConstants);COMET_LEGACY_RENDER_PATH</DefineConstants>
-  </PropertyGroup>
-  <ItemGroup Condition="'$(CometLegacyRenderPath)' != 'true'">
-	<Compile Remove="Handlers\**\*.cs" />
-	<Compile Remove="Maui\**\*.cs" />
-	<Compile Remove="AppHostBuilderExtensions.cs" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(CometLegacyRenderPath)' != 'true' AND $(TargetFramework.Contains('-ios'))">
-	<Compile Remove="Platform\iOS\CometView.cs" />
-	<Compile Remove="Platform\iOS\CometViewController.cs" />
-	<Compile Remove="Platform\iOS\CUIContainerView.cs" />
-	<Compile Remove="Platform\iOS\CUINavigationController.cs" />
-	<Compile Remove="Platform\iOS\CUIScrollView.cs" />
-	<Compile Remove="Platform\iOS\CUIShapeView.cs" />
-	<Compile Remove="Platform\iOS\CUITableView.cs" />
-	<Compile Remove="Platform\iOS\CUITableViewCell.cs" />
-	<Compile Remove="Platform\iOS\CUITableViewSource.cs" />
-	<Compile Remove="Platform\iOS\CUITabView.cs" />
-	<Compile Remove="Platform\iOS\CUIRadioButton.cs" />
-	<Compile Remove="Platform\iOS\HandlerExtensions.cs" />
-  </ItemGroup>
-
-  <!-- Platform.Maui.MacOS provides the AppKit handler bridge for net11.0-macos. -->
-  <ItemGroup Condition="$(TargetFramework.Contains('-macos'))">
-	<ProjectReference Include="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\Platform.Maui.MacOS.csproj" />
-  </ItemGroup>
-
-  <Import Project="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets"
-          Condition="$(TargetFramework.Contains('-macos'))" />
 
   <ItemGroup>
 	<ProjectReference Include="..\Comet.SourceGenerator\Comet.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false">
