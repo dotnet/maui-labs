@@ -14,7 +14,7 @@ This produces `YourApp-1.0.0-x86_64.AppImage` in the publish output parent direc
 
 - **Build host**: Linux x86_64 or ARM64 (matching your target)
 - **curl**: For automatic `appimagetool` download (first build only)
-- **Target system**: GTK4 installed (the AppImage checks for this at launch)
+- **Target system**: GTK 4.12+ installed (the AppImage checks for this at launch)
 
 ## How It Works
 
@@ -75,7 +75,7 @@ All properties are optional (except `ApplicationId` which is required by MAUI co
 
 The generated AppImage automatically checks for required system libraries at launch:
 
-- **GTK4** (`libgtk-4.so`) — always checked
+- **GTK 4.12+** (`libgtk-4.so`, verified via the 4.12-only `gtk_css_provider_load_from_string` symbol) — always checked
 - **WebKitGTK 6.0** (`libwebkitgtk-6.0.so`) — checked only when `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced
 
 If libraries are missing, the user sees a friendly error message with install commands for Ubuntu/Debian, Fedora, and Arch Linux. If `zenity` is available, a graphical error dialog is also shown.

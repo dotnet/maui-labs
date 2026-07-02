@@ -6,6 +6,20 @@ Experimental packages and tooling for .NET MAUI. This repository hosts pre-relea
 
 ## Products
 
+At a glance:
+
+| Product | What it is |
+|---------|------------|
+| [Cli](#cli) | `maui` global tool for environment diagnostics, device management, Apple/Android setup, app automation, and rapid prototyping. |
+| [Comet](#comet) | Experimental MVU UI framework for .NET MAUI with C# fluent UI, signals, and reactive state. |
+| [Go](#go) | Single-file Comet app server and companion app for rapid prototyping. |
+| [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps. |
+| [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
+| [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
+| [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
+| [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
+| [AppProjectReference](#appprojectreference) | MSBuild package for referencing MAUI app projects and consuming their platform artifacts. |
+
 ### Cli
 
 A command-line tool for .NET MAUI development environment setup, device management, and app automation.
