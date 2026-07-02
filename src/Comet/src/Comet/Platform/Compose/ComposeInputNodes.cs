@@ -20,10 +20,50 @@ namespace Comet.Platform.Compose
 		Microsoft.Maui.Graphics.Color? _textColor;
 		Comet.ReturnType _returnType = Comet.ReturnType.Default;
 
+		// TextFieldValue state (text + caret) for the borderless path: user edits hand back the
+		// full value, and programmatic edits (insert-at-cursor) can place the caret.
+		MutableState<AndroidX.Compose.UI.Text.Input.TextFieldValue>? _tfv;
+
+		public ComposeTextFieldNode() { }
+
+		public ComposeTextFieldNode(Comet.TextField field)
+			=> field.RegisterTextInserter(InsertAtCursor);
+
+		static long PackCaret(int start, int end) => ((long)start << 32) | (uint)end;
+
+		MutableState<AndroidX.Compose.UI.Text.Input.TextFieldValue> Tfv
+			=> _tfv ??= new(ComposeExtensions.NewTextFieldValue(
+				_text.Value, PackCaret(_text.Value.Length, _text.Value.Length)));
+
+		/// <summary>Inserts at the caret (replacing any selection), caret lands after the
+		/// insert. The classic emoji-picker edit — mid-string, not append.</summary>
+		void InsertAtCursor(string insert)
+		{
+			var current = Tfv.Value!;
+			var text = current.Text ?? string.Empty;
+			// Selection is the packed TextRange inline value: start in the high 32 bits, end low.
+			long sel = current.Selection;
+			int start = System.Math.Clamp((int)(sel >> 32), 0, text.Length);
+			int end = System.Math.Clamp((int)(sel & 0xFFFFFFFF), start, text.Length);
+			var newText = text.Substring(0, start) + insert + text.Substring(end);
+			int caret = start + insert.Length;
+			Tfv.Value = ComposeExtensions.NewTextFieldValue(newText, PackCaret(caret, caret));
+			_text.Value = newText;
+			Sink?.OnEvent(EventIds.TextChanged, newText);
+		}
+
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.TextField_Text)
-				_text.Value = value.AsString ?? string.Empty;
+			{
+				var s = value.AsString ?? string.Empty;
+				_text.Value = s;
+				// Programmatic text change (e.g. clear-on-send): rebuild the TextFieldValue with
+				// the caret at the end. The user-typing echo arrives with IDENTICAL text — skip
+				// it so the live caret position isn't reset mid-typing.
+				if (_tfv is not null && (_tfv.Value?.Text ?? string.Empty) != s)
+					_tfv.Value = ComposeExtensions.NewTextFieldValue(s, PackCaret(s.Length, s.Length));
+			}
 			else if (id == PropertyIds.TextField_Placeholder)
 				_placeholder.Value = value.AsString ?? string.Empty;
 			else if (id == PropertyIds.TextField_Borderless)
@@ -95,7 +135,16 @@ namespace Comet.Platform.Compose
 			((ComposableNode)box).Modifier = BuildNodeModifier();   // Yoga frame (+ any background)
 
 			var field = new AndroidX.Compose.BasicTextField(
-				_text.Value, s => Sink?.OnEvent(EventIds.TextChanged, s))
+				Tfv.Value!, tfv =>
+				{
+					Tfv.Value = tfv;
+					var s = tfv.Text ?? string.Empty;
+					if (_text.Value != s)
+					{
+						_text.Value = s;
+						Sink?.OnEvent(EventIds.TextChanged, s);
+					}
+				})
 			{
 				// Report focus GAINED so the host can react (gold onTextFieldFocused — e.g. close an open
 				// input-selector panel so the keyboard doesn't overlay it).

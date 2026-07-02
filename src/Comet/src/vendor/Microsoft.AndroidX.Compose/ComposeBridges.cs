@@ -858,6 +858,38 @@ internal static partial class ComposeBridges
         bool? singleLine,
         IComposer composer);
 
+    // androidx.compose.foundation.text.BasicTextFieldKt.BasicTextField (TextFieldValue overload) —
+    // identical shape to the String overload (BasicTextFieldDefault bit layout matches
+    // one-for-one) except slot 0 is androidx/compose/ui/text/input/TextFieldValue. Drives
+    // caret/selection programmatically (insert-at-cursor); the onValueChange hands back the
+    // full TextFieldValue (text + selection + composition).
+    const string BasicTextFieldValueSig =
+        "(Landroidx/compose/ui/text/input/TextFieldValue;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;ZZ" +
+        "Landroidx/compose/ui/text/TextStyle;" +
+        "Landroidx/compose/foundation/text/KeyboardOptions;" +
+        "Landroidx/compose/foundation/text/KeyboardActions;ZII" +
+        "Landroidx/compose/ui/text/input/VisualTransformation;" +
+        "Lkotlin/jvm/functions/Function1;" +
+        "Landroidx/compose/foundation/interaction/MutableInteractionSource;" +
+        "Landroidx/compose/ui/graphics/Brush;" +
+        "Lkotlin/jvm/functions/Function3;" +
+        "Landroidx/compose/runtime/Composer;III)V";
+
+    [ComposeBridge(
+        Class     = "androidx/compose/foundation/text/BasicTextFieldKt",
+        JvmName   = "BasicTextField",
+        Signature = BasicTextFieldValueSig,
+        Defaults  = typeof(BasicTextFieldDefault))]
+    public static partial void BasicTextFieldWithValue(
+        AndroidX.Compose.UI.Text.Input.TextFieldValue value,
+        IFunction1 onValueChange,
+        IModifier? modifier,
+        AndroidX.Compose.UI.Text.TextStyle? textStyle,
+        AndroidX.Compose.Foundation.Text.KeyboardOptions? keyboardOptions,
+        AndroidX.Compose.Foundation.Text.KeyboardActions? keyboardActions,
+        bool? singleLine,
+        IComposer composer);
+
     // androidx.compose.material3.TextFieldKt.TextField (TextFieldValue
     // overload) and OutlinedTextFieldKt.OutlinedTextField (TextFieldValue
     // overload). Same 23 user-param shape as the String overload — bit

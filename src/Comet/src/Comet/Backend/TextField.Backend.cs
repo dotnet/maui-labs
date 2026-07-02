@@ -60,6 +60,29 @@ namespace Comet
 			}
 		}
 
+		System.Action<string>? _textInserter;
+
+		/// <summary>Registered by a backend node that tracks the caret (selection): receives
+		/// programmatic insert requests and applies them at the current cursor.</summary>
+		internal void RegisterTextInserter(System.Action<string> inserter) => _textInserter = inserter;
+
+		/// <summary>Inserts <paramref name="text"/> at the caret (replacing any selection) and
+		/// places the caret after it — e.g. an emoji picker inserting mid-string. Appends when
+		/// the backend doesn't track a caret.</summary>
+		public void InsertAtCursor(string text)
+		{
+			if (string.IsNullOrEmpty(text))
+				return;
+			if (_textInserter is not null)
+			{
+				_textInserter(text);
+				return;
+			}
+			var appended = (Text?.CurrentValue ?? string.Empty) + text;
+			Node?.ApplyProperty(PropertyIds.TextField_Text, PropertyValue.From(appended));
+			Text?.Set(appended);
+		}
+
 		System.Action? _onFocused;
 
 		/// <summary>Runs when the field gains focus (the gold's <c>onTextFieldFocused</c>) — e.g. close an

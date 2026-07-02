@@ -15,8 +15,10 @@ namespace AndroidX.Compose;
 /// </remarks>
 public sealed class BasicTextField : ComposableNode
 {
-    readonly string _value;
-    readonly System.Action<string> _onValueChange;
+    readonly string? _value;
+    readonly System.Action<string>? _onValueChange;
+    readonly UI.Text.Input.TextFieldValue? _tfv;
+    readonly System.Action<UI.Text.Input.TextFieldValue>? _onTfvChange;
 
     /// <summary>Optional <c>TextStyle</c> (Kotlin <c>textStyle</c>) — text color, size, weight, etc.</summary>
     public TextStyle? TextStyle { get; set; }
@@ -45,10 +47,34 @@ public sealed class BasicTextField : ComposableNode
     {
     }
 
+    /// <summary>
+    /// TextFieldValue-overload ctor — the callback hands back the full
+    /// <see cref="UI.Text.Input.TextFieldValue"/> (text + selection + composition), and
+    /// caller-supplied selection is honoured on render (programmatic caret placement,
+    /// e.g. insert-at-cursor). Build values via <c>ComposeExtensions.NewTextFieldValue</c>.
+    /// </summary>
+    public BasicTextField(UI.Text.Input.TextFieldValue value, System.Action<UI.Text.Input.TextFieldValue> onValueChange)
+    {
+        _tfv = value;
+        _onTfvChange = onValueChange;
+    }
+
     /// <inheritdoc/>
     public override void Render(IComposer composer)
     {
-        var onValueChange = new ComposableLambda1(v => _onValueChange(v?.ToString() ?? string.Empty));
-        ComposeBridges.BasicTextField(_value, onValueChange, BuildModifier(), TextStyle?.Build(), KeyboardOptions, KeyboardActions, SingleLine, composer);
+        if (_tfv is not null)
+        {
+            // Compose hands the fresh Kotlin TextFieldValue peer to the callback; the peer
+            // registry maps it back to the bound binding type (same pattern as the Material
+            // TextFieldWithValue path).
+            var onTfvChange = new ComposableLambda1(v => _onTfvChange!(
+                Java.Lang.Object.GetObject<UI.Text.Input.TextFieldValue>(
+                    v!.Handle, Android.Runtime.JniHandleOwnership.DoNotTransfer)!));
+            ComposeBridges.BasicTextFieldWithValue(_tfv, onTfvChange, BuildModifier(), TextStyle?.Build(), KeyboardOptions, KeyboardActions, SingleLine, composer);
+            return;
+        }
+
+        var onValueChange = new ComposableLambda1(v => _onValueChange!(v?.ToString() ?? string.Empty));
+        ComposeBridges.BasicTextField(_value!, onValueChange, BuildModifier(), TextStyle?.Build(), KeyboardOptions, KeyboardActions, SingleLine, composer);
     }
 }

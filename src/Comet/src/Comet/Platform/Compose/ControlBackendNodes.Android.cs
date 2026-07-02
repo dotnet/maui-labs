@@ -84,7 +84,7 @@ namespace Comet
 	public partial class TextField
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
-			=> new ComposeTextFieldNode();
+			=> new ComposeTextFieldNode(this);
 	}
 
 	public partial class Toggle

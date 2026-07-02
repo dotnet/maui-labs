@@ -510,6 +510,7 @@ namespace CometSamples.Jetchat
 				.Borderless().Color(OnSurface).FillHorizontal()
 				.VerticalLayoutAlignment(LayoutAlignment.Center)
 				.Padding(new Thickness(20, 0, 8, 0));
+			ComposerField = field;
 
 			// The recording indicator that replaces the field while the mic is held (gold RecordingIndicator):
 			// a red dot, the live mm:ss elapsed time, and a "Swipe to cancel" hint that fades as the drag
@@ -734,9 +735,17 @@ namespace CometSamples.Jetchat
 			return col;
 		}
 
-		// Phase 3 appends the emoji to the field; Phase 4 (TextField caret/IME) will upgrade this to the
-		// gold's insert-at-cursor (TextFieldValue.addText → TextRange(len,len)).
-		static void AddEmoji(string emoji) => InputText.Value = InputText.Peek() + emoji;
+		// The gold's insert-at-cursor (UserInput.kt addText): the emoji lands at the caret,
+		// replacing any selection, and the caret moves past it. Falls back to appending on a
+		// backend without caret tracking (the field's two-way signal updates either way).
+		static TextField? ComposerField;
+		static void AddEmoji(string emoji)
+		{
+			if (ComposerField is { } f)
+				f.InsertAtCursor(emoji);
+			else
+				InputText.Value = InputText.Peek() + emoji;
+		}
 
 		const int EmojiColumns = 10;
 
