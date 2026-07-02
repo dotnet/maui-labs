@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		A single-project Comet app on the NODE BACKEND (Jetpack Compose on Android,
+		SwiftUI on iOS) — no MAUI in the render path. One shared view tree (App.cs) is
+		hosted from a thin native head per platform (Platforms/Android, Platforms/iOS).
+	-->
+	<PropertyGroup>
+		<TargetFrameworks>net11.0-android;net11.0-ios</TargetFrameworks>
+		<OutputType>Exe</OutputType>
+		<Nullable>enable</Nullable>
+		<!-- Comet transitively references Microsoft.Maui (for Graphics/Essentials primitives);
+		     keep implicit usings OFF so a global 'using Microsoft.Maui.Controls' doesn't make
+		     'View' ambiguous with Comet.View. Use explicit usings (as the heads do). -->
+		<ImplicitUsings>disable</ImplicitUsings>
+		<RootNamespace>CometNodeApp1</RootNamespace>
+
+		<ApplicationId>com.companyname.cometnodeapp1</ApplicationId>
+		<ApplicationTitle>CometNodeApp1</ApplicationTitle>
+		<ApplicationVersion>1</ApplicationVersion>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24</SupportedOSPlatformVersion>
+
+		<!--
+			Path to the Comet repo's `src/Comet` directory. Comet's node backend is not
+			published as a NuGet package yet, so the app references it in the repo. The
+			default assumes this app was scaffolded under `src/Comet/sample/<name>/`
+			(the same depth as the CometComposeProbe/CometSwiftUIProbe samples). For any
+			other location, override it:  dotnet build -p:CometRoot=/abs/path/to/src/Comet
+		-->
+		<CometRoot Condition="'$(CometRoot)' == ''">COMET_ROOT_PATH</CometRoot>
+	</PropertyGroup>
+
+	<!-- Compile the native head per-TF so Android doesn't try to build the iOS AppDelegate
+	     (UIKit) and vice versa. -->
+	<ItemGroup>
+		<Compile Remove="Platforms\**\*.cs" />
+	</ItemGroup>
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<Compile Include="Platforms\Android\**\*.cs" />
+	</ItemGroup>
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<Compile Include="Platforms\iOS\**\*.cs" />
+	</ItemGroup>
+
+	<!-- Comet: the shared view tree + node backends (Compose/SwiftUI). -->
+	<ItemGroup>
+		<ProjectReference Include="$(CometRoot)\src\Comet\Comet.csproj" />
+	</ItemGroup>
+
+	<!-- Android: ComponentActivity hosts the Compose backend view; use the app manifest. -->
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0" />
+	</ItemGroup>
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<AndroidManifest>Platforms\Android\AndroidManifest.xml</AndroidManifest>
+	</PropertyGroup>
+
+	<!-- iOS: link the SwiftUI shim framework directly so the static registrar resolves
+	     _OBJC_CLASS_$_CometSwiftUIHost. BUILD IT FIRST (once, and after any shim change):
+	     $(CometRoot)/src/Comet.SwiftUI.Shim/build-xcframework.sh -->
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<NativeReference Include="$(CometRoot)\src\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework">
+			<Kind>Framework</Kind>
+			<SmartLink>False</SmartLink>
+		</NativeReference>
+	</ItemGroup>
+
+</Project>
