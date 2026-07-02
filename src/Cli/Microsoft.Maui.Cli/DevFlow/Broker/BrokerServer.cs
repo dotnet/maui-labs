@@ -529,33 +529,27 @@ public class BrokerServer : IDisposable
             return;
         }
 
-        // /inspector/{id} (no trailing slash, no sub-path) → redirect so that
-        // <link href="devflow.css"> on the inspector page resolves to
-        // /inspector/{id}/devflow.css instead of /inspector/devflow.css
-        // (which the broker would otherwise try to route as agent id "devflow.css").
+        // /inspector/{id} (no trailing slash, no sub-path) → redirect to
+        // /inspector/{id}/ so that <link href="devflow.css"> on the inspector
+        // page resolves to /inspector/{id}/devflow.css instead of
+        // /inspector/devflow.css (which the broker would otherwise try to
+        // route as agent id "devflow.css"). Without the trailing slash, the
+        // browser treats {id} as a filename and resolves relatives against
+        // /inspector/ instead of /inspector/{id}/.
         if (segments.Length == 2 && !string.IsNullOrEmpty(segments[1]) && !path.EndsWith('/'))
         {
-            // Preserve the query string on the redirect.
+            // Preserve the query string on the redirect and URL-encode the
+            // agent id so the Location header is a valid URI-reference even
+            // when the agent id contains characters that need percent-encoding
+            // (spaces, unicode, etc.).
             var query = context.Request.Url?.Query ?? string.Empty;
             context.Response.StatusCode = 301;
-            context.Response.RedirectLocation = $"/inspector/{segments[1]}/{query}";
+            context.Response.RedirectLocation = $"/inspector/{Uri.EscapeDataString(segments[1])}/{query}";
             context.Response.Close();
             return;
         }
 
         var agentId = segments[1];
-
-        // Redirect /inspector/{id} → /inspector/{id}/ so the browser resolves
-        // relative URLs (devflow.css, devflow.js, screenshot.png) correctly.
-        // Without the trailing slash, the browser treats {id} as a filename and
-        // resolves relatives against /inspector/ instead of /inspector/{id}/.
-        if (segments.Length == 2 && !path.EndsWith('/'))
-        {
-            context.Response.StatusCode = 301;
-            context.Response.Headers.Set("Location", path + "/");
-            context.Response.Close();
-            return;
-        }
 
         var subPath = segments.Length > 2 ? "/" + segments[2] : "/";
 

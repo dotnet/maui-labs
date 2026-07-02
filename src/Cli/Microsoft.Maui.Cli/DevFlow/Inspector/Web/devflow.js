@@ -60,8 +60,8 @@
     //
     // `newHtml` is parsed into the live DOM via `innerHTML`, so any HTML it
     // contains is executed (attributes, <script>, event handlers, etc.).
-    // This is only safe because the server side (InspectorServer.HtmlRenderer)
-    // is the SOLE producer of `newHtml` and guarantees:
+    // This is only safe because the server side (HtmlRenderer) is the SOLE
+    // producer of `newHtml` and guarantees:
     //
     //   1. Element identifiers, types, and any user-controlled text reach this
     //      function only via `HttpUtility.HtmlAttributeEncode` (in attribute

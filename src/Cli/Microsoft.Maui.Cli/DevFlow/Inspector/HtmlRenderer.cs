@@ -30,16 +30,35 @@ public static class HtmlRenderer
             ? "<img id=\"screenshot\" src=\"screenshot.png\" alt=\"App screenshot\">"
             : "";
 
-        // Replace template placeholders (invariant culture so '.' is the decimal separator)
-        var html = template
+        // Replace scalar placeholders first (all produce known-safe, non-user
+        // strings). Then splice in {{ELEMENTS}} via StringBuilder so that any
+        // "{{VIEWPORT_WIDTH}}" or similar text embedded in element attributes
+        // (e.g., a Label whose title literally contains "{{DENSITY}}") is
+        // never substituted — the element HTML is only concatenated in after
+        // all Replace() calls have completed. This makes the ordering
+        // invariant explicit and resistant to a future refactor that
+        // reorders these replacements.
+        var scalarsReplaced = template
             .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("F0", CultureInfo.InvariantCulture))
             .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("F0", CultureInfo.InvariantCulture))
             .Replace("{{DENSITY}}", density.ToString("F1", CultureInfo.InvariantCulture))
             .Replace("{{ELEMENT_SCALE}}", elementScale.ToString("F4", CultureInfo.InvariantCulture))
-            .Replace("{{SCREENSHOT}}", screenshotHtml)
-            .Replace("{{ELEMENTS}}", elementsHtml);
+            .Replace("{{SCREENSHOT}}", screenshotHtml);
 
-        return html;
+        const string ElementsMarker = "{{ELEMENTS}}";
+        var markerIndex = scalarsReplaced.IndexOf(ElementsMarker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            // Marker missing from template — return as-is so the page still renders.
+            return scalarsReplaced;
+        }
+
+        var sb = new StringBuilder(scalarsReplaced.Length + elementsHtml.Length);
+        sb.Append(scalarsReplaced, 0, markerIndex);
+        sb.Append(elementsHtml);
+        sb.Append(scalarsReplaced, markerIndex + ElementsMarker.Length, scalarsReplaced.Length - markerIndex - ElementsMarker.Length);
+
+        return sb.ToString();
     }
 
     /// <summary>

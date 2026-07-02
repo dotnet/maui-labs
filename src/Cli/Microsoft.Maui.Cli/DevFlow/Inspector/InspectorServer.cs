@@ -171,6 +171,11 @@ public sealed class InspectorServer : IDisposable
             context.Response.ContentType = contentType;
             // No CORS headers: the inspector UI is served same-origin from the broker.
             // Allowing cross-origin would let any web page drive the locally connected app.
+            // Anti-framing headers (defense-in-depth against clickjacking): even though
+            // the Origin validator already blocks cross-origin API calls, these headers
+            // prevent a malicious page from rendering the inspector in an iframe.
+            context.Response.Headers.Set("X-Frame-Options", "DENY");
+            context.Response.Headers.Set("Content-Security-Policy", "frame-ancestors 'none'");
             context.Response.ContentLength64 = responseBody.Length;
             await context.Response.OutputStream.WriteAsync(responseBody);
             context.Response.Close();
@@ -179,8 +184,12 @@ public sealed class InspectorServer : IDisposable
         {
             try
             {
+                // Log the full exception server-side but return a generic body
+                // to avoid leaking internal state (paths, ports, socket error codes)
+                // to the browser. RouteAsync's inner catch already does the same.
+                Console.Error.WriteLine($"[inspector] broker request failed: {ex}");
                 context.Response.StatusCode = 500;
-                var msg = Encoding.UTF8.GetBytes($"Inspector error: {ex.Message}");
+                var msg = Encoding.UTF8.GetBytes("Internal Server Error");
                 await context.Response.OutputStream.WriteAsync(msg);
                 context.Response.Close();
             }
@@ -738,8 +747,16 @@ public sealed class InspectorServer : IDisposable
         {
             var first = pointsArr[0];
             var last = pointsArr[pointsArr.GetArrayLength() - 1];
-            var dx = last.GetProperty("x").GetDouble() - first.GetProperty("x").GetDouble();
-            var dy = last.GetProperty("y").GetDouble() - first.GetProperty("y").GetDouble();
+            // Guard against malformed input (e.g., {points: [{}, {}]}) so a
+            // client error returns 400 rather than bubbling as 500.
+            if (!first.TryGetProperty("x", out var fx) || !first.TryGetProperty("y", out var fy) ||
+                !last.TryGetProperty("x", out var lx) || !last.TryGetProperty("y", out var ly))
+            {
+                return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"missing x/y in gesture points\"}"));
+            }
+
+            var dx = lx.GetDouble() - fx.GetDouble();
+            var dy = ly.GetDouble() - fy.GetDouble();
 
             var direction = Math.Abs(dx) > Math.Abs(dy)
                 ? (dx > 0 ? "right" : "left")
@@ -872,7 +889,9 @@ public sealed class InspectorServer : IDisposable
             // message becomes one WebSocket frame on the wire — otherwise
             // SendWebSocketFrameAsync (which always sets FIN) would split
             // long messages into multiple FIN-bit frames and the browser
-            // would see partial JSON.
+            // would see partial JSON. Cap the assembled size so a
+            // misbehaving agent (or a huge visual tree) cannot OOM the broker.
+            const int MaxAssembledMessageBytes = 4 * 1024 * 1024; // 4 MB
             var buffer = new byte[8192];
             using var assembled = new MemoryStream();
             while (!linkedCt.IsCancellationRequested && agentWs.State == System.Net.WebSockets.WebSocketState.Open)
@@ -886,6 +905,11 @@ public sealed class InspectorServer : IDisposable
                 if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
                 {
                     assembled.Write(buffer, 0, result.Count);
+                    if (assembled.Length > MaxAssembledMessageBytes)
+                    {
+                        Console.Error.WriteLine($"[inspector] WS message exceeded {MaxAssembledMessageBytes} bytes, closing relay");
+                        break;
+                    }
                     if (result.EndOfMessage)
                     {
                         var payload = assembled.ToArray();
