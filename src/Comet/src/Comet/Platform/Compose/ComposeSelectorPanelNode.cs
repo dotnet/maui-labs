@@ -19,7 +19,7 @@ namespace Comet.Platform.Compose
 	/// system back press to a dismiss event (the control writes the index back to 0).</summary>
 	sealed class ComposeSelectorPanelNode : ComposeNode, IBackendManagesOwnContent
 	{
-		readonly SelectorPanel _panel;
+		SelectorPanel _panel;
 		readonly BackendContext _context;
 		readonly MutableState<int> _selector = new(0);   // drives Render (content swap)
 		int _selectorValue;                               // drives Measure (layout reflow)
@@ -39,6 +39,19 @@ namespace Comet.Platform.Compose
 				_selectorValue = value.AsInt;   // plain field, read by Measure outside composition
 				_selector.Value = value.AsInt;   // MutableState, read by Render to recompose
 			}
+		}
+
+		/// <summary>Re-point at the new SelectorPanel; only a hot reload re-materializes the
+		/// per-index panel views so the changed code renders.</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not SelectorPanel panel)
+				return;
+			_panel = panel;
+			if (!isHotReload)
+				return;
+			_initialized = false;
+			_nodes = System.Array.Empty<ComposeNode?>();
 		}
 
 		void EnsureContent()

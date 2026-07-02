@@ -59,30 +59,23 @@ namespace Comet.Platform.Compose
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
 
-		/// <summary>A (hot) reload swapped the view tree: re-point at the new NavigationView,
-		/// reset the stack to its content, and drop the materialized screens (old tree).
-		/// The new view's Navigate/Pop delegates were carried over by <c>UpdateFromOldView</c>'s
-		/// NavigationView transfer, so they still drive this node.</summary>
-		public override void OnOwnerViewChanged(View newView)
+		/// <summary>The node was transferred to a new NavigationView. Re-point always; only a hot
+		/// reload resets the stack to the new content and drops materialized screens (the code
+		/// changed). An ordinary re-render preserves the user's navigation position — the pushed
+		/// screens live in <c>_stack</c>, driven by the Navigate/Pop delegates that
+		/// <c>UpdateFromOldView</c> carried over.</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is not NavigationView nav)
 				return;
 			_nav = nav;
+			if (!isHotReload)
+				return;
 			_stack.Clear();
 			_screens.Clear();
 			if (nav.Content is { } root)
 				_stack.Add(root);
 			_version.Value++;
-		}
-
-		static Microsoft.Maui.Graphics.Size ScreenSizeDp()
-		{
-			// The live available size (shrinks when the soft keyboard resizes the window
-			// under AdjustResize); DisplayMetrics fallback before the first layout.
-			if (ComposeNode.AvailableSize is { Width: > 0, Height: > 0 } avail)
-				return avail;
-			var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
-			return new Microsoft.Maui.Graphics.Size(m.WidthPixels / ComposeNode.Density, m.HeightPixels / ComposeNode.Density);
 		}
 
 		void ReflowTopScreen()

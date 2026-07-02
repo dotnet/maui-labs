@@ -14,7 +14,7 @@ namespace Comet.Platform.Compose
 	/// not in the parent Yoga tree, and the node measures to zero in its parent's layout.</summary>
 	sealed class ComposeAlertDialogNode : ComposeNode, IBackendManagesOwnContent
 	{
-		readonly AlertDialog _dialog;
+		AlertDialog _dialog;
 		readonly BackendContext _context;
 		readonly AndroidX.Compose.MutableState<bool> _open = new(false);
 		ComposeNode? _text, _confirm, _title, _dismiss;
@@ -29,6 +29,18 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.Dialog_IsOpen)
 				_open.Value = value.AsBool;
+		}
+
+		/// <summary>Re-point at the new AlertDialog; only a hot reload re-materializes the slot
+		/// views (text/buttons/title) so the changed code renders.</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not AlertDialog dialog)
+				return;
+			_dialog = dialog;
+			if (!isHotReload)
+				return;
+			_text = _confirm = _title = _dismiss = null;
 		}
 
 		void EnsureContent()

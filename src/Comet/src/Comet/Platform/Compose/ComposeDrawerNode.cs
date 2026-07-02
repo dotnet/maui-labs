@@ -31,15 +31,23 @@ namespace Comet.Platform.Compose
 		{
 			_drawer = drawer;
 			_context = context;
+
+			// Re-lay the hosted content/side after every reactive flush so an IME-driven size
+			// change (or rotation) reflows them — this own-content node is a leaf to the engine,
+			// so the top-level RunLayout can't reach inside it (mirrors ComposeNavigationNode).
+			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowContent;
 		}
 
-		/// <summary>A (hot) reload swapped the view tree: re-point at the new Drawer and
-		/// re-materialize its side/content subtrees (they were built from the old tree).</summary>
-		public override void OnOwnerViewChanged(View newView)
+		/// <summary>The node was transferred to a new Drawer. Re-point always; only a hot reload
+		/// re-materializes the side/content subtrees (the code changed) — an ordinary re-render
+		/// keeps the materialized content and the open/closed state.</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is not Drawer drawer)
 				return;
 			_drawer = drawer;
+			if (!isHotReload)
+				return;
 			_sideNode = null;
 			_contentNode = null;
 			_contentVersion.Value++;
@@ -58,22 +66,25 @@ namespace Comet.Platform.Compose
 
 			_sideNode = (ComposeNode)CometBackendBridge.Materialize(_drawer.Side, _context);
 			_contentNode = (ComposeNode)CometBackendBridge.Materialize(_drawer.Content, _context);
+			LayoutContent();
+		}
 
-			double w, h;
-			if (ComposeNode.AvailableSize is { Width: > 0, Height: > 0 } avail)
-			{
-				w = avail.Width;
-				h = avail.Height;
-			}
-			else
-			{
-				var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
-				w = m.WidthPixels / ComposeNode.Density;
-				h = m.HeightPixels / ComposeNode.Density;
-			}
+		// Lay the content out full-viewport and the sheet at the standard width. Re-run on every
+		// flush so a keyboard-driven AvailableSize change (or rotation) reflows the hosted content
+		// instead of leaving it sized to whatever the viewport was when it was first materialized.
+		void LayoutContent()
+		{
+			if (_contentNode is null)
+				return;
+			var size = ScreenSizeDp();
+			CometBackendLayoutEngine.Layout(_drawer.Content, size);
+			CometBackendLayoutEngine.Layout(_drawer.Side, new Microsoft.Maui.Graphics.Size(SheetWidthDp, size.Height));
+		}
 
-			CometBackendLayoutEngine.Layout(_drawer.Content, new Microsoft.Maui.Graphics.Size(w, h));
-			CometBackendLayoutEngine.Layout(_drawer.Side, new Microsoft.Maui.Graphics.Size(SheetWidthDp, h));
+		void ReflowContent()
+		{
+			if (_contentNode is not null)
+				LayoutContent();
 		}
 
 		public override void Render(IComposer composer)

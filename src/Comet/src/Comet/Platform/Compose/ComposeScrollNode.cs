@@ -17,7 +17,7 @@ namespace Comet.Platform.Compose
 	/// </summary>
 	sealed class ComposeScrollNode : ComposeNode, IBackendManagesOwnContent
 	{
-		readonly IContainerView _scroll;
+		IContainerView _scroll;
 		readonly BackendContext _context;
 		readonly ScrollState _scrollState = new();
 		ComposeNode? _content;
@@ -30,6 +30,19 @@ namespace Comet.Platform.Compose
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
+
+		/// <summary>Re-point at the new ScrollView; only a hot reload drops the materialized
+		/// content so the changed code re-renders (an ordinary re-render keeps it + scroll state).</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not IContainerView scroll)
+				return;
+			_scroll = scroll;
+			if (!isHotReload)
+				return;
+			_content = null;
+			_contentView = null;
+		}
 
 		ComposeNode? EnsureContent()
 		{

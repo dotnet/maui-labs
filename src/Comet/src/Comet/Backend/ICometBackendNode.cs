@@ -66,12 +66,16 @@ namespace Comet.Backend
 		void SetEventSink(ICometEventSink? sink);
 
 		/// <summary>
-		/// Called when a (hot) reload rebuilt the view tree and this retained node was adopted
-		/// by the new view instance (see <c>View.TransferBackendNodeFrom</c>). Own-content nodes
-		/// that hold a view reference re-point to <paramref name="newView"/> and invalidate any
-		/// content they materialized from the old tree. Default no-op.
+		/// Called when a diff transferred this retained node from an old view instance to
+		/// <paramref name="newView"/> (see <c>View.TransferBackendNodeFrom</c>). Own-content
+		/// nodes re-point their captured view reference to <paramref name="newView"/> in all
+		/// cases; they invalidate content they materialized from the old tree ONLY when
+		/// <paramref name="isHotReload"/> is true — an ordinary reactive re-render (Component
+		/// <c>SetState</c>) must preserve retained state (navigation stack, list scroll, cached
+		/// screens), whereas a hot reload replaces the code and needs a re-materialize. Default
+		/// no-op (leaf nodes carry no owner reference or materialized content).
 		/// </summary>
-		void OnOwnerViewChanged(View newView) { }
+		void OnOwnerViewChanged(View newView, bool isHotReload) { }
 	}
 
 	/// <summary>

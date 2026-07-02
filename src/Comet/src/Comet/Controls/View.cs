@@ -234,7 +234,7 @@ namespace Comet
 			Unloaded?.Invoke(this, EventArgs.Empty);
 		}
 
-		internal void UpdateFromOldView(View view)
+		internal void UpdateFromOldView(View view, bool isHotReload = false)
 		{
 			// Suppress reactive notifications during internal state transfer.
 			// Setting Gestures/ViewHandler goes through SetEnvironment → ReactiveEnvironment →
@@ -252,7 +252,7 @@ namespace Comet
 				var oldView = view.ViewHandler;
 				this.ReloadHandler = view.ReloadHandler;
 				this.Gestures = view.Gestures;
-				TransferBackendNodeFrom(view);
+				TransferBackendNodeFrom(view, isHotReload);
 				view.ViewHandler = null;
 				view.replacedView?.Dispose();
 				this.ViewHandler = oldView;

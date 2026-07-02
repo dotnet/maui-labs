@@ -45,11 +45,13 @@ namespace Comet.Backend
 			rendered.Node = node;
 			node.SetEventSink(new ViewEventSink(rendered));
 
-			// A Component/[Body] view collapses to its rendered subtree and never owns a
-			// node, so it wouldn't register as a hot-reload target through the Node setter.
-			// Register it explicitly: TriggerReload must call ITS Reload() so the replaced
-			// type re-renders and diffs onto the retained nodes.
-			if (!ReferenceEquals(rendered, view))
+			// Register ONLY the reload roots ([Body]/Component views, which collapse to a
+			// different rendered subtree) as hot-reload active views, and only when hot reload
+			// is enabled. TriggerReload calls their Reload() so the replaced type re-renders
+			// and diffs onto the retained nodes. Registering every materialized node (leaf) —
+			// as an earlier revision did via the Node setter — leaked into the global
+			// ActiveViews list in Release too (no IsEnabled gate, never pruned).
+			if (!ReferenceEquals(rendered, view) && Microsoft.Maui.HotReload.MauiHotReloadHelper.IsEnabled)
 				Microsoft.Maui.HotReload.MauiHotReloadHelper.AddActiveView(view);
 
 			// Track for the in-process dev agent (no-op unless enabled) BEFORE applying

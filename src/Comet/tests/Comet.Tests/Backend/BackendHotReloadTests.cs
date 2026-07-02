@@ -164,5 +164,37 @@ namespace Comet.Tests.Backend
 			Assert.Same(textNode, stackNode.Children[0]);
 			Assert.Equal("Updated: 7", textNode.Get(PropertyIds.Text_Value).AsString);
 		}
+
+		[Fact]
+		public void OwnerTransfer_FlagsHotReloadOnlyForActualHotReload()
+		{
+			// Regression for the OnOwnerViewChanged mis-trigger: an ordinary re-render
+			// (SetState/Reload) must transfer the node with isHotReload=FALSE so own-content
+			// nodes (nav/list) preserve their retained state; only a real hot reload passes
+			// TRUE and re-materializes. Here the transferred child node records the flag.
+			MauiHotReloadHelper.IsEnabled = true;
+			var host = new LabelHostView();
+			var stackNode = Bridge(host);
+			var textNode = stackNode.Children[0];
+
+			// Ordinary re-render → transfer flagged as NOT hot reload.
+			host.Label = "again";
+			host.Reload();
+			Assert.True(textNode.OwnerChangedCount >= 1);
+			Assert.Equal(false, textNode.LastOwnerChangeWasHotReload);
+
+			// Hot-reload replacement of the root type → transfer flagged as hot reload.
+			CometHotReloadHelper.RegisterReplacedView(typeof(LabelHostView).FullName!, typeof(LabelHostViewV2));
+			MauiHotReloadHelper.TriggerReload();
+			Assert.Equal(true, textNode.LastOwnerChangeWasHotReload);
+		}
+
+		class LabelHostViewV2 : View
+		{
+			public string Label = "v2";
+
+			[Body]
+			View body() => new VStack { new Text(Label) };
+		}
 	}
 }

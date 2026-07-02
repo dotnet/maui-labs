@@ -24,6 +24,17 @@ namespace Comet.Tests.Backend
 		/// <summary>Full ordered log of every mutation, for ordering/dedup assertions.</summary>
 		public readonly List<string> Log = new();
 
+		/// <summary>Records <see cref="OnOwnerViewChanged"/> calls: how many, and whether the last
+		/// one was flagged as a hot reload (vs an ordinary re-render transfer).</summary>
+		public int OwnerChangedCount { get; private set; }
+		public bool? LastOwnerChangeWasHotReload { get; private set; }
+
+		public void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			OwnerChangedCount++;
+			LastOwnerChangeWasHotReload = isHotReload;
+		}
+
 		public ICometEventSink? Sink { get; private set; }
 		public Rect? ArrangedFrame { get; private set; }
 		public Size MeasureResult { get; set; } = Size.Zero;

@@ -24,10 +24,17 @@ namespace Comet.Platform.Compose
 		// full value, and programmatic edits (insert-at-cursor) can place the caret.
 		MutableState<AndroidX.Compose.UI.Text.Input.TextFieldValue>? _tfv;
 
-		public ComposeTextFieldNode() { }
-
 		public ComposeTextFieldNode(Comet.TextField field)
 			=> field.RegisterTextInserter(InsertAtCursor);
+
+		/// <summary>A diff transferred this node to a new TextField instance: re-register the
+		/// caret-aware inserter on it, or emoji-insert-at-cursor silently degrades to append
+		/// (the new field's inserter would be null). Fires on ordinary re-renders and hot reload.</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is Comet.TextField field)
+				field.RegisterTextInserter(InsertAtCursor);
+		}
 
 		static long PackCaret(int start, int end) => ((long)start << 32) | (uint)end;
 
@@ -42,9 +49,14 @@ namespace Comet.Platform.Compose
 			var current = Tfv.Value!;
 			var text = current.Text ?? string.Empty;
 			// Selection is the packed TextRange inline value: start in the high 32 bits, end low.
+			// A TextRange can be reversed (start > end, a right-to-left drag), so normalize with
+			// min/max before slicing — otherwise the selected span isn't replaced and the insert
+			// lands at the wrong index.
 			long sel = current.Selection;
-			int start = System.Math.Clamp((int)(sel >> 32), 0, text.Length);
-			int end = System.Math.Clamp((int)(sel & 0xFFFFFFFF), start, text.Length);
+			int a = (int)(sel >> 32);
+			int b = (int)(sel & 0xFFFFFFFF);
+			int start = System.Math.Clamp(System.Math.Min(a, b), 0, text.Length);
+			int end = System.Math.Clamp(System.Math.Max(a, b), start, text.Length);
 			var newText = text.Substring(0, start) + insert + text.Substring(end);
 			int caret = start + insert.Length;
 			Tfv.Value = ComposeExtensions.NewTextFieldValue(newText, PackCaret(caret, caret));

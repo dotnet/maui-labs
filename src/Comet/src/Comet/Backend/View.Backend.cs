@@ -24,20 +24,14 @@ namespace Comet
 		ICometBackendNode? backendNode;
 
 		/// <summary>The retained backend node for this view, if it has been materialized.</summary>
+		/// <remarks>Hot-reload active-view registration is NOT done here: registering every
+		/// materialized node (hundreds of list rows) leaked into MauiHotReloadHelper's global
+		/// ActiveViews (no IsEnabled gate, never pruned). The bridge registers only the reload
+		/// ROOTS ([Body]/Component views), gated on IsEnabled — see CometBackendBridge.</remarks>
 		internal ICometBackendNode? Node
 		{
 			get => backendNode;
-			set
-			{
-				backendNode = value;
-				// Mirror the legacy ViewHandler setter: a view that owns a live backend node
-				// is an active view for hot reload (MauiHotReloadHelper.TriggerReload targets
-				// registered active views; without this, reload never reaches the node path).
-				if (value is not null)
-					Microsoft.Maui.HotReload.MauiHotReloadHelper.AddActiveView(this);
-				else
-					Microsoft.Maui.HotReload.MauiHotReloadHelper.UnRegister(this);
-			}
+			set => backendNode = value;
 		}
 
 		/// <summary>
@@ -46,7 +40,7 @@ namespace Comet
 		/// new view's set properties are re-emitted (unchanged values no-op on the backend's
 		/// retained state, changed values patch through and recompose).
 		/// </summary>
-		internal void TransferBackendNodeFrom(View oldView)
+		internal void TransferBackendNodeFrom(View oldView, bool isHotReload)
 		{
 			var node = oldView.Node;
 			if (node is null)
@@ -55,7 +49,10 @@ namespace Comet
 			oldView.Node = null;
 			Node = node;
 			node.SetEventSink(new ViewEventSink(this));
-			node.OnOwnerViewChanged(this);
+			// Always re-point the node's owner reference to this new view; only a hot reload
+			// (code changed) invalidates the node's materialized content — an ordinary
+			// re-render preserves retained state (nav stack, list scroll). See the interface doc.
+			node.OnOwnerViewChanged(this, isHotReload);
 			ApplyChangedProperties(oldView, node);
 		}
 

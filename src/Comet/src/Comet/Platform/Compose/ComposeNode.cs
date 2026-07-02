@@ -65,6 +65,17 @@ namespace Comet.Platform.Compose
 		/// the first layout; consumers fall back to DisplayMetrics then.</summary>
 		public static Microsoft.Maui.Graphics.Size AvailableSize { get; set; }
 
+		/// <summary>The current viewport in Dp: the live <see cref="AvailableSize"/> (shrinks for the
+		/// soft keyboard) once known, else the raw display metrics. The single source own-content
+		/// hosts (navigation, drawer, scroll) use to lay their content out full-viewport.</summary>
+		public static Microsoft.Maui.Graphics.Size ScreenSizeDp()
+		{
+			if (AvailableSize is { Width: > 0, Height: > 0 } avail)
+				return avail;
+			var m = global::Android.Content.Res.Resources.System!.DisplayMetrics!;
+			return new Microsoft.Maui.Graphics.Size(m.WidthPixels / Density, m.HeightPixels / Density);
+		}
+
 		protected bool HasFrame => _hasFrame;
 
 		/// <summary>The Yoga-arranged width of this node in Dp (0 until arranged). Own-content
@@ -316,7 +327,7 @@ namespace Comet.Platform.Compose
 
 		/// <summary>A (hot) reload adopted this retained node onto a rebuilt view. Own-content
 		/// subclasses re-point their view reference and invalidate materialized content.</summary>
-		public virtual void OnOwnerViewChanged(View newView) { }
+		public virtual void OnOwnerViewChanged(View newView, bool isHotReload) { }
 
 		public void Dispose() { }
 

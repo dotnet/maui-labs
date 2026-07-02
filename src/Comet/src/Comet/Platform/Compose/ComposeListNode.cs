@@ -46,15 +46,16 @@ namespace Comet.Platform.Compose
 			_context = context;
 		}
 
-		/// <summary>A (hot) reload swapped the view tree: re-point at the new list view and
-		/// drop the row cache (rows were materialized from the old tree).</summary>
-		public override void OnOwnerViewChanged(View newView)
+		/// <summary>The node was transferred to a new ListView (ordinary re-render or hot reload).
+		/// Re-point at the new list and re-bind the JumpToBottom scroller + ScrolledAway signal to
+		/// it; bump the version so the new list's data is read (Render's version check drops the
+		/// stale row cache). Scroll position is preserved either way — the LazyListState persists
+		/// via Remember and the one-shot seed is composition-keyed, so it does not re-fire here.</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is not IListView list)
 				return;
 			_list = list;
-			_rowCache.Clear();
-			_cachedVersion = -1;
 			_scrollerRegistered = false;
 			_version.Value++;
 		}

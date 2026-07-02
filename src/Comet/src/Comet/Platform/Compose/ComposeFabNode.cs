@@ -21,7 +21,7 @@ namespace Comet.Platform.Compose
 		// Material extended-FAB content insets (dp): start 16, icon→text gap 12, end 20.
 		const float PadStart = 16f, Gap = 12f, PadEnd = 20f, MinWidth = 48f;
 
-		readonly Fab _fab;
+		Fab _fab;
 		readonly BackendContext _context;
 		readonly MutableState<bool> _extended;
 		ComposeNode? _icon, _label;
@@ -46,6 +46,20 @@ namespace Comet.Platform.Compose
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
+
+		/// <summary>Re-point at the new Fab; only a hot reload rebuilds the icon/label slots
+		/// (an ordinary re-render keeps them).</summary>
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not Fab fab)
+				return;
+			_fab = fab;
+			if (!isHotReload)
+				return;
+			_built = false;
+			_icon = null;
+			_label = null;
+		}
 
 		void EnsureContent()
 		{
