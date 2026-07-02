@@ -36,8 +36,13 @@ namespace Comet.Platform.SwiftUI
 
 			// The shim reports last-row visibility (0 = newest on screen / at bottom, 1 = scrolled away);
 			// mirror it onto IListView.ScrolledAway so the JumpToBottom FAB shows/hides on scroll — the
-			// iOS counterpart of ComposeListNode's snapshotFlow(CanScrollBackward).
-			CometSwiftUIHost.SetScrollHandler(_native, away => _list.ScrolledAway.Value = away > 0.5);
+			// iOS counterpart of ComposeListNode's snapshotFlow(CanScrollBackward). Also remember the
+			// latest value so the initial seed can stop as soon as it lands (and not fight a user scroll).
+			CometSwiftUIHost.SetScrollHandler(_native, away =>
+			{
+				_lastAway = away;
+				_list.ScrolledAway.Value = away > 0.5;
+			});
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
@@ -105,18 +110,38 @@ namespace Comet.Platform.SwiftUI
 		}
 
 		bool _seededToNewest;
+		bool _disposed;
+		double _lastAway = 1;   // 1 = not at bottom yet
 
+		// Seed the list at the newest message (iOS twin of ComposeListNode's one-shot
+		// ScrollToItem(last)). A ScrollViewReader scroll to a far target undershoots while rows
+		// are still realizing, so nudge a few times — but STOP as soon as the shim reports we've
+		// landed at the bottom (_lastAway low) or the node is torn down, so it doesn't re-scroll
+		// redundantly or yank a user who scrolled up during the window.
 		async void SeedToNewest()
 		{
-			foreach (var delay in new[] { 350, 900, 1700 })
+			try
 			{
-				await System.Threading.Tasks.Task.Delay(delay);
-				ThreadHelper.RunOnMainThread(() => CometSwiftUIHost.ScrollToBottom(_native));
+				foreach (var delay in new[] { 350, 900, 1700 })
+				{
+					await System.Threading.Tasks.Task.Delay(delay);
+					if (_disposed || _lastAway <= 0.5)
+						return;
+					ThreadHelper.RunOnMainThread(() =>
+					{
+						if (!_disposed)
+							CometSwiftUIHost.ScrollToBottom(_native);
+					});
+				}
+			}
+			catch (System.Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"[SwiftUIListNode] seed-scroll failed: {ex.Message}");
 			}
 		}
 
 		public void SetEventSink(ICometEventSink? sink) { }
-		public void Dispose() { }
+		public void Dispose() => _disposed = true;
 	}
 }
 #endif
