@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Auto-imported (as build/net11.0-ios/Comet.targets) into an app that references the
+    Comet package on iOS. The SwiftUI backend's @objc classes (CometSwiftUIHost/CometNode)
+    are only pulled in by the .NET-for-iOS STATIC REGISTRAR when the xcframework is linked
+    into the APP itself with SmartLink=False — the embedded managed binding alone leaves
+    _OBJC_CLASS_$_CometSwiftUIHost undefined at link time. So inject that NativeReference here.
+    The xcframework is shipped alongside this .targets in the package.
+  -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-ios'))">
+    <NativeReference Include="$(MSBuildThisFileDirectory)CometSwiftUIShim.xcframework">
+      <Kind>Framework</Kind>
+      <SmartLink>False</SmartLink>
+    </NativeReference>
+  </ItemGroup>
+</Project>

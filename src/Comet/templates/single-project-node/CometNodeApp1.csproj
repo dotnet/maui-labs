@@ -22,15 +22,6 @@
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24</SupportedOSPlatformVersion>
-
-		<!--
-			Path to the Comet repo's `src/Comet` directory. Comet's node backend is not
-			published as a NuGet package yet, so the app references it in the repo. The
-			default assumes this app was scaffolded under `src/Comet/sample/<name>/`
-			(the same depth as the CometComposeProbe/CometSwiftUIProbe samples). For any
-			other location, override it:  dotnet build -p:CometRoot=/abs/path/to/src/Comet
-		-->
-		<CometRoot Condition="'$(CometRoot)' == ''">COMET_ROOT_PATH</CometRoot>
 	</PropertyGroup>
 
 	<!-- Compile the native head per-TF so Android doesn't try to build the iOS AppDelegate
@@ -45,27 +36,18 @@
 		<Compile Include="Platforms\iOS\**\*.cs" />
 	</ItemGroup>
 
-	<!-- Comet: the shared view tree + node backends (Compose/SwiftUI). -->
+	<!-- Comet: the shared view tree + node backends (Compose/SwiftUI). Restored from the
+	     local feed in nuget.config; the package pulls in Yoga, the Compose facade (Android),
+	     the SwiftUI binding + shim xcframework (iOS), and the iOS NativeReference/static-
+	     registrar wiring automatically. -->
 	<ItemGroup>
-		<ProjectReference Include="$(CometRoot)\src\Comet\Comet.csproj" />
+		<PackageReference Include="Comet" Version="COMET_PACKAGE_VERSION" />
 	</ItemGroup>
 
-	<!-- Android: ComponentActivity hosts the Compose backend view; use the app manifest. -->
-	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
-		<PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0" />
-	</ItemGroup>
+	<!-- Android: use the app manifest. (ComponentActivity comes transitively via Comet -> the
+	     Compose facade's Xamarin.AndroidX.Activity dependency.) -->
 	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
 		<AndroidManifest>Platforms\Android\AndroidManifest.xml</AndroidManifest>
 	</PropertyGroup>
-
-	<!-- iOS: link the SwiftUI shim framework directly so the static registrar resolves
-	     _OBJC_CLASS_$_CometSwiftUIHost. BUILD IT FIRST (once, and after any shim change):
-	     $(CometRoot)/src/Comet.SwiftUI.Shim/build-xcframework.sh -->
-	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
-		<NativeReference Include="$(CometRoot)\src\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework">
-			<Kind>Framework</Kind>
-			<SmartLink>False</SmartLink>
-		</NativeReference>
-	</ItemGroup>
 
 </Project>

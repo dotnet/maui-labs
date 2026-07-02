@@ -28,12 +28,12 @@
         "datatype": "string",
         "replaces": "com.companyname.cometnodeapp1"
       },
-      "cometRoot": {
+      "cometPackageVersion": {
         "type": "parameter",
-        "description": "MSBuild path to the Comet repo's src/Comet directory (the node backend is not yet published as a package). Defaults to '..\\..', which resolves when the app is created under src/Comet/sample/<name>/.",
+        "description": "Version of the Comet package to reference (restored from the local feed in nuget.config).",
         "datatype": "string",
-        "defaultValue": "..\\..",
-        "replaces": "COMET_ROOT_PATH"
+        "defaultValue": "0.5.1-local",
+        "replaces": "COMET_PACKAGE_VERSION"
       }
     },
     "defaultName": "CometNodeApp1"

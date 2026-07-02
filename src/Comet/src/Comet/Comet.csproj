@@ -53,4 +53,14 @@
 	<ProjectReference Include="..\Comet.SwiftUI.Binding\Comet.SwiftUI.Binding.csproj" />
   </ItemGroup>
 
+  <!-- Packaging: ship the SwiftUI shim xcframework + a build/net11.0-ios/Comet.targets so a
+       package-referencing iOS app gets the SmartLink=False NativeReference the static
+       registrar needs (see PackAssets/Comet.targets). Pack-only; harmless at build time. -->
+  <ItemGroup>
+	<None Include="..\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework\**"
+	      Pack="true" PackagePath="build\CometSwiftUIShim.xcframework" />
+	<None Include="PackAssets\Comet.targets"
+	      Pack="true" PackagePath="build\Comet.targets" />
+  </ItemGroup>
+
 </Project>
