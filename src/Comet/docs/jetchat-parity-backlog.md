@@ -206,3 +206,24 @@ These are wrong *values* in `sample/Shared/Jetchat/JetchatTheme.cs`; the widgets
 `I4 (dialog)` + `I5/I7 (textfield/send)` → `I1/I2 (selector)` → `I3 (emoji)` →
 animation → `I6 (voice)`. `C3 / D1 / P1` are quick wins anytime. The framework-capability builds are
 **T1, T2, C1, I4, I7**; most other items compose from those.
+
+---
+
+## Addendum 2026-07-01 (autonomous run)
+
+- **I7 / P4 caret+IME: DONE** (`210ede7c`) — `BasicTextField(TextFieldValue)` bound;
+  the composer tracks the caret, the emoji table inserts AT the caret (gold
+  `addText`), typing echo never resets the caret. Deferred: `reverseLayout` (C2
+  remainder), TextFieldValue composition/IME-region styling.
+- **P7 IME insets: DONE** (`7c592914`) — Android-15 edge-to-edge makes AdjustResize
+  a no-op; ComposeBackendRoot now observes the decor-level IME inset
+  (ViewCompat) + AdjustNothing and reflows to `AvailableSize`. Composer +
+  selector row sit flush above the keyboard; restore on dismiss.
+- **Record-dot pulse: DONE** (`24f6ddcf`) — Comet's own animation engine now runs on
+  the node backends (ChoreographerTicker / DisplayLinkTicker); the gold's
+  infiniteRepeatable alpha pulse is `recordDot.Animate(repeats, autoReverses)`.
+- **iOS F3 seed-scroll: DONE** (`01192c99`) — conversation opens at the newest
+  message on iOS.
+- Remaining engine-level deviations: `AnimatedContent`/`updateTransition`
+  facade bindings (nav transitions, panel crossfades), reverseLayout,
+  structural-insert re-materialization on reload, `_rowCache` LRU.
