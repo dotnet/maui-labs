@@ -1,15 +1,7 @@
 ---
 name: maui-ui-patterns
 description: >-
-  Fix MAUI UI layout and automation issues: CollectionView not scrolling,
-  missing AutomationId bindings in DataTemplate items, UI element property
-  bindings, Grid/FlexLayout responsive choices, loading/empty/error states,
-  and testable login/form UI patterns. USE FOR: Debugging CollectionView scrolling,
-  adding stable AutomationIds to views for UI automation, fixing Grid row/column
-  sizing (Auto vs Star), empty/loading states in data-driven screens, responsive
-  layout choices, and binding patterns in DataTemplates. DO NOT USE FOR: Shell
-  routes (use maui-app-architecture), comprehensive accessibility audits (use
-  maui-accessibility), or vendor-specific control generation (Syncfusion, etc).
+  Fix MAUI page layout and automation patterns. USE FOR: non-scrolling `CollectionView`, stable `AutomationId` values in `DataTemplate` items, Grid or FlexLayout sizing, binding-driven control state, and loading, empty, or error screens. DO NOT USE FOR: Shell routes, full accessibility audits, or vendor-specific control generation.
 ---
 
 # MAUI UI Patterns

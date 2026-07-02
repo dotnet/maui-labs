@@ -1,19 +1,7 @@
 ---
 name: maui-devflow-session-review
 description: >-
-  Review previous AI sessions that used MAUI DevFlow to identify opt-in product
-  feedback, friction, repeated attempts, failed advertised features, and
-  workarounds. USE FOR: MAUI DevFlow session review, summarizing stuck maui
-  devflow debugging sessions, reviewing CLI/MCP behavior for friction, drafting
-  structured markdown feedback reports with Environment/Findings/Severity/
-  Confidence/Outcome sections, and drafting GitHub issues for dotnet/maui-labs
-  (scrubbing private file paths, emails, and PII before filing). Analyzes the
-  session content provided by the user — does NOT invoke live `maui devflow`
-  CLI commands or agents during retrospective review; DOES use gh CLI for issue
-  filing. INVOKES: session history tools
-  for scope discovery; gh CLI for issue filing. DO NOT USE FOR: fixing discovered
-  bugs, adding DevFlow to apps (use maui-devflow-onboard), iterative app
-  debugging (use maui-devflow-debug), or generic memory search.
+  Review DevFlow sessions for feedback, friction, broken features, and workarounds. USE FOR: retrospective summaries, findings, and dotnet/maui-labs issues from session content. Uses session history plus `gh`; does not run live `maui devflow`. DO NOT USE FOR: fixing bugs, onboarding DevFlow, live debugging, or memory search.
 ---
 
 # MAUI DevFlow Session Review

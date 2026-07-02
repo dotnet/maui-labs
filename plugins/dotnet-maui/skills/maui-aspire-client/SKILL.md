@@ -1,15 +1,7 @@
 ---
 name: maui-aspire-client
 description: >-
-  Connect .NET MAUI apps to Aspire-hosted services with service discovery,
-  HttpClient setup, local development networking, authentication, emulator and
-  simulator base addresses, and fallback behavior when service discovery
-  configuration is not injected into the app.
-  USE FOR: MAUI clients consuming Aspire APIs, AddServiceDiscovery,
-  https+http service endpoints, typed HttpClient registration, local emulator
-  networking, dev certificates, and app host orchestration. DO NOT USE FOR:
-  generic offline API caching (use maui-networking-offline-data), OAuth redirect
-  setup (use maui-auth-secure-storage), or server-side Aspire resource modeling.
+  Connect MAUI apps to Aspire-hosted services. USE FOR: `AddServiceDiscovery`, `HttpClient` setup, emulator or simulator base addresses, dev certificates, auth handoff, and fallback behavior when service discovery config is missing. DO NOT USE FOR: generic offline caching, OAuth redirect setup, or server-side Aspire modeling.
 ---
 
 # MAUI Aspire Client

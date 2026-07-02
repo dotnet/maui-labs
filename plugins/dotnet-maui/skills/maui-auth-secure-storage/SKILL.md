@@ -1,15 +1,7 @@
 ---
 name: maui-auth-secure-storage
 description: >-
-  Implement .NET MAUI authentication and secure storage flows using
-  WebAuthenticator, MSAL.NET, platform callback URIs, token caching,
-  SecureStorage, broker considerations, and Blazor Hybrid auth handoff. USE FOR:
-  login/logout, OAuth/OIDC redirects, Microsoft Entra ID, callback URI setup,
-  MSAL redirect URI/BrokerRedirectUri setup, Android/iOS/Mac Catalyst/Windows
-  auth configuration, secure token or secret storage, and native-to-Blazor auth
-  state. DO NOT USE FOR: general app architecture (use maui-app-architecture),
-  API client retry/offline behavior (use maui-networking-offline-data), or
-  runtime UI debugging (use maui-devflow-debug).
+  Implement MAUI sign-in and secure secret storage with `WebAuthenticator`, MSAL.NET, callback URIs, token caching, brokers, and `SecureStorage`. USE FOR: OAuth or OIDC, Entra ID, redirect URI setup across Android, iOS, Mac Catalyst, and Windows, secure tokens, and Blazor auth handoff. DO NOT USE FOR: generic architecture, offline API retries, or UI debugging.
 ---
 
 # MAUI Auth and Secure Storage

@@ -1,16 +1,7 @@
 ---
 name: maui-performance
 description: >-
-  Fix .NET MAUI performance issues: accurate startup profiling with `maui profile
-  startup` using Release builds and physical devices (not Debug/emulator),
-  eliminating janky CollectionView scrolling by removing nested ScrollView,
-  using x:DataType compiled bindings, simplifying templates, and optimizing
-  oversized image resources. USE FOR: Diagnosing slow startup with Release build
-  profiling, fixing CollectionView scrolling by removing ScrollView wrapper,
-  adding x:DataType compiled bindings, image memory optimization, layout nesting,
-  and validating performance claims with measurements. DO NOT USE FOR: UI
-  interaction bugs (maui-devflow-debug), SDK/CLI discovery (dotnet-workload-info),
-  or generic app architecture without specific performance symptoms.
+  Fix measurable MAUI performance problems such as slow startup, janky `CollectionView`, reflection bindings, and oversized images. USE FOR: `maui profile startup`, Release builds on devices, removing nested `ScrollView`, adding `x:DataType`, and validating with measurements. DO NOT USE FOR: generic UI bugs, workload discovery, or non-performance architecture work.
 ---
 
 # MAUI Performance

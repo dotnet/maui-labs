@@ -1,14 +1,7 @@
 ---
 name: maui-app-architecture
 description: >-
-  Design and update .NET MAUI app architecture around dependency injection,
-  MVVM, compiled bindings, Shell navigation, route registration, and testable
-  services. USE FOR: MauiProgram service registration, ViewModel/page wiring,
-  Shell GoToAsync routes, query parameters, x:DataType compiled bindings on
-  XAML pages and DataTemplate item templates, service lifetime choices, and
-  replacing DependencyService or service locator patterns. DO NOT USE FOR: project file/resource layout (use
-  maui-project-structure), current API deprecation checks (use maui-current-apis),
-  or runtime UI inspection (use maui-devflow-debug).
+  Design MAUI app architecture around DI, MVVM, Shell routes, and testable services. USE FOR: `MauiProgram` registration, page or ViewModel wiring, `Shell.Current.GoToAsync`, trim-safe query handling, `x:DataType`, service lifetimes, and replacing `DependencyService` or service locators. DO NOT USE FOR: project layout, API currency checks, or debug tools.
 ---
 
 # MAUI App Architecture

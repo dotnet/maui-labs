@@ -1,14 +1,7 @@
 ---
 name: maui-devflow-onboard
 description: >-
-  Add MAUI DevFlow to a .NET MAUI project with agent package references,
-  MauiProgram.cs registration, Blazor WebView support, GTK variants, Central
-  Package Management guidance, and verification commands. USE FOR: first-time
-  DevFlow setup, reviewing what files to edit, choosing DevFlow packages, or
-  continuing after `maui devflow init` installs skills. DO NOT USE FOR:
-  troubleshooting an already-integrated app that cannot connect, iterative app
-  debugging, UI inspection, or generic MAUI build failures (use
-  maui-devflow-debug). INVOKES: maui devflow CLI and dotnet CLI.
+  Add DevFlow to a MAUI app. USE FOR: package refs, `MauiProgram` registration, Blazor WebView or GTK variants, and verification commands for fresh setup or after `maui devflow init`. DO NOT USE FOR: troubleshooting an existing DevFlow integration, iterative debugging, UI inspection, or generic build failures. INVOKES: `maui devflow` and `dotnet`.
 ---
 
 # DevFlow Onboard

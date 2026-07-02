@@ -1,17 +1,7 @@
 ---
 name: maui-device-capabilities
 description: >-
-  Implement .NET MAUI device capabilities with platform permissions: camera and
-  MediaPicker (IsCaptureSupported, permission checks), FilePicker with durable
-  storage (copy to AppDataDirectory), Geolocation (GeolocationRequest,
-  LocationWhenInUse), and Maps setup. Add Android manifest entries
-  (android.permission.CAMERA, READ_MEDIA_IMAGES for Android 13+) and iOS/Mac
-  Catalyst plist entries (NSCameraUsageDescription, NSLocationWhenInUseUsageDescription).
-  USE FOR: Camera/photo/file/location/map features with permissions, platform
-  manifest/plist declarations, handling denied/cancelled flows, Android 13+
-  Photo Picker migration, runtime permission requests, and durable file access.
-  DO NOT USE FOR: Notifications/deep links (maui-notifications-deep-links), auth
-  (maui-auth-secure-storage), or UI layout (maui-ui-patterns).
+  Implement MAUI camera, photo/file picker, geolocation, and maps features with the required permissions and manifest or plist entries. USE FOR: `MediaPicker`, durable `FilePicker` storage, `GeolocationRequest`, Android 13+ photo picker changes, denied or cancelled flows, and permission requests. DO NOT USE FOR: notifications or deep links, auth, or UI layout.
 ---
 
 # MAUI Device Capabilities

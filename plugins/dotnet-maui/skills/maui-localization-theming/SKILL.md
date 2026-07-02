@@ -1,13 +1,7 @@
 ---
 name: maui-localization-theming
 description: >-
-  Implement .NET MAUI localization, culture switching, RTL layout, platform
-  language declarations, AppThemeBinding, DynamicResource theming, and runtime
-  theme switching. USE FOR: RESX resources, translated strings, culture-aware
-  formatting, right-to-left UI, app language settings, light/dark/system theme
-  support, design tokens, and live theme updates. DO NOT USE FOR: general page
-  layout (use maui-ui-patterns), accessibility audits (use maui-accessibility),
-  or app assets/splash/icon configuration (use maui-app-assets-lifecycle).
+  Implement MAUI localization, RTL, and theme switching. USE FOR: RESX strings, culture-aware formatting, language declarations, `AppThemeBinding`, `DynamicResource`, design tokens, and live light, dark, or system theme updates. DO NOT USE FOR: general page layout, accessibility audits, or splash or icon asset configuration.
 ---
 
 # MAUI Localization and Theming
