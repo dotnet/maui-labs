@@ -76,8 +76,15 @@ namespace Comet.DevTools
 				System.Diagnostics.Debug.WriteLine($"[CometDevAgent] no free port in {_port}..{_port + 9}: {lastError?.Message}");
 				return; // dev agent unavailable; the app runs fine without it
 			}
-			if (Port != _port)
-				Console.WriteLine($"[CometDevAgent] port {_port} in use; listening on {Port}");
+			// Always surface the bound port. When it differs from the requested one (the CLI's
+			// default target), the developer must pass `-ap <Port>` — there is no broker on this
+			// platform to auto-publish it, and the sim shares the host loopback so a foreign
+			// process (or a second app) can hold the default port. Hosts that DO have a broker
+			// (the Android probe) read the authoritative Port property and publish it.
+			if (Port == _port)
+				Console.WriteLine($"[CometDevAgent] listening on port {Port}");
+			else
+				Console.WriteLine($"[CometDevAgent] requested port {_port} was in use; listening on {Port} — drive it with: maui devflow ui <cmd> -ap {Port}");
 			_running = true;
 			var thread = new Thread(AcceptLoop) { IsBackground = true, Name = "CometDevAgent" };
 			thread.Start();
