@@ -31,6 +31,41 @@ scenarios:
       - "Encodes query parameter values instead of string-concatenating raw data"
     timeout: 240
 
+  - name: "Use trim-safe Shell query handling for NativeAOT"
+    setup:
+      files:
+        - path: "MyApp/ViewModels/DetailsViewModel.cs"
+          content: |
+            [QueryProperty(nameof(ProductName), "productName")]
+            public partial class DetailsViewModel : ObservableObject
+            {
+                public string? ProductName { get; set; }
+            }
+    prompt: |
+      I am keeping Shell navigation query parameters in a .NET MAUI app, but this
+      screen now has to work with full trimming and NativeAOT. The current
+      DetailsViewModel uses [QueryProperty] to receive productName after
+      navigation. What should I change to make the Shell query handling trim-safe,
+      and what should I do with the incoming string value if it came from a URI
+      like GoToAsync($"details?productName={Uri.EscapeDataString(name)}")?
+    assertions:
+      - type: "output_contains"
+        value: "IQueryAttributable"
+      - type: "output_matches"
+        pattern: "(?i)QueryProperty.*not\\s+trim-safe|not\\s+trim-safe.*QueryProperty|QueryProperty.*NativeAOT"
+      - type: "output_contains"
+        value: "ApplyQueryAttributes"
+      - type: "output_matches"
+        pattern: "(?i)trim|NativeAOT"
+      - type: "output_matches"
+        pattern: "(?i)UnescapeDataString|URL-decod|decode"
+    rubric:
+      - "Replaces QueryProperty with IQueryAttributable for full trimming or NativeAOT-sensitive Shell navigation"
+      - "Explains that QueryProperty is not trim-safe in this scenario"
+      - "Uses ApplyQueryAttributes as the explicit parsing and validation point"
+      - "Calls out that string URI query values are not automatically URL-decoded and should be decoded explicitly"
+    timeout: 240
+
   - name: "Fix stale ViewModel state caused by singleton page registration"
     setup:
       files:

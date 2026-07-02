@@ -28,8 +28,9 @@ navigation. Favor explicit, testable architecture over service locator patterns.
 6. Register Shell routes once, near app startup. When asked how to register a
    Shell route, show the literal `Routing.RegisterRoute(...)` call, not only a
    prose summary.
-7. Pass navigation data through route query parameters, `[QueryProperty]`, or
-   `IQueryAttributable`.
+7. Pass navigation data through Shell route query parameters. For trim-sensitive
+   or NativeAOT-sensitive flows, prefer `IQueryAttributable` over
+   `[QueryProperty]`.
 8. Keep platform APIs behind interfaces so ViewModels remain unit-testable.
 
 ## Dependency Injection Guidance
@@ -60,11 +61,22 @@ public sealed partial class DetailsViewModel : ObservableObject, IQueryAttributa
     {
         if (query.TryGetValue("id", out var value) && value is string id)
         {
-            Load(id);
+            Load(Uri.UnescapeDataString(id));
         }
     }
 }
 ```
+
+## Trim-safe Shell query parameters
+
+- `[QueryProperty]` is convenient, but it is **not trim-safe**.
+- When full trimming or NativeAOT is in scope, use `IQueryAttributable` on the
+  receiving page or ViewModel instead.
+- `ApplyQueryAttributes` keeps parsing, validation, conversion, and failure
+  handling explicit instead of relying on attribute-based property assignment.
+- When values came from URI-based Shell navigation, string entries received via
+  `IQueryAttributable` are not automatically URL-decoded. Decode them
+  explicitly, for example with `Uri.UnescapeDataString`, before using them.
 
 ## Compiled Binding Pattern
 
@@ -106,4 +118,6 @@ improvements over reflection-based bindings.
 - No new service locator or `BuildServiceProvider()` usage was introduced.
 - Pages and templates that bind to ViewModels/models have `x:DataType`.
 - Routes are registered before use and query values are encoded.
+- Trim-sensitive or NativeAOT-sensitive Shell navigation uses
+  `IQueryAttributable`, and string URI query values are explicitly decoded.
 - ViewModels remain testable without starting a MAUI app.
