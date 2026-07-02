@@ -90,6 +90,10 @@ namespace Comet.Platform.Compose
 			var metrics = context.Resources!.DisplayMetrics!;
 			ComposeNode.Density = metrics.Density;
 
+			// Drive Comet's animation engine (view.Animate/FadeTo/…) from the vsync
+			// Choreographer — without this, animations silently no-op on the node backend.
+			Backend.CometAnimationDriver.Initialize(new ChoreographerTicker());
+
 			_root = (ComposeNode)CometBackendBridge.Materialize(view, _context);
 
 			if (UseYogaLayout)

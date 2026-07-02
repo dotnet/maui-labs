@@ -521,10 +521,11 @@ namespace CometSamples.Jetchat
 			var swipeHint = new Text("Swipe to cancel").BodyLarge().Color(OnSurfaceVariant)
 				.HorizontalLayoutAlignment(LayoutAlignment.Center)
 				.VerticalLayoutAlignment(LayoutAlignment.Center);
+			var recordDot = new HStack().Frame(width: 10, height: 10).CornerRadius(5).Background(Colors.Red)
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
 			var indicator = new HStack(spacing: 12f)
 			{
-				new HStack().Frame(width: 10, height: 10).CornerRadius(5).Background(Colors.Red)
-					.VerticalLayoutAlignment(LayoutAlignment.Center),
+				recordDot,
 				new Text(RecordDuration).BodyLarge().Color(OnSurface)
 					.VerticalLayoutAlignment(LayoutAlignment.Center),
 				swipeHint.FillHorizontal(),
@@ -540,7 +541,7 @@ namespace CometSamples.Jetchat
 			var mic = new ZStack { micIcon }
 				.Frame(width: 48, height: 48).Margin(right: 8)
 				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnRecord(g => HandleRecord(g, field, indicator, swipeHint, micIcon));
+				.OnRecord(g => HandleRecord(g, field, indicator, swipeHint, micIcon, recordDot));
 
 			return new VStack(spacing: 0f)
 			{
@@ -590,7 +591,7 @@ namespace CometSamples.Jetchat
 		// onStartRecording/onFinishRecording/onCancelRecording + RecordingIndicator). The gold records
 		// nothing — RecordButton is a pure UI mock — so this only swaps the field for the indicator, runs
 		// the elapsed timer, and fades the "Swipe to cancel" hint as the drag nears the threshold.
-		static void HandleRecord(RecordGesture g, View field, View indicator, View swipeHint, View micIcon)
+		static void HandleRecord(RecordGesture g, View field, View indicator, View swipeHint, View micIcon, View recordDot)
 		{
 			switch (g.Status)
 			{
@@ -599,6 +600,10 @@ namespace CometSamples.Jetchat
 					field.Opacity(0);          // fade the field out …
 					indicator.Opacity(1);      // … and the recording indicator in
 					micIcon.Color(Primary);    // tint the mic active (gold animates the icon colour)
+					// The gold's infiniteRepeatable alpha pulse on the red dot, driven by
+					// Comet's own animation engine (Choreographer-ticked on the node backend).
+					recordDot.Animate(v => v.Opacity(0.2), duration: 0.6,
+						repeats: true, autoReverses: true, id: "recordPulse");
 					StartRecordTimer();
 					break;
 				case Comet.GestureStatus.Running:
@@ -609,6 +614,8 @@ namespace CometSamples.Jetchat
 				case Comet.GestureStatus.Completed:
 				case Comet.GestureStatus.Canceled:
 					StopRecordTimer();
+					recordDot.AbortAnimation("recordPulse");
+					recordDot.Opacity(1);
 					field.Opacity(1);          // restore the field
 					indicator.Opacity(0);
 					micIcon.Color(OnSurfaceVariant);

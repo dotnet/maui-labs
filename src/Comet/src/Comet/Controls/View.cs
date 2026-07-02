@@ -939,7 +939,11 @@ namespace Comet
 		}
 
 		protected virtual IMauiContext GetMauiContext() => ViewHandler?.MauiContext ?? BuiltView?.GetMauiContext();
-		IAnimationManager GetAnimationManager() => GetMauiContext()?.Services.GetRequiredService<IAnimationManager>();
+		// Node backends have no MauiContext: fall back to the Comet-owned driver (a
+		// platform frame ticker installed by the backend root); null until one exists.
+		IAnimationManager GetAnimationManager()
+			=> GetMauiContext()?.Services.GetRequiredService<IAnimationManager>()
+				?? Comet.Backend.CometAnimationDriver.Shared;
 
 		void AddAllAnimationsToManager()
 		{
