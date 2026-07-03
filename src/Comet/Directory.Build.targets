@@ -62,6 +62,26 @@
     <Compile Remove="bin\**;obj\**" />
     <None Remove="bin\**;obj\**" />
   </ItemGroup>
-  
+
+  <!--
+    Workaround for a .NET Android SDK incremental-build bug (observed in
+    Microsoft.Android.Sdk 36.99.0-preview.5.308): _BuildApkFastDevStaticInputs
+    omits @(_ApplicationSharedLibrary) (libxamarin-app.so), while the embed-path
+    _BuildApkEmbedInputs includes it. libxamarin-app.so carries the MVID-keyed
+    debug typemaps, so when a referenced library (e.g. the vendored Compose
+    facade) is rebuilt with internal-only changes, the .so is correctly
+    relinked but _BuildApkFastDev skips as "up-to-date": the stale APK keeps the
+    old-MVID typemaps while fast deployment pushes the new-MVID assembly →
+    "System.NotSupportedException: ... no Java peer type found" at runtime.
+    Adding the .so to the up-to-date check makes the APK rebuild + reinstall,
+    removing the need for clean rebuilds after facade edits.
+  -->
+  <Target Name="_CometFixFastDevApkInputs"
+          BeforeTargets="_BuildApkFastDev"
+          DependsOnTargets="_PrepareApplicationSharedLibraryItems">
+    <PropertyGroup>
+      <_BuildApkFastDevStaticInputs>$(_BuildApkFastDevStaticInputs);@(_ApplicationSharedLibrary)</_BuildApkFastDevStaticInputs>
+    </PropertyGroup>
+  </Target>
 
 </Project>

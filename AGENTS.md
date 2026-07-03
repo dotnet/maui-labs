@@ -85,10 +85,15 @@ pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
 - **Host tests link Comet via a HintPath**, so rebuild it first:
   `dotnet build src/Comet/src/Comet/Comet.csproj -f net11.0-maccatalyst`
   before `dotnet test tests/Comet.Tests` — otherwise tests run a stale DLL.
-- **After editing the vendored Compose facade** (`src/Comet/src/vendor/`), do a
-  clean rebuild (rm `obj`/`bin` for facade + Comet + probe) or `SetContent`
-  throws `ComposableLambda2: no Java peer`. Engine/sample-only edits build
-  incrementally — no clean needed. iOS: after a `Comet.SwiftUI.Shim` change,
+- **Facade edits no longer need clean rebuilds** (fixed 2026-07-03). The old
+  `ComposableLambda2: no Java peer` crash after editing `src/Comet/src/vendor/`
+  was a .NET Android SDK incremental bug: `_BuildApkFastDev` didn't list
+  `libxamarin-app.so` (MVID-keyed debug typemaps) in its Inputs, so the APK kept
+  stale typemaps while fast deploy pushed the new assembly. Worked around in
+  `src/Comet/Directory.Build.targets` (`_CometFixFastDevApkInputs`); upstream
+  issue draft: `src/Comet/docs/research/upstream-issue-fastdev-typemap-staleness.md`.
+  If the crash ever reappears (SDK update changing target names), fall back to
+  `src/Comet/tools/clean-android.sh`. iOS: after a `Comet.SwiftUI.Shim` change,
   re-run `build-xcframework.sh` AND rm the probe `obj`/`bin` (incremental build
   won't relink the NativeReference xcframework).
 - **Probe apps**: `sample/CometComposeProbe` (Android),
