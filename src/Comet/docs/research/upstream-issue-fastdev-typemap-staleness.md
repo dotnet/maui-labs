@@ -81,12 +81,23 @@ as the target already does for the task call at `ApplicationSharedLibraries=`).
 ```xml
 <Target Name="_FixFastDevApkInputs"
         BeforeTargets="_BuildApkFastDev"
-        DependsOnTargets="_PrepareApplicationSharedLibraryItems">
+        DependsOnTargets="_DefineBuildTargetAbis;_PrepareApplicationSharedLibraryItems">
   <PropertyGroup>
     <_BuildApkFastDevStaticInputs>$(_BuildApkFastDevStaticInputs);@(_ApplicationSharedLibrary)</_BuildApkFastDevStaticInputs>
   </PropertyGroup>
 </Target>
 ```
 
-Verified: with the workaround, the same impl-only edit rebuilds + reinstalls the
-APK and the app runs; without it, the app crashes as above.
+Two traps hit while landing the workaround (both cost a re-verification):
+
+1. `_PrepareApplicationSharedLibraryItems` expands `%(_BuildTargetAbis.Identity)`,
+   populated by `_DefineBuildTargetAbis`. Without that dependency the item — and
+   thus the appended input — is silently EMPTY. Our copy warns when it detects this.
+2. MSBuild stops at the NEAREST `Directory.Build.targets`; a sample-level file
+   shadows the repo-level one, so the fix must live in a file imported by every
+   Android app project (`src/Comet/eng/FastDevApkFix.targets`, imported from both).
+
+Verified end-to-end: impl-only library edit → incremental `-t:Run` → `.so` relinks
+→ APK rebuilds + reinstalls → app survives (three consecutive edit cycles, both a
+facade edit and Comet.dll edits). Without the workaround the same edit crashes as
+above.

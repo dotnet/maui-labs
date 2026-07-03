@@ -23,4 +23,9 @@
 	<PropertyGroup Condition="'$(Configuration)' == 'Debug' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
 		<CodesignEntitlements>$(MSBuildThisFileDirectory)Shared/RuntimeDebug/Entitlements.Debug.plist</CodesignEntitlements>
 	</PropertyGroup>
+
+	<!-- Fast-dev APK staleness fix ("no Java peer type found" after library rebuilds).
+	     This file SHADOWS src/Comet/Directory.Build.targets for projects under sample/,
+	     so the fix must be imported here explicitly — see the file for the analysis. -->
+	<Import Project="..\eng\FastDevApkFix.targets" />
 </Project>
