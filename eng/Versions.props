@@ -110,4 +110,9 @@
     <QRCoderVersion>1.7.0</QRCoderVersion>
     <ZXingNetMauiVersion>0.7.4</ZXingNetMauiVersion>
   </PropertyGroup>
+  <!-- Generative UI (ASP.NET Core packages for the sample server + WebApplicationFactory tests) -->
+  <PropertyGroup Label="GenerativeUI">
+    <MicrosoftAspNetCoreOpenApiVersion>10.0.3</MicrosoftAspNetCoreOpenApiVersion>
+    <MicrosoftAspNetCoreMvcTestingVersion>10.0.3</MicrosoftAspNetCoreMvcTestingVersion>
+  </PropertyGroup>
 </Project>

@@ -26,6 +26,13 @@
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
   </Folder>
+  <Folder Name="/src/GenerativeUI/">
+    <Project Path="src/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.OpenApi/Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+    <Project Path="src/GenerativeUI/sample/GenerativeUI.Sample.Garden.Shared/GenerativeUI.Sample.Garden.Shared.csproj" />
+    <Project Path="src/GenerativeUI/sample/GenerativeUI.Sample.Garden.Server/GenerativeUI.Sample.Garden.Server.csproj" />
+    <Project Path="src/GenerativeUI/tests/GenerativeUI.Sample.Garden.Server.Tests/GenerativeUI.Sample.Garden.Server.Tests.csproj" />
+    <Project Path="src/GenerativeUI/tests/Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests/Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />
     <Project Path="src/Comet/src/Comet/Comet.csproj" />

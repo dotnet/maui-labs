@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>GenerativeUI.Sample.Garden.Server.Tests</RootNamespace>
+    <!-- Same reason as the server csproj: keep ASP.NET's OpenAPI stack on its intended
+         Microsoft.OpenApi 2.0.0 rather than the repo-pinned 3.5.0. This test boots the server
+         in-process via WebApplicationFactory, so its transitive closure must not force 3.5.0. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\sample\GenerativeUI.Sample.Garden.Server\GenerativeUI.Sample.Garden.Server.csproj" />
+  </ItemGroup>
+
+</Project>

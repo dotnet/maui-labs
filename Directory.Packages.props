@@ -122,4 +122,10 @@
     <PackageVersion Include="ZXing.Net.Maui.Controls" Version="$(ZXingNetMauiVersion)" />
   </ItemGroup>
 
+  <!-- Generative UI (sample server + tests) -->
+  <ItemGroup Label="GenerativeUI">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="$(MicrosoftAspNetCoreOpenApiVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="$(MicrosoftAspNetCoreMvcTestingVersion)" />
+  </ItemGroup>
+
 </Project>

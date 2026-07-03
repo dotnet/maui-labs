@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GenerativeUI.Sample.Garden.Server</RootNamespace>
+    <!-- Sample server: not shipped, not packed. -->
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <!-- Microsoft.AspNetCore.OpenApi 10.0.x depends on Microsoft.OpenApi 2.0.0, but the repo
+         central-pins Microsoft.OpenApi to 3.5.0. Transitive pinning would force 3.5.0 onto
+         ASP.NET's OpenAPI stack, whose source generator is built against the 2.0.0 API and breaks
+         (e.g. IOpenApiMediaType.Example became read-only in 3.x). Opt this project out so ASP.NET
+         resolves its intended 2.0.0. The Generative UI reducer library uses 3.5.0 separately; the
+         two only exchange OpenAPI JSON text, never shared objects. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GenerativeUI.Sample.Garden.Shared\GenerativeUI.Sample.Garden.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

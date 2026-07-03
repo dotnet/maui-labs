@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.AI.GenerativeUI.OpenApi</RootNamespace>
+    <PackageId>Microsoft.Maui.AI.GenerativeUI.OpenApi</PackageId>
+    <Description>OpenAPI processing for Generative UI: fetches, reduces, and generically invokes a REST API described by an OpenAPI document, so an AI agent can discover and call any such API without compile-time knowledge of its models or routes.</Description>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageTags>$(PackageTags) ai openapi rest generative-ui</PackageTags>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.OpenApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

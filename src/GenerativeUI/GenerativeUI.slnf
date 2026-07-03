@@ -1,0 +1,12 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "src\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.OpenApi\\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj",
+      "src\\GenerativeUI\\sample\\GenerativeUI.Sample.Garden.Shared\\GenerativeUI.Sample.Garden.Shared.csproj",
+      "src\\GenerativeUI\\sample\\GenerativeUI.Sample.Garden.Server\\GenerativeUI.Sample.Garden.Server.csproj",
+      "src\\GenerativeUI\\tests\\GenerativeUI.Sample.Garden.Server.Tests\\GenerativeUI.Sample.Garden.Server.Tests.csproj",
+      "src\\GenerativeUI\\tests\\Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests\\Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests.csproj"
+    ]
+  }
+}

@@ -1,0 +1,1027 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "GenerativeUI.Sample.Garden.Server | v1",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/recommendations": {
+      "get": {
+        "tags": [
+          "Recommendations"
+        ],
+        "summary": "Get a recommended bundle.",
+        "description": "Returns a curated starter bundle of products for a new gardener.",
+        "operationId": "getRecommendations",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recommendation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "List products.",
+        "description": "Returns the full catalog, optionally filtered by category or a free-text search over name and description.",
+        "operationId": "listProducts",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Optional category filter, such as \u0022seeds\u0022 or \u0022tools\u0022.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Optional free-text filter matched against product name and description.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Create a product.",
+        "description": "Adds a new product to the catalog and returns it with its generated SKU.",
+        "operationId": "createProduct",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{sku}": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Get a product by SKU.",
+        "description": "Returns the full product record for a single SKU, or 404 if no such product exists.",
+        "operationId": "getProduct",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "description": "Stable product identifier (SKU).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Update a product.",
+        "description": "Applies a partial update to an existing product; only supplied fields change. Returns the updated product or 404.",
+        "operationId": "updateProduct",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "description": "SKU of the product to update.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Delete a product.",
+        "description": "Permanently removes a product from the catalog (and from the cart if present).",
+        "operationId": "deleteProduct",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "description": "SKU of the product to delete.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/products/{sku}/reviews": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "List a product\u0027s reviews.",
+        "description": "Returns all reviews for a single product, newest first.",
+        "operationId": "getProductReviews",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "description": "SKU whose reviews to return.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Review"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cart": {
+      "get": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Get the current cart.",
+        "description": "Returns the shopper\u0027s current cart with its line items and computed total.",
+        "operationId": "getCart",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Clear the cart.",
+        "description": "Empties the cart entirely.",
+        "operationId": "clearCart",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/cart/items": {
+      "post": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Add an item to the cart.",
+        "description": "Adds a product to the cart, or increments its quantity if already present. Returns the updated cart.",
+        "operationId": "addCartItem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddToCartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cart/items/{sku}": {
+      "put": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Set a cart line\u0027s quantity.",
+        "description": "Sets the absolute quantity of an existing cart line; a quantity of 0 removes it. Returns the updated cart.",
+        "operationId": "updateCartItem",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "description": "SKU of the cart line to update.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCartItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Remove a cart line.",
+        "description": "Removes a single line from the cart and returns the updated cart.",
+        "operationId": "removeCartItem",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "description": "SKU of the cart line to remove.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Check out the current cart.",
+        "description": "Places an order from the current cart, clears the cart, and returns the created order.",
+        "operationId": "checkout",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List past orders.",
+        "description": "Returns the order archive, newest first.",
+        "operationId": "listOrders",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Order"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Clear order history.",
+        "description": "Removes all past orders from the archive.",
+        "operationId": "clearOrders",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get an order by id.",
+        "description": "Returns a single placed order, or 404 if the id is unknown.",
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Order identifier.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/orders/{id}/reorder": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Reorder a past order.",
+        "description": "Copies the items of a past order back into the cart and returns the updated cart.",
+        "operationId": "reorder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Id of the order to copy into the cart.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/reviews": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "List all reviews.",
+        "description": "Returns every product review, newest first.",
+        "operationId": "listReviews",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Review"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Submit a review.",
+        "description": "Adds a 1-to-5 star review (with an optional comment) for a product and returns it.",
+        "operationId": "createReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Review"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddToCartRequest": {
+        "required": [
+          "sku"
+        ],
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "SKU of the product to add."
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Quantity to add; defaults to 1 when omitted.",
+            "format": "int32",
+            "default": 1
+          }
+        },
+        "description": "Payload to add a product to the cart, or increment its quantity if already present."
+      },
+      "Cart": {
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            },
+            "description": "Line items currently in the cart."
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Sum of all line-item subtotals, in US dollars.",
+            "format": "double"
+          }
+        },
+        "description": "The shopper\u0027s current cart: a list of line items plus a computed total."
+      },
+      "CartItem": {
+        "required": [
+          "sku",
+          "name",
+          "unitPrice",
+          "quantity",
+          "subtotal"
+        ],
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "SKU of the product on this line."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the product, denormalized for convenient rendering."
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Unit price at the time the item was added, in US dollars.",
+            "format": "double"
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of units ordered; always one or more.",
+            "format": "int32"
+          },
+          "subtotal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "UnitPrice multiplied by Quantity, in US dollars.",
+            "format": "double"
+          }
+        },
+        "description": "A single line in the cart: a product and the quantity ordered."
+      },
+      "CreateProductRequest": {
+        "required": [
+          "name",
+          "description",
+          "price",
+          "category"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name for the new product."
+          },
+          "description": {
+            "type": "string",
+            "description": "Longer marketing description of the product."
+          },
+          "price": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Unit price in US dollars.",
+            "format": "double"
+          },
+          "category": {
+            "type": "string",
+            "description": "Category such as \u0022seeds\u0022, \u0022tools\u0022, or \u0022soil\u0022."
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional emoji visual for the product."
+          },
+          "imageUrl": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional absolute image URL for the product."
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Optional initial stock count.",
+            "format": "int32"
+          }
+        },
+        "description": "Payload to create a new product in the catalog."
+      },
+      "CreateReviewRequest": {
+        "required": [
+          "sku",
+          "rating"
+        ],
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "SKU of the product being reviewed."
+          },
+          "rating": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Star rating from 1 to 5.",
+            "format": "int32"
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional free-text review body."
+          }
+        },
+        "description": "Payload to submit a new product review."
+      },
+      "Order": {
+        "required": [
+          "id",
+          "items",
+          "total",
+          "placedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique order identifier."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            },
+            "description": "Items that were purchased in this order."
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Order total in US dollars.",
+            "format": "double"
+          },
+          "placedAt": {
+            "type": "string",
+            "description": "UTC timestamp when the order was placed.",
+            "format": "date-time"
+          }
+        },
+        "description": "A placed order: the items purchased, a total, and when it was created."
+      },
+      "Product": {
+        "required": [
+          "sku",
+          "name",
+          "description",
+          "price",
+          "category",
+          "emoji"
+        ],
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "Stable, URL-safe identifier used across the catalog, cart, and orders (for example \u0022basil-seeds\u0022)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name shown in chat and on product cards (for example \u0022Basil Seeds\u0022)."
+          },
+          "description": {
+            "type": "string",
+            "description": "Longer marketing description of the product. May span multiple sentences and must never be truncated when shown to the user."
+          },
+          "price": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Unit price in US dollars.",
+            "format": "double"
+          },
+          "category": {
+            "type": "string",
+            "description": "Catalog category such as \u0022seeds\u0022, \u0022tools\u0022, or \u0022soil\u0022."
+          },
+          "emoji": {
+            "type": "string",
+            "description": "Emoji used as a lightweight visual when no image is available (for example \u0022\uD83C\uDF3F\u0022)."
+          },
+          "imageUrl": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Absolute URL of the product image; rendered by the app\u0027s watermarking ProductImage control when present."
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Current stock count; null when stock is not tracked for this product.",
+            "format": "int32"
+          }
+        },
+        "description": "A product in the garden shop catalog \u2014 seeds, tools, and supplies a gardener can browse, add to a cart, and order."
+      },
+      "Recommendation": {
+        "required": [
+          "title",
+          "reason",
+          "products"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Human-readable title of the bundle."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this bundle is recommended."
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            },
+            "description": "Products included in the bundle."
+          }
+        },
+        "description": "A curated starter bundle recommending several products to a new gardener."
+      },
+      "Review": {
+        "required": [
+          "id",
+          "sku",
+          "rating",
+          "comment",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique review identifier."
+          },
+          "sku": {
+            "type": "string",
+            "description": "SKU of the product being reviewed."
+          },
+          "rating": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Star rating from 1 to 5.",
+            "format": "int32"
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional free-text review body."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC timestamp when the review was submitted.",
+            "format": "date-time"
+          }
+        },
+        "description": "A customer review of a product."
+      },
+      "UpdateCartItemRequest": {
+        "required": [
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "New absolute quantity for the line; use 0 to remove it.",
+            "format": "int32"
+          }
+        },
+        "description": "Payload to set the absolute quantity of an existing cart line."
+      },
+      "UpdateProductRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "New display name, or null to leave unchanged."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "New description, or null to leave unchanged."
+          },
+          "price": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "New unit price in US dollars, or null to leave unchanged.",
+            "format": "double"
+          },
+          "category": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "New category, or null to leave unchanged."
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "New emoji visual, or null to leave unchanged."
+          },
+          "imageUrl": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "New absolute image URL, or null to leave unchanged."
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "New stock count, or null to leave unchanged.",
+            "format": "int32"
+          }
+        },
+        "description": "Payload to update an existing product. Only the supplied fields are changed (partial update)."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Recommendations"
+    },
+    {
+      "name": "Products"
+    },
+    {
+      "name": "Cart"
+    },
+    {
+      "name": "Orders"
+    },
+    {
+      "name": "Reviews"
+    }
+  ]
+}
