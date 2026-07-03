@@ -286,6 +286,31 @@ the JSON-payload pattern), Android full bindings, the Android NLI/slim
 workflow, and packaged redistributable bindings — only the acquisition and
 dependency-graph mechanics differ per platform/strategy.
 
+## Improve This Skill (opt-in self-review feedback)
+
+Binding work regularly hits cases this skill has not captured yet. When it does,
+offer the user an **opt-in review** that turns the friction into a concrete
+skill improvement (a new eval, missing reference context, corrected guidance, or
+a script/asset gap) filed against `dotnet/maui-labs`. See
+`references/skill-feedback.md` for the full workflow, PII/secret scrub, safe
+file handling, and issue templates.
+
+**Nudge triggers** — at a natural stop point (not mid-task), suggest the review
+when the session shows any of:
+
+- a documented gap in this skill had to be worked around;
+- three or more repeated failures at the same step (acquisition, Sharpie
+  cleanup, dependency resolution, packaging, or update);
+- an upstream update surprised the flow (breaking changes, changed
+  distribution/auth model, dropped platform slices);
+- a strategy this skill did not anticipate was needed;
+- guidance here was stale or contradicted reality.
+
+Always **ask first** — never run the review or file anything automatically.
+Default to a markdown report; file a GitHub issue only on request and only after
+a PII/secret scrub. This nudge is the same behavioral pattern as
+`maui-devflow-session-review`; it is a suggestion, not automation.
+
 ## Critical Anti-Patterns
 
 1. **Do not bind the whole SDK by default.** If the app needs three methods, build a small wrapper.
@@ -298,6 +323,7 @@ dependency-graph mechanics differ per platform/strategy.
 8. **Do not create a custom MCP server or broad scaffolding script before scripts/evals prove a repeatable gap.**
 9. **Do not delete platform slices from an `.xcframework` without also removing the matching `AvailableLibraries` entries in `Info.plist`.** A mismatched `Info.plist` causes load failures even when the trimmed binary itself is fine.
 10. **Do not collapse a modular native SDK into one giant binding to save package count.** Mirror the native module graph with per-module packages; collapsing reintroduces version-conflict and duplicate-type problems.
+11. **Do not run a self-review or file skill-feedback issues automatically.** Offer the opt-in review, stay inside the approved scope, and scrub secrets/tokens/PII before writing a file or filing an issue (see `references/skill-feedback.md`).
 
 ## Stop Signals
 
@@ -308,6 +334,7 @@ dependency-graph mechanics differ per platform/strategy.
 - Stop environment troubleshooting after one missing-tool install attempt. Report the missing prerequisite and exact command needed.
 - Stop packaging work if redistribution rights are unclear.
 - When updating a binding, stop and summarize C# breaking changes before editing wrapper/`ApiDefinition.cs` code, so the user can confirm the impact is acceptable.
+- When offering the self-review, stop at a markdown report unless the user asks to file; stop mining once the top skill-improvement opportunities each have a proposed change and eval, and never continue into out-of-scope or PII-bearing history.
 
 ## References
 
@@ -318,4 +345,5 @@ dependency-graph mechanics differ per platform/strategy.
 - `references/android-acquisition.md` — Android artifact acquisition and Gradle resolution guidance.
 - `references/nuget-packaging.md` — NuGet packaging for reusable binding libraries.
 - `references/troubleshooting.md` — common build/runtime failures and fixes.
+- `references/skill-feedback.md` — opt-in self-review that turns binding friction into skill improvements (evals, context, scripts) filed to `dotnet/maui-labs`.
 - `references/source-map.md` — primary sources backing the skill.
