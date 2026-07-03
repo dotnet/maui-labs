@@ -250,6 +250,24 @@ The Garden `Product` gains an `ImageUrl` so `ProductImage` has something to rend
 a lightweight fallback). The `CheckoutView`/`MonthlyOrdersReport` are ordinary MAUI `ContentView`s
 + VMs registered in DI and resolved by the view descriptors.
 
+**Static vs. dynamic + context resolution (demonstrated in the sample):**
+
+- The registrations above are **static** (added at startup). To exercise **dynamic** registration,
+  a "sign in as manager" prompt registers a **bundle** of manager-only vocabulary at runtime —
+  `AdminOrdersView` (a full view) and a `BulkPriceEditor` component — via `IUiRegistry.Bundle(…)`;
+  "sign out" disposes the handle and they leave the model's catalog. This shows permission-driven
+  membership changing mid-chat (see
+  [Extensibility §2.1](./appendix-extensibility.md#21-static-vs-dynamic-registration)).
+- **Context resolution is native XAML.** The `PrimaryButton`/`DangerButton`/`BrandAccent` resources
+  use `AppThemeBinding` so **light/dark** just works, and an `OnIdiom` width so the CTA adapts to
+  **phone vs. desktop** — all without the model knowing. The model emits `danger` once; the host
+  resolves the rest (see
+  [Extensibility §2.2](./appendix-extensibility.md#22-context-conditional-resolution)).
+- **Binding has no view models.** Every rendered card/form/list binds to the generic `UiObject`
+  tree built from the REST JSON and the `form` state (see the
+  [Binding Model appendix](./appendix-binding-model.md)); `StarRating` and the add/edit forms write
+  back through it.
+
 ## 6. Interaction scenarios (acceptance)
 
 Each maps a natural-language prompt to a tool sequence and a rendered surface.
@@ -288,11 +306,17 @@ Each maps a natural-language prompt to a tool sequence and a rendered surface.
 12. **"show me the June orders report"** → `present_view("MonthlyOrdersReport", { month:"2026-06" })`
     — the full-screen report view takes the canvas and self-loads/filters orders. The model supplies
     only the declared inputs.
+13. **"sign in as manager"** → the app registers the manager bundle at runtime (`AdminOrdersView` +
+    `BulkPriceEditor`); `list_ui_capabilities` now shows them, so **"bulk-edit prices"** →
+    `render_ui` using `BulkPriceEditor`, and **"show all orders"** →
+    `present_view("AdminOrdersView")`. **"sign out"** disposes the bundle and those capabilities
+    disappear.
 
 These cover read, create, partial-fill + field edits, save-via-chat, destructive confirm,
-recommendations, **registered styles/components**, **mandatory watermarking**, and **full-view
-handoff** (checkout, report) — the same surface area as the current in-memory sample, now
-server-backed, generatively rendered, and extended with app-owned UI.
+recommendations, **registered styles/components**, **mandatory watermarking**, **full-view
+handoff** (checkout, report), and **runtime (permission-driven) registration** — the same surface
+area as the current in-memory sample, now server-backed, generatively rendered, and extended with
+app-owned UI.
 
 ## 7. Running the sample
 

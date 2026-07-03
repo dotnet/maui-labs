@@ -132,21 +132,28 @@ Three sources of values:
 1. **Literal props** — e.g. `"text": "Products"`. Always available.
 2. **One-way `bind`** — `"bind": "product.price"` resolves a dotted path into the `data` object
    supplied to `render_ui`. Used by display nodes (`Label`, `Image`, `Badge`).
-3. **Two-way `Field`/`Entry`** — bound to `FormState[key]`. The bound `Entry` reflects
+3. **Two-way `Field`/`Entry`** — bound to the editable `form` state. The bound `Entry` reflects
    `set_field(key,value)` immediately, and its edits are read by `get_state()`.
 
-### `FormState`
+Both `data` and `form` are backed by a **generic observable tree** (there are no hand-authored view
+models — the model produces data of arbitrary shape). The inflator sets that tree as the
+`BindingContext` and compiles `bind`/`key` paths into indexer bindings against it. The full design —
+the `UiObject`/`UiObjectCollection` tree, why not `System.Dynamic`, path compilation, coercion, and
+persistence across re-inflation — is in the
+[Dynamic Binding Model appendix](./appendix-binding-model.md).
 
-- Backed by an `INotifyPropertyChanged` key/value store (`IDictionary<string, object?>` with
-  change notifications), so MAUI two-way bindings work without a statically typed VM.
+### `form` (editable state)
+
+- Backed by an observable `UiObject` tree (a leaf per key), so MAUI two-way bindings work without a
+  statically typed VM.
 - Seeded from the `form` object in the `render_ui` payload.
 - `set_field(key, value)` updates it on the UI thread → the on-screen control updates.
 - `get_state()` serializes it back to a JSON object for the model to send to `write_api`.
 
 ### `data` resolution
 
-- Dotted paths (`a.b.c`); array indexing (`items.0.name`) is **out of scope** for the MVP (use
-  pre-expanded `List` rows instead).
+- Dotted paths (`a.b.c`) compile to indexer chains (`[a][b][c].Value`); array indexing
+  (`items.0.name`) is **out of scope** for the MVP (use pre-expanded `List` rows instead).
 - Missing paths resolve to empty string (display) and are logged.
 
 ## 6. Intents (control → loop)
