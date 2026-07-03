@@ -41,6 +41,12 @@ namespace CometComposeProbe
 			// Must be on BEFORE any View is constructed: view registration and the
 			// active-view list (what TriggerReload targets) are gated on IsEnabled.
 			Microsoft.Maui.HotReload.MauiHotReloadHelper.IsEnabled = true;
+
+			// The Comet-tree dev agent (DevFlow wire-compatible tree/elements/tap/fill +
+			// real MotionEvent drags) must also start BEFORE the UI is built — it enables
+			// CometDevRegistry tracking, and views materialized earlier never enter the
+			// tree. Fixed port 9223: reach it with `adb forward tcp:9223 tcp:9223`.
+			Comet.Platform.Compose.ComposeDevAgentHost.Start(this);
 #endif
 
 			// Load Jetchat's real fonts (Montserrat titles/labels, Karla body) from bundled assets

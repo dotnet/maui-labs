@@ -45,6 +45,18 @@ namespace Comet.DevTools
 		/// </summary>
 		public static Func<byte[]?>? ScreenshotProvider { get; set; }
 
+		/// <summary>
+		/// Optional platform hook that injects a REAL coordinate drag through the platform's
+		/// input pipeline — <c>(x1, y1, x2, y2, durationMs) → success</c>, coordinates in
+		/// physical pixels. Unlike the semantic actions, this exercises the native gesture
+		/// machinery itself (pull-to-refresh, pager swipes, swipe-to-dismiss, flings — the
+		/// gesture's velocity comes from the event timing, so a short duration flings).
+		/// Called from the agent's worker thread and expected to BLOCK until the gesture
+		/// completes (implementations marshal individual events to the UI thread). Null when
+		/// the platform can't inject (the agent reports drag as unsupported).
+		/// </summary>
+		public static Func<float, float, float, float, int, bool>? DragInjector { get; set; }
+
 		/// <summary>Drops all tracked nodes (e.g. before a fresh root mount).</summary>
 		public static void Reset()
 		{
@@ -235,6 +247,7 @@ namespace Comet.DevTools
 			if (v == PropertyIds.Slider_Value.Value) return "sliderValue";
 			if (v == PropertyIds.BackgroundColor.Value) return "background";
 			if (v == PropertyIds.HasTapGesture.Value) return "tappable";
+			if (v == PropertyIds.Opacity.Value) return "opacity";
 			return null;
 		}
 

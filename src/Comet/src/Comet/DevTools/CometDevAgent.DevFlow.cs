@@ -87,10 +87,37 @@ namespace Comet.DevTools
 						return ActionOk();
 					});
 
+				case ("POST", "/api/v1/ui/actions/drag"):
+					// Real input injection (not a semantic event): body {x1,y1,x2,y2,durationMs?}
+					// in physical px. One generic verb covers pull-to-refresh, pager swipes,
+					// swipe-to-dismiss, drawer drags, and flings (velocity falls out of duration).
+					// NOT RunOnMain — the injector blocks this worker thread while it marshals the
+					// individual motion events to the UI thread over the gesture's duration.
+					return DragAction(body);
+
 				default:
 					// 200 + success:false keeps the CLI from hanging on unimplemented routes.
 					return "{\"success\":false,\"error\":\"unimplemented\"}";
 			}
+		}
+
+		static string DragAction(string body)
+		{
+			var inject = CometDevRegistry.DragInjector;
+			if (inject is null)
+				return "{\"success\":false,\"error\":\"drag is not supported on this platform (no injector registered)\"}";
+
+			float x1 = (float)GetDouble(body, "x1");
+			float y1 = (float)GetDouble(body, "y1");
+			float x2 = (float)GetDouble(body, "x2");
+			float y2 = (float)GetDouble(body, "y2");
+			int durationMs = 300;
+			try { durationMs = (int)GetDouble(body, "durationMs"); } catch { /* optional */ }
+			if (durationMs < 1) durationMs = 1;
+
+			return inject(x1, y1, x2, y2, durationMs)
+				? ActionOk()
+				: "{\"success\":false,\"error\":\"drag injection failed\"}";
 		}
 
 		static View ResolveElement(string body)
@@ -253,32 +280,47 @@ namespace Comet.DevTools
 			"{\"agent\":{\"name\":\"Comet.DevTools.CometDevAgent\",\"version\":\"1\",\"framework\":\"comet\"}," +
 			"\"capabilities\":{" +
 			"\"ui.tree\":{\"version\":1,\"features\":[\"type\",\"text\",\"accessibility-id\"]}," +
-			"\"ui.actions\":{\"version\":1,\"features\":[\"tap\",\"fill\",\"clear\",\"back\",\"scroll\",\"focus\"]}}}";
+			"\"ui.actions\":{\"version\":1,\"features\":[\"tap\",\"fill\",\"clear\",\"back\",\"scroll\",\"focus\"" +
+			(CometDevRegistry.DragInjector is not null ? ",\"drag\"" : "") + "]}}}";
 
-		// Builds the nested ElementInfo tree the CLI expects (single root + children[]),
-		// resolving the registry's flat parentId list into a hierarchy.
+		// Builds the nested ElementInfo tree the CLI expects, resolving the registry's flat
+		// parentId list into a hierarchy. The CLI deserializes a List<ElementInfo>, and a Comet
+		// app can track MULTIPLE parentless views (e.g. a Drawer plus content materialized
+		// under a different owner), so EVERY root is emitted — dropping all but the first
+		// hides the entire content tree.
 		static string DevFlowTreeJson()
 		{
 			var nodes = CometDevRegistry.Snapshot();
 			var byParent = new Dictionary<int, List<CometDevRegistry.NodeInfo>>();
-			CometDevRegistry.NodeInfo? root = null;
+			var roots = new List<CometDevRegistry.NodeInfo>();
 			foreach (var n in nodes)
 			{
-				if (n.ParentId < 0 && root is null)
-					root = n;
+				if (n.ParentId < 0 || !ExistsInSnapshot(nodes, n.ParentId))
+					roots.Add(n);
 				if (!byParent.TryGetValue(n.ParentId, out var list))
 					byParent[n.ParentId] = list = new();
 				list.Add(n);
 			}
 
-			// The CLI deserializes the tree as List<ElementInfo> (one root per window), so the
-			// response is a JSON array.
 			var sb = new StringBuilder();
 			sb.Append('[');
-			if (root is not null)
-				WriteElement(sb, root, byParent);
+			for (int i = 0; i < roots.Count; i++)
+			{
+				if (i > 0) sb.Append(',');
+				WriteElement(sb, roots[i], byParent);
+			}
 			sb.Append(']');
 			return sb.ToString();
+		}
+
+		// A node whose recorded parent has been unregistered (its subtree owner was replaced)
+		// is still live UI — treat it as a root rather than orphaning it out of the response.
+		static bool ExistsInSnapshot(List<CometDevRegistry.NodeInfo> nodes, int id)
+		{
+			foreach (var n in nodes)
+				if (n.Id == id)
+					return true;
+			return false;
 		}
 
 		static void WriteElement(StringBuilder sb, CometDevRegistry.NodeInfo n,
