@@ -12,16 +12,6 @@ Start with the platform and phase: acquisition, binding generation, build, packa
 | `No such module` in Swift | Missing Swift module or wrong search path | Verify `.swiftmodule` files and Xcode build settings. |
 | Sharpie parse errors | Missing headers, wrong SDK, missing compiler flags | Point Sharpie at built headers and pass required include paths/scope. |
 
-## Apple build errors
-
-| Error | Likely cause | Fix |
-|-------|--------------|-----|
-| `Framework not found` | Bad `NativeReference` path or package target path | Inspect project/package paths and generated MSBuild items. |
-| `Undefined symbols for architecture` | Missing native dependency, wrong slice, or system framework | Inspect slices and `otool -L`; add dependency/framework. |
-| `building for iOS Simulator, but linking in object file built for iOS` | Device binary used for simulator | Use `.xcframework` with simulator slice. |
-| `No such module` in Swift | Missing Swift module or wrong search path | Verify `.swiftmodule` files and Xcode build settings. |
-| Sharpie parse errors | Missing headers, wrong SDK, missing compiler flags | Point Sharpie at built headers and pass required include paths/scope. |
-
 Verify which architecture slices a framework binary actually contains before
 assuming a missing-symbol or wrong-slice error is a linking configuration
 problem:
@@ -88,16 +78,24 @@ symbols are missing at link time or duplicated at runtime:
 | `UnsatisfiedLinkError` | Missing `.so` or wrong ABI | Verify AAR `jni` folders or add `AndroidNativeLibrary`. |
 | Callback not invoked | Listener GC'd or wrong threading | Hold strong reference and marshal to UI thread as needed. |
 | `ClassNotFoundException` | ProGuard/R8/resource or dependency issue | Verify packaging and dependency tree. |
-
-## Android runtime errors
-
-| Error | Likely cause | Fix |
-|-------|--------------|-----|
-| `NoClassDefFoundError` | Runtime dependency ignored or missing | Do not use `AndroidIgnoredJavaDependency`; include dependency. |
-| `UnsatisfiedLinkError` | Missing `.so` or wrong ABI | Verify AAR `jni` folders or add `AndroidNativeLibrary`. |
-| Callback not invoked | Listener GC'd or wrong threading | Hold strong reference and marshal to UI thread as needed. |
-| `ClassNotFoundException` | ProGuard/R8/resource or dependency issue | Verify packaging and dependency tree. |
 | `Java.Lang.IllegalStateException: Must call initialize() first` | Wrapper/native SDK requires an explicit init call before other APIs are used | Call the wrapper's `Initialize(...)` during app/Activity startup (e.g. `MauiProgram`/`ConfigureLifecycleEvents`) before any other wrapper method. |
+
+## Trimming and linker stripping (Release / full trimming)
+
+Types reachable only from native code, the Android manifest, reflection, or ObjC selectors are invisible to the .NET trimmer and can be stripped in Release/`TrimMode=full` builds. These failures never appear in Debug, so test trimmed.
+
+Android:
+
+- Android callable wrappers (subclasses of `Service`, `BroadcastReceiver`, or `Activity` referenced only from the manifest, e.g. a `FirebaseMessagingService` subclass) can be trimmed away. Symptom: the service/receiver never fires and the type is missing from the generated manifest.
+- Preserve them: keep the `[Service]`/`[BroadcastReceiver]` attributes (with `Exported=false` and the correct `[IntentFilter]`), and add `[Android.Runtime.Preserve(AllMembers = true)]` (or a linker descriptor) if members are dropped.
+- Validate after a `TrimMode=full` build: confirm the managed type maps to a Java type in `obj/.../acw-map.txt`, and that it is registered as a `<service>`/`<receiver>` with the expected `android:exported` and `<intent-filter>` action in the generated `AndroidManifest.xml`.
+
+Apple:
+
+- Managed types/members invoked only from native (via selectors, `NSInvocation`, or KVO) can be trimmed. Symptom: `unrecognized selector` or `Native class hasn't been loaded` only in Release.
+- Add `[Foundation.Preserve(AllMembers = true)]` to bound/wrapper classes the native side calls back into, or ship a linker descriptor XML in the package.
+
+Always smoke-test a redistributable binding from a consumer app built in Release with full trimming before shipping.
 
 ## IntelliSense in binding projects (Android and Apple)
 

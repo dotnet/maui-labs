@@ -13,6 +13,30 @@ Package bindings only after the binding works from a sample app and redistributi
 
 For public packages, prefer one native library per package so NuGet dependencies model native dependencies accurately.
 
+### Feature packages, a shared core, and a meta-package
+
+For a large SDK split across many features, a proven layout (the Plugin.Firebase model) is:
+
+- A shared `Core` package with the common abstractions/helpers, referenced by every feature package.
+- One package per feature (Auth, Storage, Messaging, ...), each depending on `Core` and on only the platform binding NuGets that feature needs, under TFM conditions.
+- A meta/"bundled" package (e.g. `Contoso.Firebase`) that has no code of its own and simply `ProjectReference`s/depends on every feature package, so consumers who want everything install one package.
+
+Version feature packages independently — a bug fix in Storage should not force a version bump of Auth. The meta-package pins the feature versions it aggregates.
+
+### Mirror a modular native SDK as per-module packages
+
+Large modular SDKs (Stripe, AndroidX, Jetpack Compose) ship as many native modules with a dependency graph among them. The scalable pattern is one binding project/package per native module, wiring `ProjectReference`s (local) or `PackageReference`s (published) so the managed graph mirrors the native module graph exactly — for example `StripePaymentsUI` -> `StripePayments` -> `StripeCore`, or `compose.material` -> `compose.material-ripple`.
+
+- Give each package `PackageTags` including its native `group:artifact` so the correlation is discoverable.
+- Some graph nodes need no binding of their own (they are pure transitive dependencies fulfilled by another package or resolved at build time). Model those as a plain dependency, not as another generated binding project.
+- Do not collapse a modular SDK into one giant binding just to reduce package count — that reintroduces the version-conflict and duplicate-type problems the split avoids.
+
+For very large graphs this is tedious by hand. Community tooling (`Binderators.Gradle`/`Dependencies.Gradle`) auto-generates one binding csproj + `.targets` per resolved artifact from a Gradle-resolved tree; `MetadataFetcher` maps native `group:artifact` coordinates to existing C# binding NuGet ids. Know they exist before hand-authoring dozens of projects.
+
+### Let consumers toggle coupled versions and build behavior
+
+Binding NuGets frequently ship MSBuild props/targets that consumers toggle (for example an iOS Firebase binding exposes `FirebaseCrashlyticsUploadSymbolsEnabled` to control dSYM upload). When your package pulls transitive binding NuGets whose versions are tightly coupled (see `android-bindings.md`), expose those versions as MSBuild properties with defaults so consumers can float them without editing your package.
+
 ## Package metadata
 
 Include:
@@ -86,6 +110,29 @@ If a dependency is fulfilled by a package without artifact metadata:
 <PackageReference Include="Vendor.Dependency.Binding" Version="1.2.3"
                   JavaArtifact="com.vendor:dependency:1.2.3" />
 ```
+
+### Embed the AAR vs resolve it at consumer build
+
+There are two ways to get the native AAR into the consumer's app:
+
+- Embed it in the `.nupkg` (`AndroidLibrary`/bound AAR asset). Self-contained, works offline, but the package is large and you own transitive-dependency accuracy.
+- Ship a `.targets` that resolves it from Maven via Gradle at app build time (inject `GradleImplementation` plus `AndroidLibrary Pack="false" Bind="false"`, gated on `'$(AndroidApplication)' == 'true'`). Tiny package with always-correct transitive resolution, but the consumer needs the Android SDK, Gradle, and network access at build, and the target must handle Unix vs Windows Gradle-cache paths.
+
+Prefer embedding for public packages unless the native SDK's transitive graph is too large or license terms forbid redistribution.
+
+### Ship ProGuard/R8 keep rules with the package
+
+If the native library needs consumer-side keep rules (the Android analog of iOS `[Preserve]`), ship a `proguard.txt` and reference it from your `buildTransitive` `.targets`, gated on the consumer being an app:
+
+```xml
+<ItemGroup>
+  <ProguardConfiguration
+    Condition=" '$(AndroidApplication)' == 'true' and Exists('$(MSBuildThisFileDirectory)proguard.txt') "
+    Include="$(MSBuildThisFileDirectory)proguard.txt" />
+</ItemGroup>
+```
+
+Without this, Release builds with R8 can strip classes the native code reflects on, producing `ClassNotFoundException` only in release.
 
 ## build vs buildTransitive
 

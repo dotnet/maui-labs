@@ -57,6 +57,8 @@ Common metadata:
 | Metadata | Purpose |
 |----------|---------|
 | `Kind` | Native artifact kind, such as `Framework` or `Static`. |
+| `Linkage` | Declares `Static` or `Dynamic` linkage of the referenced framework. Set `Static` for statically linked `.xcframework`s so the toolchain links them in rather than expecting an embedded dynamic framework. |
+| `IsCxx` | Set `true` when the native library exposes C++ symbols so the C++ runtime is linked. |
 | `ForceLoad` | Force-load symbols, often needed for ObjC categories/static initializers. |
 | `SmartLink` | Let the native linker remove unused symbols when safe. |
 | `Frameworks` | Apple system frameworks required by the native library. |
@@ -65,6 +67,12 @@ Common metadata:
 | `Pack` | Include native item in a generated NuGet package when packaging. |
 
 Use `ForceLoad` carefully. It can fix missing ObjC category/static initializer issues, but can also increase size or expose duplicate-symbol problems.
+
+### Multiple interdependent frameworks in one binding
+
+A single SDK is often shipped as several xcframeworks that depend on each other (for example the Facebook iOS SDK ships `FBSDKCoreKit`, `FBSDKCoreKit_Basics`, `FBAEMKit`, and `FBSDKLoginKit`). Add one `NativeReference` per xcframework in the same binding project and keep the whole set in one NuGet, since they must version together. Reserve the "one native library per package" rule for libraries that version and ship independently. When these are statically linked, watch for duplicate-symbol errors and prefer enabling `ForceLoad` only on the frameworks that actually need it.
+
+If you set `<IsTrimmable>true</IsTrimmable>` on the binding project you are asserting the binding is trim-safe. Back that claim with `[Preserve]` on types the native side calls into (see the trimming section in `troubleshooting.md`); otherwise consumers get Release-only failures.
 
 ## XcodeProject
 

@@ -2,6 +2,15 @@
 
 Use this decision matrix before creating projects or downloading binaries.
 
+## Check for an existing binding first (cheapest option)
+
+Before building any binding, search NuGet for a maintained binding of the same native SDK. The cheapest binding is the one you don't write:
+
+- Apple: community/first-party binding NuGets often already wrap the native SDK (for example the Firebase iOS SDK is distributed via `AdamE.Firebase.iOS.*` packages).
+- Android: `Xamarin.Firebase.*`, `Xamarin.AndroidX.*`, `Xamarin.GooglePlayServices.*`, `Xamarin.Kotlin*`, and similar already bind huge swaths of the Java/Kotlin ecosystem from Maven.
+
+If a maintained binding NuGet exists, **consume it** and, if you want a unified cross-platform API, write a thin C# abstraction over the platform binding NuGets (the Plugin.Firebase model: one shared `net9.0` API, per-platform `PackageReference`s under TFM conditions). Only build your own binding when none exists, the existing one is stale/unmaintained, or it lacks APIs you need. Reusing a maintained binding also means you inherit its (coupled) transitive support-NuGet version requirements — see the version-compatibility guidance in `android-bindings.md`.
+
 ## Ask before choosing when ambiguous
 
 Two questions drive the slim-vs-full decision. If either is unclear from the
@@ -25,6 +34,7 @@ request, stop and ask rather than defaulting to a full binding:
 
 | Need | Prefer | Why |
 |------|--------|-----|
+| A maintained binding NuGet already exists | Consume it; add a thin C# abstraction if you want a unified API | Don't rebind what's already bound and maintained. |
 | App needs a small subset of an SDK | Native Library Interop / slim wrapper | Smaller API, fewer generator issues, easier updates. |
 | Public NuGet exposes a broad SDK | Traditional binding project | Consumers expect full API surface and packageable assets. |
 | Native SDK has stable C ABI | P/Invoke | Avoid ObjC/Java binding generators when the native ABI is simple. |

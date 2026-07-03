@@ -29,6 +29,34 @@ For Maven-hosted artifacts on .NET 9+:
 
 `AndroidMavenLibrary` downloads the requested artifact and POM metadata, then feeds dependency verification. It does not automatically include every transitive runtime dependency in your app or package.
 
+## Building a wrapper AAR from a Gradle module
+
+When you author a native Kotlin/Java wrapper (slim binding), let the .NET build compile the Gradle module into an AAR instead of hand-building it. `AndroidGradleProject` is the Android analog of Apple's `XcodeProject`:
+
+```xml
+<ItemGroup>
+  <AndroidGradleProject Include="../native/build.gradle.kts">
+    <ModuleName>myvendorbinding</ModuleName>
+    <OutputPath>myvendorbinding-release.aar</OutputPath>
+  </AndroidGradleProject>
+</ItemGroup>
+```
+
+This runs Gradle during the .NET build, produces the wrapper AAR, and binds it. Prefer this over checking a prebuilt AAR into source control — it keeps the wrapper source of truth in Gradle and rebuilds it deterministically. Requires a JDK, Android SDK, and Gradle available to the build.
+
+## Packing and skipping generation for vendor artifacts
+
+`AndroidMavenLibrary` (and `AndroidLibrary`) support metadata that decouples "ship this artifact" from "generate C# for this artifact":
+
+```xml
+<AndroidMavenLibrary Include="com.vendor:sdk" Version="$(VendorSdkVersion)"
+                     Bind="false" Pack="true" VerifyDependencies="False" />
+```
+
+- `Bind="false"` — download and include the artifact but do not generate a C# binding for it (the thin wrapper is your only bound surface).
+- `Pack="true"` — include the vendor AAR in the produced NuGet so consumers get it (redistributable bindings).
+- `VerifyDependencies="False"` — escape hatch that suppresses XA4241/XA4242 for that artifact. It does not satisfy the runtime graph; it only silences the check. If you use it, you take on manually satisfying every runtime dependency via `PackageReference`, packed `AndroidMavenLibrary`, or `AndroidIgnoredJavaDependency` (compile-only). Reach for it only when you are deliberately managing a large transitive graph by hand.
+
 ## Binding local AAR/JAR files
 
 If the artifact is local:
@@ -67,6 +95,7 @@ Resolution order:
 4. Add `ProjectReference` with `JavaArtifact` if a local binding project provides it.
 5. Add `AndroidMavenLibrary` or `AndroidLibrary` with `Bind="false"` for runtime dependencies that do not need C# bindings.
 6. Add `AndroidIgnoredJavaDependency` only for compile-time-only dependencies.
+7. As a last resort, set `VerifyDependencies="False"` on a specific `AndroidMavenLibrary`/`AndroidLibrary` to silence XA4241/XA4242 for it, then satisfy its runtime graph yourself with the options above. Silencing the check never makes a missing runtime dependency safe.
 
 Example:
 
@@ -76,6 +105,28 @@ Example:
                   JavaArtifact="org.jetbrains.kotlin:kotlin-stdlib:2.0.21" />
 <AndroidMavenLibrary Include="javax.inject:javax.inject" Version="1" Bind="false" />
 ```
+
+## Transitive binding-NuGet version compatibility
+
+When you satisfy the graph with existing binding NuGets (`Xamarin.Firebase.*`, `Xamarin.AndroidX.*`, `Xamarin.GooglePlayServices.*`), those NuGets have their own tightly coupled version requirements. Bumping one vendor binding NuGet often forces matching bumps of its AndroidX/support NuGets, or you get fresh XA4241/duplicate-type errors. Example: a given `Xamarin.Firebase.Crashlytics` version expects specific `Xamarin.AndroidX.DataStore` and `Xamarin.AndroidX.Lifecycle.Process` versions.
+
+Manage this deliberately:
+
+- Treat the set of related binding NuGets as a version *matrix*, not independent packages. Verify the whole set builds together after any bump.
+- Expose the coupled versions as MSBuild properties with sensible defaults so consumers (and CI) can float them without editing the project:
+
+```xml
+<PropertyGroup>
+  <XamarinFirebaseCrashlyticsVersion Condition="'$(XamarinFirebaseCrashlyticsVersion)'==''">120.0.5</XamarinFirebaseCrashlyticsVersion>
+  <XamarinAndroidXDataStoreVersion Condition="'$(XamarinAndroidXDataStoreVersion)'==''">1.2.1</XamarinAndroidXDataStoreVersion>
+</PropertyGroup>
+<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+  <PackageReference Include="Xamarin.Firebase.Crashlytics" Version="$(XamarinFirebaseCrashlyticsVersion)" />
+  <PackageReference Include="Xamarin.AndroidX.DataStore" Version="$(XamarinAndroidXDataStoreVersion)" />
+</ItemGroup>
+```
+
+- In CI, build against the range of vendor NuGet versions you claim to support, each paired with its known-good support-library versions, to catch incompatible combinations before shipping.
 
 ## Finding NuGet packages for Maven artifacts
 
@@ -182,6 +233,8 @@ Use:
 | `eventName` | Rename or suppress event generation. |
 | `remove-node` | Hide broken/internal APIs. |
 | `add-node` | Add missing API nodes when needed. |
+
+For large bindings, don't hand-write one transform per error. When the build reports the same class of failure across many nodes (dozens of invalid managed names or duplicate members), capture the error list, extract the offending Java names with a script or editor macro, and emit the `<attr ... name="managedName">` (or `<remove-node>`) lines in bulk. Re-run and repeat until clean.
 
 ### Removing obfuscated/internal classes
 

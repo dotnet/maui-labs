@@ -475,3 +475,198 @@ scenarios:
       - "Lists required cleanup steps: remove [Verify] attributes only after review, add [NullAllowed], add [Async]"
       - "Mentions removing InitWithCoder constructors that are auto-generated but not needed"
     timeout: 240
+
+  - name: "Build Android slim wrapper AAR via AndroidGradleProject and pack vendor Maven artifacts"
+    prompt: |
+      I'm building an app-local Android slim binding for the RevenueCat SDK. My
+      native Gradle wrapper module (revenuecatbinding) declares:
+        implementation("com.revenuecat.purchases:purchases:10.5.0")
+        implementation("com.revenuecat.purchases:purchases-store-amazon:10.5.0")
+        implementation("com.google.code.gson:gson:2.12.0")
+      I want the .NET build to compile the Gradle wrapper into an AAR and bind
+      that, and I want the vendor purchases AARs to actually ship in my binding
+      so consumers get them. How do I wire up the .csproj? I do NOT want to hand
+      author or hand build the wrapper AAR outside the .NET build.
+    assertions:
+      - type: "output_matches"
+        pattern: "AndroidGradleProject"
+      - type: "output_matches"
+        pattern: "AndroidMavenLibrary"
+      - type: "output_matches"
+        pattern: "(?i)Pack\\s*=\\s*.?[Tt]rue"
+      - type: "output_matches"
+        pattern: "(?i)Bind\\s*=\\s*.?[Ff]alse"
+    rubric:
+      - "Uses AndroidGradleProject to build the native Gradle wrapper module into an AAR as part of the .NET build (the Android analog of XcodeProject), instead of hand-building the AAR"
+      - "Binds the thin wrapper, not the vendor SDK directly"
+      - "Uses AndroidMavenLibrary with Bind=false to avoid generating C# for the vendor SDK and Pack=true so the vendor AARs ship in the binding"
+      - "Does not recommend AndroidIgnoredJavaDependency for the runtime vendor SDK artifacts"
+    timeout: 240
+
+  - name: "Correlate resolved Android transitive dependencies to NuGet, packed Maven, or ignored"
+    prompt: |
+      My Android RevenueCat slim binding builds the wrapper AAR, but Java
+      dependency verification (XA4241/XA4242) now flags a pile of transitive
+      dependencies the vendor SDK pulls in:
+        com.android.billingclient:billing
+        androidx.lifecycle:lifecycle-process, lifecycle-runtime, lifecycle-common
+        org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.7.3
+        org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21
+        androidx.core:core-ktx:1.8.0
+        com.google.crypto.tink:tink-android:1.8.0
+        com.google.code.gson:gson:2.12.0
+      I call none of these from C# directly. For each one, what is the right
+      resolution: an existing Xamarin/.NET NuGet, a packed AndroidMavenLibrary,
+      or AndroidIgnoredJavaDependency? Is there a way to stop the verifier from
+      failing the build while I manage this graph myself?
+    assertions:
+      - type: "output_matches"
+        pattern: "Xamarin\\.Android\\.Google\\.BillingClient|Xamarin\\.AndroidX\\.Lifecycle|Xamarin\\.KotlinX\\.Serialization"
+      - type: "output_matches"
+        pattern: "AndroidIgnoredJavaDependency"
+      - type: "output_matches"
+        pattern: "(?i)VerifyDependencies\\s*=\\s*.?[Ff]alse"
+      - type: "output_matches"
+        pattern: "AndroidMavenLibrary"
+    rubric:
+      - "Maps billingclient/lifecycle/kotlinx-serialization to existing Xamarin.* NuGet PackageReferences via the artifact= tag correlation"
+      - "Uses AndroidIgnoredJavaDependency for compile-time-only or already-satisfied artifacts such as kotlin-stdlib, core-ktx, annotation, and tink"
+      - "Recommends a packed AndroidMavenLibrary (Pack=true) for a runtime artifact with no maintained NuGet, such as gson"
+      - "Explains VerifyDependencies=false as an escape hatch that skips XA4241/XA4242 but shifts the burden of satisfying the runtime graph onto the author (PackageReference + AndroidMavenLibrary + AndroidIgnoredJavaDependency)"
+      - "Does not blanket-ignore genuine runtime dependencies with AndroidIgnoredJavaDependency"
+    timeout: 240
+
+  - name: "Acquire and trim an xcframework from a GitHub release for a subset of Apple platforms"
+    prompt: |
+      For the Apple side of my binding I need RevenueCat.xcframework. RevenueCat
+      publishes it as RevenueCat.xcframework.zip on their purchases-ios GitHub
+      releases (current version 5.72.0). I only target net10.0-ios and
+      net10.0-maccatalyst plus tvOS, and I want to drop the visionOS (xros) and
+      watchOS slices to shrink the package. How do I download it during the
+      build and trim it safely so it still loads at runtime?
+    assertions:
+      - type: "output_matches"
+        pattern: "DownloadFile|releases/download"
+      - type: "output_matches"
+        pattern: "(?i)Info\\.plist|AvailableLibraries|LibraryIdentifier"
+      - type: "output_matches"
+        pattern: "(?i)remove-signature|codesign|_CodeSignature"
+      - type: "output_not_matches"
+        pattern: "(?i)just delete the .*(slice|folder|directory).*(and|then) (build|done|ship)"
+    rubric:
+      - "Downloads the .xcframework.zip from the GitHub release via an MSBuild DownloadFile/Unzip target keyed on a single version property"
+      - "Removes the unwanted xros/watchos slice directories AND the matching AvailableLibraries/LibraryIdentifier entries in Info.plist"
+      - "Removes stale code signatures (codesign --remove-signature and/or deleting _CodeSignature) because trimming invalidates the signature"
+      - "Warns that deleting a slice directory without editing Info.plist causes load/validation failures"
+    timeout: 240
+
+  - name: "Update bindings when Apple and Android vendor SDK versions differ"
+    prompt: |
+      Our shipping RevenueCat binding pins the Apple SDK at 5.72.0 (downloaded
+      xcframework) and the Android SDK at 10.5.0 (Maven). The vendor just
+      released new versions on both platforms, but the version numbers don't
+      line up between iOS and Android. How should I structure the version pinning
+      and the update so I don't accidentally assume one shared version number,
+      and so I catch any C# API breaks?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)separate|per-platform|independent|each platform|different version"
+      - type: "output_matches"
+        pattern: "(?i)xcframework|slice"
+      - type: "output_matches"
+        pattern: "(?i)gradle.*dependenc|dependency tree|resolved"
+      - type: "output_matches"
+        pattern: "(?i)breaking change|api.*diff|signature.*change"
+    rubric:
+      - "Recognizes that Apple and Android vendor versions are independent and should be pinned as separate per-platform version properties, not a single global version"
+      - "Re-runs the dependency-graph basics per platform (xcframework slice re-verification for Apple, Gradle dependency tree for Android) rather than assuming the previous graph holds"
+      - "Produces a summary of C# API breaking changes for each platform before editing wrapper/ApiDefinition code"
+      - "Validates from a consumer/sample app on each platform before shipping"
+    timeout: 240
+
+  - name: "Reuse an existing binding NuGet instead of authoring a new binding"
+    prompt: |
+      I want to use the Firebase Cloud Messaging and Firebase Auth native SDKs
+      from my .NET MAUI app (iOS and Android). Do I have to write my own
+      Objective Sharpie and Java bindings for these from scratch?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)existing|already.*(bound|binding)|maintained (binding|nuget)"
+      - type: "output_matches"
+        pattern: "(?i)AdamE\\.Firebase|Xamarin\\.Firebase|Xamarin\\.Google"
+      - type: "output_matches"
+        pattern: "(?i)abstraction|wrapper|Plugin\\.Firebase|cross-platform api"
+      - type: "output_not_matches"
+        pattern: "(?i)(you must|always) (write|author|create) (your own|a new) (objective ?sharpie|binding) (from scratch|first)"
+    rubric:
+      - "Checks for existing maintained binding NuGets first (AdamE.Firebase.iOS.* for Apple, Xamarin.Firebase.* / Xamarin.GooglePlayServices for Android) before authoring anything"
+      - "Recommends consuming those bindings under TFM conditions and layering a small cross-platform abstraction (the Plugin.Firebase model) rather than re-binding the SDK"
+      - "Only falls back to authoring a fresh binding if no maintained NuGet exists or it is unusably stale"
+    timeout: 240
+
+  - name: "Keep an Android callable wrapper alive under full trimming"
+    prompt: |
+      My .NET MAUI Android app uses a Firebase-style binding that registers a
+      FirebaseMessagingService subclass. It works in Debug but in Release the
+      push handler never fires and I see the service isn't recognized. How do I
+      confirm the cause and fix it, and how would I add a check so it doesn't
+      regress?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)trim|linker|R8|TrimMode"
+      - type: "output_matches"
+        pattern: "(?i)acw-map|AndroidManifest|callable wrapper"
+      - type: "output_matches"
+        pattern: "(?i)Preserve"
+      - type: "output_not_matches"
+        pattern: "(?i)disable trimming (entirely|completely) (and|to) (ship|fix|done)"
+    rubric:
+      - "Identifies that full trimming/R8 stripped the Java callable wrapper or its manifest registration for the messaging service"
+      - "Verifies via acw-map.txt (managed type maps to a Java type) and AndroidManifest.xml (service registered with the messaging intent) after a Release/TrimMode=full build"
+      - "Fixes by preserving the type ([Android.Runtime.Preserve] / linker keep) rather than only disabling trimming"
+      - "Suggests a repeatable validation build with /p:TrimMode=full that greps acw-map.txt and the manifest so it does not regress"
+    timeout: 240
+
+  - name: "Split a modular native SDK into per-module binding packages"
+    prompt: |
+      I need to bind a large modular native SDK (think Stripe on iOS, or Jetpack
+      Compose on Android) that ships as many interdependent modules. Should I make
+      one big binding, and how do I structure the packages and the dependencies
+      between them?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)per-module|one (package|binding) per (module|artifact)|module per package"
+      - type: "output_matches"
+        pattern: "(?i)ProjectReference|PackageReference"
+      - type: "output_matches"
+        pattern: "(?i)mirror|graph|dependency tree"
+      - type: "output_not_matches"
+        pattern: "(?i)(combine|collapse|merge) (everything|all modules) into (one|a single) (big )?binding"
+    rubric:
+      - "Recommends one binding project/package per native module, not a single monolithic binding"
+      - "Wires ProjectReference (local) or PackageReference (published) so the managed dependency graph mirrors the native module graph (e.g. StripePaymentsUI -> StripePayments -> StripeCore)"
+      - "Notes that pure transitive nodes needing no binding of their own are modeled as plain dependencies, and tags packages with their native group:artifact for discovery"
+      - "Optionally mentions community generators (Binderators.Gradle / MetadataFetcher) for very large graphs instead of hand-authoring every project"
+    timeout: 240
+
+  - name: "Bind multiple statically linked interdependent xcframeworks in one package"
+    prompt: |
+      I am binding the Facebook iOS SDK. It ships four separate xcframeworks
+      (FBSDKCoreKit, FBSDKCoreKit_Basics, FBAEMKit, FBSDKLoginKit) that depend on
+      each other and are statically linked. How do I set up the NativeReference
+      items and package them, and what should I watch out for?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)NativeReference"
+      - type: "output_matches"
+        pattern: "(?i)Linkage|Static"
+      - type: "output_matches"
+        pattern: "(?i)one (package|nuget)|same (package|binding)|version together"
+      - type: "output_matches"
+        pattern: "(?i)duplicate.*symbol|ForceLoad"
+    rubric:
+      - "Adds one NativeReference per xcframework in the same binding project and declares static linkage (Linkage=Static / Kind Framework)"
+      - "Keeps the four interdependent frameworks in a single NuGet because they must version together, rather than applying the one-library-per-package rule to tightly coupled modules"
+      - "Warns about duplicate-symbol risk with static linking and applies ForceLoad only where a framework's ObjC categories/initializers require it"
+      - "If IsTrimmable is set on the binding, notes it must be backed by [Preserve] to be truthful"
+    timeout: 240

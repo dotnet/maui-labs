@@ -53,6 +53,10 @@ both Android and Apple platforms.
 
 Before writing files, identify:
 
+**First, check whether a maintained binding NuGet already exists** for this native SDK (for example `AdamE.Firebase.iOS.*` for the Firebase iOS SDK, or `Xamarin.Firebase.*`/`Xamarin.AndroidX.*`/`Xamarin.GooglePlayServices.*` for Android). If one exists, consume it — optionally behind a thin cross-platform C# abstraction — instead of building a new binding. Only build your own when none exists, it is stale/unmaintained, or it lacks APIs you need.
+
+Then identify:
+
 | Question | Why it matters |
 |----------|----------------|
 | Which platforms are required? | Apple slices and Android ABIs determine artifacts and TFMs. |
@@ -146,7 +150,9 @@ Use this sequence for an app-local Android slim binding:
 3. Expose a Java or Kotlin `DotnetMySdk`-style wrapper with only the simple,
    marshallable surface the app needs (see wrapper rules above and the
    patterns in `references/android-bindings.md`).
-4. Build the wrapper into an AAR.
+4. Build the wrapper into an AAR — prefer `AndroidGradleProject` in the binding
+   `.csproj` to compile the Gradle module during the .NET build instead of
+   hand-building or committing a prebuilt AAR.
 5. Bind the wrapper AAR (not the vendor SDK directly) from a .NET Android
    binding project.
 6. Resolve `XA4241`/`XA4242` Java dependency verification errors using the
@@ -169,6 +175,7 @@ Use this sequence for an app-local Android slim binding:
 
 - `AndroidLibrary` for local AAR/JAR files
 - `AndroidMavenLibrary` for Maven artifacts on .NET 9+
+- `AndroidGradleProject` to build a native Gradle wrapper module into an AAR during the .NET build (the Android analog of `XcodeProject`)
 - `AndroidIgnoredJavaDependency` only for compile-time-only dependencies
 - `TransformFile` / `Transforms/Metadata.xml` for binding cleanup
 
@@ -222,6 +229,7 @@ For Android:
 - Exercise at least one native call per target platform.
 - For Android, verify runtime dependencies on device/emulator, not only compile-time build.
 - For Apple, verify both simulator and device/catalyst/macOS/tvOS slices as applicable.
+- For a redistributable binding, also build the consumer app in Release with full trimming (`TrimMode=full`) and confirm manifest-only/native-callback types survive (see the trimming section in `references/troubleshooting.md`).
 
 ### 8. Package only after validation
 
@@ -234,15 +242,20 @@ Use `references/nuget-packaging.md` before creating packages. A redistributable 
 - Native license/notice files when required.
 - A sample consumer project or validation steps.
 
+For large modular SDKs (Stripe, AndroidX, Compose), prefer one binding package per native module with `ProjectReference`/`PackageReference`s that mirror the native module graph, rather than one monolithic binding. For Android you can either embed the AAR or ship a `.targets` that resolves it from Maven via Gradle at consumer build; ship `ProguardConfiguration` keep rules when the native code needs them. For a set of tightly coupled, statically linked xcframeworks (e.g. the Facebook SDK), add one `NativeReference` per framework in the same package and set `Linkage`/`ForceLoad` appropriately. See `references/nuget-packaging.md` and `references/apple-bindings.md`.
+
 ## Updating an Existing Binding
 
 Use this workflow when the vendor ships a new native SDK version, for slim or
 full bindings, on Apple, Android, or both:
 
 1. **Re-acquire the native artifact.** Find the latest vendor release/version.
-   Prefer a single pinned version property (MSBuild property, Gradle version
-   catalog entry, or similar) as the source of truth so the update touches one
-   value. Re-run the same acquisition steps as initial acquisition
+   Pin one version property per platform binding (MSBuild property, Gradle
+   version catalog entry, or similar) as the source of truth. Do not assume a
+   single global version across platforms — vendor version schemes rarely align
+   (for example a vendor may ship Apple 5.72.0 and Android 10.5.0 for the "same"
+   release), so each platform binding tracks its own version. Re-run the same
+   acquisition steps as initial acquisition
    (`references/apple-acquisition.md`, `references/android-acquisition.md`).
 2. **Redo the dependency graph basics.** Re-verify `.xcframework` slices for
    Apple, or re-run the Gradle dependency tree for Android
@@ -282,6 +295,7 @@ dependency-graph mechanics differ per platform/strategy.
 7. **Do not duplicate native libraries across packages and app projects.** Duplicate static libraries can cause duplicate symbols; duplicate Java/Kotlin artifacts can cause type conflicts.
 8. **Do not create a custom MCP server or broad scaffolding script before scripts/evals prove a repeatable gap.**
 9. **Do not delete platform slices from an `.xcframework` without also removing the matching `AvailableLibraries` entries in `Info.plist`.** A mismatched `Info.plist` causes load failures even when the trimmed binary itself is fine.
+10. **Do not collapse a modular native SDK into one giant binding to save package count.** Mirror the native module graph with per-module packages; collapsing reintroduces version-conflict and duplicate-type problems.
 
 ## Stop Signals
 
