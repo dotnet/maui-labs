@@ -264,6 +264,26 @@ public class AgentClient : IDisposable
         return await PostActionAsync($"{UiApi}/actions/gesture", payload);
     }
 
+    /// <summary>
+    /// Coordinate drag through the platform's real input pipeline (physical px). Unlike the
+    /// semantic gesture/scroll actions this exercises the native gesture machinery itself —
+    /// pull-to-refresh, pager swipes, swipe-to-dismiss, drawer drags, flings (velocity falls
+    /// out of the duration). The agent blocks until the gesture completes.
+    /// </summary>
+    public async Task<bool> DragAsync(double x1, double y1, double x2, double y2, int? durationMs = null)
+    {
+        var payload = new JsonObject
+        {
+            ["x1"] = x1,
+            ["y1"] = y1,
+            ["x2"] = x2,
+            ["y2"] = y2
+        };
+        if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+
+        return await PostActionAsync($"{UiApi}/actions/drag", payload);
+    }
+
     public async Task<JsonElement> BatchAsync(IEnumerable<JsonObject> actions, bool continueOnError = false)
     {
         var items = new JsonArray();

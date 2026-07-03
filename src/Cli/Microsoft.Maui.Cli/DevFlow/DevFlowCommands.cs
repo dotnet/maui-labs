@@ -634,6 +634,32 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiScrollCmd);
 
+        // MAUI drag — coordinate drag through the platform's real input pipeline (unlike the
+        // semantic scroll/gesture actions): pull-to-refresh, pager swipes, swipe-to-dismiss,
+        // drawer drags, flings (velocity falls out of --duration; short = fast fling).
+        var dragX1Arg = new Argument<double>("x1") { Description = "Start X (physical px)" };
+        var dragY1Arg = new Argument<double>("y1") { Description = "Start Y (physical px)" };
+        var dragX2Arg = new Argument<double>("x2") { Description = "End X (physical px)" };
+        var dragY2Arg = new Argument<double>("y2") { Description = "End Y (physical px)" };
+        var dragDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in ms (default 300; short = fling)" };
+        var mauiDragCmd = new Command("drag", "Drag between two points through the real input pipeline (pull-to-refresh, pager swipe, swipe-to-dismiss, fling)") { dragX1Arg, dragY1Arg, dragX2Arg, dragY2Arg, dragDurationOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
+        mauiDragCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            var andScreenshot = ctx.GetValue(andScreenshotOption);
+            var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
+            var andTree = ctx.GetValue(andTreeOption);
+            var andTreeDepth = ctx.GetValue(andTreeDepthOption);
+            await MauiDragAsync(host, port, isJson,
+                ctx.GetValue(dragX1Arg), ctx.GetValue(dragY1Arg),
+                ctx.GetValue(dragX2Arg), ctx.GetValue(dragY2Arg),
+                ctx.GetValue(dragDurationOption));
+            await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
+        });
+        mauiCommand.Add(mauiDragCmd);
+
         // MAUI focus
         var focusIdArg = new Argument<string?>("elementId") { Description = "Element ID to focus (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
         var mauiFocusCmd = new Command("focus", "Set focus to element") { focusIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption };
@@ -2865,6 +2891,20 @@ public class DevFlowCommands
             if (!success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
+    }
+
+    private static async Task MauiDragAsync(string host, int port, bool json, double x1, double y1, double x2, double y2, int? durationMs)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var success = await client.DragAsync(x1, y1, x2, y2, durationMs);
+            var desc = $"({x1},{y1}) -> ({x2},{y2})";
+            Output.WriteActionResult(success, "Dragged", desc, json,
+                success ? $"Dragged: {desc}" : $"Failed to drag: {desc}");
+            if (!success) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "The agent must support the 'drag' action (check 'agent capabilities')" }); _errorOccurred = true; }
     }
 
     private static async Task MauiClearAsync(string host, int port, bool json, string elementId)
