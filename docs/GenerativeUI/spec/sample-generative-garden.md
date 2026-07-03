@@ -185,15 +185,15 @@ builder.Services.AddGenerativeUi(options =>
     options.JsonSerializerContext = GardenJsonContext.Default;
 
     // Garden-specific vocabulary the model can use (details in §5.5):
-    options.Ui.AddStyle("PrimaryButton", "The main call-to-action button on a screen.");
-    options.Ui.AddStyle("DangerButton", "Destructive actions like delete or remove.");
-    options.Ui.AddStyle("BrandAccent", "Garden brand green accent for emphasis labels.");
-    options.Ui.AddComponent<ProductImage>("ProductImage",
+    options.Ui.AddStyle("PrimaryButton", "The main call-to-action button on a screen.", appliesTo: ["Button"]);
+    options.Ui.AddStyle("DangerButton", "Destructive actions like delete or remove.", appliesTo: ["Button"]);
+    options.Ui.AddStyle("BrandAccent", "Garden brand green accent for emphasis labels.", appliesTo: ["Label", "Badge"]);
+    options.Ui.AddControl<ProductImage>("ProductImage",
         "Use for ANY product image — it renders the picture with the Garden watermark. Never use a plain Image for a product.");
-    options.Ui.AddComponent<StarRating>("StarRating", "Shows or edits a 0–5 star rating.");
-    options.Ui.AddView<CheckoutView>("CheckoutView",
+    options.Ui.AddControl<StarRating>("StarRating", "Shows or edits a 0–5 star rating.");
+    options.Ui.AddScreen<CheckoutScreen>("CheckoutScreen",
         "The official checkout surface. Use for any checkout/payment; it self-loads the cart via the API. Do not compose your own checkout UI.");
-    options.Ui.AddView<MonthlyOrdersReport>("MonthlyOrdersReport",
+    options.Ui.AddScreen<MonthlyOrdersReportScreen>("MonthlyOrdersReport",
         "Full-screen monthly orders report. Use when the user asks for an orders report.");
 });
 ```
@@ -220,12 +220,12 @@ sample's `ChatClientBuilder(innerChatClient).UseFunctionInvocation().Build(rootP
 - **Discover before you call:** use `list_endpoints`/`describe_endpoint`/`describe_model` to learn
   the API; use `read_api` for reads and `write_api` for changes (changes need approval).
 - **Always render results** with the UI tools (`render_ui`, `set_field`, `get_state`,
-  `show_confirm`, `clear_ui`, `present_view`) — the chat column is for short confirmations, not
+  `show_confirm`, `clear_ui`, `present_screen`) — the chat column is for short confirmations, not
   data dumps.
 - **Use the app's registered vocabulary.** Prefer registered styles (`primary`/`danger`/`Brand`)
-  and components; product images **must** use `ProductImage`; **checkout must use `CheckoutView`**
-  via `present_view` — never compose a custom checkout/payment UI. Discover the catalog via
-  `list_ui_capabilities`/`describe_component`/`describe_view` (or the seeded summary).
+  and controls; product images **must** use `ProductImage`; **checkout must use `CheckoutScreen`**
+  via `present_screen` — never compose a custom checkout/payment UI. Discover the catalog via
+  `list_ui_capabilities`/`describe_control`/`describe_screen` (or the seeded summary).
 - For edits, render a form, honor "set X to Y" via `set_field`, and gather via `get_state` before
   `write_api`.
 - For destructive actions, show a confirm and wait for yes.
@@ -242,21 +242,21 @@ them**.
 |---|---|---|
 | `PrimaryButton` / `DangerButton` | Style | Brand CTA + destructive button styles (map to XAML `Style`s). The model picks `danger` for delete/clear. |
 | `BrandAccent` | Style | Brand accent color token for emphasis labels/badges. |
-| `ProductImage` | Component | Composite presenter: framed image + **automatic licensing watermark**; binds `source` (+ optional `caption`). Its description tells the model to use it for **any** product image. |
-| `StarRating` | Component | Editable 1–5 star control; two-way bound to a form `key` for reviews. |
-| `CheckoutView` | View | The official cart + payment surface. Its description says to use it for any checkout; self-loads the cart via the API. |
-| `MonthlyOrdersReport` | View | Filterable, printable monthly report; `Inputs`: `month`, `verbosity`. Self-loads orders. |
+| `ProductImage` | Control | Composite presenter: framed image + **automatic licensing watermark**; binds `source` (+ optional `caption`). Its description tells the model to use it for **any** product image. |
+| `StarRating` | Control | Editable 1–5 star control; two-way bound to a form `key` for reviews. |
+| `CheckoutScreen` | Screen | The official cart + payment surface. Its description says to use it for any checkout; self-loads the cart via the API. |
+| `MonthlyOrdersReport` | Screen | Filterable, printable monthly report; `Inputs`: `month`, `verbosity`. Self-loads orders. |
 
 The Garden `Product` gains an `ImageUrl` so `ProductImage` has something to render (emoji stays as
-a lightweight fallback). The `CheckoutView`/`MonthlyOrdersReport` are ordinary MAUI `ContentView`s
-+ VMs registered in DI and resolved by the view descriptors.
+a lightweight fallback). The `CheckoutScreen`/`MonthlyOrdersReportScreen` are ordinary MAUI `ContentView`s
++ VMs registered in DI and resolved by the screen descriptors.
 
 **Static + dynamic registration + native theming (demonstrated in the sample):**
 
 - The registrations above are **static** (added at startup). To exercise **dynamic** registration,
-  a "sign in as manager" prompt adds manager-only vocabulary at runtime — `AdminOrdersView` (a full
-  view) and a `BulkPriceEditor` component — by injecting the `GenerativeUiRegistry` and calling
-  `registry.AddView<AdminOrdersView>(…)` / `registry.AddComponent<BulkPriceEditor>(…)`; "sign out"
+  a "sign in as manager" prompt adds manager-only vocabulary at runtime — `AdminOrdersScreen` (a full
+  screen) and a `BulkPriceEditor` control — by injecting the `GenerativeUiRegistry` and calling
+  `registry.AddScreen<AdminOrdersScreen>(…)` / `registry.AddControl<BulkPriceEditor>(…)`; "sign out"
   calls `registry.Remove(…)` and they leave the model's catalog. Whatever is registered when a turn
   runs is what the model sees (see
   [Extensibility §2](./appendix-extensibility.md#2-the-registry)).
@@ -278,8 +278,8 @@ Each maps a natural-language prompt to a tool sequence and a rendered surface.
    `list_endpoints` → `read_api GET /products` → `render_ui` (titled list of product cards).
 2. **"show me the basil seeds"**
    `read_api GET /products/basil-seeds` → `render_ui` (detail card, one-way bound to `data`; the
-   image renders via the **`ProductImage`** component — watermarked — because the model followed
-   the component's description for product images).
+   image renders via the **`ProductImage`** control — watermarked — because the model followed
+   the control's description for product images).
 3. **"add a new product called pears"**
    `render_ui` (add-product form, `form.name = "Pears"`) → user: "set the price to 3.49" →
    `set_field("price","3.49")` → user: "save for me" → `get_state` →
@@ -294,28 +294,28 @@ Each maps a natural-language prompt to a tool sequence and a rendered surface.
 6. **"set the tomato seeds to 5"** (cart open)
    `write_api PUT /cart/items/tomato-seeds {quantity:5}` → `render_ui` (updated cart).
 7. **"checkout"**
-   `present_view("CheckoutView")` — the app's **official checkout/payment surface** takes over the
+   `present_screen("CheckoutScreen")` — the app's **official checkout/payment surface** takes over the
    canvas and self-loads the cart. The model does **not** compose a checkout UI. Payment/confirm is
-   handled inside the view; on completion it can `write_api POST /orders`.
+   handled inside the screen; on completion it can `write_api POST /orders`.
 8. **"show my past orders"** → `read_api GET /orders` → `render_ui` (order history list).
 9. **"reorder my last order"** → `write_api POST /orders/{id}/reorder` *(approval)* →
    `render_ui` (cart).
 10. **"rate the basil seeds 5 stars"** → `render_ui` (review form using the **`StarRating`**
-    component, rating prefilled) → "save" → `write_api POST /reviews` *(approval)* →
+    control, rating prefilled) → "save" → `write_api POST /reviews` *(approval)* →
     `render_ui` (thanks + reviews list).
 11. **"build me a starter bundle"** → `read_api GET /recommendations` → `render_ui` (bundle,
     product images watermarked via `ProductImage`).
-12. **"show me the June orders report"** → `present_view("MonthlyOrdersReport", { month:"2026-06" })`
-    — the full-screen report view takes the canvas and self-loads/filters orders. The model supplies
+12. **"show me the June orders report"** → `present_screen("MonthlyOrdersReport", { month:"2026-06" })`
+    — the full-screen report screen takes the canvas and self-loads/filters orders. The model supplies
     only the declared inputs.
-13. **"sign in as manager"** → the app registers the manager vocabulary at runtime (`AdminOrdersView` +
+13. **"sign in as manager"** → the app registers the manager vocabulary at runtime (`AdminOrdersScreen` +
     `BulkPriceEditor`); the next turn's catalog now includes them, so **"bulk-edit prices"** →
     `render_ui` using `BulkPriceEditor`, and **"show all orders"** →
-    `present_view("AdminOrdersView")`. **"sign out"** removes them and those capabilities
+    `present_screen("AdminOrdersScreen")`. **"sign out"** removes them and those capabilities
     disappear.
 
 These cover read, create, partial-fill + field edits, save-via-chat, destructive confirm,
-recommendations, **registered styles/components**, **description-driven watermarking**, **full-view
+recommendations, **registered styles/controls**, **description-driven watermarking**, **full-screen
 handoff** (checkout, report), and **runtime (permission-driven) registration** — the same surface
 area as the current in-memory sample, now server-backed, generatively rendered, and extended with
 app-owned UI.
@@ -365,8 +365,8 @@ app-owned UI.
 7. **Seed parity:** exactly mirror the current catalog, or trim/expand for better demos?
 8. **Approval UX in-sample:** rely on `write_api` approval alone, add `show_confirm` for
    destructive ops, or both (see overview §11)?
-9. **Checkout view boundary:** does `CheckoutView` place the order itself (`POST /orders`) or hand
-   back to the model to do so? Where does the `write_api` approval fit when a full view owns the
+9. **Checkout screen boundary:** does `CheckoutScreen` place the order itself (`POST /orders`) or hand
+   back to the model to do so? Where does the `write_api` approval fit when a full screen owns the
    action?
 10. **Product image guidance:** is a clear `ProductImage` description enough for the model to always
     use it for product images, or do we also need a lightweight validation nudge if it emits a plain

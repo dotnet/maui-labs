@@ -75,7 +75,7 @@ The inflator compiles DSL paths into indexer bindings against the root `UiObject
 |---|---|---|
 | `"bind": "product.name"` | `Binding` on path `[product][name].Value` against `data` root | one-way |
 | `"key": "quantity"` (a `Field`/editable prop) | `Binding` on `[quantity].Value` against `form` root, `TwoWay` | two-way |
-| `"bind": "product.imageUrl"` on a component prop | same, into the component's bindable target property | one-way |
+| `"bind": "product.imageUrl"` on a control prop | same, into the control's bindable target property | one-way |
 
 - **Dot-paths → indexer chains + `.Value`.** `a.b.c` becomes `[a][b][c].Value`.
 - **Missing paths auto-vivify** an empty placeholder `UiObject` (null `Value`) rather than throwing;
@@ -98,20 +98,20 @@ The inflator compiles DSL paths into indexer bindings against the root `UiObject
 
 ## 6. Type coercion
 
-Leaves store `object?`. Editable `Field`s and component props declare a `UiPropType`
+Leaves store `object?`. Editable `Field`s and control props declare a `UiPropType`
 (`string`/`number`/`bool`/`enum`/date), so the inflator attaches a value converter: `Entry` text
 round-trips to a typed JSON value in `get_state()`, and numeric/bool `data` renders correctly.
 Coercion lives at the **edges** (converters), keeping the tree itself untyped and simple.
 
-## 7. Components & views
+## 7. Controls & screens
 
-- **Components** receive their prop values through the *same* tree: one-way `bind` and two-way `key`
-  resolve exactly as above onto the component's bindable target properties. A component may host its
+- **Controls** receive their prop values through the *same* tree: one-way `bind` and two-way `key`
+  resolve exactly as above onto the control's bindable target properties. A control may host its
   own internal, real VM, but its **inputs arrive via generic-tree bindings** — it never needs a
   bespoke context from the model.
-- **Views** are self-contained: they bring their **own real VM and DI services** and self-load bulk
+- **Screens** are self-contained: they bring their **own real VM and DI services** and self-load bulk
   data, so they generally don't use the generic tree at all (they may accept a `DataContract`
-  instance built from it). See [Extensibility §3.3](./appendix-extensibility.md#33-views-full-custom-views).
+  instance built from it). See [Extensibility §3.3](./appendix-extensibility.md#33-screens-full-custom-screens).
 
 ## 8. Change, re-inflation & persistence
 

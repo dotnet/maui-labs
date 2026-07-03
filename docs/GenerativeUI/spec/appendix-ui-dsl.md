@@ -7,22 +7,22 @@ This appendix defines the **UI description language** the model emits and the **
 turns it into MAUI controls. The design bias is **reliability over expressiveness**: a small,
 **closed-but-extensible** vocabulary the model can use predictably, with graceful degradation when
 it doesn't. The base vocabulary ships in the library; apps **register** their own styles, custom
-controls, and full views on top of it — see the
+controls, and full screens on top of it — see the
 [Extensibility appendix](./appendix-extensibility.md).
 
 ## 1. Design principles
 
 1. **Closed but extensible vocabulary.** A fixed set of built-in node `type`s, plus app-registered
-   components/views known at startup. The *effective* vocabulary (built-ins + registrations) is
+   controls/screens known at startup. The *effective* vocabulary (built-ins + registrations) is
    validated; unknown types render a visible error placeholder, never crash.
 2. **Flat, JSON-native.** Plain JSON objects/arrays; no expressions, no code. Styling is limited to
    **named tokens from a registered catalog** (never raw colors/XAML from the model). Easy for a
    model to emit and for us to validate.
 3. **Declarative + data-bound.** Nodes describe *what*, not *how*. Editable nodes bind two-way to
    `FormState`; display nodes may bind one-way to `data`.
-4. **Deterministic inflation.** One document → one deterministic view tree. No layout ambiguity.
+4. **Deterministic inflation.** One document → one deterministic UI tree. No layout ambiguity.
 5. **Forgiving.** Missing optional props use sane defaults; extra props are ignored.
-6. **App owns the look, not the model.** Brand styling, bespoke controls, and full custom views are
+6. **App owns the look, not the model.** Brand styling, bespoke controls, and full custom screens are
    app-authored C#; the model only *selects* registered names and supplies declared inputs.
 
 ## 2. `render_ui` payload
@@ -32,7 +32,7 @@ controls, and full views on top of it — see the
 ```jsonc
 {
   "schemaVersion": 1,          // required; DSL version the doc targets
-  "ui": { /* root UiNode */ }, // required; the view tree
+  "ui": { /* root UiNode */ }, // required; the UI tree
   "data": { /* object */ },    // optional; values for one-way `bind` paths
   "form": {                    // optional; seeds FormState for editable fields
     "quantity": "1",
@@ -69,7 +69,7 @@ Every node is:
 ```
 
 Common fields: `type`, `id`, `bind`, `style`, `children`. Type-specific props are listed per
-node below. `type` may be a **built-in** (this appendix) or an **app-registered component/view**
+node below. `type` may be a **built-in** (this appendix) or an **app-registered control/screen**
 (see the [Extensibility appendix](./appendix-extensibility.md)); the model sees one uniform set.
 
 ## 4. Node catalog (MVP)
@@ -111,17 +111,17 @@ node below. `type` may be a **built-in** (this appendix) or an **app-registered 
 > item). This trades token cost for reliability and removes runtime item-templating. A future
 > `List` may take `itemsBind` + `itemTemplate`. See [Open Questions](#open-questions).
 
-### 4.5 Registered types (components & views)
+### 4.5 Registered types (controls & screens)
 
 Beyond the built-ins above, an app can register its own node types. These appear to the model as
 ordinary `type`s with their own prop schema, and the inflator resolves them via the registry:
 
 | `type` shape | Inflates to | Notes |
 |---|---|---|
-| a registered **component** name (e.g. `ProductImage`) | the app's composite control | Binds a single value or a small prop set; may be editable. `props` object carries values. |
-| `View` | a registered **full view** hosted inline | `view` names the registered view; `inputs` supplies its declared params. Larger, app-owned surface. |
+| a registered **control** name (e.g. `ProductImage`) | the app's composite control | Binds a single value or a small prop set; may be editable. `props` object carries values. |
+| `Screen` | a registered **full screen** hosted inline | `screen` names the registered screen; `inputs` supplies its declared params. Larger, app-owned surface. |
 
-Full views are more often presented as the whole canvas via the `present_view` tool than embedded
+Full screens are more often presented as the whole canvas via the `present_screen` tool than embedded
 as a node. Registration, prop/input lists, DI creation, and discovery are specified in the
 [Extensibility appendix](./appendix-extensibility.md). Examples appear in §10.6–10.7.
 
@@ -187,14 +187,20 @@ in the app theme, so output stays on-brand and predictable.
 - Apps **register additional styles** (or override the base) via the registry — e.g. a `Brand`
   accent for labels, a `hero` button treatment, a multi-line vs single-line entry variant. Each
   registered style carries a **name** (the token the model uses), a full **description** (which
-  says where it's meant to be used), and the **resource key** it maps to. See the
+  says where it's meant to be used), an **`appliesTo`** list of the control types it's valid on,
+  and an **optional resource key** (defaults to the name) it maps to. See the
   [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
+- **`appliesTo` constrains where a token can go.** A MAUI `Style` is `TargetType`-specific, so a
+  `danger` button style must not land on a `Picker` or `Entry`. The list is both told to the model
+  and **enforced by the inflator**: a token applied to a control outside its `appliesTo` is dropped
+  (the node keeps its default look) and logged. A node matches if its control **is that type or
+  derives from it**.
 - `style` accepts a **single token or a list** — `"style": "primary"` or
   `"style": ["Brand", "large"]` — so styles can compose (mapped to a `Style` plus MAUI
   `StyleClass`es under the hood).
-- The registered style catalog (names + descriptions) is given to the model (seeded and/or via
-  `list_ui_capabilities`), so it knows a `danger` button style exists and picks it for destructive
-  actions.
+- The registered style catalog (names + descriptions + `appliesTo`) is given to the model (seeded
+  and/or via `list_ui_capabilities`), so it knows a `danger` button style exists and picks it for
+  destructive actions.
 
 Unknown or misapplied tokens fall back to a sensible default (`Body`/`secondary`/`neutral`) and
 are logged — never an error.
@@ -203,13 +209,13 @@ Spacing/padding remain small integers interpreted as device-independent units (n
 
 ## 8. Validation & error handling
 
-- **Type resolution order:** built-in → registered component/view → unknown. The valid set is
+- **Type resolution order:** built-in → registered control/screen → unknown. The valid set is
   known at startup (built-ins + registry), so validation is exact.
 - **Parse errors** (malformed JSON): render an error card with the raw text (truncated) and log;
   return a tool error so the model can retry.
 - **Unknown `type`**: render a labeled placeholder ("Unsupported: <type>") in place of that node;
   continue inflating siblings.
-- **Missing/invalid props** (e.g. `Field` without `key`, or a component prop failing its declared
+- **Missing/invalid props** (e.g. `Field` without `key`, or a control prop failing its declared
   list): render a placeholder for that node and log.
 - **Depth/size caps**: cap node count and tree depth; beyond the cap, truncate with a notice.
 
@@ -298,7 +304,7 @@ The app registered a `hero` button style. The model just references the token:
 { "type": "Button", "text": "Start a bundle", "style": ["primary", "hero"], "intent": "action:bundle" }
 ```
 
-### 10.6 Registered component node (watermarked product image)
+### 10.6 Registered control node (watermarked product image)
 
 `ProductImage` is an app-registered composite control (frame + auto-watermark) that binds
 `source` (+ optional `caption`). Its props may be literals or `{ "bind": ... }`:
@@ -321,29 +327,29 @@ The app registered a `hero` button style. The model just references the token:
 
 The model chooses `ProductImage` here because its **description** says to use it for any product
 image (so the watermark is applied) — see
-[Extensibility §3.2](./appendix-extensibility.md#32-components-custom-controls).
+[Extensibility §3.2](./appendix-extensibility.md#32-controls-custom-controls).
 
-### 10.7 Full view handoff (checkout)
+### 10.7 Full screen handoff (checkout)
 
-Checkout must use the official, app-owned view — the model does **not** compose a checkout UI. It
-supplies only declared inputs (here, none — the view self-loads the cart) and hands off, usually
-via the `present_view` tool:
+Checkout must use the official, app-owned screen — the model does **not** compose a checkout UI. It
+supplies only declared inputs (here, none — the screen self-loads the cart) and hands off, usually
+via the `present_screen` tool:
 
 ```jsonc
-// present_view
-{ "view": "CheckoutView", "inputs": {} }
+// present_screen
+{ "screen": "CheckoutScreen", "inputs": {} }
 ```
 
-Embedded-in-a-layout form (a `View` node) is also allowed:
+Embedded-in-a-layout form (a `Screen` node) is also allowed:
 
 ```jsonc
-{ "type": "View", "view": "CheckoutView", "inputs": {} }
+{ "type": "Screen", "screen": "CheckoutScreen", "inputs": {} }
 ```
 
 ## 11. Draft JSON Schema (sketch)
 
 The schema is **generated per app at startup**: the `type` enum = built-ins **+** registered
-component/view names; the `style` enum = registered style tokens. This lets us hand the model a
+control/screen names; the `style` enum = registered style tokens. This lets us hand the model a
 schema matching exactly what *this* app supports (useful for structured output). A machine-checkable
 base schema will live alongside this doc (e.g. `schemas/ui-dsl.schema.json`); the runtime augments
 its enums from the registry. Sketch of the top level:
@@ -365,8 +371,8 @@ its enums from the registry. Sketch of the top level:
       "type": "object",
       "required": ["type"],
       "properties": {
-        // built-ins + registered component/view names, injected at startup:
-        "type": { "enum": ["Stack","Card","Scroll","Separator","Spacer","Label","Image","Badge","Icon","Button","Field","Entry","List","View","/* …registered… */"] },
+        // built-ins + registered control/screen names, injected at startup:
+        "type": { "enum": ["Stack","Card","Scroll","Separator","Spacer","Label","Image","Badge","Icon","Button","Field","Entry","List","Screen","/* …registered… */"] },
         "style": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] },
         "props": { "type": "object" },
         "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
@@ -383,7 +389,7 @@ its enums from the registry. Sketch of the top level:
 2. **Collections:** pre-expanded rows (MVP) vs. `itemsBind` + `itemTemplate`. When do we need the
    latter (large lists, live updates)?
 3. **Data binding for display:** always bind display nodes to `data`, or allow literal-inlined
-   data for read-only views (simpler, more tokens)?
+   data for read-only displays (simpler, more tokens)?
 4. **Node set:** is the §4 catalog the right MVP set? Do we need `Grid`, `Toggle`, `Picker`,
    `Slider`, tabs, tables now or later?
 5. **Styling:** the token set is now registry-driven (built-ins + app styles). Is the `style`

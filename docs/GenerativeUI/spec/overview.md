@@ -27,7 +27,7 @@ Companion documents:
 
 - [`appendix-ui-dsl.md`](./appendix-ui-dsl.md) — the UI description language and inflator.
 - [`appendix-extensibility.md`](./appendix-extensibility.md) — registering app styles, custom
-  controls, and full views the model can use, statically or **dynamically at runtime**.
+  controls, and full screens the model can use, at startup or **dynamically at runtime**.
 - [`appendix-binding-model.md`](./appendix-binding-model.md) — the generic observable data context
   the UI binds to when there are no hand-authored view models.
 - [`appendix-openapi-processor.md`](./appendix-openapi-processor.md) — the OpenAPI explorer,
@@ -89,11 +89,11 @@ We want to find out how far this can go, what breaks, and what reusable pieces f
 | **Reduced spec** | A compact, model-friendly index of endpoints + schemas derived from OpenAPI. It's compact because it strips OpenAPI *structural plumbing* — it preserves all authored **descriptions** and constraints in full. |
 | **Invoker** | The generic HTTP caller behind `read_api` / `write_api`. |
 | **UI-DSL** | The constrained JSON description language the model emits to render UI. |
-| **Inflator** | The runtime component that turns a UI-DSL document into MAUI `View`s. |
-| **UI registry** | The app-populated, **mutable** catalog of registered **styles**, **components**, and **views** that extend the base DSL. Add/remove at startup or anytime afterwards. |
+| **Inflator** | The runtime piece that turns a UI-DSL document into MAUI `View`s. |
+| **UI registry** | The app-populated, **mutable** catalog of registered **styles**, **controls**, and **screens** that extend the base DSL. Add/remove at startup or anytime afterwards. |
 | **Style** | A named visual token mapped to a XAML resource, applied to a node's `style`. |
-| **Component** | An app-registered composite control exposed as a DSL node type. |
-| **View** | An app-registered full surface the model hands off to (e.g. checkout, report). |
+| **Control** | An app-registered composite control exposed as a DSL node type. |
+| **Screen** | An app-registered full surface the model hands off to (e.g. checkout, report). |
 | **Dynamic data context** | The generic observable `UiObject` tree the UI binds to instead of a hand-authored view model (see the [Binding Model appendix](./appendix-binding-model.md)). |
 | **CanvasState** | Client state holding the currently rendered view + busy/empty flags. |
 | **FormState** | The editable region of the dynamic data context backing form fields (the DSL `form`). |
@@ -169,14 +169,14 @@ through this generic surface, so the library needs no knowledge of the app's end
 | `get_state` | Read the current bound/form values (drives "save for me"). |
 | `show_confirm` | Render a confirm overlay; resolves via button tap or the user typing "yes". |
 | `clear_ui` | Reset the canvas to the welcome/empty state. |
-| `present_view` | Hand the canvas off to a **registered full view** (e.g. checkout, report), supplying its declared inputs. |
-| `list_ui_capabilities` | List registered styles/components/views (names + descriptions). |
-| `describe_component` / `describe_view` | Full prop/input list + description for one registered component or view. |
+| `present_screen` | Hand the canvas off to a **registered full screen** (e.g. checkout, report), supplying its declared inputs. |
+| `list_ui_capabilities` | List registered styles/controls/screens (names + descriptions). |
+| `describe_control` / `describe_screen` | Full prop/input list + description for one registered control or screen. |
 
 The app **extends** what these tools can produce by registering styles, custom controls, and full
-views (see §6.3). Built-in primitives cover generic UI; registrations add brand styling, bespoke
+screens (see §6.3). Built-in primitives cover generic UI; registrations add brand styling, bespoke
 controls (e.g. a watermarking product image), and full app-owned surfaces (e.g. the official checkout
-view). The model discovers the catalog via a seeded summary and/or `list_ui_capabilities`/`describe_*`.
+screen). The model discovers the catalog via a seeded summary and/or `list_ui_capabilities`/`describe_*`.
 
 ### 6.3 Extending the vocabulary (see [Extensibility appendix](./appendix-extensibility.md))
 
@@ -186,17 +186,17 @@ vocabulary — at startup **or anytime afterwards** — through
 
 | Extension | Registered via | Appears to the model as |
 |---|---|---|
-| **Style** | `AddStyle(name, description, resourceKey?)` | a `style` token (e.g. `primary`, `danger`, `Brand`) on any node |
-| **Component** | `AddComponent<TView>(alias, description, props?)` | a node `type` with a named `props` list (e.g. `ProductImage`) |
-| **View** | `AddView<TView>(alias, description, inputs?)` | `present_view` / a `View` node (e.g. `CheckoutView`) |
+| **Style** | `AddStyle(name, description, appliesTo, resourceKey?)` | a `style` token, valid only on its `appliesTo` control types (e.g. `danger` on a `Button`) |
+| **Control** | `AddControl<TControl>(alias, description, props?)` | a node `type` with a named `props` list (e.g. `ProductImage`) |
+| **Screen** | `AddScreen<TScreen>(alias, description, inputs?)` | `present_screen` / a `Screen` node (e.g. `CheckoutScreen`) |
 
 The **library hardcodes none** of these — all app specifics live in the app and flow through the
 generic registry. Each entry carries a **name/alias** and a freeform **description**; all
 descriptions are surfaced to the model **verbatim** (same no-clip principle as API descriptions),
 and it is the description that tells the model *when and when not* to use an item.
 
-The registry is a plain mutable collection: `Add…`/`Remove…` at any time (e.g. admin components
-appear after sign-in, vanish on sign-out). Whatever is registered *now* is what the model sees this
+The registry is a plain mutable collection: `Add…`/`Remove…` at any time (e.g. admin controls and
+screens appear after sign-in, vanish on sign-out). Whatever is registered *now* is what the model sees this
 turn — no versioning, events, or handles for the MVP. **Theme/size/orientation/accessibility**
 variation is handled by the native XAML resource a style maps to
 (`AppThemeBinding`/`VisualStateManager`/merged dictionaries), not by the registry or the model: the
@@ -234,11 +234,11 @@ This boundary is the core design principle and the thing we most want to get rig
 | The AI tool implementations | ✅ (`OpenApiExplorerTools`, `GenerativeUiTools`) | — |
 | UI-DSL model + inflator + state | ✅ | — |
 | Canvas host control + DI extension | ✅ | — |
-| **UI extensibility mechanism** (registry, `AddStyle`/`AddComponent`/`AddView`, discovery tools, catalog seeding) | ✅ (generic) | — |
+| **UI extensibility mechanism** (registry, `AddStyle`/`AddControl`/`AddScreen`, discovery tools, catalog seeding) | ✅ (generic) | — |
 | Base URL, OpenAPI location | provided *by* the app at startup | ✅ (config) |
 | REST models / DTOs | ❌ (never referenced) | ✅ (`.Shared`, typed, source-gen JSON) |
 | Endpoint names / routes | ❌ | ✅ (server) |
-| **Registered styles/components/views** (the actual brand styles, `ProductImage`, `CheckoutView`) | ❌ (never referenced) | ✅ (app registers them + supplies the XAML resources / controls / views) |
+| **Registered styles/controls/screens** (the actual brand styles, `ProductImage`, `CheckoutScreen`) | ❌ (never referenced) | ✅ (app registers them + supplies the XAML resources / controls / screens) |
 | System prompt / seed data | ❌ | ✅ |
 
 The app hands the library its concrete pieces via a single DI call:
@@ -252,10 +252,10 @@ builder.Services.AddGenerativeUi(options =>
 
     // App-specific UI vocabulary (all optional; see the Extensibility appendix).
     // The same Add…/Remove… calls are available later via the DI-resolvable
-    // GenerativeUiRegistry (e.g. register admin views after sign-in, remove on sign-out):
-    options.Ui.AddStyle("danger", "Destructive actions like delete/remove.");
-    options.Ui.AddComponent<ProductImage>("ProductImage", "Use for any product image (adds the brand watermark).");
-    options.Ui.AddView<CheckoutView>("CheckoutView", "The official checkout surface; use for any checkout.");
+    // GenerativeUiRegistry (e.g. register admin screens after sign-in, remove on sign-out):
+    options.Ui.AddStyle("danger", "Destructive actions like delete/remove.", appliesTo: ["Button"], resourceKey: "DangerButtonStyle");
+    options.Ui.AddControl<ProductImage>("ProductImage", "Use for any product image (adds the brand watermark).");
+    options.Ui.AddScreen<CheckoutScreen>("CheckoutScreen", "The official checkout surface; use for any checkout.");
 });
 ```
 
@@ -335,11 +335,11 @@ Acceptance scenarios (each must work end to end):
 6. **Orders** — checkout (approval) / list / reorder / clear.
 7. **Reviews** — submit / list / per-product.
 8. **Recommendations** — starter bundle.
-9. **Registered component** — a product image renders via the app's `ProductImage` presenter
-   (watermarked), because the model followed the component's description for product images.
+9. **Registered control** — a product image renders via the app's `ProductImage` presenter
+   (watermarked), because the model followed the control's description for product images.
 10. **Registered style** — destructive buttons use the app's `danger` style the model selected.
-11. **Full view handoff** — "checkout" presents the app's `CheckoutView` (not a model-composed UI)
-    via `present_view`; the view self-loads the cart.
+11. **Full screen handoff** — "checkout" presents the app's `CheckoutScreen` (not a model-composed UI)
+    via `present_screen`; the screen self-loads the cart.
 
 ## 15. Future direction
 
@@ -348,8 +348,8 @@ Acceptance scenarios (each must work end to end):
 - **Server-side UI hints:** annotate the OpenAPI doc with rendering/semantic hints so the model
   produces better UI with less prompting.
 - **Richer DSL:** grids, templated lists (item template + items binding), charts, images from URLs.
-- **Richer extensibility:** component slots/composition, more `Presentation` modes, designer-time
-  tooling to author/register components and views, and hot-reloadable catalogs.
+- **Richer extensibility:** control slots/composition, more `Presentation` modes, designer-time
+  tooling to author/register controls and screens, and hot-reloadable catalogs.
 - **Persisted/disk-cached reduced spec** keyed by ETag/version.
 - **On-device model** via `Microsoft.Maui.Essentials.AI`.
 - **Graduation** from experimental (`IsPackable=false`) to a shipped package.
@@ -364,7 +364,7 @@ These are the things to iron out before/while building. Grouped by area.
    only.)
 2. Should the reduced spec be **seeded into the system prompt** at session start, fetched
    on-demand via tools, or both? What's the size budget?
-3. Does the library need any **server-side** component at all for the MVP, or is "server just
+3. Does the library need any **server-side** piece at all for the MVP, or is "server just
    emits OpenAPI" sufficient? (Current assumption: sufficient.)
 
 ### Server-API tools
@@ -378,19 +378,19 @@ These are the things to iron out before/while building. Grouped by area.
    clipped** — that's a fixed principle, not an open question.)
 
 ### Client-UI tools & DSL
-7. Do display views bind to `data`, or is inlining data into the DSL acceptable/preferable for
-   read-only views? (Forms clearly need binding.)
+7. Do read-only displays bind to `data`, or is inlining data into the DSL acceptable/preferable for
+   read-only displays? (Forms clearly need binding.)
 8. How are **collections** rendered in the MVP — pre-expanded rows emitted by the model, or a
    `List` + item-template + items-binding? (MVP leans pre-expanded for reliability.)
 9. What is the **exact node vocabulary** for the MVP, and what styling tokens are fixed?
 10. How do rendered controls signal back to the loop — synthetic chat turns (`intent`), direct
     tool re-entry, or a dedicated event channel?
 
-### Extensibility (styles / components / views) — see [Extensibility appendix](./appendix-extensibility.md#open-questions)
-10a. Uniform node `type` set (built-ins + registered) vs. explicit `Component`/`View` wrappers to
+### Extensibility (styles / controls / screens) — see [Extensibility appendix](./appendix-extensibility.md#open-questions)
+10a. Uniform node `type` set (built-ins + registered) vs. explicit `Control`/`Screen` wrappers to
      avoid name collisions? (Lean: uniform + collision validation.)
 10b. How much of the UI capability catalog do we **seed** vs. lazily `describe_*` as it grows?
-10c. Do components support children/slots in the MVP, or are they leaves? How do full views declare
+10c. Do controls support children/slots in the MVP, or are they leaves? How do full screens declare
      "self-loaded" vs. "model-supplied" data?
 10d. **Dynamic catalog:** when registrations change mid-session (e.g. after sign-in), how do we
      re-inform the model — reseed the system note or just let the next turn's catalog reflect it —
