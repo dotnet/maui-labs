@@ -48,8 +48,17 @@ library knowing that API's models or routes in advance.
 
 ## 3. Reduction (`OpenApiReducer`)
 
-OpenAPI documents are large and verbose; models don't need all of it. The reducer projects the
-raw doc into a compact `ReducedSpec`:
+OpenAPI documents are large, but that size is mostly **structural overhead** (envelopes, wrappers,
+repeated `$ref` machinery, media-type maps, response-code trees), not meaning. The reducer removes
+that overhead while **preserving every piece of authored semantics** — most importantly the
+`description` fields.
+
+> **Descriptions are never truncated.** `summary`, `description`, parameter descriptions, model
+> descriptions, and property descriptions are authored on purpose to tell a consumer how to use
+> the API correctly. They are carried through **verbatim and in full**. Reduction only flattens
+> and de-duplicates *structure*; it never clips *text*. If a description is long, it stays long.
+
+The reducer projects the raw doc into a compact `ReducedSpec`:
 
 ```jsonc
 {
@@ -58,11 +67,12 @@ raw doc into a compact `ReducedSpec`:
       "operationId": "getProduct",
       "method": "GET",
       "path": "/products/{sku}",
-      "summary": "Get a product by sku.",
+      "summary": "Get a product by sku.",                 // verbatim
+      "description": "Returns the full product record …",  // verbatim, full length
       "tags": ["products"],
       "parameters": [
         { "name": "sku", "in": "path", "type": "string", "required": true,
-          "description": "Product sku" }
+          "description": "Stable product identifier used across the catalog and cart …" } // verbatim
       ],
       "requestModel": null,          // schema name, or null
       "responseModel": "Product"     // schema name, or null
@@ -71,11 +81,16 @@ raw doc into a compact `ReducedSpec`:
   ],
   "models": {
     "Product": {
+      "description": "A product in the garden shop catalog …",  // verbatim
       "properties": [
-        { "name": "sku", "type": "string", "required": true },
-        { "name": "name", "type": "string", "required": true },
-        { "name": "price", "type": "number", "required": true },
-        { "name": "quantity", "type": "integer", "required": false }
+        { "name": "sku",   "type": "string",  "required": true,
+          "description": "Stable id used by tools." },          // verbatim
+        { "name": "name",  "type": "string",  "required": true,
+          "description": "Display name shown in chat and on cards." },
+        { "name": "price", "type": "number",  "required": true,
+          "description": "Unit price in USD.", "format": "decimal" },
+        { "name": "quantity", "type": "integer", "required": false,
+          "description": "Optional stock count.", "enum": null }
       ]
     }
     /* ... */
@@ -83,20 +98,31 @@ raw doc into a compact `ReducedSpec`:
 }
 ```
 
-### What's kept
+### What's kept (in full)
 
 - Per operation: `operationId` (synthesized from method+path if missing), `method`, `path`,
-  `summary`/short `description`, `tags`, parameter list (name/in/type/required/short desc),
-  request/response **model names**.
-- Per model: property list (name/type/required) and a one-line description; nested models are
-  referenced by name, not inlined.
+  **full `summary` and `description`**, `tags`, the parameter list (name/in/type/required + **full
+  description**), request/response **model names**.
+- Per model: **full model `description`**, and every property with name/type/required + **full
+  description**, plus meaning-bearing constraints (`format`, `enum`, `default`, `pattern`,
+  `minimum`/`maximum`, `nullable`). Nested models are referenced by name, not inlined.
 
-### What's dropped / trimmed
+Rule of thumb: **if a field could change how the model calls the API, it is kept.** Descriptions
+and constraints always qualify.
 
-- Verbose `description`s beyond a length cap; examples; vendor extensions; servers block; security
-  schemes detail (auth is handled by the app, see §7); response codes beyond the primary success +
-  a note that errors are possible; deep schema composition (`allOf`/`oneOf`) is flattened
-  best-effort.
+### What's dropped (structure only)
+
+- OpenAPI envelope/plumbing: media-type wrappers (`content → application/json → schema`),
+  `$ref` indirection collapsed to model names, repeated component boilerplate.
+- Servers block and security-scheme internals (auth is handled by the app, see §7) — but any
+  human-readable auth **description** relevant to usage is surfaced.
+- Non-primary response bodies are summarized to "success returns `<Model>`; errors return
+  `ProblemDetails`" **without dropping** any error description text that exists.
+- `allOf`/`oneOf`/`anyOf` are flattened into a single effective schema, **merging** (not dropping)
+  the descriptions and constraints of each branch.
+
+Explicitly **not** dropped: examples that carry usage intent are kept (see
+[Open Questions](#open-questions) — default is to keep examples too).
 
 ### Schema / `$ref` resolution
 
@@ -197,10 +223,18 @@ serialization **without** a library→app dependency.
 
 ## 6. Limits & performance
 
-- **Reduced spec size budget:** target a compact index (endpoints as one-liners; models on
-  demand) so it can optionally be **seeded into the system prompt** without blowing the context.
-- **Pagination/large results:** `read_api` responses are capped; the model is told when a result
-  was truncated and can refine (e.g. add a `query`/limit param if the API supports it).
+- **Compactness by structure, not by clipping:** the reduced spec is small because it strips
+  OpenAPI plumbing, not because it shortens text. Descriptions and constraints are kept in full
+  (see §3). We manage size via **on-demand expansion** — `list_endpoints` returns lightweight rows
+  (path + summary), and full descriptions/models are pulled only when the model asks via
+  `describe_endpoint`/`describe_model`.
+- **Seeding the prompt:** a compact endpoint index (path + summary + tags) may optionally be seeded
+  into the system prompt. Full descriptions still arrive intact through the describe tools, so
+  seeding never means losing detail. Whether/how much to seed is an open question (§ below).
+- **Pagination/large *data* results:** `read_api` **response bodies** (runtime data, not the spec)
+  are size-capped; the model is told when a result was truncated and can refine (e.g. add a
+  `query`/limit param if the API supports it). This cap applies to fetched data, never to API
+  descriptions.
 - **Caching:** the reduced spec is computed once; `describe_model` results can be memoized.
 
 ## 7. Security
@@ -232,8 +266,10 @@ serialization **without** a library→app dependency.
    budget, and does seeding measurably reduce tool round-trips?
 4. **OpenAPI parsing:** hand-rolled System.Text.Json subset parser vs. taking a dependency on
    `Microsoft.OpenApi`. Trade simplicity/size for fidelity (`allOf`/`oneOf`, complex refs).
-5. **Reduction fidelity:** how much do we drop? Do models need response codes, examples, or
-   `format`/`enum` details to call correctly?
+5. **Reduction fidelity:** the reducer preserves all authored semantics (descriptions +
+   constraints) and only strips structural plumbing — is that split exactly right? Are there
+   structural elements (e.g. examples, response codes) that actually carry usage meaning and
+   should therefore be kept too? (Default: keep examples; keep primary + error response shapes.)
 6. **`operationId` synthesis:** how do we name operations that lack an `operationId` so it's stable
    and legible?
 7. **Parameter passing ergonomics:** flat `pathParams`/`query`/`body` objects vs. a single merged

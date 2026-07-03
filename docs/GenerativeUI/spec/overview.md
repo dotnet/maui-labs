@@ -82,7 +82,7 @@ We want to find out how far this can go, what breaks, and what reusable pieces f
 | **Server-API tools** | The generic AI tools for exploring + calling the server's REST API. |
 | **Client-UI tools** | The generic AI tools for rendering UI and reading/writing bound state. |
 | **OpenAPI processor** | Downloads, caches, and *reduces* the server's OpenAPI doc for the model. |
-| **Reduced spec** | A compact, model-friendly index of endpoints + schemas derived from OpenAPI. |
+| **Reduced spec** | A compact, model-friendly index of endpoints + schemas derived from OpenAPI. It's compact because it strips OpenAPI *structural plumbing* — it preserves all authored **descriptions** and constraints in full. |
 | **Invoker** | The generic HTTP caller behind `read_api` / `write_api`. |
 | **UI-DSL** | The constrained JSON description language the model emits to render UI. |
 | **Inflator** | The runtime component that turns a UI-DSL document into MAUI `View`s. |
@@ -143,6 +143,13 @@ Backed by the server's OpenAPI document (downloaded + reduced on the client).
 
 There is intentionally **no** `list_all_products` / `add_to_list` / etc. Everything routes
 through this generic surface, so the library needs no knowledge of the app's endpoints.
+
+> **Descriptions are preserved.** "Reduced" means the OpenAPI *structure* is simplified for the
+> model, **not** that any authored text is shortened. Endpoint/parameter/model/property
+> descriptions — and meaning-bearing constraints like `enum`/`format`/`required` — are carried
+> through **verbatim and in full**, because they exist to tell the model how to use the API
+> correctly. Size is managed by lazy expansion (`describe_endpoint`/`describe_model`), never by
+> clipping text. See the [OpenAPI processor appendix §3](./appendix-openapi-processor.md#3-reduction-openapireducer).
 
 ### 6.2 Client-UI tools (see [UI-DSL appendix](./appendix-ui-dsl.md))
 
@@ -303,8 +310,10 @@ These are the things to iron out before/while building. Grouped by area.
    the model and cleaner for approval? (See OpenAPI appendix Open Questions.)
 5. How do we express **path/query/body** parameters to the model so it fills them correctly with
    minimal errors?
-6. How much of the OpenAPI doc do we keep in the reduction? What's dropped? (schemas depth,
-   examples, descriptions).
+6. Reduction keeps all authored semantics (descriptions + constraints) and only strips OpenAPI
+   structure — are there *structural* elements (examples, response codes, schema depth) that
+   actually carry usage meaning and should be kept too? (Authored **descriptions are never
+   clipped** — that's a fixed principle, not an open question.)
 
 ### Client-UI tools & DSL
 7. Do display views bind to `data`, or is inlining data into the DSL acceptable/preferable for
