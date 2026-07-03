@@ -67,6 +67,13 @@ android_shot() {  # android_shot <name> — screenshot into $OUT
 	echo "  shot: $1"
 }
 
+# android_resize <w> <h> — override the emulator display size (px). Drives the
+# LayoutChange → CometWindowMetrics path, so adaptive size-class UI reflows —
+# the smoke-script "resize verb" for Reply-style adaptive asserts.
+# ALWAYS pair with android_resize_reset (trap it) or the emulator stays resized.
+android_resize()       { adb_ shell wm size "$1x$2"; sleep 2; }
+android_resize_reset() { adb_ shell wm size reset; sleep 2; }
+
 # --- iOS (simulator) --------------------------------------------------------
 
 # The sim shares the host loopback, so the agent is reached directly — but the default

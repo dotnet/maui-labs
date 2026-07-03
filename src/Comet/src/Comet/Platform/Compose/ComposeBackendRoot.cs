@@ -122,6 +122,10 @@ namespace Comet.Platform.Compose
 				if (dp.Width <= 0 || dp.Height <= 0 || dp == _viewDp)
 					return;
 				_viewDp = dp;
+				// Window metrics track the RAW view size (per-root reactive contract for
+				// adaptive size-class UI) — deliberately not the IME-shrunk available size:
+				// a soft keyboard must not flip Medium→Compact chrome.
+				Backend.CometWindowMetrics.Shared.Update(dp);
 				RecomputeAvailable();
 			};
 

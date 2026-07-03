@@ -59,8 +59,12 @@ namespace Comet.Platform.SwiftUI
 			if (_layoutRoot is null)
 				return;
 			var bounds = UIScreen.MainScreen.Bounds;
-			CometBackendLayoutEngine.Layout(_layoutRoot,
-				new Microsoft.Maui.Graphics.Size(bounds.Width, bounds.Height));
+			var size = new Microsoft.Maui.Graphics.Size(bounds.Width, bounds.Height);
+			// Per-root reactive window contract (adaptive size-class UI). Screen bounds are
+			// only re-read per layout pass — real resize observation (viewWillTransition /
+			// scene geometry) lands with the first adaptive iOS sample.
+			CometWindowMetrics.Shared.Update(size);
+			CometBackendLayoutEngine.Layout(_layoutRoot, size);
 		}
 	}
 }
