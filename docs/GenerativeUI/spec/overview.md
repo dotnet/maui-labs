@@ -115,7 +115,7 @@ We want to find out how far this can go, what breaks, and what reusable pieces f
 │  │  ApiInvoker     generic HTTP call    │   │  GenUiState     data + bindings     │   │
 │  │  OpenApiExplorerTools                │   │  FormState      two-way form state  │   │
 │  │    list_endpoints / describe_*       │   │  CanvasState + GenerativeCanvasView │   │
-│  │    search_api / read_api / write_api │   │  GenerativeUiTools                  │   │
+│  │    read_api / write_api              │   │  GenerativeUiTools                  │   │
 │  │                                      │   │    render_ui / set_field / get_state│   │
 │  │                                      │   │    show_confirm / clear_ui          │   │
 │  └──────────────────────────────────────┘   └─────────────────────────────────────┘   │
@@ -143,12 +143,11 @@ Backed by the server's OpenAPI document (downloaded + reduced on the client).
 
 | Tool | Purpose |
 |---|---|
-| `list_endpoints` | Compact list of operations: `operationId`, method, path, summary, tags. |
-| `describe_endpoint` | Full detail for one operation: parameters + request/response schema names. |
+| `list_endpoints` | Compact list of operations: `operationId`, method, path, summary, tags. Also seeded into the prompt by default. |
+| `describe_endpoint` | Full detail for one operation: parameters + request/response schema **inlined one level** (nested by name). |
 | `describe_model` | Resolved schema for one model (properties, types, required). |
-| `search_api` | Find endpoints/models related to a query string. |
-| `read_api` | Invoke a **safe** (GET) endpoint and return JSON. |
-| `write_api` | Invoke a **mutating** endpoint (POST/PUT/PATCH/DELETE); **requires approval**. |
+| `read_api` | Invoke a **safe** (GET) operation by `operationId`, e.g. `read_api("getProduct", { sku })`; returns JSON. |
+| `write_api` | Invoke a **mutating** operation (POST/PUT/PATCH/DELETE) by `operationId` (params flat, payload under `body`); **requires approval**. |
 
 There is intentionally **no** `list_all_products` / `add_to_list` / etc. Everything routes
 through this generic surface, so the library needs no knowledge of the app's endpoints.
@@ -209,9 +208,9 @@ A representative turn ("show me the basil seeds"):
 
 ```
 User → Chat: "show me the basil seeds"
-Model → search_api("basil") / list_endpoints        (optional discovery)
-Model → describe_endpoint("GET /products/{sku}")    (optional, learn params)
-Model → read_api("/products/basil-seeds")           (server call, JSON back)
+Model → list_endpoints("basil")                     (optional; the index is also seeded)
+Model → describe_endpoint("getProduct")             (optional; params + one-level schema)
+Model → read_api("getProduct", { sku: "basil-seeds" })   (server call, JSON back)
 Model → render_ui({ ui: <detail card>, data: <product json> })   (canvas updates)
 Model → Chat: "Here are the basil seeds."           (short text reply)
 ```
@@ -249,6 +248,9 @@ builder.Services.AddGenerativeUi(options =>
     options.BaseAddress = new Uri(baseUrl);              // where the server is
     options.OpenApiPath = "/openapi/v1.json";            // where the spec is
     options.JsonSerializerContext = GardenJsonContext.Default; // typed (de)serialization
+    options.ConfigureHttpClient = client =>              // auth/transport; model never sees creds
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+    options.AllowedHosts = [new Uri(baseUrl).Host];      // SSRF allowlist (defaults to BaseAddress host)
 
     // App-specific UI vocabulary (all optional; see the Extensibility appendix).
     // The same Add…/Remove… calls are available later via the DI-resolvable

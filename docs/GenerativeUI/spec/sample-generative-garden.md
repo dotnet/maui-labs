@@ -274,6 +274,12 @@ a lightweight fallback). The `CheckoutScreen`/`MonthlyOrdersReportScreen` are or
 
 Each maps a natural-language prompt to a tool sequence and a rendered surface.
 
+> **Shorthand.** Tool calls below are written as `read_api/write_api METHOD path` for readability;
+> the actual invocation is by **operationId** with an args object — e.g. `read_api GET /products` is
+> `read_api("listProducts")` and `write_api PUT /cart/items/tomato-seeds {quantity:5}` is
+> `write_api("updateCartItem", { sku: "tomato-seeds", body: { quantity: 5 } })`. See §4.1 for the
+> operationId of each endpoint and the [OpenAPI appendix §4](./appendix-openapi-processor.md#4-server-api-tools-openapiexplorertools).
+
 1. **"what are the products?"**
    `list_endpoints` → `read_api GET /products` → `render_ui` (titled list of product cards).
 2. **"show me the basil seeds"**
@@ -357,7 +363,7 @@ app-owned UI.
 2. **Cart identity:** single global cart (MVP) vs. per-session cart (needs a session id).
 3. **Recommendations:** static bundle vs. a small rules/heuristic. How much logic on the server?
 4. **Search:** does `GET /products?search=` suffice, or do we also expose a dedicated search
-   endpoint for the model to find via `search_api`?
+   endpoint? (Discovery is via `list_endpoints(query)`; `search_api` was dropped for the MVP.)
 5. **Emoji/imagery:** now that `Product` has `ImageUrl`, do we ship real hosted images to exercise
    the `ProductImage` watermarking presenter, or keep emoji as the primary with images optional?
 6. **Validation errors:** which endpoints return `ProblemDetails` (e.g. bad price) so we can
