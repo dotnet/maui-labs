@@ -1,23 +1,20 @@
 ---
 name: native-library-bindings
 description: >-
-  Create strategy, troubleshoot, package, and update native library bindings
-  for .NET MAUI across Apple platforms and Android. USE FOR: choosing between
-  slim (Native Library Interop) and traditional/full bindings, multi-platform
-  binding strategy, cross-ecosystem native artifact acquisition, xcframework
-  slice verification, Swift-only binding options, Objective Sharpie cleanup,
-  Android Gradle/Maven dependency resolution, Android Java dependency
-  verification, redistributable binding NuGet packaging, buildTransitive
-  props/targets, and re-binding/updating an existing binding after an upstream
-  native SDK update. This skill owns the app-local vs redistributable and
-  narrow vs broad API-surface decision that determines slim vs full bindings
-  for both Apple and Android. DO NOT USE FOR: general MAUI app development,
-  platform handlers, workload installation, or non-native .NET library
-  wrappers. Do not hand off slim work to narrower skills unless the user
-  explicitly asks for those skills; this skill can choose and execute slim
-  workflows directly.
-  INVOKES: local inspection scripts, Gradle/Xcode/Objective Sharpie tooling,
-  NuGet and package-manager commands.
+  Create, troubleshoot, package, and update native library bindings for .NET
+  MAUI on Apple and Android. USE FOR: choosing between slim (Native Library
+  Interop) and traditional/full bindings, app-local vs redistributable and
+  narrow vs broad API-surface choices, multi-platform strategy, cross-ecosystem
+  artifact acquisition (Maven, SPM, CocoaPods, xcframeworks, GitHub releases),
+  xcframework slice verification, Swift-only binding options, Objective Sharpie
+  cleanup, Android Gradle/Maven and Java dependency-verification resolution,
+  redistributable NuGet packaging with buildTransitive props/targets, and
+  updating a binding after an upstream SDK update. Owns the slim-vs-full
+  decision for Apple and Android and can run slim workflows directly.
+  DO NOT USE FOR: general MAUI app development, platform handlers, workload
+  installation, or non-native .NET wrappers; do not hand slim work to narrower
+  skills unless explicitly named. INVOKES: inspection scripts,
+  Gradle/Xcode/Sharpie tooling, NuGet and package-manager commands.
 ---
 
 # Native Library Bindings for .NET MAUI
