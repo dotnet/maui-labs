@@ -116,10 +116,9 @@ Coercion lives at the **edges** (converters), keeping the tree itself untyped an
 ## 8. Change, re-inflation & persistence
 
 - Because the tree is observable, **most updates need no re-inflation** — values change in place.
-- On a **catalog or render-context change** (see
-  [Extensibility](./appendix-extensibility.md#22-context-conditional-resolution)), the current DSL
-  document is **re-inflated against the same persistent tree**, so bindings re-attach and **in-progress
-  form values survive** the re-render.
+- When the model renders a **new document** (e.g. after a registry change adds a capability, or the
+  user edits and re-queries), the current DSL is **re-inflated against the same persistent tree**,
+  so bindings re-attach and **in-progress form values survive** the re-render.
 - The `form` tree is owned by `CanvasState` for the life of the surface; a new chat/`clear_ui`
   resets it.
 

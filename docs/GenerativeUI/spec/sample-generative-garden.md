@@ -185,14 +185,16 @@ builder.Services.AddGenerativeUi(options =>
     options.JsonSerializerContext = GardenJsonContext.Default;
 
     // Garden-specific vocabulary the model can use (details in §5.5):
-    options.Ui.AddStyle(GardenUi.PrimaryButton);
-    options.Ui.AddStyle(GardenUi.DangerButton);
-    options.Ui.AddStyle(GardenUi.BrandAccent);
-    options.Ui.AddComponent(GardenUi.ProductImage);      // watermarking presenter
-    options.Ui.AddComponent(GardenUi.StarRating);        // editable rating control
-    options.Ui.AddView(GardenUi.CheckoutView);           // official checkout surface
-    options.Ui.AddView(GardenUi.MonthlyOrdersReport);    // full-screen report
-    options.Ui.AddRenderer(GardenUi.ProductImageMandatory); // product images MUST watermark
+    options.Ui.AddStyle("PrimaryButton", "The main call-to-action button on a screen.");
+    options.Ui.AddStyle("DangerButton", "Destructive actions like delete or remove.");
+    options.Ui.AddStyle("BrandAccent", "Garden brand green accent for emphasis labels.");
+    options.Ui.AddComponent<ProductImage>("ProductImage",
+        "Use for ANY product image — it renders the picture with the Garden watermark. Never use a plain Image for a product.");
+    options.Ui.AddComponent<StarRating>("StarRating", "Shows or edits a 0–5 star rating.");
+    options.Ui.AddView<CheckoutView>("CheckoutView",
+        "The official checkout surface. Use for any checkout/payment; it self-loads the cart via the API. Do not compose your own checkout UI.");
+    options.Ui.AddView<MonthlyOrdersReport>("MonthlyOrdersReport",
+        "Full-screen monthly orders report. Use when the user asks for an orders report.");
 });
 ```
 
@@ -232,7 +234,7 @@ sample's `ChatClientBuilder(innerChatClient).UseFunctionInvocation().Build(rootP
 
 ### 5.5 Registered UI extensions (Garden-specific)
 
-These are authored in the client and registered in §5.2. They demonstrate all four extension tiers
+These are authored in the client and registered in §5.2. They demonstrate the three extension tiers
 from the [Extensibility appendix](./appendix-extensibility.md); the **library references none of
 them**.
 
@@ -240,29 +242,29 @@ them**.
 |---|---|---|
 | `PrimaryButton` / `DangerButton` | Style | Brand CTA + destructive button styles (map to XAML `Style`s). The model picks `danger` for delete/clear. |
 | `BrandAccent` | Style | Brand accent color token for emphasis labels/badges. |
-| `ProductImage` | Component | Composite presenter: framed image + **automatic licensing watermark**; binds `source` (+ optional `caption`). |
+| `ProductImage` | Component | Composite presenter: framed image + **automatic licensing watermark**; binds `source` (+ optional `caption`). Its description tells the model to use it for **any** product image. |
 | `StarRating` | Component | Editable 1–5 star control; two-way bound to a form `key` for reviews. |
-| `CheckoutView` | View (`FullCanvas`) | The official cart + payment surface. `MustUseWhen` checkout; self-loads the cart via the API. |
-| `MonthlyOrdersReport` | View (`FullCanvas`) | Filterable, printable monthly report; `Inputs`: `month`, `verbosity`. Self-loads orders. |
-| `ProductImageMandatory` | Renderer | Maps content type `product-image` → `ProductImage`, `Mandatory` — even a plain `Image` for a product is substituted so watermarking can't be skipped. |
+| `CheckoutView` | View | The official cart + payment surface. Its description says to use it for any checkout; self-loads the cart via the API. |
+| `MonthlyOrdersReport` | View | Filterable, printable monthly report; `Inputs`: `month`, `verbosity`. Self-loads orders. |
 
 The Garden `Product` gains an `ImageUrl` so `ProductImage` has something to render (emoji stays as
 a lightweight fallback). The `CheckoutView`/`MonthlyOrdersReport` are ordinary MAUI `ContentView`s
 + VMs registered in DI and resolved by the view descriptors.
 
-**Static vs. dynamic + context resolution (demonstrated in the sample):**
+**Static + dynamic registration + native theming (demonstrated in the sample):**
 
 - The registrations above are **static** (added at startup). To exercise **dynamic** registration,
-  a "sign in as manager" prompt registers a **bundle** of manager-only vocabulary at runtime —
-  `AdminOrdersView` (a full view) and a `BulkPriceEditor` component — via `IUiRegistry.Bundle(…)`;
-  "sign out" disposes the handle and they leave the model's catalog. This shows permission-driven
-  membership changing mid-chat (see
-  [Extensibility §2.1](./appendix-extensibility.md#21-static-vs-dynamic-registration)).
-- **Context resolution is native XAML.** The `PrimaryButton`/`DangerButton`/`BrandAccent` resources
-  use `AppThemeBinding` so **light/dark** just works, and an `OnIdiom` width so the CTA adapts to
-  **phone vs. desktop** — all without the model knowing. The model emits `danger` once; the host
-  resolves the rest (see
-  [Extensibility §2.2](./appendix-extensibility.md#22-context-conditional-resolution)).
+  a "sign in as manager" prompt adds manager-only vocabulary at runtime — `AdminOrdersView` (a full
+  view) and a `BulkPriceEditor` component — by injecting the `GenerativeUiRegistry` and calling
+  `registry.AddView<AdminOrdersView>(…)` / `registry.AddComponent<BulkPriceEditor>(…)`; "sign out"
+  calls `registry.Remove(…)` and they leave the model's catalog. Whatever is registered when a turn
+  runs is what the model sees (see
+  [Extensibility §2](./appendix-extensibility.md#2-the-registry)).
+- **Theming is native XAML.** The `PrimaryButton`/`DangerButton`/`BrandAccent` resources use
+  `AppThemeBinding` so **light/dark** just works, and an `OnIdiom` width so the CTA adapts to
+  **phone vs. desktop** — all without the model knowing. The model emits `danger` once; the resource
+  the style maps to adapts (see
+  [Extensibility §2.1](./appendix-extensibility.md#21-theming--device-context)).
 - **Binding has no view models.** Every rendered card/form/list binds to the generic `UiObject`
   tree built from the REST JSON and the `form` state (see the
   [Binding Model appendix](./appendix-binding-model.md)); `StarRating` and the add/edit forms write
@@ -276,8 +278,8 @@ Each maps a natural-language prompt to a tool sequence and a rendered surface.
    `list_endpoints` → `read_api GET /products` → `render_ui` (titled list of product cards).
 2. **"show me the basil seeds"**
    `read_api GET /products/basil-seeds` → `render_ui` (detail card, one-way bound to `data`; the
-   image renders via the **`ProductImage`** component — watermarked — enforced by the mandatory
-   renderer even if the model reaches for a plain `Image`).
+   image renders via the **`ProductImage`** component — watermarked — because the model followed
+   the component's description for product images).
 3. **"add a new product called pears"**
    `render_ui` (add-product form, `form.name = "Pears"`) → user: "set the price to 3.49" →
    `set_field("price","3.49")` → user: "save for me" → `get_state` →
@@ -306,14 +308,14 @@ Each maps a natural-language prompt to a tool sequence and a rendered surface.
 12. **"show me the June orders report"** → `present_view("MonthlyOrdersReport", { month:"2026-06" })`
     — the full-screen report view takes the canvas and self-loads/filters orders. The model supplies
     only the declared inputs.
-13. **"sign in as manager"** → the app registers the manager bundle at runtime (`AdminOrdersView` +
-    `BulkPriceEditor`); `list_ui_capabilities` now shows them, so **"bulk-edit prices"** →
+13. **"sign in as manager"** → the app registers the manager vocabulary at runtime (`AdminOrdersView` +
+    `BulkPriceEditor`); the next turn's catalog now includes them, so **"bulk-edit prices"** →
     `render_ui` using `BulkPriceEditor`, and **"show all orders"** →
-    `present_view("AdminOrdersView")`. **"sign out"** disposes the bundle and those capabilities
+    `present_view("AdminOrdersView")`. **"sign out"** removes them and those capabilities
     disappear.
 
 These cover read, create, partial-fill + field edits, save-via-chat, destructive confirm,
-recommendations, **registered styles/components**, **mandatory watermarking**, **full-view
+recommendations, **registered styles/components**, **description-driven watermarking**, **full-view
 handoff** (checkout, report), and **runtime (permission-driven) registration** — the same surface
 area as the current in-memory sample, now server-backed, generatively rendered, and extended with
 app-owned UI.
@@ -366,7 +368,8 @@ app-owned UI.
 9. **Checkout view boundary:** does `CheckoutView` place the order itself (`POST /orders`) or hand
    back to the model to do so? Where does the `write_api` approval fit when a full view owns the
    action?
-10. **Mandatory watermark enforcement:** should the renderer silently substitute `ProductImage`,
-    or should the model be told product images are off-limits as plain `Image` (or both)?
+10. **Product image guidance:** is a clear `ProductImage` description enough for the model to always
+    use it for product images, or do we also need a lightweight validation nudge if it emits a plain
+    `Image` for a product?
 11. **Report data:** does `MonthlyOrdersReport` call the API itself, or does the library pass it a
     `DataContract` the model gathered? (Leaning self-load.)

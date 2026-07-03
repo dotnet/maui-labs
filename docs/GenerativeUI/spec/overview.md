@@ -90,12 +90,10 @@ We want to find out how far this can go, what breaks, and what reusable pieces f
 | **Invoker** | The generic HTTP caller behind `read_api` / `write_api`. |
 | **UI-DSL** | The constrained JSON description language the model emits to render UI. |
 | **Inflator** | The runtime component that turns a UI-DSL document into MAUI `View`s. |
-| **UI registry** | The app-populated, **mutable** catalog of registered **styles**, **components**, **views**, and **renderers** that extend the base DSL. Add/remove at startup or at runtime. |
+| **UI registry** | The app-populated, **mutable** catalog of registered **styles**, **components**, and **views** that extend the base DSL. Add/remove at startup or anytime afterwards. |
 | **Style** | A named visual token mapped to a XAML resource, applied to a node's `style`. |
 | **Component** | An app-registered composite control exposed as a DSL node type. |
 | **View** | An app-registered full surface the model hands off to (e.g. checkout, report). |
-| **Renderer** | A policy mapping a content/data type → a preferred or mandatory component/view. |
-| **Render context** | The runtime conditions (`UiRenderContext`: theme, size, orientation, a11y, mode, permissions) the host resolves a registered name against — invisible to the model. |
 | **Dynamic data context** | The generic observable `UiObject` tree the UI binds to instead of a hand-authored view model (see the [Binding Model appendix](./appendix-binding-model.md)). |
 | **CanvasState** | Client state holding the currently rendered view + busy/empty flags. |
 | **FormState** | The editable region of the dynamic data context backing form fields (the DSL `form`). |
@@ -172,42 +170,38 @@ through this generic surface, so the library needs no knowledge of the app's end
 | `show_confirm` | Render a confirm overlay; resolves via button tap or the user typing "yes". |
 | `clear_ui` | Reset the canvas to the welcome/empty state. |
 | `present_view` | Hand the canvas off to a **registered full view** (e.g. checkout, report), supplying its declared inputs. |
-| `list_ui_capabilities` | List registered styles/components/views/renderers (names + descriptions + where each applies). |
-| `describe_component` / `describe_view` | Full prop/input schema + usage rules for one registered component or view. |
+| `list_ui_capabilities` | List registered styles/components/views (names + descriptions). |
+| `describe_component` / `describe_view` | Full prop/input list + description for one registered component or view. |
 
 The app **extends** what these tools can produce by registering styles, custom controls, and full
 views (see §6.3). Built-in primitives cover generic UI; registrations add brand styling, bespoke
-controls (e.g. a watermarking product image), and mandatory surfaces (e.g. the official checkout
-view). The model discovers the catalog via `list_ui_capabilities`/`describe_*` and/or a seeded
-summary.
+controls (e.g. a watermarking product image), and full app-owned surfaces (e.g. the official checkout
+view). The model discovers the catalog via a seeded summary and/or `list_ui_capabilities`/`describe_*`.
 
 ### 6.3 Extending the vocabulary (see [Extensibility appendix](./appendix-extensibility.md))
 
 The DSL is **closed but extensible**. The library ships base primitives; the app registers its own
-vocabulary — at startup **or dynamically at runtime** — through
-`AddGenerativeUi(options => options.Ui.Add…)` and the resolvable `IUiRegistry`:
+vocabulary — at startup **or anytime afterwards** — through
+`AddGenerativeUi(options => options.Ui.Add…)` and the DI-resolvable `GenerativeUiRegistry`:
 
 | Extension | Registered via | Appears to the model as |
 |---|---|---|
-| **Style** | `AddStyle` | a `style` token (e.g. `primary`, `danger`, `Brand`) on any node |
-| **Component** | `AddComponent` / `AddComponent<TView>` | a node `type` with a typed `props` schema (e.g. `ProductImage`) |
-| **View** | `AddView` / `AddView<TView>` | `present_view` / a `View` node (e.g. `CheckoutView`) |
-| **Renderer** | `AddRenderer` | a preferred/**mandatory** type→control policy (e.g. product images *must* watermark) |
+| **Style** | `AddStyle(name, description, resourceKey?)` | a `style` token (e.g. `primary`, `danger`, `Brand`) on any node |
+| **Component** | `AddComponent<TView>(alias, description, props?)` | a node `type` with a named `props` list (e.g. `ProductImage`) |
+| **View** | `AddView<TView>(alias, description, inputs?)` | `present_view` / a `View` node (e.g. `CheckoutView`) |
 
 The **library hardcodes none** of these — all app specifics live in the app and flow through the
-generic registry. Descriptions and usage rules are surfaced to the model **verbatim** (same no-clip
-principle as API descriptions).
+generic registry. Each entry carries a **name/alias** and a freeform **description**; all
+descriptions are surfaced to the model **verbatim** (same no-clip principle as API descriptions),
+and it is the description that tells the model *when and when not* to use an item.
 
-Two dimensions of "dynamic" (see the
-[Extensibility appendix §2.1–§2.2](./appendix-extensibility.md#21-static-vs-dynamic-registration)):
-
-- **Membership changes** — every `Add…` returns an `IDisposable` and has a `Remove…`, so the catalog
-  can grow/shrink at runtime (e.g. admin components appear after sign-in, vanish on sign-out). The
-  catalog is versioned; on change the per-app schema regenerates and the model is re-informed.
-- **Context resolution** — the *same* registered token renders differently by **theme, size,
-  orientation, accessibility, or mode**, resolved by the host (preferably native XAML:
-  `AppThemeBinding`/`VisualStateManager`/merged dictionaries). This **never** expands the model's
-  vocabulary: the model emits `danger` once; the host picks the right resource.
+The registry is a plain mutable collection: `Add…`/`Remove…` at any time (e.g. admin components
+appear after sign-in, vanish on sign-out). Whatever is registered *now* is what the model sees this
+turn — no versioning, events, or handles for the MVP. **Theme/size/orientation/accessibility**
+variation is handled by the native XAML resource a style maps to
+(`AppThemeBinding`/`VisualStateManager`/merged dictionaries), not by the registry or the model: the
+model emits `danger` once; the resource adapts. See
+[Extensibility appendix §2](./appendix-extensibility.md#2-the-registry).
 
 ## 7. Runtime loop
 
@@ -240,11 +234,11 @@ This boundary is the core design principle and the thing we most want to get rig
 | The AI tool implementations | ✅ (`OpenApiExplorerTools`, `GenerativeUiTools`) | — |
 | UI-DSL model + inflator + state | ✅ | — |
 | Canvas host control + DI extension | ✅ | — |
-| **UI extensibility mechanism** (registry, `AddStyle`/`AddComponent`/`AddView`/`AddRenderer`, discovery tools, mandatory-renderer enforcement, per-app schema) | ✅ (generic) | — |
+| **UI extensibility mechanism** (registry, `AddStyle`/`AddComponent`/`AddView`, discovery tools, catalog seeding) | ✅ (generic) | — |
 | Base URL, OpenAPI location | provided *by* the app at startup | ✅ (config) |
 | REST models / DTOs | ❌ (never referenced) | ✅ (`.Shared`, typed, source-gen JSON) |
 | Endpoint names / routes | ❌ | ✅ (server) |
-| **Registered styles/components/views/renderers** (the actual brand styles, `ProductImage`, `CheckoutView`, watermark policy) | ❌ (never referenced) | ✅ (app registers them + supplies the XAML resources / controls / views) |
+| **Registered styles/components/views** (the actual brand styles, `ProductImage`, `CheckoutView`) | ❌ (never referenced) | ✅ (app registers them + supplies the XAML resources / controls / views) |
 | System prompt / seed data | ❌ | ✅ |
 
 The app hands the library its concrete pieces via a single DI call:
@@ -257,12 +251,11 @@ builder.Services.AddGenerativeUi(options =>
     options.JsonSerializerContext = GardenJsonContext.Default; // typed (de)serialization
 
     // App-specific UI vocabulary (all optional; see the Extensibility appendix).
-    // Every Add… returns an IDisposable and can also be called later via IUiRegistry
-    // (e.g. register admin views after sign-in, dispose on sign-out):
-    options.Ui.AddStyle(/* primary / danger / Brand … */);
-    options.Ui.AddComponent(/* ProductImage (watermarking presenter) … */);
-    options.Ui.AddView(/* CheckoutView, MonthlyOrdersReport … */);
-    options.Ui.AddRenderer(/* product-image → ProductImage (Mandatory) … */);
+    // The same Add…/Remove… calls are available later via the DI-resolvable
+    // GenerativeUiRegistry (e.g. register admin views after sign-in, remove on sign-out):
+    options.Ui.AddStyle("danger", "Destructive actions like delete/remove.");
+    options.Ui.AddComponent<ProductImage>("ProductImage", "Use for any product image (adds the brand watermark).");
+    options.Ui.AddView<CheckoutView>("CheckoutView", "The official checkout surface; use for any checkout.");
 });
 ```
 
@@ -343,7 +336,7 @@ Acceptance scenarios (each must work end to end):
 7. **Reviews** — submit / list / per-product.
 8. **Recommendations** — starter bundle.
 9. **Registered component** — a product image renders via the app's `ProductImage` presenter
-   (watermarked), including when a mandatory renderer substitutes it for a plain `Image`.
+   (watermarked), because the model followed the component's description for product images.
 10. **Registered style** — destructive buttons use the app's `danger` style the model selected.
 11. **Full view handoff** — "checkout" presents the app's `CheckoutView` (not a model-composed UI)
     via `present_view`; the view self-loads the cart.
@@ -396,27 +389,21 @@ These are the things to iron out before/while building. Grouped by area.
 ### Extensibility (styles / components / views) — see [Extensibility appendix](./appendix-extensibility.md#open-questions)
 10a. Uniform node `type` set (built-ins + registered) vs. explicit `Component`/`View` wrappers to
      avoid name collisions? (Lean: uniform + collision validation.)
-10b. Mandatory renderers: silently substitute the required control vs. reject-and-instruct the
-     model? How is a content type tagged on data?
-10c. How much of the UI capability catalog do we **seed** vs. lazily `describe_*`?
-10d. Do components support children/slots in the MVP, or are they leaves? How do full views declare
-     "self-loaded" vs. "model-supplied" data, and how do `Persistent`/`Region`/`Overlay` views
-     coexist with the generative canvas?
-10e. **Dynamic catalog:** when registrations change mid-session (e.g. after sign-in), how do we
-     re-inform the model — system note, forced `list_ui_capabilities()`, or diff-notify — and how do
-     we handle a control being unregistered while it's on screen?
-10f. **Context resolution:** where's the line between native XAML (`AppThemeBinding`/VSM/merged
-     dictionaries) and a `ResolveResourceKey` delegate for theme/size/orientation/a11y/mode? What's
-     the re-resolution cost model on context change (re-inflate vs. track sensitive nodes)?
-10g. **Registration sources:** support imperative + XAML-attribute + (future) source-generated
-     registration simultaneously? How are duplicates/conflicts reconciled?
+10b. How much of the UI capability catalog do we **seed** vs. lazily `describe_*` as it grows?
+10c. Do components support children/slots in the MVP, or are they leaves? How do full views declare
+     "self-loaded" vs. "model-supplied" data?
+10d. **Dynamic catalog:** when registrations change mid-session (e.g. after sign-in), how do we
+     re-inform the model — reseed the system note or just let the next turn's catalog reflect it —
+     and how do we handle a control being unregistered while it's on screen?
+10e. **Registration sources:** support imperative now + (future) source-generated registration; how
+     are duplicate names/aliases reconciled?
 
 ### Dynamic binding & generic model — see [Binding Model appendix](./appendix-binding-model.md#open-questions)
-10h. Indexer-path bindings (`[a][b].Value`) vs. a custom path-walking `BindingBase` — which is more
+10f. Indexer-path bindings (`[a][b].Value`) vs. a custom path-walking `BindingBase` — which is more
      reliable/AOT-friendly for the generic `UiObject` tree?
-10i. Typed vs. stringly leaves: store typed values in the tree, or keep strings and coerce only at
+10g. Typed vs. stringly leaves: store typed values in the tree, or keep strings and coerce only at
      the edges (`get_state`/converters)?
-10j. Is `data` rebuilt immutably each render (only `form` observable), or are both observable so API
+10h. Is `data` rebuilt immutably each render (only `form` observable), or are both observable so API
      updates can patch the tree in place?
 
 ### Interaction & UX

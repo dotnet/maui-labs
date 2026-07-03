@@ -22,7 +22,7 @@ controls, and full views on top of it — see the
    `FormState`; display nodes may bind one-way to `data`.
 4. **Deterministic inflation.** One document → one deterministic view tree. No layout ambiguity.
 5. **Forgiving.** Missing optional props use sane defaults; extra props are ignored.
-6. **App owns the look, not the model.** Brand styling, bespoke controls, and mandatory views are
+6. **App owns the look, not the model.** Brand styling, bespoke controls, and full custom views are
    app-authored C#; the model only *selects* registered names and supplies declared inputs.
 
 ## 2. `render_ui` payload
@@ -122,8 +122,8 @@ ordinary `type`s with their own prop schema, and the inflator resolves them via 
 | `View` | a registered **full view** hosted inline | `view` names the registered view; `inputs` supplies its declared params. Larger, app-owned surface. |
 
 Full views are more often presented as the whole canvas via the `present_view` tool than embedded
-as a node. Registration, prop/input schemas, factories, discovery, and mandatory renderers are
-specified in the [Extensibility appendix](./appendix-extensibility.md). Examples appear in §10.6–10.7.
+as a node. Registration, prop/input lists, DI creation, and discovery are specified in the
+[Extensibility appendix](./appendix-extensibility.md). Examples appear in §10.6–10.7.
 
 ## 5. Binding model
 
@@ -186,15 +186,15 @@ in the app theme, so output stays on-brand and predictable.
   button styles `primary`/`secondary`/`danger`, badge tones `neutral`/`positive`/`warning`/`danger`.
 - Apps **register additional styles** (or override the base) via the registry — e.g. a `Brand`
   accent for labels, a `hero` button treatment, a multi-line vs single-line entry variant. Each
-  registered style carries a **name** (the token the model uses), a full **description**, an
-  **appliesTo** constraint (which node/control kinds it's valid on), and the **resource key** it
-  maps to. See the [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
+  registered style carries a **name** (the token the model uses), a full **description** (which
+  says where it's meant to be used), and the **resource key** it maps to. See the
+  [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
 - `style` accepts a **single token or a list** — `"style": "primary"` or
   `"style": ["Brand", "large"]` — so styles can compose (mapped to a `Style` plus MAUI
   `StyleClass`es under the hood).
-- The registered style catalog (names + descriptions + where each applies) is given to the model
-  (seeded and/or via `list_ui_capabilities`), so it knows a `danger` button style exists and picks
-  it for destructive actions.
+- The registered style catalog (names + descriptions) is given to the model (seeded and/or via
+  `list_ui_capabilities`), so it knows a `danger` button style exists and picks it for destructive
+  actions.
 
 Unknown or misapplied tokens fall back to a sensible default (`Body`/`secondary`/`neutral`) and
 are logged — never an error.
@@ -210,10 +210,7 @@ Spacing/padding remain small integers interpreted as device-independent units (n
 - **Unknown `type`**: render a labeled placeholder ("Unsupported: <type>") in place of that node;
   continue inflating siblings.
 - **Missing/invalid props** (e.g. `Field` without `key`, or a component prop failing its declared
-  schema): render a placeholder for that node and log.
-- **Mandatory renderers:** after the tree resolves, a policy post-pass enforces any mandatory
-  type→renderer rules (e.g. product images must use the watermarking presenter). See the
-  [Extensibility appendix §3.4](./appendix-extensibility.md#34-renderers-type--componentview-policy).
+  list): render a placeholder for that node and log.
 - **Depth/size caps**: cap node count and tree depth; beyond the cap, truncate with a notice.
 
 The inflator **never throws** into the UI; it degrades to placeholders + logs.
@@ -322,9 +319,9 @@ The app registered a `hero` button style. The model just references the token:
 }
 ```
 
-A **mandatory renderer** can make this automatic: even if the model emits a plain `Image` for a
-product image, the policy post-pass substitutes `ProductImage` so watermarking can't be bypassed
-(see [Extensibility §3.4](./appendix-extensibility.md#34-renderers-type--componentview-policy)).
+The model chooses `ProductImage` here because its **description** says to use it for any product
+image (so the watermark is applied) — see
+[Extensibility §3.2](./appendix-extensibility.md#32-components-custom-controls).
 
 ### 10.7 Full view handoff (checkout)
 
