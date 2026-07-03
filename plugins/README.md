@@ -13,8 +13,9 @@ DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devf
 | | [maui-devflow-session-review](dotnet-maui/skills/maui-devflow-session-review/) | Review opt-in MAUI DevFlow sessions for friction, retries, workarounds, and product feedback. |
 | | [devflow-connect](dotnet-maui/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
 | | [maui-ai-debugging](dotnet-maui/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |
-| | [android-slim-bindings](dotnet-maui/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |
-| | [ios-slim-bindings](dotnet-maui/skills/ios-slim-bindings/) | Create iOS slim bindings using the Native Library Interop approach. |
+| | [native-library-bindings](dotnet-maui/skills/native-library-bindings/) | Create and maintain Android and Apple native library bindings (traditional and slim/NLI) for .NET MAUI apps. |
+| | [android-slim-bindings](dotnet-maui/skills/android-slim-bindings/) | Legacy redirect shim for Android slim binding requests; use `native-library-bindings`. |
+| | [ios-slim-bindings](dotnet-maui/skills/ios-slim-bindings/) | Legacy redirect shim for iOS slim binding requests; use `native-library-bindings`. |
 | | [dotnet-workload-info](dotnet-maui/skills/dotnet-workload-info/) | Discover installed .NET workloads, SDK versions, and dependency requirements. |
 
 ## Installation

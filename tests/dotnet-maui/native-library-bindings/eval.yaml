@@ -1,0 +1,477 @@
+scenarios:
+  - name: "Choose binding strategy for mixed Apple and Android SDK"
+    prompt: |
+      I have a .NET MAUI app that needs a vendor SDK on iOS, Mac Catalyst, and
+      Android. The vendor has a Swift-only xcframework for Apple and Maven
+      coordinates for Android. I only need login, logout, and fetchProfile.
+      Should I create full bindings, slim bindings, or something else?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)slim|native library interop|thin wrapper"
+      - type: "output_matches"
+        pattern: "(?i)Swift-only|swift-dotnet-bindings|Swift direct"
+      - type: "output_matches"
+        pattern: "(?i)Maven|Gradle|AndroidMavenLibrary"
+      - type: "output_not_matches"
+        pattern: "(?i)bind the entire SDK by default|full binding by default"
+    rubric:
+      - "Recommends slim/NLI wrappers for the small API surface instead of defaulting to a full SDK binding"
+      - "Identifies that pure Swift APIs are not visible to Objective Sharpie and need either an ObjC-compatible wrapper or a Swift direct binding route"
+      - "Calls out Android Maven/Gradle dependency resolution before writing the Android binding project"
+      - "Asks or states that redistribution/package needs affect the project layout"
+    timeout: 240
+
+  - name: "Apple xcframework acquisition and validation"
+    prompt: |
+      I downloaded VendorAnalytics.xcframework from a GitHub release and want to
+      bind it for net10.0-ios, net10.0-maccatalyst, net10.0-macos, and net10.0-tvos.
+      What should I inspect before creating the binding project, and what should
+      the binding .csproj include?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)Info\\.plist|AvailableLibraries|slice|architecture|lipo|file"
+      - type: "output_matches"
+        pattern: "NativeReference"
+      - type: "output_matches"
+        pattern: "net10\\.0-ios|net10\\.0-maccatalyst|net10\\.0-macos|net10\\.0-tvos"
+      - type: "output_matches"
+        pattern: "(?i)license|redistribution"
+    rubric:
+      - "Requires verifying every requested platform/simulator/device slice before multi-targeting"
+      - "Shows NativeReference-based binding project setup"
+      - "Mentions system frameworks/native dependencies and license/redistribution checks"
+      - "Does not imply that a single iOS slice is enough for Mac Catalyst, macOS, or tvOS"
+    timeout: 240
+
+  - name: "Swift Package Manager to binding artifact"
+    prompt: |
+      The iOS SDK I need only has Swift Package Manager instructions:
+      https://github.com/vendor/FancyCharts, version 2.4.0. I need to ship a
+      .NET MAUI binding NuGet for iOS and Mac Catalyst. How should I acquire the
+      native library and make it bindable?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)SPM|Swift Package Manager"
+      - type: "output_matches"
+        pattern: "(?i)xcframework|xcodebuild.*create-xcframework"
+      - type: "output_matches"
+        pattern: "BUILD_LIBRARY_FOR_DISTRIBUTION"
+      - type: "output_matches"
+        pattern: "(?i)Objective Sharpie|@objc|Swift direct"
+    rubric:
+      - "Explains that SPM source must be resolved/built into an xcframework or Xcode project before binding"
+      - "Mentions building device and simulator/Catalyst variants and enabling distribution-stable Swift settings when needed"
+      - "Explains that Objective Sharpie requires ObjC-visible headers; otherwise use wrapper or Swift direct binding path"
+      - "Includes packaging considerations for NuGet redistribution"
+    timeout: 240
+
+  - name: "Android Maven dependency graph and NuGet correlation"
+    prompt: |
+      I need to bind com.vendor:camera-sdk:5.1.0. Gradle resolves:
+      androidx.camera:camera-core:1.3.0 -> 1.4.2
+      androidx.lifecycle:lifecycle-common:2.7.0 -> 2.8.7
+      org.jetbrains.kotlin:kotlin-stdlib:1.9.22 -> 2.0.21
+      com.vendor:camera-runtime:5.1.0
+      How should I set up the binding dependencies in the .csproj? Should I
+      ignore these if I don't call them from C#?
+    assertions:
+      - type: "output_matches"
+        pattern: "AndroidMavenLibrary"
+      - type: "output_matches"
+        pattern: "PackageReference"
+      - type: "output_matches"
+        pattern: "(?i)resolved.*version|1\\.4\\.2|2\\.8\\.7|2\\.0\\.21"
+      - type: "output_not_matches"
+        pattern: "AndroidIgnoredJavaDependency.*camera-runtime"
+    rubric:
+      - "Uses resolved Gradle versions instead of only requested versions"
+      - "Maps AndroidX/Kotlin dependencies to NuGet PackageReference when available"
+      - "Uses AndroidMavenLibrary or AndroidLibrary with Bind=false for runtime dependencies not called from C#"
+      - "Warns not to ignore runtime dependencies"
+    timeout: 240
+
+  - name: "Direct AAR and POM binding with Java dependency verification"
+    setup:
+      files:
+        - path: "VendorBinding/VendorBinding.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0-android</TargetFramework>
+              </PropertyGroup>
+              <ItemGroup>
+                <AndroidLibrary Include="libs/vendor-sdk-5.1.0.aar" />
+              </ItemGroup>
+            </Project>
+    prompt: |
+      I only have vendor-sdk-5.1.0.aar and vendor-sdk-5.1.0.pom from a GitHub
+      release. Update the binding project approach so Java dependency verification
+      can tell me what dependencies are missing.
+    assertions:
+      - type: "output_matches"
+        pattern: "Manifest"
+      - type: "output_matches"
+        pattern: "JavaArtifact"
+      - type: "output_matches"
+        pattern: "JavaVersion|com\\.vendor:vendor-sdk"
+      - type: "output_matches"
+        pattern: "AndroidLibrary"
+    rubric:
+      - "Adds Manifest, JavaArtifact, and JavaVersion metadata to AndroidLibrary"
+      - "Explains that the POM enables Java dependency verification"
+      - "Does not suggest editing generated api.xml directly"
+    timeout: 240
+
+  - name: "Create app-local Android slim binding from Maven"
+    setup:
+      files:
+        - path: "MyMauiApp/MyMauiApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      I have a .NET MAUI app in MyMauiApp/. I need to use the Lottie animation
+      library (com.airbnb.android:lottie:6.6.2), but I only need to play
+      animations from JSON files and don't need the full API surface. Create an
+      app-local slim Android binding project in LottieBinding/ with the Kotlin
+      wrapper, Gradle build files, and C# binding project.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)slim|native library interop|NLI|thin wrapper"
+      - type: "output_matches"
+        pattern: "(?i)gradlew|gradle|build\\.gradle"
+      - type: "output_matches"
+        pattern: "AndroidLibrary|AndroidMavenLibrary"
+      - type: "output_not_matches"
+        pattern: "(?i)Metadata\\.xml.{0,30}(entire|all|full|complete).{0,20}(API|surface|library)"
+      - type: "file_exists"
+        path: "LottieBinding/build.gradle.kts"
+      - type: "file_contains"
+        path: "LottieBinding/build.gradle.kts"
+        value: "com.airbnb.android:lottie"
+    rubric:
+      - "Recommends the slim/NLI approach over a traditional full binding because the app needs only a subset"
+      - "Creates a Java or Kotlin wrapper class with a Dotnet prefix that exposes only animation playback"
+      - "Includes Gradle project structure with the Lottie Maven dependency in build.gradle.kts"
+      - "Shows the C# binding project referencing the built wrapper AAR via AndroidLibrary"
+      - "Uses simple marshallable wrapper APIs, not Kotlin coroutines, lambdas, or the full Lottie API surface"
+    timeout: 240
+
+  - name: "Package reusable multi-platform binding NuGet"
+    prompt: |
+      My app-local binding works. Now I want to publish a NuGet package that
+      supports iOS, Mac Catalyst, and Android. The Apple side has Contoso.xcframework.
+      The Android side uses com.contoso:sdk:1.2.3 plus com.contoso:runtime:1.2.3.
+      What package assets, props/targets, and validation should I add?
+    assertions:
+      - type: "output_matches"
+        pattern: "buildTransitive|build"
+      - type: "output_matches"
+        pattern: "NativeReference"
+      - type: "output_matches"
+        pattern: "AndroidMavenLibrary|PackageReference"
+      - type: "output_matches"
+        pattern: "(?i)license|redistribution"
+      - type: "output_matches"
+        pattern: "(?i)sample app|consumer app|clean"
+    rubric:
+      - "Describes Apple native asset wiring for consumers"
+      - "Describes Android artifact/dependency wiring without duplicating runtime dependencies"
+      - "Requires license/notice checks before redistribution"
+      - "Requires validating the packed nupkg in a clean consumer MAUI app"
+    timeout: 240
+
+  - name: "Ambiguous binding request should prompt for strategy clarification"
+    prompt: |
+      I need to bind the VendorPay native SDK for iOS and Android in our .NET
+      MAUI app so we can take payments. Can you set up the binding project?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)app-local|redistribut|publish.*nuget|only.*app|internal use"
+      - type: "output_matches"
+        pattern: "(?i)how many|which methods|small|narrow|broad|full.*api|entire sdk"
+      - type: "output_matches"
+        pattern: "\\?"
+    rubric:
+      - "Recognizes that the request does not specify app-local vs redistributable, or narrow vs broad API surface"
+      - "Asks a clarifying question (or explicitly states the missing information) before committing to slim vs full binding"
+      - "Does not default straight to a full/traditional binding project without first surfacing the strategy question"
+      - "If it proceeds with an assumption, states the assumption explicitly rather than silently picking a strategy"
+    timeout: 240
+
+  - name: "Update an existing binding after an upstream native SDK release"
+    prompt: |
+      We shipped a slim iOS wrapper and Android NLI wrapper around VendorChat
+      SDK 3.1.0 six months ago, both app-local. VendorChat just released 4.0.0
+      with expanded push notification APIs. What should I do to update our
+      bindings, and how do I know if anything breaks our C# callers?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)release notes|changelog"
+      - type: "output_matches"
+        pattern: "(?i)xcframework|slice|gradle.*dependenc|dependency tree"
+      - type: "output_matches"
+        pattern: "(?i)breaking change|diff|signature.*change|api.*diff"
+      - type: "output_matches"
+        pattern: "(?i)sample app|consumer app|test"
+    rubric:
+      - "Instructs re-acquiring the updated native artifact for both Apple and Android"
+      - "Instructs redoing the dependency graph basics (xcframework slices and/or Gradle dependency tree) rather than assuming they are unchanged"
+      - "Explains how to produce a summary of C# API breaking changes before editing wrapper code"
+      - "Requires validating the updated bindings from a sample/consumer app before considering the update complete"
+    timeout: 240
+
+  - name: "Avoid Kotlin coroutines and lambdas in Android wrapper"
+    prompt: |
+      I'm creating a Kotlin wrapper for an Android SDK that has async APIs.
+      The native SDK uses Kotlin coroutines (suspend functions) and Flow.
+      Here's my wrapper attempt:
+
+      ```kotlin
+      object DotnetMySDK {
+          suspend fun fetchData(url: String): Result<String> {
+              return MySdk.fetchData(url)
+          }
+
+          fun observeChanges(): Flow<DataUpdate> {
+              return MySdk.changes
+          }
+      }
+      ```
+
+      Will this work with the C# binding? If not, what should I change?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)won.?t work|will not work|not.{0,10}(work|support|marshal|bind)"
+      - type: "output_matches"
+        pattern: "(?i)callback|interface|listener"
+      - type: "output_contains"
+        value: "@JvmStatic"
+    rubric:
+      - "Identifies that suspend functions and Flow cannot be bound to C# through the binding generator"
+      - "Recommends converting to callback interfaces (Java-style listener pattern) instead of coroutines"
+      - "Shows a corrected wrapper using a callback interface with onSuccess/onError methods"
+      - "Adds @JvmStatic annotation on methods for static access from C#"
+      - "Uses simple marshallable types (String, boolean, int) not Kotlin-specific types (Result, Flow)"
+    timeout: 240
+
+  - name: "Resolve XA4241 and XA4242 dependency errors in Android binding"
+    setup:
+      files:
+        - path: "MyBinding/MyBinding.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0-android</TargetFramework>
+              </PropertyGroup>
+              <ItemGroup>
+                <AndroidLibrary Include="lib/firebase-wrapper.aar" />
+              </ItemGroup>
+            </Project>
+    prompt: |
+      My Android binding project at MyBinding/ fails to build with these errors:
+
+      ```
+      error XA4241: Java dependency 'androidx.core:core' is not satisfied.
+      error XA4241: Java dependency 'org.jetbrains.kotlin:kotlin-stdlib' is not satisfied.
+      error XA4242: Java dependency 'com.google.firebase:firebase-common:21.0.0' is not satisfied. Suggested fix: Install NuGet package 'Xamarin.Firebase.Common' version '121.0.0' or higher.
+      error XA4241: Java dependency 'javax.inject:javax.inject' is not satisfied.
+      ```
+
+      Fix the MyBinding/MyBinding.csproj to resolve these dependency errors.
+    assertions:
+      - type: "output_contains"
+        value: "Xamarin.AndroidX.Core"
+      - type: "output_contains"
+        value: "Xamarin.Kotlin.StdLib"
+      - type: "output_matches"
+        pattern: "AndroidMavenLibrary|AndroidIgnoredJavaDependency"
+      - type: "output_matches"
+        pattern: "Bind.*false|Bind=\"false\""
+      - type: "file_contains"
+        path: "MyBinding/MyBinding.csproj"
+        value: "Xamarin.AndroidX.Core"
+      - type: "file_contains"
+        path: "MyBinding/MyBinding.csproj"
+        value: "Xamarin.Kotlin.StdLib"
+    rubric:
+      - "For XA4242 with a suggestion (firebase-common), recommends installing the suggested NuGet package first"
+      - "For androidx.core:core and kotlin-stdlib, maps to the correct Xamarin.AndroidX/Kotlin NuGet packages"
+      - "For javax.inject (annotation/compile-time only), suggests AndroidIgnoredJavaDependency or AndroidMavenLibrary with Bind=false"
+      - "Explains the decision tree: XA4242 suggestion -> NuGet; needed at runtime -> AndroidMavenLibrary/PackageReference; compile-time only -> AndroidIgnoredJavaDependency"
+    timeout: 240
+
+  - name: "Find NuGet package for Maven dependency using dotnet package search"
+    prompt: |
+      I'm resolving Android binding dependencies and need to find NuGet equivalents
+      for these Maven artifacts from my Gradle dependency tree:
+
+      - androidx.fragment:fragment:1.8.5
+      - androidx.lifecycle:lifecycle-common:2.8.7
+      - com.squareup.okhttp3:okhttp:4.12.0
+
+      How do I search for the right NuGet packages? And how do I reference them
+      in my binding .csproj?
+    assertions:
+      - type: "output_contains"
+        value: "dotnet package search"
+      - type: "output_matches"
+        pattern: "Xamarin\\.AndroidX\\.Fragment|Xamarin\\.AndroidX\\.Lifecycle"
+      - type: "output_matches"
+        pattern: "Square\\.OkHttp3|PackageReference"
+    rubric:
+      - "Shows the dotnet package search command with the artifact= tag filter syntax for NuGet"
+      - "Maps all three Maven artifacts to their correct NuGet package names"
+      - "Shows PackageReference elements for the .csproj file"
+      - "Does not suggest manually downloading JARs or AARs for well-known AndroidX/Square libraries"
+    timeout: 240
+
+  - name: "Create iOS binding with CocoaPods dependency via XcodeGen"
+    setup:
+      files:
+        - path: "MyMauiApp/MyMauiApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      I have a .NET MAUI app in MyMauiApp/. I want to use the Lottie iOS animation
+      library (distributed via CocoaPods as 'lottie-ios') and I only need to play
+      animations from JSON files. Create a slim iOS binding project in LottieBinding/
+      with the XcodeGen project.yml, Podfile, Swift wrapper, and C# binding project.
+    assertions:
+      - type: "output_contains"
+        value: "XcodeGen"
+      - type: "output_matches"
+        pattern: "use_frameworks.*static|:linkage.*:static"
+      - type: "output_matches"
+        pattern: "@objc|NSObject"
+      - type: "output_matches"
+        pattern: "ApiDefinition\\.cs|BaseType"
+      - type: "file_exists"
+        path: "LottieBinding/project.yml"
+      - type: "file_exists"
+        path: "LottieBinding/Podfile"
+      - type: "file_contains"
+        path: "LottieBinding/Podfile"
+        value: "lottie-ios"
+    rubric:
+      - "Uses XcodeGen (project.yml) to generate the Xcode project rather than manual Xcode project creation"
+      - "Configures CocoaPods with use_frameworks! :linkage => :static for static linking"
+      - "Shows a Swift wrapper class inheriting from NSObject with @objc annotations on class and methods"
+      - "References the Xcode project from the C# binding .csproj using XcodeProject MSBuild item with SchemeName"
+      - "Sets BUILD_LIBRARY_FOR_DISTRIBUTION to YES for ABI stability across Swift versions"
+    timeout: 240
+
+  - name: "Fix unrecognized selector runtime crash in iOS binding"
+    setup:
+      files:
+        - path: "MyBinding/swift/DotnetMyBinding.swift"
+          content: |
+            import Foundation
+
+            @objc(DotnetMyBinding)
+            public class DotnetMyBinding: NSObject {
+                @objc
+                public func initialize(apiKey: String) -> Bool {
+                    return true
+                }
+            }
+        - path: "MyBinding/ApiDefinition.cs"
+          content: |
+            using Foundation;
+            using ObjCRuntime;
+
+            namespace MyBinding;
+
+            [BaseType(typeof(NSObject))]
+            interface DotnetMyBinding {
+                [Export("initializeWithApiKey:")]
+                bool Initialize(string apiKey);
+            }
+    prompt: |
+      My iOS binding project at MyBinding/ builds successfully but crashes at runtime with:
+
+      ```
+      Objective-C exception thrown. Name: NSInvalidArgumentException
+      Reason: -[DotnetMyBinding initializeWithApiKey:]: unrecognized selector sent to instance
+      ```
+
+      The Swift wrapper is at MyBinding/swift/DotnetMyBinding.swift and the binding
+      definition is at MyBinding/ApiDefinition.cs. Fix the code to resolve this
+      selector mismatch.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)selector.*mismatch|mismatch.*selector|Export.*doesn.t match|@objc.*selector"
+      - type: "output_matches"
+        pattern: "initializeWithApiKey:"
+      - type: "output_matches"
+        pattern: "@objc\\(.*initializeWithApiKey"
+      - type: "file_contains"
+        path: "MyBinding/swift/DotnetMyBinding.swift"
+        value: "initializeWithApiKey"
+    rubric:
+      - "Identifies that the @objc annotation is missing an explicit selector, so Swift generated a different one"
+      - "Explains that Swift auto-generates the selector as initializeWithApiKey: but @objc without an explicit selector may produce initializeApiKey: or similar"
+      - "Shows the fix: add @objc(initializeWithApiKey:) to explicitly match the [Export] attribute"
+      - "Emphasizes that @objc(selector:) in Swift must exactly match [Export(\"selector:\")] in ApiDefinition.cs"
+    timeout: 240
+
+  - name: "Design Swift wrapper for async/await APIs with completion handlers and [Async]"
+    prompt: |
+      The iOS SDK I'm wrapping has async/await Swift APIs:
+
+      ```swift
+      class NativeSDK {
+          func fetchUser(id: String) async throws -> User
+          func uploadImage(_ data: Data) async throws -> URL
+      }
+      ```
+
+      How do I wrap these for use in a .NET MAUI iOS binding? I need the
+      C# side to be awaitable too.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)completion.?handler|callback|closure"
+      - type: "output_matches"
+        pattern: "NSError"
+      - type: "output_matches"
+        pattern: "\\[Async\\]"
+      - type: "output_not_matches"
+        pattern: "(?i)async.*throws.*->.*in the wrapper|Task<|ValueTask"
+    rubric:
+      - "Converts async/await Swift methods to a completion handler pattern in the wrapper"
+      - "Shows completion handler signature with (Result?, NSError?) -> Void or similar nullable error pattern"
+      - "Uses @objc annotation on the completion handler methods with correct explicit selector names"
+      - "Shows [Async] attribute in ApiDefinition.cs to auto-generate C# async/await wrappers"
+      - "Does not suggest exposing Swift async/await directly through the binding"
+    timeout: 240
+
+  - name: "Generate ApiDefinition.cs with Objective Sharpie and clean up output"
+    prompt: |
+      I've built my iOS slim binding's Swift wrapper and the xcframework is
+      generated. Now I need to create the ApiDefinition.cs. I heard I should
+      use Objective Sharpie. How do I find the generated Swift header and run
+      Sharpie? What cleanup do I need to do on the output?
+    assertions:
+      - type: "output_matches"
+        pattern: "sharpie bind"
+      - type: "output_matches"
+        pattern: "(?i)Swift.*header|MyBinding-Swift\\.h"
+      - type: "output_matches"
+        pattern: "\\[Verify\\]|NullAllowed|\\[Async\\]"
+    rubric:
+      - "Shows how to locate the generated -Swift.h header file in the build output"
+      - "Provides the correct sharpie bind command with --sdk, --namespace, and --scope flags"
+      - "Lists required cleanup steps: remove [Verify] attributes only after review, add [NullAllowed], add [Async]"
+      - "Mentions removing InitWithCoder constructors that are auto-generated but not needed"
+    timeout: 240
