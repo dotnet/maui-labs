@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI.OpenApi\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+  </ItemGroup>
+
+  <!-- The reducer/invoker tests parse the checked-in OpenAPI snapshot shared with the server tests. -->
+  <ItemGroup>
+    <Content Include="..\snapshots\garden.openapi.json" Link="garden.openapi.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -10,12 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <!-- Microsoft.AspNetCore.OpenApi 10.0.x targets Microsoft.OpenApi 2.0.0, but the repo
-         central-pins Microsoft.OpenApi to 3.5.0. Transitive pinning would force 3.5.0 onto ASP.NET's
-         OpenAPI stack, whose source generator is built against the 2.0.0 API and breaks (e.g.
-         IOpenApiMediaType.Example became read-only in 3.x). Steer just this one transitive back to
-         2.0.0 with VersionOverride, leaving transitive pinning on for everything else. The Generative
-         UI reducer library uses 3.5.0 separately; the two only exchange OpenAPI JSON text. -->
+    <!-- ASP.NET's OpenAPI stack targets Microsoft.OpenApi 2.0.0; override the repo's 3.5.0 central pin. -->
     <PackageReference Include="Microsoft.OpenApi" VersionOverride="2.0.0" />
   </ItemGroup>
 
