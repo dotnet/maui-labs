@@ -57,8 +57,41 @@ drag() {
 		"{\"x1\":$1,\"y1\":$2,\"x2\":$3,\"y2\":$4,\"durationMs\":${5:-300}}" | grep -q '"success":true'
 }
 
+# scroll_by <dy> — semantic scroll of the frontmost scrollable (dy<0 scrolls toward older/top)
+scroll_by() {
+	agent_post /api/v1/ui/actions/scroll "{\"dy\":$1}" | grep -q '"success":true'
+}
+
 android_shot() {  # android_shot <name> — screenshot into $OUT
 	adb_ exec-out screencap -p > "$OUT/$1.png"
+	echo "  shot: $1"
+}
+
+# --- iOS (simulator) --------------------------------------------------------
+
+# The sim shares the host loopback, so the agent is reached directly — but the default
+# port 9223 is often held by a Mac-side process (a MAUI DevFlow agent squats it on
+# David's machine), so CometDevAgent scans forward. Discover the COMET agent by probing.
+ios_agent_discover() {
+	for p in $(seq 9223 9232); do
+		if curl -s -m 1 "http://localhost:$p/api/v1/agent/status" | grep -q '"framework":"comet"'; then
+			AGENT_HOST_PORT=$p
+			AGENT="http://localhost:$p"
+			echo "  agent: $AGENT"
+			return 0
+		fi
+	done
+	echo "FAIL: no Comet dev agent found on localhost:9223-9232" >&2
+	return 1
+}
+
+ios_launch() {  # ios_launch <bundle-id>
+	xcrun simctl terminate booted "$1" 2>/dev/null || true
+	xcrun simctl launch booted "$1" > /dev/null
+}
+
+ios_shot() {  # ios_shot <name>
+	xcrun simctl io booted screenshot "$OUT/$1.png" > /dev/null 2>&1
 	echo "  shot: $1"
 }
 
