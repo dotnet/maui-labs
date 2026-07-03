@@ -28,9 +28,9 @@ Use these sources to refresh or verify the skill guidance.
 - Java bindings metadata:
   `https://learn.microsoft.com/dotnet/android/binding-libs/customizing-bindings/java-bindings-metadata`
   - Used for `api.xml`, XPath transforms, and metadata attributes.
-- Xamarin.iOS binding project migration:
+- SDK-style iOS/Apple binding project structure:
   `https://learn.microsoft.com/dotnet/maui/migration/ios-binding-projects`
-  - Used for SDK-style binding project items and `NativeReference`.
+  - Used for SDK-style binding project items and `NativeReference` (structure only; ignore any Xamarin-migration framing — target .NET MAUI net10.0+).
 - Objective-C binding docs:
   `https://learn.microsoft.com/previous-versions/xamarin/cross-platform/macios/binding/`
   - Used for `ApiDefinition.cs`, `StructsAndEnums.cs`, ObjC binding attributes, and Objective Sharpie context.
