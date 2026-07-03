@@ -409,3 +409,29 @@ emulator and CometSwiftUIProbe on the iPhone 16 Pro sim; Release
 TrimMode=full links Comet.dll at 265,728 B (larger than June's legacy-off
 202,752 B because P1–P7 + hot reload/IME/animations landed since — the point
 is the handlers can no longer be compiled in, let alone rooted).
+
+---
+
+# compose-samples build-out (Reply → JetNews → Jetsnack → Jetcaster → JetLagged)
+
+Per-sample sections use the template below (see
+`docs/sample-workflow-checklist.md`, step 8). Emulator numbers land with the
+sample; Pixel 5 numbers land in batches — **B1** after JetNews (Reply+JetNews),
+**B2** after Jetcaster (Jetsnack+Jetcaster), **B3** after JetLagged (final sweep
++ Jetchat re-run to catch framework-growth regressions).
+
+<!-- TEMPLATE — copy per sample
+## <Sample> — <date>
+
+| Metric | Comet (emulator) | Comet (Pixel 5, B_) | Gold Kotlin app |
+|---|---|---|---|
+| Release APK, trimmed single-RID (`tools/bench/size.sh -p:RuntimeIdentifier=android-arm64`) | | | (gold app's own Release APK) |
+| Cold start median, 10 runs (`tools/bench/startup.sh`) | | | |
+| gfxinfo first-pass jank, heaviest scroll screen (<name>) | | | |
+| iOS .ipa trimmed size / launch feel (manual note) | | n/a | n/a |
+| Comet.dll size delta vs previous sample | | | |
+
+Notes: <one paragraph — anything anomalous, descopes affecting perf, screen used
+for the scroll test, fixture vs live data mode>
+-->
+
