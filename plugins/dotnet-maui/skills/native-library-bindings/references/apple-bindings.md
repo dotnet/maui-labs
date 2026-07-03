@@ -157,6 +157,16 @@ Rules:
 - Convert Swift errors to `NSError`.
 - Avoid Swift-only generics, associated values, opaque result types, actors, and SwiftUI views unless using a direct Swift binding generator.
 
+### Pure-Swift SDKs with no ObjC surface (hardest case)
+
+Some SDKs (Mapbox's iOS SDK is the canonical example) migrated fully to Swift and expose almost nothing to Objective-C. A thin `@objc` wrapper over a few calls is not enough — you must build and maintain a **separate ObjC-compatible wrapper framework** that re-exposes the API surface you need, then bind that wrapper (not the SDK).
+
+- The wrapper is its own Xcode/SPM/CocoaPods project that depends on the Swift SDK and exposes `@objc` `NSObject` types. Build it into an `.xcframework` (or reference its `.xcodeproj` via `XcodeProject`), then run Objective Sharpie against the wrapper's generated `-Swift.h`.
+- Prefix wrapper types (Mapbox uses `TMB*`) to avoid clashing with the SDK's own symbols and to make the binding surface obvious.
+- Factory/initializer patterns work best: expose `+createWith...` factory methods rather than trying to surface Swift initializers, generics, or protocols-with-associated-types.
+- This wrapper is a real, versioned artifact you own: every SDK update may require regenerating/adjusting it. For large SDKs, consider code-generating the wrapper from the Swift API rather than hand-writing hundreds of shims.
+- Then layer your binding (and any MAUI abstraction) on top, giving a three-layer stack: Swift SDK -> ObjC wrapper framework -> .NET binding (-> MAUI control).
+
 ## Complex data: JSON-payload slim binding strategy
 
 For native APIs that return large or deeply nested object graphs, modeling

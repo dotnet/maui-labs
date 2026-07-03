@@ -103,6 +103,7 @@ dotnet pack -c Release
 
 - **Apple**: prefer direct `.xcframework` or SPM-to-xcframework when available; use CocoaPods as a fallback when it is the only maintained distribution path.
 - **Android**: prefer Maven/Gradle coordinates; use direct AAR/JAR downloads only when Maven is not available.
+- **Credentialed sources**: some SDKs (e.g. Mapbox) need a download token. Inject it via env / `~/.gradle/gradle.properties` / a git-ignored props file copied from a committed template; never commit it or ship it in the package, and keep the build-time download token separate from any runtime API key.
 - Verify Apple slices/platforms before authoring bindings. Use `scripts/Test-AppleXCFramework.ps1` when an `.xcframework` exists.
 - Resolve Android runtime dependencies before deciding `.csproj` items. Use the native project's Gradle wrapper only when the project is trusted; `scripts/Get-AndroidDependencyReport.ps1` can create a best-effort report from explicit Maven coordinates when JDK, Android SDK/`ANDROID_HOME`, network access, and Gradle are available.
 
@@ -124,6 +125,7 @@ marshallable APIs.
 - Convert Swift async/await to completion handlers.
 - Convert errors to `NSError`.
 - Avoid Swift-only surface unless using an explicit Swift direct binding route.
+- If the SDK is fully Swift with no ObjC surface (e.g. Mapbox iOS), build/maintain a separate `@objc` wrapper framework and bind that, not the SDK (see `references/apple-bindings.md`).
 - For large/nested native object graphs, consider the JSON-payload complex-data
   strategy instead of modeling every nested type across the binding (see
   `references/apple-bindings.md`).

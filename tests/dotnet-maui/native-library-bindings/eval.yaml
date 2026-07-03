@@ -670,3 +670,48 @@ scenarios:
       - "Warns about duplicate-symbol risk with static linking and applies ForceLoad only where a framework's ObjC categories/initializers require it"
       - "If IsTrimmable is set on the binding, notes it must be backed by [Preserve] to be truthful"
     timeout: 240
+
+  - name: "Acquire a credentialed SDK and keep the token out of the package"
+    prompt: |
+      I'm binding the Mapbox SDK for .NET MAUI (Android and iOS). Mapbox serves
+      its Android SDK from a private Maven repo that needs a MAPBOX_DOWNLOADS_TOKEN,
+      and the iOS SDK also needs a download token. There's also a separate Mapbox
+      access token the app uses at runtime. How do I wire acquisition so the build
+      can fetch the SDK, without leaking any token into my binding NuGet or source?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)gradle\\.properties|GradleRepository|~/\\.gradle"
+      - type: "output_matches"
+        pattern: "(?i)template|gitignore|environment|CI secret|\\.netrc"
+      - type: "output_matches"
+        pattern: "(?i)runtime.*(token|key|access)|access token.*runtime|MBXAccessToken|separate secret"
+      - type: "output_not_matches"
+        pattern: "(?i)(commit|hard-?code|embed|put) the (token|credential|secret) (in|into) (the )?(\\.targets|\\.props|package|nupkg|source)"
+    rubric:
+      - "Injects the Android download token via ~/.gradle/gradle.properties (or CI env/secret), not committed, and declares the vendor Maven repo (e.g. GradleRepository)"
+      - "Uses a committed *.props.template plus a git-ignored real *.props (or env/.netrc) so the token never lands in source or the NuGet"
+      - "Distinguishes the build-time download token from the runtime access token (e.g. Info.plist MBXAccessToken) as separate secrets, neither shipped in the package"
+      - "Never bakes the token into .targets/.props that ship in the package"
+    timeout: 240
+
+  - name: "Bind a fully-Swift SDK that dropped Objective-C compatibility"
+    prompt: |
+      I need to bind the Mapbox Maps iOS SDK for .NET MAUI. It's written entirely
+      in Swift and exposes almost nothing to Objective-C, so Objective Sharpie
+      can't see the API. How should I approach this so I end up with a usable
+      .NET binding, and what does the overall structure look like?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)wrapper (framework|library|pod|project)|objective-c.*wrapper|@objc"
+      - type: "output_matches"
+        pattern: "(?i)-Swift\\.h|generated header|objective sharpie"
+      - type: "output_matches"
+        pattern: "(?i)xcframework|XcodeProject"
+      - type: "output_not_matches"
+        pattern: "(?i)(point|run) (objective ?sharpie|sharpie) (directly )?(at|on) the (swift|mapbox) (sdk|source).{0,40}(and|to) (bind|generate)"
+    rubric:
+      - "Explains that Objective Sharpie parses ObjC headers, so a pure-Swift SDK needs a separate @objc-compatible wrapper framework built on top of the SDK"
+      - "Binds the wrapper's generated -Swift.h (built into an xcframework or referenced via XcodeProject), not the Swift SDK directly"
+      - "Describes the three-layer stack: Swift SDK -> ObjC wrapper framework -> .NET binding (optionally -> MAUI control), and that the wrapper is a versioned artifact to maintain across updates"
+      - "Prefers @objc NSObject types with factory methods and prefixed names; avoids exposing Swift-only generics/actors/SwiftUI"
+    timeout: 240

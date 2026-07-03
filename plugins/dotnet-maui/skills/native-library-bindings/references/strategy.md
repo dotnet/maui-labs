@@ -97,6 +97,9 @@ Treat this as an advanced path. Validate generated packages with a sample app, i
 | Direct release asset | Verify `.xcframework` slices and checksums | Verify AAR/JAR/POM and checksums |
 | Source repo | Build Xcode project/workspace | Build Gradle module/AAR |
 | Existing local binary | Inspect slices, headers, modules | Inspect AAR/JAR/classes/POM/native ABIs |
+| Credentialed source | Download token via env/`.netrc`/git-ignored props; keep out of package (see `apple-acquisition.md`) | Token in `~/.gradle/gradle.properties`; template + gitignore (see `android-acquisition.md`) |
+
+Hardest case: a fully-Swift SDK with no Objective-C surface (for example Mapbox iOS) forces an extra layer — a separately built and versioned `@objc` wrapper framework you bind instead of the SDK. Budget for maintaining that wrapper across updates. See `apple-bindings.md`.
 
 ## Redistribution decision
 

@@ -135,6 +135,14 @@ After `pod install`:
 - Pin versions in `Podfile.lock` for reproducible builds.
 - Document Pod source and license obligations.
 
+## Credentialed / authenticated sources
+
+Some Apple SDKs require a token to download the artifact regardless of channel (SPM, CocoaPods, or a direct URL). Mapbox, for example, needs a download token to fetch its iOS SDK.
+
+- Inject the credential from the environment, `~/.netrc`, an SPM/CocoaPods credential mechanism, or a git-ignored `*.props` copied from a committed `*.props.template`. Never commit it and never ship it in the package.
+- In CI, provide the token via a secret; do not write it into `.targets`/`.props` that end up in the NuGet.
+- Keep the **build-time download token** separate from any **runtime API key** (for example a Mapbox access token set in `Info.plist` as `MBXAccessToken`). They are distinct secrets; the binding package must contain neither.
+
 ## Xcode projects and workspaces
 
 When using `XcodeProject`:
@@ -157,6 +165,7 @@ For workspaces:
 | `Undefined symbols for architecture arm64` | Missing slice or dependency framework | Inspect binary slices and `otool -L`; add required frameworks. |
 | Works on simulator but not device | Missing device slice | Add/rebuild arm64 device variant. |
 | Works on iOS but not Mac Catalyst | Catalyst slice missing | Build or acquire Catalyst-specific variant. |
+| Vendor xcframework has no simulator slice (device-only) | Heavy SDKs sometimes ship arm64-device only | Pin `<RuntimeIdentifier>ios-arm64</RuntimeIdentifier>` for device testing, or request/build a simulator slice; do not expect simulator runs to work. |
 | Sharpie cannot see Swift types | API is not ObjC-visible | Add Swift wrapper or use Swift direct binding generator. |
 | `.xcframework` fails to load/validate after trimming | Removed slice directory but left its `AvailableLibraries` entry in `Info.plist` | Remove the matching `Info.plist` entry whenever a slice directory is removed; re-inspect before use. |
 

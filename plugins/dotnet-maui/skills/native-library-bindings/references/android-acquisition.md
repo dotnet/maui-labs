@@ -114,4 +114,11 @@ choose a .NET binding/NuGet strategy that satisfies the resolved `2.0.21` artifa
 
 ## Private or authenticated repositories
 
-Do not put credentials in skill files, scripts, or project files. Use existing Gradle credential mechanisms, environment variables, or authenticated developer tooling. Document required access but never commit secrets.
+Some SDKs (Mapbox is the classic example) are served from a credentialed Maven repository and require a download token to acquire the AAR at build time.
+
+- Declare the repo (for a Gradle wrapper project, a `GradleRepository` item pointing at the vendor Maven URL). Gradle reads the credential from `~/.gradle/gradle.properties` (for example `MAPBOX_DOWNLOADS_TOKEN=...`), which is machine-global and never committed.
+- For contributor setups, commit a `*.props.template` with a placeholder and `.gitignore` the real `*.props` that holds the token, so the secret never lands in source or the package.
+- In CI, inject the token from a secret into the environment or a generated `gradle.properties`; do not bake it into `.targets`/`.props` that ship in the NuGet.
+- Distinguish the **build-time acquisition credential** (download token used to fetch the SDK) from any **runtime API key** (for example a Mapbox access token in the app). They are different secrets with different lifecycles; never ship either in the binding package.
+
+Do not put credentials in skill files, scripts, or committed project files. Document required access, but never commit secrets.
