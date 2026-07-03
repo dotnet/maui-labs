@@ -58,7 +58,7 @@ properties, `System.Text.Json`-friendly.
 ```csharp
 namespace GenerativeUI.Sample.Garden.Shared;
 
-public record Product(string Sku, string Name, string Category, decimal Price, string Emoji);
+public record Product(string Sku, string Name, string Category, decimal Price, string Emoji, string? ImageUrl = null);
 
 public record CartItem(string Sku, string Name, string Emoji, decimal Price, int Quantity)
 {
@@ -175,7 +175,7 @@ No catalog/cart/orders pages — the canvas is the only content surface.
 ### 5.2 DI & config (`MauiProgram`)
 
 Follows the existing sample's patterns (user-secrets embedding, Azure OpenAI setup), plus the
-library registration:
+library registration — including the Garden-specific **UI extensions** (see §5.5):
 
 ```csharp
 builder.Services.AddGenerativeUi(options =>
@@ -183,6 +183,16 @@ builder.Services.AddGenerativeUi(options =>
     options.BaseAddress = new Uri(builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5225");
     options.OpenApiPath = builder.Configuration["Api:OpenApiPath"] ?? "/openapi/v1.json";
     options.JsonSerializerContext = GardenJsonContext.Default;
+
+    // Garden-specific vocabulary the model can use (details in §5.5):
+    options.Ui.AddStyle(GardenUi.PrimaryButton);
+    options.Ui.AddStyle(GardenUi.DangerButton);
+    options.Ui.AddStyle(GardenUi.BrandAccent);
+    options.Ui.AddComponent(GardenUi.ProductImage);      // watermarking presenter
+    options.Ui.AddComponent(GardenUi.StarRating);        // editable rating control
+    options.Ui.AddView(GardenUi.CheckoutView);           // official checkout surface
+    options.Ui.AddView(GardenUi.MonthlyOrdersReport);    // full-screen report
+    options.Ui.AddRenderer(GardenUi.ProductImageMandatory); // product images MUST watermark
 });
 ```
 
@@ -208,11 +218,37 @@ sample's `ChatClientBuilder(innerChatClient).UseFunctionInvocation().Build(rootP
 - **Discover before you call:** use `list_endpoints`/`describe_endpoint`/`describe_model` to learn
   the API; use `read_api` for reads and `write_api` for changes (changes need approval).
 - **Always render results** with the UI tools (`render_ui`, `set_field`, `get_state`,
-  `show_confirm`, `clear_ui`) — the chat column is for short confirmations, not data dumps.
+  `show_confirm`, `clear_ui`, `present_view`) — the chat column is for short confirmations, not
+  data dumps.
+- **Use the app's registered vocabulary.** Prefer registered styles (`primary`/`danger`/`Brand`)
+  and components; product images **must** use `ProductImage`; **checkout must use `CheckoutView`**
+  via `present_view` — never compose a custom checkout/payment UI. Discover the catalog via
+  `list_ui_capabilities`/`describe_component`/`describe_view` (or the seeded summary).
 - For edits, render a form, honor "set X to Y" via `set_field`, and gather via `get_state` before
   `write_api`.
 - For destructive actions, show a confirm and wait for yes.
-- Optionally seed the reduced endpoint index here (see the OpenAPI appendix §6).
+- Optionally seed the reduced endpoint index + UI capability catalog here (see the OpenAPI
+  appendix §6 and the Extensibility appendix §4).
+
+### 5.5 Registered UI extensions (Garden-specific)
+
+These are authored in the client and registered in §5.2. They demonstrate all four extension tiers
+from the [Extensibility appendix](./appendix-extensibility.md); the **library references none of
+them**.
+
+| Registration | Kind | Purpose |
+|---|---|---|
+| `PrimaryButton` / `DangerButton` | Style | Brand CTA + destructive button styles (map to XAML `Style`s). The model picks `danger` for delete/clear. |
+| `BrandAccent` | Style | Brand accent color token for emphasis labels/badges. |
+| `ProductImage` | Component | Composite presenter: framed image + **automatic licensing watermark**; binds `source` (+ optional `caption`). |
+| `StarRating` | Component | Editable 1–5 star control; two-way bound to a form `key` for reviews. |
+| `CheckoutView` | View (`FullCanvas`) | The official cart + payment surface. `MustUseWhen` checkout; self-loads the cart via the API. |
+| `MonthlyOrdersReport` | View (`FullCanvas`) | Filterable, printable monthly report; `Inputs`: `month`, `verbosity`. Self-loads orders. |
+| `ProductImageMandatory` | Renderer | Maps content type `product-image` → `ProductImage`, `Mandatory` — even a plain `Image` for a product is substituted so watermarking can't be skipped. |
+
+The Garden `Product` gains an `ImageUrl` so `ProductImage` has something to render (emoji stays as
+a lightweight fallback). The `CheckoutView`/`MonthlyOrdersReport` are ordinary MAUI `ContentView`s
++ VMs registered in DI and resolved by the view descriptors.
 
 ## 6. Interaction scenarios (acceptance)
 
@@ -221,32 +257,42 @@ Each maps a natural-language prompt to a tool sequence and a rendered surface.
 1. **"what are the products?"**
    `list_endpoints` → `read_api GET /products` → `render_ui` (titled list of product cards).
 2. **"show me the basil seeds"**
-   `read_api GET /products/basil-seeds` → `render_ui` (detail card, one-way bound to `data`).
+   `read_api GET /products/basil-seeds` → `render_ui` (detail card, one-way bound to `data`; the
+   image renders via the **`ProductImage`** component — watermarked — enforced by the mandatory
+   renderer even if the model reaches for a plain `Image`).
 3. **"add a new product called pears"**
    `render_ui` (add-product form, `form.name = "Pears"`) → user: "set the price to 3.49" →
    `set_field("price","3.49")` → user: "save for me" → `get_state` →
    `write_api POST /products` *(approval)* → `render_ui` (success card).
 4. **"delete the tomato seeds"**
-   `read_api GET /products/tomato-seeds` → `render_ui` (detail) → `show_confirm` → user: "yes" →
-   `write_api DELETE /products/tomato-seeds` *(approval)* → `render_ui` (confirmation).
+   `read_api GET /products/tomato-seeds` → `render_ui` (detail, **`danger`**-styled Delete button)
+   → `show_confirm` → user: "yes" → `write_api DELETE /products/tomato-seeds` *(approval)* →
+   `render_ui` (confirmation).
 5. **"add 3 tomato seed packs to my cart"**
    `write_api POST /cart/items {sku, quantity:3}` *(approval)* → `read_api GET /cart` →
    `render_ui` (cart with lines + total).
 6. **"set the tomato seeds to 5"** (cart open)
    `write_api PUT /cart/items/tomato-seeds {quantity:5}` → `render_ui` (updated cart).
 7. **"checkout"**
-   `render_ui` cart summary → `show_confirm` → "yes" → `write_api POST /orders` *(approval)* →
-   `render_ui` (order confirmation with id + total).
+   `present_view("CheckoutView")` — the app's **official checkout/payment surface** takes over the
+   canvas and self-loads the cart. The model does **not** compose a checkout UI. Payment/confirm is
+   handled inside the view; on completion it can `write_api POST /orders`.
 8. **"show my past orders"** → `read_api GET /orders` → `render_ui` (order history list).
 9. **"reorder my last order"** → `write_api POST /orders/{id}/reorder` *(approval)* →
    `render_ui` (cart).
-10. **"rate the basil seeds 5 stars"** → `render_ui` (review form, rating prefilled) →
-    "save" → `write_api POST /reviews` *(approval)* → `render_ui` (thanks + reviews list).
-11. **"build me a starter bundle"** → `read_api GET /recommendations` → `render_ui` (bundle).
+10. **"rate the basil seeds 5 stars"** → `render_ui` (review form using the **`StarRating`**
+    component, rating prefilled) → "save" → `write_api POST /reviews` *(approval)* →
+    `render_ui` (thanks + reviews list).
+11. **"build me a starter bundle"** → `read_api GET /recommendations` → `render_ui` (bundle,
+    product images watermarked via `ProductImage`).
+12. **"show me the June orders report"** → `present_view("MonthlyOrdersReport", { month:"2026-06" })`
+    — the full-screen report view takes the canvas and self-loads/filters orders. The model supplies
+    only the declared inputs.
 
-These cover read, create, partial-fill + field edits, save-via-chat, destructive confirm, and
-recommendations — the same surface area as the current in-memory sample, now server-backed and
-generatively rendered.
+These cover read, create, partial-fill + field edits, save-via-chat, destructive confirm,
+recommendations, **registered styles/components**, **mandatory watermarking**, and **full-view
+handoff** (checkout, report) — the same surface area as the current in-memory sample, now
+server-backed, generatively rendered, and extended with app-owned UI.
 
 ## 7. Running the sample
 
@@ -286,10 +332,17 @@ generatively rendered.
 3. **Recommendations:** static bundle vs. a small rules/heuristic. How much logic on the server?
 4. **Search:** does `GET /products?search=` suffice, or do we also expose a dedicated search
    endpoint for the model to find via `search_api`?
-5. **Emoji/imagery:** keep emoji (matches current sample) or add image URLs to exercise
-   `Image.source` in the DSL?
+5. **Emoji/imagery:** now that `Product` has `ImageUrl`, do we ship real hosted images to exercise
+   the `ProductImage` watermarking presenter, or keep emoji as the primary with images optional?
 6. **Validation errors:** which endpoints return `ProblemDetails` (e.g. bad price) so we can
    demonstrate the model surfacing validation in the UI?
 7. **Seed parity:** exactly mirror the current catalog, or trim/expand for better demos?
 8. **Approval UX in-sample:** rely on `write_api` approval alone, add `show_confirm` for
    destructive ops, or both (see overview §11)?
+9. **Checkout view boundary:** does `CheckoutView` place the order itself (`POST /orders`) or hand
+   back to the model to do so? Where does the `write_api` approval fit when a full view owns the
+   action?
+10. **Mandatory watermark enforcement:** should the renderer silently substitute `ProductImage`,
+    or should the model be told product images are off-limits as plain `Image` (or both)?
+11. **Report data:** does `MonthlyOrdersReport` call the API itself, or does the library pass it a
+    `DataContract` the model gathered? (Leaning self-load.)

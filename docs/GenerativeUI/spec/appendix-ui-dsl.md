@@ -5,18 +5,25 @@
 
 This appendix defines the **UI description language** the model emits and the **inflator** that
 turns it into MAUI controls. The design bias is **reliability over expressiveness**: a small,
-closed vocabulary the model can use predictably, with graceful degradation when it doesn't.
+**closed-but-extensible** vocabulary the model can use predictably, with graceful degradation when
+it doesn't. The base vocabulary ships in the library; apps **register** their own styles, custom
+controls, and full views on top of it — see the
+[Extensibility appendix](./appendix-extensibility.md).
 
 ## 1. Design principles
 
-1. **Closed vocabulary.** A fixed set of node `type`s. Unknown types render a visible error
-   placeholder, never crash.
-2. **Flat, JSON-native.** Plain JSON objects/arrays; no expressions, no code, no styles beyond a
-   fixed token set. Easy for a model to emit and for us to validate.
+1. **Closed but extensible vocabulary.** A fixed set of built-in node `type`s, plus app-registered
+   components/views known at startup. The *effective* vocabulary (built-ins + registrations) is
+   validated; unknown types render a visible error placeholder, never crash.
+2. **Flat, JSON-native.** Plain JSON objects/arrays; no expressions, no code. Styling is limited to
+   **named tokens from a registered catalog** (never raw colors/XAML from the model). Easy for a
+   model to emit and for us to validate.
 3. **Declarative + data-bound.** Nodes describe *what*, not *how*. Editable nodes bind two-way to
    `FormState`; display nodes may bind one-way to `data`.
 4. **Deterministic inflation.** One document → one deterministic view tree. No layout ambiguity.
 5. **Forgiving.** Missing optional props use sane defaults; extra props are ignored.
+6. **App owns the look, not the model.** Brand styling, bespoke controls, and mandatory views are
+   app-authored C#; the model only *selects* registered names and supplies declared inputs.
 
 ## 2. `render_ui` payload
 
@@ -52,17 +59,18 @@ Every node is:
 
 ```jsonc
 {
-  "type": "Label",     // required; one of the closed vocabulary
+  "type": "Label",     // required; a built-in or app-registered type
   "id": "title",       // optional; for targeting/debugging
   "bind": "product.name", // optional; one-way path into `data`
-  "style": "Title",    // optional; a fixed style token
+  "style": "Title",    // optional; a registered style token, or a list e.g. ["Brand","large"]
   "children": [ ... ], // optional; for container nodes
   // ...type-specific props
 }
 ```
 
 Common fields: `type`, `id`, `bind`, `style`, `children`. Type-specific props are listed per
-node below.
+node below. `type` may be a **built-in** (this appendix) or an **app-registered component/view**
+(see the [Extensibility appendix](./appendix-extensibility.md)); the model sees one uniform set.
 
 ## 4. Node catalog (MVP)
 
@@ -102,6 +110,20 @@ node below.
 > For the MVP a `List`'s rows are **pre-expanded** by the model (it emits one child node per
 > item). This trades token cost for reliability and removes runtime item-templating. A future
 > `List` may take `itemsBind` + `itemTemplate`. See [Open Questions](#open-questions).
+
+### 4.5 Registered types (components & views)
+
+Beyond the built-ins above, an app can register its own node types. These appear to the model as
+ordinary `type`s with their own prop schema, and the inflator resolves them via the registry:
+
+| `type` shape | Inflates to | Notes |
+|---|---|---|
+| a registered **component** name (e.g. `ProductImage`) | the app's composite control | Binds a single value or a small prop set; may be editable. `props` object carries values. |
+| `View` | a registered **full view** hosted inline | `view` names the registered view; `inputs` supplies its declared params. Larger, app-owned surface. |
+
+Full views are more often presented as the whole canvas via the `present_view` tool than embedded
+as a node. Registration, prop/input schemas, factories, discovery, and mandatory renderers are
+specified in the [Extensibility appendix](./appendix-extensibility.md). Examples appear in §10.6–10.7.
 
 ## 5. Binding model
 
@@ -149,23 +171,42 @@ the loop **AI-driven**: buttons feed the model, which then explores/renders/call
 
 ## 7. Styles
 
-A **fixed** token set (no arbitrary colors/sizes from the model) keeps output on-brand and
-predictable. Tokens map to `StaticResource`s in the app theme.
+Styling is limited to **named tokens from a registered catalog** — the model never emits raw
+colors, sizes, or XAML. Each token maps to a `StaticResource` (a `Style`, `Color`, thickness, …)
+in the app theme, so output stays on-brand and predictable.
 
-- Text styles: `Title`, `Subtitle`, `Body`, `Caption`, `Mono`.
-- Button styles: `primary`, `secondary`, `danger`.
-- Badge tones: `neutral`, `positive`, `warning`, `danger`.
-- Spacing/padding: small integers interpreted as device-independent units.
+- The library pre-registers a **base set**: text styles `Title`/`Subtitle`/`Body`/`Caption`/`Mono`,
+  button styles `primary`/`secondary`/`danger`, badge tones `neutral`/`positive`/`warning`/`danger`.
+- Apps **register additional styles** (or override the base) via the registry — e.g. a `Brand`
+  accent for labels, a `hero` button treatment, a multi-line vs single-line entry variant. Each
+  registered style carries a **name** (the token the model uses), a full **description**, an
+  **appliesTo** constraint (which node/control kinds it's valid on), and the **resource key** it
+  maps to. See the [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
+- `style` accepts a **single token or a list** — `"style": "primary"` or
+  `"style": ["Brand", "large"]` — so styles can compose (mapped to a `Style` plus MAUI
+  `StyleClass`es under the hood).
+- The registered style catalog (names + descriptions + where each applies) is given to the model
+  (seeded and/or via `list_ui_capabilities`), so it knows a `danger` button style exists and picks
+  it for destructive actions.
 
-Unknown tokens fall back to `Body`/`secondary`/`neutral`.
+Unknown or misapplied tokens fall back to a sensible default (`Body`/`secondary`/`neutral`) and
+are logged — never an error.
+
+Spacing/padding remain small integers interpreted as device-independent units (not a style token).
 
 ## 8. Validation & error handling
 
+- **Type resolution order:** built-in → registered component/view → unknown. The valid set is
+  known at startup (built-ins + registry), so validation is exact.
 - **Parse errors** (malformed JSON): render an error card with the raw text (truncated) and log;
   return a tool error so the model can retry.
 - **Unknown `type`**: render a labeled placeholder ("Unsupported: <type>") in place of that node;
   continue inflating siblings.
-- **Missing required props** (e.g. `Field` without `key`): render a placeholder for that node.
+- **Missing/invalid props** (e.g. `Field` without `key`, or a component prop failing its declared
+  schema): render a placeholder for that node and log.
+- **Mandatory renderers:** after the tree resolves, a policy post-pass enforces any mandatory
+  type→renderer rules (e.g. product images must use the watermarking presenter). See the
+  [Extensibility appendix §3.4](./appendix-extensibility.md#34-renderers-type--componentview-policy).
 - **Depth/size caps**: cap node count and tree depth; beyond the cap, truncate with a notice.
 
 The inflator **never throws** into the UI; it degrades to placeholders + logs.
@@ -245,31 +286,63 @@ Flow: user says "set the quantity to 3" → model calls `set_field("quantity","3
 `Entry` shows `3`. User says "save for me" → model calls `get_state()` → `write_api("POST",
 "/products", body)`. Or the user taps **Save** → `submit` intent → model does the same.
 
-### 10.4 Confirm delete
+### 10.5 Registered style on a built-in (styled button)
 
-`show_confirm` produces an overlay; conceptually equivalent DSL:
+The app registered a `hero` button style. The model just references the token:
+
+```jsonc
+{ "type": "Button", "text": "Start a bundle", "style": ["primary", "hero"], "intent": "action:bundle" }
+```
+
+### 10.6 Registered component node (watermarked product image)
+
+`ProductImage` is an app-registered composite control (frame + auto-watermark) that binds
+`source` (+ optional `caption`). Its props may be literals or `{ "bind": ... }`:
 
 ```jsonc
 {
-  "schemaVersion": 1,
-  "ui": {
-    "type": "Card",
-    "children": [
-      { "type": "Label", "text": "Delete Heirloom Tomato Seeds?", "style": "Subtitle" },
-      { "type": "Label", "text": "This cannot be undone.", "style": "Caption" },
-      { "type": "Stack", "orientation": "horizontal", "spacing": 8, "children": [
-        { "type": "Button", "text": "Cancel", "style": "secondary", "intent": "cancel" },
-        { "type": "Button", "text": "Delete", "style": "danger",    "intent": "confirm" }
-      ]}
-    ]
-  }
+  "type": "Card",
+  "children": [
+    { "type": "ProductImage",
+      "props": {
+        "source":  { "bind": "product.imageUrl" },
+        "caption": { "bind": "product.name" },
+        "size": 120
+      }
+    },
+    { "type": "Label", "bind": "product.price", "style": "Subtitle" }
+  ]
 }
+```
+
+A **mandatory renderer** can make this automatic: even if the model emits a plain `Image` for a
+product image, the policy post-pass substitutes `ProductImage` so watermarking can't be bypassed
+(see [Extensibility §3.4](./appendix-extensibility.md#34-renderers-type--componentview-policy)).
+
+### 10.7 Full view handoff (checkout)
+
+Checkout must use the official, app-owned view — the model does **not** compose a checkout UI. It
+supplies only declared inputs (here, none — the view self-loads the cart) and hands off, usually
+via the `present_view` tool:
+
+```jsonc
+// present_view
+{ "view": "CheckoutView", "inputs": {} }
+```
+
+Embedded-in-a-layout form (a `View` node) is also allowed:
+
+```jsonc
+{ "type": "View", "view": "CheckoutView", "inputs": {} }
 ```
 
 ## 11. Draft JSON Schema (sketch)
 
-A machine-checkable schema will live alongside this doc (e.g. `schemas/ui-dsl.schema.json`) once
-the vocabulary settles. Sketch of the top level:
+The schema is **generated per app at startup**: the `type` enum = built-ins **+** registered
+component/view names; the `style` enum = registered style tokens. This lets us hand the model a
+schema matching exactly what *this* app supports (useful for structured output). A machine-checkable
+base schema will live alongside this doc (e.g. `schemas/ui-dsl.schema.json`); the runtime augments
+its enums from the registry. Sketch of the top level:
 
 ```jsonc
 {
@@ -288,7 +361,10 @@ the vocabulary settles. Sketch of the top level:
       "type": "object",
       "required": ["type"],
       "properties": {
-        "type": { "enum": ["Stack","Card","Scroll","Separator","Spacer","Label","Image","Badge","Icon","Button","Field","Entry","List"] },
+        // built-ins + registered component/view names, injected at startup:
+        "type": { "enum": ["Stack","Card","Scroll","Separator","Spacer","Label","Image","Badge","Icon","Button","Field","Entry","List","View","/* …registered… */"] },
+        "style": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] },
+        "props": { "type": "object" },
         "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
       }
     }
@@ -306,8 +382,9 @@ the vocabulary settles. Sketch of the top level:
    data for read-only views (simpler, more tokens)?
 4. **Node set:** is the §4 catalog the right MVP set? Do we need `Grid`, `Toggle`, `Picker`,
    `Slider`, tabs, tables now or later?
-5. **Styling:** are the fixed tokens sufficient, or does the model need limited color/size
-   control? How do we keep it on-brand?
+5. **Styling:** the token set is now registry-driven (built-ins + app styles). Is the `style`
+   string-or-list shape right, and do we need any model-controlled sizing, or is app-registered
+   enough? See the [Extensibility appendix](./appendix-extensibility.md#open-questions).
 6. **Intents:** synthetic chat turns vs. structured tool-result events. How do we avoid loops /
    duplicate submissions?
 7. **Images:** allow remote URLs (`Image.source`)? Security/perf implications; do we need an

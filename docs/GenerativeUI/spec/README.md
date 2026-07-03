@@ -20,6 +20,7 @@ Two deliverables:
 |---|---|
 | [`overview.md`](./overview.md) | The main spec: motivation, goals/non-goals, architecture, the two tool families, runtime loop, library/sample boundary, state & binding, approval, config, security, MVP scope, and open questions. **Start here.** |
 | [`appendix-ui-dsl.md`](./appendix-ui-dsl.md) | The JSON UI-DSL the model emits and the inflator that turns it into MAUI controls: node catalog, binding model, intents, styles, validation, versioning, worked examples, draft schema. |
+| [`appendix-extensibility.md`](./appendix-extensibility.md) | How an app **extends** the DSL: registering brand **styles**, bespoke **components** (e.g. a watermarking product image), full **views** (e.g. checkout, reports), and **renderer** policies (mandatory controls). Registration API, discovery tools, per-app schema, security. |
 | [`appendix-openapi-processor.md`](./appendix-openapi-processor.md) | How the library fetches, reduces, and serves a server's OpenAPI doc to the model, and the generic invoker for `read_api`/`write_api`: pipeline, reduction, tool signatures, security. |
 | [`sample-generative-garden.md`](./sample-generative-garden.md) | The reference sample: 3-project layout, shared models + source-gen JSON context, server endpoints, client shell/DI, system prompt, interaction scenarios, run steps. |
 
