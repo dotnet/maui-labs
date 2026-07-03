@@ -6,9 +6,10 @@ Acquire and verify Apple native assets before authoring bindings.
 
 1. Direct `.xcframework` from the vendor when available.
 2. Swift Package Manager resolved and built into an `.xcframework`.
-3. Source/Xcode project built as part of the binding.
-4. CocoaPods workspace when it is the maintained distribution path.
-5. Raw `.framework`/`.a` only when you can verify all required platform slices.
+3. Carthage with `--use-xcframeworks` when the SDK ships a Cartfile-friendly release.
+4. Source/Xcode project built as part of the binding.
+5. CocoaPods workspace when it is the maintained distribution path.
+6. Raw `.framework`/`.a` only when you can verify all required platform slices.
 
 ## Direct downloads and GitHub releases
 
@@ -134,6 +135,22 @@ After `pod install`:
 - Avoid manual edits to generated Pods project files.
 - Pin versions in `Podfile.lock` for reproducible builds.
 - Document Pod source and license obligations.
+
+## Carthage
+
+Some Swift SDKs (e.g. Datadog iOS) publish a `Cartfile`. Carthage can produce
+xcframeworks directly, which is convenient for binding:
+
+```sh
+carthage update --use-xcframeworks
+```
+
+- `--use-xcframeworks` yields `Carthage/Build/*.xcframework` you can bind or
+  bundle; without it you only get per-platform `.framework`s.
+- Commit `Cartfile.resolved` for reproducible, pinned versions.
+- Carthage resolves and builds the full dependency set; expect several
+  interdependent xcframeworks (bind/bundle each one you actually use plus its
+  transitive dependencies).
 
 ## Credentialed / authenticated sources
 

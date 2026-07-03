@@ -50,6 +50,18 @@ Use these sources to refresh or verify the skill guidance.
   `https://github.com/justinwojo/swift-dotnet-bindings`
   - Used as an optional advanced path for Swift-only `.xcframework` inputs.
 
+## Real-world binding repos mined for gaps
+
+These community bindings were studied to surface real edge cases. They are not
+all best-practice; use them for patterns, not prescriptions.
+
+- `github.com/Redth/Plugin.RevenueCat` — slim binding + JSON-to-abstraction; dependency graph.
+- `github.com/TobiasBuchholz/Plugin.Firebase` — modular multi-package Firebase bindings.
+- `github.com/brandmooffin/FacebookiOSBindings` — static multi-xcframework Apple binding.
+- `github.com/tuyen-vuduc/dotnet-binding-utils` — Gradle-driven resolution, per-artifact code-gen (`Binderators.Gradle`), native->NuGet mapping.
+- `github.com/tuyen-vuduc` Mapbox stack (`mapbox-maui`, `mapbox-ios-binding`, `mapbox-ios-objective-c`) — canonical hardest case: pure-Swift SDK needing a hand-built `@objc` wrapper framework; credentialed Maven/download tokens.
+- `github.com/tuyen-vuduc/datadog-ios-dotnet-binding` — Carthage `--use-xcframeworks` acquisition; vendor-shipped `DatadogObjc` ObjC-compat module; interdependent xcframework tree.
+
 ## Local repo prior art
 
 The predecessor implementation guides and eval suites for

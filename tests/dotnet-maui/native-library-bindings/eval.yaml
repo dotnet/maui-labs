@@ -715,3 +715,22 @@ scenarios:
       - "Describes the three-layer stack: Swift SDK -> ObjC wrapper framework -> .NET binding (optionally -> MAUI control), and that the wrapper is a versioned artifact to maintain across updates"
       - "Prefers @objc NSObject types with factory methods and prefixed names; avoids exposing Swift-only generics/actors/SwiftUI"
     timeout: 240
+
+  - name: "Acquire a Swift SDK via Carthage and prefer its shipped ObjC module"
+    prompt: |
+      I want to bind the Datadog iOS SDK for .NET MAUI. It's a Swift SDK
+      distributed with a Cartfile, and it has several interdependent frameworks
+      (DatadogCore, DatadogRUM, DatadogLogs, etc.). How do I acquire it and get
+      a bindable Objective-C surface with the least effort?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)carthage.*--use-xcframeworks|--use-xcframeworks"
+      - type: "output_matches"
+        pattern: "(?i)DatadogObjc|objc.*module|ships? an? .*objc|first-party.*objc|vendor.*objc"
+      - type: "output_matches"
+        pattern: "(?i)Cartfile\\.resolved|pin|interdependent|transitive"
+    rubric:
+      - "Uses `carthage update --use-xcframeworks` to produce xcframeworks (noting plain carthage yields only per-platform .frameworks) and pins via Cartfile.resolved"
+      - "Recommends binding the vendor-shipped ObjC-compat module (DatadogObjc) instead of hand-writing a wrapper, since the SDK already provides one"
+      - "Accounts for the interdependent framework/xcframework tree — bind/bundle each used module plus its transitive dependencies"
+    timeout: 240

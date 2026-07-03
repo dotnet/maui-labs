@@ -161,6 +161,8 @@ Rules:
 
 Some SDKs (Mapbox's iOS SDK is the canonical example) migrated fully to Swift and expose almost nothing to Objective-C. A thin `@objc` wrapper over a few calls is not enough — you must build and maintain a **separate ObjC-compatible wrapper framework** that re-exposes the API surface you need, then bind that wrapper (not the SDK).
 
+**First, check whether the vendor already ships an ObjC-compat module.** Some SDKs publish a companion framework specifically for ObjC interop (e.g. Datadog's `DatadogObjc`). If one exists, bind that instead of writing your own wrapper — it is far less to build and maintain. Only hand-build a wrapper when no such module is provided (Mapbox).
+
 - The wrapper is its own Xcode/SPM/CocoaPods project that depends on the Swift SDK and exposes `@objc` `NSObject` types. Build it into an `.xcframework` (or reference its `.xcodeproj` via `XcodeProject`), then run Objective Sharpie against the wrapper's generated `-Swift.h`.
 - Prefix wrapper types (Mapbox uses `TMB*`) to avoid clashing with the SDK's own symbols and to make the binding surface obvious.
 - Factory/initializer patterns work best: expose `+createWith...` factory methods rather than trying to surface Swift initializers, generics, or protocols-with-associated-types.
