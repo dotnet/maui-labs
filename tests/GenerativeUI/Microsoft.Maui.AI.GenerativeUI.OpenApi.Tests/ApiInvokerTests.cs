@@ -29,7 +29,7 @@ public sealed class ApiInvokerTests
     {
         using var request = Invoker().BuildRequest(Spec, "getProduct", new JsonObject { ["sku"] = "a b" });
 
-        Assert.Contains("products/a%20b", request.RequestUri!.AbsoluteUri);
+        Assert.Equal("https://api.garden.example/products/a%20b", request.RequestUri!.AbsoluteUri);
     }
 
     [Fact]
@@ -38,8 +38,7 @@ public sealed class ApiInvokerTests
         using var request = Invoker().BuildRequest(Spec, "listProducts",
             new JsonObject { ["category"] = "seeds", ["search"] = "basil" });
 
-        Assert.Contains("category=seeds", request.RequestUri!.Query);
-        Assert.Contains("search=basil", request.RequestUri!.Query);
+        Assert.Equal("https://api.garden.example/products?category=seeds&search=basil", request.RequestUri!.AbsoluteUri);
     }
 
     [Fact]
@@ -51,7 +50,7 @@ public sealed class ApiInvokerTests
         Assert.Equal(HttpMethod.Post, request.Method);
         Assert.NotNull(request.Content);
         var json = await request.Content!.ReadAsStringAsync();
-        Assert.Contains("\"name\":\"Pears\"", json);
+        Assert.Equal("""{"name":"Pears","price":3.49}""", json);
     }
 
     [Fact]
@@ -61,7 +60,7 @@ public sealed class ApiInvokerTests
             new JsonObject { ["sku"] = "tomato-seeds", ["body"] = new JsonObject { ["quantity"] = 5 } });
 
         Assert.Equal(HttpMethod.Put, request.Method);
-        Assert.Equal("https://api.garden.example/cart/items/tomato-seeds", request.RequestUri!.GetLeftPart(UriPartial.Path));
+        Assert.Equal("https://api.garden.example/cart/items/tomato-seeds", request.RequestUri!.AbsoluteUri);
     }
 
     [Fact]

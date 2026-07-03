@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests;
 
 /// <summary>
@@ -31,14 +33,18 @@ public sealed class OpenApiReducerTests
         Assert.Equal("/products/{sku}", endpoint.Path);
         Assert.Equal("Product", endpoint.ResponseModel);
         Assert.Null(endpoint.RequestModel);
-        Assert.False(string.IsNullOrEmpty(endpoint.Summary));
-        Assert.Contains("Products", endpoint.Tags!);
+        Assert.Equal("Get a product by SKU.", endpoint.Summary);
+        Assert.Equal(
+            "Returns the full product record for a single SKU, or 404 if no such product exists.",
+            endpoint.Description);
+        Assert.Equal(new[] { "Products" }, endpoint.Tags);
 
         var parameter = Assert.Single(endpoint.Parameters!);
         Assert.Equal("sku", parameter.Name);
         Assert.Equal("path", parameter.In);
+        Assert.Equal("string", parameter.Type);
         Assert.True(parameter.Required);
-        Assert.False(string.IsNullOrEmpty(parameter.Description));
+        Assert.Equal("Stable product identifier (SKU).", parameter.Description);
     }
 
     [Fact]
@@ -48,8 +54,20 @@ public sealed class OpenApiReducerTests
 
         Assert.Equal("Product[]", endpoint.ResponseModel);
         Assert.Equal(2, endpoint.Parameters!.Count);
-        Assert.All(endpoint.Parameters!, p => Assert.Equal("query", p.In));
-        Assert.All(endpoint.Parameters!, p => Assert.False(p.Required));
+
+        var category = endpoint.Parameters![0];
+        Assert.Equal("category", category.Name);
+        Assert.Equal("query", category.In);
+        Assert.Equal("string", category.Type);
+        Assert.False(category.Required);
+        Assert.Equal("""Optional category filter, such as "seeds" or "tools".""", category.Description);
+
+        var search = endpoint.Parameters![1];
+        Assert.Equal("search", search.Name);
+        Assert.Equal("query", search.In);
+        Assert.Equal("string", search.Type);
+        Assert.False(search.Required);
+        Assert.Equal("Optional free-text filter matched against product name and description.", search.Description);
     }
 
     [Fact]
@@ -88,6 +106,14 @@ public sealed class OpenApiReducerTests
     }
 
     [Fact]
+    public void Preserves_quotes_in_property_description_verbatim()
+    {
+        Assert.Equal(
+            """Stable, URL-safe identifier used across the catalog, cart, and orders (for example "basil-seeds").""",
+            Property("Product", "sku").Description);
+    }
+
+    [Fact]
     public void Maps_number_type_and_format()
     {
         var price = Property("Product", "price");
@@ -120,9 +146,29 @@ public sealed class OpenApiReducerTests
     }
 
     [Fact]
-    public void Authored_operation_ids_survive()
+    public void Projects_the_complete_set_of_operation_ids()
     {
-        Assert.Contains(Spec.Endpoints, e => e.OperationId == "getRecommendations");
-        Assert.Contains(Spec.Endpoints, e => e.OperationId == "updateCartItem");
+        string[] expected =
+        [
+            "addCartItem", "checkout", "clearCart", "clearOrders", "createProduct", "createReview",
+            "deleteProduct", "getCart", "getOrder", "getProduct", "getProductReviews",
+            "getRecommendations", "listOrders", "listProducts", "listReviews", "removeCartItem",
+            "reorder", "updateCartItem", "updateProduct",
+        ];
+
+        Assert.Equal(
+            expected,
+            Spec.Endpoints.Select(e => e.OperationId).OrderBy(id => id, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public void Serializes_reduced_model_as_compact_json_without_null_keys()
+    {
+        var json = JsonSerializer.Serialize(
+            Spec.Models["UpdateCartItemRequest"], ReducedSpecJsonContext.Default.ReducedModel);
+
+        Assert.Equal(
+            """{"description":"Payload to set the absolute quantity of an existing cart line.","properties":[{"name":"quantity","type":"integer","required":true,"nullable":false,"description":"New absolute quantity for the line; use 0 to remove it.","format":"int32"}]}""",
+            json);
     }
 }

@@ -34,10 +34,9 @@ public sealed class OpenApiSnapshotTests : IClassFixture<WebApplicationFactory<P
 
         var expected = Normalize(await File.ReadAllTextAsync(snapshotPath));
 
-        Assert.True(
-            expected == live,
-            $"The generated OpenAPI document does not match {snapshotPath}. " +
-            "Re-run with UPDATE_OPENAPI=1 to accept intentional API changes.");
+        // Exact full-document comparison. If this fails after an intentional API change, re-run with
+        // UPDATE_OPENAPI=1 to regenerate the snapshot.
+        Assert.Equal(expected, live);
     }
 
     private static string Normalize(string json)
