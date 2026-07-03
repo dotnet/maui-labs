@@ -6,10 +6,6 @@
     <IsShipping>false</IsShipping>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>GenerativeUI.Sample.Garden.Server.Tests</RootNamespace>
-    <!-- Same reason as the server csproj: keep ASP.NET's OpenAPI stack on its intended
-         Microsoft.OpenApi 2.0.0 rather than the repo-pinned 3.5.0. This test boots the server
-         in-process via WebApplicationFactory, so its transitive closure must not force 3.5.0. -->
-    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +15,10 @@
     </PackageReference>
     <PackageReference Include="xunit" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <!-- This test boots the server in-process via WebApplicationFactory, so it must run against the
+         same Microsoft.OpenApi 2.0.0 the server (and ASP.NET's OpenAPI stack) target — not the
+         repo-pinned 3.5.0 that transitive pinning would otherwise impose. See the server csproj. -->
+    <PackageReference Include="Microsoft.OpenApi" VersionOverride="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>
