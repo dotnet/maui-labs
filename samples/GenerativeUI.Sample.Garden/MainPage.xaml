@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:GenerativeUI.Sample.Garden.ViewModels"
+             xmlns:local="clr-namespace:GenerativeUI.Sample.Garden"
+             x:Class="GenerativeUI.Sample.Garden.MainPage"
+             x:DataType="vm:ChatViewModel"
+             Title="Generative Garden">
+
+    <ContentPage.Resources>
+        <local:BoolToEndAlignmentConverter x:Key="EndAlign" />
+        <local:StringNotEmptyConverter x:Key="NotEmpty" />
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="*,Auto" Padding="12" RowSpacing="8">
+
+        <!-- Transcript -->
+        <CollectionView Grid.Row="0"
+                        ItemsSource="{Binding Messages}"
+                        VerticalOptions="Fill">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                    <Border StrokeThickness="0"
+                            Margin="0,4"
+                            Padding="12,8"
+                            HorizontalOptions="{Binding IsUser, Converter={StaticResource EndAlign}}"
+                            MaximumWidthRequest="640">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="12" />
+                        </Border.StrokeShape>
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                            <Label Text="{Binding Detail}"
+                                   FontSize="12"
+                                   FontFamily="OpenSansRegular"
+                                   TextColor="{StaticResource Gray500}"
+                                   IsVisible="{Binding Detail, Converter={StaticResource NotEmpty}}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Input / approval -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+
+            <!-- Normal input -->
+            <Entry Grid.Column="0"
+                   Placeholder="Ask about products, cart, orders…"
+                   Text="{Binding InputText}"
+                   IsVisible="{Binding IsInputVisible}"
+                   ReturnCommand="{Binding SendCommand}"
+                   IsEnabled="{Binding IsNotBusy}" />
+            <Button Grid.Column="1"
+                    Text="Send"
+                    Command="{Binding SendCommand}"
+                    IsVisible="{Binding IsInputVisible}"
+                    IsEnabled="{Binding IsNotBusy}" />
+
+            <!-- Approval bar -->
+            <Label Grid.Column="0"
+                   Text="{Binding ApprovalText}"
+                   VerticalOptions="Center"
+                   IsVisible="{Binding IsApprovalPending}" />
+            <HorizontalStackLayout Grid.Column="1"
+                                   Spacing="8"
+                                   IsVisible="{Binding IsApprovalPending}">
+                <Button Text="Approve" Command="{Binding ApproveCommand}" />
+                <Button Text="Reject" Command="{Binding RejectCommand}" />
+            </HorizontalStackLayout>
+        </Grid>
+
+        <!-- Busy overlay -->
+        <ActivityIndicator Grid.Row="0"
+                           IsRunning="{Binding IsBusy}"
+                           IsVisible="{Binding IsBusy}"
+                           VerticalOptions="End"
+                           HorizontalOptions="Center" />
+    </Grid>
+</ContentPage>

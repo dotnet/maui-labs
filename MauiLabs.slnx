@@ -17,6 +17,7 @@
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
     <Project Path="samples/GenerativeUI.Sample.Garden.Shared/GenerativeUI.Sample.Garden.Shared.csproj" />
     <Project Path="samples/GenerativeUI.Sample.Garden.Server/GenerativeUI.Sample.Garden.Server.csproj" />
+    <Project Path="samples/GenerativeUI.Sample.Garden/GenerativeUI.Sample.Garden.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
