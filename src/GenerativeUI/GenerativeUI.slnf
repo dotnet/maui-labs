@@ -5,7 +5,6 @@
       "src\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.OpenApi\\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj",
       "samples\\GenerativeUI.Sample.Garden.Shared\\GenerativeUI.Sample.Garden.Shared.csproj",
       "samples\\GenerativeUI.Sample.Garden.Server\\GenerativeUI.Sample.Garden.Server.csproj",
-      "tests\\GenerativeUI\\GenerativeUI.Sample.Garden.Server.Tests\\GenerativeUI.Sample.Garden.Server.Tests.csproj",
       "tests\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests\\Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests.csproj"
     ]
   }

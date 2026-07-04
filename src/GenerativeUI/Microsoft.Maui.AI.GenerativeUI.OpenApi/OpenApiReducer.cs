@@ -173,7 +173,9 @@ public static class OpenApiReducer
         return tags.Count > 0 ? tags : null;
     }
 
-    private static IOpenApiSchema? JsonSchema(IDictionary<string, IOpenApiMediaType>? content)
+    // Content values are the concrete OpenApiMediaType in Microsoft.OpenApi 2.0.0 (the interface
+    // IOpenApiMediaType only exists in 3.x). This is the sole 2.0.0-specific member in the reducer.
+    private static IOpenApiSchema? JsonSchema(IDictionary<string, OpenApiMediaType>? content)
     {
         if (content is null || content.Count == 0)
             return null;
