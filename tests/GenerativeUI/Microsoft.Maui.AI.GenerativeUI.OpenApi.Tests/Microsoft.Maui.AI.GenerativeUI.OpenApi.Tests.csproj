@@ -22,6 +22,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI.OpenApi\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+    <!-- Build-only dependency: ensures the sample server (and its apphost) is built so the round-trip
+         test can launch it as a separate process. ExcludeAssets/ReferenceOutputAssembly keep the
+         server's assembly and its Microsoft.OpenApi 2.0.0 (+ ASP.NET OpenAPI analyzer) out of this
+         3.5.0 test project — the two only talk over HTTP. -->
+    <ProjectReference Include="..\..\..\samples\GenerativeUI.Sample.Garden.Server\GenerativeUI.Sample.Garden.Server.csproj"
+                      ReferenceOutputAssembly="false"
+                      ExcludeAssets="all" />
   </ItemGroup>
 
   <!-- The reducer/invoker tests parse the checked-in OpenAPI snapshot shared with the server tests. -->

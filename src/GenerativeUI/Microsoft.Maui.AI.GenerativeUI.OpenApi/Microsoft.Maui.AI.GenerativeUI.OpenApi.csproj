@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Runtime attributes only ([ExportAIFunction]); the source generator + DI wiring come in a later slice. -->
+    <ProjectReference Include="..\..\AIExtensions\Microsoft.Maui.AI.Attributes\Microsoft.Maui.AI.Attributes.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 

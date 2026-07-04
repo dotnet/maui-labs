@@ -91,25 +91,129 @@ public sealed class ApiInvokerTests
     }
 
     [Fact]
-    public async Task SendAsync_dispatches_through_the_http_client()
+    public async Task InvokeAsync_read_returns_success_envelope()
     {
-        var handler = new CapturingHandler();
-        using var httpClient = new HttpClient(handler);
-        var invoker = new ApiInvoker(new GenerativeOpenApiOptions { BaseAddress = new Uri("https://api.garden.example") }, httpClient);
+        var (invoker, handler) = InvokerWith(_ => Json(HttpStatusCode.OK, """{"items":[],"total":0}"""));
 
-        using var response = await invoker.SendAsync(Spec, "getCart");
+        var result = await invoker.InvokeAsync(Spec, "getCart", access: ApiAccess.Read);
 
-        Assert.Equal("https://api.garden.example/cart", handler.LastRequestUri!.AbsoluteUri);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(200, result.StatusCode);
+        Assert.Equal("https://api.garden.example/cart", handler.LastRequest!.RequestUri!.AbsoluteUri);
+        Assert.Equal("""{"status":200,"data":{"items":[],"total":0}}""", result.ToResponseJson());
     }
 
-    private sealed class CapturingHandler : HttpMessageHandler
+    [Fact]
+    public async Task InvokeAsync_write_with_no_content_returns_status_only_envelope()
     {
-        public Uri? LastRequestUri { get; private set; }
+        var (invoker, _) = InvokerWith(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        var result = await invoker.InvokeAsync(Spec, "clearCart", access: ApiAccess.Write);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(204, result.StatusCode);
+        Assert.Null(result.Body);
+        Assert.Equal("""{"status":204}""", result.ToResponseJson());
+    }
+
+    [Fact]
+    public async Task InvokeAsync_non_success_parses_problem_details()
+    {
+        var problem = """{"title":"Not Found","status":404,"detail":"No product 'nope'."}""";
+        var (invoker, _) = InvokerWith(_ => Json(HttpStatusCode.NotFound, problem));
+
+        var result = await invoker.InvokeAsync(Spec, "getProduct", new JsonObject { ["sku"] = "nope" }, ApiAccess.Read);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(404, result.StatusCode);
+        Assert.Equal("Not Found", result.Error!.Title);
+        Assert.Equal("No product 'nope'.", result.Error!.Detail);
+        Assert.Equal("""{"status":404,"error":{"title":"Not Found","detail":"No product 'nope'."}}""", result.ToResponseJson());
+    }
+
+    [Fact]
+    public async Task InvokeAsync_caps_a_large_response_body()
+    {
+        var big = new string('x', 5000);
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, $$"""{"note":"{{big}}"}"""));
+        using var httpClient = new HttpClient(handler);
+        var invoker = new ApiInvoker(
+            new GenerativeOpenApiOptions { BaseAddress = new Uri("https://api.garden.example"), MaxResponseBytes = 64 },
+            httpClient);
+
+        var result = await invoker.InvokeAsync(Spec, "getCart", access: ApiAccess.Read);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Truncated);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(result.Body!) <= 64);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_read_on_a_write_operation_is_rejected()
+    {
+        var (invoker, handler) = InvokerWith(_ => Json(HttpStatusCode.OK, "{}"));
+
+        var result = await invoker.InvokeAsync(Spec, "deleteProduct", new JsonObject { ["sku"] = "x" }, ApiAccess.Read);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("wrong_tool", result.Error!.Title);
+        Assert.Null(handler.LastRequest); // never dispatched
+    }
+
+    [Fact]
+    public async Task InvokeAsync_write_on_a_read_operation_is_rejected()
+    {
+        var (invoker, handler) = InvokerWith(_ => Json(HttpStatusCode.OK, "{}"));
+
+        var result = await invoker.InvokeAsync(Spec, "getProduct", new JsonObject { ["sku"] = "x" }, ApiAccess.Write);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("wrong_tool", result.Error!.Title);
+        Assert.Null(handler.LastRequest);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_unknown_operation_returns_error()
+    {
+        var (invoker, _) = InvokerWith(_ => Json(HttpStatusCode.OK, "{}"));
+
+        var result = await invoker.InvokeAsync(Spec, "nope", access: ApiAccess.Read);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("no_such_operation", result.Error!.Title);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_missing_required_arg_returns_error()
+    {
+        var (invoker, handler) = InvokerWith(_ => Json(HttpStatusCode.OK, "{}"));
+
+        var result = await invoker.InvokeAsync(Spec, "getProduct", new JsonObject(), ApiAccess.Read);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("bad_request", result.Error!.Title);
+        Assert.Null(handler.LastRequest);
+    }
+
+    private static (ApiInvoker Invoker, StubHandler Handler) InvokerWith(Func<HttpRequestMessage, HttpResponseMessage> responder)
+    {
+        var handler = new StubHandler(responder);
+        var httpClient = new HttpClient(handler);
+        var invoker = new ApiInvoker(new GenerativeOpenApiOptions { BaseAddress = new Uri("https://api.garden.example") }, httpClient);
+        return (invoker, handler);
+    }
+
+    private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
+        new(status) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
+    {
+        public HttpRequestMessage? LastRequest { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            LastRequestUri = request.RequestUri;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
+            LastRequest = request;
+            return Task.FromResult(responder(request));
         }
     }
 }
