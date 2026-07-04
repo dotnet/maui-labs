@@ -6,6 +6,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.AI.GenerativeUI.OpenApi;
+using Microsoft.Maui.DevFlow.Agent;
 
 namespace GenerativeUI.Sample.Garden;
 
@@ -35,6 +36,9 @@ public static class MauiProgram
         });
 
         builder.AddOpenAIServices();
+
+        // DevFlow agent — enables driving/inspecting the running app via `maui devflow` and MCP tools.
+        builder.AddMauiDevFlowAgent();
 
         builder.Services.AddSingleton<ChatViewModel>();
         builder.Services.AddSingleton<MainPage>();

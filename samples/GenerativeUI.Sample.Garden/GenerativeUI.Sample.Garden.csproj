@@ -52,6 +52,8 @@
     <ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes.Generators\Microsoft.Maui.AI.Attributes.Generators.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <!-- DevFlow agent: lets `maui devflow` / MCP tools drive and inspect the running app. -->
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
   </ItemGroup>
 
   <!-- WARNING: This embeds your local secrets.json into the app binary. Acceptable ONLY because this

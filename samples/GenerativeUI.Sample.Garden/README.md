@@ -49,9 +49,30 @@ OpenAPI document, then calls them. Writes (create/update/delete, checkout) requi
 - "What's in my cart?"
 - "Delete the potting soil." *(approve)*
 
+## Drive it with DevFlow
+
+The app registers the [DevFlow](../../src/DevFlow) agent (`AddMauiDevFlowAgent()`), so you can
+drive and inspect it from the `maui devflow` CLI (or MCP tools) — handy for iterating on the loop
+without clicking. With the app running:
+
+```bash
+maui devflow list                                   # find the agent + its --agent-port
+maui devflow ui screenshot --agent-port <port>      # see the current screen
+maui devflow ui tree --agent-port <port>            # inspect the visual tree
+maui devflow ui fill <entryId> "what are the products?" --agent-port <port>
+maui devflow ui tap --text Send --agent-port <port>
+maui devflow ui tap --text Approve --agent-port <port>   # accept a write_api prompt
+maui devflow network --agent-port <port>            # observe the REST round trips
+```
+
+> If several DevFlow apps are running they each get a distinct `--agent-port` (assigned by the
+> broker); pass the one shown for **Generative Garden**. Referencing the DevFlow agent also pulls in
+> the `macos` workload for its `net10.0-macos` target, so run `dotnet workload install macos` too.
+
 ## Notes
 
-- Requires the .NET MAUI workload (`dotnet workload install maui`).
+- Requires the .NET MAUI workload (`dotnet workload install maui`), plus the `macos` workload
+  (`dotnet workload install macos`) because the DevFlow agent multi-targets `net10.0-macos`.
 - The app targets **Microsoft.OpenApi 2.0.0** (the version .NET 10's ASP.NET ships), matching the
   library — see the library README.
 - Experimental; local-developer sample only. The user-secrets embedding target bakes secrets into
