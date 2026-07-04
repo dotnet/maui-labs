@@ -18,6 +18,11 @@ public sealed class ApiInvoker
     private readonly GenerativeOpenApiOptions _options;
     private readonly HttpClient _httpClient;
 
+    /// <param name="httpClient">
+    /// The client used to send requests. Configure it (base address, auth headers) before passing it
+    /// in — <see cref="AddGenerativeUiOpenApiServiceCollectionExtensions.AddGenerativeUiOpenApi"/> does
+    /// this from <see cref="GenerativeOpenApiOptions"/>.
+    /// </param>
     public ApiInvoker(GenerativeOpenApiOptions options, HttpClient? httpClient = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -25,7 +30,6 @@ public sealed class ApiInvoker
             throw new ArgumentException($"{nameof(GenerativeOpenApiOptions.BaseAddress)} is required.", nameof(options));
 
         _httpClient = httpClient ?? new HttpClient();
-        _options.ConfigureHttpClient?.Invoke(_httpClient);
     }
 
     /// <summary>

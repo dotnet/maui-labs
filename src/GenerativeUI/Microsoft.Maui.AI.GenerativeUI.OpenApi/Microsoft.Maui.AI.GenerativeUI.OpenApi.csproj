@@ -16,10 +16,11 @@
          so this library is conflict-free for net10 apps that also use ASP.NET's OpenAPI stack.
          Overrides the repo's 3.5.0 central pin (which DevFlow uses). -->
     <PackageReference Include="Microsoft.OpenApi" VersionOverride="2.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Runtime attributes only ([ExportAIFunction]); the source generator + DI wiring come in a later slice. -->
+    <!-- Runtime attributes ([ExportAIFunction]) for the AI-facing tools. -->
     <ProjectReference Include="..\..\AIExtensions\Microsoft.Maui.AI.Attributes\Microsoft.Maui.AI.Attributes.csproj" />
   </ItemGroup>
 

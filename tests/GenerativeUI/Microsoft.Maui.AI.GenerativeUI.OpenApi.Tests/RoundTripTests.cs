@@ -17,10 +17,10 @@ public sealed class RoundTripTests
     {
         var factory = new WebApplicationFactory<Program>();
         var client = factory.CreateClient();
-        var liveDocument = await client.GetStringAsync("/openapi/v1.json");
-        var spec = OpenApiReducer.Reduce(liveDocument);
-        var invoker = new ApiInvoker(new GenerativeOpenApiOptions { BaseAddress = client.BaseAddress! }, client);
-        return (factory, new OpenApiExplorerTools(spec, invoker));
+        var options = new GenerativeOpenApiOptions { BaseAddress = client.BaseAddress! };
+        var cache = new OpenApiCache(options, client);
+        var invoker = new ApiInvoker(options, client);
+        return (factory, new OpenApiExplorerTools(cache, invoker));
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public sealed class RoundTripTests
         var (factory, tools) = await CreateAsync();
         using (factory)
         {
-            var array = JsonNode.Parse(tools.ListEndpoints(query: "/cart"))!.AsArray();
+            var array = JsonNode.Parse(await tools.ListEndpointsAsync(query: "/cart"))!.AsArray();
             var ids = array.Select(n => n!["operationId"]!.GetValue<string>()).OrderBy(x => x, StringComparer.Ordinal).ToArray();
 
             Assert.Equal(new[] { "addCartItem", "clearCart", "getCart", "removeCartItem", "updateCartItem" }, ids);
@@ -123,7 +123,7 @@ public sealed class RoundTripTests
         var (factory, tools) = await CreateAsync();
         using (factory)
         {
-            var detail = JsonNode.Parse(tools.DescribeEndpoint("getProduct"))!;
+            var detail = JsonNode.Parse(await tools.DescribeEndpointAsync("getProduct"))!;
 
             Assert.Null(detail["requestSchema"]); // GET has no body
             var props = detail["responseSchema"]!["properties"]!.AsArray()

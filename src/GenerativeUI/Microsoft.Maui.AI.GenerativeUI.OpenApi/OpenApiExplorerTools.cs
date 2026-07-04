@@ -7,9 +7,10 @@ using Microsoft.Maui.AI.Attributes;
 namespace Microsoft.Maui.AI.GenerativeUI.OpenApi;
 
 /// <summary>
-/// The AI-facing server-API tools. They let a model discover a REST API described by a
-/// <see cref="ReducedSpec"/> and call it generically. Reads and writes are split into two tools so
-/// that only <see cref="WriteApiAsync"/> is approval-gated and a read can never perform a write.
+/// The AI-facing server-API tools. They let a model discover a REST API described by an OpenAPI
+/// document and call it generically. The document is fetched and reduced on demand via
+/// <see cref="OpenApiCache"/>. Reads and writes are split into two tools so that only
+/// <see cref="WriteApiAsync"/> is approval-gated and a read can never perform a write.
 /// </summary>
 public sealed class OpenApiExplorerTools
 {
@@ -18,23 +19,26 @@ public sealed class OpenApiExplorerTools
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    private readonly ReducedSpec _spec;
+    private readonly OpenApiCache _cache;
     private readonly ApiInvoker _invoker;
 
-    public OpenApiExplorerTools(ReducedSpec spec, ApiInvoker invoker)
+    public OpenApiExplorerTools(OpenApiCache cache, ApiInvoker invoker)
     {
-        _spec = spec ?? throw new ArgumentNullException(nameof(spec));
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _invoker = invoker ?? throw new ArgumentNullException(nameof(invoker));
     }
 
     [ExportAIFunction("list_endpoints")]
     [Description("List the API's operations as a compact index (operationId, method, path, summary, tags). Optionally filter by tag or a free-text query over the path, summary, tags, and operationId.")]
-    public string ListEndpoints(
+    public async Task<string> ListEndpointsAsync(
         [Description("Only include operations carrying this tag.")] string? tag = null,
-        [Description("Only include operations whose path, summary, tags, or operationId contains this text.")] string? query = null)
+        [Description("Only include operations whose path, summary, tags, or operationId contains this text.")] string? query = null,
+        CancellationToken cancellationToken = default)
     {
+        var spec = await _cache.GetSpecAsync(cancellationToken).ConfigureAwait(false);
+
         var rows = new JsonArray();
-        foreach (var endpoint in _spec.Endpoints)
+        foreach (var endpoint in spec.Endpoints)
         {
             if (tag is not null && (endpoint.Tags is null || !endpoint.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)))
                 continue;
@@ -58,26 +62,32 @@ public sealed class OpenApiExplorerTools
     }
 
     [ExportAIFunction("describe_endpoint")]
-    [Description("Full detail for one operation: parameters plus the request and response schemas inlined one level deep (immediate properties; nested models are referenced by name — use describe_model to expand them).")]
-    public string DescribeEndpoint(
-        [Description("The operationId to describe (from list_endpoints).")] string operationId)
+    [Description("Full detail for one operation: parameters plus the request and response schemas inlined one level deep (immediate properties; nested models are referenced by name - use describe_model to expand them).")]
+    public async Task<string> DescribeEndpointAsync(
+        [Description("The operationId to describe (from list_endpoints).")] string operationId,
+        CancellationToken cancellationToken = default)
     {
-        var endpoint = _spec.Endpoints.FirstOrDefault(e => string.Equals(e.OperationId, operationId, StringComparison.Ordinal));
+        var spec = await _cache.GetSpecAsync(cancellationToken).ConfigureAwait(false);
+
+        var endpoint = spec.Endpoints.FirstOrDefault(e => string.Equals(e.OperationId, operationId, StringComparison.Ordinal));
         if (endpoint is null)
             return Error($"No operation with id '{operationId}'.");
 
         var node = JsonSerializer.SerializeToNode(endpoint, ReducedSpecJsonContext.Default.ReducedEndpoint)!.AsObject();
-        InlineModel(node, "requestSchema", endpoint.RequestModel);
-        InlineModel(node, "responseSchema", endpoint.ResponseModel);
+        InlineModel(spec, node, "requestSchema", endpoint.RequestModel);
+        InlineModel(spec, node, "responseSchema", endpoint.ResponseModel);
         return node.ToJsonString(RelaxedJson);
     }
 
     [ExportAIFunction("describe_model")]
     [Description("The resolved schema for one model: its properties (name, type, required, nullable, description). Nested/array property types name other models you can describe_model in turn.")]
-    public string DescribeModel(
-        [Description("The model name to describe.")] string name)
+    public async Task<string> DescribeModelAsync(
+        [Description("The model name to describe.")] string name,
+        CancellationToken cancellationToken = default)
     {
-        if (!_spec.Models.TryGetValue(ModelKey(name), out var model))
+        var spec = await _cache.GetSpecAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!spec.Models.TryGetValue(ModelKey(name), out var model))
             return Error($"No model named '{name}'.");
 
         return JsonSerializer.Serialize(model, ReducedSpecJsonContext.Default.ReducedModel);
@@ -90,7 +100,8 @@ public sealed class OpenApiExplorerTools
         [Description("Path/query values as flat top-level keys.")] JsonObject? args = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _invoker.InvokeAsync(_spec, operationId, args, ApiAccess.Read, cancellationToken).ConfigureAwait(false);
+        var spec = await _cache.GetSpecAsync(cancellationToken).ConfigureAwait(false);
+        var result = await _invoker.InvokeAsync(spec, operationId, args, ApiAccess.Read, cancellationToken).ConfigureAwait(false);
         return result.ToResponseJson();
     }
 
@@ -101,15 +112,16 @@ public sealed class OpenApiExplorerTools
         [Description("Path/query values as flat top-level keys; the request payload under \"body\".")] JsonObject? args = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _invoker.InvokeAsync(_spec, operationId, args, ApiAccess.Write, cancellationToken).ConfigureAwait(false);
+        var spec = await _cache.GetSpecAsync(cancellationToken).ConfigureAwait(false);
+        var result = await _invoker.InvokeAsync(spec, operationId, args, ApiAccess.Write, cancellationToken).ConfigureAwait(false);
         return result.ToResponseJson();
     }
 
-    private void InlineModel(JsonObject node, string key, string? modelName)
+    private static void InlineModel(ReducedSpec spec, JsonObject node, string key, string? modelName)
     {
         if (modelName is null)
             return;
-        if (_spec.Models.TryGetValue(ModelKey(modelName), out var model))
+        if (spec.Models.TryGetValue(ModelKey(modelName), out var model))
             node[key] = JsonSerializer.SerializeToNode(model, ReducedSpecJsonContext.Default.ReducedModel);
     }
 
