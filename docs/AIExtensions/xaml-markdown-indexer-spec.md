@@ -65,8 +65,9 @@ index is the only responsibility of this system.
 
 ## 2. Design philosophy
 
-**The AI is treated as a blind user.** The output describes what a screen reader would announce —
-**semantic content**, not visual layout. This principle drives every rule in this document:
+**The AI consumes the UI non‑visually — the way a screen reader does.** It has no access to the
+rendered pixels, only to the semantic content this document describes: what a screen reader would
+announce, **not** visual layout. This principle drives every rule in this document:
 
 - **Include** things a user can perceive or act on: text, labels, headings, input fields and their
   hints, buttons and the actions they trigger, images (by their source/description), list content,
