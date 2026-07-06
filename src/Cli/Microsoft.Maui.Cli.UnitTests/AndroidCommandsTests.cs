@@ -599,4 +599,56 @@ public class AndroidCommandsTests
 		Assert.Equal(1, exitCode);
 		Assert.Empty(fake.InstallCalls);
 	}
+
+	// --- Tests for device profile helpers added when 'emulator create' switched from a
+	// hardcoded Pixel device list to a live avdmanager query (AvdManagerRunner.ListDeviceProfilesAsync). ---
+
+	[Theory]
+	[InlineData("pixel_6", "Pixel 6")]
+	[InlineData("pixel_9_pro_fold", "Pixel 9 Pro Fold")]
+	[InlineData("medium_phone", "Medium Phone")]
+	[InlineData("automotive_1024p_landscape", "Automotive 1024p Landscape")]
+	public void HumanizeDeviceProfileId_ConvertsSnakeCaseToTitleCase(string id, string expected)
+	{
+		Assert.Equal(expected, AndroidCommands.HumanizeDeviceProfileId(id));
+	}
+
+	[Theory]
+	[InlineData("Nexus 10")]
+	[InlineData("Galaxy Nexus")]
+	[InlineData("")]
+	public void HumanizeDeviceProfileId_LeavesAlreadyFriendlyIdsUnchanged(string id)
+	{
+		Assert.Equal(id, AndroidCommands.HumanizeDeviceProfileId(id));
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FallsBackToDefaults_WhenLiveListIsNull()
+	{
+		var choices = AndroidCommands.BuildDeviceProfileChoices(null);
+
+		Assert.NotEmpty(choices);
+		Assert.Contains(choices, c => c.Id == "pixel_6" && c.Name == "Pixel 6");
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FallsBackToDefaults_WhenLiveListIsEmpty()
+	{
+		var choices = AndroidCommands.BuildDeviceProfileChoices(Array.Empty<string>());
+
+		Assert.NotEmpty(choices);
+		Assert.Contains(choices, c => c.Id == "pixel_6" && c.Name == "Pixel 6");
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_MapsLiveIds_ToHumanizedNames()
+	{
+		var liveProfileIds = new[] { "pixel_9_pro_fold", "Nexus 10" };
+
+		var choices = AndroidCommands.BuildDeviceProfileChoices(liveProfileIds);
+
+		Assert.Equal(2, choices.Count);
+		Assert.Equal(("pixel_9_pro_fold", "Pixel 9 Pro Fold"), choices[0]);
+		Assert.Equal(("Nexus 10", "Nexus 10"), choices[1]);
+	}
 }

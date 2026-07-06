@@ -242,6 +242,11 @@ public class AndroidProvider : IAndroidProvider
 		return await _avdManager.GetAvdsAsync(cancellationToken);
 	}
 
+	public async Task<List<string>> GetDeviceProfilesAsync(CancellationToken cancellationToken = default)
+	{
+		return await _avdManager.GetDeviceProfilesAsync(cancellationToken);
+	}
+
 	public async Task<AvdInfo> CreateAvdAsync(string name, string deviceProfile, string systemImage,
 		bool force = false, CancellationToken cancellationToken = default)
 	{

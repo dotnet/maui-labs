@@ -127,20 +127,18 @@ public static partial class AndroidCommands
 				// --- Step 2: Device profile selection ---
 				if (string.IsNullOrEmpty(device) && !useJson && !isCi && formatter is SpectreOutputFormatter spectre2)
 				{
-					var deviceProfiles = new List<(string Id, string Name)>
-					{
-						("pixel_6", "Pixel 6"),
-						("pixel_8", "Pixel 8"),
-						("pixel_9", "Pixel 9"),
-						("pixel_fold", "Pixel Fold"),
-						("pixel_tablet", "Pixel Tablet"),
-						("medium_phone", "Medium Phone"),
-						("small_phone", "Small Phone"),
-					};
+					var liveProfiles = await spectre2.StatusAsync(
+						"Finding device profiles...",
+						() => androidProvider.GetDeviceProfilesAsync(cancellationToken));
+
+					var deviceProfiles = BuildDeviceProfileChoices(liveProfiles);
 
 					var selectedDevice = spectre2.Prompt(
 						new SelectionPrompt<(string Id, string Name)>()
 							.Title("[bold]Select a device profile[/]")
+							.PageSize(15)
+							.EnableSearch()
+							.SearchPlaceholderText("[grey](Type to search)[/]")
 							.HighlightStyle(new Style(Color.DodgerBlue1))
 							.UseConverter(d => $"[bold]{Markup.Escape(d.Name)}[/]  [dim]{Markup.Escape(d.Id)}[/]")
 							.AddChoices(deviceProfiles));
@@ -509,5 +507,49 @@ public static partial class AndroidCommands
 		command.Add(deleteCommand);
 
 		return command;
+	}
+
+	/// <summary>
+	/// Curated fallback device profiles shown when a live avdmanager query is
+	/// unavailable (SDK/avdmanager missing) or returns no results.
+	/// </summary>
+	static readonly List<(string Id, string Name)> DefaultDeviceProfiles = new()
+	{
+		("pixel_6", "Pixel 6"),
+		("pixel_8", "Pixel 8"),
+		("pixel_9", "Pixel 9"),
+		("pixel_fold", "Pixel Fold"),
+		("pixel_tablet", "Pixel Tablet"),
+		("medium_phone", "Medium Phone"),
+		("small_phone", "Small Phone"),
+	};
+
+	/// <summary>
+	/// Converts a raw avdmanager device profile id (e.g. "pixel_9_pro_fold") into a
+	/// human-friendly display name (e.g. "Pixel 9 Pro Fold"). Ids that are already
+	/// human-readable (no underscores, e.g. "Nexus 10") are returned unchanged.
+	/// </summary>
+	internal static string HumanizeDeviceProfileId(string id)
+	{
+		if (string.IsNullOrEmpty(id) || !id.Contains('_', StringComparison.Ordinal))
+			return id;
+
+		var words = id.Split('_', StringSplitOptions.RemoveEmptyEntries);
+		return string.Join(" ", words.Select(w => w.Length > 0 ? char.ToUpperInvariant(w[0]) + w[1..] : w));
+	}
+
+	/// <summary>
+	/// Builds the (Id, Name) choices shown in the device profile selection prompt from
+	/// a live avdmanager query. Falls back to <see cref="DefaultDeviceProfiles"/> when
+	/// the live list is null or empty (e.g. avdmanager missing or the query failed).
+	/// </summary>
+	internal static List<(string Id, string Name)> BuildDeviceProfileChoices(IReadOnlyList<string>? liveProfileIds)
+	{
+		if (liveProfileIds == null || liveProfileIds.Count == 0)
+			return DefaultDeviceProfiles;
+
+		return liveProfileIds
+			.Select(id => (Id: id, Name: HumanizeDeviceProfileId(id)))
+			.ToList();
 	}
 }

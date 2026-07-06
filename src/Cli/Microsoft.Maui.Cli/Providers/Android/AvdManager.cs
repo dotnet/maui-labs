@@ -106,6 +106,28 @@ public class AvdManager
 		}
 	}
 
+	/// <summary>
+	/// Lists available AVD device profile ids (e.g. "pixel_6", "Nexus 10") via
+	/// <c>avdmanager list device --compact</c>. Returns an empty list if avdmanager
+	/// is unavailable or the query fails, mirroring <see cref="GetAvdsAsync"/>.
+	/// </summary>
+	public async Task<List<string>> GetDeviceProfilesAsync(CancellationToken cancellationToken = default)
+	{
+		if (_runner == null)
+			return new List<string>();
+
+		try
+		{
+			var profiles = await _runner.ListDeviceProfilesAsync(cancellationToken);
+			return profiles.Select(p => p.Id).ToList();
+		}
+		catch (InvalidOperationException ex)
+		{
+			System.Diagnostics.Trace.WriteLine($"Device profile list failed: {ex.Message}");
+			return new List<string>();
+		}
+	}
+
 	static AvdInfo MapToMauiAvd(Xamarin.Android.Tools.AvdInfo avd)
 	{
 		string? systemImage = null;
