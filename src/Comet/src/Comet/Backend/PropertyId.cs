@@ -124,5 +124,9 @@ namespace Comet.Backend
 		// --- SelectorPanel (240–255) ---
 		// The active panel index (gold UserInput.kt InputSelector); 0 = collapsed.
 		public static readonly PropertyId SelectorPanel_Index = new(240);
+
+		// --- Navigation chrome (256–271): NavigationBar / NavigationRail ---
+		// The selected destination index; both chrome controls share the id.
+		public static readonly PropertyId Nav_SelectedIndex = new(256);
 	}
 }

@@ -45,6 +45,18 @@ namespace Comet
 			=> new ComposeFabNode(this, context);
 	}
 
+	public partial class NavigationBar
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeNavigationBarNode(this, context);
+	}
+
+	public partial class NavigationRail
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeNavigationRailNode(this, context);
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
