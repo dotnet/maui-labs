@@ -184,6 +184,85 @@ public class FunctionInvocationHandlerTests
     }
 
     [Fact]
+    public async Task TwoToolCalls_BothResultsBatchedInOneUpdate_ReverseOrder_MatchByCallId()
+    {
+        // Regression: the function-invocation middleware returns the results for parallel tool calls
+        // batched into ONE update, in an order that need not match the call order. The handler must
+        // match each result to its block by CallId, not by position — otherwise a block is left with
+        // Result == null and AgentContext redundantly re-invokes the tool.
+        var pipeline = CreatePipeline();
+
+        var call1 = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new FunctionCallContent("call-A", "AddA", null)],
+            FinishReason = ChatFinishReason.ToolCalls
+        };
+        var blockA = Assert.IsType<FunctionInvocationContentBlock>((await CollectBlocks(pipeline, call1))[0]);
+
+        var call2 = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new FunctionCallContent("call-B", "AddB", null)],
+            FinishReason = ChatFinishReason.ToolCalls
+        };
+        var blockB = Assert.IsType<FunctionInvocationContentBlock>((await CollectBlocks(pipeline, call2))[0]);
+
+        // Both results in a single update, in REVERSE order relative to the calls.
+        var results = new ChatResponseUpdate
+        {
+            Contents =
+            [
+                new FunctionResultContent("call-B", "resultB"),
+                new FunctionResultContent("call-A", "resultA"),
+            ]
+        };
+        await CollectBlocks(pipeline, results);
+
+        Assert.True(blockA.HasResult);
+        Assert.Equal("resultA", blockA.Result?.Result?.ToString());
+        Assert.True(blockB.HasResult);
+        Assert.Equal("resultB", blockB.Result?.Result?.ToString());
+    }
+
+    [Fact]
+    public async Task TwoToolCalls_BothResultsBatchedInOneUpdate_CallOrder_MatchByCallId()
+    {
+        var pipeline = CreatePipeline();
+
+        var call1 = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new FunctionCallContent("call-A", "AddA", null)],
+            FinishReason = ChatFinishReason.ToolCalls
+        };
+        var blockA = Assert.IsType<FunctionInvocationContentBlock>((await CollectBlocks(pipeline, call1))[0]);
+
+        var call2 = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new FunctionCallContent("call-B", "AddB", null)],
+            FinishReason = ChatFinishReason.ToolCalls
+        };
+        var blockB = Assert.IsType<FunctionInvocationContentBlock>((await CollectBlocks(pipeline, call2))[0]);
+
+        var results = new ChatResponseUpdate
+        {
+            Contents =
+            [
+                new FunctionResultContent("call-A", "resultA"),
+                new FunctionResultContent("call-B", "resultB"),
+            ]
+        };
+        await CollectBlocks(pipeline, results);
+
+        Assert.True(blockA.HasResult);
+        Assert.Equal("resultA", blockA.Result?.Result?.ToString());
+        Assert.True(blockB.HasResult);
+        Assert.Equal("resultB", blockB.Result?.Result?.ToString());
+    }
+
+    [Fact]
     public async Task Finalize_ActiveToolCallBlock_BecomesInactive()
     {
         var pipeline = CreatePipeline();
