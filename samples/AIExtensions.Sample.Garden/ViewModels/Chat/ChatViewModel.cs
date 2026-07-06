@@ -14,10 +14,12 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// Hosts the AI chat for the garden shop over the reusable <see cref="AgentContext"/> engine. The
 /// message loop, streaming, tool invocation, and approval flow all live in the engine + controls; this
 /// view model only configures the agent (tools, instructions, custom block handlers), exposes the
-/// <see cref="Session"/> for a <c>CopilotChatView</c> to bind to, and surfaces sample chrome
-/// (suggestions, the available-tools list for the empty state, and a fancy/plain template toggle).
+/// <see cref="Session"/> for the chat controls to bind to, and surfaces sample chrome (suggestions,
+/// the available-tools list for the empty state, and the fancy/plain view toggle state).
 /// </summary>
-public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNewChatSessionMessage>
+public sealed partial class ChatViewModel : ObservableObject,
+    IRecipient<StartNewChatSessionMessage>,
+    IRecipient<ChatTemplateModeChangedMessage>
 {
     /// <summary>
     /// Source-generated tool context that merges all tool sources into one.
@@ -105,7 +107,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         Session = new AgentContext(agent);
         Session.RegisterOnStatusChanged(OnStatusChanged);
 
-        WeakReferenceMessenger.Default.Register(this);
+        WeakReferenceMessenger.Default.RegisterAll(this);
 
         RefreshAvailableTools();
     }
@@ -115,6 +117,19 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
     /// <summary>Tools surfaced in the empty-state grid so the user can see what Sage can do.</summary>
     public ObservableCollection<ToolInfoViewModel> AvailableTools { get; } = [];
+
+    /// <summary>
+    /// Whether the rich (fancy) CopilotChatView is shown. Bound by <c>ChatView.xaml</c> to swap
+    /// visibility between the full CopilotChatView and the bare MessageListView. The header owns the
+    /// toggle button and broadcasts <see cref="ChatTemplateModeChangedMessage"/>; this view model just
+    /// mirrors the state for the view.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPlain))]
+    public partial bool IsFancy { get; set; } = true;
+
+    /// <summary>Inverse of <see cref="IsFancy"/> — shows the bare MessageListView.</summary>
+    public bool IsPlain => !IsFancy;
 
     /// <summary>Starter prompts shown as suggestion chips.</summary>
     public IReadOnlyList<string> SuggestionPrompts { get; } =
@@ -132,6 +147,9 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
     void IRecipient<StartNewChatSessionMessage>.Receive(StartNewChatSessionMessage message) =>
         Session.Clear();
+
+    void IRecipient<ChatTemplateModeChangedMessage>.Receive(ChatTemplateModeChangedMessage message) =>
+        IsFancy = message.IsFancy;
 
     private void OnStatusChanged(ConversationStatus status)
     {

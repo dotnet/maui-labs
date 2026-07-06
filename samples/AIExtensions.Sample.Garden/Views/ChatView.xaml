@@ -3,84 +3,128 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             xmlns:gchat="clr-namespace:AIExtensions.Sample.Garden.Chat"
              xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:engine="clr-namespace:Microsoft.Maui.AI.Chat;assembly=Microsoft.Maui.AI.Chat"
              x:Class="AIExtensions.Sample.Garden.Views.ChatView"
              x:DataType="vm:ChatViewModel"
              local:ViewModelBinder.Type="{x:Type vm:ChatViewModel}">
 
-    <!-- The whole chat surface is the drop-in CopilotChatView. It renders the session's blocks,
-         suggestion chips, welcome/empty state, and input box. The rich (fancy) and plain template
-         sets are applied in code-behind so the header toggle can swap between them. -->
-    <chat:CopilotChatView x:Name="ChatControl"
-                          Session="{Binding Session}"
-                          SuggestionPrompts="{Binding SuggestionPrompts}"
-                          Placeholder="Ask about products..."
-                          MaxBubbleWidth="560"
-                          HorizontalOptions="Fill">
-        <chat:CopilotChatView.EmptyViewTemplate>
-            <DataTemplate x:DataType="vm:ChatViewModel">
-                <ScrollView>
-                    <Grid Padding="24" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12"
-                          MaximumWidthRequest="840" HorizontalOptions="Center">
-                        <Label Grid.Row="0"
-                               Text="&#xF788;"
-                               FontFamily="FluentFilled"
-                               FontSize="{StaticResource FontSizeHero}"
-                               TextColor="{StaticResource Primary}"
-                               HorizontalOptions="Center" />
-                        <Label Grid.Row="1"
-                               Text="Welcome to Sage, your personal garden shopper"
-                               FontSize="{StaticResource FontSizeTitle}"
-                               FontAttributes="Bold"
-                               HorizontalTextAlignment="Center" />
-                        <Label Grid.Row="2"
-                               Text="Tap a chip below to get started, or browse the catalog. The assistant can use these tools:"
-                               FontSize="{StaticResource FontSizeBody}"
-                               HorizontalTextAlignment="Center"
-                               LineBreakMode="WordWrap"
-                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
-                        <FlexLayout Grid.Row="3"
-                                    BindableLayout.ItemsSource="{Binding AvailableTools}"
-                                    Wrap="Wrap"
-                                    JustifyContent="Center"
-                                    AlignItems="Start"
-                                    AlignContent="Start">
-                            <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ToolInfoViewModel">
-                                    <Border Margin="4"
-                                            Padding="10,8"
-                                            FlexLayout.Basis="{OnIdiom Phone=150, Tablet=240, Desktop=240}"
-                                            FlexLayout.Grow="1"
-                                            FlexLayout.Shrink="1"
-                                            MinimumWidthRequest="{OnIdiom Phone=120, Tablet=220, Desktop=220}"
-                                            MaximumWidthRequest="{OnIdiom Phone=190, Tablet=300, Desktop=300}"
-                                            HeightRequest="92"
-                                            BackgroundColor="{AppThemeBinding Light={StaticResource ToolCardBackgroundLight}, Dark={StaticResource ToolCardBackgroundDark}}"
-                                            Stroke="{AppThemeBinding Light={StaticResource ToolCardStrokeLight}, Dark={StaticResource ToolCardStrokeDark}}"
-                                            StrokeThickness="1"
-                                            StrokeShape="RoundRectangle 8">
-                                        <Grid RowDefinitions="Auto,*" RowSpacing="2">
-                                            <Label Text="{Binding Name}"
-                                                   MaxLines="1"
-                                                   LineBreakMode="TailTruncation"
-                                                   FontAttributes="Bold"
-                                                   FontSize="{StaticResource FontSizeBody}"
-                                                   TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
-                                            <Label Grid.Row="1"
-                                                   Text="{Binding Description}"
-                                                   FontSize="{StaticResource FontSizeCaption}"
-                                                   MaxLines="3"
-                                                   LineBreakMode="TailTruncation"
-                                                   TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </BindableLayout.ItemTemplate>
-                        </FlexLayout>
-                    </Grid>
-                </ScrollView>
-            </DataTemplate>
-        </chat:CopilotChatView.EmptyViewTemplate>
-    </chat:CopilotChatView>
+    <!-- Both controls share one Session. The header toggle flips the view model's IsFancy, which
+         shows/hides the two overlapping controls:
+           • Fancy  → the full CopilotChatView (chrome, input, suggestions, empty state) with the
+                      rich Garden templates below.
+           • Plain  → the bare MessageListView with only the built-in templates — the same blocks
+                      rendered plainly (product results as a text summary, formatted text as raw
+                      markdown, tools as the built-in call/result). -->
+    <Grid>
+
+        <!-- ═══ Fancy: full CopilotChatView with custom Garden templates ═══ -->
+        <chat:CopilotChatView Session="{Binding Session}"
+                              SuggestionPrompts="{Binding SuggestionPrompts}"
+                              Placeholder="Ask about products..."
+                              MaxBubbleWidth="560"
+                              IsVisible="{Binding IsFancy}"
+                              HorizontalOptions="Fill">
+
+            <!-- Welcome / empty state: greeting + the grid of available tools -->
+            <chat:CopilotChatView.EmptyViewTemplate>
+                <DataTemplate x:DataType="vm:ChatViewModel">
+                    <ScrollView>
+                        <Grid Padding="24" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12"
+                              MaximumWidthRequest="840" HorizontalOptions="Center">
+                            <Label Grid.Row="0"
+                                   Text="&#xF788;"
+                                   FontFamily="FluentFilled"
+                                   FontSize="{StaticResource FontSizeHero}"
+                                   TextColor="{StaticResource Primary}"
+                                   HorizontalOptions="Center" />
+                            <Label Grid.Row="1"
+                                   Text="Welcome to Sage, your personal garden shopper"
+                                   FontSize="{StaticResource FontSizeTitle}"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="Center" />
+                            <Label Grid.Row="2"
+                                   Text="Tap a chip below to get started, or browse the catalog. The assistant can use these tools:"
+                                   FontSize="{StaticResource FontSizeBody}"
+                                   HorizontalTextAlignment="Center"
+                                   LineBreakMode="WordWrap"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                            <FlexLayout Grid.Row="3"
+                                        BindableLayout.ItemsSource="{Binding AvailableTools}"
+                                        Wrap="Wrap"
+                                        JustifyContent="Center"
+                                        AlignItems="Start"
+                                        AlignContent="Start">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ToolInfoViewModel">
+                                        <Border Margin="4"
+                                                Padding="10,8"
+                                                FlexLayout.Basis="{OnIdiom Phone=150, Tablet=240, Desktop=240}"
+                                                FlexLayout.Grow="1"
+                                                FlexLayout.Shrink="1"
+                                                MinimumWidthRequest="{OnIdiom Phone=120, Tablet=220, Desktop=220}"
+                                                MaximumWidthRequest="{OnIdiom Phone=190, Tablet=300, Desktop=300}"
+                                                HeightRequest="92"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource ToolCardBackgroundLight}, Dark={StaticResource ToolCardBackgroundDark}}"
+                                                Stroke="{AppThemeBinding Light={StaticResource ToolCardStrokeLight}, Dark={StaticResource ToolCardStrokeDark}}"
+                                                StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 8">
+                                            <Grid RowDefinitions="Auto,*" RowSpacing="2">
+                                                <Label Text="{Binding Name}"
+                                                       MaxLines="1"
+                                                       LineBreakMode="TailTruncation"
+                                                       FontAttributes="Bold"
+                                                       FontSize="{StaticResource FontSizeBody}"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                                                <Label Grid.Row="1"
+                                                       Text="{Binding Description}"
+                                                       FontSize="{StaticResource FontSizeCaption}"
+                                                       MaxLines="3"
+                                                       LineBreakMode="TailTruncation"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </FlexLayout>
+                        </Grid>
+                    </ScrollView>
+                </DataTemplate>
+            </chat:CopilotChatView.EmptyViewTemplate>
+
+            <!-- Rich template set — custom Garden views per block type -->
+            <chat:CopilotChatView.ContentTemplates>
+                <chat:ThinkingContentTemplate />
+                <chat:TextContentTemplate Role="User" />
+                <chat:GenericContentTemplate BlockType="{x:Type gchat:GardenFormattedTextBlock}"
+                                             ViewType="{x:Type gchat:GardenFormattedTextView}" />
+                <chat:MediaContentTemplate />
+                <chat:GenericContentTemplate BlockType="{x:Type gchat:ProductResultsBlock}"
+                                             ViewType="{x:Type gchat:ProductResultsView}" />
+                <chat:GenericContentTemplate BlockType="{x:Type engine:FunctionInvocationContentBlock}"
+                                             ViewType="{x:Type gchat:GardenToolView}" />
+                <chat:ToolApprovalTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </chat:CopilotChatView.ContentTemplates>
+        </chat:CopilotChatView>
+
+        <!-- ═══ Plain: bare MessageListView with only built-in templates ═══ -->
+        <chat:MessageListView Session="{Binding Session}"
+                              IsVisible="{Binding IsPlain}"
+                              Margin="12,8,12,12">
+            <chat:MessageListView.ContentTemplates>
+                <chat:ThinkingContentTemplate />
+                <chat:TextContentTemplate />
+                <chat:MediaContentTemplate />
+                <chat:FunctionInvocationTemplate />
+                <chat:ToolApprovalTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </chat:MessageListView.ContentTemplates>
+        </chat:MessageListView>
+
+    </Grid>
 
 </ContentView>
