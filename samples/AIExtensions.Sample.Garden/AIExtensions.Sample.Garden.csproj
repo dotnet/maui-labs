@@ -21,8 +21,11 @@
 
 		<UserSecretsId>ai-attributes-secrets</UserSecretsId>
 
-		<!-- Microsoft.Extensions.AI image-generation + hosted image tool are experimental (MEAI001). -->
-		<NoWarn>$(NoWarn);MEAI001</NoWarn>
+		<!-- Microsoft.Extensions.AI image-generation + hosted image tool are experimental (MEAI001).
+		     XC0025: the sample's pre-existing cart DataTrigger (x:Reference source) and catalog Command
+		     (RelativeSource AncestorType) bindings can't be XamlC-compiled and fall back to reflection at
+		     runtime — benign, but CI builds with /warnaserror, so suppress the warning. -->
+		<NoWarn>$(NoWarn);MEAI001;XC0025</NoWarn>
 
 		<!-- For inspecting source-generator output only. Not required to run the sample. -->
 		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
