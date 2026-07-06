@@ -82,6 +82,14 @@ public partial class MessageListView : TemplatedView
     private IDisposable? _blockAddedReg;
     private readonly List<IDisposable> _blockSubscriptions = [];
 
+    // Streaming coalescing: a block can raise a change per token. Applying each one immediately
+    // replaces the CollectionView item (recreating the whole cell) and rebuilds custom views from
+    // scratch, which stalls the UI during a burst. Instead we mark the block dirty and flush the
+    // batch at most once per interval, so N token updates collapse into a few refreshes.
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(50);
+    private readonly List<ContentBlock> _dirtyBlocks = [];
+    private bool _flushScheduled;
+
     // Purely visual, UI-only items — never part of the engine's turns or the message thread.
     private ContentContext? _thinkingItem;   // transient tail while streaming
     private Exception? _shownError;           // dedupe: the error currently rendered
@@ -171,6 +179,7 @@ public partial class MessageListView : TemplatedView
         foreach (var sub in _blockSubscriptions)
             sub.Dispose();
         _blockSubscriptions.Clear();
+        _dirtyBlocks.Clear();
     }
 
     private void OnStatusChanged(ConversationStatus status)
@@ -204,29 +213,56 @@ public partial class MessageListView : TemplatedView
         RemoveThinkingItem();
 
         _items.Add(new ContentContext(Session, block));
-        _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
+        _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block))));
 
         UpdateThinkingItem();
         ScrollToLatestMessage();
     }
 
-    private void OnBlockChanged(ContentBlock block)
+    /// <summary>Marks a block as needing a UI refresh and schedules a single coalesced flush.</summary>
+    private void MarkBlockDirty(ContentBlock block)
     {
+        if (!_dirtyBlocks.Contains(block))
+            _dirtyBlocks.Add(block);
+
+        if (_flushScheduled)
+            return;
+
+        _flushScheduled = true;
+        Dispatcher.DispatchDelayed(FlushInterval, FlushDirtyBlocks);
+    }
+
+    private void FlushDirtyBlocks()
+    {
+        _flushScheduled = false;
+
+        if (_dirtyBlocks.Count == 0)
+            return;
+
+        var dirty = _dirtyBlocks.ToArray();
+        _dirtyBlocks.Clear();
+
         if (Session is null)
             return;
 
-        for (int i = 0; i < _items.Count; i++)
-        {
-            if (ReferenceEquals(_items[i].Block, block))
-            {
-                _items[i] = new ContentContext(Session, block);
-                break;
-            }
-        }
+        foreach (var block in dirty)
+            ApplyBlockChanged(block);
 
         // The tail may now be streaming assistant content, which hides the thinking item.
         UpdateThinkingItem();
         ScrollToLatestMessage();
+    }
+
+    private void ApplyBlockChanged(ContentBlock block)
+    {
+        for (int i = 0; i < _items.Count; i++)
+        {
+            if (ReferenceEquals(_items[i].Block, block))
+            {
+                _items[i] = new ContentContext(Session!, block);
+                return;
+            }
+        }
     }
 
     private void RebuildFromSession()
@@ -236,6 +272,7 @@ public partial class MessageListView : TemplatedView
         _blockSubscriptions.Clear();
 
         _items.Clear();
+        _dirtyBlocks.Clear();
         _thinkingItem = null;
         _shownError = null;
 
@@ -249,12 +286,12 @@ public partial class MessageListView : TemplatedView
             foreach (var block in turn.RequestBlocks)
             {
                 _items.Add(new ContentContext(Session, block));
-                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
+                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block))));
             }
             foreach (var block in turn.ResponseBlocks)
             {
                 _items.Add(new ContentContext(Session, block));
-                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => OnBlockChanged(block))));
+                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block))));
             }
         }
 
