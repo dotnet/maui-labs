@@ -286,22 +286,24 @@ public class AndroidProvider : IAndroidProvider
 	public async Task<string?> GetMostRecentSystemImageAsync(CancellationToken cancellationToken = default)
 	{
 		var packages = await GetInstalledPackagesAsync(cancellationToken);
-
-		// Filter to system images and sort by Android API level (descending)
-		// System image format: system-images;android-XX;google_apis;arm64-v8a
-		var systemImages = packages
-			.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
-			.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
-			.Where(x => x.ApiLevel > 0)
-			.OrderByDescending(x => x.ApiLevel)
-			.ToList();
-
-		return systemImages.FirstOrDefault()?.Package.Path;
+		return FindMostRecentSystemImage(packages);
 	}
 
-	internal static int ExtractApiLevel(string systemImagePath)
+	// Selects the installed system image with the highest Android API level.
+	// System image format: system-images;android-XX;google_apis;arm64-v8a
+	internal static string? FindMostRecentSystemImage(IEnumerable<SdkPackage> packages)
 	{
-		// Parse "system-images;android-35;google_apis;arm64-v8a" -> 35
+		return packages
+			.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
+			.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
+			.Where(x => x.ApiLevel > new Version(0, 0))
+			.OrderByDescending(x => x.ApiLevel)
+			.FirstOrDefault()?.Package.Path;
+	}
+
+	internal static Version ExtractApiLevel(string systemImagePath)
+	{
+		// Parse "system-images;android-35;google_apis;arm64-v8a" -> 35.0
 		var parts = systemImagePath.Split(';');
 		if (parts.Length >= 2)
 		{
@@ -310,21 +312,18 @@ public class AndroidProvider : IAndroidProvider
 			{
 				var levelStr = androidPart.Substring(8); // Remove "android-"
 
-				// Some platforms carry a minor revision suffix (e.g. "android-37.0");
-				// compare on the major component so the image isn't silently dropped.
-				// Two coexisting minor revisions (e.g. "37.0" and "37.1") both map to 37,
-				// so their relative ordering is input-order-dependent. Only ".0" has been
-				// observed in practice; if finer-grained ordering is ever required, switch
-				// to Version.TryParse on the full "major.minor" component.
-				var dotIndex = levelStr.IndexOf('.');
-				if (dotIndex >= 0)
-					levelStr = levelStr.Substring(0, dotIndex);
-
-				if (int.TryParse(levelStr, out var level))
-					return level;
+				// Platforms may carry a minor revision suffix (e.g. "android-37.0"); keep it
+				// so newer revisions sort ahead of older ones (37.1 > 37.0) rather than being
+				// silently dropped. Mirrors the parse ladder in AndroidCommands.Sdk.cs:
+				// "37.0" -> 37.0, plain "35" -> 35.0, and non-numeric codenames
+				// (e.g. "android-VanillaIceCream") -> 0.0 so they're excluded from auto-detect.
+				if (Version.TryParse(levelStr, out var version))
+					return version;
+				if (int.TryParse(levelStr, out var major))
+					return new Version(major, 0);
 			}
 		}
-		return 0;
+		return new Version(0, 0);
 	}
 
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses = false,

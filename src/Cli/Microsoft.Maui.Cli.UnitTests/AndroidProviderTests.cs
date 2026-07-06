@@ -186,16 +186,8 @@ public class AndroidProviderTests
 		var provider = new FakeAndroidProvider
 		{
 			InstalledPackages = packages,
-			GetMostRecentSystemImageFunc = async ct =>
-			{
-				var pkgs = packages;
-				return pkgs
-					.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
-					.Select(p => new { Package = p, ApiLevel = AndroidProvider.ExtractApiLevel(p.Path) })
-					.Where(x => x.ApiLevel > 0)
-					.OrderByDescending(x => x.ApiLevel)
-					.FirstOrDefault()?.Package.Path;
-			}
+			GetMostRecentSystemImageFunc = ct =>
+				Task.FromResult(AndroidProvider.FindMostRecentSystemImage(packages))
 		};
 
 		// Act
@@ -209,13 +201,9 @@ public class AndroidProviderTests
 	public async Task GetMostRecentSystemImageAsync_HandlesMinorRevisionSuffix()
 	{
 		// API 37 ships as "android-37.0" (with a minor revision suffix). Regression test
-		// ensuring such images are not silently dropped by API-level parsing.
-		//
-		// SdkManager is not mockable, so this mirrors the production filter from
-		// AndroidProvider.GetMostRecentSystemImageAsync while calling the real
-		// AndroidProvider.ExtractApiLevel. It is therefore an ExtractApiLevel integration
-		// test for the most-recent-image flow; ExtractApiLevel_ParsesApiLevel below covers
-		// the parser directly. Keep the filter here in sync with the production method.
+		// ensuring such images are not silently dropped by API-level parsing. Calls the real
+		// production selector (AndroidProvider.FindMostRecentSystemImage) so filter and sort
+		// logic stay covered.
 		var packages = new List<SdkPackage>
 		{
 			new SdkPackage { Path = "system-images;android-35;google_apis;arm64-v8a" },
@@ -226,12 +214,8 @@ public class AndroidProviderTests
 		var provider = new FakeAndroidProvider
 		{
 			InstalledPackages = packages,
-			GetMostRecentSystemImageFunc = ct => Task.FromResult(packages
-				.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
-				.Select(p => new { Package = p, ApiLevel = AndroidProvider.ExtractApiLevel(p.Path) })
-				.Where(x => x.ApiLevel > 0)
-				.OrderByDescending(x => x.ApiLevel)
-				.FirstOrDefault()?.Package.Path)
+			GetMostRecentSystemImageFunc = ct =>
+				Task.FromResult(AndroidProvider.FindMostRecentSystemImage(packages))
 		};
 
 		// Act
@@ -241,16 +225,37 @@ public class AndroidProviderTests
 		Assert.Equal("system-images;android-37.0;google_apis_ps16k;arm64-v8a", result);
 	}
 
-	[Theory]
-	[InlineData("system-images;android-35;google_apis;arm64-v8a", 35)]
-	[InlineData("system-images;android-37.0;google_apis_ps16k;arm64-v8a", 37)]
-	[InlineData("system-images;android-37.0;google_apis_playstore_ps16k;x86_64", 37)]
-	[InlineData("platform-tools", 0)]
-	[InlineData("build-tools;34.0.0", 0)]
-	[InlineData("system-images;android-VanillaIceCream;google_apis;arm64-v8a", 0)]
-	public void ExtractApiLevel_ParsesApiLevel(string systemImagePath, int expected)
+	[Fact]
+	public void FindMostRecentSystemImage_PrefersHigherMinorRevision()
 	{
-		Assert.Equal(expected, AndroidProvider.ExtractApiLevel(systemImagePath));
+		// Two minor revisions of the same major API level can coexist. The newer revision
+		// must win regardless of input order — guards against a stable OrderByDescending
+		// leaving the older "37.0" ahead of "37.1" when both parse to the same major.
+		var packages = new List<SdkPackage>
+		{
+			new SdkPackage { Path = "system-images;android-37.0;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-37.1;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-36.1;google_apis;arm64-v8a" }
+		};
+
+		// Act
+		var result = AndroidProvider.FindMostRecentSystemImage(packages);
+
+		// Assert
+		Assert.Equal("system-images;android-37.1;google_apis_ps16k;arm64-v8a", result);
+	}
+
+	[Theory]
+	[InlineData("system-images;android-35;google_apis;arm64-v8a", "35.0")]
+	[InlineData("system-images;android-37.0;google_apis_ps16k;arm64-v8a", "37.0")]
+	[InlineData("system-images;android-37.0;google_apis_playstore_ps16k;x86_64", "37.0")]
+	[InlineData("system-images;android-37.1;google_apis_ps16k;arm64-v8a", "37.1")]
+	[InlineData("platform-tools", "0.0")]
+	[InlineData("build-tools;34.0.0", "0.0")]
+	[InlineData("system-images;android-VanillaIceCream;google_apis;arm64-v8a", "0.0")]
+	public void ExtractApiLevel_ParsesApiLevel(string systemImagePath, string expected)
+	{
+		Assert.Equal(Version.Parse(expected), AndroidProvider.ExtractApiLevel(systemImagePath));
 	}
 
 	[Fact]
