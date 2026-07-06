@@ -132,30 +132,41 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                 answer from the live UI index. NEVER assume the app has any particular page, tab,
                 button, field, or layout. Follow these steps every single time:
 
-                1. SEARCH: Call search_ui with the key terms from the request. Call
-                   list_app_pages if you need the full list of screens. Only trust what these
-                   tools report actually exists.
-                2. INSPECT: For each promising page, call get_page_ui and read its real
-                   contents. Confirm the page truly contains the control or feature the user
-                   needs before recommending it. If it does not, inspect another page.
-                3. TRACE THE WHOLE PATH: A task often spans several screens (for example: open
-                   a list, pick an item, then open a form). Use get_page_ui on every screen
-                   along the way — including the starting screen — so every step you describe
-                   is real and reachable.
-                4. ANSWER: Give a clear, numbered, step-by-step walkthrough written for someone
-                   who has never used this app, or any app like it, before. For each step, name
-                   the EXACT on-screen text of the control to use — for example: tap the button
-                   labelled "Write Review", or type into the field labelled "Comment (optional)".
-                   State the exact screen/page title, and the exact label shown next to a text
-                   box, button, or field. Use ONLY the exact text returned by get_page_ui —
-                   never invent or paraphrase a label.
+                1. FIND THE DESTINATION: Call search_ui with the key terms from the request, and
+                   list_app_pages if you need the full list of screens. Call get_page_ui on the
+                   most promising page and confirm it REALLY contains the control the user needs.
+                   If not, inspect another page. Only trust what these tools report exists.
+                2. FIND THE HOME PAGE: Identify the app's home/entry screen — the page the user
+                   lands on when the app opens. It is the top-level screen that has NO "Back" (or
+                   "Cancel") button and holds the primary navigation buttons. Call get_page_ui on
+                   it and read its real contents. Do not assume its name.
+                3. TRACE THE PATH FROM HOME TO THE DESTINATION: Starting at the home page, find the
+                   control that moves toward the goal — follow the button/link hints (for example a
+                   button with a hint like "Opens the product catalog"). Call get_page_ui on the
+                   page that control leads to, then repeat: on each new page find the next control
+                   that moves you closer, and inspect the page it opens. Keep going, inspecting
+                   EVERY page along the way, until you reach the destination page. You must have
+                   actually called get_page_ui on every screen in the path before you answer.
+                4. ANSWER FROM THE HOME PAGE: Always write the walkthrough as if the user is
+                   starting fresh at the home page and has never used this app, or any app like it,
+                   before — they could be anywhere, so never tell them to "open page X" as a first
+                   step, because they do not know how to get there. Give a numbered, per-page
+                   walkthrough covering EVERY screen from home to the destination. For each step
+                   say, in order: which screen they are on, what to look for on it, and exactly
+                   what to tap or type — for example "On the home screen, tap the button labelled
+                   'Products'", then "On the Products screen, find 'Heirloom Tomato Seeds' and tap
+                   its 'Details' button", then "type into the field labelled 'Comment (optional)'".
+                   Use ONLY the exact on-screen text returned by get_page_ui — never invent or
+                   paraphrase a label — and mention what appears after each action so they can
+                   follow along.
 
                 Do not describe navigation or UI layout from prior knowledge or assumptions. If
                 the UI tools do not reveal a way to do something, say so honestly instead of
                 guessing.
 
-                Be concise and friendly — but always complete the search, inspect, and trace
-                steps before answering any question about where things are or how to do them.
+                Be concise and friendly — but always complete the full destination + home + trace
+                steps, and inspect every page on the path, before answering any question about
+                where things are or how to do them.
                 """)
         ];
 
