@@ -192,20 +192,20 @@ public partial class SdkManager : IDisposable
 
 		try
 		{
-			// Streaming the live progress requires answering any per-package license prompt on
-			// stdin. Without auto-accept, a prompt would deadlock behind the redirected stdout
-			// (the prompt text is parsed as progress and dropped). When we can't auto-accept,
-			// fall back to the upstream buffered install — it trades live progress for safety.
-			if (onProgress is null || !acceptLicenses)
+			// No progress requested: install everything in one buffered upstream call.
+			if (onProgress is null)
 			{
 				await _sdkManager.InstallAsync(packageList, acceptLicenses, cancellationToken);
 				return;
 			}
 
-			var sdkManagerPath = SdkManagerPath!; // EnsureAvailable guarantees this is non-null.
+			// Reuse the already-synced sdkPath to resolve the sdkmanager path once (avoids the
+			// extra SyncPaths() call the SdkManagerPath property would trigger). EnsureAvailable()
+			// above guarantees this resolves to a non-null path.
+			var sdkManagerPath = ResolveSdkManagerPath(sdkPath) ?? _sdkManager.FindSdkManagerPath()!;
 
-			// Install one package at a time so we can stream live progress for each. Installing
-			// individually also keeps the progress percentage meaningful (it resets per package).
+			// Install one package at a time so we can report per-package progress. Installing
+			// individually also keeps the streamed percentage meaningful (it resets per package).
 			for (var i = 0; i < packageList.Count; i++)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
@@ -216,11 +216,22 @@ public partial class SdkManager : IDisposable
 				// before sdkmanager prints its first progress line.
 				onProgress(new AndroidPackageInstallProgress(package, index, packageList.Count, string.Empty, -1));
 
-				await RunSdkManagerInstallAsync(
-					sdkManagerPath, package, acceptLicenses, sdkPath, jdkPath,
-					(phase, percent) => onProgress(
-						new AndroidPackageInstallProgress(package, index, packageList.Count, phase, percent)),
-					cancellationToken);
+				// Live streaming needs stdin to auto-accept per-package license prompts; without
+				// auto-accept a prompt would deadlock behind the redirected stdout. When we can't
+				// auto-accept, fall back to the buffered upstream install for this package — the
+				// seed callback above still gives coarse per-package progress.
+				if (acceptLicenses)
+				{
+					await RunSdkManagerInstallAsync(
+						sdkManagerPath, package, acceptLicenses, sdkPath, jdkPath,
+						(phase, percent) => onProgress(
+							new AndroidPackageInstallProgress(package, index, packageList.Count, phase, percent)),
+						cancellationToken);
+				}
+				else
+				{
+					await _sdkManager.InstallAsync(new[] { package }, acceptLicenses, cancellationToken);
+				}
 			}
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException)
@@ -246,14 +257,33 @@ public partial class SdkManager : IDisposable
 	{
 		var psi = new ProcessStartInfo
 		{
-			FileName = sdkManagerPath,
 			UseShellExecute = false,
 			CreateNoWindow = true,
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 			RedirectStandardInput = acceptLicenses,
 		};
+
+		// On Windows, sdkmanager resolves to a .bat wrapper. Executing a .bat with
+		// UseShellExecute=false is not universally reliable (it is not a PE image), so run it
+		// through cmd.exe /c. Other platforms exec the shell script directly.
+		if (OperatingSystem.IsWindows() && sdkManagerPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+		{
+			psi.FileName = "cmd.exe";
+			psi.ArgumentList.Add("/c");
+			psi.ArgumentList.Add(sdkManagerPath);
+		}
+		else
+		{
+			psi.FileName = sdkManagerPath;
+		}
+
 		psi.ArgumentList.Add(package);
+
+		// The upstream wrapper passes --sdk_root explicitly; mirror that so the install targets the
+		// resolved SDK even when ANDROID_HOME/ANDROID_SDK_ROOT aren't set in the ambient environment.
+		if (!string.IsNullOrEmpty(sdkPath))
+			psi.ArgumentList.Add($"--sdk_root={sdkPath}");
 
 		foreach (var kvp in AndroidEnvironment.BuildEnvironmentVariables(sdkPath, jdkPath))
 			psi.Environment[kvp.Key] = kvp.Value;
@@ -264,8 +294,8 @@ public partial class SdkManager : IDisposable
 		if (!process.Start())
 			throw new InvalidOperationException($"Failed to start sdkmanager for package '{package}'.");
 
-		// Stops the auto-accept loop deterministically once the process exits (independent of the
-		// caller's token) so it never races teardown and touches a disposed process.
+		// Stops the auto-accept loop deterministically once the process exits or the caller cancels.
+		// Linked to the caller's token so cancellation also tears the loop down.
 		using var stopAccept = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
 		using var registration = cancellationToken.Register(() =>
@@ -298,7 +328,18 @@ public partial class SdkManager : IDisposable
 
 		try
 		{
-			await process.WaitForExitAsync(cancellationToken);
+			// Race the process exit against the stdout reader. If onProgress throws, stdoutTask
+			// faults and stops draining stdout; sdkmanager would then block once the OS pipe buffer
+			// fills, hanging WaitForExitAsync forever. Detecting the faulted reader lets us kill the
+			// process so the fault surfaces instead of deadlocking.
+			var exitTask = process.WaitForExitAsync(cancellationToken);
+			var finished = await Task.WhenAny(exitTask, stdoutTask);
+			if (finished == stdoutTask && stdoutTask.IsFaulted)
+			{
+				try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+				catch { /* Best-effort: process may have already exited. */ }
+			}
+			await SafeAwait(exitTask);
 		}
 		finally
 		{

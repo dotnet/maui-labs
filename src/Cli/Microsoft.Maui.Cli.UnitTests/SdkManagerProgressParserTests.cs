@@ -38,7 +38,7 @@ public class SdkManagerProgressParserTests
 	}
 
 	[Fact]
-	public void TryParse_PercentWithoutSpaceBeforeSign_IsParsed()
+	public void TryParse_PercentWithWhitespaceBeforeSign_IsParsed()
 	{
 		var ok = SdkManager.TryParseInstallProgressLine("[=====] 5 % Downloading", out var phase, out var percent);
 
@@ -97,30 +97,32 @@ public class SdkManagerProgressParserTests
 	[InlineData("   ")]
 	[InlineData("Warning: A newer version of the tools is available")]
 	[InlineData("Loading local repository...")]
-	[InlineData("[======================================] 100%")] // handled separately
-	public void TryParse_LinesWithNoProgress_ReturnFalseExceptBareBar(string? line)
+	[InlineData("done.")]
+	public void TryParse_LinesWithNoProgress_ReturnFalse(string? line)
 	{
 		var ok = SdkManager.TryParseInstallProgressLine(line, out var phase, out var percent);
 
-		if (line is not null && line.Contains('%'))
-		{
-			// A bare progress bar with a percentage is still progress, just without a named phase.
-			Assert.True(ok);
-			Assert.Equal(string.Empty, phase);
-			Assert.Equal(100, percent);
-		}
-		else
-		{
-			Assert.False(ok);
-			Assert.Equal(string.Empty, phase);
-			Assert.Equal(-1, percent);
-		}
+		Assert.False(ok);
+		Assert.Equal(string.Empty, phase);
+		Assert.Equal(-1, percent);
+	}
+
+	[Fact]
+	public void TryParse_BareProgressBarWithoutPhase_ReturnsPercentWithEmptyPhase()
+	{
+		// A bare progress bar with a percentage is still progress, just without a named phase.
+		var ok = SdkManager.TryParseInstallProgressLine(
+			"[======================================] 100%", out var phase, out var percent);
+
+		Assert.True(ok);
+		Assert.Equal(string.Empty, phase);
+		Assert.Equal(100, percent);
 	}
 
 	[Fact]
 	public void TryParse_MalformedLine_ReturnsFalse()
 	{
-		var ok = SdkManager.TryParseInstallProgressLine("done.", out var phase, out var percent);
+		var ok = SdkManager.TryParseInstallProgressLine("no progress here", out var phase, out var percent);
 
 		Assert.False(ok);
 		Assert.Equal(string.Empty, phase);
