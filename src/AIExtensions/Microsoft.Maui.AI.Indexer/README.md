@@ -6,6 +6,10 @@ Compile-time XAML UI indexer for .NET MAUI — generates AI-friendly semantic Ma
 
 The indexer analyzes your XAML files at build time and generates structured Markdown that describes your UI from an accessibility perspective — what a screen reader would announce. This makes your entire UI discoverable by AI agents without running the app.
 
+> 📄 **Specification.** For the complete, implementation-independent description of every rule and
+> the exact Markdown produced for any XAML page, see the
+> [XAML → Markdown UI Indexer specification](../../../docs/AIExtensions/xaml-markdown-indexer-spec.md).
+
 ## Quick Start
 
 ```xml
