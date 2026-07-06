@@ -245,6 +245,12 @@ public class AndroidProviderTests
 		Assert.Equal("system-images;android-37.1;google_apis_ps16k;arm64-v8a", result);
 	}
 
+	[Fact]
+	public void FindMostRecentSystemImage_Throws_WhenPackagesNull()
+	{
+		Assert.Throws<ArgumentNullException>(() => AndroidProvider.FindMostRecentSystemImage(null!));
+	}
+
 	[Theory]
 	[InlineData("system-images;android-35;google_apis;arm64-v8a", "35.0")]
 	[InlineData("system-images;android-37.0;google_apis_ps16k;arm64-v8a", "37.0")]

@@ -32,6 +32,10 @@ public class AndroidProvider : IAndroidProvider
 	internal static string DefaultSystemImagePackage =>
 		$"system-images;android-{DefaultAndroidApiLevel};google_apis;{(PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64")}";
 
+	// Sentinel returned by ExtractApiLevel for non-numeric ids (e.g. codenames); such
+	// images are excluded from auto-detect. Hoisted to avoid a per-element allocation.
+	static readonly Version NoApiLevel = new(0, 0);
+
 	public string? SdkPath => _sdkPath ??= PlatformDetector.Paths.GetAndroidSdkPath();
 	public string? JdkPath => _jdkPath ??= _jdkManager.DetectedJdkPath ?? PlatformDetector.Paths.GetJdkPath();
 
@@ -293,10 +297,12 @@ public class AndroidProvider : IAndroidProvider
 	// System image format: system-images;android-XX;google_apis;arm64-v8a
 	internal static string? FindMostRecentSystemImage(IEnumerable<SdkPackage> packages)
 	{
+		ArgumentNullException.ThrowIfNull(packages);
+
 		return packages
 			.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
 			.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
-			.Where(x => x.ApiLevel > new Version(0, 0))
+			.Where(x => x.ApiLevel > NoApiLevel)
 			.OrderByDescending(x => x.ApiLevel)
 			.FirstOrDefault()?.Package.Path;
 	}
@@ -310,7 +316,7 @@ public class AndroidProvider : IAndroidProvider
 			var androidPart = parts[1]; // "android-35" or "android-37.0"
 			if (androidPart.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
 			{
-				var levelStr = androidPart.Substring(8); // Remove "android-"
+				var levelStr = androidPart.Substring("android-".Length);
 
 				// Platforms may carry a minor revision suffix (e.g. "android-37.0"); keep it
 				// so newer revisions sort ahead of older ones (37.1 > 37.0) rather than being
@@ -323,7 +329,7 @@ public class AndroidProvider : IAndroidProvider
 					return new Version(major, 0);
 			}
 		}
-		return new Version(0, 0);
+		return NoApiLevel;
 	}
 
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses = false,
