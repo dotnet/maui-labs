@@ -15,7 +15,7 @@ internal sealed class CrossFileResolver
 {
     private readonly Dictionary<string, PageModel> _pagesBySimpleName;
     private readonly Dictionary<string, PageModel> _pagesByFqn;
-    private readonly Dictionary<string, List<UiElement>> _resolvedCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<SemanticNode>> _resolvedCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _inProgress = new(StringComparer.OrdinalIgnoreCase);
 
     public CrossFileResolver(IEnumerable<PageModel> allPages)
@@ -51,9 +51,9 @@ internal sealed class CrossFileResolver
         }
     }
 
-    private List<UiElement> ResolveElements(List<UiElement> elements, string ownerClassName)
+    private List<SemanticNode> ResolveElements(List<SemanticNode> elements, string ownerClassName)
     {
-        var resolved = new List<UiElement>(elements.Count);
+        var resolved = new List<SemanticNode>(elements.Count);
 
         foreach (var el in elements)
         {
@@ -62,7 +62,7 @@ internal sealed class CrossFileResolver
                 var inlined = ResolveUserControl(el.TypeName, ownerClassName);
                 if (inlined != null)
                 {
-                    var wrapper = new UiElement
+                    var wrapper = new SemanticNode
                     {
                         TypeName = el.TypeName,
                         IsUserControlReference = true,
@@ -76,7 +76,7 @@ internal sealed class CrossFileResolver
                 {
                     // Unresolved — keep as placeholder if it has semantic properties
                     // (e.g., third-party controls with SemanticProperties)
-                    var wrapper = new UiElement
+                    var wrapper = new SemanticNode
                     {
                         TypeName = el.TypeName,
                         IsUserControlReference = true,
@@ -114,7 +114,7 @@ internal sealed class CrossFileResolver
         return resolved;
     }
 
-    private List<UiElement>? ResolveUserControl(string typeName, string ownerClassName)
+    private List<SemanticNode>? ResolveUserControl(string typeName, string ownerClassName)
     {
         // Prevent self-referencing loops
         if (string.Equals(typeName, ownerClassName, StringComparison.OrdinalIgnoreCase))
@@ -159,9 +159,9 @@ internal sealed class CrossFileResolver
     /// Deep clone element list to prevent shared mutation between pages
     /// that both reference the same user control.
     /// </summary>
-    private static List<UiElement> DeepCloneElements(List<UiElement> elements)
+    private static List<SemanticNode> DeepCloneElements(List<SemanticNode> elements)
     {
-        var cloned = new List<UiElement>(elements.Count);
+        var cloned = new List<SemanticNode>(elements.Count);
         foreach (var el in elements)
         {
             cloned.Add(CloneElement(el));
@@ -169,9 +169,9 @@ internal sealed class CrossFileResolver
         return cloned;
     }
 
-    private static UiElement CloneElement(UiElement el)
+    private static SemanticNode CloneElement(SemanticNode el)
     {
-        return new UiElement
+        return new SemanticNode
         {
             TypeName = el.TypeName,
             Text = el.Text,

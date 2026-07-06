@@ -33,7 +33,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     [AIToolSource(typeof(CartViewModel))]
     [AIToolSource(typeof(CatalogViewModel))]
     [AIToolSource(typeof(ReviewStore))]
-    [AIToolSource(typeof(UiDiscovery))]
+    [AIToolSource(typeof(PageDiscovery))]
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;

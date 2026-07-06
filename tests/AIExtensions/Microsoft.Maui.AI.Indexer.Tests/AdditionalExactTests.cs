@@ -375,19 +375,19 @@ public class AdditionalExactTests
         var sources = GeneratorTestHarness.GetGeneratedSources(
             ("P1.xaml", p1), ("P2.xaml", p2));
 
-        Assert.True(sources.Keys.Any(k => k.Contains("P1_UiIndex")));
-        Assert.True(sources.Keys.Any(k => k.Contains("P2_UiIndex")));
+        Assert.True(sources.Keys.Any(k => k.Contains("P1_Indexed")));
+        Assert.True(sources.Keys.Any(k => k.Contains("P2_Indexed")));
 
-        // Aggregate class follows {AssemblyName}UiIndex pattern
-        var aggKey = sources.Keys.FirstOrDefault(k => k.Contains("UiIndex.g.cs") && !k.Contains("P1") && !k.Contains("P2"));
+        // Aggregate class follows {AssemblyName}IndexedPageCatalog pattern
+        var aggKey = sources.Keys.FirstOrDefault(k => k.Contains("IndexedPageCatalog.g.cs") && !k.Contains("P1") && !k.Contains("P2"));
         Assert.NotNull(aggKey);
 
         var agg = sources[aggKey!];
-        Assert.Contains("UiPageIndex", agg); // inherits from base
+        Assert.Contains("IndexedPageCatalog", agg); // inherits from base
         Assert.Contains("Default", agg); // has Default singleton
         Assert.Contains("Pages", agg); // has Pages override
-        Assert.Contains("global::A.P1_UiIndex.Markdown", agg);
-        Assert.Contains("global::A.P2_UiIndex.Markdown", agg);
+        Assert.Contains("global::A.P1_Indexed.Markdown", agg);
+        Assert.Contains("global::A.P2_Indexed.Markdown", agg);
     }
 
     [Fact]

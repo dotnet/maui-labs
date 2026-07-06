@@ -6,7 +6,7 @@ using Microsoft.Maui.AI.Indexer.Generators.Models;
 namespace Microsoft.Maui.AI.Indexer.Generators.Generation;
 
 /// <summary>
-/// Emits the aggregate {AssemblyName}UiIndex : UiPageIndex class
+/// Emits the aggregate {AssemblyName}IndexedPageCatalog : IndexedPageCatalog class
 /// with a Default singleton and Pages override.
 /// </summary>
 internal static class AggregateCodeEmitter
@@ -28,13 +28,13 @@ internal static class AggregateCodeEmitter
         }
 
         // Class name derived from assembly name (sanitized)
-        var className = SanitizeIdentifier(rootNamespace ?? "App") + "UiIndex";
+        var className = SanitizeIdentifier(rootNamespace ?? "App") + "IndexedPageCatalog";
 
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Generated UI page index for this assembly. Provides access to all");
         sb.AppendLine("/// indexed XAML pages and their semantic markdown content.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine($"public partial class {className} : global::Microsoft.Maui.AI.Indexer.UiPageIndex");
+        sb.AppendLine($"public partial class {className} : global::Microsoft.Maui.AI.Indexer.IndexedPageCatalog");
         sb.AppendLine("{");
 
         // Default singleton
@@ -43,7 +43,7 @@ internal static class AggregateCodeEmitter
         sb.AppendLine();
 
         // Pages override
-        sb.AppendLine("    private static readonly global::Microsoft.Maui.AI.Indexer.UiPageEntry[] s_pages = new global::Microsoft.Maui.AI.Indexer.UiPageEntry[]");
+        sb.AppendLine("    private static readonly global::Microsoft.Maui.AI.Indexer.IndexedPage[] s_pages = new global::Microsoft.Maui.AI.Indexer.IndexedPage[]");
         sb.AppendLine("    {");
 
         foreach (var page in index.Pages.OrderBy(p => p.ClassName))
@@ -51,16 +51,16 @@ internal static class AggregateCodeEmitter
             var route = page.Route != null ? $"\"{Escape(page.Route)}\"" : "null";
             var filePath = !string.IsNullOrEmpty(page.FilePath) ? $"\"{Escape(page.FilePath)}\"" : "null";
             var fqnClass = !string.IsNullOrEmpty(page.Namespace)
-                ? $"global::{page.Namespace}.{SanitizeIdentifier(page.ClassName)}_UiIndex"
-                : $"global::{SanitizeIdentifier(page.ClassName)}_UiIndex";
+                ? $"global::{page.Namespace}.{SanitizeIdentifier(page.ClassName)}_Indexed"
+                : $"global::{SanitizeIdentifier(page.ClassName)}_Indexed";
 
-            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.UiPageEntry(\"{Escape(page.ClassName)}\", {route}, {filePath}, {fqnClass}.Markdown),");
+            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {route}, {filePath}, {fqnClass}.Markdown),");
         }
 
         sb.AppendLine("    };");
         sb.AppendLine();
         sb.AppendLine("    /// <inheritdoc />");
-        sb.AppendLine("    public override global::System.Collections.Generic.IReadOnlyList<global::Microsoft.Maui.AI.Indexer.UiPageEntry> Pages => s_pages;");
+        sb.AppendLine("    public override global::System.Collections.Generic.IReadOnlyList<global::Microsoft.Maui.AI.Indexer.IndexedPage> Pages => s_pages;");
 
         if (!string.IsNullOrEmpty(index.EntryPageName))
         {

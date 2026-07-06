@@ -36,7 +36,7 @@ internal sealed class MarkdownBuilder
     public override string ToString() => _sb.ToString();
 
     /// <summary>Render a single UI element as a markdown list item.</summary>
-    public void RenderElement(UiElement el)
+    public void RenderElement(SemanticNode el)
     {
         // Determine the display text
         var displayText = GetElementDisplayText(el);
@@ -74,7 +74,7 @@ internal sealed class MarkdownBuilder
         return mb.ToString().TrimEnd() + "\n";
     }
 
-    public static void RenderElements(MarkdownBuilder mb, List<UiElement> elements)
+    public static void RenderElements(MarkdownBuilder mb, List<SemanticNode> elements)
     {
         foreach (var el in elements)
         {
@@ -82,7 +82,7 @@ internal sealed class MarkdownBuilder
         }
     }
 
-    private static void RenderElementTree(MarkdownBuilder mb, UiElement el)
+    private static void RenderElementTree(MarkdownBuilder mb, SemanticNode el)
     {
         // Handle collection views specially
         if (el.TypeName is "CollectionView" or "ListView" or "CarouselView")
@@ -131,7 +131,7 @@ internal sealed class MarkdownBuilder
         }
     }
 
-    private static void RenderConditionGroup(MarkdownBuilder mb, UiElement el)
+    private static void RenderConditionGroup(MarkdownBuilder mb, SemanticNode el)
     {
         var cond = el.Condition != null ? $" [{el.Condition}]" : "";
         mb.AppendLine($"- When{cond}:");
@@ -140,7 +140,7 @@ internal sealed class MarkdownBuilder
         mb.Dedent();
     }
 
-    private static void RenderCollectionView(MarkdownBuilder mb, UiElement el)
+    private static void RenderCollectionView(MarkdownBuilder mb, SemanticNode el)
     {
         var source = el.ItemsSourceBinding != null ? $": \"{{{el.ItemsSourceBinding}}}\"" : "";
 
@@ -219,7 +219,7 @@ internal sealed class MarkdownBuilder
         mb.Dedent();
     }
 
-    private static void RenderUserControl(MarkdownBuilder mb, UiElement el)
+    private static void RenderUserControl(MarkdownBuilder mb, SemanticNode el)
     {
         var cond = el.Condition != null ? $" [{el.Condition}]" : "";
         mb.AppendLine($"- [{el.TypeName}]:{cond}");
@@ -232,7 +232,7 @@ internal sealed class MarkdownBuilder
         }
     }
 
-    private static void RenderBindableLayout(MarkdownBuilder mb, UiElement el)
+    private static void RenderBindableLayout(MarkdownBuilder mb, SemanticNode el)
     {
         var source = el.BindableLayoutItemsSource != null ? $" with items from \"{{{el.BindableLayoutItemsSource}}}\"" : "";
         var cond = el.Condition != null ? $" [{el.Condition}]" : "";
@@ -252,7 +252,7 @@ internal sealed class MarkdownBuilder
         mb.Dedent();
     }
 
-    private static void RenderShellElement(MarkdownBuilder mb, UiElement el)
+    private static void RenderShellElement(MarkdownBuilder mb, SemanticNode el)
     {
         var route = el.CommandName != null ? $" [route: {el.CommandName}]" : "";
         var hosts = el.NavigationTarget != null ? $" → {el.NavigationTarget}" : "";
@@ -270,7 +270,7 @@ internal sealed class MarkdownBuilder
         }
     }
 
-    private string GetDisplayTypeName(UiElement el)
+    private string GetDisplayTypeName(SemanticNode el)
     {
         // If heading level is set, use Heading instead of Label
         if (el.Semantics.HeadingLevel != null)
@@ -299,7 +299,7 @@ internal sealed class MarkdownBuilder
         };
     }
 
-    private string GetElementDisplayText(UiElement el)
+    private string GetElementDisplayText(SemanticNode el)
     {
         // SemanticProperties.Description overrides everything
         if (el.Semantics.Description != null && el.Semantics.Description.Length > 0)
@@ -353,7 +353,7 @@ internal sealed class MarkdownBuilder
         return "";
     }
 
-    private string GetAnnotations(UiElement el)
+    private string GetAnnotations(SemanticNode el)
     {
         var parts = new List<string>();
 

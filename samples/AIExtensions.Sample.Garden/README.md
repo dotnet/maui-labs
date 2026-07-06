@@ -55,7 +55,7 @@ assembly-wide context for the whole app.
 | `MainViewModel` | singleton | UI navigation tools: `navigate_to_page` and `dismiss_page` |
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
-| `UiDiscovery` | static | UI-index discovery tools: `search_ui`, `get_page_ui`, and `list_app_pages`, backed by the compile-time [`Microsoft.Maui.AI.Indexer`](../../src/AIExtensions/Microsoft.Maui.AI.Indexer/README.md) generated Markdown |
+| `PageDiscovery` | static | UI-index discovery tools: `search_ui`, `get_page_ui`, and `list_app_pages`, backed by the compile-time [`Microsoft.Maui.AI.Indexer`](../../src/AIExtensions/Microsoft.Maui.AI.Indexer/README.md) generated Markdown |
 
 This sample is especially useful if you want to see a **transient view-model**
 participate in a shared tool context while still writing through to singleton state.
@@ -86,7 +86,7 @@ participate in a shared tool context while still writing through to singleton st
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
-| Compile-time UI-index discovery tools | `Services/UiDiscovery.cs` → `search_ui` / `get_page_ui` / `list_app_pages`, over `Microsoft.Maui.AI.Indexer` |
+| Compile-time UI-index discovery tools | `Services/PageDiscovery.cs` → `search_ui` / `get_page_ui` / `list_app_pages`, over `Microsoft.Maui.AI.Indexer` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 
 ## Approval flow

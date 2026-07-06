@@ -77,13 +77,13 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
             var qualifiedName = !string.IsNullOrEmpty(page.Namespace)
                 ? $"{page.Namespace}.{page.ClassName}"
                 : page.ClassName;
-            var hintName = $"{SanitizeIdentifier(qualifiedName)}_UiIndex.g.cs";
+            var hintName = $"{SanitizeIdentifier(qualifiedName)}_Indexed.g.cs";
             spc.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
         }
 
         // Emit aggregate index
         var aggregateSource = AggregateCodeEmitter.Emit(projectIndex, rootNamespace);
-        spc.AddSource("UiIndex.g.cs", SourceText.From(aggregateSource, Encoding.UTF8));
+        spc.AddSource("IndexedPageCatalog.g.cs", SourceText.From(aggregateSource, Encoding.UTF8));
     }
 
     private static string SanitizeIdentifier(string name)
@@ -138,7 +138,7 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
     }
 
     /// <summary>Enumerate ShellContent elements (including those nested under Tab) in document order.</summary>
-    private static System.Collections.Generic.IEnumerable<UiElement> EnumerateShellContent(System.Collections.Generic.List<UiElement> elements)
+    private static System.Collections.Generic.IEnumerable<SemanticNode> EnumerateShellContent(System.Collections.Generic.List<SemanticNode> elements)
     {
         foreach (var el in elements)
         {

@@ -32,7 +32,7 @@ public class ReviewFindingTests
             ("User/SettingsPage.xaml", page2));
 
         // Both should generate unique files (no crash)
-        var keys = sources.Keys.Where(k => k.Contains("SettingsPage_UiIndex")).ToList();
+        var keys = sources.Keys.Where(k => k.Contains("SettingsPage_Indexed")).ToList();
         Assert.Equal(2, keys.Count);
 
         var md1 = GeneratorTestHarness.GetMarkdown("SettingsPage",
@@ -386,9 +386,9 @@ public class ReviewFindingTests
         var page = Page("RootPage", "<Label Text=\"Hi\" />");
         var sources = GeneratorTestHarness.GetGeneratedSources(("RootPage.xaml", page));
 
-        var aggKey = sources.Keys.FirstOrDefault(k => k.Contains("UiIndex.g.cs") && !k.Contains("RootPage_"));
+        var aggKey = sources.Keys.FirstOrDefault(k => k.Contains("IndexedPageCatalog.g.cs") && !k.Contains("RootPage_"));
         Assert.NotNull(aggKey);
-        Assert.Contains("global::RootPage_UiIndex.Markdown", sources[aggKey!]);
+        Assert.Contains("global::RootPage_Indexed.Markdown", sources[aggKey!]);
     }
 
     // ──────────────────────────────────────────────

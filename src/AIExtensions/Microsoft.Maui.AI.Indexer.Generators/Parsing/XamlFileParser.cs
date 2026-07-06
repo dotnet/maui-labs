@@ -103,9 +103,9 @@ internal static class XamlFileParser
         return page;
     }
 
-    private static List<UiElement> WalkElement(XElement element)
+    private static List<SemanticNode> WalkElement(XElement element)
     {
-        var results = new List<UiElement>();
+        var results = new List<SemanticNode>();
         var localName = element.Name.LocalName;
 
         // Skip property elements (e.g., Grid.RowDefinitions, CollectionView.ItemTemplate)
@@ -144,7 +144,7 @@ internal static class XamlFileParser
             var customSemantics = AccessibilityExtractor.Extract(element);
             var customCondition = ConditionalDetector.DetectCondition(element);
 
-            var ucElement = new UiElement
+            var ucElement = new SemanticNode
             {
                 TypeName = localName,
                 IsUserControlReference = true,
@@ -174,7 +174,7 @@ internal static class XamlFileParser
             {
                 // Promoted: developer explicitly set a description.
                 // ALSO walk children so actionable descendants are preserved.
-                var promoted = new UiElement
+                var promoted = new SemanticNode
                 {
                     TypeName = localName,
                     Text = semantics.Description,
@@ -190,7 +190,7 @@ internal static class XamlFileParser
             }
 
             // Walk children, propagating container condition if present
-            var childElements = new List<UiElement>();
+            var childElements = new List<SemanticNode>();
             foreach (var child in element.Elements())
             {
                 childElements.AddRange(WalkElement(child));
@@ -199,7 +199,7 @@ internal static class XamlFileParser
             // If the container has a condition, wrap children in a condition group
             if (containerCondition != null && childElements.Count > 0)
             {
-                var condGroup = new UiElement
+                var condGroup = new SemanticNode
                 {
                     TypeName = localName,
                     IsConditionGroup = true,
@@ -224,7 +224,7 @@ internal static class XamlFileParser
         return results;
     }
 
-    private static UiElement? ExtractSemanticElement(XElement element, string typeName)
+    private static SemanticNode? ExtractSemanticElement(XElement element, string typeName)
     {
         var semantics = AccessibilityExtractor.Extract(element);
 
@@ -239,7 +239,7 @@ internal static class XamlFileParser
         if (condition != null && condition.Property == "(always hidden)")
             return null;
 
-        var ui = new UiElement
+        var ui = new SemanticNode
         {
             TypeName = typeName,
             Semantics = semantics,
@@ -333,7 +333,7 @@ internal static class XamlFileParser
         return ui;
     }
 
-    private static void ExtractTextProperty(XElement element, UiElement ui)
+    private static void ExtractTextProperty(XElement element, SemanticNode ui)
     {
         var text = GetAttr(element, "Text") ?? GetAttr(element, "Content");
         if (text != null)
@@ -346,7 +346,7 @@ internal static class XamlFileParser
         }
     }
 
-    private static void ExtractCommand(XElement element, UiElement ui)
+    private static void ExtractCommand(XElement element, SemanticNode ui)
     {
         var cmd = GetAttr(element, "Command");
         if (cmd != null)
@@ -363,7 +363,7 @@ internal static class XamlFileParser
         }
     }
 
-    private static void ExtractCollectionView(XElement element, UiElement ui)
+    private static void ExtractCollectionView(XElement element, SemanticNode ui)
     {
         var itemsSource = GetAttr(element, "ItemsSource");
         var binding = MarkupExtensionParser.TryParseBinding(itemsSource);
@@ -410,9 +410,9 @@ internal static class XamlFileParser
         }
     }
 
-    private static List<UiElement> ExtractTemplateContent(XElement templatePropertyElement)
+    private static List<SemanticNode> ExtractTemplateContent(XElement templatePropertyElement)
     {
-        var results = new List<UiElement>();
+        var results = new List<SemanticNode>();
         foreach (var child in templatePropertyElement.Elements())
         {
             if (child.Name.LocalName == "DataTemplate")
@@ -430,9 +430,9 @@ internal static class XamlFileParser
         return results;
     }
 
-    private static List<UiElement> ExtractChildElements(XElement parent)
+    private static List<SemanticNode> ExtractChildElements(XElement parent)
     {
-        var results = new List<UiElement>();
+        var results = new List<SemanticNode>();
         foreach (var child in parent.Elements())
         {
             results.AddRange(WalkElement(child));
@@ -440,10 +440,10 @@ internal static class XamlFileParser
         return results;
     }
 
-    private static UiElement CreateBindableLayoutElement(XElement element, string typeName, string itemsSource)
+    private static SemanticNode CreateBindableLayoutElement(XElement element, string typeName, string itemsSource)
     {
         var binding = MarkupExtensionParser.TryParseBinding(itemsSource);
-        var ui = new UiElement
+        var ui = new SemanticNode
         {
             TypeName = typeName,
             IsBindableLayout = true,
@@ -463,7 +463,7 @@ internal static class XamlFileParser
         return ui;
     }
 
-    private static List<UiElement> WalkPropertyElement(XElement element)
+    private static List<SemanticNode> WalkPropertyElement(XElement element)
     {
         var localName = element.Name.LocalName;
 
@@ -478,7 +478,7 @@ internal static class XamlFileParser
             || localName.EndsWith(".FooterTemplate") || localName.EndsWith(".GroupHeaderTemplate")
             || localName.EndsWith(".GroupFooterTemplate"))
         {
-            return new List<UiElement>();
+            return new List<SemanticNode>();
         }
 
         // Walk children for content-carrying property elements
@@ -487,7 +487,7 @@ internal static class XamlFileParser
         return ExtractChildElements(element);
     }
 
-    private static List<UiElement> ParseShellElements(XElement root)
+    private static List<SemanticNode> ParseShellElements(XElement root)
     {
         return ShellParser.ParseShell(root);
     }

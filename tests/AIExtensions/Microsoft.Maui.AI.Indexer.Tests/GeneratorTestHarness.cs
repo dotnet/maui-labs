@@ -40,8 +40,8 @@ public static class GeneratorTestHarness
     {
         var sources = GetGeneratedSources(xamlFiles);
 
-        // Find the key that ends with {ClassName}_UiIndex.g.cs
-        var suffix = $"{pageClassName}_UiIndex.g.cs";
+        // Find the key that ends with {ClassName}_Indexed.g.cs
+        var suffix = $"{pageClassName}_Indexed.g.cs";
         var key = sources.Keys.FirstOrDefault(k => k.EndsWith(suffix));
         if (key == null || !sources.TryGetValue(key, out var source))
             return null;
@@ -137,9 +137,9 @@ public static class GeneratorTestHarness
         var attributeSource = @"
 namespace Microsoft.Maui.AI.Indexer
 {
-    public sealed class UiPageEntry
+    public sealed class IndexedPage
     {
-        public UiPageEntry(string name, string? route, string? filePath, string markdown)
+        public IndexedPage(string name, string? route, string? filePath, string markdown)
         {
             Name = name; Route = route; FilePath = filePath; Markdown = markdown;
         }
@@ -149,9 +149,9 @@ namespace Microsoft.Maui.AI.Indexer
         public string Markdown { get; }
     }
 
-    public abstract class UiPageIndex
+    public abstract class IndexedPageCatalog
     {
-        public abstract System.Collections.Generic.IReadOnlyList<UiPageEntry> Pages { get; }
+        public abstract System.Collections.Generic.IReadOnlyList<IndexedPage> Pages { get; }
     }
 }
 ";

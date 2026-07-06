@@ -9,9 +9,9 @@ namespace Microsoft.Maui.AI.Indexer.Generators.Parsing;
 internal static class ShellParser
 {
     /// <summary>Parse Shell root element into semantic UI elements representing navigation.</summary>
-    public static List<UiElement> ParseShell(XElement shellRoot)
+    public static List<SemanticNode> ParseShell(XElement shellRoot)
     {
-        var elements = new List<UiElement>();
+        var elements = new List<SemanticNode>();
 
         foreach (var child in shellRoot.Elements())
         {
@@ -31,7 +31,7 @@ internal static class ShellParser
         return elements;
     }
 
-    private static void ParseShellNavigationElement(XElement element, List<UiElement> elements)
+    private static void ParseShellNavigationElement(XElement element, List<SemanticNode> elements)
     {
         var name = element.Name.LocalName;
         var route = element.Attribute("Route")?.Value;
@@ -39,7 +39,7 @@ internal static class ShellParser
 
         if (name == "ShellContent")
         {
-            var ui = new UiElement
+            var ui = new SemanticNode
             {
                 TypeName = "ShellContent",
                 Text = title ?? route ?? "",
@@ -62,7 +62,7 @@ internal static class ShellParser
         }
         else if (name == "Tab")
         {
-            var ui = new UiElement
+            var ui = new SemanticNode
             {
                 TypeName = "Tab",
                 Text = title ?? "",
@@ -78,7 +78,7 @@ internal static class ShellParser
                 {
                     var shellContentRoute = child.Attribute("Route")?.Value;
                     var shellContentTitle = child.Attribute("Title")?.Value;
-                    ui.Children.Add(new UiElement
+                    ui.Children.Add(new SemanticNode
                     {
                         TypeName = "ShellContent",
                         Text = shellContentTitle ?? shellContentRoute ?? "",

@@ -820,7 +820,7 @@ are the public contract** that consumers depend on.
 
 For every indexed page, a generated type carries that page's Markdown:
 
-- The type is named `{PageName}_UiIndex` (with any characters invalid in an identifier replaced by
+- The type is named `{PageName}_Indexed` (with any characters invalid in an identifier replaced by
   `_`), declared in the page's namespace, as a `public static partial class`.
 - It exposes:
   - `public const string Markdown` — the page's full semantic Markdown (as described throughout
@@ -831,12 +831,12 @@ For every indexed page, a generated type carries that page's Markdown:
 
 Exactly one aggregate index is emitted per assembly:
 
-- The type is named `{AssemblyName}UiIndex` (identifier‑sanitized) and derives from the runtime base
-  type `UiPageIndex`. It is placed in a namespace matching the assembly name when that is a valid
+- The type is named `{AssemblyName}IndexedPageCatalog` (identifier‑sanitized) and derives from the runtime base
+  type `IndexedPageCatalog`. It is placed in a namespace matching the assembly name when that is a valid
   namespace; otherwise it is emitted without a namespace.
 - It exposes:
   - `public static {Type} Default { get; }` — a ready‑to‑use singleton.
-  - `Pages` — the list of every indexed page, as `UiPageEntry` records, **ordered alphabetically by
+  - `Pages` — the list of every indexed page, as `IndexedPage` records, **ordered alphabetically by
     page name**. Each entry carries the page's name, route (or none), file path (or none), and its
     Markdown.
   - `EntryPageName` — the home/entry screen's page name, emitted **only** when a home screen was
@@ -848,14 +848,14 @@ Exactly one aggregate index is emitted per assembly:
 
 Consumers interact with two runtime types (provided by the runtime library, not generated):
 
-- **`UiPageEntry`** — an indexed page: `Name`, `Route` (nullable), `FilePath` (nullable),
+- **`IndexedPage`** — an indexed page: `Name`, `Route` (nullable), `FilePath` (nullable),
   `Markdown`.
-- **`UiPageIndex`** — the base of every aggregate:
+- **`IndexedPageCatalog`** — the base of every aggregate:
   - `Pages` — all indexed pages.
   - `FindByName(name)` — look up a page by class name (case‑insensitive).
   - `FindByRoute(route)` — look up a page by Shell route (case‑insensitive).
   - `EntryPageName` — the home/entry page name (or none).
-  - `Home` — the home/entry `UiPageEntry` (or none).
+  - `Home` — the home/entry `IndexedPage` (or none).
 
 Multiple assemblies each get their own aggregate; there is no global registry by design. An app
 that spans assemblies merges each assembly's `Pages` itself.

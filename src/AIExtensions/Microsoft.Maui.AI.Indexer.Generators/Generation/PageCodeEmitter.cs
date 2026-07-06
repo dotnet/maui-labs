@@ -25,7 +25,7 @@ internal static class PageCodeEmitter
         sb.AppendLine("/// <summary>");
         sb.AppendLine($"/// AI-generated UI index for {page.ClassName}.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine($"public static partial class {SanitizeIdentifier(page.ClassName)}_UiIndex");
+        sb.AppendLine($"public static partial class {SanitizeIdentifier(page.ClassName)}_Indexed");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Structured markdown representation of the page UI.</summary>");
         sb.AppendLine("    public const string Markdown =");

@@ -10,11 +10,11 @@ namespace AIExtensions.Sample.Garden.Services;
 /// Uses the compile-time generated UI index to answer questions like
 /// "which page has the list of products?" or "where do I go to checkout?".
 /// </summary>
-public sealed class UiDiscovery
+public sealed class PageDiscovery
 {
-    // The generated index class name follows the pattern {SanitizedAssemblyName}UiIndex.
-    // For AIExtensions.Sample.Garden → AIExtensions_Sample_GardenUiIndex
-    private static UiPageIndex Index => AIExtensions_Sample_GardenUiIndex.Default;
+    // The generated index class name follows the pattern {SanitizedAssemblyName}IndexedPageCatalog.
+    // For AIExtensions.Sample.Garden → AIExtensions_Sample_GardenIndexedPageCatalog
+    private static IndexedPageCatalog Index => AIExtensions_Sample_GardenIndexedPageCatalog.Default;
 
     [ExportAIFunction("search_ui")]
     [Description(
