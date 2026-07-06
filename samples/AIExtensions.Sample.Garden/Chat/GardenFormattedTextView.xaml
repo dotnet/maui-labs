@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<chat:ContentContextView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+                         xmlns:local="clr-namespace:AIExtensions.Sample.Garden.Chat"
+                         x:Class="AIExtensions.Sample.Garden.Chat.GardenFormattedTextView"
+                         x:Name="Root">
+
+    <chat:ContentContextView.Resources>
+        <local:FormattedLineToFormattedStringConverter x:Key="LineToFormattedString" />
+    </chat:ContentContextView.Resources>
+
+    <!-- Assistant-styled speech bubble so formatted replies look like normal messages. Each parsed
+         line is one Label whose FormattedText is built by the converter (spans carry the bold/italic/
+         code/heading/bullet styling). -->
+    <Grid Padding="0,4" BindingContext="{x:Reference Root}" x:DataType="local:GardenFormattedTextView">
+        <Border Padding="12,10"
+                HorizontalOptions="Start"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 16,16,16,4"
+                MaximumWidthRequest="{DynamicResource MauiAIChat.Bubble.MaxWidth}"
+                BackgroundColor="{DynamicResource MauiAIChat.Assistant.Background}">
+            <VerticalStackLayout Spacing="4" BindableLayout.ItemsSource="{Binding Lines}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="local:FormattedLine">
+                        <Label FormattedText="{Binding ., Converter={StaticResource LineToFormattedString}}"
+                               LineBreakMode="WordWrap"
+                               TextColor="{DynamicResource MauiAIChat.Assistant.TextColor}" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+
+</chat:ContentContextView>
