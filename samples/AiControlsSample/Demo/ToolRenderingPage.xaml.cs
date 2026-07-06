@@ -32,7 +32,8 @@ public partial class ToolRenderingPage : ContentPage
         {
             Instructions = """
                 You are a helpful assistant that demonstrates the core chat features.
-                - For weather, call GetCurrentWeather.
+                - For weather, call GetCurrentWeather once per city (call it multiple times
+                  when the user asks about several cities).
                 - For math, call the calculate tool.
                 - To make a step-by-step plan, call create_plan with a JSON array of steps.
                   The user must approve it before it runs. If rejected, ask what to change
@@ -47,8 +48,9 @@ public partial class ToolRenderingPage : ContentPage
         var agent = new UIAgent(chatClient, options =>
         {
             options.ChatOptions = chatOptions;
-            // Map raw M.E.AI weather content into a strongly-typed WeatherToolBlock.
-            options.AddBlockHandler(new WeatherToolBlockHandler());
+            // Aggregate all GetCurrentWeather calls in a turn into one WeatherCollectionBlock
+            // (many-to-one), rendered as a carousel of city cards.
+            options.AddBlockHandler(new WeatherCollectionHandler());
             // Parse assistant text into a formatted rich-text block (sample pattern).
             options.AddBlockHandler(new FormattedTextHandler());
         });
