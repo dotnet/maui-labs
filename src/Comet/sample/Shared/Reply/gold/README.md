@@ -31,9 +31,13 @@ running on the **Pixel_9_Pro emulator** (API 36, physical 1280x2856 px, density 
 
 ## Caveats (do not build these)
 
-- **Dynamic color:** Reply uses Material You; these captures picked up the emulator
-  wallpaper's warm beige/green scheme. Fidelity compares against *this* scheme via the
-  existing `ApplyDynamicSchemeFromPixels`/seed generator, same approach as Jetchat.
+- **The warm beige/green scheme is Reply's OWN static palette, not Material You.**
+  `ContrastAwareReplyTheme` defaults `dynamicColor = false` (Theme.kt:298) and
+  MainActivity passes nothing; every color is a literal in `ui/theme/Color.kt`
+  (primary `#805610`, tertiaryContainer `#D4EABB` = the green FAB, background
+  `#FFF8F4`). Fidelity uses those exact hex values — deterministic on any device,
+  no seed generator needed. (Contrast variants exist behind UiModeManager contrast;
+  default contrast = `lightScheme`/`darkScheme`.)
 - Status-bar clock/battery and the bottom gesture handle are OS chrome.
 - compact-04: soft keyboard is not visible because the emulator reports a hardware
   keyboard (`show_ime_with_hard_keyboard` was enabled during capture to suppress
