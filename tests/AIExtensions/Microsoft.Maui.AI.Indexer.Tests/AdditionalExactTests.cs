@@ -375,8 +375,8 @@ public class AdditionalExactTests
         var sources = GeneratorTestHarness.GetGeneratedSources(
             ("P1.xaml", p1), ("P2.xaml", p2));
 
-        Assert.True(sources.Keys.Any(k => k.Contains("P1_Indexed")));
-        Assert.True(sources.Keys.Any(k => k.Contains("P2_Indexed")));
+        Assert.Contains(sources.Keys, k => k.Contains("P1_Indexed"));
+        Assert.Contains(sources.Keys, k => k.Contains("P2_Indexed"));
 
         // Aggregate class follows {AssemblyName}IndexedPageCatalog pattern
         var aggKey = sources.Keys.FirstOrDefault(k => k.Contains("IndexedPageCatalog.g.cs") && !k.Contains("P1") && !k.Contains("P2"));
