@@ -45,6 +45,11 @@ internal sealed class UiElement
     // Cross-file user control reference
     public bool IsUserControlReference { get; set; }
 
+    // Shell navigation: the page class this ShellContent/Tab hosts (from ContentTemplate),
+    // and whether it is the app's entry/home screen (first ShellContent in the Shell).
+    public string? NavigationTarget { get; set; }
+    public bool IsEntry { get; set; }
+
     // Condition group (structural container with visibility condition wrapping children)
     public bool IsConditionGroup { get; set; }
 
@@ -117,4 +122,7 @@ internal sealed class PageModel
 internal sealed class ProjectIndex
 {
     public List<PageModel> Pages { get; set; } = new();
+
+    /// <summary>Class name of the app's home/entry screen (first ShellContent), or null.</summary>
+    public string? EntryPageName { get; set; }
 }

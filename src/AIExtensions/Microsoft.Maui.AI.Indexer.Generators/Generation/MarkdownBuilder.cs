@@ -249,7 +249,9 @@ internal sealed class MarkdownBuilder
     private static void RenderShellElement(MarkdownBuilder mb, UiElement el)
     {
         var route = el.CommandName != null ? $" [route: {el.CommandName}]" : "";
-        mb.AppendLine($"- {el.TypeName}: \"{el.Text}\"{route}");
+        var hosts = el.NavigationTarget != null ? $" → {el.NavigationTarget}" : "";
+        var home = el.IsEntry ? "  (HOME — the screen the app opens to; users start here)" : "";
+        mb.AppendLine($"- {el.TypeName}: \"{el.Text}\"{hosts}{route}{home}");
 
         if (el.Children.Count > 0)
         {

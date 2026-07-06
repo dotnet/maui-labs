@@ -64,6 +64,10 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
 
         var projectIndex = new ProjectIndex { Pages = pages };
 
+        // Resolve Shell navigation: map each ShellContent's route onto its hosted page,
+        // and mark the first ShellContent as the app's home/entry screen.
+        ResolveShellNavigation(pages, projectIndex);
+
         // Emit per-page files
         foreach (var page in pages)
         {
@@ -93,5 +97,60 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
                 sb.Append('_');
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Walk the Shell page(s) to (a) mark the first ShellContent as the entry/home screen and
+    /// (b) copy each ShellContent's route onto the page it hosts. This makes the home screen a
+    /// discoverable fact and gives Shell-hosted pages their routes.
+    /// </summary>
+    private static void ResolveShellNavigation(System.Collections.Generic.List<PageModel> pages, ProjectIndex projectIndex)
+    {
+        PageModel? FindPage(string? className)
+            => className == null ? null : pages.Find(p => string.Equals(p.ClassName, className, System.StringComparison.OrdinalIgnoreCase));
+
+        foreach (var shell in pages)
+        {
+            if (!string.Equals(shell.RootType, "Shell", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var order = 0;
+            foreach (var nav in EnumerateShellContent(shell.Elements))
+            {
+                // Map route onto the hosted page.
+                if (nav.NavigationTarget != null && nav.CommandName != null)
+                {
+                    var target = FindPage(nav.NavigationTarget);
+                    if (target != null && target.Route == null)
+                        target.Route = nav.CommandName;
+                }
+
+                // The first ShellContent that hosts a page is the entry/home screen.
+                if (order == 0 && nav.NavigationTarget != null)
+                {
+                    nav.IsEntry = true;
+                    projectIndex.EntryPageName ??= nav.NavigationTarget;
+                }
+
+                order++;
+            }
+        }
+    }
+
+    /// <summary>Enumerate ShellContent elements (including those nested under Tab) in document order.</summary>
+    private static System.Collections.Generic.IEnumerable<UiElement> EnumerateShellContent(System.Collections.Generic.List<UiElement> elements)
+    {
+        foreach (var el in elements)
+        {
+            if (el.TypeName == "ShellContent")
+            {
+                yield return el;
+            }
+            else if (el.Children.Count > 0)
+            {
+                foreach (var child in EnumerateShellContent(el.Children))
+                    yield return child;
+            }
+        }
     }
 }

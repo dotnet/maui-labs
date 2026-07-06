@@ -36,17 +36,14 @@ internal static class ShellParser
         var name = element.Name.LocalName;
         var route = element.Attribute("Route")?.Value;
         var title = element.Attribute("Title")?.Value;
-        var contentType = element.Attribute("ContentTemplate")?.Value;
 
         if (name == "ShellContent")
         {
-            var pageType = element.Attribute("ContentTemplate")?.Value;
-            // In MAUI, ShellContent often uses ContentTemplate="{DataTemplate local:PageType}"
-            // or the Type attribute directly
             var ui = new UiElement
             {
                 TypeName = "ShellContent",
                 Text = title ?? route ?? "",
+                NavigationTarget = ExtractContentPage(element),
             };
 
             if (route != null)
@@ -86,11 +83,65 @@ internal static class ShellParser
                         TypeName = "ShellContent",
                         Text = shellContentTitle ?? shellContentRoute ?? "",
                         CommandName = shellContentRoute,
+                        NavigationTarget = ExtractContentPage(child),
                     });
                 }
             }
 
             elements.Add(ui);
         }
+    }
+
+    /// <summary>
+    /// Extract the hosted page's simple class name from a ShellContent, whether declared as
+    /// <c>ContentTemplate="{DataTemplate pages:MainPage}"</c> or a nested
+    /// <c>&lt;ShellContent.ContentTemplate&gt;&lt;DataTemplate&gt;&lt;pages:MainPage/&gt;...</c>.
+    /// </summary>
+    private static string? ExtractContentPage(XElement shellContent)
+    {
+        // Inline markup extension form: ContentTemplate="{DataTemplate pages:MainPage}"
+        var attr = shellContent.Attribute("ContentTemplate")?.Value;
+        var fromAttr = ExtractTypeFromDataTemplate(attr);
+        if (fromAttr != null)
+            return fromAttr;
+
+        // Property-element form: <ShellContent.ContentTemplate><DataTemplate><pages:MainPage/>...
+        foreach (var propEl in shellContent.Elements())
+        {
+            if (!propEl.Name.LocalName.EndsWith(".ContentTemplate"))
+                continue;
+            foreach (var dt in propEl.Elements())
+            {
+                foreach (var content in dt.Elements())
+                    return content.Name.LocalName;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Pull the type local name out of a <c>{DataTemplate prefix:TypeName}</c> expression.</summary>
+    private static string? ExtractTypeFromDataTemplate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var v = value!.Trim();
+        if (!v.StartsWith("{") || !v.EndsWith("}"))
+            return null;
+
+        // Strip braces and the markup-extension name (DataTemplate / x:Type / Type)
+        var inner = v.Substring(1, v.Length - 2).Trim();
+        var spaceIdx = inner.IndexOf(' ');
+        if (spaceIdx < 0)
+            return null;
+
+        var typeRef = inner.Substring(spaceIdx + 1).Trim();
+        // Drop any xmlns prefix (e.g. "pages:MainPage" -> "MainPage")
+        var colonIdx = typeRef.LastIndexOf(':');
+        if (colonIdx >= 0)
+            typeRef = typeRef.Substring(colonIdx + 1);
+
+        return typeRef.Length > 0 ? typeRef : null;
     }
 }

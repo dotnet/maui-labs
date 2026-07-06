@@ -18,10 +18,13 @@ public sealed class UiDiscovery
 
     [ExportAIFunction("search_ui")]
     [Description(
-        "Search the app's UI pages for content matching one or more search terms. " +
-        "Use this to find which pages contain specific controls, labels, buttons, or features. " +
-        "Returns a list of matching page names with relevant snippets. " +
-        "Example: search for ['cart', 'checkout'] to find pages related to shopping.")]
+        "ALWAYS use this first to answer any question about how to use the app, how to do a " +
+        "task, where a feature or screen is, or to walk the user through something (for example " +
+        "'how do I write a review?', 'walk me through checking out', 'where do I see prices?'). " +
+        "Searches the real app screens for content matching one or more terms and returns the " +
+        "matching screen names with snippets of their actual controls. Never answer such " +
+        "questions from your own knowledge — search here and then read the screens with " +
+        "get_page_ui. Example: search for ['review'] to find where reviews are written.")]
     public static string SearchUi(
         [Description("One or more search terms to look for across all pages. Each term is matched independently.")]
         string[] searchTerms)
@@ -53,6 +56,14 @@ public sealed class UiDiscovery
 
         if (matchedPages.Count == 0)
             return $"No pages found matching: {string.Join(", ", searchTerms)}";
+
+        var home = Index.EntryPageName;
+        if (!string.IsNullOrEmpty(home))
+        {
+            sb.AppendLine($"HOME screen (the app opens here — every user starts on this screen): {home}");
+            sb.AppendLine($"A walkthrough MUST start here. First call get_page_ui(\"{home}\") to read the home screen, then follow its buttons screen by screen to reach the matching page(s) below.");
+            sb.AppendLine();
+        }
 
         sb.AppendLine($"Found {matchedPages.Count} page(s) matching your search:");
         sb.AppendLine();
@@ -94,10 +105,12 @@ public sealed class UiDiscovery
 
     [ExportAIFunction("get_page_ui")]
     [Description(
-        "Get the full semantic UI description of a specific page. " +
-        "Returns the complete accessibility tree showing all controls, " +
-        "their labels, bindings, commands, and conditions. " +
-        "Use after search_ui to inspect a specific page in detail.")]
+        "Read one real app screen in full. Returns the exact controls on that screen — the " +
+        "verbatim button labels, field labels, headings, and navigation hints. Call this on " +
+        "every screen along the path (starting from the home screen) before you explain how to " +
+        "do anything, so you can name the exact on-screen text the user must tap or type. Never " +
+        "describe a screen you have not read with this tool. Use after search_ui or " +
+        "list_app_pages.")]
     public static string GetPageUi(
         [Description("The name of the page to retrieve, e.g. 'MainPage', 'CatalogView', 'ProductDetailPage'")]
         string pageName)
@@ -125,11 +138,20 @@ public sealed class UiDiscovery
 
     [ExportAIFunction("list_app_pages")]
     [Description(
-        "List all pages and views in the app with their routes. " +
-        "Use this to understand the app's structure and navigation.")]
+        "List every real screen in the app with its route, and identify the HOME screen (where " +
+        "the app opens and every user starts). Call this when you need the full set of screens " +
+        "or the starting point for a walkthrough. Read individual screens with get_page_ui.")]
     public static string ListAppPages()
     {
         var sb = new StringBuilder();
+        var home = Index.EntryPageName;
+
+        if (!string.IsNullOrEmpty(home))
+        {
+            sb.AppendLine($"HOME screen (the app opens here — start every walkthrough from this screen): {home}");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("App pages and views:");
         sb.AppendLine();
 
@@ -137,7 +159,8 @@ public sealed class UiDiscovery
         {
             var route = page.Route != null ? $" (route: {page.Route})" : "";
             var file = page.FilePath != null ? $" — {page.FilePath}" : "";
-            sb.AppendLine($"- {page.Name}{route}{file}");
+            var isHome = string.Equals(page.Name, home, StringComparison.OrdinalIgnoreCase) ? "  [HOME]" : "";
+            sb.AppendLine($"- {page.Name}{route}{file}{isHome}");
         }
 
         sb.AppendLine();

@@ -62,6 +62,13 @@ internal static class AggregateCodeEmitter
         sb.AppendLine("    /// <inheritdoc />");
         sb.AppendLine("    public override global::System.Collections.Generic.IReadOnlyList<global::Microsoft.Maui.AI.Indexer.UiPageEntry> Pages => s_pages;");
 
+        if (!string.IsNullOrEmpty(index.EntryPageName))
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <inheritdoc />");
+            sb.AppendLine($"    public override string? EntryPageName => \"{Escape(index.EntryPageName!)}\";");
+        }
+
         sb.AppendLine("}");
 
         return sb.ToString();

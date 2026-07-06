@@ -40,6 +40,21 @@ public abstract class UiPageIndex
     /// <summary>All indexed pages in this assembly.</summary>
     public abstract IReadOnlyList<UiPageEntry> Pages { get; }
 
+    /// <summary>
+    /// The class name of the app's home/entry screen — the screen shown when the
+    /// app launches (the first <c>ShellContent</c> in the Shell). <c>null</c> when
+    /// the assembly has no Shell or the entry screen could not be resolved.
+    /// </summary>
+    public virtual string? EntryPageName => null;
+
+    /// <summary>
+    /// The app's home/entry screen, or <c>null</c> when it cannot be resolved.
+    /// This is where a user starts, so any "how do I get to X" walkthrough should
+    /// begin here.
+    /// </summary>
+    public UiPageEntry? Home
+        => EntryPageName is null ? null : FindByName(EntryPageName);
+
     /// <summary>Find a page by its class name.</summary>
     public UiPageEntry? FindByName(string name)
         => Pages.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
