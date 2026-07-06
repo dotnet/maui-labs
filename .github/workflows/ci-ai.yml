@@ -36,3 +36,7 @@ jobs:
       run-tests: true
       pack: true
       install-workloads: true
+      # Garden (the MAUI showcase) builds/links maccatalyst + ios app bundles on macOS.
+      # The pinned MAUI workload (Apple SDK 26.2) requires Xcode 26.3+; the runner default
+      # (16.4) fails ILLink with MT0079/MT4162. Matches the EssentialsAI sample precedent.
+      xcode-version: '26.3'
