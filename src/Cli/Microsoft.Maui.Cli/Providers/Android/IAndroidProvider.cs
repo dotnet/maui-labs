@@ -97,6 +97,12 @@ public interface IAndroidProvider : IDisposable
 	Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses, Action<string, int, int>? onProgress, CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// Installs SDK packages with live per-package progress (phase + percent) streamed from
+	/// <c>sdkmanager</c> so large downloads/extractions surface real progress instead of appearing to hang.
+	/// </summary>
+	Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses, Action<AndroidPackageInstallProgress>? onProgress, CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Uninstalls SDK packages.
 	/// </summary>
 	Task UninstallPackagesAsync(IEnumerable<string> packages, CancellationToken cancellationToken = default);
@@ -191,3 +197,19 @@ public record SdkPackage
 	public string? Location { get; init; }
 	public bool IsInstalled { get; init; }
 }
+
+/// <summary>
+/// Live progress for a single SDK package install, surfaced from the streamed
+/// <c>sdkmanager</c> stdout so long downloads/extractions don't appear to hang.
+/// </summary>
+/// <param name="Package">The package being installed (e.g. <c>system-images;android-37.0;google_apis_ps16k;arm64-v8a</c>).</param>
+/// <param name="PackageIndex">1-based index of this package within the overall batch.</param>
+/// <param name="PackageTotal">Total number of packages in the batch.</param>
+/// <param name="Phase">Human-readable phase parsed from sdkmanager output (e.g. <c>Downloading</c>, <c>Unzipping</c>), or empty when unknown.</param>
+/// <param name="Percent">Percent (0-100) for the current package, or -1 when sdkmanager has not reported a percentage yet.</param>
+public record AndroidPackageInstallProgress(
+	string Package,
+	int PackageIndex,
+	int PackageTotal,
+	string Phase,
+	int Percent);
