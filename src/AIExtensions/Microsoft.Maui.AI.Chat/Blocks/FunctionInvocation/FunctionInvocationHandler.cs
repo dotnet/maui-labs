@@ -34,22 +34,22 @@ internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionIn
             }
         }
 
-        // Check for FunctionResultContent matching our active block's CallId
-        FunctionResultContent? resultContent = null;
-        foreach (var content in context.UnhandledContents)
+        // Check for a FunctionResultContent whose CallId matches our active block's call.
+        // Scan by CallId (not just the first result) so that when several tool calls in a turn
+        // have their results batched into one update — in any order — each block still claims
+        // its own result. Taking the first result and bailing on a CallId mismatch would leave
+        // a block unmatched (Result == null), which then triggers a redundant re-invocation.
+        if (state.Call is not null)
         {
-            if (content is FunctionResultContent frc)
+            foreach (var content in context.UnhandledContents)
             {
-                resultContent = frc;
-                break;
+                if (content is FunctionResultContent frc && frc.CallId == state.Call.CallId)
+                {
+                    context.MarkHandled(frc);
+                    state.Result = frc;
+                    return BlockMappingResult<FunctionInvocationContentBlock>.Complete();
+                }
             }
-        }
-
-        if (resultContent is not null && state.Call is not null && resultContent.CallId == state.Call.CallId)
-        {
-            context.MarkHandled(resultContent);
-            state.Result = resultContent;
-            return BlockMappingResult<FunctionInvocationContentBlock>.Complete();
         }
 
         // No matching content — wait
