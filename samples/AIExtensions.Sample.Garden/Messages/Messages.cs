@@ -11,6 +11,15 @@ public sealed class CartChangedMessage;
 public sealed class ChatTurnCompletedMessage;
 
 /// <summary>
+/// Broadcast when the chat rendering mode is toggled between the rich (fancy) template set and
+/// the plain built-in set. The chat view swaps its content templates in response.
+/// </summary>
+public sealed class ChatTemplateModeChangedMessage(bool isFancy)
+{
+    public bool IsFancy { get; } = isFancy;
+}
+
+/// <summary>
 /// Request that the chat starts a fresh session (clears the conversation).
 /// </summary>
 public sealed class StartNewChatSessionMessage;

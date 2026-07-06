@@ -3,10 +3,8 @@ using AIExtensions.Sample.Garden.Chat;
 using AIExtensions.Sample.Garden.Messages;
 using AIExtensions.Sample.Garden.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Maui.AI.Attributes;
 using Microsoft.Maui.AI.Chat;
 
@@ -74,33 +72,29 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         FORMATTING:
         - Format text answers with **bold** for emphasis and "- " bullets for lists.
 
+        IMAGES:
+        - When the user asks you to draw, generate, or picture something, use image generation.
+
         Be concise and friendly.
         """;
 
     private bool _turnActive;
 
-    public ChatViewModel(IChatClient chatClient, IConfiguration configuration)
+    public ChatViewModel(IChatClient chatClient)
     {
-        var imageEnabled = !string.IsNullOrWhiteSpace(configuration["AI:ImageDeploymentName"]);
-
-        var tools = new List<AITool>(GardenShopTools.Default.Tools);
-        if (imageEnabled)
+        // Image generation is always available: the hosted tool lets the model produce images inline,
+        // and MauiProgram wires the matching UseImageGeneration middleware beneath function invocation
+        // so the image streams back as DataContent and renders through the built-in MediaContentTemplate.
+        var tools = new List<AITool>(GardenShopTools.Default.Tools)
         {
-            // The hosted tool lets the model generate images inline; MauiProgram wires the matching
-            // UseImageGeneration middleware beneath function invocation so the image streams back as
-            // DataContent and renders through the built-in MediaContentTemplate.
-            tools.Add(new HostedImageGenerationTool());
-        }
-
-        var instructions = imageEnabled
-            ? SystemPrompt + "\n\nIMAGES:\n- When the user asks you to draw, generate, or picture something, use image generation."
-            : SystemPrompt;
+            new HostedImageGenerationTool(),
+        };
 
         var agent = new UIAgent(chatClient, options =>
         {
             options.ChatOptions = new ChatOptions
             {
-                Instructions = instructions,
+                Instructions = SystemPrompt,
                 Tools = [.. tools],
             };
             // Assistant text becomes rich formatted text; product lookups aggregate into a carousel/card.
@@ -113,7 +107,6 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
         WeakReferenceMessenger.Default.Register(this);
 
-        SuggestionPrompts = BuildSuggestions(imageEnabled);
         RefreshAvailableTools();
     }
 
@@ -124,22 +117,18 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     public ObservableCollection<ToolInfoViewModel> AvailableTools { get; } = [];
 
     /// <summary>Starter prompts shown as suggestion chips.</summary>
-    public IReadOnlyList<string> SuggestionPrompts { get; }
-
-    /// <summary>
-    /// Toggles between the rich (fancy) template set and the plain built-in set so the same blocks can
-    /// be shown either fully styled or as raw text/tool cards. The <c>ChatView</c> swaps templates when
-    /// this changes.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TemplateToggleIcon))]
-    public partial bool IsFancy { get; set; } = true;
-
-    /// <summary>Emoji for the header toggle button — sparkle when fancy, page when plain.</summary>
-    public string TemplateToggleIcon => IsFancy ? "\u2728" : "\U0001F4C4";
-
-    [RelayCommand]
-    private void ToggleTemplates() => IsFancy = !IsFancy;
+    public IReadOnlyList<string> SuggestionPrompts { get; } =
+    [
+        "Add 5 packs of tomato seeds and a trowel",
+        "Show me the basil seeds",
+        "Draw a watercolor of a thriving vegetable garden",
+        "Compare the tomato and pepper seeds",
+        "Build me a starter bundle",
+        "Switch cart display mode",
+        "Checkout my shopping list",
+        "Go to my past orders",
+        "Rate the tomato seeds 5 stars",
+    ];
 
     void IRecipient<StartNewChatSessionMessage>.Receive(StartNewChatSessionMessage message) =>
         Session.Clear();
@@ -160,24 +149,6 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
             MainThread.BeginInvokeOnMainThread(() =>
                 WeakReferenceMessenger.Default.Send(new ChatTurnCompletedMessage()));
         }
-    }
-
-    private static IReadOnlyList<string> BuildSuggestions(bool imageEnabled)
-    {
-        var prompts = new List<string>
-        {
-            "Add 5 packs of tomato seeds and a trowel",
-            "Show me the basil seeds",
-            "Compare the tomato and pepper seeds",
-            "Build me a starter bundle",
-            "Switch cart display mode",
-            "Checkout my shopping list",
-            "Go to my past orders",
-            "Rate the tomato seeds 5 stars",
-        };
-        if (imageEnabled)
-            prompts.Insert(2, "Draw a watercolor of a thriving vegetable garden");
-        return prompts;
     }
 
     private void RefreshAvailableTools()
