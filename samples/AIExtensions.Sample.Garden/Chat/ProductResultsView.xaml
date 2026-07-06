@@ -26,10 +26,9 @@
                    TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
         </Border>
 
-        <!-- Single: a large detail card -->
+        <!-- Single: a large detail card. IsVisible binds the view's IsSingle (outer Root context);
+             the inner Grid switches to the product for its content bindings. -->
         <Border IsVisible="{Binding IsSingle}"
-                BindingContext="{Binding SingleProduct}"
-                x:DataType="models:Product"
                 WidthRequest="320"
                 Padding="14"
                 StrokeThickness="1"
@@ -38,7 +37,8 @@
                 BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
                 Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
             <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*"
-                  RowSpacing="4" ColumnSpacing="14">
+                  RowSpacing="4" ColumnSpacing="14"
+                  BindingContext="{Binding SingleProduct}" x:DataType="models:Product">
                 <Label Grid.RowSpan="2"
                        Text="{Binding Emoji}"
                        FontFamily="FluentFilled"
