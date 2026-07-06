@@ -74,6 +74,17 @@
                         </DataTrigger>
                     </Border.Triggers>
                 </Border>
+                <!-- Fancy / plain template toggle -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="{Binding Chat.TemplateToggleIcon}" FontSize="16"
+                            AutomationId="ToggleTemplatesButton"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Command="{Binding Chat.ToggleTemplatesCommand}" />
+                </Border>
                 <!-- New Chat -->
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
                         StrokeThickness="0" StrokeShape="RoundRectangle 18"
