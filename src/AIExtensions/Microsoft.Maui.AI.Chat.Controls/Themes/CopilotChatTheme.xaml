@@ -31,6 +31,11 @@
                            Opacity="0.7" />
                 </VerticalStackLayout>
 
+                <!-- Custom empty-state host (shown when EmptyViewTemplate is set) -->
+                <ContentView x:Name="PART_EmptyView"
+                             IsVisible="False"
+                             VerticalOptions="Fill" HorizontalOptions="Fill" />
+
                 <!-- Messages list (a nested MessageListView renders the blocks) -->
                 <chat:MessageListView x:Name="PART_MessageList"
                                       AutomationId="ChatMessages"

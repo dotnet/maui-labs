@@ -18,6 +18,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <item><c>PART_WelcomePanel</c> — <see cref="View"/> shown when there are no messages</item>
 /// <item><c>PART_WelcomeIcon</c> — <see cref="Label"/> for the welcome icon</item>
 /// <item><c>PART_WelcomeMessage</c> — <see cref="Label"/> for the welcome text</item>
+/// <item><c>PART_EmptyView</c> — <see cref="ContentView"/> host for a custom <see cref="EmptyViewTemplate"/></item>
 /// <item><c>PART_BusyIndicator</c> — <see cref="ActivityIndicator"/> for the busy state</item>
 /// <item><c>PART_Suggestions</c> — <see cref="Layout"/> for suggestion chips</item>
 /// <item><c>PART_Footer</c> — <see cref="ContentView"/> for footer content</item>
@@ -79,6 +80,7 @@ public partial class CopilotChatView : TemplatedView
     private View? _welcomePanelPart;
     private Label? _welcomeIconPart;
     private Label? _welcomeMessagePart;
+    private ContentView? _emptyViewHostPart;
     private ActivityIndicator? _busyIndicatorPart;
     private Layout? _suggestionsPart;
     private ContentView? _footerPart;
@@ -177,6 +179,7 @@ public partial class CopilotChatView : TemplatedView
         _welcomePanelPart = GetTemplateChild("PART_WelcomePanel") as View;
         _welcomeIconPart = GetTemplateChild("PART_WelcomeIcon") as Label;
         _welcomeMessagePart = GetTemplateChild("PART_WelcomeMessage") as Label;
+        _emptyViewHostPart = GetTemplateChild("PART_EmptyView") as ContentView;
         _busyIndicatorPart = GetTemplateChild("PART_BusyIndicator") as ActivityIndicator;
         _suggestionsPart = GetTemplateChild("PART_Suggestions") as Layout;
         _footerPart = GetTemplateChild("PART_Footer") as ContentView;
@@ -205,6 +208,7 @@ public partial class CopilotChatView : TemplatedView
         ApplyInputStyling();
         ApplyHeaderTemplate();
         ApplyFooterTemplate();
+        ApplyEmptyViewTemplate();
         UpdateWelcomeVisibility();
         OnIsBusyChanged();
     }
@@ -276,8 +280,16 @@ public partial class CopilotChatView : TemplatedView
     internal void UpdateWelcomeVisibility()
     {
         var itemCount = _messageListPart?.Items.Count ?? 0;
-        var showWelcome = !string.IsNullOrEmpty(WelcomeMessage) && itemCount == 0;
+        var isEmpty = itemCount == 0;
 
+        // A custom EmptyViewTemplate (when supplied and hostable) takes precedence
+        // over the default welcome icon/message labels.
+        var hasCustomEmpty = EmptyViewTemplate is not null && _emptyViewHostPart is not null;
+        var showCustomEmpty = hasCustomEmpty && isEmpty;
+        var showWelcome = !hasCustomEmpty && !string.IsNullOrEmpty(WelcomeMessage) && isEmpty;
+
+        if (_emptyViewHostPart is not null)
+            _emptyViewHostPart.IsVisible = showCustomEmpty;
         if (_welcomePanelPart is not null)
             _welcomePanelPart.IsVisible = showWelcome;
         if (_welcomeIconPart is not null)
@@ -285,9 +297,18 @@ public partial class CopilotChatView : TemplatedView
         if (_welcomeMessagePart is not null)
             _welcomeMessagePart.Text = WelcomeMessage;
         if (_messageListPart is not null)
-            _messageListPart.IsVisible = !showWelcome;
+            _messageListPart.IsVisible = !(showWelcome || showCustomEmpty);
 
         UpdateSuggestionsVisibility();
+    }
+
+    private void ApplyEmptyViewTemplate()
+    {
+        if (_emptyViewHostPart is null)
+            return;
+
+        _emptyViewHostPart.Content = EmptyViewTemplate?.CreateContent() as View;
+        UpdateWelcomeVisibility();
     }
 
     private void UpdateSuggestionsVisibility()
@@ -613,6 +634,22 @@ public partial class CopilotChatView : TemplatedView
     {
         get => (DataTemplate?)GetValue(FooterTemplateProperty);
         set => SetValue(FooterTemplateProperty, value);
+    }
+
+    public static readonly BindableProperty EmptyViewTemplateProperty =
+        BindableProperty.Create(nameof(EmptyViewTemplate), typeof(DataTemplate), typeof(CopilotChatView),
+            propertyChanged: (b, _, _) => ((CopilotChatView)b).ApplyEmptyViewTemplate());
+
+    /// <summary>
+    /// A <see cref="DataTemplate"/> shown in the welcome slot while the conversation is empty.
+    /// When set (and the control template exposes a <c>PART_EmptyView</c> host), this content
+    /// replaces the default <see cref="WelcomeIcon"/>/<see cref="WelcomeMessage"/> labels. When
+    /// <see langword="null"/>, the default welcome labels are used instead.
+    /// </summary>
+    public DataTemplate? EmptyViewTemplate
+    {
+        get => (DataTemplate?)GetValue(EmptyViewTemplateProperty);
+        set => SetValue(EmptyViewTemplateProperty, value);
     }
 
     // ═══════════════════════════════════════════════════════════════
