@@ -26,6 +26,14 @@ namespace Comet
 		/// e.g. "" for mic). Call after the font file is loaded under <paramref name="family"/>.</summary>
 		public static void Register(string family, IDictionary<string, string> glyphs)
 		{
+			// Same family registered again (another sample/screen in this process): merge the
+			// maps (last write wins per name) instead of clobbering the earlier glyph set.
+			if (Family == family)
+			{
+				foreach (var kv in glyphs)
+					_map[kv.Key] = kv.Value;
+				return;
+			}
 			Family = family;
 			_map = new Dictionary<string, string>(glyphs);
 		}
