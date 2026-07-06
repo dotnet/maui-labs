@@ -19,6 +19,7 @@ static class FluentIcons
     public const string Checkmark = "\uF295";
     public const string Home = "\uF488";
     public const string Sparkle = "\uEB3D";
+    public const string TextAlignLeft = "\uF7B8";
     public const string Food = "\uF448";
     public const string Drop = "\uE59D";
     public const string Toolbox = "\uF848";

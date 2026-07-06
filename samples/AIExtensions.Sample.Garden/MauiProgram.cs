@@ -99,7 +99,7 @@ public static class MauiProgram
         var deploymentName = aiSection["DeploymentName"];
         var imageDeploymentName = aiSection["ImageDeploymentName"];
 
-        if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName))
+        if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName) || string.IsNullOrEmpty(imageDeploymentName))
         {
             throw new InvalidOperationException(
                 """
@@ -108,8 +108,6 @@ public static class MauiProgram
                   dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
-
-                Optionally, to demo inline image generation:
                   dotnet user-secrets --id ai-attributes-secrets set "AI:ImageDeploymentName" "<your-image-deployment>"
                 """);
         }
@@ -119,14 +117,10 @@ public static class MauiProgram
             new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
 
-        // Optional image-generation deployment (e.g. gpt-image-1). When configured, UseImageGeneration
-        // lets the chat model produce images inline; the image arrives as DataContent and renders as a
-        // MediaContentBlock. The ChatViewModel adds the matching HostedImageGenerationTool when set.
-        IImageGenerator? imageGenerator = null;
-        if (!string.IsNullOrEmpty(imageDeploymentName))
-        {
-            imageGenerator = azureClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
-        }
+        // Image generation is always enabled: UseImageGeneration lets the chat model produce images
+        // inline; the image arrives as DataContent and renders as a MediaContentBlock. The ChatViewModel
+        // always adds the matching HostedImageGenerationTool.
+        var imageGenerator = azureClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
 
         // Build the full client here (with the root service provider) so source-generated tools bind
         // their [FromServices] parameters. Image generation must be registered BEFORE function
@@ -136,14 +130,9 @@ public static class MauiProgram
             var lf = sp.GetRequiredService<ILoggerFactory>();
             var clientBuilder = chatClient.AsIChatClient()
                 .AsBuilder()
-                .UseLogging(lf);
-
-            if (imageGenerator is not null)
-            {
-                clientBuilder.UseImageGeneration(imageGenerator);
-            }
-
-            clientBuilder.UseFunctionInvocation(lf);
+                .UseLogging(lf)
+                .UseImageGeneration(imageGenerator)
+                .UseFunctionInvocation(lf);
 
             return clientBuilder.Build(sp);
         });

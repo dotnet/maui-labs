@@ -1,6 +1,6 @@
-using System.ComponentModel;
 using AIExtensions.Sample.Garden.Chat;
-using AIExtensions.Sample.Garden.ViewModels;
+using AIExtensions.Sample.Garden.Messages;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls;
 
@@ -8,37 +8,24 @@ namespace AIExtensions.Sample.Garden.Views;
 
 /// <summary>
 /// Hosts the drop-in <see cref="CopilotChatView"/> and swaps its content templates between the rich
-/// (fancy) Garden views and the plain built-in views when <see cref="ChatViewModel.IsFancy"/> changes.
+/// (fancy) Garden views and the plain built-in views. The header owns the toggle state and broadcasts
+/// a <see cref="ChatTemplateModeChangedMessage"/>; this view reacts to it (messaging, not a shared VM
+/// reference).
 /// </summary>
-public partial class ChatView : ContentView
+public partial class ChatView : ContentView, IRecipient<ChatTemplateModeChangedMessage>
 {
-    private ChatViewModel? _viewModel;
-
     public ChatView()
     {
         InitializeComponent();
-        BindingContextChanged += OnBindingContextChanged;
+
+        // Start in the rich (fancy) mode; the header toggle defaults to fancy too.
+        ApplyTemplates(fancy: true);
+
+        WeakReferenceMessenger.Default.Register(this);
     }
 
-    private void OnBindingContextChanged(object? sender, EventArgs e)
-    {
-        if (_viewModel is not null)
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-
-        _viewModel = BindingContext as ChatViewModel;
-
-        if (_viewModel is not null)
-        {
-            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-            ApplyTemplates(_viewModel.IsFancy);
-        }
-    }
-
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ChatViewModel.IsFancy) && _viewModel is not null)
-            ApplyTemplates(_viewModel.IsFancy);
-    }
+    void IRecipient<ChatTemplateModeChangedMessage>.Receive(ChatTemplateModeChangedMessage message) =>
+        ApplyTemplates(message.IsFancy);
 
     private void ApplyTemplates(bool fancy)
     {
