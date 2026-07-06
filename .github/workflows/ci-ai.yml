@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
+      - 'samples/AIExtensions.Sample.Garden/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
+      - 'samples/AIExtensions.Sample.Garden/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -33,4 +35,4 @@ jobs:
       project-name: ai-extensions
       run-tests: true
       pack: true
-      install-workloads: false
+      install-workloads: true

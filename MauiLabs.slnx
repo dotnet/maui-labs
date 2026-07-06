@@ -8,7 +8,6 @@
     <Project Path="playground/DevFlow.Console/DevFlow.Console.csproj" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/AiControlsSample/AiControlsSample.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj" />
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
@@ -21,15 +20,15 @@
   <Folder Name="/src/AI/">
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
   </Folder>
-  <Folder Name="/src/AIControls/">
-    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
-    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat/Microsoft.Maui.AI.Chat.csproj" />
-  </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes.Generators/Microsoft.Maui.AI.Attributes.Generators.csproj" />
+    <Project Path="src/AIExtensions/Microsoft.Maui.AI.Chat/Microsoft.Maui.AI.Chat.csproj" />
+    <Project Path="src/AIExtensions/Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
+    <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
+    <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />
