@@ -203,10 +203,13 @@ namespace CometComposeProbe
 		}
 
 		// The faithful Jetchat conversation screen (shared tree, identical on iOS). A ~24dp top
-		// inset clears the status bar.
+		// inset clears the status bar. Launch with `--es screen reply` (adb am start extra) to
+		// switch the probe to the Reply sample instead — the smoke scripts pass it per sample.
 #if DEBUG
 		// A [Body] root is what hot reload targets (see HotReloadDemo.cs).
-		View BuildUi() => new JetchatRoot();
+		View BuildUi() => Intent?.GetStringExtra("screen") == "reply"
+			? new CometSamples.Reply.ReplyProbeRoot()
+			: new JetchatRoot();
 #else
 		View BuildUi() => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24);
 #endif

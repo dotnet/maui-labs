@@ -26,6 +26,8 @@
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
+    <!-- Shared Reply sample (M1). -->
+    <Compile Include="..\Shared\Reply\*.cs" Link="Shared\Reply\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.
