@@ -22,7 +22,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<CheckBox IsChecked=\"{Binding Agreed}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- CheckBox: \"{Agreed}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - CheckBox: "{Agreed}"
+            """,
+            md);
     }
 
     [Fact]
@@ -30,7 +38,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<RadioButton Content=\"Option A\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- RadioButton: \"Option A\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - RadioButton: "Option A"
+            """,
+            md);
     }
 
     [Fact]
@@ -38,7 +54,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<DatePicker Date=\"{Binding Delivery}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- DatePicker: \"{Delivery}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - DatePicker: "{Delivery}"
+            """,
+            md);
     }
 
     [Fact]
@@ -46,7 +70,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<TimePicker Time=\"{Binding SelectedTime}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- TimePicker: \"{SelectedTime}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - TimePicker: "{SelectedTime}"
+            """,
+            md);
     }
 
     [Fact]
@@ -54,7 +86,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<SearchBar Placeholder=\"Search...\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- SearchBar: placeholder \"Search...\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - SearchBar: placeholder "Search..."
+            """,
+            md);
     }
 
     [Fact]
@@ -62,7 +102,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Stepper Minimum=\"0\" Maximum=\"10\" Value=\"{Binding Qty}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Stepper: 0–10 → \"{Qty}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Stepper: 0–10 → "{Qty}"
+            """,
+            md);
     }
 
     [Fact]
@@ -70,7 +118,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<ActivityIndicator IsRunning=\"{Binding IsBusy}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- ActivityIndicator: \"{IsBusy}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - ActivityIndicator: "{IsBusy}"
+            """,
+            md);
     }
 
     [Fact]
@@ -78,7 +134,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<ProgressBar Progress=\"{Binding Download}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- ProgressBar: \"{Download}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - ProgressBar: "{Download}"
+            """,
+            md);
     }
 
     [Fact]
@@ -86,7 +150,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<ImageButton Source=\"heart.png\" Command=\"{Binding Like}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- ImageButton: \"heart.png\" → Like", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - ImageButton: "heart.png" → Like
+            """,
+            md);
     }
 
     [Fact]
@@ -95,7 +167,15 @@ public class AdditionalExactTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Slider Minimum="0" Maximum="100" SemanticProperties.Description="Volume" SemanticProperties.Hint="Adjust volume" />""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Slider: \"Volume\" [hint: Adjust volume]", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Slider: "Volume" [hint: Adjust volume]
+            """,
+            md);
     }
 
     [Fact]
@@ -105,7 +185,16 @@ public class AdditionalExactTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Border SemanticProperties.Description="Product card"><Label Text="Inside" /></Border>""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Border: \"Product card\"\n  - Label: \"Inside\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Border: "Product card"
+              - Label: "Inside"
+            """,
+            md);
     }
 
     [Fact]
@@ -122,7 +211,15 @@ public class AdditionalExactTests
                     </Label.Triggers>
                 </Label>
                 """)));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Discount\" [visible when HasDiscount = True]", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Discount" [visible when HasDiscount = True]
+            """,
+            md);
     }
 
     [Fact]
@@ -131,7 +228,15 @@ public class AdditionalExactTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Button Text="Go" IsVisible="{Binding IsBusy, Converter={StaticResource NegateBoolConverter}}" />""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Button: \"Go\" [visible when IsBusy = false]", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Button: "Go" [visible when IsBusy = false]
+            """,
+            md);
     }
 
     [Fact]
@@ -349,7 +454,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"{Binding}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"{.}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "{.}"
+            """,
+            md);
     }
 
     [Fact]
@@ -357,7 +470,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Editor Placeholder=\"Write here\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Editor: placeholder \"Write here\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Editor: placeholder "Write here"
+            """,
+            md);
     }
 
     [Fact]
@@ -381,7 +502,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"Section\" SemanticProperties.HeadingLevel=\"3\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Heading (level 3): \"Section\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Heading (level 3): "Section"
+            """,
+            md);
     }
 
     [Fact]
@@ -389,7 +518,15 @@ public class AdditionalExactTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Picker SelectedItem=\"{Binding Choice}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Picker:  → \"{Choice}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Picker:  → "{Choice}"
+            """,
+            md);
     }
 
     [Fact]
@@ -398,6 +535,14 @@ public class AdditionalExactTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 "<Button Text=\"Delete\" Command=\"{Binding DeleteCommand}\" CommandParameter=\"{Binding Id}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Button: \"Delete\" → DeleteCommand", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Button: "Delete" → DeleteCommand
+            """,
+            md);
     }
 }

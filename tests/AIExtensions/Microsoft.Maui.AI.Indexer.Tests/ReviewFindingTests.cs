@@ -292,7 +292,13 @@ public class ReviewFindingTests
                 """)));
 
         Assert.Equal(
-            "# T\n\nFile: T.xaml\n\n- Label: \"Loading\" [hidden when IsBusy = True]",
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Loading" [hidden when IsBusy = True]
+            """,
             md);
     }
 
@@ -312,7 +318,13 @@ public class ReviewFindingTests
                 """)));
 
         Assert.Equal(
-            "# T\n\nFile: T.xaml\n\n- Label: \"Ready\" [visible when IsReady = True]",
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Ready" [visible when IsReady = True]
+            """,
             md);
     }
 
@@ -330,7 +342,15 @@ public class ReviewFindingTests
                 <Label Text="Visible" />
                 """)));
 
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Visible\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Visible"
+            """,
+            md);
     }
 
     [Fact]
@@ -345,7 +365,15 @@ public class ReviewFindingTests
                 <Label Text="Visible" />
                 """)));
 
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Visible\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Visible"
+            """,
+            md);
     }
 
     // ──────────────────────────────────────────────
@@ -376,7 +404,15 @@ public class ReviewFindingTests
                 "<Label Text=\"{BindingSource}\" />")));
 
         // Should show raw markup, not a parsed binding
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"{BindingSource}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "{BindingSource}"
+            """,
+            md);
     }
 
     // ──────────────────────────────────────────────
@@ -452,6 +488,14 @@ public class ReviewFindingTests
             ("T.xaml", Page("X.T",
                 "<Label Text=\"{}{not a binding}\" />")));
 
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"{}{not a binding}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "{}{not a binding}"
+            """,
+            md);
     }
 }

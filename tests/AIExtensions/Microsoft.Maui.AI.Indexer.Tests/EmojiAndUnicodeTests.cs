@@ -26,7 +26,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"🌿 Welcome\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"🌿 Welcome\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "🌿 Welcome"
+            """,
+            md);
     }
 
     [Fact]
@@ -34,7 +42,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Button Text=\"🛒 Cart\" Command=\"{Binding GoCart}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Button: \"🛒 Cart\" → GoCart", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Button: "🛒 Cart" → GoCart
+            """,
+            md);
     }
 
     [Fact]
@@ -46,7 +62,15 @@ public class EmojiAndUnicodeTests
                 <Label Text="🌿" SemanticProperties.Description="" />
                 <Label Text="After emoji" />
                 """)));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"After emoji\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "After emoji"
+            """,
+            md);
     }
 
     [Fact]
@@ -55,7 +79,15 @@ public class EmojiAndUnicodeTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Label Text="🌿" SemanticProperties.Description="Sage logo" />""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Sage logo\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Sage logo"
+            """,
+            md);
     }
 
     [Fact]
@@ -63,7 +95,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Entry Placeholder=\"🔍 Search products\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Entry: placeholder \"🔍 Search products\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Entry: placeholder "🔍 Search products"
+            """,
+            md);
     }
 
     [Fact]
@@ -72,7 +112,15 @@ public class EmojiAndUnicodeTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Label Text="📦 Orders" SemanticProperties.HeadingLevel="Level1" />""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Heading (level 1): \"📦 Orders\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Heading (level 1): "📦 Orders"
+            """,
+            md);
     }
 
     [Fact]
@@ -81,7 +129,15 @@ public class EmojiAndUnicodeTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 """<Button Text="Buy" SemanticProperties.Hint="🛒 Adds item to your cart" />""")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Button: \"Buy\" [hint: 🛒 Adds item to your cart]", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Button: "Buy" [hint: 🛒 Adds item to your cart]
+            """,
+            md);
     }
 
     [Fact]
@@ -89,7 +145,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"こんにちは世界\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"こんにちは世界\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "こんにちは世界"
+            """,
+            md);
     }
 
     [Fact]
@@ -97,7 +161,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"مرحبا\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"مرحبا\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "مرحبا"
+            """,
+            md);
     }
 
     [Fact]
@@ -133,7 +205,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"Say &quot;hello&quot;\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Say \"hello\"\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Say "hello""
+            """,
+            md);
     }
 
     [Fact]
@@ -141,7 +221,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"Tom &amp; Jerry\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Tom & Jerry\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Tom & Jerry"
+            """,
+            md);
     }
 
     [Fact]
@@ -149,7 +237,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label Text=\"Price &lt; $10\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Price < $10\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Price < $10"
+            """,
+            md);
     }
 
     // ──────────────────────────────────────────────
@@ -184,7 +280,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Button />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Button:", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Button:
+            """,
+            md);
     }
 
     [Fact]
@@ -192,7 +296,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Label />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label:", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label:
+            """,
+            md);
     }
 
     [Fact]
@@ -200,7 +312,15 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "<Slider />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Slider: 0–1", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Slider: 0–1
+            """,
+            md);
     }
 
     [Fact]
@@ -310,7 +430,15 @@ public class EmojiAndUnicodeTests
                 <Label Text="Hidden" IsVisible="False" />
                 <Label Text="Visible" />
                 """)));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Visible\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Visible"
+            """,
+            md);
     }
 
     [Fact]
@@ -319,7 +447,15 @@ public class EmojiAndUnicodeTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 "<Label Text=\"Deep\" SemanticProperties.HeadingLevel=\"Level9\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Heading (level 9): \"Deep\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Heading (level 9): "Deep"
+            """,
+            md);
     }
 
     [Fact]
@@ -328,7 +464,15 @@ public class EmojiAndUnicodeTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 "<Label Text=\"Normal\" SemanticProperties.HeadingLevel=\"None\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"Normal\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "Normal"
+            """,
+            md);
     }
 
     [Fact]
@@ -364,7 +508,15 @@ public class EmojiAndUnicodeTests
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T",
                 "<Label Text=\"{Binding Path=User.Profile.Name}\" />")));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"{User.Profile.Name}\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "{User.Profile.Name}"
+            """,
+            md);
     }
 
     [Fact]
@@ -372,7 +524,13 @@ public class EmojiAndUnicodeTests
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
             ("T.xaml", Page("X.T", "")));
-        Assert.Equal("# T\n\nFile: T.xaml", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+            """,
+            md);
     }
 
     [Fact]
@@ -388,7 +546,15 @@ public class EmojiAndUnicodeTests
                 </ContentPage.Resources>
                 <Label Text="After resources" />
                 """)));
-        Assert.Equal("# T\n\nFile: T.xaml\n\n- Label: \"After resources\"", md);
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Label: "After resources"
+            """,
+            md);
     }
 
     [Fact]
