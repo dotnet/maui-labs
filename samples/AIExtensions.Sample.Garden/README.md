@@ -13,6 +13,9 @@ past purchases using source-generated tools.
 - `Open the catalog`
 - `Go to my past orders`
 - `Re-order my last order`
+- `Where do I write a review for the tomato seeds?` — Sage searches the UI index,
+  inspects the real pages, and walks you through it step by step with the exact
+  on-screen button and field labels.
 
 ## App behaviors
 
@@ -52,6 +55,7 @@ assembly-wide context for the whole app.
 | `MainViewModel` | singleton | UI navigation tools: `navigate_to_page` and `dismiss_page` |
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
+| `UiDiscovery` | static | UI-index discovery tools: `search_ui`, `get_page_ui`, and `list_app_pages`, backed by the compile-time [`Microsoft.Maui.AI.Indexer`](../../src/AIExtensions/Microsoft.Maui.AI.Indexer/README.md) generated Markdown |
 
 This sample is especially useful if you want to see a **transient view-model**
 participate in a shared tool context while still writing through to singleton state.
@@ -64,7 +68,8 @@ participate in a shared tool context while still writing through to singleton st
 | Cart management | `show_list`, `add_to_list`, `change_qty`, `remove_from_list`, `cancel_list` |
 | Cart presentation | `get_cart_mode`, `set_cart_mode` |
 | Orders | `list_past_orders`, `find_order`, `checkout_list`, `reorder`, `clear_past_orders` |
-| Page navigation | `navigate_to_page`, `dismiss_page` |
+| Page navigation (actually moves the user) | `navigate_to_page`, `dismiss_page` |
+| UI discovery & in-app help (explains where/how) | `search_ui`, `get_page_ui`, `list_app_pages` |
 | Recommendations | `recommend_bundle` |
 
 ## Feature showcase
@@ -81,6 +86,7 @@ participate in a shared tool context while still writing through to singleton st
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
+| Compile-time UI-index discovery tools | `Services/UiDiscovery.cs` → `search_ui` / `get_page_ui` / `list_app_pages`, over `Microsoft.Maui.AI.Indexer` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 
 ## Approval flow

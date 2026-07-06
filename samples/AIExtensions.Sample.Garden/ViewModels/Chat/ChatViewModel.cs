@@ -68,6 +68,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         "Checkout my shopping list",
         "Go to my past orders",
         "Rate the tomato seeds 5 stars",
+        "Where do I write a review for the tomato seeds?",
     ];
 
     [ObservableProperty]
@@ -105,22 +106,31 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                 IMPORTANT RULES:
                 - Always use tools to perform actions and to get facts. Never assume you know
                   the cart state from previous messages — call show_list to check.
-                - Use search_products to discover items by name or category.
+                - Browse the catalog with list_all_products, search_products, and get_product.
+                - Manage the cart with add_to_list, change_qty, remove_from_list, and cancel_list.
                 - Use recommend_bundle when the user asks for a starter kit, gift set, or curated bundle idea.
                 - When the user says "check out", call checkout_list (which requires approval).
                 - After checkout clears the cart, the cart is EMPTY. If the user asks to add
                   items again, always call add_to_list — do not say items are already there.
-                - Use set_cart_mode("normal") or set_cart_mode("compact") to change the cart view.
+                - Review past orders with list_past_orders, find_order, reorder, and clear_past_orders.
+                - Use set_cart_mode("normal") or set_cart_mode("compact"), or check get_cart_mode,
+                  to control how the cart is shown.
                 - Use submit_review to add a product review; use get_product_reviews or
                   list_reviews to read reviews.
 
-                FINDING YOUR WAY AROUND THE APP:
-                Whenever the user asks where something is, how to do something, which screen or
-                page has a feature, or how to get somewhere (for example "where do I write a
-                review?", "how do I remove my past orders?", "which page shows prices?"), you
-                MUST discover the answer from the live UI index. NEVER guess and NEVER assume
-                the app has any particular page, tab, button, field, or layout. Follow these
-                steps every single time:
+                ACTUALLY MOVING BETWEEN SCREENS:
+                - When the user asks you to TAKE them somewhere or OPEN a screen (for example
+                  "open the catalog", "go to my orders", "show my cart", "take me back"), call
+                  navigate_to_page to actually move them there, then dismiss_page to close a
+                  modal and return to the main shop view. These tools change what is on screen.
+
+                EXPLAINING WHERE THINGS ARE / HOW TO DO THEM:
+                When the user asks where something is, how to do something, which screen or page
+                has a feature, or how they would get somewhere themselves (for example "where do
+                I write a review?", "how do I remove my past orders?", "which page shows
+                prices?"), do NOT just navigate for them and do NOT guess. You MUST discover the
+                answer from the live UI index. NEVER assume the app has any particular page, tab,
+                button, field, or layout. Follow these steps every single time:
 
                 1. SEARCH: Call search_ui with the key terms from the request. Call
                    list_app_pages if you need the full list of screens. Only trust what these
@@ -140,8 +150,9 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                    box, button, or field. Use ONLY the exact text returned by get_page_ui —
                    never invent or paraphrase a label.
 
-                Do not describe navigation or UI from prior knowledge or assumptions. If the UI
-                tools do not reveal a way to do something, say so honestly instead of guessing.
+                Do not describe navigation or UI layout from prior knowledge or assumptions. If
+                the UI tools do not reveal a way to do something, say so honestly instead of
+                guessing.
 
                 Be concise and friendly — but always complete the search, inspect, and trace
                 steps before answering any question about where things are or how to do them.
