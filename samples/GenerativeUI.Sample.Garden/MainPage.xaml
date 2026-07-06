@@ -42,27 +42,32 @@
         </CollectionView>
 
         <!-- Input / approval -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+
+            <!-- Clear / restart conversation (always available) -->
+            <Button Grid.Column="0"
+                    Text="Clear"
+                    Command="{Binding ClearCommand}" />
 
             <!-- Normal input -->
-            <Entry Grid.Column="0"
+            <Entry Grid.Column="1"
                    Placeholder="Ask about products, cart, orders…"
                    Text="{Binding InputText}"
                    IsVisible="{Binding IsInputVisible}"
                    ReturnCommand="{Binding SendCommand}"
                    IsEnabled="{Binding IsNotBusy}" />
-            <Button Grid.Column="1"
+            <Button Grid.Column="2"
                     Text="Send"
                     Command="{Binding SendCommand}"
                     IsVisible="{Binding IsInputVisible}"
                     IsEnabled="{Binding IsNotBusy}" />
 
             <!-- Approval bar -->
-            <Label Grid.Column="0"
+            <Label Grid.Column="1"
                    Text="{Binding ApprovalText}"
                    VerticalOptions="Center"
                    IsVisible="{Binding IsApprovalPending}" />
-            <HorizontalStackLayout Grid.Column="1"
+            <HorizontalStackLayout Grid.Column="2"
                                    Spacing="8"
                                    IsVisible="{Binding IsApprovalPending}">
                 <Button Text="Approve" Command="{Binding ApproveCommand}" />

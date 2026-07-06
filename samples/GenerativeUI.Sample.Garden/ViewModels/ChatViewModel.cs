@@ -63,6 +63,7 @@ public sealed partial class ChatViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNotBusy))]
+    [NotifyCanExecuteChangedFor(nameof(ClearCommand))]
     public partial bool IsBusy { get; set; }
 
     public bool IsNotBusy => !IsBusy;
@@ -98,6 +99,24 @@ public sealed partial class ChatViewModel : ObservableObject
 
     [RelayCommand]
     private Task RejectAsync() => ResolveApprovalAsync(approved: false, reason: "User rejected");
+
+    /// <summary>
+    /// Resets the conversation back to a fresh start: clears the transcript, drops any pending
+    /// approval, and rebuilds history with just the system prompt. Disabled while a turn is in
+    /// flight so we never clear history out from under a streaming response.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsNotBusy))]
+    private void Clear()
+    {
+        _pendingApproval = null;
+        IsApprovalPending = false;
+        ApprovalText = "";
+        InputText = string.Empty;
+
+        Messages.Clear();
+        _history.Clear();
+        _history.Add(new ChatMessage(ChatRole.System, SystemPrompt));
+    }
 
     private async Task ResolveApprovalAsync(bool approved, string? reason = null)
     {
