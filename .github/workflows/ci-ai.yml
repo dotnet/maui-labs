@@ -8,6 +8,7 @@ on:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
+      - 'samples/AIExtensions.Sample.Garden/**'
       - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -22,6 +23,7 @@ on:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
+      - 'samples/AIExtensions.Sample.Garden/**'
       - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -39,7 +41,7 @@ jobs:
       os: '["macos-latest", "windows-2025-vs2026"]'
       run-tests: true
       pack: true
-      install-workloads: false
+      install-workloads: true
 
   sample:
     uses: ./.github/workflows/_build.yml

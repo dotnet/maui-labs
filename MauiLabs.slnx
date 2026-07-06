@@ -37,6 +37,7 @@
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
+    <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />
