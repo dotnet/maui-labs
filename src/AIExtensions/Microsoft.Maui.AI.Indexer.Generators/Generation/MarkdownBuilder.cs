@@ -43,8 +43,14 @@ internal sealed class MarkdownBuilder
         var typeName = GetDisplayTypeName(el);
         var annotations = GetAnnotations(el);
 
-        var line = $"- {typeName}{displayText}{annotations}";
-        AppendLine(line);
+        // typeName ends with ": ". When there is no display text (e.g. an input with
+        // only a placeholder, or a control with only a command/annotation), drop that
+        // trailing space so we don't emit a double space before the annotations.
+        var head = displayText.Length > 0
+            ? $"{typeName}{displayText}"
+            : typeName.TrimEnd();
+
+        AppendLine($"- {head}{annotations}");
     }
 
     /// <summary>Render a full page model to markdown.</summary>
@@ -317,13 +323,12 @@ internal sealed class MarkdownBuilder
             return title;
         }
 
-        // Entry/Editor — prefer placeholder if no text
+        // Entry/Editor — the bound value (if any). The placeholder is rendered
+        // separately as a [placeholder: "..."] annotation (see GetAnnotations).
         if (el.TypeName is "Entry" or "Editor" or "SearchBar")
         {
             if (el.TextBinding != null)
                 return $"\"{el.TextBinding.ToDisplayString()}\"";
-            if (el.Placeholder != null)
-                return $"placeholder \"{el.Placeholder}\"";
             if (el.Text != null)
                 return $"\"{el.Text}\"";
             return "";
@@ -358,6 +363,11 @@ internal sealed class MarkdownBuilder
 
         // Build bracket annotations
         var brackets = new List<string>();
+
+        // Placeholder (Entry/Editor/SearchBar) — the visible on-screen hint, the most
+        // important identifier for an input, so it comes first.
+        if (el.Placeholder != null)
+            brackets.Add($"placeholder: \"{el.Placeholder}\"");
 
         if (el.Semantics.Hint != null)
             brackets.Add($"hint: {el.Semantics.Hint}");

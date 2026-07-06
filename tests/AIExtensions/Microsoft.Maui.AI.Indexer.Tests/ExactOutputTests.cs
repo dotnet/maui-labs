@@ -189,7 +189,7 @@ public class ExactOutputTests
 
             File: TestPage.xaml
 
-            - Entry: placeholder "Type here..."
+            - Entry: [placeholder: "Type here..."]
             """,
             md);
     }
@@ -207,7 +207,7 @@ public class ExactOutputTests
 
             File: TestPage.xaml
 
-            - Entry: "{Email}"
+            - Entry: "{Email}" [placeholder: "Email"]
             """,
             md);
     }

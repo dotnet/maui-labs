@@ -101,7 +101,7 @@ public class EmojiAndUnicodeTests
 
             File: T.xaml
 
-            - Entry: placeholder "🔍 Search products"
+            - Entry: [placeholder: "🔍 Search products"]
             """,
             md);
     }
@@ -270,7 +270,7 @@ public class EmojiAndUnicodeTests
 
             - Label: "{FirstName}"
             - Label: "{LastName}"
-            - Entry: "{Email}"
+            - Entry: "{Email}" [placeholder: "Enter email"]
             """,
             md);
     }

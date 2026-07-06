@@ -92,7 +92,7 @@ public class AdditionalExactTests
 
             File: T.xaml
 
-            - SearchBar: placeholder "Search..."
+            - SearchBar: [placeholder: "Search..."]
             """,
             md);
     }
@@ -476,7 +476,60 @@ public class AdditionalExactTests
 
             File: T.xaml
 
-            - Editor: placeholder "Write here"
+            - Editor: [placeholder: "Write here"]
+            """,
+            md);
+    }
+
+    [Fact]
+    public void Editor_WithBoundText_AndPlaceholder()
+    {
+        // The important case: a bound value AND a placeholder — both must appear.
+        var md = GeneratorTestHarness.GetMarkdown("T",
+            ("T.xaml", Page("X.T",
+                """<Editor Text="{Binding Comment}" Placeholder="Write your review" />""")));
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Editor: "{Comment}" [placeholder: "Write your review"]
+            """,
+            md);
+    }
+
+    [Fact]
+    public void Entry_Placeholder_BeforeHint()
+    {
+        // Placeholder is the visible label, so it comes first in the bracket group.
+        var md = GeneratorTestHarness.GetMarkdown("T",
+            ("T.xaml", Page("X.T",
+                """<Entry Text="{Binding Note}" Placeholder="Add a note" SemanticProperties.Hint="More context" />""")));
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Entry: "{Note}" [placeholder: "Add a note", hint: More context]
+            """,
+            md);
+    }
+
+    [Fact]
+    public void Entry_Placeholder_WithVisibilityCondition()
+    {
+        var md = GeneratorTestHarness.GetMarkdown("T",
+            ("T.xaml", Page("X.T",
+                """<Entry Text="{Binding Coupon}" Placeholder="Coupon code" IsVisible="{Binding HasCoupon}" />""")));
+        Assert.Equal(
+            """
+            # T
+
+            File: T.xaml
+
+            - Entry: "{Coupon}" [placeholder: "Coupon code", visible when HasCoupon = true]
             """,
             md);
     }
