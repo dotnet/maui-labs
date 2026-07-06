@@ -1,5 +1,3 @@
-using AIExtensions.Sample.Garden.ViewModels;
-
 namespace AIExtensions.Sample.Garden.Messages;
 
 /// <summary>
@@ -13,14 +11,6 @@ public sealed class CartChangedMessage;
 public sealed class ChatTurnCompletedMessage;
 
 /// <summary>
-/// Broadcast when a new chat message is appended so views can scroll.
-/// </summary>
-public sealed class ChatMessageAddedMessage(ChatMessageViewModel message)
-{
-    public ChatMessageViewModel Message { get; } = message;
-}
-
-/// <summary>
-/// Request that the chat VM starts a fresh session (clears history + messages).
+/// Request that the chat starts a fresh session (clears the conversation).
 /// </summary>
 public sealed class StartNewChatSessionMessage;
