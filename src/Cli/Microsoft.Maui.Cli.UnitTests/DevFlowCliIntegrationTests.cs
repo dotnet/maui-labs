@@ -6,7 +6,6 @@ using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
-using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -199,7 +198,7 @@ public class DevFlowCliIntegrationTests
         var cli = new CliTestHarness(mockAgentPort: 9223);
         var tempDir = Directory.CreateTempSubdirectory("maui-devflow-diagnose-");
         var originalCurrentDirectory = Directory.GetCurrentDirectory();
-        var commands = new List<string>();
+        var runner = new FakeAdbRunner(forwardPorts: [9223], reversePorts: [19223]);
 
         DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
         DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
@@ -238,20 +237,7 @@ public class DevFlowCliIntegrationTests
                 ]
             };
 
-            return new AndroidDevFlowPortForwarder(
-                provider,
-                "/android-sdk/platform-tools/adb",
-                (_, args, _) =>
-                {
-                    commands.Add(string.Join(' ', args));
-                    var output = args[2] switch
-                    {
-                        "reverse" => "emulator-5554 tcp:19223 tcp:19223",
-                        "forward" => "emulator-5554 tcp:9223 tcp:9223",
-                        _ => ""
-                    };
-                    return Task.FromResult(new ProcessResult { ExitCode = 0, StandardOutput = output });
-                });
+            return new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
         };
 
         try
@@ -268,8 +254,8 @@ public class DevFlowCliIntegrationTests
             var forward = Assert.Single(android.GetProperty("agent_forwards").EnumerateArray());
             Assert.Equal(9223, forward.GetProperty("port").GetInt32());
             Assert.True(forward.GetProperty("present_after").GetBoolean());
-            Assert.Contains("-s emulator-5554 reverse --list", commands);
-            Assert.Contains("-s emulator-5554 forward --list", commands);
+            Assert.Contains("-s emulator-5554 reverse --list", runner.Commands);
+            Assert.Contains("-s emulator-5554 forward --list", runner.Commands);
         }
         finally
         {
@@ -330,16 +316,7 @@ public class DevFlowCliIntegrationTests
             return new AndroidDevFlowPortForwarder(
                 provider,
                 "/android-sdk/platform-tools/adb",
-                (_, args, _) =>
-                {
-                    var output = args[2] switch
-                    {
-                        "reverse" => "emulator-5554 tcp:19225 tcp:19225",
-                        "forward" => "emulator-5554 tcp:9223 tcp:9223",
-                        _ => ""
-                    };
-                    return Task.FromResult(new ProcessResult { ExitCode = 0, StandardOutput = output });
-                });
+                new FakeAdbRunner(forwardPorts: [9223], reversePorts: [19225]));
         };
 
         try
