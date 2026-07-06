@@ -9,14 +9,11 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 
 /// <summary>
 /// Top-level view model for <see cref="Pages.MainPage"/>.
-/// Owns page navigation and the new-session action.
+/// Owns page navigation, the new-session action, and the chat template mode toggle.
 /// </summary>
-public sealed partial class MainViewModel(CurrentCart currentCart, ChatViewModel chat) : ObservableObject
+public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableObject
 {
     private bool _initialized;
-
-    /// <summary>The chat view model, exposed so the header can drive the fancy/plain template toggle.</summary>
-    public ChatViewModel Chat { get; } = chat;
 
     public void Initialize()
     {
@@ -25,6 +22,25 @@ public sealed partial class MainViewModel(CurrentCart currentCart, ChatViewModel
         _initialized = true;
 
         StartNewSession();
+    }
+
+    /// <summary>
+    /// Whether the chat renders with the rich (fancy) template set. The toggle broadcasts a
+    /// <see cref="ChatTemplateModeChangedMessage"/> so the chat view swaps its templates — the header
+    /// stays decoupled from the chat view model (messaging, not a shared reference).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemplateToggleIcon))]
+    public partial bool IsFancyChat { get; set; } = true;
+
+    /// <summary>Fluent glyph for the toggle button — a sparkle when fancy, plain text lines when plain.</summary>
+    public string TemplateToggleIcon => IsFancyChat ? FluentIcons.Sparkle : FluentIcons.TextAlignLeft;
+
+    [RelayCommand]
+    private void ToggleChatTemplateMode()
+    {
+        IsFancyChat = !IsFancyChat;
+        WeakReferenceMessenger.Default.Send(new ChatTemplateModeChangedMessage(IsFancyChat));
     }
 
     [RelayCommand]
