@@ -1,4 +1,6 @@
 using Microsoft.Maui.AI.Chat.Controls;
+using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.Controls.Shapes;
 
 namespace AiControlsSample;
 
@@ -7,14 +9,30 @@ namespace AiControlsSample;
 /// so the view only walks the pre-parsed <see cref="FormattedLine"/> model and builds
 /// MAUI <see cref="FormattedString"/> spans.
 /// </summary>
+/// <remarks>
+/// The content is wrapped in an assistant-styled speech bubble (using the chat theme's
+/// colour and sizing tokens) so formatted responses look like normal assistant messages.
+/// </remarks>
 public sealed class FormattedTextView : ContentContextView
 {
     private readonly VerticalStackLayout _layout;
 
     public FormattedTextView()
     {
-        _layout = new VerticalStackLayout { Spacing = 4, Padding = new Thickness(12, 8) };
-        Content = _layout;
+        _layout = new VerticalStackLayout { Spacing = 4 };
+
+        var bubble = new Border
+        {
+            Padding = new Thickness(12, 10),
+            HorizontalOptions = LayoutOptions.Start,
+            StrokeThickness = 0,
+            StrokeShape = new RoundRectangle { CornerRadius = new CornerRadius(16, 16, 16, 4) },
+            Content = _layout,
+        };
+        bubble.SetDynamicResource(BackgroundColorProperty, ChatThemeKeys.AssistantBackground);
+        bubble.SetDynamicResource(MaximumWidthRequestProperty, ChatThemeKeys.BubbleMaxWidth);
+
+        Content = new Grid { Padding = new Thickness(0, 4), Children = { bubble } };
     }
 
     protected override void RefreshFromContentContext()
@@ -37,6 +55,7 @@ public sealed class FormattedTextView : ContentContextView
             FormattedText = BuildFormatted(line.Spans),
             LineBreakMode = LineBreakMode.WordWrap,
         };
+        label.SetDynamicResource(Label.TextColorProperty, ChatThemeKeys.AssistantTextColor);
 
         switch (line.Kind)
         {
@@ -58,6 +77,7 @@ public sealed class FormattedTextView : ContentContextView
                     ColumnSpacing = 6,
                 };
                 var bullet = new Label { Text = "•", FontAttributes = FontAttributes.Bold };
+                bullet.SetDynamicResource(Label.TextColorProperty, ChatThemeKeys.AssistantTextColor);
                 row.Add(bullet, 0, 0);
                 row.Add(label, 1, 0);
                 return row;
