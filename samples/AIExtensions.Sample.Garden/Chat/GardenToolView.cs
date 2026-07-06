@@ -1,10 +1,9 @@
 using System.Text.Json;
-using AIExtensions.Sample.Garden;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls;
 using Microsoft.Maui.Controls.Shapes;
 
-namespace AIExtensions.Sample.Garden.Views;
+namespace AIExtensions.Sample.Garden.Chat;
 
 /// <summary>
 /// Renders a <see cref="FunctionInvocationContentBlock"/> (any tool that isn't projected into a richer

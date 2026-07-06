@@ -1,9 +1,8 @@
-using AIExtensions.Sample.Garden.Chat;
 using AIExtensions.Sample.Garden.Models;
 using Microsoft.Maui.AI.Chat.Controls;
 using Microsoft.Maui.Controls.Shapes;
 
-namespace AIExtensions.Sample.Garden.Views;
+namespace AIExtensions.Sample.Garden.Chat;
 
 /// <summary>
 /// Renders a <see cref="ProductResultsBlock"/>. Adapts to the number of products discovered in the turn:
