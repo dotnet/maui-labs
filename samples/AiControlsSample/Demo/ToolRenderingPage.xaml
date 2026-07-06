@@ -36,7 +36,7 @@
             <controls:CopilotChatView.SuggestionPrompts>
                 <x:String>Give me 3 tips for a tidy desk with **bold** keywords</x:String>
                 <x:String>Draw a watercolor sunset over mountains</x:String>
-                <x:String>What's the weather in Tokyo?</x:String>
+                <x:String>What's the weather in Tokyo and Paris?</x:String>
                 <x:String>Create a plan to organize my desk</x:String>
                 <x:String>Trigger an error to test error handling</x:String>
             </controls:CopilotChatView.SuggestionPrompts>
@@ -46,7 +46,7 @@
                 <chat:GenericContentTemplate BlockType="{x:Type local:FormattedTextBlock}" ViewType="{x:Type local:FormattedTextView}" />
                 <chat:MediaContentTemplate />
                 <chat:FunctionInvocationTemplate />
-                <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />
+                <chat:GenericContentTemplate BlockType="{x:Type local:WeatherCollectionBlock}" ViewType="{x:Type local:WeatherCarouselView}" />
                 <chat:ToolApprovalTemplate ToolName="create_plan" ViewType="{x:Type local:PlanStepsView}" />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
