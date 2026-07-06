@@ -1,9 +1,8 @@
-using AIExtensions.Sample.Garden.Chat;
 using Microsoft.Maui.AI.Chat.Controls;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
 using Microsoft.Maui.Controls.Shapes;
 
-namespace AIExtensions.Sample.Garden.Views;
+namespace AIExtensions.Sample.Garden.Chat;
 
 /// <summary>
 /// Renders a <see cref="GardenFormattedTextBlock"/>. All parsing happens in the handler, so the view
