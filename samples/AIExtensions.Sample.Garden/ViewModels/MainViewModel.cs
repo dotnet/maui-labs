@@ -11,9 +11,12 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// Top-level view model for <see cref="Pages.MainPage"/>.
 /// Owns page navigation and the new-session action.
 /// </summary>
-public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableObject
+public sealed partial class MainViewModel(CurrentCart currentCart, ChatViewModel chat) : ObservableObject
 {
     private bool _initialized;
+
+    /// <summary>The chat view model, exposed so the header can drive the fancy/plain template toggle.</summary>
+    public ChatViewModel Chat { get; } = chat;
 
     public void Initialize()
     {

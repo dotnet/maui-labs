@@ -60,6 +60,23 @@ public class EmptyViewTests
         Assert.Null(control.EmptyViewTemplate);
     }
 
+    [Fact]
+    public void SettingBindingContext_WithEmptyViewTemplate_DoesNotThrow()
+    {
+        var control = CreateControl();
+        if (control == null)
+            return;
+
+        // Custom empty content binds against the control's data context (not the
+        // templated parent). Changing the BindingContext must re-propagate safely,
+        // even when the control template has not been applied (parts are null).
+        control.EmptyViewTemplate = new DataTemplate(() => new Label { Text = "Empty" });
+
+        var ex = Record.Exception(() => control.BindingContext = new { Name = "vm" });
+
+        Assert.Null(ex);
+    }
+
     /// <summary>
     /// Creates a CopilotChatView, returning null if MAUI XAML runtime is unavailable
     /// (InitializeComponent requires the full MAUI platform host).

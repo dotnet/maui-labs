@@ -307,8 +307,36 @@ public partial class CopilotChatView : TemplatedView
         if (_emptyViewHostPart is null)
             return;
 
-        _emptyViewHostPart.Content = EmptyViewTemplate?.CreateContent() as View;
+        _emptyViewHostPart.Content = CreateTemplatedContent(EmptyViewTemplate);
         UpdateWelcomeVisibility();
+    }
+
+    // Consumer-supplied DataTemplates (empty view, header, footer) should bind against the
+    // control's data context (e.g. the host ViewModel), NOT the templated parent. Inside a
+    // ControlTemplate the BindingContext of parts is the control itself, so created content
+    // would otherwise inherit the control as its context and bindings like "{Binding MyProp}"
+    // would silently resolve to nothing. We set the content's BindingContext explicitly and
+    // keep it in sync via OnBindingContextChanged.
+    private View? CreateTemplatedContent(DataTemplate? template)
+    {
+        if (template?.CreateContent() is not View view)
+            return null;
+
+        view.BindingContext = BindingContext;
+        return view;
+    }
+
+    protected override void OnBindingContextChanged()
+    {
+        base.OnBindingContextChanged();
+
+        var ctx = BindingContext;
+        if (_emptyViewHostPart?.Content is View emptyContent)
+            emptyContent.BindingContext = ctx;
+        if (_headerPart?.Content is View headerContent)
+            headerContent.BindingContext = ctx;
+        if (_footerPart?.Content is View footerContent)
+            footerContent.BindingContext = ctx;
     }
 
     private void UpdateSuggestionsVisibility()
@@ -365,7 +393,7 @@ public partial class CopilotChatView : TemplatedView
 
         if (HeaderTemplate is not null)
         {
-            _headerPart.Content = HeaderTemplate.CreateContent() as View;
+            _headerPart.Content = CreateTemplatedContent(HeaderTemplate);
             _headerPart.IsVisible = true;
         }
         else
@@ -382,7 +410,7 @@ public partial class CopilotChatView : TemplatedView
 
         if (FooterTemplate is not null)
         {
-            _footerPart.Content = FooterTemplate.CreateContent() as View;
+            _footerPart.Content = CreateTemplatedContent(FooterTemplate);
             _footerPart.IsVisible = true;
         }
         else
