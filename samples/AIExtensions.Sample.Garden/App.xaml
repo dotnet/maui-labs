@@ -8,6 +8,16 @@
                 <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
                 <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Chat control theme overrides. Direct keys here win over the ChatTheme dictionary that
+                 UseChatControls merges, so the drop-in CopilotChatView adopts Garden's brand. -->
+            <Color x:Key="MauiAIChat.Suggestion.Background">#E8F2E6</Color>
+            <Color x:Key="MauiAIChat.Suggestion.TextColor">#3A5A3A</Color>
+            <Color x:Key="MauiAIChat.Assistant.Background">#FFFFFF</Color>
+            <Color x:Key="MauiAIChat.Assistant.TextColor">#2C2416</Color>
+            <Color x:Key="MauiAIChat.User.Background">#5B8C5A</Color>
+            <Color x:Key="MauiAIChat.User.TextColor">#FFFFFF</Color>
+            <x:Double x:Key="MauiAIChat.Bubble.MaxWidth">560</x:Double>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

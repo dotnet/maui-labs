@@ -21,6 +21,9 @@
 
 		<UserSecretsId>ai-attributes-secrets</UserSecretsId>
 
+		<!-- Microsoft.Extensions.AI image-generation + hosted image tool are experimental (MEAI001). -->
+		<NoWarn>$(NoWarn);MEAI001</NoWarn>
+
 		<!-- For inspecting source-generator output only. Not required to run the sample. -->
 		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
 	</PropertyGroup>
@@ -48,6 +51,7 @@
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes.Generators\Microsoft.Maui.AI.Attributes.Generators.csproj"
 		                  OutputItemType="Analyzer"
 		                  ReferenceOutputAssembly="false" />
+		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
 		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
 
