@@ -58,7 +58,7 @@ Review pull request #${{ github.event.pull_request.number || github.event.issue.
 > - **Zero findings / all findings discarded** → the single `add_comment` only (no `submit_pull_request_review`).
 > - **Cannot run / infra failure** (no target PR, pre-flight failed, or fewer than 2 reviewers completed) → `noop` when there is no target PR; otherwise the single `add_comment` explaining the failure (the pre-flight guard, or the Step 2 `<2 reviewers` fallback).
 >
-> Ending with only prose like "No actionable issues found" produces **zero safe outputs** — nothing posts and no review happens. (Post-v0.81.1 this is a silent no-op, not a workflow failure, but the review is still lost.) If unsure or low on turn budget, call `noop` with a one-line status message first.
+> Ending with only prose like "No actionable issues found" produces **zero safe outputs** — nothing posts and no review happens. (Post-v0.81.1 this is a silent no-op, not a workflow failure, but the review is still lost.) If unsure or low on turn budget, secure a safe output immediately: when a target PR exists, emit the single `add_comment` with a one-line status (e.g. "Ran low on turn budget — please re-run `/review`"); only when there is no target PR, call `noop` with a one-line status message. (`noop` posts nothing, so never use it on a targeted run — the maintainer would see no output at all.)
 
 ## Instructions
 
