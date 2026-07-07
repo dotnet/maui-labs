@@ -211,8 +211,6 @@ extends:
 
           - job: EssentialsAI_macOS
             displayName: EssentialsAI - macOS (native build)
-            variables:
-              DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             pool:
               name: Azure Pipelines
               vmImage: macos-latest-internal
@@ -231,10 +229,14 @@ extends:
             - script: |
                 eng/common/dotnet.sh --info
               displayName: Provision .NET SDK via Arcade
+              env:
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
+              env:
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: |
                 ./eng/common/build.sh \
                   --configuration $(_BuildConfig) \
@@ -244,6 +246,8 @@ extends:
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
               displayName: Build EssentialsAI (macOS)
+              env:
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - task: CopyFiles@2
               displayName: Copy Native Binaries
               inputs:
