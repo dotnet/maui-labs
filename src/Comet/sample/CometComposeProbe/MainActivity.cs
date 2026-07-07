@@ -108,11 +108,18 @@ namespace CometComposeProbe
 				scheme = ComposeSchemeFromSeed(s, dark);
 			}
 
+			// Per-sample theming: the Reply screen uses Reply's OWN static scheme
+			// (gold: ContrastAwareReplyTheme, dynamicColor=false) — the real M3 widgets
+			// (NavigationBar/Rail, drawer sheets) derive their container colors from it.
+			bool replyScreen = Intent?.GetStringExtra("screen") == "reply";
+			if (replyScreen)
+				scheme = CometSamples.Reply.ReplyTheme.ComposeScheme();
+
 			// Status bar: Surface (matches the header bar).
 			// Nav bar: SurfaceTinted (matches the footer/UserInput bar so the background is seamless).
-			var surf = CometSamples.Jetchat.JetchatTheme.Surface;
+			var surf = replyScreen ? CometSamples.Reply.ReplyTheme.Background : CometSamples.Jetchat.JetchatTheme.Surface;
 			var statusTint = Android.Graphics.Color.Argb(255, (int)(surf.Red * 255), (int)(surf.Green * 255), (int)(surf.Blue * 255));
-			var footerSurf = CometSamples.Jetchat.JetchatTheme.SurfaceTinted;
+			var footerSurf = replyScreen ? CometSamples.Reply.ReplyTheme.SurfaceContainer : CometSamples.Jetchat.JetchatTheme.SurfaceTinted;
 			var navTint = Android.Graphics.Color.Argb(255, (int)(footerSurf.Red * 255), (int)(footerSurf.Green * 255), (int)(footerSurf.Blue * 255));
 			Window!.SetStatusBarColor(statusTint);
 			Window.SetNavigationBarColor(navTint);

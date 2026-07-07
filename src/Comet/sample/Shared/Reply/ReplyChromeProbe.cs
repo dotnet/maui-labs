@@ -137,18 +137,4 @@ namespace CometSamples.Reply
 		}.Padding(new Thickness(16, 16, 16, 40));
 	}
 
-	/// <summary>Reply's static light scheme — literals from the gold's ui/theme/Color.kt
-	/// (dynamicColor=false; deterministic, no seed generation). Grows role-by-role as the
-	/// sample needs them; the full table ports with the theme increment.</summary>
-	public static class ReplyTheme
-	{
-		public static readonly Color Primary = Color.FromArgb("#805610");
-		public static readonly Color Background = Color.FromArgb("#FFF8F4");
-		public static readonly Color Outline = Color.FromArgb("#817567");
-		public static readonly Color OnSurfaceVariant = Color.FromArgb("#4F4539");
-		public static readonly Color TertiaryContainer = Color.FromArgb("#D4EABB");
-		public static readonly Color OnTertiaryContainer = Color.FromArgb("#102004");
-		public static readonly Color SurfaceVariant = Color.FromArgb("#F0E0CF");
-		public static readonly Color InverseOnSurface = Color.FromArgb("#FCEFE2");
-	}
 }
