@@ -75,7 +75,12 @@ namespace CometSwiftUIProbe
 
 		// The faithful Jetchat conversation screen (shared tree, identical on Android). iPhone
 		// safe-area insets: status bar / Dynamic Island ~50dp top, home indicator ~28dp bottom.
-		View BuildUi() => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28);
+		// Launch with SIMCTL_CHILD_COMET_SCREEN=reply to switch to the Reply sample (the
+		// smoke scripts pass it — the iOS twin of the Android probe's intent extra).
+		View BuildUi() =>
+			System.Environment.GetEnvironmentVariable("COMET_SCREEN") == "reply"
+				? new CometSamples.Reply.ReplyProbeRoot()
+				: CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28);
 
 		// Decode a bundled image to a small AARRGGBB pixel buffer for content-based theming (the
 		// material-color-utilities Quantize+Score wants raw pixels). Downscaled for a fast seed extract.

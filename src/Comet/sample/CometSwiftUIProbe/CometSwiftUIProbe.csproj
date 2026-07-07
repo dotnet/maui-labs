@@ -26,6 +26,8 @@
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
+    <!-- Shared Reply sample (M1). -->
+    <Compile Include="..\Shared\Reply\*.cs" Link="Shared\Reply\%(Filename)%(Extension)" />
     <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
     <BundleResource Include="Fonts\Montserrat-Regular.ttf" />
     <BundleResource Include="Fonts\Montserrat-Medium.ttf" />
@@ -38,6 +40,18 @@
     <BundleResource Include="Resources\someone_else.jpg"><LogicalName>someone_else.jpg</LogicalName></BundleResource>
     <BundleResource Include="Resources\sticker.png"><LogicalName>sticker.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\jetchat.png"><LogicalName>jetchat.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_0.jpg"><LogicalName>avatar_0.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_1.jpg"><LogicalName>avatar_1.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_10.jpg"><LogicalName>avatar_10.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_2.jpg"><LogicalName>avatar_2.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_3.jpg"><LogicalName>avatar_3.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_4.jpg"><LogicalName>avatar_4.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_5.jpg"><LogicalName>avatar_5.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_6.jpg"><LogicalName>avatar_6.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_7.jpg"><LogicalName>avatar_7.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_8.jpg"><LogicalName>avatar_8.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_9.jpg"><LogicalName>avatar_9.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_express.png"><LogicalName>avatar_express.png</LogicalName></BundleResource>
   </ItemGroup>
 
   <!-- Link + embed the Swift framework directly in the app so the static registrar's
