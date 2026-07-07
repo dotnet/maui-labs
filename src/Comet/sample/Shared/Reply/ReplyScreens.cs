@@ -19,6 +19,17 @@ namespace CometSamples.Reply
 		public static readonly Signal<bool> DetailOpen = new(false);
 		public static readonly Signal<int> OpenedEmailId = new(0);
 
+		// Hook the static signals ONCE (a per-build += on a static signal stacks a handler —
+		// and roots the captured list — on every body rebuild); the fields track the current
+		// list instances.
+		static ListView<ReplyEmail>? _inboxList, _searchResults;
+		static ReplyScreens()
+		{
+			SearchQuery.PropertyChanged += (_, __) => _searchResults?.ReloadData();
+			// Rows snapshot OpenedEmailId at build; reload so the opened highlight moves.
+			OpenedEmailId.PropertyChanged += (_, __) => _inboxList?.ReloadData();
+		}
+
 		static ReplyEmail Opened()
 		{
 			foreach (var e in ReplyData.AllEmails)
@@ -38,6 +49,7 @@ namespace CometSamples.Reply
 			{
 				ViewFor = email => EmailListItem(email),
 			};
+			_inboxList = list;
 
 			// Gold ExtendedFAB (ReplyListContent.kt:113-126): tertiaryContainer, "Compose" +
 			// edit icon, expanded at the top (!canScrollBackward); collapses once scrolled.
@@ -95,7 +107,7 @@ namespace CometSamples.Reply
 			{
 				ViewFor = e => SearchResultRow(e),
 			};
-			SearchQuery.PropertyChanged += (_, __) => results.ReloadData();
+			_searchResults = results;
 
 			var content = new VStack(spacing: 0f)
 			{
