@@ -180,3 +180,16 @@ REMAINING for M1 (priority order):
    for rail inverseOnSurface); perf snapshot → RESULTS.md; /code-review the diff.
 5. iOS GATE: SwiftUI twins (NavigationSuite/ListDetail/ContentSwitcher/nav chrome in
    shim), real resize observation, drag injector, reply.ios.sh.
+
+### Review skips (2026-07-07, tracked)
+- Leaf padding on NON-text Compose leaves (Image/Button/TextField-material) grows the
+  box without insetting content; SwiftUI engine path has no PadsOwnContent twin — align
+  both backends (generalize inset to all plain leaves) before any sample pads such leaves.
+- Suite BottomBar variant: bar offset ignores the widget's internal bottom-inset growth
+  (visible only with 3-button nav); use safeDp.Bottom in the bar offset + content math.
+- Refactor debt: shared ComposeOwnContentNode base (5 copies of lifecycle scaffolding);
+  EmitSignalProperty helper for the 7 backend partials; suite reusing bar/rail item
+  rendering + drawer sync from their standalone nodes.
+- Reply Release size snapshot: probe APK (Jetchat+Reply, all ABIs) 38.0 MiB vs gold
+  Kotlin Reply release APK 3.4 MiB (minified, single sample) — single-RID + per-sample
+  probe split needed for an honest RESULTS.md row (bench script RID arg didn't take).
