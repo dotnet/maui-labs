@@ -211,6 +211,8 @@ extends:
 
           - job: EssentialsAI_macOS
             displayName: EssentialsAI - macOS (native build)
+            variables:
+              DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             pool:
               name: Azure Pipelines
               vmImage: macos-latest-internal
