@@ -158,10 +158,16 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            # The AI Extensions slnf now includes the Garden MAUI showcase (android/ios/
+            # maccatalyst/windows) and the Chat.Controls MAUI library, so the MAUI and Apple
+            # workloads are required. Apple TFMs cross-compile on Windows using the workload
+            # reference assemblies. Mirrors the DevFlow job's provisioning.
+            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
+              displayName: Install MAUI and Apple workloads
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true samples\AIExtensions.Sample.Garden\AIExtensions.Sample.Garden.csproj
+              displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
