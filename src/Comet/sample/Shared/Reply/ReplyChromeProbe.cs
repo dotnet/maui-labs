@@ -9,12 +9,11 @@ using Microsoft.Maui.Primitives;
 namespace CometSamples.Reply
 {
 	/// <summary>
-	/// M1 scaffold: Reply's adaptive nav chrome driving the REAL M3 widgets — bottom
-	/// NavigationBar under 600dp, NavigationRail (menu + FAB header) at 600dp+ — switched
-	/// reactively off <see cref="CometWindowMetrics"/>, with the four gold destinations and
-	/// a placeholder content pane per route. The inbox/detail screens replace the
-	/// placeholders as the sample builds out; this composition hardens into the
-	/// NavigationSuite primitive (docs/adaptive-primitives-design.md).
+	/// M1 scaffold: Reply's adaptive nav chrome on the <see cref="NavigationSuite"/> primitive —
+	/// bottom bar &lt;600dp, rail (menu + FAB header) 600–1199dp, permanent drawer ≥1200dp,
+	/// all real M3 widgets, the swap owned by the suite's node (window-metrics reactive).
+	/// Placeholder route content per gold destination; the inbox/detail screens replace it as
+	/// the sample builds out.
 	/// </summary>
 	public class ReplyProbeRoot : View
 	{
@@ -25,45 +24,44 @@ namespace CometSamples.Reply
 		View body()
 		{
 			ReplyIcons.Register();
-			var metrics = this.GetWindowMetrics();
-			bool useRail = metrics.WidthClass != WindowWidthClass.Compact;
 
 			var items = new[]
 			{
-				new NavigationItem(new Icon("inbox").IconSize(24)),
-				new NavigationItem(new Icon("article").IconSize(24)),
-				new NavigationItem(new Icon("chat_outline").IconSize(24)),
-				new NavigationItem(new Icon("people_outline").IconSize(24)),
+				NavItem("inbox", "Inbox"),
+				NavItem("article", "Articles"),
+				NavItem("chat_outline", "Direct Messages"),
+				NavItem("people_outline", "Groups"),
 			};
 
 			// Placeholder route content (EmptyComingSoon-shaped); bound so a selection
-			// re-renders just the texts.
+			// re-renders just the texts. FlexGrow spacers center the block vertically
+			// (alignment modifiers position a view in its parent, not its children).
 			var content = new VStack(spacing: 8)
 			{
+				new HStack().FlexGrow(1),
 				new Text(() => Titles[Selected.Value])
 					.FontSize(22).FontWeight(FontWeight.Bold)
-					.Color(ReplyTheme.Primary),
+					.Color(ReplyTheme.Primary)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center),
 				new Text("This screen is still under construction.")
-					.FontSize(12).Color(ReplyTheme.Outline),
+					.FontSize(12).Color(ReplyTheme.Outline)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center),
 				// TEMP diagnostic: live window size (remove before the sample lands)
 				new Text(() => $"win {CometWindowMetrics.Shared.SizeDp.Value.Width:0}x{CometWindowMetrics.Shared.SizeDp.Value.Height:0} {CometWindowMetrics.Shared.WidthClass}")
-					.FontSize(11).Color(ReplyTheme.Outline),
+					.FontSize(11).Color(ReplyTheme.Outline)
+					.HorizontalLayoutAlignment(LayoutAlignment.Center),
+				new HStack().FlexGrow(1),
 			}
-			.HorizontalLayoutAlignment(LayoutAlignment.Center)
-			.VerticalLayoutAlignment(LayoutAlignment.Center);
+			.Background(ReplyTheme.Background);
 
-			return useRail
-				? new HStack
-				{
-					new NavigationRail(Selected, items, header: RailHeader()).FlexShrink(0),
-					content.FlexGrow(1).FlexBasis(0),
-				}.Background(ReplyTheme.Background)
-				: new VStack
-				{
-					content.FlexGrow(1).FlexBasis(0),
-					new NavigationBar(Selected, items).FlexShrink(0),
-				}.Background(ReplyTheme.Background);
+			return new NavigationSuite(Selected, items, content,
+				railHeader: RailHeader(), drawerHeader: DrawerHeader());
 		}
+
+		// The gold drawer variant shows labeled items — label views feed NavigationDrawerItem
+		// slots; the bar/rail render icon-only, matching the gold.
+		static NavigationItem NavItem(string icon, string label) =>
+			new(new Icon(icon).IconSize(24), new Text(label).FontSize(14));
 
 		// The gold rail header: a menu affordance above the compose FAB (drawer wiring lands
 		// with the modal-drawer increment).
@@ -75,6 +73,22 @@ namespace CometSamples.Reply
 				.Background(ReplyTheme.TertiaryContainer)
 				.CornerRadius(16),
 		}.HorizontalLayoutAlignment(LayoutAlignment.Center);
+
+		// The gold permanent-drawer header: "REPLY" wordmark + the Compose extended FAB.
+		static View DrawerHeader() => new VStack(spacing: 8)
+		{
+			new Text("REPLY").FontSize(16).FontWeight(FontWeight.Semibold)
+				.Color(ReplyTheme.Primary),
+			new HStack(spacing: 8)
+			{
+				new Icon("edit").IconSize(18).Color(ReplyTheme.OnTertiaryContainer),
+				new Text("Compose").FontSize(14).Color(ReplyTheme.OnTertiaryContainer),
+			}
+			.Frame(height: 56)
+			.Background(ReplyTheme.TertiaryContainer)
+			.CornerRadius(16)
+			.Padding(new Thickness(16, 0)),
+		}.Padding(new Thickness(16, 16, 16, 40));
 	}
 
 	/// <summary>Reply's static light scheme — literals from the gold's ui/theme/Color.kt
