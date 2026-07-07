@@ -144,8 +144,8 @@ namespace CometSamples.Reply
 					new Image(email.Sender.Avatar).Frame(width: 40, height: 40).CornerRadius(20).FlexShrink(0),
 					new VStack(spacing: 0f)
 					{
-						new Text(email.Sender.FirstName).FontSize(12).Color(T.OnSurface),
-						new Text(email.CreatedAt).FontSize(12).Color(T.OnSurfaceVariant),
+						new Text(email.Sender.FirstName).FontSize(12).FontWeight(FontWeight.Medium).Color(T.OnSurface),
+						new Text(email.CreatedAt).FontSize(12).FontWeight(FontWeight.Medium).Color(T.OnSurfaceVariant),
 					}.Padding(new Thickness(12, 4, 12, 4)).FlexGrow(1).FlexBasis(0),
 					new Icon("star_border").IconSize(24).Color(T.Outline)
 						.Frame(width: 40, height: 40)
@@ -154,13 +154,16 @@ namespace CometSamples.Reply
 				},
 				new Text(email.Subject).FontSize(16).Color(T.OnSurface)
 					.Padding(new Thickness(0, 12, 0, 8)),
-				// Gold: bodyMedium, maxLines 2, ellipsis (ReplyEmailListItem.kt:134-139).
-				new Text(email.Body.Replace("\n\n", " ").Replace('\n', ' ')).FontSize(14).Color(T.OnSurfaceVariant)
+				// Gold: bodyMedium, maxLines 2, ellipsis, RAW line breaks kept
+				// (ReplyEmailListItem.kt:134-139 — short first lines ellipsize on line 2).
+				new Text(email.Body).FontSize(14).Color(T.OnSurfaceVariant)
 					.LineBreakMode(LineBreakMode.WordWrap)
 					.MaxLines(2),
 			}
 			.Padding(new Thickness(20))
-			.Background(email.Id == OpenedEmailId.Value && DetailOpen.Value ? T.SecondaryContainer : T.SurfaceVariant)
+			// Gold: secondaryContainer while this is the OPENED email (the home state opens
+			// the first email at launch), regardless of the detail being on screen (:72-76).
+			.Background(email.Id == OpenedEmailId.Value ? T.SecondaryContainer : T.SurfaceVariant)
 			.CornerRadius(16)
 			.OnTap(_ =>
 			{
