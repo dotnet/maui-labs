@@ -53,13 +53,20 @@ Review pull request #${{ github.event.pull_request.number || github.event.issue.
 >
 > **🚨 `add_comment` budget: exactly ONE call.** You may call `add_comment` at most once per review — either for the "zero findings" message (Step 3) or for the lean summary (Step 4 Part B). Follow-up agent responses (AGREE/DISAGREE from disputed-finding evaluation) are **internal data only** — NEVER post them as comments.
 >
-> **🚨 ALWAYS end the run with a safe-output tool call — NEVER plain text.** Every run must terminate by calling exactly one of: `submit_pull_request_review` (findings were posted inline), `add_comment` (zero-findings message), or `noop` (nothing to report, or the review could not be completed). Ending your turn with only a prose conclusion such as "No actionable issues found" produces **zero safe outputs**, posts nothing on the PR, and is reported as a workflow failure. If you are unsure, or you are running low on your turn budget, call `noop` with a one-line status message before you stop.
+> **🚨 ALWAYS end the run with safe-output tool calls — NEVER plain text.** A prose-only conclusion posts nothing. End every run through the tools, per path:
+> - **Findings survived consensus** → inline `create_pull_request_review_comment` + `submit_pull_request_review` (`COMMENT`) **and** the single Part B `add_comment` summary. Do NOT stop after `submit_pull_request_review` — the summary still follows it.
+> - **Zero findings / all findings discarded** → the single `add_comment` only (no `submit_pull_request_review`).
+> - **Cannot run** (no target PR, pre-flight failed) → `noop` (or the pre-flight `add_comment` when a PR exists).
+>
+> Ending with only prose like "No actionable issues found" produces **zero safe outputs** — nothing posts and no review happens. (Post-v0.81.1 this is a silent no-op, not a workflow failure, but the review is still lost.) If unsure or low on turn budget, call `noop` with a one-line status message first.
 
 ## Instructions
 
 You are the orchestrator. Your job is to dispatch **3 parallel expert-reviewer sub-agents** with different models, collect their results, synthesize a consensus, and post the final review. Follow these steps exactly.
 
 ### Step 1: Gather Context
+
+> ⚠️ **No-target guard**: This workflow requires a target PR. If no PR number resolves from the triggering context — e.g. a manual `workflow_dispatch` started with an empty `pr_number` — there is no diff to fetch and no PR to comment on. Do NOT proceed: immediately call `noop` with a one-line status (e.g. "No PR number provided — nothing to review.") and stop. (Slash-command and pull-request-opened triggers always supply a PR, so this only guards empty manual dispatches.)
 
 Fetch the PR diff, changed files, description, and existing reviews using the GitHub MCP tools configured above — and nothing more. **You are the orchestrator, not a reviewer: do NOT read source files yourself, do NOT call `search_code` / `github-search_code`, and do NOT use `web_fetch` or any other web research.** All code reading and external research happens *inside* the sub-agents, in their own context windows — doing it yourself burns the shared turn budget and is what causes the run to end with no review posted. Pass only the diff and PR description to sub-agents — they will read source files independently in their own context windows.
 
