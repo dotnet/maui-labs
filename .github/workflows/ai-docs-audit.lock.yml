@@ -42,6 +42,7 @@ run-name: "Weekly AI Docs Audit"
 jobs:
   activation:
     runs-on: ubuntu-slim
+    environment: maui-labs
     permissions:
       contents: read
     outputs:
@@ -230,6 +231,7 @@ jobs:
   agent:
     needs: activation
     runs-on: ubuntu-latest
+    environment: maui-labs
     permissions:
       contents: read
       issues: read
@@ -1060,6 +1062,7 @@ jobs:
       - safe_outputs
     if: (always()) && (needs.agent.result != 'skipped')
     runs-on: ubuntu-slim
+    environment: maui-labs
     permissions:
       contents: write
       issues: write
@@ -1177,6 +1180,7 @@ jobs:
       - agent
     if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (needs.agent.outputs.detection_success == 'true')
     runs-on: ubuntu-slim
+    environment: maui-labs
     permissions:
       contents: write
       issues: write
@@ -1268,4 +1272,3 @@ jobs:
           name: safe-output-items
           path: /tmp/safe-output-items.jsonl
           if-no-files-found: warn
-

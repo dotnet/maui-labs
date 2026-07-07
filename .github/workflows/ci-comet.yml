@@ -52,6 +52,7 @@ jobs:
   package:
     needs: build
     runs-on: windows-latest
+    environment: maui-labs
     permissions:
       contents: write
     defaults:
