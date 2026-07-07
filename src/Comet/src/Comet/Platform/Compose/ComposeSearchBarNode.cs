@@ -34,6 +34,9 @@ namespace Comet.Platform.Compose
 			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowContent;
 		}
 
+		public override void Dispose()
+			=> Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
+
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
 
 		public override void OnOwnerViewChanged(View newView, bool isHotReload)
@@ -99,8 +102,8 @@ namespace Comet.Platform.Compose
 			_ = _contentVersion.Value;
 			EnsureContent();
 
-			// Stream every edit into the control's Query signal (equality-gated there).
-			var capturedBar = _bar;
+			// Stream every edit into the CURRENT control's Query signal (equality-gated
+			// there; _bar re-points on owner re-render, so don't capture it).
 			var capturedText = _textState;
 			composer.LaunchedEffect(true, async ct =>
 			{
@@ -109,7 +112,7 @@ namespace Comet.Platform.Compose
 				{
 					Comet.ThreadHelper.RunOnMainThread(() =>
 					{
-						capturedBar.Query.Value = text;
+						_bar.Query.Value = text;
 						Comet.Reactive.ReactiveScheduler.EnsureFlushScheduled();
 					});
 				}

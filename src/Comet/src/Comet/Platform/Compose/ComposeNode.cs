@@ -339,7 +339,11 @@ namespace Comet.Platform.Compose
 		/// subclasses re-point their view reference and invalidate materialized content.</summary>
 		public virtual void OnOwnerViewChanged(View newView, bool isHotReload) { }
 
-		public void Dispose() { }
+		/// <summary>Called when the owning view is disposed (diff replacement, reload).
+		/// Own-content nodes override to unhook static events (AfterFlush, window metrics) —
+		/// without this every discarded node stays rooted for the process lifetime and keeps
+		/// re-running its per-flush layout.</summary>
+		public virtual void Dispose() { }
 
 		// Composition helpers --------------------------------------------------
 

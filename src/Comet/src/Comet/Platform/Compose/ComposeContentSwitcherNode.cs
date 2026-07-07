@@ -20,7 +20,6 @@ namespace Comet.Platform.Compose
 		readonly MutableState<int> _contentVersion = new(0);
 		ComposeNode?[] _nodes = System.Array.Empty<ComposeNode?>();
 		int _indexValue;
-		Size _boundsDp;
 
 		public ComposeContentSwitcherNode(ContentSwitcher switcher, BackendContext context)
 		{
@@ -28,6 +27,9 @@ namespace Comet.Platform.Compose
 			_context = context;
 			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowContent;
 		}
+
+		public override void Dispose()
+			=> Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
@@ -83,7 +85,6 @@ namespace Comet.Platform.Compose
 			var bounds = BoundsDp();
 			if (bounds.Width <= 0)
 				return;
-			_boundsDp = bounds;
 			CometBackendLayoutEngine.Layout(_switcher.Views[i], bounds);
 		}
 

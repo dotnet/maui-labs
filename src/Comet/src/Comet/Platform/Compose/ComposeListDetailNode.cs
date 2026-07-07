@@ -66,13 +66,24 @@ namespace Comet.Platform.Compose
 			UpdateFromMetrics();
 		}
 
+		System.ComponentModel.PropertyChangedEventHandler? _metricsHandler;
+		Backend.CometWindowMetrics? _hookedMetrics;
+
 		void HookMetrics()
 		{
 			if (_metricsHooked)
 				return;
 			_metricsHooked = true;
-			_listDetail.GetWindowMetrics().SizeDp.PropertyChanged += (_, __) =>
-				Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
+			_hookedMetrics = _listDetail.GetWindowMetrics();
+			_metricsHandler = (_, __) => Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
+			_hookedMetrics.SizeDp.PropertyChanged += _metricsHandler;
+		}
+
+		public override void Dispose()
+		{
+			Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
+			if (_hookedMetrics is not null && _metricsHandler is not null)
+				_hookedMetrics.SizeDp.PropertyChanged -= _metricsHandler;
 		}
 
 		/// <summary>This node usually fills a NavigationSuite content slot, so its bounds are

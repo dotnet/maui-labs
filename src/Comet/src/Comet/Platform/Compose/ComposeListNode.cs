@@ -101,7 +101,7 @@ namespace Comet.Platform.Compose
 				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
 					.WithCancellation(ct))
 				{
-					var signal = capturedList.ScrolledAway;
+					var signal = _list.ScrolledAway;   // re-read: owner re-points _list on re-render
 					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
 				}
 			});
@@ -113,7 +113,7 @@ namespace Comet.Platform.Compose
 				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollBackward)
 					.WithCancellation(ct))
 				{
-					var signal = capturedList.ScrolledFromTop;
+					var signal = _list.ScrolledFromTop;   // re-read: owner re-points _list on re-render
 					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
 				}
 			});

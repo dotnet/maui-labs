@@ -100,16 +100,28 @@ namespace Comet.Platform.Compose
 
 		/// <summary>Follow the per-root reactive window contract: a size change recomputes the
 		/// variant (recomposes the chrome swap) and re-lays the content to the new bounds.</summary>
+		System.ComponentModel.PropertyChangedEventHandler? _metricsHandler;
+		Backend.CometWindowMetrics? _hookedMetrics;
+
 		void HookMetrics()
 		{
 			if (_metricsHooked)
 				return;
 			_metricsHooked = true;
-			var metrics = _suite.GetWindowMetrics();
-			metrics.SizeDp.PropertyChanged += (_, __) =>
-				Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
-			metrics.SafeAreaDp.PropertyChanged += (_, __) =>
-				Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
+			_hookedMetrics = _suite.GetWindowMetrics();
+			_metricsHandler = (_, __) => Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
+			_hookedMetrics.SizeDp.PropertyChanged += _metricsHandler;
+			_hookedMetrics.SafeAreaDp.PropertyChanged += _metricsHandler;
+		}
+
+		public override void Dispose()
+		{
+			Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
+			if (_hookedMetrics is not null && _metricsHandler is not null)
+			{
+				_hookedMetrics.SizeDp.PropertyChanged -= _metricsHandler;
+				_hookedMetrics.SafeAreaDp.PropertyChanged -= _metricsHandler;
+			}
 		}
 
 		void UpdateFromMetrics()

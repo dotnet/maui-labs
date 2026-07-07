@@ -104,7 +104,7 @@ namespace Comet.Platform.Compose
 		{
 			double width = double.IsInfinity(widthConstraint) ? 0 : widthConstraint;
 			if (_borderless.Value)
-				return new Size(width, 22 + Padding.Top + Padding.Bottom);
+				return new Size(width, 22);   // content only — Yoga adds the leaf's padding
 			return new Size(width, 56);
 		}
 

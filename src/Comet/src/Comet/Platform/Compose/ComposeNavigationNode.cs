@@ -57,6 +57,9 @@ namespace Comet.Platform.Compose
 			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowTopScreen;
 		}
 
+		public override void Dispose()
+			=> Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowTopScreen;
+
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
 
 		/// <summary>The node was transferred to a new NavigationView. Re-point always; only a hot

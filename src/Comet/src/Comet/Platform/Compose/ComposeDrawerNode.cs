@@ -53,6 +53,9 @@ namespace Comet.Platform.Compose
 			_contentVersion.Value++;
 		}
 
+		public override void Dispose()
+			=> Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
+
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Drawer_IsOpen)

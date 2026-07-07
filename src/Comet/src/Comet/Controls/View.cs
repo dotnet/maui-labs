@@ -754,6 +754,14 @@ namespace Comet
 
 			try
 			{
+				// Release the retained backend node so it can unhook static events
+				// (ReactiveScheduler.AfterFlush, window-metrics signals). A node that was
+				// TRANSFERRED to a replacement view is already null here (TransferNode
+				// clears the old view's reference before this runs).
+				var node = Node;
+				Node = null;
+				node?.Dispose();
+
 				var vh = ViewHandler;
 				ViewHandler = null;
 				(vh as IDisposable)?.Dispose();
