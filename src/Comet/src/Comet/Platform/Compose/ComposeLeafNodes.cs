@@ -12,6 +12,8 @@ namespace Comet.Platform.Compose
 	/// <summary>Renders Comet <c>Text</c> as a Material 3 <c>Text</c> composable.</summary>
 	sealed class ComposeTextNode : ComposeNode
 	{
+		protected override bool PadsOwnContent => true;
+
 		readonly MutableState<string> _text = new(string.Empty);
 		Microsoft.Maui.Graphics.Color? _color;
 		int _fontSize;

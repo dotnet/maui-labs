@@ -14,6 +14,8 @@ namespace Comet.Platform.Compose
 	/// spans so the wrapped height matches the rendered glyph metrics.</summary>
 	sealed class ComposeFormattedTextNode : ComposeNode
 	{
+		protected override bool PadsOwnContent => true;
+
 		IReadOnlyList<TextRun> _runs = System.Array.Empty<TextRun>();
 		int _fontSize;
 		int _lineHeight;

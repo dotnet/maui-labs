@@ -269,6 +269,33 @@ namespace Comet.Tests.Backend
 			Assert.Equal(60, size.Height, 3);
 		}
 
+		[Fact]
+		public void LeafPadding_GrowsTheArrangedBox()
+		{
+			// A LEAF's .Padding must reach Yoga: the box = measured content + padding (the
+			// node insets its own content at render — ComposeNode.PadsOwnContent). Regression
+			// guard for the gap where leaf padding was silently dropped (Reply title flush at
+			// x=0 despite Padding(16)).
+			var padded = new Text("padded").Padding(new Microsoft.Maui.Thickness(16, 8, 16, 4));
+			var plain = new Text("plain");
+			var root = new VStack(spacing: 0f) { padded, plain };
+			Bridge(root);
+
+			Node(padded).MeasureResult = new Size(100, 20);
+			Node(plain).MeasureResult = new Size(100, 20);
+
+			CometBackendLayoutEngine.Layout(root, new Size(400, 400));
+
+			var fp = Node(padded).ArrangedFrame!.Value;
+			Assert.Equal(20 + 8 + 4, fp.Height, 3);      // content + vertical padding
+			// Stretch gives both full width; the padded one is NOT narrower than the plain one
+			// (padding grows inward space, the box still fills).
+			Assert.Equal(Node(plain).ArrangedFrame!.Value.Width, fp.Width, 3);
+
+			// The next sibling is pushed down by the padded height.
+			Assert.Equal(32, Node(plain).ArrangedFrame!.Value.Y, 3);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;

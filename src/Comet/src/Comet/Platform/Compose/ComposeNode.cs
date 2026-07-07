@@ -78,6 +78,12 @@ namespace Comet.Platform.Compose
 
 		protected bool HasFrame => _hasFrame;
 
+		/// <summary>True for LEAF nodes that render their own content (text, icon glyphs):
+		/// Yoga includes their padding in the arranged frame, so the node itself insets the
+		/// content at render (see <see cref="BuildNodeModifier"/>). Containers stay false —
+		/// their children's frames already carry the inset.</summary>
+		protected virtual bool PadsOwnContent => false;
+
 		/// <summary>The Yoga-arranged size of this node in Dp (0 until arranged). Own-content
 		/// nodes (list, scroll, list-detail) use it to lay their own content out to the host's
 		/// bounds.</summary>
@@ -232,11 +238,13 @@ namespace Comet.Platform.Compose
 				m = (m ?? Modifier.Companion).Border(new Dp(_borderWidth), ToComposeColor(bc),
 					rounded ? CornerShape() : null);
 
-			// Native padding only when Compose lays out natively; under Yoga the engine has
-			// already inset the children (their absolute frames include the padding), so applying
-			// it again here would double it and push content off the edge.
+			// Padding: under native Compose layout always; under Yoga only for LEAF nodes
+			// (PadsOwnContent) — Yoga grows a leaf's frame by its padding but the node renders
+			// its content at the frame origin, so the inset must be applied here. Containers
+			// must NOT re-apply it (their children's absolute frames already include it —
+			// doubling would push content off the edge).
 			var p = _padding;
-			if (!_hasFrame && (p.Left != 0 || p.Top != 0 || p.Right != 0 || p.Bottom != 0))
+			if ((!_hasFrame || PadsOwnContent) && (p.Left != 0 || p.Top != 0 || p.Right != 0 || p.Bottom != 0))
 				m = (m is null ? Modifier.Companion : m)
 					.Padding((float)p.Left, (float)p.Top, (float)p.Right, (float)p.Bottom);
 

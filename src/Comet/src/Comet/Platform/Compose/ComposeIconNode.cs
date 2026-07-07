@@ -13,6 +13,8 @@ namespace Comet.Platform.Compose
 	/// (<c>ImageVector</c> from the <c>Icons</c> set), tinted and sized — not a glyph in a label.</summary>
 	sealed class ComposeIconNode : ComposeNode
 	{
+		protected override bool PadsOwnContent => true;
+
 		readonly MutableState<string> _symbol = new(string.Empty);
 		readonly MutableState<string> _glyph = new(string.Empty);       // icon-font codepoint, if any
 		readonly MutableState<string> _glyphFont = new(string.Empty);   // icon-font family
