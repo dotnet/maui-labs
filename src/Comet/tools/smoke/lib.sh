@@ -40,7 +40,8 @@ agent_get()  { curl -s -m 10 "$AGENT$1"; }
 agent_post() { curl -s -m 30 -X POST "$AGENT$1" -d "$2"; }
 
 # elements <query>          → the raw JSON array for ?type=&text=&automationId=
-elements() { agent_get "/api/v1/ui/elements?$1"; }
+# (spaces in text= values are URL-encoded here so callers can write them naturally)
+elements() { agent_get "/api/v1/ui/elements?${1// /%20}"; }
 
 # element_id <query>        → first matching element id (empty when none)
 element_id() { elements "$1" | sed -n 's/.*"id":"\([0-9]*\)".*/\1/p' | head -1; }
