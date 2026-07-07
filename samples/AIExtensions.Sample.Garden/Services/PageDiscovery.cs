@@ -138,9 +138,9 @@ public sealed class PageDiscovery
 
     [ExportAIFunction("list_app_pages")]
     [Description(
-        "List every real screen in the app with its route, and identify the HOME screen (where " +
-        "the app opens and every user starts). Call this when you need the full set of screens " +
-        "or the starting point for a walkthrough. Read individual screens with get_page_ui.")]
+        "List every real screen in the app, and identify the HOME screen (where the app opens and " +
+        "every user starts). Call this when you need the full set of screens or the starting point " +
+        "for a walkthrough. Read individual screens with get_page_ui.")]
     public static string ListAppPages()
     {
         var sb = new StringBuilder();
@@ -157,10 +157,9 @@ public sealed class PageDiscovery
 
         foreach (var page in Index.Pages.OrderBy(p => p.Name))
         {
-            var route = page.Route != null ? $" (route: {page.Route})" : "";
             var file = page.FilePath != null ? $" — {page.FilePath}" : "";
             var isHome = string.Equals(page.Name, home, StringComparison.OrdinalIgnoreCase) ? "  [HOME]" : "";
-            sb.AppendLine($"- {page.Name}{route}{file}{isHome}");
+            sb.AppendLine($"- {page.Name}{file}{isHome}");
         }
 
         sb.AppendLine();

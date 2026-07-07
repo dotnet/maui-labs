@@ -64,8 +64,7 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
 
         var projectIndex = new ProjectIndex { Pages = pages };
 
-        // Resolve Shell navigation: map each ShellContent's route onto its hosted page,
-        // and mark the first ShellContent as the app's home/entry screen.
+        // Identify the app's home/entry screen (the first ShellContent's hosted page).
         ResolveShellNavigation(pages, projectIndex);
 
         // Emit per-page files
@@ -100,15 +99,12 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Walk the Shell page(s) to (a) mark the first ShellContent as the entry/home screen and
-    /// (b) copy each ShellContent's route onto the page it hosts. This makes the home screen a
-    /// discoverable fact and gives Shell-hosted pages their routes.
+    /// Walk the Shell page(s) to mark the first ShellContent (the screen the app opens to) as the
+    /// entry/home screen. This makes the home screen a discoverable, human-relevant fact. Routes are
+    /// an implementation detail and are never captured.
     /// </summary>
     private static void ResolveShellNavigation(System.Collections.Generic.List<PageModel> pages, ProjectIndex projectIndex)
     {
-        PageModel? FindPage(string? className)
-            => className == null ? null : pages.Find(p => string.Equals(p.ClassName, className, System.StringComparison.OrdinalIgnoreCase));
-
         foreach (var shell in pages)
         {
             if (!string.Equals(shell.RootType, "Shell", System.StringComparison.OrdinalIgnoreCase))
@@ -117,14 +113,6 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
             var order = 0;
             foreach (var nav in EnumerateShellContent(shell.Elements))
             {
-                // Map route onto the hosted page.
-                if (nav.NavigationTarget != null && nav.CommandName != null)
-                {
-                    var target = FindPage(nav.NavigationTarget);
-                    if (target != null && target.Route == null)
-                        target.Route = nav.CommandName;
-                }
-
                 // The first ShellContent that hosts a page is the entry/home screen.
                 if (order == 0 && nav.NavigationTarget != null)
                 {

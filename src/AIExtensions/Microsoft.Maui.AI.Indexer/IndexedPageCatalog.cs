@@ -32,8 +32,4 @@ public abstract class IndexedPageCatalog
     /// <summary>Find a page by its class name.</summary>
     public IndexedPage? FindByName(string name)
         => Pages.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>Find a page by its Shell route.</summary>
-    public IndexedPage? FindByRoute(string route)
-        => Pages.FirstOrDefault(p => string.Equals(p.Route, route, StringComparison.OrdinalIgnoreCase));
 }

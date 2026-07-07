@@ -5,7 +5,7 @@ using Microsoft.Maui.AI.Indexer.Generators.Models;
 
 namespace Microsoft.Maui.AI.Indexer.Generators.Parsing;
 
-/// <summary>Parses Shell XAML for routes, tabs, and flyout items.</summary>
+/// <summary>Parses Shell XAML for tabs, flyout items, and the app's home screen.</summary>
 internal static class ShellParser
 {
     /// <summary>Parse Shell root element into semantic UI elements representing navigation.</summary>
@@ -34,20 +34,18 @@ internal static class ShellParser
     private static void ParseShellNavigationElement(XElement element, List<SemanticNode> elements)
     {
         var name = element.Name.LocalName;
-        var route = element.Attribute("Route")?.Value;
         var title = element.Attribute("Title")?.Value;
 
         if (name == "ShellContent")
         {
+            // Routes are an implementation detail and are never captured. Only the human-visible
+            // Title (if any) and the hosted page (used to identify HOME) are kept.
             var ui = new SemanticNode
             {
                 TypeName = "ShellContent",
-                Text = title ?? route ?? "",
+                Text = title ?? "",
                 NavigationTarget = ExtractContentPage(element),
             };
-
-            if (route != null)
-                ui.CommandName = route; // Reuse CommandName to store route
 
             elements.Add(ui);
         }
@@ -68,21 +66,16 @@ internal static class ShellParser
                 Text = title ?? "",
             };
 
-            if (route != null)
-                ui.CommandName = route;
-
             // Walk children for ShellContent
             foreach (var child in element.Elements())
             {
                 if (child.Name.LocalName == "ShellContent")
                 {
-                    var shellContentRoute = child.Attribute("Route")?.Value;
                     var shellContentTitle = child.Attribute("Title")?.Value;
                     ui.Children.Add(new SemanticNode
                     {
                         TypeName = "ShellContent",
-                        Text = shellContentTitle ?? shellContentRoute ?? "",
-                        CommandName = shellContentRoute,
+                        Text = shellContentTitle ?? "",
                         NavigationTarget = ExtractContentPage(child),
                     });
                 }

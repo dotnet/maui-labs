@@ -516,8 +516,8 @@ public class ExactOutputTests
 
             File: AppShell.xaml
 
-            - ShellContent: "Home" [route: home]
-            - ShellContent: "Settings" [route: settings]
+            - ShellContent: "Home"
+            - ShellContent: "Settings"
             """,
             md);
     }

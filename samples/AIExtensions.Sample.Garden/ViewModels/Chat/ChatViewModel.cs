@@ -163,17 +163,28 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                 2. get_page_ui the HOME screen and read it.
                 3. Find the DESTINATION screen (the one whose control finishes the task) using
                    search_ui / get_page_ui, and confirm that control exists.
+                   - CRITICAL: search_ui results are NOT the path — they are only endpoints. The
+                     screens the user must tap THROUGH to get there (a catalog, a list) are usually
+                     NOT in the search results. Clear search evidence does NOT mean you know the
+                     path. You must still load every screen in between yourself, even when the flow
+                     "feels obvious" from other apps. Assuming a typical flow is a failure.
                 4. TRACE THE WHOLE PATH, one screen at a time, from HOME to the destination:
-                   - On the screen you are on, find the button that moves toward the goal. Its hint
-                     says what it opens (e.g. "Opens the product catalog"); match that to a screen in
-                     list_app_pages (by name or route) and get_page_ui THAT screen.
+                   - Read the CURRENT screen's controls. If a control's hint says it opens/shows/goes
+                     to another screen (e.g. "Opens the product catalog", "Opens product details"),
+                     that is a SEPARATE screen you have NOT read yet. It is the next stop on the path.
+                   - BEFORE you describe ANY action on that next screen, load it: call search_ui with
+                     the key words from the hint (e.g. "product catalog", "product details"), or scan
+                     list_app_pages, then get_page_ui it. Only after loading it do you know its real
+                     controls (e.g. that a catalog item is opened by a "Details" button, not by
+                     tapping its name).
                    - Repeat until you reach the destination. The catalog / list / detail screens in
                      between are PART OF THE PATH — read every one, even if search_ui did not return
-                     it.
+                     it. Never skip from HOME straight to the destination.
                 5. Only after you have read HOME, EVERY screen in between, and the destination, write
                    a NUMBERED walkthrough. Step 1 is an action on HOME. Each step names, in quotes,
                    the exact button/field from a screen you read this turn, and says which screen
-                   opens next.
+                   opens next. If a step involves choosing an item from a list, it MUST name the
+                   button that opens it (from the list screen you read), never "select/tap the item".
 
                 HARD RULES for the steps:
                 - You may name ONLY controls that appeared in a get_page_ui result you read THIS turn.

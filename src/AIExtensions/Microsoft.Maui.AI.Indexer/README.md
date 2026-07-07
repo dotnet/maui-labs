@@ -58,13 +58,11 @@ public abstract class IndexedPageCatalog
 {
     public abstract IReadOnlyList<IndexedPage> Pages { get; }
     public IndexedPage? FindByName(string name);
-    public IndexedPage? FindByRoute(string route);
 }
 
 public sealed class IndexedPage
 {
     public string Name { get; }
-    public string? Route { get; }
     public string? FilePath { get; }
     public string Markdown { get; }
 }
@@ -80,7 +78,7 @@ does exactly this, backing three tools with `MyAppIndexedPageCatalog.Default`:
 ```csharp
 // list_app_pages — enumerate every indexed page
 foreach (var page in MyAppIndexedPageCatalog.Default.Pages)
-    Console.WriteLine($"{page.Name} ({page.Route}) — {page.FilePath}");
+    Console.WriteLine($"{page.Name} — {page.FilePath}");
 
 // get_page_ui — return one page's full semantic Markdown
 var md = MyAppIndexedPageCatalog.Default.FindByName("ProductDetailPage")?.Markdown;

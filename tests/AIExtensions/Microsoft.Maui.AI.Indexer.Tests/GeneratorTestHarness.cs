@@ -139,12 +139,11 @@ namespace Microsoft.Maui.AI.Indexer
 {
     public sealed class IndexedPage
     {
-        public IndexedPage(string name, string? route, string? filePath, string markdown)
+        public IndexedPage(string name, string? filePath, string markdown)
         {
-            Name = name; Route = route; FilePath = filePath; Markdown = markdown;
+            Name = name; FilePath = filePath; Markdown = markdown;
         }
         public string Name { get; }
-        public string? Route { get; }
         public string? FilePath { get; }
         public string Markdown { get; }
     }

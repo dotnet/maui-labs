@@ -412,7 +412,7 @@ public class AdditionalExactTests
 
             File: AppShell.xaml
 
-            - ShellContent: "Dashboard" [route: dash]
+            - ShellContent: "Dashboard"
             """,
             md);
     }
@@ -442,9 +442,9 @@ public class AdditionalExactTests
 
             File: AppShell.xaml
 
-            - Tab: "Browse" [route: browse]
-              - ShellContent: "Catalog" [route: catalog]
-              - ShellContent: "Search" [route: search]
+            - Tab: "Browse"
+              - ShellContent: "Catalog"
+              - ShellContent: "Search"
             """,
             md);
     }

@@ -61,9 +61,6 @@ internal sealed class MarkdownBuilder
         mb.AppendHeading(1, page.ClassName);
         mb.AppendLine();
 
-        if (page.Route != null)
-            mb.AppendLine($"Route: {page.Route}");
-
         if (!string.IsNullOrEmpty(page.FilePath))
             mb.AppendLine($"File: {page.FilePath}");
 
@@ -254,10 +251,10 @@ internal sealed class MarkdownBuilder
 
     private static void RenderShellElement(MarkdownBuilder mb, SemanticNode el)
     {
-        var route = el.CommandName != null ? $" [route: {el.CommandName}]" : "";
+        var label = !string.IsNullOrEmpty(el.Text) ? $": \"{el.Text}\"" : "";
         var hosts = el.NavigationTarget != null ? $" → {el.NavigationTarget}" : "";
         var home = el.IsEntry ? "  (HOME — the screen the app opens to; users start here)" : "";
-        mb.AppendLine($"- {el.TypeName}: \"{el.Text}\"{hosts}{route}{home}");
+        mb.AppendLine($"- {el.TypeName}{label}{hosts}{home}");
 
         if (el.Children.Count > 0)
         {

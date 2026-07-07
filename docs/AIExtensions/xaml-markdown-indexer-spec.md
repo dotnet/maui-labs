@@ -91,7 +91,7 @@ announce, **not** visual layout. This principle drives every rule in this docume
 - Walking each document's element tree and extracting semantic content.
 - Following references from one XAML document to another (user controls, hosted pages).
 - Emitting one Markdown representation per page plus a per‑assembly aggregate index.
-- Extracting Shell navigation structure, routes, and the app's home/entry screen.
+- Extracting the app's home/entry screen from the Shell (which screen the app opens to).
 
 ### Non‑goals
 
@@ -118,8 +118,8 @@ Processing occurs in ordered stages. Conceptually:
    (see [§19](#19-error-handling-and-resilience)).
 3. **Resolve cross‑file references.** Replace references to user controls/views with the inlined
    semantic content of the referenced document (see [§15](#15-user-controls-and-cross-file-resolution)).
-4. **Resolve Shell navigation.** Map each Shell route onto the page it hosts and identify the
-   app's home/entry screen (see [§16](#16-shell-navigation-and-routing)).
+4. **Identify the home screen.** From the Shell, determine which screen the app opens to
+   (see [§16](#16-shell-navigation-and-routing)).
 5. **Emit artifacts.** Render each page's element tree to Markdown and embed it in a per‑page
    generated type; emit one per‑assembly aggregate index enumerating all pages
    (see [§17](#17-generated-artifacts-and-runtime-contract)).
@@ -172,7 +172,6 @@ Each page renders to a single Markdown document with this structure:
 ```
 # {PageName}
 
-Route: {route}            ← present only if the page has a Shell route
 File: {relative/path.xaml} ← present only if a file path is known
 
 {body — one line per semantic element, nested by indentation}
@@ -181,9 +180,9 @@ File: {relative/path.xaml} ← present only if a file path is known
 Rules:
 
 - **Title.** The first line is a level‑1 Markdown heading containing the page name: `# {PageName}`.
-- **Header block.** A single blank line follows the title. Then, if the page has a Shell route, a
-  `Route: {route}` line; then, if a file path is known, a `File: {path}` line. A single blank line
-  separates the header block from the body.
+- **Header block.** A single blank line follows the title. Then, if a file path is known, a
+  `File: {path}` line. A single blank line separates the header block from the body. (Routes are an
+  implementation detail and are never shown — the index contains only human‑perceivable content.)
 - **Body.** Each semantic element is one Markdown list item beginning with `- `. Nesting is
   expressed by **two spaces of indentation per level**.
 - **Whitespace normalization.** The document has no leading or trailing blank lines. There is
@@ -747,44 +746,37 @@ in‑spirit (a placeholder), not failures.
 
 ---
 
-## 16. Shell, navigation, and routing
+## 16. Shell and the home screen
 
-When a document's root type is `Shell`, it is parsed for **navigation structure** instead of page
-content. The Shell parse recognizes `TabBar`, `Tab`, `FlyoutItem`, and `ShellContent`.
+When a document's root type is `Shell`, it is parsed only to (a) list the top‑level content it hosts
+and (b) identify the app's home screen. The Shell parse recognizes `TabBar`, `Tab`, `FlyoutItem`,
+and `ShellContent`. **Routes are an implementation detail and are never captured or shown** — a user
+never perceives a route, so it does not belong in an accessibility‑first index.
 
 ### 16.1 Navigation elements
 
-- **`ShellContent`** renders as `- ShellContent: "{Title or Route}"[ → {HostedPage}] [route: {route}]`:
-  - The display text is the `Title` if present, otherwise the `Route`, otherwise empty.
-  - If the `ShellContent` names a hosted page via its content template (see §16.3), the hosted
+- **`ShellContent`** renders as `- ShellContent[: "{Title}"][ → {HostedPage}]`:
+  - The display text is the `Title` if present, otherwise omitted (no quotes).
+  - If the `ShellContent` names a hosted page via its content template (see §16.2), the hosted
     page's simple class name is shown after an arrow: `→ {HostedPage}`.
-  - The `Route`, if present, is shown as a `[route: {route}]` annotation.
 - **`TabBar`** and **`FlyoutItem`** are transparent grouping containers: their `ShellContent`/`Tab`
   children are surfaced directly (the `TabBar`/`FlyoutItem` itself is not rendered as a line).
-- **`Tab`** renders as `- Tab: "{Title}" [route: {route}]` with its child `ShellContent`s nested
-  beneath it.
+- **`Tab`** renders as `- Tab: "{Title}"` with its child `ShellContent`s nested beneath it.
 
 Examples:
 
 ```
-- ShellContent: "Home" [route: home]
-- ShellContent: "Settings" [route: settings]
+- ShellContent: "Home"
+- ShellContent: "Settings"
 ```
 
 ```
-- Tab: "Browse" [route: browse]
-  - ShellContent: "Catalog" [route: catalog]
-  - ShellContent: "Search" [route: search]
+- Tab: "Browse"
+  - ShellContent: "Catalog"
+  - ShellContent: "Search"
 ```
 
-### 16.2 Route mapping onto pages
-
-After all documents are parsed, each `ShellContent`'s route is **copied onto the page it hosts**.
-That page then reports that route in its own header (`Route: {route}`) and is discoverable by
-route. A page that is only reachable through code‑based route registration (not declared in the
-Shell) has no route in its header.
-
-### 16.3 Resolving the hosted page
+### 16.2 Resolving the hosted page
 
 A `ShellContent`'s hosted page is resolved from its content template, in either form:
 
@@ -795,7 +787,7 @@ A `ShellContent`'s hosted page is resolved from its content template, in either 
 Any namespace prefix on the type is dropped; the **simple class name** is used, which matches the
 hosted page's page name.
 
-### 16.4 Home / entry screen
+### 16.3 Home / entry screen
 
 The **first** `ShellContent` (in document order, including those nested under a `Tab`) that hosts a
 page identifies the app's **home/entry screen** — the screen shown when the app launches and where
@@ -837,10 +829,9 @@ Exactly one aggregate index is emitted per assembly:
 - It exposes:
   - `public static {Type} Default { get; }` — a ready‑to‑use singleton.
   - `Pages` — the list of every indexed page, as `IndexedPage` records, **ordered alphabetically by
-    page name**. Each entry carries the page's name, route (or none), file path (or none), and its
-    Markdown.
+    page name**. Each entry carries the page's name, file path (or none), and its Markdown.
   - `EntryPageName` — the home/entry screen's page name, emitted **only** when a home screen was
-    resolved from a Shell (see [§16.4](#164-home--entry-screen)).
+    resolved from a Shell (see [§16.3](#163-home--entry-screen)).
 - The page list is a plain static array — **no reflection, no module initializers** — so it is
   trimming‑ and AOT‑safe.
 
@@ -848,12 +839,10 @@ Exactly one aggregate index is emitted per assembly:
 
 Consumers interact with two runtime types (provided by the runtime library, not generated):
 
-- **`IndexedPage`** — an indexed page: `Name`, `Route` (nullable), `FilePath` (nullable),
-  `Markdown`.
+- **`IndexedPage`** — an indexed page: `Name`, `FilePath` (nullable), `Markdown`.
 - **`IndexedPageCatalog`** — the base of every aggregate:
   - `Pages` — all indexed pages.
   - `FindByName(name)` — look up a page by class name (case‑insensitive).
-  - `FindByRoute(route)` — look up a page by Shell route (case‑insensitive).
   - `EntryPageName` — the home/entry page name (or none).
   - `Home` — the home/entry `IndexedPage` (or none).
 
@@ -875,7 +864,7 @@ concern and does not alter the Markdown.
 - **Stable ordering.** Within a page, elements follow document order after transformation. In the
   aggregate, pages are ordered alphabetically by page name.
 - **Indentation.** Exactly two spaces per nesting level; list items always begin with `- `.
-- **Header.** `# {PageName}`, one blank line, optional `Route:` line, optional `File:` line, one
+- **Header.** `# {PageName}`, one blank line, optional `File:` line, one
   blank line, then the body. No leading/trailing blank lines; no blank lines within the body.
 - **Verbatim text.** On‑screen text, labels, hints, and placeholders are reproduced exactly,
   including Unicode, emoji, RTL text, and quotes. Nothing is translated or paraphrased.
@@ -932,8 +921,8 @@ container-group = "When " brackets ":"        ; conditional structural container
               | user-control                  ; "[TypeName]:"  (+ optional condition annotation)
               | collection                     ; "{Type}: \"{source}\"" (+ [grouped, …])
               | bindable-layout                ; "{Type} with items from \"{source}\"" (+ cond) ":"
-shell-item    = "ShellContent: \"" text "\"" [ " → " page ] [ " [route: " route "]" ] [ home-marker ]
-              | "Tab: \"" title "\"" [ " [route: " route "]" ]
+shell-item    = "ShellContent" [ ": \"" title "\"" ] [ " → " page ] [ home-marker ]
+              | "Tab: \"" title "\""
 home-marker   = "  (HOME — the screen the app opens to; users start here)"
 ```
 
@@ -989,13 +978,12 @@ Given these documents:
 
 ### Output — `ProductDetailPage`
 
-Because the Shell's first `ShellContent` hosts `ProductDetailPage`, its route `products` is mapped
-onto the page (and it is the home screen).
+Because the Shell's first `ShellContent` hosts `ProductDetailPage`, it is the home screen. (The
+`Route="products"` in the Shell is an implementation detail and never appears in the output.)
 
 ```
 # ProductDetailPage
 
-Route: products
 File: Pages/ProductDetailPage.xaml
 
 - Button: "Back" [hint: Returns to catalog]
@@ -1016,13 +1004,13 @@ File: Pages/ProductDetailPage.xaml
 
 File: AppShell.xaml
 
-- ShellContent: "Products" → ProductDetailPage [route: products]  (HOME — the screen the app opens to; users start here)
+- ShellContent: "Products" → ProductDetailPage  (HOME — the screen the app opens to; users start here)
 ```
 
 ### Aggregate
 
 The assembly's aggregate index exposes both pages (ordered alphabetically: `AppShell`,
-`ProductDetailPage`), each with its name, route, file path, and Markdown, and reports the entry
+`ProductDetailPage`), each with its name, file path, and Markdown, and reports the entry
 page name `ProductDetailPage`.
 
 ---
@@ -1129,6 +1117,6 @@ Static `IsVisible="False"` is not a condition — the element is omitted entirel
 - **User‑control reference** — a use of another XAML view/control by type; rendered as `[TypeName]:`
   with the referenced content inlined.
 - **Aggregate index** — the per‑assembly type that enumerates every indexed page and exposes lookup
-  by name/route and the home screen.
+  by name and the home screen.
 - **Home / entry screen** — the screen the app opens to, taken from the first Shell content that
   hosts a page; surfaced as an explicit fact so navigation walkthroughs can start there.

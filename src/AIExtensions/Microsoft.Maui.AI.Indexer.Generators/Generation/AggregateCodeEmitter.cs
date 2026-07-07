@@ -48,13 +48,12 @@ internal static class AggregateCodeEmitter
 
         foreach (var page in index.Pages.OrderBy(p => p.ClassName))
         {
-            var route = page.Route != null ? $"\"{Escape(page.Route)}\"" : "null";
             var filePath = !string.IsNullOrEmpty(page.FilePath) ? $"\"{Escape(page.FilePath)}\"" : "null";
             var fqnClass = !string.IsNullOrEmpty(page.Namespace)
                 ? $"global::{page.Namespace}.{SanitizeIdentifier(page.ClassName)}_Indexed"
                 : $"global::{SanitizeIdentifier(page.ClassName)}_Indexed";
 
-            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {route}, {filePath}, {fqnClass}.Markdown),");
+            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {filePath}, {fqnClass}.Markdown),");
         }
 
         sb.AppendLine("    };");
