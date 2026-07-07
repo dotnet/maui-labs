@@ -66,7 +66,7 @@ extends:
   parameters:
     pool:
       name: NetCore1ESPool-Internal
-      image: windows.vs2026preview.scout.amd64
+      image: windows.vs2026.amd64
       os: windows
     # Required for publishing to external feeds like nuget.org
     settings:
@@ -97,7 +97,7 @@ extends:
             displayName: DevFlow - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -125,7 +125,7 @@ extends:
             displayName: Cli - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -134,10 +134,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -149,7 +146,7 @@ extends:
             displayName: AI Extensions - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -163,7 +160,9 @@ extends:
             # The AI Extensions slnf now includes the Garden MAUI showcase (android/ios/
             # maccatalyst/windows) and the Chat.Controls MAUI library, so the MAUI and Apple
             # workloads are required. Apple TFMs cross-compile on Windows using the workload
-            # reference assemblies. Mirrors the DevFlow job's provisioning.
+            # reference assemblies. Mirrors the DevFlow job's provisioning (the shared
+            # install-dotnet-sdk.yml template only installs the SDK, not the workloads, and
+            # provisions a system SDK rather than the Arcade .dotnet that cibuild uses).
             - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI and Apple workloads
             - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true samples\AIExtensions.Sample.Garden\AIExtensions.Sample.Garden.csproj
@@ -179,7 +178,7 @@ extends:
             displayName: AppProjectReference - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -188,10 +187,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -207,7 +203,7 @@ extends:
             displayName: Linux GTK4 - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -216,10 +212,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -247,6 +240,11 @@ extends:
             - script: |
                 eng/common/dotnet.sh --info
               displayName: Provision .NET SDK via Arcade
+              env:
+                # Hosted macOS sets DOTNET_INSTALL_DIR to /Users/runner/.dotnet.
+                # Force Arcade to provision repo-local .dotnet because the next
+                # step invokes .dotnet/dotnet directly.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
@@ -260,6 +258,9 @@ extends:
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
               displayName: Build EssentialsAI (macOS)
+              env:
+                # Use the same SDK root that received the workload installation.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - task: CopyFiles@2
               displayName: Copy Native Binaries
               inputs:
@@ -273,7 +274,7 @@ extends:
             dependsOn: EssentialsAI_macOS
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -317,10 +318,7 @@ extends:
                 Release:
                   _BuildConfig: Release
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: |
                 sudo apt-get update
                 sudo apt-get install -y \
@@ -347,7 +345,7 @@ extends:
             displayName: WPF - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -374,7 +372,7 @@ extends:
             displayName: macOS AppKit - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -413,7 +411,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -436,7 +434,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -468,7 +466,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -492,7 +490,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -524,7 +522,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -547,7 +545,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -579,7 +577,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -602,7 +600,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -634,7 +632,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -657,7 +655,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -689,7 +687,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -712,7 +710,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -744,7 +742,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -767,7 +765,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -799,7 +797,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -822,7 +820,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob

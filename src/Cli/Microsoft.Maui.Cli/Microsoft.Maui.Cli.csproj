@@ -21,6 +21,11 @@
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <!-- Let the latest packaged tool TFM run on newer major runtimes. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
@@ -76,6 +81,9 @@
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-debug\**\*" LogicalName="devflow.skills/maui-devflow-debug/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-session-review\**\*" LogicalName="devflow.skills/maui-devflow-session-review/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
   </ItemGroup>

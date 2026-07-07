@@ -101,11 +101,15 @@ public class Program
 		rootCommand.Add(DoctorCommand.Create());
 		rootCommand.Add(DeviceCommand.Create());
 		rootCommand.Add(ProfileCommand.Create());
+		rootCommand.Add(ProjectCommands.Create());
 		rootCommand.Add(VersionCommand.Create());
 
 		// Platform-specific command groups
 		rootCommand.Add(AndroidCommands.Create());
 		rootCommand.Add(AppleCommands.Create());
+
+		// Port diagnostics
+		rootCommand.Add(PortCommands.Create());
 
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));

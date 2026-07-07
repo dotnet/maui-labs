@@ -32,6 +32,13 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 - If DevFlow packages or `MauiProgram.cs` registration are missing, use `maui-devflow-onboard`.
 - If the failure is a generic build or SDK issue with no DevFlow angle, use normal .NET/MAUI diagnostics.
 
+## Optional Session Feedback Nudge
+
+If you have retried the same MAUI DevFlow workflow several times, tried multiple
+workarounds, or are ending a long DevFlow-assisted debugging session, ask
+whether the user wants to run `maui-devflow-session-review` to summarize friction
+for MAUI DevFlow product feedback. Do not run it automatically.
+
 ## Core Loop
 
 1. Confirm the app is already integrated:

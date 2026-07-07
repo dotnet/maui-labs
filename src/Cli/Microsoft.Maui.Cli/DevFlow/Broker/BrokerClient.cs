@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -41,6 +42,12 @@ public static class BrokerClient
         return await IsBrokerAliveAsync(port) ? port : null;
     }
 
+    internal static int? GetRunningBrokerPort()
+    {
+        var port = ReadBrokerPort() ?? BrokerServer.DefaultPort;
+        return IsBrokerAlive(port) ? port : null;
+    }
+
     /// <summary>
     /// Lists all agents registered with the broker.
     /// </summary>
@@ -49,6 +56,19 @@ public static class BrokerClient
         try
         {
             var response = await _http.GetStringAsync($"http://localhost:{brokerPort}/api/agents");
+            return CliJson.Deserialize<AgentRegistration[]>(response);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static AgentRegistration[]? ListAgents(int brokerPort)
+    {
+        try
+        {
+            var response = GetString($"http://localhost:{brokerPort}/api/agents");
             return CliJson.Deserialize<AgentRegistration[]>(response);
         }
         catch
@@ -74,30 +94,58 @@ public static class BrokerClient
     /// Tries: broker lookup by project hash → single agent auto-select → null.
     /// </summary>
     public static async Task<int?> ResolveAgentPortAsync(int brokerPort, string? projectPath = null, string? tfm = null)
+        => (await ResolveAgentAsync(brokerPort, projectPath, tfm))?.Port;
+
+    /// <summary>
+    /// Resolves the agent registration for the current project context.
+    /// Tries: broker lookup by project hash → single agent auto-select → null.
+    /// </summary>
+    public static async Task<AgentRegistration?> ResolveAgentAsync(int brokerPort, string? projectPath = null, string? tfm = null)
     {
         var agents = await ListAgentsAsync(brokerPort);
         if (agents == null || agents.Length == 0) return null;
 
+        return ResolveAgent(agents, projectPath, tfm);
+    }
+
+    public static AgentRegistration? ResolveAgent(int brokerPort, string? projectPath = null, string? tfm = null)
+    {
+        var agents = ListAgents(brokerPort);
+        if (agents == null || agents.Length == 0) return null;
+
+        return ResolveAgent(agents, projectPath, tfm);
+    }
+
+    static AgentRegistration? ResolveAgent(AgentRegistration[] agents, string? projectPath = null, string? tfm = null)
+    {
         // If project+TFM provided, look for exact match
         if (projectPath != null && tfm != null)
         {
             var id = AgentRegistration.ComputeId(projectPath, tfm);
             var match = agents.FirstOrDefault(a => a.Id == id);
-            if (match != null) return match.Port;
+            if (match != null) return match;
+
+            var tfmMatches = agents
+                .Where(a => AgentMatchesProject(a, projectPath) && a.Tfm.Equals(tfm, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (tfmMatches.Length == 1) return tfmMatches[0];
         }
 
         // If project provided (no TFM), match by project path
         if (projectPath != null)
         {
-            var matches = agents.Where(a => a.Project == projectPath).ToArray();
-            if (matches.Length == 1) return matches[0].Port;
+            var matches = agents.Where(a => AgentMatchesProject(a, projectPath)).ToArray();
+            if (matches.Length == 1) return matches[0];
         }
 
         // If only one agent, auto-select
-        if (agents.Length == 1) return agents[0].Port;
+        if (agents.Length == 1) return agents[0];
 
         return null;
     }
+
+    static bool AgentMatchesProject(AgentRegistration agent, string projectPath)
+        => agent.Project.Equals(projectPath, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Sends a shutdown request to the broker.
@@ -128,6 +176,54 @@ public static class BrokerClient
         {
             return false;
         }
+    }
+
+    private static bool IsBrokerAlive(int port)
+    {
+        try
+        {
+            return TryConnect(IPAddress.Loopback, port) || TryConnect(IPAddress.IPv6Loopback, port);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryConnect(IPAddress address, int port)
+    {
+        using var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        {
+            Blocking = false
+        };
+
+        try
+        {
+            socket.Connect(new IPEndPoint(address, port));
+            return true;
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode is SocketError.WouldBlock or SocketError.InProgress or SocketError.AlreadyInProgress)
+        {
+            if (!socket.Poll(500_000, SelectMode.SelectWrite))
+                return false;
+
+            var error = (int)socket.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Error)!;
+            return error == 0;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+    }
+
+    private static string GetString(string url)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var response = _http.Send(request);
+        response.EnsureSuccessStatusCode();
+        using var stream = response.Content.ReadAsStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd();
     }
 
     private static int? ReadBrokerPort()
@@ -171,13 +267,46 @@ public static class BrokerClient
         var csproj = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj").FirstOrDefault();
         if (csproj is not null)
         {
-            var port = await ResolveAgentPortAsync(brokerPort, Path.GetFullPath(csproj));
-            if (port.HasValue) return port.Value;
+            var agent = await ResolveAgentAsync(brokerPort, Path.GetFullPath(csproj));
+            if (agent is not null) return agent.Port;
         }
 
         // Try auto-select (single agent)
-        var autoPort = await ResolveAgentPortAsync(brokerPort);
-        if (autoPort.HasValue) return autoPort.Value;
+        var autoAgent = await ResolveAgentAsync(brokerPort);
+        if (autoAgent is not null) return autoAgent.Port;
+
+        // No single match — return null so callers can handle multi-agent case
+        return null;
+    }
+
+    /// <summary>
+    /// High-level agent resolution: ensure broker running → resolve by project → auto-select → null.
+    /// Returns the resolved broker registration when one can be selected unambiguously.
+    /// </summary>
+    public static async Task<AgentRegistration?> ResolveAgentForProjectAsync()
+    {
+        var brokerPort = ReadBrokerPort() ?? BrokerServer.DefaultPort;
+
+        if (!await IsBrokerAliveAsync(brokerPort))
+        {
+            var started = await EnsureBrokerRunningAsync();
+            if (started.HasValue)
+                brokerPort = started.Value;
+            else
+                return null;
+        }
+
+        // Try project-specific resolution
+        var csproj = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj").FirstOrDefault();
+        if (csproj is not null)
+        {
+            var agent = await ResolveAgentAsync(brokerPort, Path.GetFullPath(csproj));
+            if (agent is not null) return agent;
+        }
+
+        // Try auto-select (single agent)
+        var autoAgent = await ResolveAgentAsync(brokerPort);
+        if (autoAgent is not null) return autoAgent;
 
         // No single match — return null so callers can handle multi-agent case
         return null;

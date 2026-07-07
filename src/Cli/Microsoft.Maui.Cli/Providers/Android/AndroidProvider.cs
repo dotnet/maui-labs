@@ -32,6 +32,10 @@ public class AndroidProvider : IAndroidProvider
 	internal static string DefaultSystemImagePackage =>
 		$"system-images;android-{DefaultAndroidApiLevel};google_apis;{(PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64")}";
 
+	// Sentinel returned by ExtractApiLevel for non-numeric ids (e.g. codenames); such
+	// images are excluded from auto-detect. Hoisted to avoid a per-element allocation.
+	static readonly Version NoApiLevel = new(0, 0);
+
 	public string? SdkPath => _sdkPath ??= PlatformDetector.Paths.GetAndroidSdkPath();
 	public string? JdkPath => _jdkPath ??= _jdkManager.DetectedJdkPath ?? PlatformDetector.Paths.GetJdkPath();
 
@@ -286,34 +290,46 @@ public class AndroidProvider : IAndroidProvider
 	public async Task<string?> GetMostRecentSystemImageAsync(CancellationToken cancellationToken = default)
 	{
 		var packages = await GetInstalledPackagesAsync(cancellationToken);
-
-		// Filter to system images and sort by Android API level (descending)
-		// System image format: system-images;android-XX;google_apis;arm64-v8a
-		var systemImages = packages
-			.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
-			.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
-			.Where(x => x.ApiLevel > 0)
-			.OrderByDescending(x => x.ApiLevel)
-			.ToList();
-
-		return systemImages.FirstOrDefault()?.Package.Path;
+		return FindMostRecentSystemImage(packages);
 	}
 
-	static int ExtractApiLevel(string systemImagePath)
+	// Selects the installed system image with the highest Android API level.
+	// System image format: system-images;android-XX;google_apis;arm64-v8a
+	internal static string? FindMostRecentSystemImage(IEnumerable<SdkPackage> packages)
 	{
-		// Parse "system-images;android-35;google_apis;arm64-v8a" -> 35
+		ArgumentNullException.ThrowIfNull(packages);
+
+		return packages
+			.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
+			.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
+			.Where(x => x.ApiLevel > NoApiLevel)
+			.OrderByDescending(x => x.ApiLevel)
+			.FirstOrDefault()?.Package.Path;
+	}
+
+	internal static Version ExtractApiLevel(string systemImagePath)
+	{
+		// Parse "system-images;android-35;google_apis;arm64-v8a" -> 35.0
 		var parts = systemImagePath.Split(';');
 		if (parts.Length >= 2)
 		{
-			var androidPart = parts[1]; // "android-35"
+			var androidPart = parts[1]; // "android-35" or "android-37.0"
 			if (androidPart.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
 			{
-				var levelStr = androidPart.Substring(8); // Remove "android-"
-				if (int.TryParse(levelStr, out var level))
-					return level;
+				var levelStr = androidPart.Substring("android-".Length);
+
+				// Platforms may carry a minor revision suffix (e.g. "android-37.0"); keep it
+				// so newer revisions sort ahead of older ones (37.1 > 37.0) rather than being
+				// silently dropped. Mirrors the parse ladder in AndroidCommands.Sdk.cs:
+				// "37.0" -> 37.0, plain "35" -> 35.0, and non-numeric codenames
+				// (e.g. "android-VanillaIceCream") -> 0.0 so they're excluded from auto-detect.
+				if (Version.TryParse(levelStr, out var version))
+					return version;
+				if (int.TryParse(levelStr, out var major))
+					return new Version(major, 0);
 			}
 		}
-		return 0;
+		return NoApiLevel;
 	}
 
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses = false,
@@ -324,6 +340,12 @@ public class AndroidProvider : IAndroidProvider
 
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses,
 		Action<string, int, int>? onProgress, CancellationToken cancellationToken = default)
+	{
+		await _sdkManager.InstallPackagesAsync(packages, acceptLicenses, onProgress, cancellationToken);
+	}
+
+	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses,
+		Action<AndroidPackageInstallProgress>? onProgress, CancellationToken cancellationToken = default)
 	{
 		await _sdkManager.InstallPackagesAsync(packages, acceptLicenses, onProgress, cancellationToken);
 	}

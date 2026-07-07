@@ -168,46 +168,132 @@
               "upload",
               "delete"
             ]
+          },
+          "theme": {
+            "version": 1,
+            "features": [
+              "get",
+              "set"
+            ],
+            "supported": true
+          },
+          "app.theme": {
+            "version": 1,
+            "features": [
+              "get",
+              "set"
+            ],
+            "supported": true
           }
         }
       ]
     },
     "extensions": {
       "type": "object",
-      "description": "Map of extension namespaces (reverse-domain notation) to their route registrations.",
+      "description": "Map of extension namespaces (reverse-domain notation) to their self-describing tool registrations. Each extension is discoverable and invocable by CLI and MCP clients without hardcoded extension-specific code.",
       "additionalProperties": {
-        "type": "object",
-        "required": [
-          "routes"
-        ],
-        "properties": {
-          "routes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "method",
-                "path"
-              ],
-              "properties": {
-                "method": {
-                  "type": "string",
-                  "description": "HTTP method for this route (e.g. 'GET', 'POST')."
-                },
-                "path": {
-                  "type": "string",
-                  "description": "URL path for this route."
-                }
-              }
-            },
-            "description": "Routes registered by this extension."
-          },
-          "description": {
-            "type": "string",
-            "description": "Human-readable description of this extension."
-          }
+        "$ref": "#/$defs/ExtensionDescriptor"
+      }
+    }
+  },
+  "$defs": {
+    "ExtensionDescriptor": {
+      "type": "object",
+      "required": [
+        "version",
+        "description",
+        "tools"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Semantic version of this extension. Changes to this value signal clients to refresh cached tool definitions.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
         },
-        "description": "Extension details including registered routes."
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this extension provides."
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExtensionTool"
+          },
+          "description": "Self-describing tools exposed by this extension. Each tool maps to an HTTP endpoint under /api/v1/ext/{namespace}/."
+        }
+      },
+      "description": "Extension descriptor with version, description, and self-describing tools."
+    },
+    "ExtensionTool": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "method",
+        "path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Machine-readable tool name, unique within the extension (e.g. 'build_info', 'capture_message').",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this tool does. Used by extension discovery clients."
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE"
+          ],
+          "description": "HTTP method for this tool's endpoint."
+        },
+        "path": {
+          "type": "string",
+          "description": "Full URL path for this tool (e.g. '/api/v1/ext/com.example.diagnostics/build-info')."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "JSON Schema describing the tool's input parameters. For GET requests, parameters are query strings. For POST, PUT, and DELETE, parameters are the JSON request body.",
+          "additionalProperties": true
+        },
+        "returns": {
+          "type": "object",
+          "description": "JSON Schema describing the tool's response body.",
+          "additionalProperties": true
+        },
+        "annotations": {
+          "$ref": "#/$defs/ExtensionToolAnnotations"
+        }
+      }
+    },
+    "ExtensionToolAnnotations": {
+      "type": "object",
+      "description": "Hints about the tool's behavior, modeled after MCP tool annotations.",
+      "properties": {
+        "readOnly": {
+          "type": "boolean",
+          "description": "True if the tool only reads data and has no side effects.",
+          "default": false
+        },
+        "idempotent": {
+          "type": "boolean",
+          "description": "True if calling the tool multiple times with the same input has the same effect as calling it once.",
+          "default": false
+        },
+        "destructive": {
+          "type": "boolean",
+          "description": "True if the tool may delete data or cause irreversible changes.",
+          "default": false
+        },
+        "category": {
+          "type": "string",
+          "description": "Optional grouping category (e.g. 'diagnostics', 'testing')."
+        }
       }
     }
   }

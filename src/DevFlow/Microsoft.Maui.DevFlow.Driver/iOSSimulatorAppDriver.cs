@@ -35,6 +35,38 @@ public class iOSSimulatorAppDriver : AppDriverBase
     /// </summary>
     public string? BundleId { get; set; }
 
+    public override async Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
+    {
+        if (scope == ThemeSetScope.App || (scope == ThemeSetScope.Auto && theme == DevFlowTheme.System))
+            return await base.SetThemeAsync(theme, ThemeSetScope.App).ConfigureAwait(false);
+
+        if (theme == DevFlowTheme.System)
+        {
+            return new ThemeResult
+            {
+                Theme = theme,
+                RequestedTheme = theme,
+                Source = "system",
+                Success = false,
+                Message = "iOS Simulator host appearance supports light and dark only. Use app scope for system theme.",
+            };
+        }
+
+        EnsureDeviceUdid();
+        var appearance = theme == DevFlowTheme.Dark ? "dark" : "light";
+        await RunProcessAsync("xcrun", $"simctl ui {DeviceUdid} appearance {appearance}").ConfigureAwait(false);
+
+        return new ThemeResult
+        {
+            Theme = theme,
+            RequestedTheme = theme,
+            EffectiveTheme = theme,
+            Source = "system",
+            Success = true,
+            Message = $"iOS Simulator appearance set to {appearance}.",
+        };
+    }
+
     // --- Permission management via xcrun simctl privacy ---
 
     /// <summary>

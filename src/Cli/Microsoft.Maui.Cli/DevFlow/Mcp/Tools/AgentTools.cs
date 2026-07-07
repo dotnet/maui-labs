@@ -69,7 +69,7 @@ public sealed class AgentTools
 
                 if (match != null)
                 {
-                    session.DefaultAgentPort = match.Port;
+                    session.SetDefaultAgent(match);
                     return CliJson.SerializeUntyped(new JsonObject
                     {
                         ["id"] = match.Id,
@@ -101,11 +101,11 @@ public sealed class AgentTools
     }
 
     [McpServerTool(Name = "maui_select_agent"), Description("Set the default agent for this MCP session. Subsequent tool calls will use this agent automatically without needing agentPort.")]
-    public static string SelectAgent(
+    public static async Task<string> SelectAgent(
         McpAgentSession session,
         [Description("Agent HTTP port to use as default")] int agentPort)
     {
-        session.DefaultAgentPort = agentPort;
+        await session.SetDefaultAgentPortAsync(agentPort);
         return $"Default agent set to port {agentPort}. All subsequent commands will use this agent.";
     }
 }

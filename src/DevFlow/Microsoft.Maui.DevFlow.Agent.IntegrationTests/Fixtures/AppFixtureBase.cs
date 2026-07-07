@@ -70,7 +70,11 @@ public abstract class AppFixtureBase : IAppFixture
             BaseAddress = new Uri(AgentBaseUrl),
             Timeout = TimeSpan.FromSeconds(60)
         };
-        Client = new AgentClient("localhost", AgentPort);
+        Client = new AgentClient("localhost", AgentPort)
+        {
+            TransientFailureRetryCount = Platform == "android" ? 8 : 0,
+            TransientFailureRetryDelay = TimeSpan.FromMilliseconds(250),
+        };
     }
 
     protected async Task<bool> IsAgentReadyAsync()

@@ -1313,6 +1313,51 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/device/app/theme:
+    get:
+      operationId: getAppTheme
+      tags: [device]
+      summary: Get app theme
+      description: >
+        Returns the current in-app theme override and effective application
+        theme. This is app-scoped and does not change the host operating
+        system appearance.
+      responses:
+        "200":
+          description: Application theme information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/ThemeInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: setAppTheme
+      tags: [device]
+      summary: Set app theme
+      description: >
+        Sets the in-app theme override. Use `light` or `dark` to force the
+        application theme, or `system` to clear the override and follow the
+        host/device setting.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/device.json#/$defs/ThemeSetRequest"
+      responses:
+        "200":
+          description: Updated application theme information.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/device.json#/$defs/ThemeInfo"
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/device/sensors:
     get:
       operationId: listSensors
@@ -1921,6 +1966,158 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  # ─────────────────────────────── Extensions ───────────────────────────
+  /api/v1/ext/{namespace}/{path}:
+    get:
+      operationId: callExtensionGet
+      tags: [extensions]
+      summary: Call extension endpoint (GET)
+      description: >
+        Proxy route for custom extension GET endpoints. The namespace uses
+        reverse-domain notation (e.g. `com.example.diagnostics`). Available
+        extensions and their self-describing tools are discoverable via
+        `GET /api/v1/agent/capabilities`. This generic OpenAPI template
+        represents a single path segment; clients should use each descriptor's
+        concrete `path` value when an extension advertises a nested sub-path.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: Extension namespace in reverse-domain notation.
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        - name: path
+          in: path
+          required: true
+          description: Extension-defined sub-path.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Extension-defined response.
+          content:
+            application/json:
+              schema: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      operationId: callExtensionPost
+      tags: [extensions]
+      summary: Call extension endpoint (POST)
+      description: >
+        Proxy route for custom extension POST endpoints. Request and response
+        schemas are extension-defined and advertised by the tool descriptor in
+        the capabilities response.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: Extension namespace in reverse-domain notation.
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        - name: path
+          in: path
+          required: true
+          description: Extension-defined sub-path.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: Extension-defined response.
+          content:
+            application/json:
+              schema: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: callExtensionPut
+      tags: [extensions]
+      summary: Call extension endpoint (PUT)
+      description: >
+        Proxy route for custom extension PUT endpoints. Request and response
+        schemas are extension-defined and advertised by the tool descriptor in
+        the capabilities response.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: Extension namespace in reverse-domain notation.
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        - name: path
+          in: path
+          required: true
+          description: Extension-defined sub-path.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: Extension-defined response.
+          content:
+            application/json:
+              schema: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: callExtensionDelete
+      tags: [extensions]
+      summary: Call extension endpoint (DELETE)
+      description: >
+        Proxy route for custom extension DELETE endpoints. Available extension
+        tools and behavior annotations are discoverable from
+        `GET /api/v1/agent/capabilities`.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: Extension namespace in reverse-domain notation.
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        - name: path
+          in: path
+          required: true
+          description: Extension-defined sub-path.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: Extension-defined response.
+          content:
+            application/json:
+              schema: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 # ═══════════════════════════ Components ═══════════════════════════════
 components:
   parameters:
@@ -1987,6 +2184,18 @@ components:
             title: Invalid storage path
             status: 400
             errorCode: invalid-path
+
+    InvalidArgument:
+      description: Invalid request argument.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          example:
+            type: "urn:devflow:error:invalid-argument"
+            title: Invalid argument
+            status: 400
+            errorCode: invalid-argument
 
     Timeout:
       description: Operation timed out.

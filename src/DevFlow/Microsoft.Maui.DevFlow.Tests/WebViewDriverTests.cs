@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Tests;
@@ -32,6 +35,82 @@ public class AgentClientTests
         using var client = new AgentClient("localhost", 19999);
         var tree = await client.GetTreeAsync();
         Assert.Empty(tree);
+    }
+
+    [Fact]
+    public async Task GetStatus_WithTransientRetry_RetriesConnectionRefused()
+    {
+        using var reserved = new TcpListener(IPAddress.Loopback, 0);
+        reserved.ExclusiveAddressUse = false;
+        reserved.Start();
+        var port = ((IPEndPoint)reserved.LocalEndpoint).Port;
+        reserved.Stop();
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Generous startup delay so the client is virtually guaranteed to make at
+        // least one connection attempt (which fails with ECONNREFUSED) before the
+        // listener is bound. We additionally assert elapsed wall time below to
+        // prove the retry path actually fired.
+        var startupDelay = TimeSpan.FromMilliseconds(500);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await Task.Delay(startupDelay, cts.Token);
+
+            using var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.ExclusiveAddressUse = false;
+            listener.Start();
+
+            using var tcpClient = await listener.AcceptTcpClientAsync(cts.Token);
+            using var stream = tcpClient.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAtLeastAsync(buffer, 1, throwOnEndOfStream: false, cancellationToken: cts.Token);
+            Assert.True(read > 0);
+
+            var body = """{"agent":{"name":"test","version":"1.0"},"device":{"platform":"Test"},"app":{"name":"Sample"},"running":true}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response), cts.Token);
+        });
+
+        var retryDelay = TimeSpan.FromMilliseconds(50);
+        using var client = new AgentClient("localhost", port)
+        {
+            TransientFailureRetryCount = 20,
+            TransientFailureRetryDelay = retryDelay,
+        };
+
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var status = await client.GetStatusAsync();
+            sw.Stop();
+
+            Assert.NotNull(status);
+            Assert.True(status!.Running);
+
+            // If the retry path was not exercised, GetStatusAsync would have returned
+            // either ~immediately (failure) or only after the very first successful
+            // connect. Asserting elapsed >= one retry delay catches the regression
+            // where the test passes without ever hitting the retry loop.
+            Assert.True(
+                sw.Elapsed >= retryDelay,
+                $"Expected GetStatusAsync to take at least one retry delay ({retryDelay.TotalMilliseconds} ms) " +
+                $"due to connection-refused retries, but completed in {sw.Elapsed.TotalMilliseconds:F1} ms.");
+        }
+        finally
+        {
+            // Guard against a missed accept hanging the test indefinitely.
+            var completed = await Task.WhenAny(serverTask, Task.Delay(2000));
+            if (completed == serverTask)
+            {
+                await serverTask;
+            }
+            else
+            {
+                cts.Cancel();
+            }
+        }
     }
 
     [Fact]

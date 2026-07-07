@@ -32,6 +32,13 @@ Keep DevFlow skills up to date with `maui devflow skills update`. The hidden
 `maui devflow update-skill` compatibility command runs the same bundled updater
 and may remove this legacy skill after installing current replacements.
 
+## Optional Session Feedback Nudge
+
+If this legacy workflow involved repeated DevFlow retries, unclear workarounds,
+or a long debugging session, ask whether the user wants to run
+`maui-devflow-session-review` to summarize friction for MAUI DevFlow product
+feedback. Do not run it automatically.
+
 ## Integrating MauiDevFlow into a MAUI App
 
 For complete setup instructions, see [references/setup.md](references/setup.md).

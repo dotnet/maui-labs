@@ -64,6 +64,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         RegisterStorageEndpoints(_app);
         RegisterWebViewEndpoints(_app);
         RegisterNetworkEndpoints(_app);
+        RegisterExtensionEndpoints(_app);
 
         await _app.StartAsync();
         Port = _app.Urls.Select(url => new Uri(url).Port).First();
@@ -90,6 +91,18 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/agent/capabilities", () => Results.Content(MockAgentResponses.AgentCapabilities, "application/json"));
     }
 
+    private static void RegisterExtensionEndpoints(WebApplication app)
+    {
+        app.MapGet("/api/v1/ext/com.example.diagnostics/build-info", () =>
+            Results.Content("""{"app":"TestApp","version":"1.0.0","build":"42"}""", "application/json"));
+        app.MapPost("/api/v1/ext/com.example.diagnostics/echo", async (HttpContext context) =>
+        {
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+            var body = await reader.ReadToEndAsync();
+            return Results.Content($$"""{"body":{{body}}}""", "application/json");
+        });
+    }
+
     private static void RegisterUiEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/ui/tree", () => Results.Content(MockAgentResponses.VisualTree, "application/json"));
@@ -110,6 +123,22 @@ public sealed class MockAgentServer : IAsyncDisposable
     {
         app.MapGet("/api/v1/device/info", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
+        app.MapGet("/api/v1/device/app/theme", () => Results.Content(MockAgentResponses.ThemeInfo, "application/json"));
+        app.MapPut("/api/v1/device/app/theme", async (HttpContext context) =>
+        {
+            using var document = await JsonDocument.ParseAsync(context.Request.Body);
+            var theme = document.RootElement.GetProperty("theme").GetString() ?? "system";
+            return Results.Content($$"""
+                {
+                  "theme": "{{theme}}",
+                  "requestedTheme": "{{theme}}",
+                  "userAppTheme": "{{theme}}",
+                  "effectiveTheme": "{{theme}}",
+                  "supportedThemes": ["light", "dark", "system"],
+                  "source": "app"
+                }
+                """, "application/json");
+        });
         app.MapGet("/api/v1/device/display", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/battery", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/connectivity", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
