@@ -546,9 +546,11 @@ public static partial class AndroidCommands
 	internal static List<(string Id, string Name)> BuildDeviceProfileChoices(IReadOnlyList<string>? liveProfileIds)
 	{
 		if (liveProfileIds == null || liveProfileIds.Count == 0)
-			return DefaultDeviceProfiles;
+			// Return a copy so callers can never mutate the shared fallback list.
+			return DefaultDeviceProfiles.ToList();
 
 		return liveProfileIds
+			.Where(id => !string.IsNullOrWhiteSpace(id))
 			.Select(id => (Id: id, Name: HumanizeDeviceProfileId(id)))
 			.ToList();
 	}

@@ -119,9 +119,12 @@ public class AvdManager
 		try
 		{
 			var profiles = await _runner.ListDeviceProfilesAsync(cancellationToken);
-			return profiles.Select(p => p.Id).ToList();
+			return profiles
+				.Select(p => p.Id)
+				.Where(id => !string.IsNullOrWhiteSpace(id))
+				.ToList();
 		}
-		catch (InvalidOperationException ex)
+		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
 			System.Diagnostics.Trace.WriteLine($"Device profile list failed: {ex.Message}");
 			return new List<string>();

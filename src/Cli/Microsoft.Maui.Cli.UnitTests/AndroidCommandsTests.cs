@@ -651,4 +651,31 @@ public class AndroidCommandsTests
 		Assert.Equal(("pixel_9_pro_fold", "Pixel 9 Pro Fold"), choices[0]);
 		Assert.Equal(("Nexus 10", "Nexus 10"), choices[1]);
 	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FallbackList_IsNotSharedReference()
+	{
+		// Regression test: the fallback path must return a fresh copy, not the
+		// shared static default list, so a caller mutating the result can never
+		// corrupt the fallback for later invocations.
+		var first = AndroidCommands.BuildDeviceProfileChoices(null);
+		var second = AndroidCommands.BuildDeviceProfileChoices(null);
+
+		Assert.NotSame(first, second);
+
+		first.Add(("mutated", "Mutated"));
+		Assert.DoesNotContain(second, c => c.Id == "mutated");
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FiltersOutNullOrWhitespaceIds()
+	{
+		var liveProfileIds = new[] { "pixel_9_pro_fold", "", "   ", "Nexus 10" };
+
+		var choices = AndroidCommands.BuildDeviceProfileChoices(liveProfileIds);
+
+		Assert.Equal(2, choices.Count);
+		Assert.Equal(("pixel_9_pro_fold", "Pixel 9 Pro Fold"), choices[0]);
+		Assert.Equal(("Nexus 10", "Nexus 10"), choices[1]);
+	}
 }
