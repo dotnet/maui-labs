@@ -56,7 +56,7 @@ Review pull request #${{ github.event.pull_request.number || github.event.issue.
 > **🚨 ALWAYS end the run with safe-output tool calls — NEVER plain text.** A prose-only conclusion posts nothing. End every run through the tools, per path:
 > - **Findings survived consensus** → inline `create_pull_request_review_comment` + `submit_pull_request_review` (`COMMENT`) **and** the single Part B `add_comment` summary. Do NOT stop after `submit_pull_request_review` — the summary still follows it.
 > - **Zero findings / all findings discarded** → the single `add_comment` only (no `submit_pull_request_review`).
-> - **Cannot run** (no target PR, pre-flight failed) → `noop` (or the pre-flight `add_comment` when a PR exists).
+> - **Cannot run / infra failure** (no target PR, pre-flight failed, or fewer than 2 reviewers completed) → `noop` when there is no target PR; otherwise the single `add_comment` explaining the failure (the pre-flight guard, or the Step 2 `<2 reviewers` fallback).
 >
 > Ending with only prose like "No actionable issues found" produces **zero safe outputs** — nothing posts and no review happens. (Post-v0.81.1 this is a silent no-op, not a workflow failure, but the review is still lost.) If unsure or low on turn budget, call `noop` with a one-line status message first.
 
