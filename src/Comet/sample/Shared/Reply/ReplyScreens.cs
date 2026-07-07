@@ -143,6 +143,7 @@ namespace CometSamples.Reply
 		static View DetailAppBar() => new HStack(spacing: 0f)
 		{
 			new Icon("arrow_back").IconSize(14).Color(T.OnSurface)
+				.Padding(new Thickness(13))   // centers the 14dp glyph in the 40dp circle
 				.Frame(width: 40, height: 40)
 				.Background(T.Surface).CornerRadius(20)
 				.Margin(left: 8, top: 8, bottom: 8)
@@ -196,12 +197,22 @@ namespace CometSamples.Reply
 		}.Padding(new Thickness(16, 4, 16, 4));
 
 		// Gold: M3 Button, containerColor surfaceBright, onSurface text, weight(1f) each.
-		static View ThreadButton(string label) => new Text(label).FontSize(14).Color(T.OnSurface)
-			.HorizontalLayoutAlignment(LayoutAlignment.Center)
-			.Frame(height: 40)
-			.Background(T.SurfaceBright)
-			.CornerRadius(20)
-			.FlexGrow(1).FlexBasis(0);
+		// Spacer rows/columns center the label (alignment positions a view in its parent).
+		static View ThreadButton(string label) => new HStack(spacing: 0f)
+		{
+			new HStack().FlexGrow(1),
+			new VStack(spacing: 0f)
+			{
+				new HStack().FlexGrow(1),
+				new Text(label).FontSize(14).Color(T.OnSurface),
+				new HStack().FlexGrow(1),
+			},
+			new HStack().FlexGrow(1),
+		}
+		.Frame(height: 40)
+		.Background(T.SurfaceBright)
+		.CornerRadius(20)
+		.FlexGrow(1).FlexBasis(0);
 
 		// ── EmptyComingSoon.kt ──
 		public static View ComingSoon() => new VStack(spacing: 8f)
