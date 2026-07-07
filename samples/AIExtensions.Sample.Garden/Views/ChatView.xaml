@@ -102,6 +102,12 @@
                 <chat:MediaContentTemplate />
                 <chat:GenericContentTemplate BlockType="{x:Type gchat:ProductResultsBlock}"
                                              ViewType="{x:Type gchat:ProductResultsView}" />
+                <!-- OrderSummaryBlock is-a FunctionInvocationContentBlock, so it also matches the generic
+                     tool template below (both tie at the +25 BlockType priority). Priority="1" makes this
+                     win deterministically; declaring it first is belt-and-suspenders. -->
+                <chat:GenericContentTemplate BlockType="{x:Type gchat:OrderSummaryBlock}"
+                                             ViewType="{x:Type gchat:OrderSummaryView}"
+                                             Priority="1" />
                 <chat:GenericContentTemplate BlockType="{x:Type engine:FunctionInvocationContentBlock}"
                                              ViewType="{x:Type gchat:GardenToolView}" />
                 <chat:ToolApprovalTemplate />
