@@ -58,9 +58,10 @@ namespace CometSamples.Reply
 			{
 				new VStack(spacing: 0f)
 				{
-					// TODO(fidelity): the real DockedSearchBar control replaces this pill
-					// (backlog §3); collapsed-state look per gold ReplyAppBars.kt:84-125.
-					SearchBarPill().Margin(left: 16, top: 16, right: 16, bottom: 16),
+					// The REAL M3 docked search bar (gold ReplyDockedSearchBar,
+					// ReplyAppBars.kt:84-168): "Search emails" placeholder + profile
+					// trailing; expanded popup shows history/results.
+					EmailSearchBar().Margin(left: 16, top: 16, right: 16, bottom: 16),
 					list.FlexGrow(1).FlexBasis(0),
 				}
 				.HorizontalLayoutAlignment(LayoutAlignment.Fill)
@@ -71,16 +72,65 @@ namespace CometSamples.Reply
 			}.Background(T.Background);
 		}
 
-		static View SearchBarPill() => new HStack(spacing: 12)
+		static readonly Signal<string> SearchQuery = new("");
+
+		// Gold filter (ReplyAppBars.kt:65-82): subject OR sender fullName startsWith,
+		// ignore case; empty query → history message.
+		static IReadOnlyList<ReplyEmail> SearchResults()
 		{
-			new Icon("search").IconSize(24).Color(T.OnSurfaceVariant).Padding(new Thickness(16, 0, 0, 0)),
-			new Text("Search emails").FontSize(16).Color(T.OnSurfaceVariant).FlexGrow(1),
-			new Image("avatar_6").Frame(width: 32, height: 32).CornerRadius(16)
-				.Margin(right: 12).FlexShrink(0),
+			var q = SearchQuery.Peek();
+			if (string.IsNullOrEmpty(q))
+				return System.Array.Empty<ReplyEmail>();
+			var hits = new List<ReplyEmail>();
+			foreach (var e in ReplyData.AllEmails)
+				if (e.Subject.StartsWith(q, System.StringComparison.OrdinalIgnoreCase)
+					|| e.Sender.FullName.StartsWith(q, System.StringComparison.OrdinalIgnoreCase))
+					hits.Add(e);
+			return hits;
 		}
-		.Frame(height: 56)
-		.Background(T.SurfaceContainerHigh)
-		.CornerRadius(28);
+
+		static View EmailSearchBar()
+		{
+			var results = new ListView<ReplyEmail>(() => SearchResults())
+			{
+				ViewFor = e => SearchResultRow(e),
+			};
+			SearchQuery.PropertyChanged += (_, __) => results.ReloadData();
+
+			var content = new VStack(spacing: 0f)
+			{
+				// Gold: "No search history" (empty) / "No item found" (no hits) / results.
+				new Text(() => SearchQuery.Value.Length == 0 ? "No search history"
+						: SearchResults().Count == 0 ? "No item found" : "")
+					.FontSize(16).Color(T.OnSurface)
+					.Padding(new Thickness(16)),
+				results.FlexGrow(1).FlexBasis(0),
+			}.Frame(height: 420);
+
+			return new SearchBar(SearchQuery,
+				placeholder: new Text("Search emails").FontSize(16).Color(T.OnSurfaceVariant),
+				content: content,
+				leading: new Icon("search").IconSize(24).Color(T.OnSurfaceVariant),
+				trailing: new Image("avatar_6").Frame(width: 32, height: 32).CornerRadius(16));
+		}
+
+		// Gold search result rows: M3 ListItem shape — 32dp avatar, subject headline,
+		// sender supporting (ReplyAppBars.kt:137-155).
+		static View SearchResultRow(ReplyEmail email) => new HStack(spacing: 16f)
+		{
+			new Image(email.Sender.Avatar).Frame(width: 32, height: 32).CornerRadius(16).FlexShrink(0),
+			new VStack(spacing: 2f)
+			{
+				new Text(email.Subject).FontSize(16).Color(T.OnSurface),
+				new Text(email.Sender.FullName).FontSize(14).Color(T.OnSurfaceVariant),
+			}.FlexGrow(1).FlexBasis(0),
+		}
+		.Padding(new Thickness(16, 8, 16, 8))
+		.OnTap(_ =>
+		{
+			OpenedEmailId.Value = (int)email.Id;
+			DetailOpen.Value = true;
+		});
 
 		// ── One list row (gold ReplyEmailListItem.kt:52-142). Outer wrapper carries the
 		// h16/v4 gutter as PADDING (list rows are laid at full list width; root margins

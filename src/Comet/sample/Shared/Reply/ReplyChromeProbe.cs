@@ -16,6 +16,7 @@ namespace CometSamples.Reply
 	public class ReplyProbeRoot : View
 	{
 		static readonly Signal<int> Selected = new(0);
+		static readonly Signal<bool> DrawerOpen = new(false);
 
 		[Body]
 		View body()
@@ -39,7 +40,8 @@ namespace CometSamples.Reply
 			});
 
 			return new NavigationSuite(Selected, items, routes,
-					railHeader: RailHeader(), drawerHeader: DrawerHeader())
+					railHeader: RailHeader(), drawerHeader: DrawerHeader(),
+					drawerOpen: DrawerOpen)
 				.Background(T.Background);   // paints the safe-area strips too
 		}
 
@@ -52,7 +54,9 @@ namespace CometSamples.Reply
 		// with the modal-drawer increment).
 		static View RailHeader() => new VStack(spacing: 4)
 		{
-			new Icon("menu").IconSize(24).Color(T.OnSurfaceVariant),
+			new Icon("menu").IconSize(24).Color(T.OnSurfaceVariant)
+				.Frame(width: 48, height: 48).Padding(new Thickness(12))
+				.OnTap(_ => DrawerOpen.Value = true),
 			new Icon("edit").IconSize(18).Color(T.OnTertiaryContainer)
 				.Frame(width: 56, height: 56)
 				.Background(T.TertiaryContainer)
