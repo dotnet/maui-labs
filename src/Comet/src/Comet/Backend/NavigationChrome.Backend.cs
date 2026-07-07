@@ -40,4 +40,21 @@ namespace Comet
 			}
 		}
 	}
+
+	public partial class NavigationSuite
+	{
+		bool _hooked;
+
+		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
+		{
+			base.ApplyAllSetProperties(node);
+			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+			if (!_hooked)
+			{
+				_hooked = true;
+				SelectedIndex.PropertyChanged += (_, _) =>
+					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+			}
+		}
+	}
 }

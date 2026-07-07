@@ -57,6 +57,12 @@ namespace Comet
 			=> new ComposeNavigationRailNode(this, context);
 	}
 
+	public partial class NavigationSuite
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeNavigationSuiteNode(this, context);
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

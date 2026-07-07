@@ -122,6 +122,64 @@ namespace Comet.Tests.Backend
 			Assert.Equal(1, node.Get(PropertyIds.Nav_SelectedIndex).AsInt);
 		}
 
+		[Theory]
+		[InlineData(400, 900, NavigationSuiteVariant.BottomBar)]    // phone portrait
+		[InlineData(599.9, 900, NavigationSuiteVariant.BottomBar)]
+		[InlineData(800, 400, NavigationSuiteVariant.BottomBar)]    // short window: bar even when wide
+		[InlineData(600, 900, NavigationSuiteVariant.Rail)]
+		[InlineData(700, 952, NavigationSuiteVariant.Rail)]         // gold medium capture
+		[InlineData(960, 952, NavigationSuiteVariant.Rail)]         // gold: 840-1199 = rail + two-pane
+		[InlineData(1199.9, 952, NavigationSuiteVariant.Rail)]
+		[InlineData(1200, 952, NavigationSuiteVariant.PermanentDrawer)]
+		[InlineData(1260, 952, NavigationSuiteVariant.PermanentDrawer)]
+		public void NavigationSuite_VariantFor_FollowsGoldBreakpoints(
+			double w, double h, NavigationSuiteVariant expected)
+			=> Assert.Equal(expected, NavigationSuite.VariantFor(w, h));
+
+		[Fact]
+		public void NavigationSuite_SameSelectionContract_AndOwnContentBridging()
+		{
+			int invoked = -1;
+			var selected = new Signal<int>(2);
+			var suite = new NavigationSuite(selected,
+				new[] { Item("a"), Item("b"), Item("c", () => invoked = 2) },
+				content: new VStack { new Text("screen") },
+				railHeader: new Icon("menu"));
+
+			var node = Bridge(suite);
+			// Own-content gating keys off the NODE type (platform nodes implement
+			// IBackendManagesOwnContent; FakeBackendNode doesn't), so host-side the children
+			// bridge normally: content + railHeader + 3 items.
+			Assert.Equal(5, node.Children.Count);
+			Assert.Equal(2, node.Get(PropertyIds.Nav_SelectedIndex).AsInt);
+
+			suite.SelectItem(2);
+			Assert.Equal(2, invoked);
+			selected.Value = 0;
+			Assert.Equal(0, node.Get(PropertyIds.Nav_SelectedIndex).AsInt);
+		}
+
+		[Fact]
+		public void NavigationSuite_ContentSwapsByReadingSelectedIndex()
+		{
+			// The screen-swap pattern the suite prescribes: content BINDINGS read the signal
+			// (structure stays put — the body-swap node gap is exactly why).
+			var selected = new Signal<int>(0);
+			var titles = new[] { "Inbox", "Articles" };
+			var content = new VStack { new Text(() => titles[selected.Value]) };
+			var suite = new NavigationSuite(selected, new[] { Item("inbox"), Item("articles") }, content);
+			Bridge(suite);
+
+			// The suite's node owns content materialization on-device; host-side, bridge the
+			// content directly to observe the binding patch flow.
+			var contentNode = Bridge(content);
+			Assert.Equal("Inbox", contentNode.Children[0].Get(PropertyIds.Text_Value).AsString);
+
+			suite.SelectItem(1);
+			ReactiveScheduler.FlushSync();
+			Assert.Equal("Articles", contentNode.Children[0].Get(PropertyIds.Text_Value).AsString);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;
