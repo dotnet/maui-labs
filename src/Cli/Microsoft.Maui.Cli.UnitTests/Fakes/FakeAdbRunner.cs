@@ -20,6 +20,22 @@ public sealed class FakeAdbRunner : AdbRunner
 
 	public List<string> Commands { get; } = [];
 
+	/// <summary>
+	/// Optional hook invoked before <see cref="ReversePortAsync"/> performs its normal
+	/// work. Throw from this delegate to simulate an <c>adb</c> failure. Throwing an
+	/// <see cref="OperationCanceledException"/> here simulates an internal per-call
+	/// timeout (as opposed to the caller's own <see cref="CancellationToken"/> firing).
+	/// </summary>
+	public Action? OnReversePort { get; set; }
+
+	/// <summary>
+	/// Optional hook invoked before <see cref="ForwardPortAsync"/> performs its normal
+	/// work. Throw from this delegate to simulate an <c>adb</c> failure. Throwing an
+	/// <see cref="OperationCanceledException"/> here simulates an internal per-call
+	/// timeout (as opposed to the caller's own <see cref="CancellationToken"/> firing).
+	/// </summary>
+	public Action? OnForwardPort { get; set; }
+
 	public FakeAdbRunner(HashSet<int>? forwardPorts = null, HashSet<int>? reversePorts = null)
 		: base("adb")
 	{
@@ -42,6 +58,7 @@ public sealed class FakeAdbRunner : AdbRunner
 	public override Task ForwardPortAsync(string serial, AdbPortSpec local, AdbPortSpec remote, CancellationToken cancellationToken = default)
 	{
 		Commands.Add($"-s {serial} forward {local.ToSocketSpec()} {remote.ToSocketSpec()}");
+		OnForwardPort?.Invoke();
 		if (local.Port == remote.Port)
 			_forwardPorts.Add(local.Port);
 		return Task.CompletedTask;
@@ -50,6 +67,7 @@ public sealed class FakeAdbRunner : AdbRunner
 	public override Task ReversePortAsync(string serial, AdbPortSpec remote, AdbPortSpec local, CancellationToken cancellationToken = default)
 	{
 		Commands.Add($"-s {serial} reverse {remote.ToSocketSpec()} {local.ToSocketSpec()}");
+		OnReversePort?.Invoke();
 		if (local.Port == remote.Port)
 			_reversePorts.Add(local.Port);
 		return Task.CompletedTask;

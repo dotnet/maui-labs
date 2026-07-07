@@ -8,6 +8,61 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class AndroidDevFlowPortForwarderTests
 {
 	[Fact]
+	public void Constructor_WithAdbPathButNullRunner_ThrowsArgumentNullException()
+	{
+		var provider = new FakeAndroidProvider();
+
+		var ex = Assert.Throws<ArgumentNullException>(() =>
+			new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", adbRunner: null));
+
+		Assert.Equal("adbRunner", ex.ParamName);
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WhenCallerCancels_PropagatesOperationCanceledException()
+	{
+		var provider = CreateProvider(Device("emulator-5554"));
+		var runner = new FakeAdbRunner
+		{
+			OnReversePort = () => throw new OperationCanceledException()
+		};
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+		using var cts = new CancellationTokenSource();
+		cts.Cancel();
+
+		await Assert.ThrowsAsync<OperationCanceledException>(() => forwarder.EnsureAsync(
+			new AndroidDevFlowForwardingRequest
+			{
+				AgentPorts = [9223],
+				EnsureBrokerReverse = true,
+				Repair = true
+			},
+			cts.Token));
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WhenAdbCallTimesOutInternally_ReportsErrorInsteadOfPropagating()
+	{
+		var provider = CreateProvider(Device("emulator-5554"));
+		var runner = new FakeAdbRunner
+		{
+			// Simulates the internal per-call timeout firing - not the caller's own token.
+			OnReversePort = () => throw new OperationCanceledException("adb reverse timed out")
+		};
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
+		{
+			AgentPorts = [9223],
+			EnsureBrokerReverse = true,
+			Repair = true
+		}, CancellationToken.None);
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.Error, report.Status);
+		Assert.Contains("adb reverse tcp:19223 tcp:19223 failed", report.Message);
+	}
+
+	[Fact]
 	public async Task EnsureAsync_WithoutSdkPath_ReportsNoAdb()
 	{
 		var provider = new FakeAndroidProvider();

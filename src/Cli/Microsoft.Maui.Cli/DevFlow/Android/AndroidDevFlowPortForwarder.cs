@@ -10,6 +10,8 @@ internal sealed class AndroidDevFlowPortForwarder
 {
     public const int DefaultBrokerPort = BrokerServer.DefaultPort;
 
+    static readonly TimeSpan AdbCallTimeout = TimeSpan.FromSeconds(15);
+
     readonly IAndroidProvider _androidProvider;
     readonly string? _adbPath;
     readonly AdbRunner? _adbRunner;
@@ -19,6 +21,9 @@ internal sealed class AndroidDevFlowPortForwarder
         string? adbPath,
         AdbRunner? adbRunner)
     {
+        if (adbPath != null && adbRunner == null)
+            throw new ArgumentNullException(nameof(adbRunner), "adbRunner is required when adbPath is provided");
+
         _androidProvider = androidProvider;
         _adbPath = adbPath;
         _adbRunner = adbRunner;
@@ -84,7 +89,7 @@ internal sealed class AndroidDevFlowPortForwarder
         {
             devices = await _androidProvider.GetDevicesAsync(cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return report with
             {
@@ -141,8 +146,16 @@ internal sealed class AndroidDevFlowPortForwarder
             try
             {
                 var spec = new AdbPortSpec(AdbProtocol.Tcp, brokerPort);
-                await _adbRunner!.ReversePortAsync(report.SelectedSerial, spec, spec, cancellationToken);
+                using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
+                await _adbRunner!.ReversePortAsync(report.SelectedSerial, spec, spec, timeoutCts.Token);
                 brokerReverseAdded = true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Caller-initiated cancellation (Ctrl+C, etc.) must propagate. Cancellation
+                // originating from the internal per-call timeout below falls through to the
+                // general catch so a single slow adb invocation is reported as an error.
+                throw;
             }
             catch (Exception ex)
             {
@@ -160,8 +173,13 @@ internal sealed class AndroidDevFlowPortForwarder
                 try
                 {
                     var spec = new AdbPortSpec(AdbProtocol.Tcp, port);
-                    await _adbRunner!.ForwardPortAsync(report.SelectedSerial, spec, spec, cancellationToken);
+                    using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
+                    await _adbRunner!.ForwardPortAsync(report.SelectedSerial, spec, spec, timeoutCts.Token);
                     added = true;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -285,16 +303,35 @@ internal sealed class AndroidDevFlowPortForwarder
     {
         try
         {
+            using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
             var rules = reverse
-                ? await _adbRunner!.ListReversePortsAsync(serial, cancellationToken)
-                : await _adbRunner!.ListForwardPortsAsync(serial, cancellationToken);
+                ? await _adbRunner!.ListReversePortsAsync(serial, timeoutCts.Token)
+                : await _adbRunner!.ListForwardPortsAsync(serial, timeoutCts.Token);
             return AndroidPortMappingList.Ok(rules);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             var command = reverse ? "adb reverse --list" : "adb forward --list";
             return AndroidPortMappingList.Failed($"{command} failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Creates a linked <see cref="CancellationTokenSource"/> that caps a single
+    /// <c>adb</c> invocation at <see cref="AdbCallTimeout"/>, while still observing the
+    /// caller's <paramref name="cancellationToken"/>. Callers distinguish the two by
+    /// checking <c>cancellationToken.IsCancellationRequested</c> in their catch block:
+    /// only the caller's own token should cause the whole operation to abort.
+    /// </summary>
+    static CancellationTokenSource CreateAdbCallTimeoutSource(CancellationToken cancellationToken)
+    {
+        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(AdbCallTimeout);
+        return timeoutCts;
     }
 
     static bool ContainsMapping(IEnumerable<AdbPortRule> mappings, int port)
