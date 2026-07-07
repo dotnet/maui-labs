@@ -97,11 +97,11 @@ namespace Comet.Platform.SwiftUI
 				foreach (var row in _rows)
 					LayoutRow(row);
 
-				// Open at the newest message (bottom) — the iOS twin of ComposeListNode's
-				// one-shot ScrollToItem(last) seed. Nudged a few times because a
-				// ScrollViewReader scroll to a far target undershoots while rows are still
-				// realizing; each pass lands closer as more content exists.
-				if (!_seededToNewest && _rows.Count > 0)
+				// AnchorBottom (chat log): open at the newest message — the iOS twin of
+				// ComposeListNode's one-shot ScrollToItem(last) seed. Nudged a few times
+				// because a ScrollViewReader scroll to a far target undershoots while rows
+				// are still realizing. Ordinary lists (inbox) open at the top.
+				if (_list.AnchorBottom && !_seededToNewest && _rows.Count > 0)
 				{
 					_seededToNewest = true;
 					SeedToNewest();

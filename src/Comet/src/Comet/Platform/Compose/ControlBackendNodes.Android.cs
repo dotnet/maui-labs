@@ -69,6 +69,12 @@ namespace Comet
 			=> new ComposeListDetailNode(this, context);
 	}
 
+	public partial class ContentSwitcher
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeContentSwitcherNode(this, context);
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

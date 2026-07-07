@@ -130,5 +130,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Nav_SelectedIndex = new(256);
 		// ListDetail: compact-mode detail pane visibility.
 		public static readonly PropertyId ListDetail_IsDetailOpen = new(257);
+		// ContentSwitcher: the active route/view index.
+		public static readonly PropertyId ContentSwitcher_Index = new(258);
 	}
 }

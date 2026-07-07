@@ -91,17 +91,29 @@ namespace Comet.Platform.Compose
 			var capturedState = listState;
 			composer.LaunchedEffect(true, async ct =>
 			{
-				// Open at the newest message (bottom) — the gold's reverseLayout initial position.
-				// Instant (not animated) so launch doesn't visibly scroll through the older history;
-				// scrollToItem(last) clamps to the maximum, landing the newest row at the bottom.
+				// AnchorBottom (chat log): open at the newest message — the gold Jetchat's
+				// reverseLayout initial position; instant so launch doesn't visibly scroll.
+				// Ordinary lists (inbox) open at the top.
 				int lastIndex = capturedList.Sections() > 0 ? System.Math.Max(0, capturedList.Rows(0) - 1) : 0;
-				if (lastIndex > 0)
+				if (capturedList.AnchorBottom && lastIndex > 0)
 					await capturedState.ScrollToItemAsync(lastIndex);
 
 				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
 					.WithCancellation(ct))
 				{
 					var signal = capturedList.ScrolledAway;
+					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
+				}
+			});
+
+			// Top-relative twin: canScrollBackward = content above the viewport. Drives
+			// Reply's ExtendedFAB (expanded at the top, contracted once scrolled).
+			composer.LaunchedEffect(2, async ct =>
+			{
+				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollBackward)
+					.WithCancellation(ct))
+				{
+					var signal = capturedList.ScrolledFromTop;
 					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
 				}
 			});

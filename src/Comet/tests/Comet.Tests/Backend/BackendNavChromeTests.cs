@@ -211,6 +211,23 @@ namespace Comet.Tests.Backend
 			Assert.False(node.Get(PropertyIds.ListDetail_IsDetailOpen).AsBool);
 		}
 
+		[Fact]
+		public void ContentSwitcher_PushesAndPatchesIndex()
+		{
+			var index = new Signal<int>(1);
+			var switcher = new ContentSwitcher(index, new View[]
+			{
+				new VStack { new Text("inbox") },
+				new VStack { new Text("articles") },
+			});
+
+			var node = Bridge(switcher);
+			Assert.Equal(1, node.Get(PropertyIds.ContentSwitcher_Index).AsInt);
+
+			index.Value = 0;
+			Assert.Equal(0, node.Get(PropertyIds.ContentSwitcher_Index).AsInt);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;

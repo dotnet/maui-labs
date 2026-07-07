@@ -41,6 +41,23 @@ namespace Comet
 		}
 	}
 
+	public partial class ContentSwitcher
+	{
+		bool _hooked;
+
+		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
+		{
+			base.ApplyAllSetProperties(node);
+			node.ApplyProperty(PropertyIds.ContentSwitcher_Index, PropertyValue.From(Index.Peek()));
+			if (!_hooked)
+			{
+				_hooked = true;
+				Index.PropertyChanged += (_, _) =>
+					Node?.ApplyProperty(PropertyIds.ContentSwitcher_Index, PropertyValue.From(Index.Peek()));
+			}
+		}
+	}
+
 	public partial class NavigationSuite
 	{
 		bool _hooked;

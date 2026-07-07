@@ -31,6 +31,15 @@ namespace Comet
 		/// <summary>The backend node registers a delegate that animates the list to its end; calling
 		/// <see cref="ListView.ScrollToBottom"/> invokes it. Null until the node has rendered.</summary>
 		void RegisterScroller(System.Action scrollToBottom);
+
+		/// <summary>Open the list at its LAST row (chat-log semantics — Jetchat). Ordinary
+		/// lists (an inbox) leave this false and open at the top.</summary>
+		bool AnchorBottom { get; }
+
+		/// <summary>Reactive "scrolled away from the TOP" flag (content exists above the
+		/// viewport — Compose <c>canScrollBackward</c>). Reply's ExtendedFAB collapse reads
+		/// this; <see cref="ScrolledAway"/> is the bottom-relative twin.</summary>
+		Comet.Reactive.Signal<bool> ScrolledFromTop { get; }
 	}
 
 	public class ListView<T> : ListView
@@ -175,6 +184,14 @@ namespace Comet
 		/// <summary>Reactive "scrolled away from the bottom" flag, driven by the node backend's
 		/// <c>LazyListState</c>. Bind a JumpToBottom affordance's visibility to this.</summary>
 		public Comet.Reactive.Signal<bool> ScrolledAway { get; } = new(false);
+
+		/// <summary>Open the list at its LAST row (a chat log's newest-at-bottom initial
+		/// position — Jetchat). Default false: ordinary lists (an inbox) open at the top.</summary>
+		public bool AnchorBottom { get; set; }
+
+		/// <summary>Reactive "scrolled away from the top" flag (top-relative twin of
+		/// <see cref="ScrolledAway"/>); drives Reply's ExtendedFAB collapse.</summary>
+		public Comet.Reactive.Signal<bool> ScrolledFromTop { get; } = new(false);
 
 		System.Action _scrollToBottom;
 
