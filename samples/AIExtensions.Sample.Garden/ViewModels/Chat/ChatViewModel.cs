@@ -54,6 +54,9 @@ public sealed partial class ChatViewModel : ObservableObject,
           the tool call is enough — do not re-list every field in prose.
         - Use recommend_bundle when the user asks for a starter kit, gift set, or curated bundle idea.
         - When the user says "check out", call checkout_list (which requires approval).
+        - Use list_past_orders to see past orders, and find_order to look up one order by its id.
+          The app renders a found order as a receipt card, so a short sentence plus the tool call
+          is enough — do not re-list every line item in prose.
         - After checkout clears the cart, the cart is EMPTY. If the user asks to add
           items again, always call add_to_list — do not say items are already there.
 
@@ -102,6 +105,10 @@ public sealed partial class ChatViewModel : ObservableObject,
             // Assistant text becomes rich formatted text; product lookups aggregate into a carousel/card.
             options.AddBlockHandler(new GardenFormattedTextHandler());
             options.AddBlockHandler(new ProductResultsHandler());
+            // A single find_order call renders as an order receipt card. This is the simplest 1:1
+            // tool→block mapping — the whole handler is mechanical and would be deleted once a
+            // [ToolBlock] source generator can emit it (see OrderSummaryBlock for the migration).
+            options.AddBlockHandler(new OrderSummaryHandler());
         });
 
         Session = new AgentContext(agent);
