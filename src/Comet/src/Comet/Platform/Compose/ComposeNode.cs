@@ -78,9 +78,11 @@ namespace Comet.Platform.Compose
 
 		protected bool HasFrame => _hasFrame;
 
-		/// <summary>The Yoga-arranged width of this node in Dp (0 until arranged). Own-content
-		/// nodes (list, scroll) use it to lay their own content out to the host's width.</summary>
+		/// <summary>The Yoga-arranged size of this node in Dp (0 until arranged). Own-content
+		/// nodes (list, scroll, list-detail) use it to lay their own content out to the host's
+		/// bounds.</summary>
 		protected float FrameWidth => _fw;
+		protected float FrameHeight => _fh;
 
 		/// <summary>The Yoga-arranged parent-relative position in Dp (0 until arranged). A self-sizing
 		/// native control (e.g. a FAB overlay) positions itself at this offset WITHOUT applying the

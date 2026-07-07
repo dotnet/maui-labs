@@ -180,6 +180,37 @@ namespace Comet.Tests.Backend
 			Assert.Equal("Articles", contentNode.Children[0].Get(PropertyIds.Text_Value).AsString);
 		}
 
+		[Theory]
+		[InlineData(427, false)]     // phone
+		[InlineData(700, false)]     // gold medium: rail + SINGLE pane
+		[InlineData(839.9, false)]
+		[InlineData(840, true)]      // WindowWidthSizeClass.Expanded
+		[InlineData(960, true)]      // gold: rail + two-pane
+		[InlineData(1260, true)]     // gold: permanent drawer + two-pane
+		public void ListDetail_TwoPaneFor_FollowsGoldThreshold(double w, bool expected)
+			=> Assert.Equal(expected, ListDetail.TwoPaneFor(w));
+
+		[Fact]
+		public void ListDetail_PushesAndPatchesIsDetailOpen_AndBackCloseWritesSignalBack()
+		{
+			var open = new Signal<bool>(false);
+			var listDetail = new ListDetail(open,
+				list: new VStack { new Text("list") },
+				detail: new VStack { new Text("detail") });
+
+			var node = Bridge(listDetail);
+			Assert.False(node.Get(PropertyIds.ListDetail_IsDetailOpen).AsBool);
+
+			open.Value = true;   // app opens the detail (list row tap)
+			Assert.True(node.Get(PropertyIds.ListDetail_IsDetailOpen).AsBool);
+
+			// The compact detail's BackHandler fires → node raises DetailClosed → the control
+			// writes the signal back (the Drawer dismiss round-trip).
+			node.Sink!.OnEvent(EventIds.DetailClosed);
+			Assert.False(open.Value);
+			Assert.False(node.Get(PropertyIds.ListDetail_IsDetailOpen).AsBool);
+		}
+
 		sealed class EmptyServiceProvider : System.IServiceProvider
 		{
 			public object? GetService(System.Type serviceType) => null;

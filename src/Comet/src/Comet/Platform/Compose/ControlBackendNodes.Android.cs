@@ -63,6 +63,12 @@ namespace Comet
 			=> new ComposeNavigationSuiteNode(this, context);
 	}
 
+	public partial class ListDetail
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeListDetailNode(this, context);
+	}
+
 	public partial class Text
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
