@@ -229,6 +229,11 @@ extends:
             - script: |
                 eng/common/dotnet.sh --info
               displayName: Provision .NET SDK via Arcade
+              env:
+                # Hosted macOS sets DOTNET_INSTALL_DIR to /Users/runner/.dotnet.
+                # Force Arcade to provision repo-local .dotnet because the next
+                # step invokes .dotnet/dotnet directly.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
@@ -242,6 +247,9 @@ extends:
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
               displayName: Build EssentialsAI (macOS)
+              env:
+                # Use the same SDK root that received the workload installation.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - task: CopyFiles@2
               displayName: Copy Native Binaries
               inputs:

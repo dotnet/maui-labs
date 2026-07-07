@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.DevFlow.Skills;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
 using Microsoft.Maui.DevFlow.Driver;
 
@@ -744,12 +745,12 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiAssertCmd);
 
-        // MAUI permission subcommands (iOS simulator only — uses xcrun simctl privacy)
+        // MAUI permission subcommands (iOS simulator only — uses SimulatorService.Privacy)
         var permissionCommand = new Command("permission", "Manage iOS simulator permissions");
 
         var permGrantUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
         var permGrantBundle = new Option<string?>("--bundle-id") { Description = "App bundle identifier" };
-        var permGrantServiceArg = new Argument<string>("service") { Description = "Permission service (camera, location, photos, contacts, microphone, calendar, all, etc.)" };
+        var permGrantServiceArg = new Argument<string>("service") { Description = "Permission service (location, photos, contacts, microphone, calendar, reminders, motion, siri, media-library, all, etc.)" };
         var permGrantCmd = new Command("grant", "Grant a permission (no dialog will appear)") { permGrantServiceArg, permGrantUdid, permGrantBundle };
         permGrantCmd.SetAction(async (ctx, ct) =>
         {
@@ -4111,19 +4112,24 @@ public class DevFlowCommands
         try
         {
             var resolved = await ResolveUdidAsync(udid);
-            // Run xcrun simctl privacy directly (driver methods require BundleId which may not be set)
-            var privacyArgs = string.IsNullOrEmpty(bundleId)
-                ? new[] { "simctl", "privacy", resolved, action, service }
-                : new[] { "simctl", "privacy", resolved, action, service, bundleId };
 
-            var privacyResult = await ProcessRunner.RunAsync("xcrun", privacyArgs);
-
-            if (!privacyResult.Success)
+            // Map the service token to the strongly-typed permission and drive it through
+            // SimulatorService.Privacy (bundleIdentifier is optional in the upstream signature).
+            if (!SimulatorEnumParsing.TryParsePrivacyPermission(service, out var permission))
             {
-                Output.WriteError($"simctl privacy failed: {privacyResult.StandardError.Trim()}", json);
+                Output.WriteError($"Unknown permission service '{service}'. Valid services: {SimulatorEnumParsing.PrivacyPermissionNames}.", json);
                 _errorOccurred = true;
                 return;
             }
+
+            var success = Program.AppleProvider.SetPrivacy(action, resolved, permission, bundleId);
+            if (!success)
+            {
+                Output.WriteError($"simctl privacy {action} failed for service '{service}'.", json);
+                _errorOccurred = true;
+                return;
+            }
+
             var message = $"Permission {action}: {service}" + (bundleId != null ? $" for {bundleId}" : "");
             Output.WriteActionResult(true, $"permission-{action}", service, json, message);
         }

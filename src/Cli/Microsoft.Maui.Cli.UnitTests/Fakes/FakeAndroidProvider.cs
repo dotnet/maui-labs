@@ -135,6 +135,18 @@ public class FakeAndroidProvider : IAndroidProvider
 		return Task.CompletedTask;
 	}
 
+	public Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses, Action<AndroidPackageInstallProgress>? onProgress, CancellationToken cancellationToken = default)
+	{
+		var pkgList = packages.ToList();
+		InstalledPackageSets.Add(pkgList);
+		if (onProgress is not null)
+		{
+			for (var i = 0; i < pkgList.Count; i++)
+				onProgress(new AndroidPackageInstallProgress(pkgList[i], i + 1, pkgList.Count, "Installing", 100));
+		}
+		return Task.CompletedTask;
+	}
+
 	public Task UninstallPackagesAsync(IEnumerable<string> packages, CancellationToken cancellationToken = default)
 	{
 		UninstalledPackageSets.Add(packages.ToList());
