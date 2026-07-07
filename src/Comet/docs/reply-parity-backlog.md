@@ -193,3 +193,25 @@ REMAINING for M1 (priority order):
 - Reply Release size snapshot: probe APK (Jetchat+Reply, all ABIs) 38.0 MiB vs gold
   Kotlin Reply release APK 3.4 MiB (minified, single sample) — single-RID + per-sample
   probe split needed for an honest RESULTS.md row (bench script RID arg didn't take).
+
+## 10. iOS gate status (2026-07-07)
+
+DONE (01da1d53, 44ee7093): shim maxLines + scroll-top handler (xcframework rebuilt);
+SwiftUI hosted-composition twins (ContentSwitcher/ListDetail/NavigationSuite/SearchBar);
+Text_MaxLines + ScrolledFromTop on iOS nodes; agent semantic-tap BUBBLING (fixes the
+old drawer-row bug; Icons queryable by symbol); probe COMET_SCREEN=reply switch +
+avatars. VERIFIED on iPhone 16 Pro sim: inbox renders near-gold (cards/avatars/
+opened-highlight/2-line ellipsis/FAB/suite bar + pill, safe-area clean);
+jetchat.ios.sh 14/14 (no regressions); reply.ios.sh inbox asserts 4/4.
+
+🔴 BLOCKER: compact detail swap crashes — StackOverflow in
+ContextualObject.GetValue (env walk) during SwiftUIListDetailNode.Relayout →
+Layout(Detail) after DetailOpen=true; LD.Refresh observed 5x per tap (churn).
+View-parent chain is acyclic (verified: Detail>ListDetail>ContentSwitcher>VStack>null,
+4 hops) — the recursion is in the CONTEXT graph, likely from repeatedly
+re-materializing persistent views through fresh wrapper VStacks (suite/switcher
+refresh churn). Next steps: (a) reproduce in a host test (materialize a view twice
+through different wrappers, then GetEnvironment<double?>(MinimumWidth)); (b) add a
+cycle guard/visited-set to ContextualObject.GetValue; (c) reduce twin churn (cache
+BuildContent wrappers per state; only swap the changed slot).
+Also remaining: search expanded-pane interaction on iOS; two-pane on an iPad sim.
