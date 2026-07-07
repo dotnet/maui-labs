@@ -18,6 +18,15 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.Equal("adbRunner", ex.ParamName);
 	}
 
+	/// <summary>
+	/// Verifies that an <see cref="OperationCanceledException"/> raised while a runner call is in
+	/// flight propagates out of <see cref="AndroidDevFlowPortForwarder.EnsureAsync"/> untouched
+	/// (i.e. it isn't caught and reported as an error result). This is exercised via
+	/// <see cref="FakeAdbRunner.OnReversePort"/> throwing unconditionally, not by the pre-cancelled
+	/// <c>cts.Token</c> actually being observed - <see cref="FakeAdbRunner"/> accepts a
+	/// <see cref="CancellationToken"/> parameter on each call but never checks it, so this test does
+	/// not prove that a caller-supplied token threads through to cancel a real adb process.
+	/// </summary>
 	[Fact]
 	public async Task EnsureAsync_WhenCallerCancels_PropagatesOperationCanceledException()
 	{

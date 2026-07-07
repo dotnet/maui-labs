@@ -57,8 +57,11 @@ public sealed class FakeAdbRunner : AdbRunner
 
 	public override Task ForwardPortAsync(string serial, AdbPortSpec local, AdbPortSpec remote, CancellationToken cancellationToken = default)
 	{
-		Commands.Add($"-s {serial} forward {local.ToSocketSpec()} {remote.ToSocketSpec()}");
+		// The hook runs first so a simulated failure (throwing from OnForwardPort) prevents the
+		// command from being recorded as "attempted" - Commands should only ever reflect calls
+		// that actually completed, matching what a real adb invocation would have logged.
 		OnForwardPort?.Invoke();
+		Commands.Add($"-s {serial} forward {local.ToSocketSpec()} {remote.ToSocketSpec()}");
 		if (local.Port == remote.Port)
 			_forwardPorts.Add(local.Port);
 		return Task.CompletedTask;
@@ -66,8 +69,10 @@ public sealed class FakeAdbRunner : AdbRunner
 
 	public override Task ReversePortAsync(string serial, AdbPortSpec remote, AdbPortSpec local, CancellationToken cancellationToken = default)
 	{
-		Commands.Add($"-s {serial} reverse {remote.ToSocketSpec()} {local.ToSocketSpec()}");
+		// See the comment in ForwardPortAsync: the hook runs first so a simulated failure keeps
+		// Commands limited to calls that actually completed.
 		OnReversePort?.Invoke();
+		Commands.Add($"-s {serial} reverse {remote.ToSocketSpec()} {local.ToSocketSpec()}");
 		if (local.Port == remote.Port)
 			_reversePorts.Add(local.Port);
 		return Task.CompletedTask;

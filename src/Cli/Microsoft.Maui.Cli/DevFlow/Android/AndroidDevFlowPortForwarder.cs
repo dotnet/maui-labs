@@ -335,7 +335,9 @@ internal sealed class AndroidDevFlowPortForwarder
     }
 
     static bool ContainsMapping(IEnumerable<AdbPortRule> mappings, int port)
-        => mappings.Any(m => m.Local.Port == port && m.Remote.Port == port);
+        => mappings.Any(m =>
+            m.Local.Protocol == AdbProtocol.Tcp && m.Local.Port == port
+            && m.Remote.Protocol == AdbProtocol.Tcp && m.Remote.Port == port);
 
     static string[] BuildMappingSuggestions(string serial, bool brokerReverseMissing, int brokerPort, int[] missingAgentForwards)
     {
