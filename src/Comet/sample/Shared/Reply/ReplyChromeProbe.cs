@@ -43,7 +43,8 @@ namespace CometSamples.Reply
 			};
 
 			return new NavigationSuite(Selected, items, new ReplyRouteContent(),
-				railHeader: RailHeader(), drawerHeader: DrawerHeader());
+					railHeader: RailHeader(), drawerHeader: DrawerHeader())
+				.Background(ReplyTheme.Background);   // paints the safe-area strips too
 		}
 
 		/// <summary>Route content: the ListDetail scaffold with placeholder inbox rows and a
@@ -62,7 +63,7 @@ namespace CometSamples.Reply
 			stack.Add(new Text(() => Titles[Selected.Value])
 				.FontSize(22).FontWeight(FontWeight.Bold)
 				.Color(ReplyTheme.Primary)
-				.Padding(new Thickness(16, 40, 16, 8)));
+				.Padding(new Thickness(16, 16, 16, 8)));
 			for (int i = 0; i < Emails.Length; i++)
 			{
 				int index = i;
@@ -94,7 +95,7 @@ namespace CometSamples.Reply
 			new Text(() => Emails[OpenedEmail.Value].subject)
 				.FontSize(20).FontWeight(FontWeight.Semibold)
 				.Color(ReplyTheme.OnSurfaceVariant)
-				.Padding(new Thickness(20, 48, 20, 4)),
+				.Padding(new Thickness(20, 16, 20, 4)),
 			new Text(() => $"From {Emails[OpenedEmail.Value].sender}")
 				.FontSize(13).Color(ReplyTheme.Outline)
 				.Padding(new Thickness(20, 0, 20, 0)),
