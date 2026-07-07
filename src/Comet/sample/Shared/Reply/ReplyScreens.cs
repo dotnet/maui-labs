@@ -154,8 +154,10 @@ namespace CometSamples.Reply
 				},
 				new Text(email.Subject).FontSize(16).Color(T.OnSurface)
 					.Padding(new Thickness(0, 12, 0, 8)),
-				new Text(Preview(email.Body)).FontSize(14).Color(T.OnSurfaceVariant)
-					.LineBreakMode(LineBreakMode.WordWrap),
+				// Gold: bodyMedium, maxLines 2, ellipsis (ReplyEmailListItem.kt:134-139).
+				new Text(email.Body.Replace("\n\n", " ").Replace('\n', ' ')).FontSize(14).Color(T.OnSurfaceVariant)
+					.LineBreakMode(LineBreakMode.WordWrap)
+					.MaxLines(2),
 			}
 			.Padding(new Thickness(20))
 			.Background(email.Id == OpenedEmailId.Value && DetailOpen.Value ? T.SecondaryContainer : T.SurfaceVariant)
@@ -166,15 +168,6 @@ namespace CometSamples.Reply
 				DetailOpen.Value = true;
 			}),
 		}.Padding(new Thickness(16, 4, 16, 4));
-
-		// 2-line preview stand-in until Text gains MaxLines/ellipsis (backlog).
-		static string Preview(string body)
-		{
-			if (body.Length == 0)
-				return "";
-			var line = body.Split('\n')[0];
-			return line.Length > 92 ? line[..92].TrimEnd() + " …" : line;
-		}
 
 		// ── Detail pane (gold ReplyEmailDetail :207-225 + EmailDetailAppBar) ──
 		static View EmailDetail()

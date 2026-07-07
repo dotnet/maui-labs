@@ -31,6 +31,9 @@ namespace Comet
 
 			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
 				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(family));
+
+			if (this.GetEnvironment<int?>(EnvironmentKeys.Text.MaxLines) is { } maxLines and > 0)
+				node.ApplyProperty(PropertyIds.Text_MaxLines, PropertyValue.From(maxLines));
 		}
 	}
 }

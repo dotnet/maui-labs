@@ -16,6 +16,7 @@ namespace Comet.Platform.Compose
 
 		readonly MutableState<string> _text = new(string.Empty);
 		Microsoft.Maui.Graphics.Color? _color;
+		int _maxLines;
 		int _fontSize;
 		int _lineHeight;
 		int _fontWeight;
@@ -51,6 +52,11 @@ namespace Comet.Platform.Compose
 				_fontWeight = value.AsInt;   // emitted as From((int)weight) — read as Int, not Double
 				_colorVersion.Value++;
 			}
+			else if (id == PropertyIds.Text_MaxLines)
+			{
+				_maxLines = value.AsInt;
+				_colorVersion.Value++;
+			}
 			else if (id == PropertyIds.Text_FontFamily)
 			{
 				_fontFamily = value.AsString;
@@ -62,7 +68,7 @@ namespace Comet.Platform.Compose
 		// with StaticLayout (synchronous, no composition needed). Uses the resolved custom typeface
 		// so measurement matches the rendered (custom-font) glyphs. 16sp ~ Material bodyLarge.
 		public override Size Measure(double widthConstraint, double heightConstraint)
-			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface(), EffectiveLineHeightSp());
+			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface(), EffectiveLineHeightSp(), _maxLines);
 
 		// First-baseline offset (Dp) measured by Compose's OWN layout (TextMeasurer) so the reported
 		// baseline equals the drawn one (the RN single-engine model). Only invoked for baseline-aligned
@@ -118,6 +124,11 @@ namespace Comet.Platform.Compose
 			// line isn't an over-tall box (which threw off vertical centering + the title/subtitle
 			// gap), and the frame height matches the render line-for-line.
 			text.LineHeight = new AndroidX.Compose.Sp(EffectiveLineHeightSp());
+			if (_maxLines > 0)
+			{
+				text.MaxLines = _maxLines;
+				text.Overflow = AndroidX.Compose.TextOverflow.Ellipsis;
+			}
 			text.Render(composer);
 		}
 
@@ -205,7 +216,7 @@ namespace Comet.Platform.Compose
 		// Wrapped to the available width: StaticLayout lays the text out to widthPx and reports
 		// the multi-line height (the Compose analog of iOS TextKit boundingRect). When a custom
 		// typeface is supplied it is used so the measurement matches the rendered glyph metrics.
-		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp, global::Android.Graphics.Typeface? typeface = null, int lineHeightSp = 0)
+		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp, global::Android.Graphics.Typeface? typeface = null, int lineHeightSp = 0, int maxLines = 0)
 		{
 			var density = ComposeNode.Density;
 			var s = text ?? string.Empty;
@@ -228,7 +239,8 @@ namespace Comet.Platform.Compose
 			// Width: +2px absorbs hinting differences so a one-line label never clips.
 			// Height: lineCount × the SAME line-height the renderer pins (explicit if supplied, else
 			// the heuristic), so the frame is exactly as tall as the composed Text — no clipping.
-			double heightDp = layout.LineCount * (lineHeightSp > 0 ? lineHeightSp : LineHeightSp(sp));
+			int lines = maxLines > 0 ? System.Math.Min(layout.LineCount, maxLines) : layout.LineCount;
+			double heightDp = lines * (lineHeightSp > 0 ? lineHeightSp : LineHeightSp(sp));
 			return new Size((System.Math.Ceiling(used) + 2) / density, heightDp);
 		}
 	}
