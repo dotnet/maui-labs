@@ -160,3 +160,23 @@ Comet State/Signal.
 Known iOS debt Reply will hit: real resize observation (SwiftUIBackendRoot reads
 UIScreen bounds per pass only), drawer-row semantic-tap-doesn't-navigate (backlog),
 no drag injector (scroll_by fallback).
+
+## 9. Progress log (2026-07-06 — Android structural build-out COMPLETE)
+
+DONE (commits 2be19e2b..9f40b105): NavigationSuite (bar/rail/permanent-drawer on real
+M3 widgets, own-content swap) · ListDetail (two-pane ≥840 / compact push+BackHandler
+round-trip) · ContentSwitcher route host · safe-area contract (SafeAreaDp; suite insets
+content) · leaf-padding Yoga fix · full static ReplyTheme + per-screen Compose scheme ·
+ReplyData verbatim port + gold avatars · inbox/detail/coming-soon screens ·
+ExtendedFAB expand-at-top/collapse-on-scroll (ScrolledFromTop) · reply.android.sh
+14/14 + jetchat 13/13.
+
+REMAINING for M1 (priority order):
+1. Real DockedSearchBar control+node (replaces the pill; search results ListItem list).
+2. Modal drawer from the rail's menu item (suite variant wrap, gold :122-137).
+3. Text MaxLines/ellipsis (previews are string-truncated); gold lastScrolledBackward
+   re-expand signal; row long-press selection mode (longpress gesture port).
+4. Fidelity pass vs gold screenshots (pixel-scan sweep; containerColor facade Phase-6
+   for rail inverseOnSurface); perf snapshot → RESULTS.md; /code-review the diff.
+5. iOS GATE: SwiftUI twins (NavigationSuite/ListDetail/ContentSwitcher/nav chrome in
+   shim), real resize observation, drag injector, reply.ios.sh.
