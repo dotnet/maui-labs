@@ -23,13 +23,15 @@ namespace Comet
 	public partial class NavigationSuite : View, IContainerView
 	{
 		public NavigationSuite(Signal<int> selectedIndex, IReadOnlyList<NavigationItem> items,
-			View content, View? railHeader = null, View? drawerHeader = null)
+			View content, View? railHeader = null, View? drawerHeader = null,
+			Signal<bool>? drawerOpen = null)
 		{
 			SelectedIndex = selectedIndex;
 			Items = items;
 			Content = content;
 			RailHeaderView = railHeader;
 			DrawerHeaderView = drawerHeader;
+			DrawerOpen = drawerOpen;
 			foreach (var item in items)
 				item.Parent = this;
 			content.Parent = this;
@@ -44,6 +46,12 @@ namespace Comet
 		public View Content { get; }
 		public View? RailHeaderView { get; }
 		public View? DrawerHeaderView { get; }
+
+		/// <summary>When set, the whole suite wraps in a modal navigation drawer (the gold
+		/// wraps the app — ReplyNavigationComponents.kt:122-137): the sheet shows
+		/// <see cref="DrawerHeaderView"/> + labeled items. Open it from chrome (the rail's
+		/// menu item); scrim tap / back / swipe dismissal writes the signal back to false.</summary>
+		public Signal<bool>? DrawerOpen { get; }
 
 		/// <summary>See <see cref="NavigationBar.SelectItem"/> — same contract.</summary>
 		public void SelectItem(int index)

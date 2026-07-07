@@ -66,12 +66,24 @@ namespace Comet
 		{
 			base.ApplyAllSetProperties(node);
 			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+			if (DrawerOpen is { } drawer)
+				node.ApplyProperty(PropertyIds.Drawer_IsOpen, PropertyValue.From(drawer.Peek()));
 			if (!_hooked)
 			{
 				_hooked = true;
 				SelectedIndex.PropertyChanged += (_, _) =>
 					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+				if (DrawerOpen is { } d)
+					d.PropertyChanged += (_, _) =>
+						Node?.ApplyProperty(PropertyIds.Drawer_IsOpen, PropertyValue.From(d.Peek()));
 			}
+		}
+
+		protected internal override void OnBackendEvent(Backend.EventId id)
+		{
+			// Scrim tap / swipe / back dismissed the modal drawer — reflect into the signal.
+			if (id == Backend.EventIds.DrawerClosed && DrawerOpen is { } drawer)
+				drawer.Value = false;
 		}
 	}
 }

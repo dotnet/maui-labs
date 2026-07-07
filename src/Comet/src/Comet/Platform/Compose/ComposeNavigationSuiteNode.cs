@@ -38,6 +38,10 @@ namespace Comet.Platform.Compose
 		// SelectorPanel _selectorValue idiom); the MutableState drives recomposition.
 		NavigationSuiteVariant _variantValue = NavigationSuiteVariant.BottomBar;
 		bool _built, _metricsHooked;
+		// Modal drawer (gold wraps the whole app): Comet signal ↔ animated drawer state,
+		// the ComposeDrawerNode sync idiom.
+		readonly MutableState<bool> _drawerOpen = new(false);
+		readonly DrawerStateHolder _drawerHolder = new(AndroidX.Compose.Material3.DrawerValue.Closed);
 
 		public ComposeNavigationSuiteNode(NavigationSuite suite, BackendContext context)
 		{
@@ -53,6 +57,8 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.Nav_SelectedIndex)
 				_selected.Value = value.AsInt;
+			else if (id == PropertyIds.Drawer_IsOpen)
+				_drawerOpen.Value = value.AsBool;
 		}
 
 		public override void OnOwnerViewChanged(View newView, bool isHotReload)
@@ -259,7 +265,61 @@ namespace Comet.Platform.Compose
 				}
 			}
 
-			box.Render(composer);
+			// Modal drawer wrap (gold ReplyNavigationComponents.kt:122-137): only when the
+			// app supplied a DrawerOpen signal. The sheet reuses the drawer header + labeled
+			// item nodes (rendering the same slot nodes in two composition sites is safe —
+			// they're render-emitters over shared MutableState).
+			if (_suite.DrawerOpen is null)
+			{
+				box.Render(composer);
+				return;
+			}
+
+			bool open = _drawerOpen.Value;
+			composer.LaunchedEffect(open, async ct =>
+			{
+				if (open && _drawerHolder.IsClosed)
+					await _drawerHolder.OpenAsync();
+				else if (!open && _drawerHolder.IsOpen)
+					await _drawerHolder.CloseAsync();
+			});
+			// Reading CurrentValue subscribes this scope: a gesture/scrim dismissal
+			// recomposes here and reports back so the Comet signal clears.
+			var current = _drawerHolder.CurrentValue;
+			composer.LaunchedEffect(current, ct =>
+			{
+				if (_drawerHolder.IsClosed && _drawerOpen.Value)
+					Sink?.OnEvent(EventIds.DrawerClosed);
+				return System.Threading.Tasks.Task.CompletedTask;
+			});
+
+			var modalColumn = new Column();
+			if (_drawerHeaderNode is not null)
+				modalColumn.Add(_drawerHeaderNode);
+			for (int i = 0; i < _items.Length; i++)
+			{
+				int index = i;
+				var item = new AndroidX.Compose.NavigationDrawerItem(
+					selected: index == selected,
+					onClick: () =>
+					{
+						_suite.SelectItem(index);
+						Sink?.OnEvent(EventIds.DrawerClosed);   // gold closes on selection
+					})
+				{ Icon = _items[i].icon };
+				item.Label = _items[i].label ?? _items[i].icon;
+				modalColumn.Add(item);
+			}
+			var modalSheet = new ModalDrawerSheet();
+			modalSheet.Add(modalColumn);
+
+			var drawer = new ModalNavigationDrawer(drawerState: _drawerHolder)
+			{
+				Drawer = modalSheet,
+				Content = box,
+			};
+			((ComposableNode)drawer).Modifier = Modifier.Companion.FillMaxSize();
+			drawer.Render(composer);
 		}
 	}
 }
