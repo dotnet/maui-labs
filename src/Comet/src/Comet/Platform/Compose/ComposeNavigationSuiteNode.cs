@@ -33,6 +33,7 @@ namespace Comet.Platform.Compose
 			System.Array.Empty<(ComposeNode, ComposeNode?)>();
 		ComposeNode? _contentNode, _railHeaderNode, _drawerHeaderNode;
 		Size _windowDp;
+		Microsoft.Maui.Thickness _safeDp;
 		// Plain mirror of _variant for reads OUTSIDE composition (Measure/Layout — the
 		// SelectorPanel _selectorValue idiom); the MutableState drives recomposition.
 		NavigationSuiteVariant _variantValue = NavigationSuiteVariant.BottomBar;
@@ -98,18 +99,24 @@ namespace Comet.Platform.Compose
 			if (_metricsHooked)
 				return;
 			_metricsHooked = true;
-			_suite.GetWindowMetrics().SizeDp.PropertyChanged += (_, __) =>
+			var metrics = _suite.GetWindowMetrics();
+			metrics.SizeDp.PropertyChanged += (_, __) =>
+				Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
+			metrics.SafeAreaDp.PropertyChanged += (_, __) =>
 				Comet.ThreadHelper.RunOnMainThread(UpdateFromMetrics);
 		}
 
 		void UpdateFromMetrics()
 		{
-			var size = _suite.GetWindowMetrics().SizeDp.Peek();
+			var metrics = _suite.GetWindowMetrics();
+			var size = metrics.SizeDp.Peek();
 			if (size.Width <= 0 || size.Height <= 0)
 				size = ScreenSizeDp();
-			if (size == _windowDp)
+			var safe = metrics.SafeAreaDp.Peek();
+			if (size == _windowDp && safe == _safeDp)
 				return;
 			_windowDp = size;
+			_safeDp = safe;
 			_variantValue = NavigationSuite.VariantFor(size.Width, size.Height);
 			_variant.Value = (int)_variantValue;
 			_geometry.Value++;
@@ -117,11 +124,21 @@ namespace Comet.Platform.Compose
 			Comet.Reactive.ReactiveScheduler.EnsureFlushScheduled();
 		}
 
+		// The content slot clears the safe area automatically: the status-bar/cutout strip at
+		// the top always, plus the bottom system-bar strip on variants where the content runs
+		// to the bottom edge (rail/drawer — the M3 bottom NavigationBar already covers it).
+		// The chrome widgets themselves keep the M3 default internal inset handling.
 		Size ContentSizeDp() => _variantValue switch
 		{
-			NavigationSuiteVariant.Rail => new Size(_windowDp.Width - RailWidthDp, _windowDp.Height),
-			NavigationSuiteVariant.PermanentDrawer => new Size(_windowDp.Width - DrawerWidthDp, _windowDp.Height),
-			_ => new Size(_windowDp.Width, _windowDp.Height - BarHeightDp),
+			NavigationSuiteVariant.Rail => new Size(
+				_windowDp.Width - RailWidthDp,
+				_windowDp.Height - _safeDp.Top - _safeDp.Bottom),
+			NavigationSuiteVariant.PermanentDrawer => new Size(
+				_windowDp.Width - DrawerWidthDp,
+				_windowDp.Height - _safeDp.Top - _safeDp.Bottom),
+			_ => new Size(
+				_windowDp.Width,
+				_windowDp.Height - _safeDp.Top - BarHeightDp),
 		};
 
 		void LayoutContent()
@@ -164,15 +181,17 @@ namespace Comet.Platform.Compose
 			var box = new Box();
 			((ComposableNode)box).Modifier = BuildNodeModifier() ?? Modifier.Companion.FillMaxSize();
 
-			// Content first (chrome paints over it at the shared edge).
+			// Content first (chrome paints over it at the shared edge), shifted below the
+			// status-bar/cutout strip — the layout math in ContentSizeDp shrank it to match.
+			float safeTop = (float)_safeDp.Top;
 			var contentHost = new Box();
 			((ComposableNode)contentHost).Modifier = variant switch
 			{
 				NavigationSuiteVariant.Rail =>
-					Modifier.Companion.AbsoluteOffset(new Dp(RailWidthDp), new Dp(0)),
+					Modifier.Companion.AbsoluteOffset(new Dp(RailWidthDp), new Dp(safeTop)),
 				NavigationSuiteVariant.PermanentDrawer =>
-					Modifier.Companion.AbsoluteOffset(new Dp(DrawerWidthDp), new Dp(0)),
-				_ => Modifier.Companion,
+					Modifier.Companion.AbsoluteOffset(new Dp(DrawerWidthDp), new Dp(safeTop)),
+				_ => Modifier.Companion.AbsoluteOffset(new Dp(0), new Dp(safeTop)),
 			};
 			contentHost.Add(_contentNode!);
 			box.Add(contentHost);

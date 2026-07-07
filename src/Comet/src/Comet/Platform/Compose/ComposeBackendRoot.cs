@@ -67,6 +67,16 @@ namespace Comet.Platform.Compose
 			{
 				var ime = insets.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom;
 				_owner.SetImeInsetDp(ime / ComposeNode.Density);
+
+				// Safe area (per-root reactive contract): system bars + display cutout — the
+				// insets edge-to-edge content must clear. Equality-gated, safe per dispatch.
+				var bars = insets.GetInsets(
+					AndroidX.Core.View.WindowInsetsCompat.Type.SystemBars()
+					| AndroidX.Core.View.WindowInsetsCompat.Type.DisplayCutout());
+				float d = ComposeNode.Density;
+				Backend.CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
+					bars.Left / d, bars.Top / d, bars.Right / d, bars.Bottom / d));
+
 				return AndroidX.Core.View.ViewCompat.OnApplyWindowInsets(v, insets);
 			}
 		}

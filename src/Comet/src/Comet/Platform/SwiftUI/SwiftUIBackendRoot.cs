@@ -64,6 +64,13 @@ namespace Comet.Platform.SwiftUI
 			// only re-read per layout pass — real resize observation (viewWillTransition /
 			// scene geometry) lands with the first adaptive iOS sample.
 			CometWindowMetrics.Shared.Update(size);
+			// Safe area from the key window (notch / home indicator), same per-pass cadence.
+			if (UIApplication.SharedApplication.KeyWindow is { } window)
+			{
+				var sa = window.SafeAreaInsets;
+				CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
+					sa.Left, sa.Top, sa.Right, sa.Bottom));
+			}
 			CometBackendLayoutEngine.Layout(_layoutRoot, size);
 		}
 	}

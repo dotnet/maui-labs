@@ -40,6 +40,13 @@ namespace Comet.Backend
 		/// consumers treating zero as "unknown" should defer or use a platform fallback.</summary>
 		public Signal<Size> SizeDp { get; } = new(Size.Zero);
 
+		/// <summary>The window's safe-area insets in Dp: status bar + navigation bar + display
+		/// cutout under Android edge-to-edge; the iOS safe-area insets. Zero until the first
+		/// native inset dispatch. Chrome that hosts app content (NavigationSuite) insets its
+		/// content slot by this automatically; the real Material widgets keep handling their
+		/// OWN insets internally.</summary>
+		public Signal<Microsoft.Maui.Thickness> SafeAreaDp { get; } = new(default);
+
 		/// <summary>Reactive Material width class of the current size.</summary>
 		public WindowWidthClass WidthClass => ClassifyWidth(SizeDp.Value.Width);
 
@@ -50,6 +57,10 @@ namespace Comet.Backend
 		/// size changes. No-ops on equal sizes (Signal's equality gate), so per-frame
 		/// layout callbacks are safe to forward directly.</summary>
 		public void Update(Size sizeDp) => SizeDp.Value = sizeDp;
+
+		/// <summary>Called by the owning backend root when the window's safe-area insets
+		/// change (equality-gated like <see cref="Update"/>).</summary>
+		public void UpdateSafeArea(Microsoft.Maui.Thickness insetsDp) => SafeAreaDp.Value = insetsDp;
 
 		/// <summary>M3 width breakpoints: Compact &lt; 600 ≤ Medium &lt; 840 ≤ Expanded.</summary>
 		public static WindowWidthClass ClassifyWidth(double widthDp) =>

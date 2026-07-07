@@ -94,6 +94,32 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void SafeAreaUpdate_IsReactive_AndEqualityGated()
+		{
+			var metrics = new CometWindowMetrics();
+			metrics.UpdateSafeArea(new Microsoft.Maui.Thickness(0, 24, 0, 24));
+
+			var root = new VStack
+			{
+				new Text(() => $"top:{metrics.SafeAreaDp.Value.Top:0}"),
+			};
+			root.WindowMetrics(metrics);
+			var node = Bridge(root);
+			var textNode = node.Children[0];
+			Assert.Equal("top:24", textNode.Get(PropertyIds.Text_Value).AsString);
+
+			int notifications = 0;
+			metrics.SafeAreaDp.PropertyChanged += (_, __) => notifications++;
+			metrics.UpdateSafeArea(new Microsoft.Maui.Thickness(0, 24, 0, 24));   // equal → gated
+			Assert.Equal(0, notifications);
+
+			metrics.UpdateSafeArea(new Microsoft.Maui.Thickness(0, 35, 0, 24));   // cutout grew
+			ReactiveScheduler.FlushSync();
+			Assert.Equal(1, notifications);
+			Assert.Equal("top:35", textNode.Get(PropertyIds.Text_Value).AsString);
+		}
+
+		[Fact]
 		public void GetWindowMetrics_PrefersEnvironmentInstance_FallsBackToShared()
 		{
 			var perRoot = new CometWindowMetrics();
