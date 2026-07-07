@@ -43,6 +43,11 @@ namespace Comet.Platform.SwiftUI
 				_lastAway = away;
 				_list.ScrolledAway.Value = away > 0.5;
 			});
+
+			// Top-relative twin (first-row visibility) → ScrolledFromTop, the iOS counterpart
+			// of ComposeListNode's CanScrollBackward flow (Reply's ExtendedFAB collapse).
+			CometSwiftUIHost.SetScrollTopHandler(_native, away =>
+				_list.ScrolledFromTop.Value = away > 0.5);
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)

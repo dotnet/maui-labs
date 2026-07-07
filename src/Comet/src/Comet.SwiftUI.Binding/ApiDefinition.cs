@@ -65,6 +65,9 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setScrollHandler:handler:")]
 		void SetScrollHandler(CometNode node, Action<double> handler);
 
+		[Static, Export("setScrollTopHandler:handler:")]
+		void SetScrollTopHandler(CometNode node, Action<double> handler);
+
 		[Static, Export("insertChild:atIndex:child:")]
 		void InsertChild(CometNode node, nint index, CometNode child);
 

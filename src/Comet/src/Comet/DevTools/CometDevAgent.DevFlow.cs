@@ -43,8 +43,16 @@ namespace Comet.DevTools
 					return RunOnMain(() =>
 					{
 						var view = ResolveElement(body);
-						view.OnBackendEvent(EventIds.Clicked);
-						view.OnBackendGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
+						// Bubble to the nearest tap-bearing ancestor — the semantic counterpart
+						// of a hit-test targeting the gesture's owner (a Text inside a tappable
+						// card). Without this, taps on leaf elements silently no-op (the iOS
+						// drawer-row bug; Android smoke masked it with coordinate taps).
+						var target = view;
+						for (int depth = 0; target is not null && !HasTap(target) && depth < 32; depth++)
+							target = target.Parent as View;
+						target ??= view;
+						target.OnBackendEvent(EventIds.Clicked);
+						target.OnBackendGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
 						return ActionOk();
 					});
 
@@ -126,6 +134,17 @@ namespace Comet.DevTools
 			if (idStr is null || !int.TryParse(idStr, out var id))
 				throw new System.InvalidOperationException("elementId is required");
 			return Resolve(id);
+		}
+
+		static bool HasTap(View view)
+		{
+			var gestures = view.Gestures;
+			if (gestures is null)
+				return false;
+			for (int i = 0; i < gestures.Count; i++)
+				if (gestures[i] is TapGesture)
+					return true;
+			return false;
 		}
 
 		static string ActionOk() => "{\"success\":true}";

@@ -108,6 +108,8 @@ namespace Comet.Platform.SwiftUI
 				_fontSize = value.AsDouble;
 				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
 			}
+			else if (id == PropertyIds.Text_MaxLines)
+				CometSwiftUIHost.SetDouble(_native, "maxlines", value.AsInt);
 			else if (id == PropertyIds.Text_FontWeight)
 				CometSwiftUIHost.SetDouble(_native, "fontweight", value.AsInt);   // Int-kind, not Double
 			else if (id == PropertyIds.Text_FontFamily)

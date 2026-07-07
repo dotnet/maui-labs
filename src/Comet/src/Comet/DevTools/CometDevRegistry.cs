@@ -240,6 +240,7 @@ namespace Comet.DevTools
 		{
 			var v = id.Value;
 			if (v == PropertyIds.Text_Value.Value) return "text";
+			if (v == PropertyIds.Icon_Symbol.Value) return "text";   // Icon("arrow_back") queryable by symbol
 			if (v == PropertyIds.Button_Text.Value) return "buttonText";
 			if (v == PropertyIds.TextField_Text.Value) return "text";
 			if (v == PropertyIds.TextField_Placeholder.Value) return "placeholder";

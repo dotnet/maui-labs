@@ -120,5 +120,47 @@ namespace Comet
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new SwiftUINavigationNode(this, context);
 	}
+
+	// Adaptive primitives (M1 Reply): hosted-composition twins — structure/interaction
+	// parity composed from Comet views (see SwiftUIAdaptiveNodes.cs).
+
+	public partial class ContentSwitcher
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIContentSwitcherNode(this, context);
+	}
+
+	public partial class ListDetail
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIListDetailNode(this, context);
+	}
+
+	public partial class NavigationSuite
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINavigationSuiteNode(this, context);
+	}
+
+	public partial class SearchBar
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUISearchBarNode(this, context);
+	}
+
+	public partial class NavigationBar
+	{
+		// Standalone bar: host a one-variant suite-style row (rare outside the suite).
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINavigationSuiteNode(
+				new NavigationSuite(SelectedIndex, Items, new VStack()), context);
+	}
+
+	public partial class NavigationRail
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINavigationSuiteNode(
+				new NavigationSuite(SelectedIndex, Items, new VStack(), railHeader: HeaderView), context);
+	}
 }
 #endif

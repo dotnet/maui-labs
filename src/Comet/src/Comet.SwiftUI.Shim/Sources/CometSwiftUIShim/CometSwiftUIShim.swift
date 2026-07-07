@@ -32,6 +32,7 @@ struct CometTextRun {
     @Published var isVisible: Bool = true       // Comet IsVisible; false => hidden + non-interactive
     @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
     @Published var fontSize: CGFloat = 0        // 0 = default (body)
+    @Published var maxLines: Int = 0            // 0 = unlimited; else lineLimit + tail truncation
     @Published var fontWeight: Int = 0          // 0 = default; otherwise Maui FontWeight (100–900)
     @Published var fontFamily: String = ""      // custom font family (e.g. "Montserrat"); "" = system
     @Published var padding: CGFloat = 0
@@ -72,6 +73,7 @@ struct CometTextRun {
     var onDialogDismiss: (() -> Void)?  // native .alert dismissed (-> DialogDismissed)
     var onFocused: (() -> Void)?        // TextField gained focus (-> Focused; gold onTextFieldFocused)
     var onScroll: ((Double) -> Void)?   // ScrollView scrolled (-> ScrollView.AtTop / ScrollOffset)
+    var onScrollTop: ((Double) -> Void)?   // list first row visibility (-> ListView.ScrolledFromTop)
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -147,6 +149,7 @@ struct CometTextRun {
         case "opacity": node.opacity = CGFloat(value)
         case "contenttopinset": node.contentTopInset = CGFloat(value)
         case "fontsize": node.fontSize = CGFloat(value)
+        case "maxlines": node.maxLines = Int(value)
         case "fontweight": node.fontWeight = Int(value)
         case "borderwidth": node.borderWidth = CGFloat(value)
         default: break
@@ -216,6 +219,12 @@ struct CometTextRun {
         node.onScroll = handler
     }
 
+    // Top-relative twin (drives ListView.ScrolledFromTop — Reply's ExtendedFAB collapse).
+    @objc(setScrollTopHandler:handler:)
+    public static func setScrollTopHandler(_ node: CometNode, handler: @escaping @convention(block) (Double) -> Void) {
+        node.onScrollTop = handler
+    }
+
     @objc(insertChild:atIndex:child:)
     public static func insertChild(_ node: CometNode, atIndex index: Int, child: CometNode) {
         let i = max(0, min(index, node.children.count))
@@ -262,8 +271,13 @@ struct CometTextRun {
                 attributes: [.font: font],
                 context: nil)
             // Report the ACTUAL used width (≤ constraint) so a short label hugs and the flex row
-            // packs it tight; the wrapped height drives multi-line bubbles.
-            return CGSize(width: min(ceil(rect.width), w), height: ceil(rect.height))
+            // packs it tight; the wrapped height drives multi-line bubbles. A maxLines clamp
+            // caps the box; the rendered Text ellipsizes via lineLimit.
+            var height = ceil(rect.height)
+            if node.maxLines > 0 {
+                height = min(height, ceil(font.lineHeight * CGFloat(node.maxLines)))
+            }
+            return CGSize(width: min(ceil(rect.width), w), height: height)
         }
 
         // Icon: a square box at the symbol's point size.
@@ -412,6 +426,7 @@ struct CometLeafContent: View {
                 Text(node.text)
                     .modifier(ForegroundModifier(argb: node.textColorARGB))
                     .modifier(FontModifier(node: node))
+                    .lineLimit(node.maxLines > 0 ? node.maxLines : nil)
             }
         }
     }
@@ -651,8 +666,14 @@ struct CometNodeView: View {
                             // Drive ScrolledAway (the JumpToBottom FAB): the newest message is the last
                             // child — when it's on screen we're at the bottom (0), when it scrolls off
                             // we're scrolled away (1). The C# list node maps this onto IListView.ScrolledAway.
-                            .onAppear { if child.id == node.children.last?.id { node.onScroll?(0) } }
-                            .onDisappear { if child.id == node.children.last?.id { node.onScroll?(1) } }
+                            .onAppear {
+                                if child.id == node.children.last?.id { node.onScroll?(0) }
+                                if child.id == node.children.first?.id { node.onScrollTop?(0) }
+                            }
+                            .onDisappear {
+                                if child.id == node.children.last?.id { node.onScroll?(1) }
+                                if child.id == node.children.first?.id { node.onScrollTop?(1) }
+                            }
                     }
                 }
                 .listStyle(.plain)
