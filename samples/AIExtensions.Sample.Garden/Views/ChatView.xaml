@@ -5,7 +5,6 @@
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
              xmlns:gchat="clr-namespace:AIExtensions.Sample.Garden.Chat"
              xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
-             xmlns:engine="clr-namespace:Microsoft.Maui.AI.Chat;assembly=Microsoft.Maui.AI.Chat"
              x:Class="AIExtensions.Sample.Garden.Views.ChatView"
              x:DataType="vm:ChatViewModel"
              local:ViewModelBinder.Type="{x:Type vm:ChatViewModel}">
@@ -93,23 +92,18 @@
                 </DataTemplate>
             </chat:CopilotChatView.EmptyViewTemplate>
 
-            <!-- Rich template set — custom Garden views per block type -->
+            <!-- Rich template set — custom Garden views per block type. Each custom block has a small
+                 typed ContentTemplate (like the built-in MediaContentTemplate), so the block↔view wiring
+                 and priority are encapsulated in one class instead of a declarative GenericContentTemplate.
+                 The generic tool card reuses the built-in FunctionInvocationTemplate with a custom ViewType. -->
             <chat:CopilotChatView.ContentTemplates>
                 <chat:ThinkingContentTemplate />
                 <chat:TextContentTemplate Role="User" />
-                <chat:GenericContentTemplate BlockType="{x:Type gchat:GardenFormattedTextBlock}"
-                                             ViewType="{x:Type gchat:GardenFormattedTextView}" />
+                <gchat:GardenFormattedTextTemplate />
                 <chat:MediaContentTemplate />
-                <chat:GenericContentTemplate BlockType="{x:Type gchat:ProductResultsBlock}"
-                                             ViewType="{x:Type gchat:ProductResultsView}" />
-                <!-- OrderSummaryBlock is-a FunctionInvocationContentBlock, so it also matches the generic
-                     tool template below (both tie at the +25 BlockType priority). Priority="1" makes this
-                     win deterministically; declaring it first is belt-and-suspenders. -->
-                <chat:GenericContentTemplate BlockType="{x:Type gchat:OrderSummaryBlock}"
-                                             ViewType="{x:Type gchat:OrderSummaryView}"
-                                             Priority="1" />
-                <chat:GenericContentTemplate BlockType="{x:Type engine:FunctionInvocationContentBlock}"
-                                             ViewType="{x:Type gchat:GardenToolView}" />
+                <gchat:ProductResultsTemplate />
+                <gchat:OrderSummaryTemplate />
+                <chat:FunctionInvocationTemplate ViewType="{x:Type gchat:GardenToolView}" />
                 <chat:ToolApprovalTemplate />
                 <chat:ErrorContentTemplate />
                 <chat:DefaultContentTemplate />
