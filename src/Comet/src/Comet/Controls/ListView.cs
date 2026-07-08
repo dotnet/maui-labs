@@ -148,6 +148,12 @@ namespace Comet
 			{
 				_items?.Reevaluate();
 				currentItems = _items?.CurrentValue;
+				// Invalidate the row-view cache: rows snapshot state at build time (an
+				// opened-row highlight), so a reload must rebuild them — serving cached
+				// views re-emits the stale snapshot. Same clear+dispose as Dispose().
+				var staleViews = CurrentViews?.ToList();
+				CurrentViews?.Clear();
+				staleViews?.ForEach(x => x.Value?.Dispose());
 				base.ReloadData();
 			}
 			finally

@@ -55,6 +55,7 @@ namespace Comet.Tests.Backend
 				_list = list;
 				_factory = factory;
 				_context = context;
+				ListInstances.Add(this);
 			}
 
 			public override void ApplyProperty(PropertyId id, in PropertyValue value)
@@ -64,17 +65,25 @@ namespace Comet.Tests.Backend
 					Rebuild();
 			}
 
+			public static readonly List<FakeListNode> ListInstances = new();
+
+			readonly List<FakeBackendNode> _rowNodes = new();
+			public int RowCount => _rowViews.Count;
+			public Microsoft.Maui.Graphics.Color? RowBackground(int i)
+				=> _rowNodes[i].Get(PropertyIds.BackgroundColor).AsColor;
+
 			void Rebuild()
 			{
 				using var hold = ReactiveScheduler.HoldFlushes();
 				if (_list is View listView)
 					Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
 				_rowViews.Clear();
+				_rowNodes.Clear();
 				int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 				for (int i = 0; i < count; i++)
 				{
 					var view = _list.ViewFor(0, i);
-					CometBackendBridge.Materialize(view, _factory, _context);
+					_rowNodes.Add((FakeBackendNode)CometBackendBridge.Materialize(view, _factory, _context));
 					_rowViews.Add(view);
 					LayoutRow(view);
 				}
@@ -366,7 +375,12 @@ namespace Comet.Tests.Backend
 					.Padding(new Microsoft.Maui.Thickness(16, 4, 16, 4));
 			}
 
-			View Row(int i) => new VStack(spacing: 2f)
+			public static readonly List<string> RowLog = new();
+
+			View Row(int i)
+			{
+				RowLog.Add($"{i}@{OpenedEmailId.Value}");
+				return new VStack(spacing: 2f)
 			{
 				new Text($"Email {i}"),
 				new Text("Preview text"),
@@ -378,6 +392,7 @@ namespace Comet.Tests.Backend
 				OpenedEmailId.Value = i;
 				DetailOpen.Value = true;
 			});
+			}
 
 			View EmailDetail()
 			{
@@ -481,6 +496,42 @@ namespace Comet.Tests.Backend
 			{
 				ReactiveScheduler.AfterFlush -= RunLayout;
 			}
+		}
+
+		/// <summary>The opened-row highlight (Reply): after the opened-email signal changes and
+		/// the static hook reloads the list, rebuilt rows must reflect the NEW signal value in
+		/// their background — the ReloadData path may not serve stale row state.</summary>
+		[Fact]
+		public void ReloadData_RebuildsRowsAgainstCurrentSignalValue()
+		{
+			FakeHostedNode.Depth = 0;
+			FakeHostedNode.MaxDepth = 0;
+			FakeHostedNode.TotalRefreshes = 0;
+			FakeHostedNode.Instances.Clear();
+			FakeListNode.ListInstances.Clear();
+
+			var app = new MiniReply();
+			var probe = new ProbeRoot(app);
+			CometBackendBridge.Materialize(probe, Factory, Ctx);
+			CometBackendLayoutEngine.Layout(probe.BuiltView ?? probe, new Size(402, 874));
+
+			// The tap: open email 2 (highlight signal first, then the pane swap).
+			app.OpenedEmailId.Value = 2;
+			app.DetailOpen.Value = true;
+			// Back to the list (compact restores the list pane).
+			app.DetailOpen.Value = false;
+
+			// Find the live inbox list node and read the rebuilt rows' backgrounds.
+			var lists = FakeListNode.ListInstances.FindAll(l => !l.Disposed);
+			Assert.NotEmpty(lists);
+
+			// Row 2 must now carry the highlight color, row 1 must not.
+			var inbox = lists.FindLast(l => l.RowCount == 3);
+			Assert.NotNull(inbox);
+			var diag = string.Join(" | ", FakeListNode.ListInstances.ConvertAll(l =>
+				$"disposed={l.Disposed} rows={l.RowCount} bgs=[{string.Join(",", System.Linq.Enumerable.Select(System.Linq.Enumerable.Range(0, l.RowCount), i => l.RowBackground(i)?.ToHex()))}]"));
+			Assert.True(Colors.Gray.Equals(inbox!.RowBackground(0)) && Colors.Red.Equals(inbox.RowBackground(1)),
+				$"stale row state after ReloadData: {diag}\nrowLog: {string.Join(" ", MiniReply.RowLog)}");
 		}
 
 		/// <summary>A hosted swap triggered OUTSIDE a flush (a tap handler) must stay a single
