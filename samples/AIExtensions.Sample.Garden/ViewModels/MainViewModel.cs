@@ -31,10 +31,16 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HandlerToggleIcon))]
+    [NotifyPropertyChangedFor(nameof(HandlerToggleTooltip))]
     public partial bool UseCustomHandlers { get; set; } = true;
 
     /// <summary>Fluent glyph for the handler toggle — a toolbox when custom, a box when raw/defaults.</summary>
     public string HandlerToggleIcon => UseCustomHandlers ? FluentIcons.Toolbox : FluentIcons.Box;
+
+    /// <summary>Hover text describing the current handler mode and what tapping will do.</summary>
+    public string HandlerToggleTooltip => UseCustomHandlers
+        ? "Handlers: custom Garden blocks — tap for built-in defaults"
+        : "Handlers: built-in defaults — tap for custom Garden blocks";
 
     [RelayCommand]
     private void ToggleChatHandlerMode()
@@ -51,10 +57,16 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PreviewToggleIcon))]
+    [NotifyPropertyChangedFor(nameof(PreviewToggleTooltip))]
     public partial bool IsPreview { get; set; }
 
     /// <summary>Fluent glyph for the preview toggle — a beaker when inspecting, a leaf for designed views.</summary>
     public string PreviewToggleIcon => IsPreview ? FluentIcons.Beaker : FluentIcons.LeafOne;
+
+    /// <summary>Hover text describing the current rendering mode and what tapping will do.</summary>
+    public string PreviewToggleTooltip => IsPreview
+        ? "Rendering: raw block inspector — tap for designed views"
+        : "Rendering: designed views — tap for raw block inspector";
 
     [RelayCommand]
     private void ToggleChatPreviewMode()
