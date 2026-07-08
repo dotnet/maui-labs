@@ -9,11 +9,41 @@
              x:DataType="vm:ChatViewModel"
              local:ViewModelBinder.Type="{x:Type vm:ChatViewModel}">
 
-    <ContentView.Resources>
+    <!-- A single CopilotChatView bound to the one live Session. Two axes are exercised without adding
+         controls:
+           • Handlers  → the view model recreates Session with/without the custom handlers (which blocks
+                         the pipeline produces).
+           • Rendering → the designed templates below are the default; the implicit Style in the control's
+                         own Resources adds ONLY a data trigger that swaps ContentTemplates to the raw
+                         block inspector when IsPreview is true. Delete the Style and the fancy designed
+                         set remains — the trigger just layers preview on top (in MAUI a trigger overrides
+                         the inline/local value while active, and restores it when the condition clears). -->
+    <chat:CopilotChatView Session="{Binding Session}"
+                          SuggestionPrompts="{Binding SuggestionPrompts}"
+                          Placeholder="Ask about products..."
+                          MaxBubbleWidth="560"
+                          HorizontalOptions="Fill">
 
-        <!-- Designed set — a small typed ContentTemplate per custom block; the generic tool card reuses
-             the built-in FunctionInvocationTemplate with a custom ViewType. -->
-        <x:Array x:Key="DesignedTemplates" Type="{x:Type chat:ContentTemplate}">
+        <chat:CopilotChatView.Resources>
+            <!-- Preview set — a single catch-all template that renders every block through the raw inspector. -->
+            <x:Array x:Key="PreviewTemplates" Type="{x:Type chat:ContentTemplate}">
+                <gchat:BlockPreviewTemplate />
+            </x:Array>
+
+            <!-- Implicit style: adds only the preview trigger, layered over the inline designed templates. -->
+            <Style TargetType="chat:CopilotChatView">
+                <Style.Triggers>
+                    <DataTrigger TargetType="chat:CopilotChatView"
+                                 Binding="{Binding IsPreview}" Value="True">
+                        <Setter Property="ContentTemplates" Value="{StaticResource PreviewTemplates}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </chat:CopilotChatView.Resources>
+
+        <!-- Designed set (default) — a small typed ContentTemplate per custom block; the generic tool
+             card reuses the built-in FunctionInvocationTemplate with a custom ViewType. -->
+        <chat:CopilotChatView.ContentTemplates>
             <chat:ThinkingContentTemplate />
             <chat:TextContentTemplate Role="User" />
             <gchat:GardenFormattedTextTemplate />
@@ -24,41 +54,7 @@
             <chat:ToolApprovalTemplate />
             <chat:ErrorContentTemplate />
             <chat:DefaultContentTemplate />
-        </x:Array>
-
-        <!-- Preview set — a single catch-all template that renders every block through the raw inspector. -->
-        <x:Array x:Key="PreviewTemplates" Type="{x:Type chat:ContentTemplate}">
-            <gchat:BlockPreviewTemplate />
-        </x:Array>
-
-        <!-- The rendering axis, done declaratively: one Style whose base setter installs the designed
-             templates, and a data trigger that swaps the whole ContentTemplates collection to the preview
-             set when the view model's IsPreview flips. ContentTemplates is a bindable collection property,
-             so the control rebuilds its selector and re-renders the existing messages on the swap. -->
-        <Style x:Key="ChatTemplateStyle" TargetType="chat:CopilotChatView">
-            <Setter Property="ContentTemplates" Value="{StaticResource DesignedTemplates}" />
-            <Style.Triggers>
-                <DataTrigger TargetType="chat:CopilotChatView"
-                             Binding="{Binding IsPreview}" Value="True">
-                    <Setter Property="ContentTemplates" Value="{StaticResource PreviewTemplates}" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-    </ContentView.Resources>
-
-    <!-- A single CopilotChatView bound to the one live Session. Two axes are exercised without adding
-         controls:
-           • Handlers  → the view model recreates Session with/without the custom handlers (which blocks
-                         the pipeline produces).
-           • Rendering → the ChatTemplateStyle above swaps ContentTemplates between the designed set and
-                         the raw block inspector via a data trigger on IsPreview. -->
-    <chat:CopilotChatView Style="{StaticResource ChatTemplateStyle}"
-                          Session="{Binding Session}"
-                          SuggestionPrompts="{Binding SuggestionPrompts}"
-                          Placeholder="Ask about products..."
-                          MaxBubbleWidth="560"
-                          HorizontalOptions="Fill">
+        </chat:CopilotChatView.ContentTemplates>
 
         <!-- Welcome / empty state: greeting + the grid of available tools -->
         <chat:CopilotChatView.EmptyViewTemplate>
