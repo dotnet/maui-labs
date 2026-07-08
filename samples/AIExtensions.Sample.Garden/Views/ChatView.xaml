@@ -47,6 +47,11 @@
             <chat:ThinkingContentTemplate />
             <chat:TextContentTemplate Role="User" />
             <gchat:GardenFormattedTextTemplate />
+            <!-- Assistant text fallback: in built-in-handler mode there is no GardenFormattedTextHandler,
+                 so assistant replies are plain TextContentBlocks. Render them as a normal bubble. Declared
+                 after GardenFormattedTextTemplate so the custom formatted block (a TextContentBlock subclass)
+                 still wins at equal priority via declaration order. -->
+            <chat:TextContentTemplate />
             <chat:MediaContentTemplate />
             <gchat:ProductResultsTemplate />
             <gchat:OrderSummaryTemplate />
