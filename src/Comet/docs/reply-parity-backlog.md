@@ -204,14 +204,22 @@ avatars. VERIFIED on iPhone 16 Pro sim: inbox renders near-gold (cards/avatars/
 opened-highlight/2-line ellipsis/FAB/suite bar + pill, safe-area clean);
 jetchat.ios.sh 14/14 (no regressions); reply.ios.sh inbox asserts 4/4.
 
-🔴 BLOCKER: compact detail swap crashes — StackOverflow in
-ContextualObject.GetValue (env walk) during SwiftUIListDetailNode.Relayout →
-Layout(Detail) after DetailOpen=true; LD.Refresh observed 5x per tap (churn).
-View-parent chain is acyclic (verified: Detail>ListDetail>ContentSwitcher>VStack>null,
-4 hops) — the recursion is in the CONTEXT graph, likely from repeatedly
-re-materializing persistent views through fresh wrapper VStacks (suite/switcher
-refresh churn). Next steps: (a) reproduce in a host test (materialize a view twice
-through different wrappers, then GetEnvironment<double?>(MinimumWidth)); (b) add a
-cycle guard/visited-set to ContextualObject.GetValue; (c) reduce twin churn (cache
-BuildContent wrappers per state; only swap the changed slot).
-Also remaining: search expanded-pane interaction on iOS; two-pane on an iPad sim.
+✅ BLOCKER RESOLVED (26e3858a, 2026-07-08): the crash was NOT a context-graph
+cycle — the env walk was innocent (GetValue frames just topped a much deeper
+stack; the depth cap in 56f5deae was aimed at the wrong layer). The real loop,
+recovered from the managed dump (`--console-pty` stderr — CoreCLR prints the
+full managed stack on fatal overflow; DiagnosticReports .ips only shows
+interpreter frames): hosted Refresh → Materialize → SwiftUIListNode.Rebuild →
+ThreadItem's .FontSize → SetEnvironment → ReactiveEnv.SetValue →
+EnsureFlushScheduled → FlushEntry runs INLINE (main thread, _flushing already
+false during AfterFlush) → AfterFlush → ancestor twin Relayout → Layout →
+Arrange(mid-build LD node, _shown==null) → Refresh again. Fixed in
+ReactiveScheduler: FlushEntry re-entrancy guard + pass loop (see commit).
+Host repro: BackendHostedCompositionChurnTests (nests 67 before / 5 after).
+Also fixed: font-mapped Icons (Icon_Glyph path) lost their queryable symbol —
+CometDevRegistry now falls back to Icon.Symbol for element text.
+reply.ios.sh 13/13 → the iOS gate smoke is GREEN (inbox, detail round-trip via
+app-bar back, route switch); jetchat 14/14 iOS + 13/13 Android, reply.android
+14/14 — no regressions.
+Still open (post-gate polish): search expanded-pane interaction on iOS;
+two-pane on an iPad sim.
