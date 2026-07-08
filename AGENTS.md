@@ -99,6 +99,13 @@ pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
 - **Probe apps**: `sample/CometComposeProbe` (Android),
   `sample/CometSwiftUIProbe` (iOS). Android deploy:
   `dotnet build -t:Run -p:AndroidPackageFormat=apk`.
+- **Standalone per-sample apps**: add `-p:CometSample=reply` (or `jetchat`) to
+  either probe build — unique app id `com.comet.sample.<name>`, launcher name
+  "Comet Reply"/"Comet Jetchat", isolated `obj|bin/sample-<name>/`, and the
+  screen defaults from the app id — so samples install SIDE BY SIDE instead of
+  replacing each other. The plain probe ids (`com.comet.composeprobe`,
+  `com.comet.swiftuiprobe`, Jetchat default + `--es screen` / `COMET_SCREEN`
+  switch) are what the smoke scripts drive — leave them installed.
 - **Two devices are usually attached** — always target explicitly with
   `adb -s 13041FDD4007MT` (the physical Pixel 5). Don't use left-edge swipes to
   open drawers (triggers the system back/home gesture).

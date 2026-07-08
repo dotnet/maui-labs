@@ -18,9 +18,19 @@ namespace CometComposeProbe
 	/// (avatar + author + wrapping body), so it renders identically to the iOS/SwiftUI
 	/// backend — no MAUI handlers in the path.
 	/// </summary>
-	[Activity(Label = "Comet+Compose", MainLauncher = true)]
+	// No Label on the attribute: the launcher shows the application label, which comes from
+	// <ApplicationTitle> — so `-p:CometSample=…` names each standalone sample app.
+	[Activity(MainLauncher = true)]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
+		/// <summary>Which sample to show: the `--es screen` intent extra (the smoke scripts /
+		/// dev loop), else derived from the package id (`com.comet.sample.&lt;name&gt;` — the
+		/// standalone per-sample installs), else Jetchat.</summary>
+		string Screen =>
+			Intent?.GetStringExtra("screen")
+			?? (PackageName is { } pkg && pkg.StartsWith("com.comet.sample.")
+				? pkg.Substring("com.comet.sample.".Length)
+				: "jetchat");
 #if DEBUG
 		/// <summary>The logical root, exposed so the hot-reload demo receiver can log reload state.</summary>
 		internal static View? RootView;
@@ -111,7 +121,7 @@ namespace CometComposeProbe
 			// Per-sample theming: the Reply screen uses Reply's OWN static scheme
 			// (gold: ContrastAwareReplyTheme, dynamicColor=false) — the real M3 widgets
 			// (NavigationBar/Rail, drawer sheets) derive their container colors from it.
-			bool replyScreen = Intent?.GetStringExtra("screen") == "reply";
+			bool replyScreen = Screen == "reply";
 			if (replyScreen)
 				scheme = CometSamples.Reply.ReplyTheme.ComposeScheme();
 
@@ -210,15 +220,17 @@ namespace CometComposeProbe
 		}
 
 		// The faithful Jetchat conversation screen (shared tree, identical on iOS). A ~24dp top
-		// inset clears the status bar. Launch with `--es screen reply` (adb am start extra) to
-		// switch the probe to the Reply sample instead — the smoke scripts pass it per sample.
+		// inset clears the status bar. The screen comes from the `--es screen` extra (smokes)
+		// or the standalone per-sample package id — see <see cref="Screen"/>.
 #if DEBUG
 		// A [Body] root is what hot reload targets (see HotReloadDemo.cs).
-		View BuildUi() => Intent?.GetStringExtra("screen") == "reply"
+		View BuildUi() => Screen == "reply"
 			? new CometSamples.Reply.ReplyProbeRoot()
 			: new JetchatRoot();
 #else
-		View BuildUi() => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24);
+		View BuildUi() => Screen == "reply"
+			? new CometSamples.Reply.ReplyProbeRoot()
+			: CometSamples.Jetchat.JetchatConversation.Build(topInset: 24);
 #endif
 
 		sealed class EmptyServiceProvider : IServiceProvider

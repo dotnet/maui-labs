@@ -19,6 +19,18 @@
     <PublishAot Condition="'$(EnableProbeAot)' == 'true'">true</PublishAot>
   </PropertyGroup>
 
+  <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
+       its OWN app — unique bundle id + display name + isolated obj/bin — so samples install
+       side by side instead of replacing each other. AppDelegate defaults the screen from
+       the bundle id (com.comet.sample.<name>); the plain probe id stays for the smokes.
+       Requires the id/name to come from the csproj (NOT Info.plist) — see Info.plist note. -->
+  <PropertyGroup Condition="'$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1))</ApplicationTitle>
+    <IntermediateOutputPath>obj/sample-$(CometSample)/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)/</OutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,

@@ -21,6 +21,17 @@
     <RuntimeIdentifiers Condition="'$(CometSingleRid)' == 'true'">android-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
+  <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
+       its OWN app — unique id + launcher name + isolated obj/bin — so samples install side
+       by side instead of replacing each other. MainActivity defaults the screen from the
+       package name (com.comet.sample.<name>); the plain probe id stays for the smokes. -->
+  <PropertyGroup Condition="'$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1))</ApplicationTitle>
+    <IntermediateOutputPath>obj/sample-$(CometSample)/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)/</OutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- ComponentActivity host for ComposeView. -->
