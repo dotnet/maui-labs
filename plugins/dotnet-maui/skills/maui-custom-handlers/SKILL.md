@@ -1,7 +1,7 @@
 ---
 name: maui-custom-handlers
 description: >-
-  Implement/migrate MAUI visual handlers. USE FOR: `EntryHandler.Mapper.AppendToMapping`, scoped `BorderlessEntry` type guards, unique mapper keys, repeated mapper callbacks, renderer-to-handler migration, `ConnectHandler`/`DisconnectHandler` cleanup, `PropertyMapper`, `CommandMapper`, custom `ViewHandler`, platform partial handlers, conflicting partial base classes, `CreatePlatformView`, native namespace leaks, `ConfigureMauiHandlers`. DO NOT USE FOR: non-visual platform APIs, full Xamarin migration, native SDK bindings, or backend code.
+  Implement or migrate MAUI visual handlers. USE FOR: handler mappers, type guards, unique mapper keys, renderer-to-handler migration, `ConnectHandler`/`DisconnectHandler`, `PropertyMapper`, `CommandMapper`, custom `ViewHandler`, platform partials, `CreatePlatformView`, `ConfigureMauiHandlers`. DO NOT USE FOR: non-visual APIs, full Xamarin migration, native SDK bindings.
 ---
 
 # MAUI Custom Handlers

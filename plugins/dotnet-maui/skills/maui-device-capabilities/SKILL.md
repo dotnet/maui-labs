@@ -1,7 +1,7 @@
 ---
 name: maui-device-capabilities
 description: >-
-  Implement .NET MAUI device capabilities with platform permissions and declarations. USE FOR: camera/photo/media capture, MediaPicker.IsCaptureSupported, FilePicker.PickAsync durable copies to FileSystem.AppDataDirectory, GeolocationRequest, Permissions.LocationWhenInUse, UseMauiMaps, Android manifest entries, READ_MEDIA_IMAGES/Android 13+ Photo Picker migration, NSCameraUsageDescription/NSLocationWhenInUseUsageDescription, runtime permission requests, denied/cancelled flows, and durable file access. DO NOT USE FOR: notifications, auth, or UI layout.
+  Implement MAUI device capabilities with permissions and platform declarations. USE FOR: camera/media/file pickers, durable file copies, geolocation, maps, contacts, Android manifest entries, iOS usage descriptions, runtime permission prompts, denied/cancelled flows. DO NOT USE FOR: notifications, auth, UI layout.
 ---
 
 # MAUI Device Capabilities

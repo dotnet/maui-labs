@@ -1,7 +1,7 @@
 ---
 name: maui-release-notes
 description: >-
-  Help .NET MAUI app teams read official .NET/MAUI release notes and turn them into an upgrade plan. USE FOR: deciding whether an app should move to a new release, summarizing breaking changes, Xcode/JDK/Android SDK requirements, global.json updates, pinned workload install/update --version steps, package updates, CI image changes, migration checklists, validation plans, and using dotnet-workload-info for exact live versions. DO NOT USE FOR: authoring MAUI workload release notes, SDK publishing tables, or app-store marketing copy.
+  Turn official .NET/MAUI release notes into an app upgrade plan. USE FOR: breaking-change summaries, Xcode/JDK/Android SDK requirements, global.json/workload/package updates, CI image changes, migration checklists, validation plans, live version lookup. DO NOT USE FOR: authoring workload release notes or marketing copy.
 ---
 
 # MAUI Release Notes

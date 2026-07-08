@@ -1,7 +1,7 @@
 ---
 name: maui-labs-platform-targeting
 description: >-
-  Target MAUI Labs desktop backends from MAUI apps. USE FOR: separate Linux GTK4 head projects, `maui-linux-gtk4`, `maui-macos`, or `maui-wpf` templates, net10 desktop setup, `UseMauiAppLinuxGtk4` or related SDK hooks, AppKit instead of Mac Catalyst, and parity planning. DO NOT USE FOR: implementing backends, handlers, or Essentials services.
+  Target MAUI Labs desktop backends from MAUI apps. USE FOR: Linux GTK4 head projects, `maui-linux-gtk4`, `maui-macos`, `maui-wpf`, net10 desktop setup, `UseMauiAppLinuxGtk4`, AppKit vs Mac Catalyst, parity planning. DO NOT USE FOR: backend implementation, handlers, Essentials services.
 ---
 
 # MAUI Labs Platform Targeting

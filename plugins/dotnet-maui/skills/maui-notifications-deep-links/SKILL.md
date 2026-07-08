@@ -1,7 +1,7 @@
 ---
 name: maui-notifications-deep-links
 description: >-
-  Implement .NET MAUI local notifications, push notifications, Firebase/FCM legacy server-key migration to FCM HTTP v1, APNs/Azure Notification Hubs registration, app links, universal links, custom URI schemes, token refresh/sign-in/logout lifecycle, push payload safety, and deep-link troubleshooting. USE FOR: notification permission UX, Android NotificationChannel and POST_NOTIFICATIONS, iOS UNUserNotificationCenter, push token upload, notification tap navigation, assetlinks.json autoVerify, apple-app-site-association, and CFBundleURLTypes. DO NOT USE FOR: OAuth callback-only flows, generic Shell navigation, or picker/location permissions.
+  Implement MAUI notifications and deep links. USE FOR: local/push notifications, FCM HTTP v1 migration, APNs/Azure Notification Hubs, permission UX, Android channels/`POST_NOTIFICATIONS`, iOS `UNUserNotificationCenter`, token lifecycle, notification tap navigation, app links/universal links/URI schemes. DO NOT USE FOR: OAuth callbacks, generic Shell navigation, picker/location permissions.
 ---
 
 # MAUI Notifications and Deep Links

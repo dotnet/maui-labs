@@ -1,6 +1,6 @@
 {
   "name": "dotnet-maui",
   "version": "0.6.0",
-  "description": "Comprehensive .NET MAUI skills for app architecture, UI, accessibility, testing, performance, platform integration, migration, DevFlow automation, slim platform bindings, and workload diagnostics.",
+  "description": "Skills for building production .NET MAUI apps: architecture, project structure, UI, accessibility, testing, performance, platform integration, auth, networking, assets, lifecycle, Blazor Hybrid, AI, localization, theming, release notes, and migration.",
   "skills": ["./skills/"]
 }

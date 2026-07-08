@@ -1,7 +1,7 @@
 ---
 name: maui-project-structure
 description: >-
-  Configure .NET MAUI single-project structure: app icons and splash screens, resource folders, shared images/fonts/raw assets, app display/build versioning, Central Package Management, and platform metadata files. USE FOR: MauiIcon, MauiSplashScreen, MauiImage, MauiAsset, Resources/Images/Fonts/Raw, EmbeddedResource/Content migration, PackageVersion, versionless PackageReference, Directory.Packages.props, AndroidManifest.xml, Info.plist, Package.appxmanifest, ApplicationDisplayVersion/ApplicationVersion, package IDs/app identifiers guardrails, and rejecting `maui project version` for store versions. DO NOT USE FOR: UI debugging, workload discovery, or MVVM/Shell architecture.
+  Configure MAUI single-project structure. USE FOR: app icons/splash screens, resource folders, images/fonts/raw assets, app display/build versioning, Central Package Management, platform metadata files, `AndroidManifest.xml`, `Info.plist`, package IDs/app identifiers. DO NOT USE FOR: UI debugging, workload discovery, MVVM/Shell architecture.
 ---
 
 # MAUI Project Structure

@@ -1,7 +1,7 @@
 ---
 name: maui-performance
 description: >-
-  Fix measurable .NET MAUI performance issues: accurate startup profiling with `maui profile startup` using Release builds and physical devices, janky CollectionView scrolling, compiled bindings, oversized images, and trim/NativeAOT regressions. USE FOR: Debug/emulator profiling mistakes, Release physical-device startup measurements, CollectionView nested ScrollView issues, x:DataType, shallow templates, MauiImage BaseSize, remote/gallery image thumbnails, 4000px decode memory, IL2026, NoWarn traps, source-generated serializers, DynamicDependency, linker descriptors, publish-build validation, and before/after measurement. DO NOT USE FOR: generic UI bugs, workload discovery, or architecture-only work.
+  Fix measurable MAUI performance issues. USE FOR: `maui profile startup`, Release/physical-device measurements, janky `CollectionView`, compiled bindings, oversized images, `MauiImage` `BaseSize`, thumbnail decoding, trim/NativeAOT regressions, IL2026, source-generated serializers, linker validation. DO NOT USE FOR: generic UI bugs, workload discovery, architecture-only work.
 ---
 
 # MAUI Performance

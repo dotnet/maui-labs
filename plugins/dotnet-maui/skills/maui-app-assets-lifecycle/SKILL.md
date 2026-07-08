@@ -1,7 +1,7 @@
 ---
 name: maui-app-assets-lifecycle
 description: >-
-  Configure .NET MAUI app icons, splash screens, images, fonts, bundled files, app/window lifecycle, background/resume state, and platform asset/lifecycle settings. USE FOR: MauiIcon, MauiSplashScreen, MauiImage, MauiFont, MauiAsset, Resources/Images, Resources/Fonts, Resources/Raw seed JSON, FileSystem.OpenAppPackageFileAsync, Window Created/Stopped/Resumed/Destroying, ConfigureLifecycleEvents, state restore, Xamarin drawable/UIAppFonts migration, and platform asset overrides. DO NOT USE FOR: localization/theme resources, device permissions, or broad project structure.
+  Configure MAUI assets and lifecycle. USE FOR: `MauiIcon`, `MauiSplashScreen`, images, fonts, raw assets, `OpenAppPackageFileAsync`, window lifecycle, `ConfigureLifecycleEvents`, resume/state restore, Xamarin asset migration. DO NOT USE FOR: localization, permissions, broad project structure.
 ---
 
 # MAUI App Assets and Lifecycle

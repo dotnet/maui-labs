@@ -1,7 +1,7 @@
 ---
 name: maui-accessibility
 description: >-
-  Make .NET MAUI apps accessible with semantic properties, screen reader labels/hints, heading levels, focus, announcements, AutomationProperties, touch targets, and platform checks. USE FOR: accessibility audits, WCAG UI fixes, TalkBack/VoiceOver/Narrator behavior, SemanticProperties.Description/Hint/HeadingLevel, SemanticScreenReader.Announce, SetSemanticFocus, avoiding redundant Label metadata, hiding decorative content with IsInAccessibleTree=false, and CollectionView row semantics. DO NOT USE FOR: general layout, UI automation only, or performance tuning.
+  Improve MAUI accessibility. USE FOR: semantic labels, hints, headings, screen-reader focus/announcements, AutomationProperties, touch targets, decorative content, TalkBack/VoiceOver/Narrator checks. DO NOT USE FOR: general layout, automation-only tests, performance.
 ---
 
 # MAUI Accessibility

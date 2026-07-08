@@ -1,7 +1,7 @@
 ---
 name: maui-blazor-hybrid
 description: >-
-  Build and debug .NET MAUI Blazor Hybrid features with BlazorWebView, HybridWebView, Razor components, static assets, JS/.NET interop, trimming/NativeAOT concerns, and DevFlow CDP route inspection. USE FOR: MAUI apps hosting Razor UI, embedded HTML/JS, choosing BlazorWebView vs HybridWebView, AddMauiBlazorWebView, RootComponent, SendRawMessage/RawMessageReceived, JSON DTO contracts, JsonSerializerContext, wwwroot assets, hybrid auth/data handoff, stale DOM/Razor route debugging, and maui_cdp_webviews/source/evaluate/screenshot/logs. DO NOT USE FOR: pure XAML UI or browser-only apps.
+  Build/debug MAUI Blazor Hybrid. USE FOR: BlazorWebView vs HybridWebView, Razor UI, embedded HTML/JS, `AddMauiBlazorWebView`, root components, JS/.NET messaging, trim-safe JSON, wwwroot assets, auth/data handoff, DevFlow CDP route/DOM debugging. DO NOT USE FOR: pure XAML UI or browser-only apps.
 ---
 
 # MAUI Blazor Hybrid

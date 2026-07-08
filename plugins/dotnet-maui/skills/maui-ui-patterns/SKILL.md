@@ -1,7 +1,7 @@
 ---
 name: maui-ui-patterns
 description: >-
-  Fix .NET MAUI UI layout, state, and automation issues: CollectionView not scrolling, DataTemplate binding problems, command binding back to page view models, Grid/FlexLayout responsive sizing, and binding-driven states. USE FOR: Auto vs Star Grid rows, avoiding ScrollView parents around CollectionView, rejecting HeightRequest fixes, replacing BindableLayout for large lists, stable AutomationIds, x:DataType item templates, RelativeSource AncestorType command bindings, EmptyView/loading/error states, responsive resources, and UI property bindings. DO NOT USE FOR: Shell routes, full accessibility audits, or vendor-specific controls.
+  Fix MAUI UI layout, state, and automation issues. USE FOR: `CollectionView` scrolling, DataTemplate bindings, command bindings, Grid/FlexLayout sizing, binding-driven states, avoiding `ScrollView` parents, stable AutomationIds, `x:DataType`, EmptyView/loading/error states. DO NOT USE FOR: Shell routes, full accessibility, vendor-specific controls.
 ---
 
 # MAUI UI Patterns

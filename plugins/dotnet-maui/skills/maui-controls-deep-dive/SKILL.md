@@ -1,7 +1,7 @@
 ---
 name: maui-controls-deep-dive
 description: >-
-  Apply advanced MAUI control guidance. USE FOR: `CollectionView` incremental loading, `RemainingItemsThreshold`, `EmptyView`, `AutomationId`, avoiding `ScrollView` wrappers, `SafeAreaEdges` on .NET 10, `GraphicsView`/`IDrawable`/`Invalidate` hot-path performance, gestures, animations. DO NOT USE FOR: general layout, full accessibility audits, profiling, or handlers.
+  Apply advanced MAUI control guidance. USE FOR: `CollectionView` incremental loading, `RemainingItemsThreshold`, `EmptyView`, `AutomationId`, avoiding `ScrollView` wrappers, .NET 10 `SafeAreaEdges`, `GraphicsView`/`IDrawable`, gestures, animations. DO NOT USE FOR: general layout, full accessibility, profiling, handlers.
 ---
 
 # MAUI Controls Deep Dive

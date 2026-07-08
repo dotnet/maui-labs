@@ -1,7 +1,7 @@
 ---
 name: maui-essentials-ai
 description: >-
-  Adopt `Microsoft.Maui.Essentials.AI` for local/on-device MAUI AI. USE FOR: Apple Intelligence `AppleIntelligenceChatClient` as `IChatClient`, iOS/macOS/Mac Catalyst 26+ checks, fallback UI, `NLEmbeddingGenerator` semantic search, local `UseFunctionInvocation` tools, privacy/offline UX. DO NOT USE FOR: source-generated tools, cloud-only Azure/OpenAI, UI debug, or non-MAUI AI.
+  Adopt `Microsoft.Maui.Essentials.AI` for local/on-device MAUI AI. USE FOR: Apple Intelligence chat, `IChatClient`, iOS/macOS/Mac Catalyst 26+ checks, fallback UI, `NLEmbeddingGenerator`, local tool invocation, privacy/offline UX. DO NOT USE FOR: source-generated tools, cloud-only AI, UI debugging.
 ---
 
 # MAUI Essentials AI

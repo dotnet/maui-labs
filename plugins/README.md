@@ -2,9 +2,29 @@
 
 Distributable agent skills for .NET MAUI development. Installable via the Copilot CLI, Claude Code, or VS Code plugin system.
 
-The `dotnet-maui` plugin is the single installable .NET MAUI plugin. It includes day-to-day app builder skills, advanced platform and migration guidance, DevFlow runtime skills, slim binding skills, and workload diagnostics. DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devflow-session-review`) are also bundled with the `maui` CLI from `plugins/dotnet-maui/skills/`, installed with `maui devflow init`, and exposed through the plugin manifest.
+## Plugins
 
-## Included Skills
+| Plugin | Purpose |
+|--------|---------|
+| [dotnet-maui](dotnet-maui/) | Default app-development plugin for building production .NET MAUI apps. |
+| [dotnet-maui-tooling](dotnet-maui-tooling/) | Specialist tooling plugin for DevFlow automation, slim bindings, workload discovery, and diagnostics. |
+
+DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devflow-session-review`) live in `plugins/dotnet-maui-tooling/skills/`, are bundled with the `maui` CLI by `maui devflow init`, and are exposed through the plugin manifest.
+
+## Installation
+
+```bash
+# Add this repo as a marketplace
+/plugin marketplace add dotnet/maui-labs
+
+# Install app-development skills
+/plugin install dotnet-maui@dotnet-maui-labs
+
+# Install specialist tooling skills
+/plugin install dotnet-maui-tooling@dotnet-maui-labs
+```
+
+## dotnet-maui skills
 
 | Area | Skill | Description |
 |------|-------|-------------|
@@ -31,25 +51,20 @@ The `dotnet-maui` plugin is the single installable .NET MAUI plugin. It includes
 | Advanced and migration | [maui-platform-invoke](dotnet-maui/skills/maui-platform-invoke/) | Wrap native platform APIs behind DI services, permissions, platform metadata, partial platform files, and lifecycle hooks. |
 | Advanced and migration | [maui-release-notes](dotnet-maui/skills/maui-release-notes/) | Convert official .NET/MAUI release notes into app upgrade notes, CI changes, requirements, and validation plans. |
 | Advanced and migration | [xamarin-forms-migration](dotnet-maui/skills/xamarin-forms-migration/) | Audit Xamarin.Forms apps, replace namespaces/APIs, migrate DependencyService and MessagingCenter usage, and plan parity work. |
-| Specialist tooling | [maui-devflow-onboard](dotnet-maui/skills/maui-devflow-onboard/) | Add MAUI DevFlow packages and app registration to a project. |
-| Specialist tooling | [maui-devflow-debug](dotnet-maui/skills/maui-devflow-debug/) | Run MAUI DevFlow build, deploy, connection recovery, inspect, and fix loops. |
-| Specialist tooling | [maui-devflow-session-review](dotnet-maui/skills/maui-devflow-session-review/) | Review opt-in MAUI DevFlow sessions for friction, retries, workarounds, and product feedback. |
-| Specialist tooling | [devflow-automation](dotnet-maui/skills/devflow-automation/) | Automate MAUI app inspection and debugging workflows through DevFlow tools. |
-| Specialist tooling | [devflow-connect](dotnet-maui/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
-| Specialist tooling | [maui-ai-debugging](dotnet-maui/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |
-| Specialist tooling | [android-slim-bindings](dotnet-maui/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |
-| Specialist tooling | [ios-slim-bindings](dotnet-maui/skills/ios-slim-bindings/) | Create iOS slim bindings using the Native Library Interop approach. |
-| Specialist tooling | [dotnet-workload-info](dotnet-maui/skills/dotnet-workload-info/) | Discover installed .NET workloads, SDK versions, and dependency requirements. |
 
-## Installation
+## dotnet-maui-tooling skills
 
-```bash
-# Add this repo as a marketplace
-/plugin marketplace add dotnet/maui-labs
-
-# Install the plugin
-/plugin install dotnet-maui@dotnet-maui-labs
-```
+| Skill | Description |
+|-------|-------------|
+| [maui-devflow-onboard](dotnet-maui-tooling/skills/maui-devflow-onboard/) | Add MAUI DevFlow packages and app registration to a project. |
+| [maui-devflow-debug](dotnet-maui-tooling/skills/maui-devflow-debug/) | Run MAUI DevFlow build, deploy, connection recovery, inspect, and fix loops. |
+| [maui-devflow-session-review](dotnet-maui-tooling/skills/maui-devflow-session-review/) | Review opt-in MAUI DevFlow sessions for friction, retries, workarounds, and product feedback. |
+| [devflow-automation](dotnet-maui-tooling/skills/devflow-automation/) | Automate MAUI app inspection and debugging workflows through DevFlow tools. |
+| [devflow-connect](dotnet-maui-tooling/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
+| [maui-ai-debugging](dotnet-maui-tooling/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |
+| [android-slim-bindings](dotnet-maui-tooling/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |
+| [ios-slim-bindings](dotnet-maui-tooling/skills/ios-slim-bindings/) | Create iOS slim bindings using the Native Library Interop approach. |
+| [dotnet-workload-info](dotnet-maui-tooling/skills/dotnet-workload-info/) | Discover installed .NET workloads, SDK versions, and dependency requirements. |
 
 ## Adding Skills
 
@@ -57,5 +72,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Quick summary:
 
 1. Create `plugins/<plugin>/skills/<skill-name>/SKILL.md` with YAML frontmatter
 2. Create `tests/<plugin>/<skill-name>/eval.yaml` with evaluation scenarios
-3. Submit a PR — the `skill-check` workflow validates automatically
+3. Submit a PR -- the `skill-check` workflow validates automatically
 4. A maintainer posts `/evaluate` to run LLM-based evaluation

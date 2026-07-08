@@ -1,7 +1,7 @@
 ---
 name: maui-networking-offline-data
 description: >-
-  Build .NET MAUI networking and offline data features with HttpClient DI, JSON serialization, emulator/simulator networking, debug cleartext exceptions, SQLite persistence, sync boundaries, retries, cancellation, and error handling. USE FOR: typed HttpClient clients, Android emulator 10.0.2.2, iOS simulator localhost, physical-device LAN/dev-tunnel fallback, offline-first screens, SQLiteAsyncConnection/EF Core sync metadata, sync queues, sensitive offline data encryption decisions, retry/backoff, and background batch/chunk sync. DO NOT USE FOR: auth redirects, Aspire service discovery, or UI layout.
+  Build MAUI networking and offline data. USE FOR: typed `HttpClient`, JSON serialization, Android `10.0.2.2`, iOS simulator localhost, LAN/dev-tunnel fallback, debug cleartext, offline-first screens, SQLite/EF Core sync metadata, queues, encryption decisions, retries, cancellation. DO NOT USE FOR: auth redirects, Aspire service discovery, UI layout.
 ---
 
 # MAUI Networking and Offline Data

@@ -1,7 +1,7 @@
 ---
 name: maui-unit-testing
 description: >-
-  Add and improve automated tests for .NET MAUI apps, focusing on ViewModels, services, platform abstractions, and unit/integration/device test boundaries. USE FOR: xUnit projects, ViewModel tests that avoid MauiProgram.CreateMauiApp, fakes/mocks, MAUI injectable platform interfaces such as IGeolocation/IConnectivity/IPreferences/IFileSystem/ISecureStorage instead of static Essentials calls, avoiding PlatformNotSupportedException in test hosts, testing navigation/data services, Microsoft.Maui.Build.AppProjectReference for MAUI app references, and deciding what must run on device. DO NOT USE FOR: UI automation or production profiling.
+  Add MAUI app tests around ViewModels, services, platform abstractions, and unit/integration/device boundaries. USE FOR: xUnit, avoiding `MauiProgram.CreateMauiApp` in unit tests, fakes/mocks, injectable Essentials interfaces, `PlatformNotSupportedException`, navigation/data services, AppProjectReference, device-test decisions. DO NOT USE FOR: UI automation or profiling.
 ---
 
 # MAUI Unit Testing
