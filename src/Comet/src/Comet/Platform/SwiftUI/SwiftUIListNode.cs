@@ -56,23 +56,42 @@ namespace Comet.Platform.SwiftUI
 				Rebuild();
 		}
 
+		// Nodes materialized for the current row set; disposed on the next rebuild so stale
+		// row generations release any static hooks.
+		List<ICometBackendNode>? _rowGeneration;
+
 		void Rebuild()
 		{
+			// Hold flushes: row templates carry modifiers (environment writes) — an inline
+			// flush mid-rebuild re-arranges ancestors around a half-built row set.
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
 			// Drop the previous rows from the dev tree (they register under the ListView).
 			if (_list is View listView)
 				Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
 
+			if (_rowGeneration is { } stale)
+			{
+				_rowGeneration = null;
+				foreach (var n in stale)
+					n.Dispose();
+			}
+
 			CometSwiftUIHost.ClearChildren(_native);
 			_rows.Clear();
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
-			for (int i = 0; i < count; i++)
+			var generation = new List<ICometBackendNode>();
+			using (var scope = CometBackendBridge.CollectNodes(generation))
 			{
-				var view = _list.ViewFor(0, i);
-				var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context, _list as View);
-				CometSwiftUIHost.InsertChild(_native, i, node.Native);
-				_rows.Add(view);
-				LayoutRow(view); // no-op until the list has been arranged (width known)
+				for (int i = 0; i < count; i++)
+				{
+					var view = _list.ViewFor(0, i);
+					var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context, _list as View);
+					CometSwiftUIHost.InsertChild(_native, i, node.Native);
+					_rows.Add(view);
+					LayoutRow(view); // no-op until the list has been arranged (width known)
+				}
 			}
+			_rowGeneration = generation;
 		}
 
 		// Lay each row out to the list's arranged width with the shared Yoga engine, height-wrapped,
@@ -146,7 +165,20 @@ namespace Comet.Platform.SwiftUI
 		}
 
 		public void SetEventSink(ICometEventSink? sink) { }
-		public void Dispose() => _disposed = true;
+		public void Dispose()
+		{
+			_disposed = true;
+			// Drop this node's rows from the dev registry (runs BEFORE a successor list node
+			// re-registers fresh rows, so only the stale generation is pruned).
+			if (_list is View listView)
+				Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
+			if (_rowGeneration is { } rows)
+			{
+				_rowGeneration = null;
+				foreach (var n in rows)
+					n.Dispose();
+			}
+		}
 	}
 }
 #endif

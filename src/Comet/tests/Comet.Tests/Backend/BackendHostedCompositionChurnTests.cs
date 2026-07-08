@@ -66,6 +66,7 @@ namespace Comet.Tests.Backend
 
 			void Rebuild()
 			{
+				using var hold = ReactiveScheduler.HoldFlushes();
 				if (_list is View listView)
 					Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
 				_rowViews.Clear();
@@ -125,10 +126,15 @@ namespace Comet.Tests.Backend
 
 			protected abstract View BuildContent();
 
+			List<ICometBackendNode>? _generation;
+
 			public void Refresh()
 			{
 				RefreshCount++;
 				TotalRefreshes++;
+				// Matches the iOS twin: the swap is atomic w.r.t. reactive flushes, and the
+				// previous node generation is disposed (releases static hooks).
+				using var hold = ReactiveScheduler.HoldFlushes();
 				Enter();
 				try
 				{
@@ -137,10 +143,17 @@ namespace Comet.Tests.Backend
 						Comet.DevTools.CometDevRegistry.UnregisterSubtree(prev, includeRoot: true);
 						_shown = null;
 					}
-					// ClearChildren analog: the old node tree is dropped, NOT disposed —
-					// exactly what the iOS twin does today.
+					if (_generation is { } stale)
+					{
+						_generation = null;
+						foreach (var n in stale)
+							n.Dispose();
+					}
 					var view = BuildContent();
-					CometBackendBridge.Materialize(view, NodeFactory, Context);
+					var generation = new List<ICometBackendNode>();
+					using (CometBackendBridge.CollectNodes(generation))
+						CometBackendBridge.Materialize(view, NodeFactory, Context);
+					_generation = generation;
 					_shown = view;
 					Relayout();
 				}
@@ -193,7 +206,17 @@ namespace Comet.Tests.Backend
 					Relayout();
 			}
 
-			public override void Dispose() => ReactiveScheduler.AfterFlush -= Relayout;
+			public override void Dispose()
+			{
+				base.Dispose();
+				ReactiveScheduler.AfterFlush -= Relayout;
+				if (_generation is { } nodes)
+				{
+					_generation = null;
+					foreach (var n in nodes)
+						n.Dispose();
+				}
+			}
 		}
 
 		sealed class FakeSuiteNode : FakeHostedNode
@@ -448,6 +471,56 @@ namespace Comet.Tests.Backend
 				// so incidental changes don't flake; a runaway blows straight past this.
 				Assert.True(FakeHostedNode.Instances.Count <= 20 && FakeHostedNode.TotalRefreshes <= 60,
 					$"hosted-node churn runaway: {diag}");
+
+				// Stale generations must be DISPOSED (static hooks released): only the live
+				// tree's hosted nodes — one suite, one switcher, one ListDetail — may remain.
+				var alive = FakeHostedNode.Instances.FindAll(n => !n.Disposed).Count;
+				Assert.True(alive <= 3, $"stale hosted-node generations leaked: {alive} alive — {diag}");
+			}
+			finally
+			{
+				ReactiveScheduler.AfterFlush -= RunLayout;
+			}
+		}
+
+		/// <summary>A hosted swap triggered OUTSIDE a flush (a tap handler) must stay a single
+		/// generation: its env writes during Materialize may not run an inline flush whose
+		/// AfterFlush layout re-enters the mid-build node (was: search pane double-built and
+		/// its node state lost).</summary>
+		[Fact]
+		public void RefreshOutsideFlush_IsAtomic_SingleGeneration()
+		{
+			FakeHostedNode.Depth = 0;
+			FakeHostedNode.MaxDepth = 0;
+			FakeHostedNode.TotalRefreshes = 0;
+			FakeHostedNode.Instances.Clear();
+
+			var app = new MiniReply();
+			var probe = new ProbeRoot(app);
+			CometBackendBridge.Materialize(probe, Factory, Ctx);
+
+			void RunLayout()
+			{
+				var layoutRoot = probe.BuiltView ?? probe;
+				CometBackendLayoutEngine.Layout(layoutRoot, new Size(402, 874));
+			}
+			ReactiveScheduler.AfterFlush += RunLayout;
+			try
+			{
+				RunLayout();
+				var ldBefore = FakeHostedNode.Instances.FindAll(n => n is FakeListDetailNode).Count;
+
+				// The tap-handler path: flip the signal from OUTSIDE any flush. The LD node's
+				// Refresh materializes the detail pane, whose ListView rows write the
+				// environment (.FontSize) — before the HoldFlushes fix this ran an inline
+				// flush that re-entered the mid-build node and spawned a second generation.
+				app.OpenedEmailId.Value = 2;
+				app.DetailOpen.Value = true;
+
+				var ld = FakeHostedNode.Instances.FindAll(n => n is FakeListDetailNode);
+				Assert.Equal(ldBefore, ld.Count);   // no new node generations from one tap
+				Assert.True(FakeHostedNode.MaxDepth <= 4,
+					$"nested re-entry during an outside-flush Refresh: depth {FakeHostedNode.MaxDepth}");
 			}
 			finally
 			{

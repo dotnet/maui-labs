@@ -131,6 +131,31 @@ namespace Comet
 
 		public Func<int> Count { get; set; }
 
+		bool _reloading;
+
+		/// <summary>Re-pulls the items snapshot before signaling recomposition. A Func-backed
+		/// source that returns a NEW list per call (a filtered search) — or one reading state
+		/// via an untracked Peek — never re-fires the subscription, so the ctor-time snapshot
+		/// would stay stale forever and ReloadData would rebuild against it. The guard breaks
+		/// the notify cycle (re-evaluation with a fresh list instance fires
+		/// ViewPropertyChanged(Items), which calls ReloadData again).</summary>
+		public override void ReloadData()
+		{
+			if (_reloading)
+				return;
+			_reloading = true;
+			try
+			{
+				_items?.Reevaluate();
+				currentItems = _items?.CurrentValue;
+				base.ReloadData();
+			}
+			finally
+			{
+				_reloading = false;
+			}
+		}
+
 		protected override int GetCount(int section) => currentItems?.Count ?? Count?.Invoke() ?? 0;
 
 		protected override object GetItemAt(int section, int index) => currentItems.SafeGetAtIndex(index, ItemFor);

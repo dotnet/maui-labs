@@ -38,20 +38,42 @@ namespace Comet.Platform.SwiftUI
 		/// <summary>Compose the full subtree for the CURRENT control state.</summary>
 		protected abstract View BuildContent();
 
-		/// <summary>Rebuild + swap the hosted subtree (call from state patches).</summary>
+		/// <summary>Nodes materialized for the CURRENT hosted subtree; disposed on the next
+		/// swap so stale generations release their static hooks (AfterFlush, signals, metrics).</summary>
+		List<ICometBackendNode>? _generation;
+
+		/// <summary>Rebuild + swap the hosted subtree (call from state patches). Flushes are
+		/// held for the duration: materializing the new subtree writes the environment, and an
+		/// inline flush's AfterFlush layout pass would re-arrange this node mid-build and
+		/// re-enter (double-built generations / the Reply detail-swap overflow class).</summary>
 		protected void Refresh()
 		{
+			using var hold = ReactiveScheduler.HoldFlushes();
 			if (_shown is { } prev)
 			{
 				Comet.DevTools.CometDevRegistry.UnregisterSubtree(prev, includeRoot: true);
 				_shown = null;
 			}
+			DisposeGeneration();
 			CometSwiftUIHost.ClearChildren(_native);
 			var view = BuildContent();
-			var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, Context);
+			var generation = new List<ICometBackendNode>();
+			ISwiftUINativeNode node;
+			using (CometBackendBridge.CollectNodes(generation))
+				node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, Context);
+			_generation = generation;
 			CometSwiftUIHost.InsertChild(_native, 0, node.Native);
 			_shown = view;
 			Relayout();
+		}
+
+		void DisposeGeneration()
+		{
+			if (_generation is not { } nodes)
+				return;
+			_generation = null;
+			foreach (var n in nodes)
+				n.Dispose();
 		}
 
 		protected void Relayout()
@@ -93,7 +115,18 @@ namespace Comet.Platform.SwiftUI
 
 		public void SetEventSink(ICometEventSink? sink) => Sink = sink;
 
-		public virtual void Dispose() => ReactiveScheduler.AfterFlush -= Relayout;
+		public virtual void Dispose()
+		{
+			ReactiveScheduler.AfterFlush -= Relayout;
+			// Drop this generation's views from the dev registry — a disposed host's hosted
+			// subtree would otherwise linger as ghost elements the agent can still query.
+			if (_shown is { } shown)
+			{
+				Comet.DevTools.CometDevRegistry.UnregisterSubtree(shown, includeRoot: true);
+				_shown = null;
+			}
+			DisposeGeneration();   // cascades: a disposed host releases its current subtree too
+		}
 	}
 
 	/// <summary>iOS ContentSwitcher: swap the active route subtree on index patches.</summary>
@@ -317,22 +350,36 @@ namespace Comet.Platform.SwiftUI
 	sealed class SwiftUISearchBarNode : SwiftUIHostedCompositionNode
 	{
 		Comet.SearchBar _bar;
-		bool _expanded;
+		System.ComponentModel.PropertyChangedEventHandler? _expandedHandler;
 
 		public SwiftUISearchBarNode(Comet.SearchBar bar, BackendContext context)
-			: base(context) => _bar = bar;
+			: base(context)
+		{
+			_bar = bar;
+			// Expansion state lives on the CONTROL (survives node re-materialization from
+			// ancestor refreshes); the node just re-renders when it changes.
+			_expandedHandler = (_, __) => ThreadHelper.RunOnMainThread(Refresh);
+			_bar.Expanded.PropertyChanged += _expandedHandler;
+		}
+
+		public override void Dispose()
+		{
+			base.Dispose();
+			if (_expandedHandler is not null)
+				_bar.Expanded.PropertyChanged -= _expandedHandler;
+		}
 
 		// In-flow footprint: the collapsed pill (56dp) or the expanded pane — NOT the base's
 		// fill size (a fill-measured bar starves its flex siblings of height).
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
 			double w = double.IsFinite(widthConstraint) && widthConstraint > 0 ? widthConstraint : ScreenDp().Width;
-			return new Size(w, _expanded ? 480 : 56);
+			return new Size(w, _bar.Expanded.Peek() ? 480 : 56);
 		}
 
 		protected override View BuildContent()
 		{
-			if (!_expanded)
+			if (!_bar.Expanded.Peek())
 			{
 				var pill = new HStack(spacing: 12f) { };
 				if (_bar.LeadingView is { } leading)
@@ -345,7 +392,7 @@ namespace Comet.Platform.SwiftUI
 					.Frame(height: 56)
 					.Background(Color.FromArgb("#14000000"))
 					.CornerRadius(28)
-					.OnTap(_ => { _expanded = true; Refresh(); });
+					.OnTap(_ => _bar.Expanded.Value = true);
 			}
 
 			var field = SignalExtensions.TextField(_bar.Query, placeholder: "Search");
@@ -355,7 +402,7 @@ namespace Comet.Platform.SwiftUI
 				{
 					field.FlexGrow(1).FlexBasis(0),
 					new Text("Close").FontSize(14)
-						.OnTap(_ => { _expanded = false; _bar.Query.Value = ""; Refresh(); })
+						.OnTap(_ => { _bar.Query.Value = ""; _bar.Expanded.Value = false; })
 						.FlexShrink(0),
 				}.Frame(height: 56),
 				_bar.ContentView.FlexGrow(1).FlexBasis(0),

@@ -32,6 +32,44 @@ public static class ReactiveScheduler
 		set => _suppressNotifications = value;
 	}
 
+	/// <summary>Depth of active <see cref="HoldFlushes"/> scopes on this thread.</summary>
+	[ThreadStatic]
+	static int _holdDepth;
+
+	/// <summary>
+	/// Defers reactive flushes for the duration of the returned scope. An own-content node
+	/// swapping its hosted subtree materializes views whose modifiers write the environment;
+	/// each write schedules a flush, and on the UI thread the flush runs INLINE — its
+	/// AfterFlush layout pass would then re-arrange the node that is still mid-build and
+	/// re-enter the swap (double-built subtrees, lost node state). Holding makes the swap
+	/// atomic: writes just mark the flush pending, and it runs once when the scope closes.
+	/// </summary>
+	public static IDisposable HoldFlushes()
+	{
+		_holdDepth++;
+		return new FlushHold();
+	}
+
+	sealed class FlushHold : IDisposable
+	{
+		bool _released;
+		public void Dispose()
+		{
+			if (_released)
+				return;
+			_released = true;
+			if (--_holdDepth == 0 && _flushScheduled)
+			{
+				// Re-drive scheduling for the pending work that accumulated during the hold.
+				lock (_lock)
+				{
+					_flushScheduled = false;
+				}
+				EnsureFlushScheduled();
+			}
+		}
+	}
+
 	public static void EnsureFlushScheduled()
 	{
 		// If a flush is already in progress, skip scheduling — the current
@@ -40,6 +78,17 @@ public static class ReactiveScheduler
 		// → MarkViewDirty → EnsureFlushScheduled would otherwise re-enter FlushEntry.
 		if (_flushScheduled || _flushing)
 			return;
+
+		// A HoldFlushes scope is active on this thread: record that a flush is wanted and
+		// let the scope run it on release (keeps hosted-subtree swaps atomic).
+		if (_holdDepth > 0)
+		{
+			lock (_lock)
+			{
+				_flushScheduled = true;
+			}
+			return;
+		}
 
 		lock (_lock)
 		{

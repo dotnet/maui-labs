@@ -47,4 +47,19 @@ check "tap Inbox item" tap "$INBOX"
 sleep 2
 assert_element "inbox restored"         "type=Text&text=Package shipped!"
 
+# --- search: pill → expanded pane → typed query filters → close collapses ------
+PILL=$(element_id "type=Text&text=Search emails")
+check "tap search pill" tap "$PILL"
+sleep 2
+ios_shot 04-search-expanded
+FIELD=$(element_id "type=TextField")
+check "fill search query" fill "$FIELD" "Brunch"
+sleep 2
+ios_shot 05-search-results
+assert_element "search result subject"  "type=Text&text=Brunch this weekend?"
+CLOSE=$(element_id "type=Text&text=Close")
+check "close search" tap "$CLOSE"
+sleep 2
+assert_element "search pill restored"   "type=Text&text=Search emails"
+
 smoke_end

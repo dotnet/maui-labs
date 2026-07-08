@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 
 namespace Comet.Backend
 {
@@ -15,6 +16,40 @@ namespace Comet.Backend
 	/// </summary>
 	public static class CometBackendBridge
 	{
+		[ThreadStatic]
+		static List<ICometBackendNode>? _collector;
+
+		/// <summary>
+		/// Collects every node created by Materialize calls inside the scope into
+		/// <paramref name="into"/>. Own-content nodes use this to track a hosted subtree's
+		/// node GENERATION so the previous generation can be disposed on swap — without it,
+		/// stale nodes stay subscribed to statics (AfterFlush, control signals, window
+		/// metrics) and every swap leaks a generation that keeps reacting. Scopes nest: an
+		/// inner own-content node's children collect into ITS scope only.
+		/// </summary>
+		public static NodeCollectionScope CollectNodes(List<ICometBackendNode> into)
+		{
+			var previous = _collector;
+			_collector = into;
+			return new NodeCollectionScope(previous, into);
+		}
+
+		public readonly struct NodeCollectionScope : IDisposable
+		{
+			readonly List<ICometBackendNode>? _previous;
+			readonly List<ICometBackendNode> _mine;
+			internal NodeCollectionScope(List<ICometBackendNode>? previous, List<ICometBackendNode> mine)
+			{
+				_previous = previous;
+				_mine = mine;
+			}
+			public void Dispose()
+			{
+				if (_collector == _mine)
+					_collector = _previous;
+			}
+		}
+
 		/// <summary>Materializes <paramref name="view"/> using each control's own
 		/// <c>CreateBackendNode</c> (production path).</summary>
 		public static ICometBackendNode Materialize(View view, BackendContext context)
@@ -42,6 +77,7 @@ namespace Comet.Backend
 			var rendered = view.GetView();
 
 			var node = factory(rendered);
+			_collector?.Add(node);
 			rendered.Node = node;
 			node.SetEventSink(new ViewEventSink(rendered));
 

@@ -43,6 +43,11 @@ namespace Comet
 		/// <summary>Invoked on the IME Search action with the current text.</summary>
 		public Action<string>? OnSearch { get; }
 
+		/// <summary>Whether the bar is expanded (pane open). Lives on the CONTROL, not the
+		/// backend node: an ancestor own-content refresh re-materializes the node, and
+		/// node-local expansion state would silently collapse the pane.</summary>
+		public Signal<bool> Expanded { get; } = new(false);
+
 		public IReadOnlyList<View> GetChildren()
 		{
 			var children = new List<View> { PlaceholderView, ContentView };

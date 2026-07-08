@@ -71,13 +71,25 @@ namespace Comet.Platform.SwiftUI
 			CometBackendLayoutEngine.Layout(top, new Size(b.Width, b.Height - CometSwiftUIKeyboard.Inset));
 		}
 
+		// Nodes materialized for the current top screen; disposed on the next swap so a
+		// popped/replaced screen's nodes release their static hooks.
+		List<ICometBackendNode>? _generation;
+
 		void ShowTop()
 		{
+			// Hold flushes so the screen swap is atomic (see SwiftUIHostedCompositionNode.Refresh).
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
 			// Drop the previous screen's nodes from the dev tree before swapping it out.
 			if (_shown is { } prev)
 			{
 				Comet.DevTools.CometDevRegistry.UnregisterSubtree(prev, includeRoot: true);
 				_shown = null;
+			}
+			if (_generation is { } stale)
+			{
+				_generation = null;
+				foreach (var n in stale)
+					n.Dispose();
 			}
 
 			CometSwiftUIHost.ClearChildren(_native);
@@ -85,7 +97,11 @@ namespace Comet.Platform.SwiftUI
 				return;
 			var top = _stack[_stack.Count - 1];
 			// Register the screen under the NavigationView so the dev tree nests correctly.
-			var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(top, _context, _nav);
+			var generation = new List<ICometBackendNode>();
+			ISwiftUINativeNode node;
+			using (CometBackendBridge.CollectNodes(generation))
+				node = (ISwiftUINativeNode)CometBackendBridge.Materialize(top, _context, _nav);
+			_generation = generation;
 			CometSwiftUIHost.InsertChild(_native, 0, node.Native);
 			_shown = top;
 
@@ -106,6 +122,17 @@ namespace Comet.Platform.SwiftUI
 		{
 			Comet.Reactive.ReactiveScheduler.AfterFlush -= RelayoutTop;
 			CometSwiftUIKeyboard.Changed -= RelayoutTop;
+			if (_shown is { } shown)
+			{
+				Comet.DevTools.CometDevRegistry.UnregisterSubtree(shown, includeRoot: true);
+				_shown = null;
+			}
+			if (_generation is { } nodes)
+			{
+				_generation = null;
+				foreach (var n in nodes)
+					n.Dispose();
+			}
 		}
 	}
 }
