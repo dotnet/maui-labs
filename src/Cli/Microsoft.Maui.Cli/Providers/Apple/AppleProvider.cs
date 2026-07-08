@@ -189,6 +189,81 @@ public class AppleProvider : IAppleProvider
 		return _simulatorService?.GetAppContainer(udid, bundleIdentifier, containerType);
 	}
 
+	public bool SetPrivacy(string action, string udid, PrivacyPermission permission, string? bundleIdentifier = null)
+	{
+		if (_simulatorService is null)
+			return false;
+
+		var privacy = _simulatorService.Privacy;
+		return action switch
+		{
+			"grant" => privacy.Grant(udid, permission, bundleIdentifier),
+			"revoke" => privacy.Revoke(udid, permission, bundleIdentifier),
+			"reset" => privacy.Reset(udid, permission, bundleIdentifier),
+			_ => throw new ArgumentException($"Unknown privacy action '{action}'. Expected 'grant', 'revoke', or 'reset'.", nameof(action)),
+		};
+	}
+
+	public bool SetAppearance(string udid, SimulatorAppearance appearance)
+	{
+		return _simulatorService?.SetAppearance(udid, appearance) ?? false;
+	}
+
+	public SimulatorAppearance? GetAppearance(string udid)
+	{
+		return _simulatorService?.GetAppearance(udid);
+	}
+
+	public bool OverrideStatusBar(string udid, StatusBarOverrides overrides)
+	{
+		return _simulatorService?.StatusBar.Override(udid, overrides) ?? false;
+	}
+
+	public bool ClearStatusBar(string udid)
+	{
+		return _simulatorService?.StatusBar.Clear(udid) ?? false;
+	}
+
+	public bool OpenUrl(string udid, string url)
+	{
+		return _simulatorService?.OpenUrl(udid, url) ?? false;
+	}
+
+	public bool PushNotification(string udid, string bundleIdentifier, string payloadJsonOrPath)
+	{
+		return _simulatorService?.Push(udid, bundleIdentifier, payloadJsonOrPath) ?? false;
+	}
+
+	public bool SetLocation(string udid, double latitude, double longitude)
+	{
+		return _simulatorService?.Location.Set(udid, latitude, longitude) ?? false;
+	}
+
+	public bool ClearLocation(string udid)
+	{
+		return _simulatorService?.Location.Clear(udid) ?? false;
+	}
+
+	public bool RunLocation(string udid, string gpxPath)
+	{
+		return _simulatorService?.Location.Run(udid, gpxPath) ?? false;
+	}
+
+	public bool AddMedia(string udid, IEnumerable<string> paths)
+	{
+		return _simulatorService?.AddMedia(udid, paths) ?? false;
+	}
+
+	public bool Screenshot(string udid, string outputPath, ScreenshotFormat format = ScreenshotFormat.Png)
+	{
+		return _simulatorService?.ScreenCapture.Screenshot(udid, outputPath, format) ?? false;
+	}
+
+	public IDisposable? StartRecording(string udid, string outputPath, RecordingOptions? options = null)
+	{
+		return _simulatorService?.ScreenCapture.StartRecording(udid, outputPath, options);
+	}
+
 	public List<HealthCheck> CheckHealth()
 	{
 		var checks = new List<HealthCheck>();

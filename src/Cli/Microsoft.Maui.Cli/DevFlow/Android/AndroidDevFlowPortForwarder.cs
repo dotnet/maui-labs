@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
-using Microsoft.Maui.Cli.Utils;
+using Xamarin.Android.Tools;
 
 namespace Microsoft.Maui.Cli.DevFlow.Android;
 
@@ -10,18 +10,23 @@ internal sealed class AndroidDevFlowPortForwarder
 {
     public const int DefaultBrokerPort = BrokerServer.DefaultPort;
 
+    static readonly TimeSpan AdbCallTimeout = TimeSpan.FromSeconds(15);
+
     readonly IAndroidProvider _androidProvider;
     readonly string? _adbPath;
-    readonly Func<string, string[], CancellationToken, Task<ProcessResult>> _runAdbAsync;
+    readonly AdbRunner? _adbRunner;
 
     public AndroidDevFlowPortForwarder(
         IAndroidProvider androidProvider,
         string? adbPath,
-        Func<string, string[], CancellationToken, Task<ProcessResult>> runAdbAsync)
+        AdbRunner? adbRunner)
     {
+        if (adbPath != null && adbRunner == null)
+            throw new ArgumentNullException(nameof(adbRunner), "adbRunner is required when adbPath is provided");
+
         _androidProvider = androidProvider;
         _adbPath = adbPath;
-        _runAdbAsync = runAdbAsync;
+        _adbRunner = adbRunner;
     }
 
     public static AndroidDevFlowPortForwarder CreateDefault()
@@ -30,15 +35,7 @@ internal sealed class AndroidDevFlowPortForwarder
         var environment = AndroidEnvironment.BuildEnvironmentVariables(provider.SdkPath, provider.JdkPath);
         var adb = new Adb(() => provider.SdkPath, environment);
 
-        return new AndroidDevFlowPortForwarder(
-            provider,
-            adb.AdbPath,
-            (adbPath, args, cancellationToken) => ProcessRunner.RunAsync(
-                adbPath,
-                args,
-                environmentVariables: environment,
-                timeout: TimeSpan.FromSeconds(15),
-                cancellationToken: cancellationToken));
+        return new AndroidDevFlowPortForwarder(provider, adb.AdbPath, adb.Runner);
     }
 
     /// <summary>
@@ -92,7 +89,7 @@ internal sealed class AndroidDevFlowPortForwarder
         {
             devices = await _androidProvider.GetDevicesAsync(cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return report with
             {
@@ -141,30 +138,53 @@ internal sealed class AndroidDevFlowPortForwarder
 
         var errors = new List<string>();
         var brokerReverseBefore = request.EnsureBrokerReverse
-            && ContainsMapping(reverseBefore.Mappings, report.SelectedSerial, brokerPort);
+            && ContainsMapping(reverseBefore.Mappings, brokerPort);
         var brokerReverseAdded = false;
 
         if (request.EnsureBrokerReverse && !brokerReverseBefore && request.Repair)
         {
-            var result = await RunAdbAsync(report.SelectedSerial, ["reverse", $"tcp:{brokerPort}", $"tcp:{brokerPort}"], cancellationToken);
-            if (result.Success)
+            try
+            {
+                var spec = new AdbPortSpec(AdbProtocol.Tcp, brokerPort);
+                using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
+                await _adbRunner!.ReversePortAsync(report.SelectedSerial, spec, spec, timeoutCts.Token);
                 brokerReverseAdded = true;
-            else
-                errors.Add($"adb reverse tcp:{brokerPort} tcp:{brokerPort} failed: {GetProcessError(result)}");
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Caller-initiated cancellation (Ctrl+C, etc.) must propagate. Cancellation
+                // originating from the internal per-call timeout below falls through to the
+                // general catch so a single slow adb invocation is reported as an error.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"adb reverse tcp:{brokerPort} tcp:{brokerPort} failed: {ex.Message}");
+            }
         }
 
         var agentForwards = new List<AndroidDevFlowPortForward>();
         foreach (var port in report.AgentPorts)
         {
-            var presentBefore = ContainsMapping(forwardBefore.Mappings, report.SelectedSerial, port);
+            var presentBefore = ContainsMapping(forwardBefore.Mappings, port);
             var added = false;
             if (!presentBefore && request.Repair)
             {
-                var result = await RunAdbAsync(report.SelectedSerial, ["forward", $"tcp:{port}", $"tcp:{port}"], cancellationToken);
-                if (result.Success)
+                try
+                {
+                    var spec = new AdbPortSpec(AdbProtocol.Tcp, port);
+                    using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
+                    await _adbRunner!.ForwardPortAsync(report.SelectedSerial, spec, spec, timeoutCts.Token);
                     added = true;
-                else
-                    errors.Add($"adb forward tcp:{port} tcp:{port} failed: {GetProcessError(result)}");
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"adb forward tcp:{port} tcp:{port} failed: {ex.Message}");
+                }
             }
 
             agentForwards.Add(new AndroidDevFlowPortForward
@@ -192,12 +212,12 @@ internal sealed class AndroidDevFlowPortForwarder
 
         var brokerReversePresent = request.EnsureBrokerReverse
             && reverseAfter.Success
-            && ContainsMapping(reverseAfter.Mappings, report.SelectedSerial, brokerPort);
+            && ContainsMapping(reverseAfter.Mappings, brokerPort);
 
         agentForwards = agentForwards
             .Select(f => f with
             {
-                PresentAfter = forwardAfter.Success && ContainsMapping(forwardAfter.Mappings, report.SelectedSerial, f.Port)
+                PresentAfter = forwardAfter.Success && ContainsMapping(forwardAfter.Mappings, f.Port)
             })
             .ToList();
 
@@ -281,68 +301,43 @@ internal sealed class AndroidDevFlowPortForwarder
 
     async Task<AndroidPortMappingList> ListMappingsAsync(string serial, bool reverse, CancellationToken cancellationToken)
     {
-        var result = await RunAdbAsync(serial, [reverse ? "reverse" : "forward", "--list"], cancellationToken);
-        if (!result.Success)
+        try
+        {
+            using var timeoutCts = CreateAdbCallTimeoutSource(cancellationToken);
+            var rules = reverse
+                ? await _adbRunner!.ListReversePortsAsync(serial, timeoutCts.Token)
+                : await _adbRunner!.ListForwardPortsAsync(serial, timeoutCts.Token);
+            return AndroidPortMappingList.Ok(rules);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
         {
             var command = reverse ? "adb reverse --list" : "adb forward --list";
-            return AndroidPortMappingList.Failed($"{command} failed: {GetProcessError(result)}");
+            return AndroidPortMappingList.Failed($"{command} failed: {ex.Message}");
         }
-
-        return AndroidPortMappingList.Ok(ParsePortMappings(result.StandardOutput));
     }
 
-    Task<ProcessResult> RunAdbAsync(string serial, string[] args, CancellationToken cancellationToken)
+    /// <summary>
+    /// Creates a linked <see cref="CancellationTokenSource"/> that caps a single
+    /// <c>adb</c> invocation at <see cref="AdbCallTimeout"/>, while still observing the
+    /// caller's <paramref name="cancellationToken"/>. Callers distinguish the two by
+    /// checking <c>cancellationToken.IsCancellationRequested</c> in their catch block:
+    /// only the caller's own token should cause the whole operation to abort.
+    /// </summary>
+    static CancellationTokenSource CreateAdbCallTimeoutSource(CancellationToken cancellationToken)
     {
-        var fullArgs = new List<string> { "-s", serial };
-        fullArgs.AddRange(args);
-        return _runAdbAsync(_adbPath!, fullArgs.ToArray(), cancellationToken);
+        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(AdbCallTimeout);
+        return timeoutCts;
     }
 
-    internal static AndroidDevFlowPortMapping[] ParsePortMappings(string output)
-    {
-        var mappings = new List<AndroidDevFlowPortMapping>();
-        foreach (var rawLine in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var parts = rawLine.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 3)
-            {
-                mappings.Add(new AndroidDevFlowPortMapping
-                {
-                    Serial = parts[0],
-                    Local = parts[1],
-                    Remote = parts[2]
-                });
-            }
-            else if (parts.Length == 2)
-            {
-                mappings.Add(new AndroidDevFlowPortMapping
-                {
-                    Local = parts[0],
-                    Remote = parts[1]
-                });
-            }
-        }
-
-        return mappings.ToArray();
-    }
-
-    static bool ContainsMapping(IEnumerable<AndroidDevFlowPortMapping> mappings, string serial, int port)
-    {
-        var endpoint = $"tcp:{port}";
-        return mappings.Any(m =>
-            (string.IsNullOrWhiteSpace(m.Serial) || m.Serial.Equals(serial, StringComparison.OrdinalIgnoreCase)) &&
-            m.Local.Equals(endpoint, StringComparison.OrdinalIgnoreCase) &&
-            m.Remote.Equals(endpoint, StringComparison.OrdinalIgnoreCase));
-    }
-
-    static string GetProcessError(ProcessResult result)
-    {
-        var error = !string.IsNullOrWhiteSpace(result.StandardError)
-            ? result.StandardError.Trim()
-            : result.StandardOutput.Trim();
-
-        return string.IsNullOrWhiteSpace(error) ? $"exit code {result.ExitCode}" : error;
-    }
+    static bool ContainsMapping(IEnumerable<AdbPortRule> mappings, int port)
+        => mappings.Any(m =>
+            m.Local.Protocol == AdbProtocol.Tcp && m.Local.Port == port
+            && m.Remote.Protocol == AdbProtocol.Tcp && m.Remote.Port == port);
 
     static string[] BuildMappingSuggestions(string serial, bool brokerReverseMissing, int brokerPort, int[] missingAgentForwards)
     {
@@ -362,9 +357,9 @@ internal sealed class AndroidDevFlowPortForwarder
             => new(status, null, message, suggestions);
     }
 
-    sealed record AndroidPortMappingList(bool Success, AndroidDevFlowPortMapping[] Mappings, string? Error)
+    sealed record AndroidPortMappingList(bool Success, IReadOnlyList<AdbPortRule> Mappings, string? Error)
     {
-        public static AndroidPortMappingList Ok(AndroidDevFlowPortMapping[] mappings) => new(true, mappings, null);
+        public static AndroidPortMappingList Ok(IReadOnlyList<AdbPortRule> mappings) => new(true, mappings, null);
 
         public static AndroidPortMappingList Failed(string error) => new(false, [], error);
     }
@@ -484,19 +479,6 @@ internal sealed record AndroidDevFlowDevice
             IsEmulator = device.IsEmulator,
             IsOnline = device.State is DeviceState.Connected or DeviceState.Booted
         };
-}
-
-internal sealed record AndroidDevFlowPortMapping
-{
-    [JsonPropertyName("serial")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Serial { get; init; }
-
-    [JsonPropertyName("local")]
-    public string Local { get; init; } = "";
-
-    [JsonPropertyName("remote")]
-    public string Remote { get; init; } = "";
 }
 
 internal sealed record AndroidDevFlowPortForward

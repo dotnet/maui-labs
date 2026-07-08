@@ -80,6 +80,7 @@ When adding a new third-party dependency that gets bundled into a NuGet package,
 - `dotnet-eng` — engineering infrastructure
 - `dotnet10` — version-specific feed
 - `dotnet11` — version-specific feed
+- `dotnet11-transport` — .NET 11 transport feed
 
 **Do NOT add `nuget.org` as a direct source.** All public packages are available through the dnceng proxy feeds.
 

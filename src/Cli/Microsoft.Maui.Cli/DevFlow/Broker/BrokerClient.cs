@@ -116,7 +116,7 @@ public static class BrokerClient
         return ResolveAgent(agents, projectPath, tfm);
     }
 
-    static AgentRegistration? ResolveAgent(AgentRegistration[] agents, string? projectPath = null, string? tfm = null)
+    internal static AgentRegistration? ResolveAgent(AgentRegistration[] agents, string? projectPath = null, string? tfm = null)
     {
         // If project+TFM provided, look for exact match
         if (projectPath != null && tfm != null)
@@ -498,5 +498,28 @@ public static class BrokerClient
 
         var candidate = Path.Combine(AppContext.BaseDirectory, $"{assemblyName}.dll");
         return File.Exists(candidate) ? candidate : null;
+    }
+
+    /// <summary>
+    /// Builds the shared guidance message shown when multiple agents are connected and no
+    /// target was specified (issue #343). Used by both the CLI <c>--agent-port</c> guard and
+    /// the MCP <c>McpAgentSession</c> so the two surfaces stay identical.
+    /// </summary>
+    /// <param name="agents">The connected agents to list (may be empty).</param>
+    /// <param name="optionHint">
+    /// How the caller specifies a target on this surface — <c>--agent-port</c> for the CLI,
+    /// <c>agentPort</c> for MCP tools.
+    /// </param>
+    internal static string BuildMultiAgentTargetingMessage(AgentRegistration[] agents, string optionHint = "--agent-port")
+    {
+        var sb = new StringBuilder();
+        sb.Append("Multiple MAUI DevFlow agents are connected and no target was specified. ");
+        sb.Append($"Re-run with {optionHint} <port> to choose which app to target.");
+        if (agents is { Length: > 0 })
+        {
+            foreach (var a in agents.OrderBy(a => a.Port))
+                sb.Append($"{Environment.NewLine}  {optionHint} {a.Port}  {a.AppName} ({a.Platform} {a.Tfm})");
+        }
+        return sb.ToString();
     }
 }

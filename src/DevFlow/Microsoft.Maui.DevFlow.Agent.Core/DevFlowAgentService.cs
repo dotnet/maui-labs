@@ -1292,11 +1292,22 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 if (element == null)
                     return HttpResponse.Error($"Element '{elementId}' not found or not a VisualElement");
 
-                var pngData = await DispatchAsync(() => CaptureElementScreenshotAsync(element));
-                if (pngData == null)
-                    return HttpResponse.Error($"Capture returned null for element '{elementId}'");
+                var outcome = await DispatchAsync<ScreenshotCaptureOutcome>(async () =>
+                {
+                    var bytes = await CaptureElementScreenshotAsync(element);
+                    // Diagnose in the same UI-thread turn as the failed capture so the
+                    // reported window/app state matches the state at capture time.
+                    return new ScreenshotCaptureOutcome
+                    {
+                        Data = bytes,
+                        Failure = bytes == null ? DescribeScreenshotFailure() : null
+                    };
+                });
 
-                return HttpResponse.Png(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
+                if (outcome?.Data == null)
+                    return BuildScreenshotFailureResponse(outcome?.Failure, $"Capture returned null for element '{elementId}'");
+
+                return HttpResponse.Png(ResizePngIfNeeded(outcome.Data, maxWidth, density, autoScale));
             }
             catch (Exception ex)
             {
@@ -1327,11 +1338,22 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 if (element == null)
                     return HttpResponse.Error($"Element '{matchId}' not found or not a VisualElement");
 
-                var pngData = await DispatchAsync(() => CaptureElementScreenshotAsync(element));
-                if (pngData == null)
-                    return HttpResponse.Error($"Capture returned null for element '{matchId}'");
+                var outcome = await DispatchAsync<ScreenshotCaptureOutcome>(async () =>
+                {
+                    var bytes = await CaptureElementScreenshotAsync(element);
+                    // Diagnose in the same UI-thread turn as the failed capture so the
+                    // reported window/app state matches the state at capture time.
+                    return new ScreenshotCaptureOutcome
+                    {
+                        Data = bytes,
+                        Failure = bytes == null ? DescribeScreenshotFailure() : null
+                    };
+                });
 
-                return HttpResponse.Png(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
+                if (outcome?.Data == null)
+                    return BuildScreenshotFailureResponse(outcome?.Failure, $"Capture returned null for element '{matchId}'");
+
+                return HttpResponse.Png(ResizePngIfNeeded(outcome.Data, maxWidth, density, autoScale));
             }
             catch (FormatException ex)
             {
@@ -1345,10 +1367,11 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         try
         {
-            var pngData = await DispatchAsync(async () =>
+            var outcome = await DispatchAsync<ScreenshotCaptureOutcome>(async () =>
             {
                 var window = GetWindow(windowIndex);
-                if (window == null) return null;
+                if (window == null)
+                    return new ScreenshotCaptureOutcome { Failure = DescribeScreenshotFailure() };
 
                 // If a modal page is displayed, capture it instead of the underlying page
                 VisualElement? topModal = null;
@@ -1375,18 +1398,27 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     }
                 }
 
+                byte[]? bytes;
                 if (topModal != null)
-                    return await CaptureScreenshotAsync(topModal);
+                    bytes = await CaptureScreenshotAsync(topModal);
+                else if (window.Page is VisualElement rootElement)
+                    bytes = await CaptureScreenshotAsync(rootElement);
+                else
+                    bytes = null;
 
-                if (window.Page is not VisualElement rootElement) return null;
-
-                return await CaptureScreenshotAsync(rootElement);
+                // Diagnose in the same UI-thread turn as the failed capture so the
+                // reported window/app state matches the state at capture time.
+                return new ScreenshotCaptureOutcome
+                {
+                    Data = bytes,
+                    Failure = bytes == null ? DescribeScreenshotFailure() : null
+                };
             });
 
-            if (pngData == null)
-                return HttpResponse.Error("Failed to capture screenshot");
+            if (outcome?.Data == null)
+                return BuildScreenshotFailureResponse(outcome?.Failure, "Failed to capture screenshot");
 
-            return HttpResponse.Png(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
+            return HttpResponse.Png(ResizePngIfNeeded(outcome.Data, maxWidth, density, autoScale));
         }
         catch (Exception ex)
         {
@@ -1420,6 +1452,58 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     protected virtual Task<byte[]?> CaptureFullScreenAsync()
     {
         return Task.FromResult<byte[]?>(null);
+    }
+
+    /// <summary>
+    /// Describes why a screenshot capture returned null, when the platform can determine an
+    /// actionable, often-retryable cause (e.g. the app window is not the frontmost application
+    /// on macOS). Returns <c>null</c> when no specific cause is known, in which case the caller
+    /// falls back to a generic error.
+    /// <para>
+    /// Invoked on the UI thread within the same dispatch as the failed capture (see
+    /// <see cref="ScreenshotCaptureOutcome"/>), so the probed window/app state reflects the
+    /// state at capture time rather than a later re-probe. The result is best-effort/advisory.
+    /// </para>
+    /// </summary>
+    protected virtual ScreenshotCaptureFailure? DescribeScreenshotFailure() => null;
+
+    /// <summary>
+    /// Carries the outcome of a screenshot capture attempt: the PNG bytes on success, or the
+    /// platform-described <see cref="ScreenshotCaptureFailure"/> (probed atomically in the same
+    /// UI dispatch as the capture) on failure.
+    /// </summary>
+    private sealed class ScreenshotCaptureOutcome
+    {
+        public byte[]? Data { get; init; }
+        public ScreenshotCaptureFailure? Failure { get; init; }
+    }
+
+    /// <summary>
+    /// Builds an HTTP error response for a failed screenshot capture, enriching it with an
+    /// actionable, retryable cause when the platform described one (see
+    /// <see cref="DescribeScreenshotFailure"/>). Falls back to <paramref name="defaultMessage"/>.
+    /// </summary>
+    private static HttpResponse BuildScreenshotFailureResponse(ScreenshotCaptureFailure? failure, string defaultMessage)
+    {
+        if (failure == null)
+            return HttpResponse.Error(defaultMessage);
+
+        var details = new Dictionary<string, object?>
+        {
+            ["retryable"] = failure.Retryable
+        };
+        if (failure.Suggestions is { Length: > 0 })
+            details["suggestions"] = failure.Suggestions;
+
+        var message = string.IsNullOrWhiteSpace(failure.Message) ? defaultMessage : failure.Message;
+
+        // 409 Conflict signals a transient, retryable precondition (window focus/visibility);
+        // the structured body carries the authoritative retryable flag for clients.
+        return HttpResponse.Error(
+            message,
+            statusCode: failure.Retryable ? 409 : 400,
+            reason: failure.Reason,
+            details: details);
     }
 
     /// <summary>
@@ -6875,6 +6959,34 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         return HttpResponse.Json(result);
     }
+}
+
+/// <summary>
+/// Describes an actionable cause for a failed screenshot capture, used to return a clear,
+/// often-retryable error to clients instead of a generic failure. See
+/// <see cref="DevFlowAgentService.DescribeScreenshotFailure"/>.
+/// </summary>
+public sealed class ScreenshotCaptureFailure
+{
+    public ScreenshotCaptureFailure(string message, string reason, bool retryable, string[]? suggestions = null)
+    {
+        Message = message;
+        Reason = reason;
+        Retryable = retryable;
+        Suggestions = suggestions;
+    }
+
+    /// <summary>Human-readable, actionable error message.</summary>
+    public string Message { get; }
+
+    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-frontmost</c>).</summary>
+    public string Reason { get; }
+
+    /// <summary>Whether retrying (e.g. after foregrounding the app) may succeed.</summary>
+    public bool Retryable { get; }
+
+    /// <summary>Optional actionable suggestions for the caller.</summary>
+    public string[]? Suggestions { get; }
 }
 
 // Request DTOs

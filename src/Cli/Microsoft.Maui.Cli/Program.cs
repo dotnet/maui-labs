@@ -55,7 +55,14 @@ public class Program
 
 		try
 		{
-			return await parseResult.InvokeAsync();
+			var exitCode = await parseResult.InvokeAsync();
+
+			// DevFlow command handlers swallow exceptions and signal failure via a flag
+			// instead of a non-zero return; translate that into a non-zero process exit.
+			if (exitCode == 0 && Microsoft.Maui.Cli.DevFlow.DevFlowCommands.ErrorOccurred)
+				exitCode = 1;
+
+			return exitCode;
 		}
 		catch (Exception exception)
 		{
