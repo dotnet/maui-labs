@@ -2944,7 +2944,18 @@ public class DevFlowCommands
             // Fall back to agent-based screenshot (or used for element-scoped captures)
             if (data == null)
             {
-                data = await client.ScreenshotAsync(window, id, selector, maxWidth, scale);
+                var result = await client.ScreenshotResultAsync(window, id, selector, maxWidth, scale);
+                if (!result.Success)
+                {
+                    Output.WriteError(
+                        result.Error ?? "Failed to capture screenshot",
+                        json,
+                        retryable: result.Retryable,
+                        suggestions: result.Suggestions?.ToArray());
+                    _errorOccurred = true;
+                    return;
+                }
+                data = result.Data;
             }
 
             if (data == null)
