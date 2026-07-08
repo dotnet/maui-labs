@@ -1,6 +1,7 @@
 using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.DevFlow.Driver;
+using ModelContextProtocol;
 
 namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 
@@ -64,8 +65,23 @@ public class McpAgentSession
 			return agent.Port;
 		}
 
-		var fallbackPort = BrokerClient.ReadConfigPort() ?? 9223;
-		return fallbackPort;
+		// No single agent could be resolved. Distinguish the safe "no broker / single app"
+		// path from genuine ambiguity (broker reports >1 agents). In the ambiguous case,
+		// refuse instead of silently defaulting to a port and targeting an arbitrary app
+		// (issue #343). An explicit agentPort or a selected default agent bypasses this.
+		var configPort = BrokerClient.ReadConfigPort();
+		if (!configPort.HasValue)
+		{
+			var brokerPort = BrokerClient.ReadBrokerPortPublic();
+			if (brokerPort.HasValue)
+			{
+				var agents = await BrokerClient.ListAgentsAsync(brokerPort.Value);
+				if (agents is { Length: > 1 })
+					throw new McpException(BrokerClient.BuildMultiAgentTargetingMessage(agents, optionHint: "agentPort"));
+			}
+		}
+
+		return configPort ?? 9223;
 	}
 
 	async Task TryEnsureAndroidForwardingForAgentPortAsync(int agentPort, bool ensureBrokerReverse)
