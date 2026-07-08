@@ -1,14 +1,7 @@
 ---
 name: maui-devflow-session-review
 description: >-
-  Review previous AI sessions that used MAUI DevFlow to identify opt-in product
-  feedback, friction, repeated attempts, failed advertised features, and
-  workarounds. USE FOR: MAUI DevFlow session review, stuck maui devflow debugging
-  sessions, reviewing CLI/MCP behavior for friction, markdown feedback reports,
-  filing dotnet/maui-labs GitHub issues. DO NOT USE FOR: fixing discovered bugs,
-  adding DevFlow to apps (use maui-devflow-onboard), iterative app debugging
-  (use maui-devflow-debug), or generic memory search. INVOKES: session
-  history/search tools, gh CLI, and maui devflow CLI.
+  Review past MAUI DevFlow sessions. USE FOR: DevFlow friction reports, classifying `maui_tap`/`maui_hittest`/`maui_screenshot`/`maui_cdp_webviews` issues vs app bugs, markdown Environment/Findings reports, scrubbed dotnet/maui-labs issue drafts, workaround summaries. Does not run live `maui devflow`. DO NOT USE FOR: fixing bugs, onboarding, live debugging, or memory search.
 ---
 
 # MAUI DevFlow Session Review
@@ -44,7 +37,11 @@ Use this skill when:
 
 ### 1. Confirm opt-in scope
 
-Identify what the user wants reviewed:
+**If the user has provided session content directly in the message**, start from
+step 4 (Classify friction) immediately — do not invoke live DevFlow CLI commands,
+search tools, or session history tools. The user has already supplied the evidence.
+
+If no session content is provided, identify what the user wants reviewed:
 
 - current session
 - recent sessions matching MAUI DevFlow keywords
@@ -140,6 +137,9 @@ bodies, screenshots, and user-specific text.
 
 Use [references/reporting.md](references/reporting.md). Default to a markdown
 report. File GitHub issues only when the user asks and repository access works.
+For markdown reports, include the exact sections `## Environment` and
+`## Findings`; put unknown environment details under `## Environment` as
+`Unknown` rather than omitting or guessing them.
 
 For GitHub issues, prefer one issue per actionable MAUI DevFlow product problem.
 Merge near-duplicate session evidence into the same issue body instead of
@@ -147,7 +147,9 @@ opening many low-signal issues.
 
 Before saving markdown or filing issues, do a final privacy pass. If a useful
 finding cannot be explained without PII or local identifiers, omit it or replace
-the details with a generic description.
+the details with a generic description. Do not repeat the original private value
+in the output, even to say that it was scrubbed; say only that local paths,
+emails, private URLs, or other identifiers were redacted.
 
 ## Optional Feedback Nudge
 
@@ -163,7 +165,7 @@ they want an opt-in review; it should not run this skill automatically.
 | Auto-scan all past sessions | Ask for scope and stay inside it |
 | Ask for session IDs, transcript paths, log paths, or artifact paths | Ask for a high-level scope such as time range, platform, feature, or current session |
 | Treat one ambiguous failure as a confirmed DevFlow bug | Label confidence and separate app/environment/unknown causes |
-| Include raw private transcript excerpts, screenshots, tokens, file paths, session IDs, or request bodies | Paraphrase safe evidence and scrub PII before output |
+| Include raw private transcript excerpts, screenshots, tokens, file paths, session IDs, or request bodies, even in "removed PII" notes | Paraphrase safe evidence and say identifiers were redacted without repeating them |
 | Fix the discovered issues during the review | Produce feedback unless the user separately asks for implementation |
 | File GitHub issues without user approval and repo access | Produce markdown first, then file only on request |
 | Hide successful workarounds | Capture the final working path and the failed attempts that led to it |
