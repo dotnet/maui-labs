@@ -118,24 +118,78 @@ public static class ReactiveScheduler
 	/// </summary>
 	public static event Action? AfterFlush;
 
+	/// <summary>True while <see cref="FlushEntry"/> is running on this thread — including its
+	/// <see cref="AfterFlush"/> phase, which <see cref="_flushing"/> deliberately excludes.</summary>
+	[ThreadStatic]
+	static bool _inFlushEntry;
+
 	static void FlushEntry()
 	{
-		lock (_lock)
-		{
-			_flushScheduled = false;
-		}
+		// Re-entrancy guard. An AfterFlush handler that BUILDS views — an own-content node
+		// refreshing its hosted subtree during the post-flush layout pass — writes the
+		// environment, which calls EnsureFlushScheduled; with _flushing already false that
+		// would run a nested FlushEntry inline, whose AfterFlush re-arranges the node that is
+		// still mid-build and recurses without bound (the Reply detail-swap stack overflow).
+		// Instead leave _flushScheduled set and return: the outer call's pass loop below
+		// picks the new work up after the current pass settles.
+		if (_inFlushEntry)
+			return;
 
-		_flushing = true;
+		_inFlushEntry = true;
 		try
 		{
-			Flush(depth: 0);
+			for (int pass = 0; ; pass++)
+			{
+				lock (_lock)
+				{
+					_flushScheduled = false;
+				}
+
+				_flushing = true;
+				try
+				{
+					Flush(depth: 0);
+				}
+				finally
+				{
+					_flushing = false;
+				}
+
+				AfterFlush?.Invoke();
+
+				lock (_lock)
+				{
+					if (!_flushScheduled && _dirtyEffects.Count == 0 && _dirtyViews.Count == 0)
+						return;
+				}
+
+				if (pass >= MaxFlushDepth)
+				{
+					ReactiveDiagnostics.NotifyFlushDepthWarning(pass);
+					Debug.WriteLine(
+						$"[Comet.Reactive] ReactiveScheduler exceeded {MaxFlushDepth} AfterFlush passes. " +
+						"This indicates AfterFlush work that re-dirties the graph every pass " +
+						"(e.g. a layout handler rebuilding views unconditionally). Breaking the cycle.");
+#if DEBUG
+					throw new InvalidOperationException(
+						$"Reactive AfterFlush cycle detected: exceeded {MaxFlushDepth} passes. " +
+						"Check AfterFlush handlers that write signals/environment on every pass.");
+#else
+					lock (_lock)
+					{
+						_flushScheduled = false;
+						_dirtyEffects.Clear();
+						_dirtyViews.Clear();
+					}
+					return;
+#endif
+				}
+			}
 		}
 		finally
 		{
-			_flushing = false;
+			_inFlushEntry = false;
 		}
-
-		AfterFlush?.Invoke();
 	}
 
 	static void Flush(int depth)

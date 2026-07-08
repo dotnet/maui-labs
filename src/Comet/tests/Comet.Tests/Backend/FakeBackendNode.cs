@@ -10,7 +10,7 @@ namespace Comet.Tests.Backend
 	/// receives, so the diff→backend contract can be asserted without any platform.
 	/// This replaces the role the legacy MAUI mapper tests played.
 	/// </summary>
-	public sealed class FakeBackendNode : ICometBackendNode
+	public class FakeBackendNode : ICometBackendNode
 	{
 		public string Kind { get; }
 		public FakeBackendNode(string kind = "node") => Kind = kind;
@@ -54,7 +54,7 @@ namespace Comet.Tests.Backend
 		/// <summary>Count of ApplyProperty calls (including no-op re-applies, if any reach us).</summary>
 		public int ApplyCount { get; private set; }
 
-		public void ApplyProperty(PropertyId id, in PropertyValue value)
+		public virtual void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
 			ApplyCount++;
 			Properties[id.Value] = value;
@@ -83,7 +83,7 @@ namespace Comet.Tests.Backend
 			Log.Add($"move {fromIndex}->{toIndex} {node.Kind}");
 		}
 
-		public Size Measure(double widthConstraint, double heightConstraint)
+		public virtual Size Measure(double widthConstraint, double heightConstraint)
 		{
 			LastMeasureWidth = widthConstraint;
 			return MeasureFunc?.Invoke(widthConstraint, heightConstraint) ?? MeasureResult;
@@ -91,7 +91,7 @@ namespace Comet.Tests.Backend
 
 		public double? MeasureBaseline(double width, double height) => BaselineResult;
 
-		public void Arrange(Rect frame)
+		public virtual void Arrange(Rect frame)
 		{
 			ArrangedFrame = frame;
 			Log.Add($"arrange {frame}");
@@ -103,7 +103,7 @@ namespace Comet.Tests.Backend
 			Log.Add(sink is null ? "sink=null" : "sink=set");
 		}
 
-		public void Dispose()
+		public virtual void Dispose()
 		{
 			Disposed = true;
 			Log.Add("dispose");

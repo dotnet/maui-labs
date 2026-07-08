@@ -213,6 +213,10 @@ namespace Comet.DevTools
 
 				info.Text = info.Props.TryGetValue("text", out var t) ? t
 					: info.Props.TryGetValue("buttonText", out var bt) ? bt
+					// An Icon whose symbol resolved through a registered icon font emits
+					// Icon_Glyph (a PUA char), not Icon_Symbol — expose the symbol name
+					// directly so icons stay queryable by name either way.
+					: view is Icon icon && !string.IsNullOrEmpty(icon.Symbol) ? icon.Symbol
 					: null;
 				info.Value = info.Props.TryGetValue("isOn", out var on) ? on
 					: info.Props.TryGetValue("sliderValue", out var sv) ? sv
