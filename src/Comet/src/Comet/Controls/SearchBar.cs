@@ -57,5 +57,18 @@ namespace Comet
 				children.Add(TrailingView);
 			return children;
 		}
+
+		/// <summary>Programmatic text entry (the dev agent's fill action targeting the
+		/// SearchBar element): drives the SAME pipeline as typing — expands the bar and
+		/// writes the query signal. On Android the input field is a native M3 facade widget
+		/// (not a registered Comet element), so this is the only agent-reachable path there.</summary>
+		protected internal override void OnBackendEvent<T>(Backend.EventId id, T payload)
+		{
+			if (id == Backend.EventIds.TextChanged && payload is string s)
+			{
+				Expanded.Value = true;
+				Query.Value = s;
+			}
+		}
 	}
 }
