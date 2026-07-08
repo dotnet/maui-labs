@@ -87,6 +87,9 @@ public class ElementInfo
     [JsonPropertyName("bounds")]
     public BoundsInfo? Bounds { get; set; }
 
+    [JsonPropertyName("windowBounds")]
+    public BoundsInfo? WindowBounds { get; set; }
+
     [JsonPropertyName("gestures")]
     public List<string>? Gestures { get; set; }
 
