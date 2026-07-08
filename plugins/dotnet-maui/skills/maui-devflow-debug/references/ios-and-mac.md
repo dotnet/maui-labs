@@ -32,41 +32,55 @@ it's clear which simulator belongs to which project.
 
 ### List simulators
 ```bash
-xcrun simctl list devices                     # all devices by runtime
-xcrun simctl list devices booted              # only booted
-xcrun simctl list devices available            # only available
-apple simulator list                          # formatted table
-apple simulator list --booted                 # booted only
+maui apple simulator list                     # formatted table (State column shows Booted/Shutdown); add --json for agents
+xcrun simctl list devices booted              # raw: filter to only booted
+xcrun simctl list devices available           # raw: filter to only available
 ```
 
 ### Create simulator
 ```bash
-# List available device types and runtimes first
-xcrun simctl list devicetypes                 # e.g. "iPhone 16 Pro"
-xcrun simctl list runtimes                    # e.g. "iOS 18.2"
+# List available device types and runtimes first (identifiers, not friendly names)
+xcrun simctl list devicetypes                 # e.g. com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
+xcrun simctl list runtimes                    # e.g. com.apple.CoreSimulator.SimRuntime.iOS-18-2
 
+# Preferred: unified maui CLI (device-type is positional; --name/--runtime optional).
+# --if-not-exists makes it idempotent: returns the existing UDID instead of failing.
+maui apple simulator create com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro \
+  --name "My iPhone" --runtime com.apple.CoreSimulator.SimRuntime.iOS-18-2 --if-not-exists
+
+# Raw simctl equivalent (name, device-type, runtime are all positional)
 xcrun simctl create "My iPhone" "iPhone 16 Pro" "iOS 18.2"
-apple simulator create "My iPhone" --device-type "iPhone 16 Pro" --runtime "iOS 18.2"
 ```
 
 ### Boot / shutdown
 ```bash
+# Preferred: unified maui CLI (accepts a name or UDID; `start` also opens the Simulator UI)
+maui apple simulator start <name-or-UDID>     # add --no-open to boot headless
+maui apple simulator stop <name-or-UDID>      # or `stop all`
+
+# Raw simctl fallback
 xcrun simctl boot <UDID>
 xcrun simctl shutdown <UDID>
-apple simulator boot <UDID>
-apple simulator shutdown <UDID>
 ```
 
 ### Install and launch app
 ```bash
+# Preferred: unified maui CLI (JSON output + structured errors)
+maui apple simulator install <UDID> /path/to/App.app
+maui apple simulator launch <UDID> com.company.appid
+
+# Raw simctl fallback (`booted` targets the active simulator)
 xcrun simctl install booted /path/to/App.app
 xcrun simctl launch booted com.company.appid
 ```
 
 ### Screenshots (iOS Simulator)
 ```bash
+# Preferred: unified maui CLI (output path is positional — no --output flag)
+maui apple simulator screenshot <UDID> output.png
+
+# Raw simctl fallback
 xcrun simctl io booted screenshot output.png
-apple simulator screenshot <UDID> --output output.png
 ```
 
 ### Screenshots (Mac Catalyst)
@@ -156,6 +170,13 @@ Common values: `net9.0-ios`, `net9.0-maccatalyst`, `net10.0-ios`, `net10.0-macca
 
 The `apple` command (from `appledev.tools` NuGet) provides higher-level wrappers.
 
+> **Prefer `maui apple simulator …`** (unified CLI) for new automation — it adds
+> `--json` output and the standard error envelope. The standalone `apple` syntax
+> below differs from `maui`: it uses `boot`/`shutdown` (maui: `start`/`stop`),
+> supports `list --booted` (maui has no such flag), and takes `create <name>
+> --device-type …` (maui inverts this: `create <device-type> --name …`). Don't
+> blindly prefix these with `maui`.
+
 ### Simulator commands
 ```
 apple simulator list [--booted|--available|--unavailable|--name "..."]
@@ -190,6 +211,11 @@ the standard error envelope:
 
 | Command | Use | `maui` equivalent |
 |---------|-----|-------------------|
+| `simctl boot <UDID>` | Boot a simulator | `maui apple simulator start <name-or-UDID>` |
+| `simctl shutdown <UDID>` | Shut down | `maui apple simulator stop <name-or-UDID>` (or `stop all`) |
+| `simctl create "name" "type" "runtime"` | Create | `maui apple simulator create <device-type> --name "name" --runtime <runtime>` |
+| `simctl erase <UDID>` | Factory reset | `maui apple simulator erase <UDID>` |
+| `simctl delete <UDID>` | Remove permanently | `maui apple simulator delete <name-or-UDID>` |
 | `simctl addmedia <UDID> file.jpg` | Add photos/videos to sim | `maui apple simulator add-media <UDID> file.jpg` |
 | `simctl openurl <UDID> "url"` | Open URL / deep link | `maui apple simulator openurl <UDID> "url"` |
 | `simctl push <UDID> bundle payload.json` | Simulate push notification | `maui apple simulator push <UDID> bundle payload.json` |
@@ -236,6 +262,12 @@ maui apple simulator privacy grant <UDID> location --bundle-id com.company.appid
 maui apple simulator privacy grant <UDID> photos          # all apps (no bundle id)
 maui devflow ui permission grant location --bundle-id com.company.appid
 ```
+
+> If `maui devflow ui permission` reports `'ui' was not matched`, your installed
+> `maui` CLI predates that subcommand. Use the `maui apple simulator privacy`
+> path above (it needs only a UDID — no running agent) or update the CLI with
+> `dotnet tool update --global Microsoft.Maui.Cli` (see setup.md → "Checking for
+> Updates").
 
 Raw `xcrun simctl` fallback (only if the `maui` CLI is unavailable):
 ```bash
@@ -319,12 +351,22 @@ Use these to test and validate dialog detection and dismissal workflows.
 ## Dark Mode Testing
 
 ### Toggle dark mode
+
+Prefer the unified `maui` CLI. Use an **app-scoped** theme so the host desktop
+is unaffected; fall back to simulator-wide appearance when you need the OS to
+change too:
 ```bash
-# Preferred when available: use an in-app theme toggle so the host desktop is unaffected.
-#
-# iOS Simulator (safe: affects the simulator only)
+# App-scoped theme via the DevFlow agent (does not touch the host or OS)
+maui devflow theme set dark --scope app
+maui devflow theme set light --scope app
+maui devflow theme get                          # read the current app theme
+
+# iOS Simulator appearance (affects the simulator only)
+maui apple simulator appearance dark <UDID>
+maui apple simulator appearance light <UDID>
+
+# Raw simctl fallback
 xcrun simctl ui <UDID> appearance dark
-xcrun simctl ui <UDID> appearance light
 ```
 
 For **Mac Catalyst**, changing system appearance affects the user's entire macOS desktop. Only do
