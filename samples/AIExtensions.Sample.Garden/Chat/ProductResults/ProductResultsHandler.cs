@@ -39,13 +39,14 @@ public sealed class ProductResultsHandler : ContentBlockHandler<ProductResultsBl
             {
                 case FunctionCallContent call when ProductTools.Contains(call.Name):
                     context.MarkHandled(call);
-                    state.TrackCall(call.CallId);
+                    state.TrackCall(call);
                     claimed = true;
                     break;
 
                 case FunctionResultContent result when state.OwnsResult(result.CallId):
                     context.MarkHandled(result);
                     state.AddProducts(ExtractProducts(result.Result));
+                    state.MarkResult(result.CallId);
                     state.AnyResultReceived = true;
                     claimed = true;
                     break;

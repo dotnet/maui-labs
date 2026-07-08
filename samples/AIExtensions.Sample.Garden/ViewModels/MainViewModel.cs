@@ -25,29 +25,50 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
     }
 
     /// <summary>
-    /// Whether the chat renders with the rich (fancy) template set. The toggle broadcasts a
-    /// <see cref="ChatTemplateModeChangedMessage"/> so the chat view swaps its templates — the header
-    /// stays decoupled from the chat view model (messaging, not a shared reference).
+    /// Handler axis: whether the chat uses the custom Garden block handlers (custom blocks) or only the
+    /// built-in defaults (raw function-call blocks). Toggling sends a <see cref="StartNewChatSessionMessage"/>
+    /// with the new mode so the chat view recreates its session with that handler set.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TemplateToggleIcon))]
-    public partial bool IsFancyChat { get; set; } = true;
+    [NotifyPropertyChangedFor(nameof(HandlerToggleIcon))]
+    public partial bool UseCustomHandlers { get; set; } = true;
 
-    /// <summary>Fluent glyph for the toggle button — a sparkle when fancy, plain text lines when plain.</summary>
-    public string TemplateToggleIcon => IsFancyChat ? FluentIcons.Sparkle : FluentIcons.TextAlignLeft;
+    /// <summary>Fluent glyph for the handler toggle — a toolbox when custom, a box when raw/defaults.</summary>
+    public string HandlerToggleIcon => UseCustomHandlers ? FluentIcons.Toolbox : FluentIcons.Box;
 
     [RelayCommand]
-    private void ToggleChatTemplateMode()
+    private void ToggleChatHandlerMode()
     {
-        IsFancyChat = !IsFancyChat;
-        WeakReferenceMessenger.Default.Send(new ChatTemplateModeChangedMessage(IsFancyChat));
+        UseCustomHandlers = !UseCustomHandlers;
+        // Switching handlers starts a fresh conversation with the new handler set (the chat view
+        // recreates its session because the mode differs from the current one).
+        WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage(UseCustomHandlers));
+    }
+
+    /// <summary>
+    /// Rendering axis: whether blocks render through the raw block-preview inspector instead of the
+    /// designed views. Broadcasts <see cref="ChatBlockPreviewModeChangedMessage"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewToggleIcon))]
+    public partial bool IsPreview { get; set; }
+
+    /// <summary>Fluent glyph for the preview toggle — a beaker when inspecting, a leaf for designed views.</summary>
+    public string PreviewToggleIcon => IsPreview ? FluentIcons.Beaker : FluentIcons.LeafOne;
+
+    [RelayCommand]
+    private void ToggleChatPreviewMode()
+    {
+        IsPreview = !IsPreview;
+        WeakReferenceMessenger.Default.Send(new ChatBlockPreviewModeChangedMessage(IsPreview));
     }
 
     [RelayCommand]
     private void StartNewSession()
     {
         currentCart.Clear();
-        WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage());
+        // Same handler mode → the chat view just clears the current conversation.
+        WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage(UseCustomHandlers));
     }
 
     [RelayCommand]
