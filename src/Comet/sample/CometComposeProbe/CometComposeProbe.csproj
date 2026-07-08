@@ -15,6 +15,10 @@
     <ApplicationId>com.comet.composeprobe</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- Size benches: -p:CometSingleRid=true publishes arm64-only (a raw
+         -p:RuntimeIdentifiers flows to every referenced project and breaks the
+         netstandard2.0 source generator's copy step). -->
+    <RuntimeIdentifiers Condition="'$(CometSingleRid)' == 'true'">android-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

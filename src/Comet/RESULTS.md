@@ -435,3 +435,28 @@ Notes: <one paragraph — anything anomalous, descopes affecting perf, screen us
 for the scroll test, fixture vs live data mode>
 -->
 
+## Reply — 2026-07-08
+
+Emulator = Pixel 9 Pro AVD (API 36, arm64, Apple M4 Max host). Gold = the Kotlin
+Reply `app-release.apk` (minified) from ~/work/compose-samples, same device.
+
+| Metric | Comet (emulator) | Comet (Pixel 5, B1) | Gold Kotlin app |
+|---|---|---|---|
+| Release APK, trimmed single-RID (`tools/bench/size.sh <probe> -p:CometSingleRid=true`) | 26.1 MiB (27,409,987 B) | — | 3.4 MiB |
+| Cold start median, 10 runs (`am start -W --es screen reply`) | 3705 ms | — | 773 ms |
+| gfxinfo scroll jank, inbox list (6 fling swipes) | 13.0% janky, p50 26ms / p90 40ms / p95 57ms | — | 9.3% janky, p50 28ms / p90 40ms / p95 48ms |
+| iOS .ipa trimmed size / launch feel (manual note) | not measured (sim-only gate; Debug launch feels instant after splash) | n/a | n/a |
+| Comet.dll (linked, android-arm64) | 819 KiB (839,168 B) | — | n/a |
+
+Notes: the probe APK bundles BOTH samples (Jetchat + Reply, incl. avatar
+drawables + icon font) — a per-sample split would shave little since the total
+is dominated by the AndroidX Compose dex (~32 MB uncompressed across 3
+classes.dex) and the CoreCLR preview runtime (libcoreclr+libclrjit ~9 MB);
+managed code is 8.4 MiB (assembly store). No AOT/startup profile tuning yet —
+cold start carries full JIT + Compose init (the 4.8× gap vs gold is the
+headline framework-maturity number to attack, not the scroll path). Scroll
+jank is at parity with the gold app on the same device. Single-RID publish
+needs the `CometSingleRid` csproj switch — a raw `-p:RuntimeIdentifiers` flows
+into the netstandard2.0 source generator and breaks its copy step. Pixel 5
+column lands with batch B1 (after JetNews).
+

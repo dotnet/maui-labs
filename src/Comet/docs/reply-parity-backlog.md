@@ -190,9 +190,11 @@ REMAINING for M1 (priority order):
 - Refactor debt: shared ComposeOwnContentNode base (5 copies of lifecycle scaffolding);
   EmitSignalProperty helper for the 7 backend partials; suite reusing bar/rail item
   rendering + drawer sync from their standalone nodes.
-- Reply Release size snapshot: probe APK (Jetchat+Reply, all ABIs) 38.0 MiB vs gold
-  Kotlin Reply release APK 3.4 MiB (minified, single sample) — single-RID + per-sample
-  probe split needed for an honest RESULTS.md row (bench script RID arg didn't take).
+- Reply Release size snapshot ✅ (2026-07-08): single-RID (arm64) 26.1 MiB via the new
+  `-p:CometSingleRid=true` probe-csproj switch (a raw `-p:RuntimeIdentifiers` breaks the
+  netstandard2.0 source generator's copy step). Full RESULTS.md row filled: cold start
+  3705ms vs gold 773ms (JIT + Compose init — the maturity gap to attack); inbox scroll
+  jank AT PARITY with gold (13.0% vs 9.3%, near-identical percentiles).
 
 ## 10. iOS gate status (2026-07-07)
 
@@ -221,5 +223,19 @@ CometDevRegistry now falls back to Icon.Symbol for element text.
 reply.ios.sh 13/13 → the iOS gate smoke is GREEN (inbox, detail round-trip via
 app-bar back, route switch); jetchat 14/14 iOS + 13/13 Android, reply.android
 14/14 — no regressions.
-Still open (post-gate polish): search expanded-pane interaction on iOS;
-two-pane on an iPad sim.
+✅ POST-GATE POLISH DONE (2026-07-08, commits 199d95ad..b12a7abb):
+- iOS search end-to-end (pill → expanded pane → typed query → gold-filtered
+  result renders → close restores pill) — smoke grew a search section (18/18).
+  Surfaced + fixed 4 framework gaps: HoldFlushes (atomic hosted swaps),
+  node-generation disposal + registry pruning (stale-gen ghosts), SearchBar
+  Expanded state on the CONTROL, ListView.ReloadData re-pulls items AND
+  invalidates the row-view cache (opened-highlight now moves on iOS).
+- iPad Pro 13 two-pane: rail + list + detail render side-by-side (gold
+  840–1199 band); row tap swaps the detail in place; highlight follows.
+- Android search: SearchBar itself now accepts the agent fill (TextChanged →
+  expand + Query) since the M3 input field isn't a registered element —
+  query pipeline verified (results rebuild). FOLLOW-UP: sync
+  SearchBar.Expanded ↔ M3 SearchBarState so the popup opens/closes
+  programmatically on Android (today expansion is focus-driven only);
+  adb-IME text into the popup remains broken (upstream/IME quirk, agent
+  fill is the supported path).
