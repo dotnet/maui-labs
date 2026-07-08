@@ -10,7 +10,7 @@ on:
     inputs:
       pr_number:
         description: 'PR number to review'
-        required: true
+        required: false
         type: number
   roles: [admin, maintainer, write]
 
