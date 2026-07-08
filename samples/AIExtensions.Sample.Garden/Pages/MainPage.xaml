@@ -74,16 +74,27 @@
                         </DataTrigger>
                     </Border.Triggers>
                 </Border>
-                <!-- Fancy / plain template toggle -->
+                <!-- Handler axis: custom handlers vs built-in defaults -->
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
                         StrokeThickness="0" StrokeShape="RoundRectangle 18"
                         WidthRequest="36" HeightRequest="36">
-                    <Button Text="{Binding TemplateToggleIcon}" FontFamily="FluentFilled" FontSize="16"
-                            AutomationId="ToggleTemplatesButton"
+                    <Button Text="{Binding HandlerToggleIcon}" FontFamily="FluentFilled" FontSize="16"
+                            AutomationId="ToggleHandlersButton"
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
-                            Command="{Binding ToggleChatTemplateModeCommand}" />
+                            Command="{Binding ToggleChatHandlerModeCommand}" />
+                </Border>
+                <!-- Rendering axis: designed views vs raw block preview -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="{Binding PreviewToggleIcon}" FontFamily="FluentFilled" FontSize="16"
+                            AutomationId="TogglePreviewButton"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Command="{Binding ToggleChatPreviewModeCommand}" />
                 </Border>
                 <!-- New Chat -->
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"

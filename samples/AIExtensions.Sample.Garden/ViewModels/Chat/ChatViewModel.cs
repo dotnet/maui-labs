@@ -19,7 +19,7 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// </summary>
 public sealed partial class ChatViewModel : ObservableObject,
     IRecipient<StartNewChatSessionMessage>,
-    IRecipient<ChatTemplateModeChangedMessage>
+    IRecipient<ChatBlockPreviewModeChangedMessage>
 {
     /// <summary>
     /// Source-generated tool context that merges all tool sources into one.
@@ -85,7 +85,33 @@ public sealed partial class ChatViewModel : ObservableObject,
 
     private bool _turnActive;
 
+    private readonly IChatClient _chatClient;
+
+    // The handler mode of the current Session. Switching mode requires a new session (handlers are baked
+    // into the pipeline), so this is tracked here and compared against incoming new-session requests.
+    private bool _useCustomHandlers = true;
+
     public ChatViewModel(IChatClient chatClient)
+    {
+        _chatClient = chatClient;
+
+        // A single live session. Its handler set is baked into the pipeline, so switching handler mode
+        // recreates the session (see the StartNewChatSessionMessage handler) rather than holding several.
+        Session = CreateSession(_useCustomHandlers);
+
+        WeakReferenceMessenger.Default.RegisterAll(this);
+
+        RefreshAvailableTools();
+    }
+
+    /// <summary>
+    /// Builds a fresh <see cref="AgentContext"/> over the shared chat client. With
+    /// <paramref name="useCustomHandlers"/> the custom Garden handlers are registered; otherwise the
+    /// pipeline uses only the built-ins, so tools surface as raw <c>FunctionInvocationContentBlock</c>s.
+    /// Demonstrates that a different handler set is just a different agent — created ad-hoc, no engine
+    /// changes.
+    /// </summary>
+    private AgentContext CreateSession(bool useCustomHandlers)
     {
         // Image generation is always available: the hosted tool lets the model produce images inline,
         // and MauiProgram wires the matching UseImageGeneration middleware beneath function invocation
@@ -95,48 +121,45 @@ public sealed partial class ChatViewModel : ObservableObject,
             new HostedImageGenerationTool(),
         };
 
-        var agent = new UIAgent(chatClient, options =>
+        var agent = new UIAgent(_chatClient, options =>
         {
             options.ChatOptions = new ChatOptions
             {
                 Instructions = SystemPrompt,
                 Tools = [.. tools],
             };
-            // Assistant text becomes rich formatted text; product lookups aggregate into a carousel/card.
-            options.AddBlockHandler(new GardenFormattedTextHandler());
-            options.AddBlockHandler(new ProductResultsHandler());
-            // A single find_order call renders as an order receipt card. This is the simplest 1:1
-            // tool→block mapping — the whole handler is mechanical and would be deleted once a
-            // [ToolBlock] source generator can emit it (see OrderSummaryBlock for the migration).
-            options.AddBlockHandler(new OrderSummaryHandler());
+
+            if (useCustomHandlers)
+            {
+                // Assistant text becomes rich formatted text; product lookups aggregate into a carousel/card.
+                options.AddBlockHandler(new GardenFormattedTextHandler());
+                options.AddBlockHandler(new ProductResultsHandler());
+                // A single find_order call renders as an order receipt card. This is the simplest 1:1
+                // tool→block mapping — the whole handler is mechanical and would be deleted once a
+                // [ToolBlock] source generator can emit it (see OrderSummaryBlock for the migration).
+                options.AddBlockHandler(new OrderSummaryHandler());
+            }
         });
 
-        Session = new AgentContext(agent);
-        Session.RegisterOnStatusChanged(OnStatusChanged);
-
-        WeakReferenceMessenger.Default.RegisterAll(this);
-
-        RefreshAvailableTools();
+        var context = new AgentContext(agent);
+        context.RegisterOnStatusChanged(OnStatusChanged);
+        return context;
     }
 
-    /// <summary>The stateful conversation a <c>CopilotChatView</c> binds to.</summary>
-    public AgentContext Session { get; }
+    /// <summary>The single live conversation the chat control binds to.</summary>
+    [ObservableProperty]
+    public partial AgentContext Session { get; set; }
 
     /// <summary>Tools surfaced in the empty-state grid so the user can see what Sage can do.</summary>
     public ObservableCollection<ToolInfoViewModel> AvailableTools { get; } = [];
 
     /// <summary>
-    /// Whether the rich (fancy) CopilotChatView is shown. Bound by <c>ChatView.xaml</c> to swap
-    /// visibility between the full CopilotChatView and the bare MessageListView. The header owns the
-    /// toggle button and broadcasts <see cref="ChatTemplateModeChangedMessage"/>; this view model just
-    /// mirrors the state for the view.
+    /// Rendering axis: the designed views vs the raw block-preview inspector. The chat view's template
+    /// Style swaps its content templates via a data trigger on this flag. Driven by the header toggle via
+    /// <see cref="ChatBlockPreviewModeChangedMessage"/>.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPlain))]
-    public partial bool IsFancy { get; set; } = true;
-
-    /// <summary>Inverse of <see cref="IsFancy"/> — shows the bare MessageListView.</summary>
-    public bool IsPlain => !IsFancy;
+    public partial bool IsPreview { get; set; }
 
     /// <summary>Starter prompts shown as suggestion chips.</summary>
     public IReadOnlyList<string> SuggestionPrompts { get; } =
@@ -152,11 +175,28 @@ public sealed partial class ChatViewModel : ObservableObject,
         "Rate the tomato seeds 5 stars",
     ];
 
-    void IRecipient<StartNewChatSessionMessage>.Receive(StartNewChatSessionMessage message) =>
-        Session.Clear();
+    /// <summary>
+    /// Starts a fresh conversation. When the requested handler mode matches the current session, just
+    /// clear it; when it differs, recreate the session with the new handler set (a new, empty
+    /// conversation). This single path serves both the "new chat" button and the handler toggle.
+    /// </summary>
+    void IRecipient<StartNewChatSessionMessage>.Receive(StartNewChatSessionMessage message)
+    {
+        if (message.UseCustomHandlers == _useCustomHandlers)
+        {
+            Session.Clear();
+        }
+        else
+        {
+            _useCustomHandlers = message.UseCustomHandlers;
+            var old = Session;
+            Session = CreateSession(_useCustomHandlers);
+            old.Dispose();
+        }
+    }
 
-    void IRecipient<ChatTemplateModeChangedMessage>.Receive(ChatTemplateModeChangedMessage message) =>
-        IsFancy = message.IsFancy;
+    void IRecipient<ChatBlockPreviewModeChangedMessage>.Receive(ChatBlockPreviewModeChangedMessage message) =>
+        IsPreview = message.IsPreview;
 
     private void OnStatusChanged(ConversationStatus status)
     {

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<chat:ContentContextView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+                         xmlns:local="clr-namespace:AIExtensions.Sample.Garden.Chat"
+                         x:Class="AIExtensions.Sample.Garden.Chat.BlockPreviewView"
+                         x:Name="Root">
+
+    <!-- A raw-block inspector card: type heading + Label/Value rows (populated in RefreshFromContentContext). -->
+    <Border Padding="12"
+            Margin="0,4"
+            StrokeThickness="1"
+            HorizontalOptions="Fill"
+            StrokeShape="RoundRectangle 10"
+            BindingContext="{x:Reference Root}" x:DataType="local:BlockPreviewView"
+            BackgroundColor="{AppThemeBinding Light={StaticResource ToolCardBackgroundLight}, Dark={StaticResource ToolCardBackgroundDark}}"
+            Stroke="{AppThemeBinding Light={StaticResource ToolCardStrokeLight}, Dark={StaticResource ToolCardStrokeDark}}">
+        <VerticalStackLayout Spacing="8">
+
+            <!-- Heading: block type -->
+            <HorizontalStackLayout Spacing="8">
+                <Label Text="&#xF1D8;"
+                       FontFamily="FluentFilled"
+                       FontSize="16"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="{Binding TypeName}"
+                       FontSize="{StaticResource FontSizeBody}"
+                       FontAttributes="Bold"
+                       VerticalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+            </HorizontalStackLayout>
+
+            <!-- Fields: Label / Value rows -->
+            <VerticalStackLayout Spacing="3" BindableLayout.ItemsSource="{Binding Fields}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="local:PreviewField">
+                        <Grid ColumnDefinitions="120,*" ColumnSpacing="10">
+                            <Label Grid.Column="0"
+                                   Text="{Binding Label}"
+                                   FontSize="{StaticResource FontSizeCaption}"
+                                   FontAttributes="Bold"
+                                   LineBreakMode="TailTruncation"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding Value}"
+                                   FontSize="{StaticResource FontSizeCaption}"
+                                   LineBreakMode="WordWrap"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </Border>
+
+</chat:ContentContextView>
