@@ -42,15 +42,6 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
         ? "Handlers: custom Garden blocks — tap for built-in defaults"
         : "Handlers: built-in defaults — tap for custom Garden blocks";
 
-    [RelayCommand]
-    private void ToggleChatHandlerMode()
-    {
-        UseCustomHandlers = !UseCustomHandlers;
-        // Switching handlers starts a fresh conversation with the new handler set (the chat view
-        // recreates its session because the mode differs from the current one).
-        WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage(UseCustomHandlers));
-    }
-
     /// <summary>
     /// Rendering axis: whether blocks render through the raw block-preview inspector instead of the
     /// designed views. Broadcasts <see cref="ChatBlockPreviewModeChangedMessage"/>.
@@ -75,11 +66,19 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
         WeakReferenceMessenger.Default.Send(new ChatBlockPreviewModeChangedMessage(IsPreview));
     }
 
+    /// <summary>
+    /// Starts a fresh chat session: clears the cart and requests a new conversation. The New Chat button
+    /// invokes this with no parameter (keep the current handler mode); the handler toggle passes a
+    /// non-null parameter to also flip <see cref="UseCustomHandlers"/> first, so switching handlers and
+    /// starting a new session are one command and one message.
+    /// </summary>
     [RelayCommand]
-    private void StartNewSession()
+    private void StartNewSession(string? toggleHandlers = null)
     {
+        if (toggleHandlers is not null)
+            UseCustomHandlers = !UseCustomHandlers;
+
         currentCart.Clear();
-        // Same handler mode → the chat view just clears the current conversation.
         WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage(UseCustomHandlers));
     }
 
