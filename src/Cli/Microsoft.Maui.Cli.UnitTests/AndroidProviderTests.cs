@@ -354,6 +354,24 @@ public class AndroidProviderTests
 	}
 
 	[Fact]
+	public async Task GetDeviceProfilesAsync_ReturnsDeviceProfileList()
+	{
+		// Arrange
+		var provider = new FakeAndroidProvider
+		{
+			DeviceProfiles = new List<string> { "pixel_9_pro_fold", "Nexus 10" }
+		};
+
+		// Act
+		var result = await provider.GetDeviceProfilesAsync();
+
+		// Assert
+		Assert.Equal(2, result.Count);
+		Assert.Contains("pixel_9_pro_fold", result);
+		Assert.Contains("Nexus 10", result);
+	}
+
+	[Fact]
 	public async Task InstallAsync_ReportsProgress()
 	{
 		// Arrange
