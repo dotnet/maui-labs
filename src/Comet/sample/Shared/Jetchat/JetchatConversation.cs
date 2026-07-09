@@ -280,6 +280,7 @@ namespace CometSamples.Jetchat
 		// standard's Messages() — each row template is materialized only when it scrolls into view. ──
 		static ListView<Row> MessageLog() => new ListView<Row>(() => Rows)
 		{
+			AnchorBottom = true,   // chat log: open at the newest message (gold reverseLayout)
 			ViewFor = r => r switch
 			{
 				HeaderRow h => DayHeader(h.Day),
