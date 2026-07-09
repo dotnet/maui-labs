@@ -99,3 +99,41 @@ full-screen compact / detail-pane expanded. All data static in-memory
    pull-to-refresh? (verify facade bindings before building controls).
 3. Screens: Home → Article (typography) → Interests → drawer/rail chrome.
 4. jetnews.android.sh as screens land; then iOS gate; then RESULTS row.
+
+## Status 2026-07-09 — compact-width core LANDED on Android (near-gold)
+
+Commits `bd797be8`…`31e64d6a`: data/theme/icons port, Home, Article,
+Interests, drawer-first chrome, jetnews.android.sh (16/16).
+
+Framework capabilities added en route:
+- `ListView.Horizontal` → real Compose `LazyRow` (popular carousel).
+- `Text.LineBreak(Heading|Paragraph)` → real Compose `LineBreak` presets via
+  the Text/AnnotatedText `style` slot + matching StaticLayout measurement
+  (balanced+phrase / high-quality). iOS: no SwiftUI wrap-strategy API —
+  documented greedy deviation.
+- `TabBar` → real M3 `PrimaryTabRow`+`Tab` (Interests switcher).
+- `DrawerOpened` event — gesture-open now reflects into the open signal
+  (desync previously swallowed the next programmatic close).
+- Surface-container tones derived from CorePalette.Neutral (mapper predates
+  the M3 container roles).
+
+Known deviations / follow-ups (compact):
+- Wordmark + jetnews-logo + publication-badge VECTORS are stand-ins (styled
+  Text / menu glyph / android glyph on #073042). Bundle the gold drawables
+  (tinted-Icon resId path exists — the Jetchat footer approach).
+- App bar does NOT collapse on scroll (gold: enterAlwaysScrollBehavior).
+- Drawer sheet pills are hand-composed to NavigationDrawerItem metrics
+  (Drawer takes a free-form sheet); selected highlight is Peek-baked, not
+  reactive.
+- Interests tab lists are ListViews (LazyColumn) vs gold Column+verticalScroll;
+  bullet dot is line-height-centered vs gold's baseline alignBy; history-row
+  3-line phrase break differs on one title.
+- Article favorites/bookmark bottom-bar actions are inert (gold shows an
+  unimplemented-dialog for most; bookmark toggle should wire to favorites).
+- Scroll position resets on Article re-open (gold restores per-post state).
+
+Remaining for M2: expanded chrome (AppNavRail + list-detail + search field,
+gold medium-700dp/expanded-1260dp), per-sample app id + icons
+(`-p:CometSample=jetnews`), iOS gate (SwiftUI twins: horizontal list =
+ScrollView(.horizontal)+LazyHStack design noted; TabBar twin; article),
+RESULTS.md row, /code-review.
