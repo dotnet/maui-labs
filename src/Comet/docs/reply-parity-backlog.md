@@ -239,3 +239,16 @@ app-bar back, route switch); jetchat 14/14 iOS + 13/13 Android, reply.android
   programmatically on Android (today expansion is focus-driven only);
   adb-IME text into the popup remains broken (upstream/IME quirk, agent
   fill is the supported path).
+✅ iOS PARITY PASS 2 (2026-07-08, commit 77922ba0 — David flagged the FAB and
+missing icons): ExtendedFAB now CONTRACTS on iOS (the node re-frames to a
+Height-dp square with the right edge pinned — the shim only hides the label,
+the frame was staying extended-wide) and uses the real M3 CornerLarge 16dp
+shape (was a capsule). SearchBar.containerColor + NavigationSuite
+containerColor/indicatorColor let the hand-composed iOS chrome wear the gold
+M3 tokens (surfaceContainerHigh pill, surfaceContainer bar, secondaryContainer
+indicator — Android's real widgets take these from the scheme); nav item
+icons tinted onSurfaceVariant. Real app icons on BOTH platforms: per-variant
+asset catalogs (iOS <AppIcon> property — icon-set NAME, so one Info.plist
+serves all variants) / @mipmap + per-variant app_name strings (Android manifest
+label was hardcoded); gold launcher art for reply/jetchat, the Comet mark
+(art/comet_icon.svg) for the probe.
