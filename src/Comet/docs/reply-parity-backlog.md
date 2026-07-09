@@ -171,15 +171,20 @@ ReplyData verbatim port + gold avatars · inbox/detail/coming-soon screens ·
 ExtendedFAB expand-at-top/collapse-on-scroll (ScrolledFromTop) · reply.android.sh
 14/14 + jetchat 13/13.
 
-REMAINING for M1 (priority order):
-1. Real DockedSearchBar control+node (replaces the pill; search results ListItem list).
-2. Modal drawer from the rail's menu item (suite variant wrap, gold :122-137).
-3. Text MaxLines/ellipsis (previews are string-truncated); gold lastScrolledBackward
-   re-expand signal; row long-press selection mode (longpress gesture port).
-4. Fidelity pass vs gold screenshots (pixel-scan sweep; containerColor facade Phase-6
-   for rail inverseOnSurface); perf snapshot → RESULTS.md; /code-review the diff.
-5. iOS GATE: SwiftUI twins (NavigationSuite/ListDetail/ContentSwitcher/nav chrome in
-   shim), real resize observation, drag injector, reply.ios.sh.
+REMAINING for M1 (updated 2026-07-09 — items 1/2/4/5 and most of 3 shipped; see
+the dated ✅ sections below):
+1. **Row long-press selection mode** (gold combinedClickable onLongClick →
+   toggleSelectedEmail; avatar ↔ check swap via AnimatedContent; selected
+   count in the UI) — the last unimplemented gold INTERACTION. Long-press
+   gesture exists on the devflow/longpress-gesture branch (port or redo).
+2. **ExtendedFAB re-expand on upward scroll** (gold `lastScrolledBackward ||
+   !canScrollBackward` — we only re-expand at the very top; needs a scroll
+   DIRECTION signal on ListView, both backends).
+3. Small gold divergences (visual polish, non-blocking): detail status-bar
+   strip is Background, gold paints it inverseOnSurface (needs per-route strip
+   color or screen-owned top inset); Android search popup expands on focus
+   only (Expanded ↔ SearchBarState facade sync); rail container inverseOnSurface
+   (containerColor now exists control-side — pass it for the rail variant too).
 
 ### Review skips (2026-07-07, tracked)
 - Leaf padding on NON-text Compose leaves (Image/Button/TextField-material) grows the
