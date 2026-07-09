@@ -227,3 +227,14 @@ animation → `I6 (voice)`. `C3 / D1 / P1` are quick wins anytime. The framework
 - Remaining engine-level deviations: `AnimatedContent`/`updateTransition`
   facade bindings (nav transitions, panel crossfades), reverseLayout,
   structural-insert re-materialization on reload, `_rowCache` LRU.
+
+
+## Known visual bug (found 2026-07-09, PRE-EXISTING — verified present at 56f5deae)
+- **Android: long message bubbles' TEXT overflows the bubble box** (right edge —
+  the FormattedText/Text ink wraps at a wider width than the Yoga box it gets,
+  clipping at the screen edge; the bubble BACKGROUND is correctly at
+  screen−16dp). iOS wraps correctly. Suspect: the Compose text node's
+  measure-vs-render width mismatch (MeasureRuns/MeasureWrapped constraint vs
+  the rendered composable's width). Repro: Jetchat conversation, John Glenn's
+  long messages. Surfaced during the Reply close-out visual inspection —
+  smokes never caught it (existence-based asserts).
