@@ -29,6 +29,10 @@ namespace CometSamples.JetNews
 
 		public static void OpenPost(string id) { /* article route lands in the next increment */ }
 
+		// Gold typography (Type.kt defaultTextStyle): Montserrat for EVERY style — already
+		// registered in both probes (Jetchat ships the same family).
+		static Text Tx(string s) => new Text(s).FontFamily("Montserrat");
+
 		// ── Home feed rows: the gold's LazyColumn sections flattened into one list
 		// (PostList :423-443 — top / simple×3+divider / popular / history). ──
 		abstract record HomeRow;
@@ -97,8 +101,8 @@ namespace CometSamples.JetNews
 				.Frame(width: 48, height: 48).Padding(new Thickness(12))
 				.FlexShrink(0),
 			new HStack().FlexGrow(1),
-			new Text("jetnews").FontSize(24).FontFamily("Montserrat")
-				.FontWeight(FontWeight.Medium).Color(T.OnBackground)
+			Tx("jetnews").FontSize(24)
+				.FontWeight(FontWeight.Medium).Color(T.Primary)
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
 			new HStack().FlexGrow(1),
 			new Icon("search").IconSize(24).Color(T.OnSurfaceVariant)
@@ -112,19 +116,19 @@ namespace CometSamples.JetNews
 		// date-readtime bodySmall onSurfaceVariant. ──
 		static View TopSection(Post post) => new VStack(spacing: 0f)
 		{
-			new Text("Top stories for you").FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
+			Tx("Top stories for you").FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
 				.Padding(new Thickness(16, 16, 16, 0)),
 			new VStack(spacing: 0f)
 			{
 				new Image(post.ImageId).Frame(height: 180).CornerRadius(12)
 					.HorizontalLayoutAlignment(LayoutAlignment.Fill),
 				new HStack().Frame(height: 16),
-				new Text(post.Title).FontSize(22).Color(T.OnSurface)
-					.LineBreakMode(LineBreakMode.WordWrap)
+				Tx(post.Title).FontSize(22).Color(T.OnSurface)
+					.LineBreakMode(LineBreakMode.WordWrap).LineBreak(TextLineBreak.Heading)
 					.Padding(new Thickness(0, 0, 0, 8)),
-				new Text(post.Metadata.Author.Name).FontSize(14).FontWeight(FontWeight.Medium).Color(T.OnSurface)
+				Tx(post.Metadata.Author.Name).FontSize(14).FontWeight(FontWeight.Medium).Color(T.OnSurface)
 					.Padding(new Thickness(0, 0, 0, 4)),
-				new Text($"{post.Metadata.Date} - {post.Metadata.ReadTimeMinutes} min read")
+				Tx($"{post.Metadata.Date} - {post.Metadata.ReadTimeMinutes} min read")
 					.FontSize(12).Color(T.OnSurfaceVariant),
 			}.Padding(new Thickness(16)),
 		}.OnTap(_ => OpenPost(post.Id));
@@ -137,9 +141,9 @@ namespace CometSamples.JetNews
 				.Margin(new Thickness(16)).FlexShrink(0),
 			new VStack(spacing: 2f)
 			{
-				new Text(post.Title).FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
-					.LineBreakMode(LineBreakMode.WordWrap),
-				new Text($"{post.Metadata.Author.Name} - {post.Metadata.ReadTimeMinutes} min read")
+				Tx(post.Title).FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
+					.LineBreakMode(LineBreakMode.WordWrap).LineBreak(TextLineBreak.Heading),
+				Tx($"{post.Metadata.Author.Name} - {post.Metadata.ReadTimeMinutes} min read")
 					.FontSize(14).Color(T.OnSurfaceVariant),
 			}.Padding(new Thickness(0, 10, 0, 10)).FlexGrow(1).FlexBasis(0)
 			.VerticalLayoutAlignment(LayoutAlignment.Center),
@@ -168,7 +172,7 @@ namespace CometSamples.JetNews
 			};
 			return new VStack(spacing: 0f)
 			{
-				new Text("Popular on Jetnews").FontSize(22).Color(T.OnSurface)
+				Tx("Popular on Jetnews").FontSize(22).Color(T.OnSurface)
 					.Padding(new Thickness(16)),
 				carousel.Frame(height: 250).Margin(left: 16)
 					.HorizontalLayoutAlignment(LayoutAlignment.Fill),
@@ -181,11 +185,11 @@ namespace CometSamples.JetNews
 			new Image(post.ImageId).Frame(width: 280, height: 100),
 			new VStack(spacing: 0f)
 			{
-				new Text(post.Title).FontSize(24).Color(T.OnSurface)
-					.LineBreakMode(LineBreakMode.WordWrap).MaxLines(2),
-				new Text(post.Metadata.Author.Name).FontSize(14).Color(T.OnSurface)
+				Tx(post.Title).FontSize(24).Color(T.OnSurface)
+					.LineBreakMode(LineBreakMode.WordWrap).LineBreak(TextLineBreak.Heading).MaxLines(2),
+				Tx(post.Metadata.Author.Name).FontSize(14).Color(T.OnSurface)
 					.MaxLines(1).Padding(new Thickness(0, 4, 0, 0)),
-				new Text($"{post.Metadata.Date} - {post.Metadata.ReadTimeMinutes} min read")
+				Tx($"{post.Metadata.Date} - {post.Metadata.ReadTimeMinutes} min read")
 					.FontSize(12).Color(T.OnSurfaceVariant),
 			}.Padding(new Thickness(16)),
 		}
@@ -202,11 +206,11 @@ namespace CometSamples.JetNews
 				.Margin(new Thickness(16)).FlexShrink(0),
 			new VStack(spacing: 2f)
 			{
-				new Text("BASED ON YOUR HISTORY").FontSize(12).FontWeight(FontWeight.Medium)
+				Tx("BASED ON YOUR HISTORY").FontSize(12).FontWeight(FontWeight.Medium)
 					.Color(T.OnSurfaceVariant),
-				new Text(post.Title).FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
-					.LineBreakMode(LineBreakMode.WordWrap),
-				new Text($"{post.Metadata.Author.Name} - {post.Metadata.ReadTimeMinutes} min read")
+				Tx(post.Title).FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
+					.LineBreakMode(LineBreakMode.WordWrap).LineBreak(TextLineBreak.Heading),
+				Tx($"{post.Metadata.Author.Name} - {post.Metadata.ReadTimeMinutes} min read")
 					.FontSize(14).Color(T.OnSurfaceVariant).Padding(new Thickness(0, 4, 0, 0)),
 			}.Padding(new Thickness(0, 12, 0, 12)).FlexGrow(1).FlexBasis(0),
 			new Icon("more_vert").IconSize(24).Color(T.OnSurfaceVariant)

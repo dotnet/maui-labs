@@ -230,14 +230,14 @@ namespace CometComposeProbe
 		View BuildUi() => Screen switch
 		{
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
-			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 24),
+			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 52),
 			_ => new JetchatRoot(),
 		};
 #else
 		View BuildUi() => Screen switch
 		{
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
-			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 24),
+			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 52),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24),
 		};
 #endif
