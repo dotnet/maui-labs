@@ -175,6 +175,13 @@ REMAINING for M1 (updated 2026-07-09): items 1 and 2 SHIPPED (commit 4bc7557b �
 long-press end-to-end w/ agent `longpress` action + ListView.LastScrolledBackward
 on both backends; selection = check avatar + primaryContainer, gold precedence;
 FAB re-expands mid-list). M1 close-out = only the small polish items below.
+Agent gap (tracked): the `back` action = PopNavigation, which no-ops on apps
+without a NavigationView (Reply) — it should fall back to the system back
+(Android OnBackPressedDispatcher / the iOS detail's own affordance) so smokes
+drive the gold close path; reply.android.sh uses KEYCODE_BACK meanwhile.
+Registry asserts are EXISTENCE-based — elements of hidden panes still pass;
+a visibility-honest query (or per-pane pruning) would catch stale-screen runs.
+
 Small gold divergences (visual polish, non-blocking): detail status-bar
    strip is Background, gold paints it inverseOnSurface (needs per-route strip
    color or screen-owned top inset); Android search popup expands on focus
