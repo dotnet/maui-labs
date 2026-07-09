@@ -194,7 +194,7 @@ namespace CometSamples.JetNews
 			}.Padding(new Thickness(16)),
 		}
 		.Frame(width: 280)
-		.Background(T.Surface).CornerRadius(12).Shadow(new Comet.Graphics.Shadow().WithRadius(2))
+		.Background(T.SurfaceContainerLow).CornerRadius(12).Shadow(new Comet.Graphics.Shadow().WithRadius(2))
 		.Margin(right: 8)
 		.OnTap(_ => OpenPost(post.Id));
 

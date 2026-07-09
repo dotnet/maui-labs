@@ -16,13 +16,14 @@ namespace CometSamples.JetNews
 		/// <summary>Sampled from the gold captures (Interests tab indicator = primary).</summary>
 		public static readonly Color Seed = Color.FromArgb("#475D92");
 
+		// Order matters: static fields initialize in source order, and S's builder reads Core.
+		static readonly MaterialColorUtilities.Palettes.CorePalette Core =
+			MaterialColorUtilities.Palettes.CorePalette.Of(ToArgbUint(Seed));
+
 		static readonly MaterialColorUtilities.Schemes.Scheme<uint> S = BuildScheme();
 
-		static MaterialColorUtilities.Schemes.Scheme<uint> BuildScheme()
-		{
-			var core = MaterialColorUtilities.Palettes.CorePalette.Of(ToArgbUint(Seed));
-			return new MaterialColorUtilities.Schemes.LightSchemeMapper().Map(core);
-		}
+			static MaterialColorUtilities.Schemes.Scheme<uint> BuildScheme() =>
+			new MaterialColorUtilities.Schemes.LightSchemeMapper().Map(Core);
 
 		public static readonly Color Primary = C(S.Primary);
 		public static readonly Color OnPrimary = C(S.OnPrimary);
@@ -39,6 +40,15 @@ namespace CometSamples.JetNews
 		public static readonly Color OnSurfaceVariant = C(S.OnSurfaceVariant);
 		public static readonly Color Outline = C(S.Outline);
 		public static readonly Color InverseOnSurface = C(S.InverseOnSurface);
+
+		// M3 surface-container roles (neutral tones 100/96/94/92/90 in light schemes) —
+		// the 0.3.0 scheme mapper predates these tokens, so derive them from the palette.
+		// M3 Card's DEFAULT containerColor is SurfaceContainerLow (gold popular cards).
+		public static readonly Color SurfaceContainerLowest = C(Core.Neutral[100]);
+		public static readonly Color SurfaceContainerLow = C(Core.Neutral[96]);
+		public static readonly Color SurfaceContainer = C(Core.Neutral[94]);
+		public static readonly Color SurfaceContainerHigh = C(Core.Neutral[92]);
+		public static readonly Color SurfaceContainerHighest = C(Core.Neutral[90]);
 
 		/// <summary>onSurface @ 12% — the gold's list dividers (DividerDefaults).</summary>
 		public static readonly Color Divider = C(S.OnSurface).WithAlpha(0.12f);
@@ -58,8 +68,13 @@ namespace CometSamples.JetNews
 				background: C(Background), onBackground: C(OnBackground),
 				surface: C(Surface), onSurface: C(OnSurface),
 				surfaceVariant: C(SurfaceVariant), onSurfaceVariant: C(OnSurfaceVariant),
-				inverseOnSurface: C(InverseOnSurface),
-				outline: C(Outline));
+			inverseOnSurface: C(InverseOnSurface),
+				outline: C(Outline),
+				surfaceContainerLowest: C(SurfaceContainerLowest),
+				surfaceContainerLow: C(SurfaceContainerLow),
+				surfaceContainer: C(SurfaceContainer),
+				surfaceContainerHigh: C(SurfaceContainerHigh),
+				surfaceContainerHighest: C(SurfaceContainerHighest));
 		}
 #endif
 
