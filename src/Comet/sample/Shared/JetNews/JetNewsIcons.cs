@@ -38,6 +38,7 @@ namespace CometSamples.JetNews
 			Add("add", 0xE145);               // interests unselected toggle
 			Add("check", 0xE5CA);             // interests selected toggle
 			Add("account_circle", 0xE853);    // article author avatar placeholder
+			Add("android", 0xE859);           // publication badge stand-in (gold: icon_post_background vector)
 
 			IconFont.Register(Font, map);
 		}

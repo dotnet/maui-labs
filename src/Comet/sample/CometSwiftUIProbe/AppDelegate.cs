@@ -87,7 +87,7 @@ namespace CometSwiftUIProbe
 		View BuildUi() => Screen switch
 		{
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
-			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 59),
+			"jetnews" => new CometSamples.JetNews.JetNewsRoot(topInset: 59),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28),
 		};
 

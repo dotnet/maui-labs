@@ -27,7 +27,7 @@ namespace CometSamples.JetNews
 			_homeList?.ReloadData();
 		}
 
-		public static void OpenPost(string id) { /* article route lands in the next increment */ }
+		public static void OpenPost(string id) => JetNewsRoot.OpenPost(id);
 
 		// Gold typography (Type.kt defaultTextStyle): Montserrat for EVERY style — already
 		// registered in both probes (Jetchat ships the same family).
@@ -120,7 +120,7 @@ namespace CometSamples.JetNews
 				.Padding(new Thickness(16, 16, 16, 0)),
 			new VStack(spacing: 0f)
 			{
-				new Image(post.ImageId).Frame(height: 180).CornerRadius(12)
+				new Image(post.ImageId).Frame(height: 180).CornerRadius(8)
 					.HorizontalLayoutAlignment(LayoutAlignment.Fill),
 				new HStack().Frame(height: 16),
 				Tx(post.Title).FontSize(22).Color(T.OnSurface)
@@ -137,7 +137,7 @@ namespace CometSamples.JetNews
 		// titleMedium, author-readtime bodyMedium) | bookmark toggle pad v2/h6. ──
 		static View PostCardSimple(Post post) => new HStack(spacing: 0f)
 		{
-			new Image(post.ImageThumbId).Frame(width: 40, height: 40).CornerRadius(8)
+			new Image(post.ImageThumbId).Frame(width: 40, height: 40).CornerRadius(4)
 				.Margin(new Thickness(16)).FlexShrink(0),
 			new VStack(spacing: 2f)
 			{
@@ -194,7 +194,7 @@ namespace CometSamples.JetNews
 			}.Padding(new Thickness(16)),
 		}
 		.Frame(width: 280)
-		.Background(T.SurfaceContainerLow).CornerRadius(12).Shadow(new Comet.Graphics.Shadow().WithRadius(2))
+		.Background(T.SurfaceContainerLow).CornerRadius(4).Shadow(new Comet.Graphics.Shadow().WithRadius(2))
 		.Margin(right: 8)
 		.OnTap(_ => OpenPost(post.Id));
 
@@ -202,7 +202,7 @@ namespace CometSamples.JetNews
 		// labelMedium "BASED ON YOUR HISTORY", title, author-readtime pad t4) | more_vert. ──
 		static View PostCardHistory(Post post) => new HStack(spacing: 0f)
 		{
-			new Image(post.ImageThumbId).Frame(width: 40, height: 40).CornerRadius(8)
+			new Image(post.ImageThumbId).Frame(width: 40, height: 40).CornerRadius(4)
 				.Margin(new Thickness(16)).FlexShrink(0),
 			new VStack(spacing: 2f)
 			{

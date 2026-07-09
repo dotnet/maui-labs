@@ -53,6 +53,9 @@ namespace CometSamples.JetNews
 		/// <summary>onSurface @ 12% — the gold's list dividers (DividerDefaults).</summary>
 		public static readonly Color Divider = C(S.OnSurface).WithAlpha(0.12f);
 
+		/// <summary>onSurface @ 15% — code spans/blocks (PostContent.kt codeBlockBackground).</summary>
+		public static readonly Color CodeBlockBackground = C(S.OnSurface).WithAlpha(0.15f);
+
 #if ANDROID
 		/// <summary>The same scheme as a Compose ColorScheme, so the REAL M3 widgets
 		/// (TabRow, drawer sheets, snackbar) are seeded identically (the Reply pattern).</summary>
