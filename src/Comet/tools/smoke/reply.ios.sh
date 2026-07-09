@@ -62,4 +62,14 @@ check "close search" tap "$CLOSE"
 sleep 2
 assert_element "search pill restored"   "type=Text&text=Search emails"
 
+# --- selection mode (long-press toggles; check avatar appears/disappears) ------
+ROW2=$(element_id "type=Text&text=Brunch this weekend?")
+check "long-press row into selection" longpress "$ROW2"
+sleep 2
+assert_element "selected check avatar"  "type=Icon&text=check"
+ROW2=$(element_id "type=Text&text=Brunch this weekend?")
+check "long-press row out of selection" longpress "$ROW2"
+sleep 2
+assert_no_element "selection cleared"  "type=Icon&text=check"
+
 smoke_end

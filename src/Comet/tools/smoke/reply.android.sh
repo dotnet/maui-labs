@@ -31,7 +31,10 @@ sleep 1.5
 assert_element "detail app bar message count"  "type=Text&text=7 Messages"
 assert_element "thread subject"                "type=Text&text=Your update on Google Play Store is live!"
 android_shot 02-detail
-back
+# SYSTEM back (KEYCODE_BACK → BackHandler → DetailClosed — the gold's close path).
+# The agent's `back` action is PopNavigation, which no-ops here: Reply has no
+# NavigationView (agent gap tracked in the backlog).
+adb_ shell input keyevent KEYCODE_BACK
 sleep 1.5
 assert_element "back on inbox"                 "type=Text&text=Search emails"
 
@@ -68,5 +71,15 @@ android_resize_reset
 trap - EXIT
 sleep 3
 assert_element "inbox after resize walk"        "type=Text&text=Package shipped!"
+
+# --- selection mode (long-press toggles; check avatar appears/disappears) ------
+ROW2=$(element_id "type=Text&text=Brunch this weekend?")
+check "long-press row into selection" longpress "$ROW2"
+sleep 2
+assert_element "selected check avatar"  "type=Icon&text=check"
+ROW2=$(element_id "type=Text&text=Brunch this weekend?")
+check "long-press row out of selection" longpress "$ROW2"
+sleep 2
+assert_no_element "selection cleared"  "type=Icon&text=check"
 
 smoke_end

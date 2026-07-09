@@ -47,6 +47,7 @@ elements() { agent_get "/api/v1/ui/elements?${1// /%20}"; }
 element_id() { elements "$1" | sed -n 's/.*"id":"\([0-9]*\)".*/\1/p' | head -1; }
 
 tap()      { agent_post /api/v1/ui/actions/tap   "{\"elementId\":\"$1\"}" | grep -q '"success":true'; }
+longpress() { agent_post /api/v1/ui/actions/longpress "{\"elementId\":\"$1\"}" | grep -q '"success":true'; }
 clear_el() { agent_post /api/v1/ui/actions/clear "{\"elementId\":\"$1\"}" | grep -q '"success":true'; }
 fill()  { agent_post /api/v1/ui/actions/fill "{\"elementId\":\"$1\",\"text\":$(printf '%s' "$2" | jq -Rs .)}" | grep -q '"success":true'; }
 focus() { agent_post /api/v1/ui/actions/focus "{\"elementId\":\"$1\"}" | grep -q '"success":true'; }

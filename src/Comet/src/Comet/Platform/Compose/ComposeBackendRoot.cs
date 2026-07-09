@@ -104,6 +104,10 @@ namespace Comet.Platform.Compose
 			// Choreographer — without this, animations silently no-op on the node backend.
 			Backend.CometAnimationDriver.Initialize(new ChoreographerTicker());
 
+			// A NEW root (activity re-creation) obsoletes every prior registration; without
+			// this the registry keeps ghost elements whose disposed views the agent can still
+			// resolve (semantic taps/long-presses then silently no-op on dead views).
+			Comet.DevTools.CometDevRegistry.Reset();
 			_root = (ComposeNode)CometBackendBridge.Materialize(view, _context);
 
 			if (UseYogaLayout)

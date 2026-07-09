@@ -63,7 +63,14 @@ namespace Comet.Platform.Compose
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.List_Version)
+			{
+				// Drop the previous rows from the dev registry before the recompose pulls the
+				// new ones (the iOS list node's Rebuild does the same) — stale row elements
+				// otherwise accumulate and the agent resolves dead views.
+				if (_list is View listView)
+					Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
 				_version.Value++; // recompose against the latest rows
+			}
 		}
 
 		public override void Render(IComposer composer)
@@ -157,7 +164,10 @@ namespace Comet.Platform.Compose
 
 				// First time this row is needed: build, materialize, and Yoga-lay-out once, then cache.
 				var view = _list.ViewFor(0, i);
-				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context);
+				// Parent the row under the ListView in the dev registry (like the iOS list
+				// node) so UnregisterSubtree(list) can prune stale rows on reload — parentless
+				// rows were registry ROOTS and survived every rebuild as ghost elements.
+				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context, _list as View);
 				if (yoga)
 					CometBackendLayoutEngine.LayoutContent(view, rowWidth);
 				_rowCache[i] = node;
