@@ -19,6 +19,7 @@ namespace Comet.Platform.Compose
 		IReadOnlyList<TextRun> _runs = System.Array.Empty<TextRun>();
 		int _fontSize;
 		int _lineHeight;
+		int _lineBreak;
 		string? _fontFamily;
 		readonly MutableState<int> _version = new(0);
 
@@ -41,6 +42,11 @@ namespace Comet.Platform.Compose
 				_lineHeight = (int)System.Math.Round(value.AsDouble);
 				_version.Value++;
 			}
+			else if (id == PropertyIds.Text_LineBreak)
+			{
+				_lineBreak = value.AsInt;
+				_version.Value++;
+			}
 			else if (id == PropertyIds.Text_FontFamily)
 			{
 				_fontFamily = value.AsString;
@@ -52,7 +58,7 @@ namespace Comet.Platform.Compose
 		{
 			int sp = _fontSize > 0 ? _fontSize : 16;
 			var baseTypeface = ComposeFontRegistry.Resolve(_fontFamily, 400)?.Typeface;
-			return TextMeasure.MeasureRuns(_runs, sp, widthConstraint, baseTypeface, EffectiveLineHeightSp());
+			return TextMeasure.MeasureRuns(_runs, sp, widthConstraint, baseTypeface, EffectiveLineHeightSp(), _lineBreak);
 		}
 
 		public override void Render(IComposer composer)
@@ -107,6 +113,12 @@ namespace Comet.Platform.Compose
 			// Base (non-code) runs use the body family; code runs override to monospace above.
 			if (ComposeFontRegistry.Resolve(_fontFamily, 400) is { } r)
 				text.FontFamily = r.Family;
+			// Wrap strategy via a base TextStyle (see ComposeTextNode) — explicit params still win.
+			if (_lineBreak != 0)
+				text.Style = new AndroidX.Compose.TextStyle
+				{
+					LineBreak = _lineBreak == 1 ? LineBreakValues.Heading : LineBreakValues.Paragraph,
+				}.Build();
 			text.Render(composer);
 		}
 	}

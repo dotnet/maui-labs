@@ -164,8 +164,24 @@ namespace Comet.Platform.Compose
 
 		// Measures formatted runs by building a native SpannableString with the same monospace
 		// ("code") spans the renderer uses, so wrapping/height match the composed AnnotatedText.
+		// Mirror the Compose LineBreak presets in StaticLayout so measured line count matches
+		// the render: Heading = balanced + phrase word breaks (33+), Paragraph = high quality.
+		static void ApplyBreakStrategy(global::Android.Text.StaticLayout.Builder builder, int lineBreak)
+		{
+			if (lineBreak == 1)
+			{
+				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.Balanced);
+				if (System.OperatingSystem.IsAndroidVersionAtLeast(33))
+					builder.SetLineBreakConfig(new global::Android.Graphics.Text.LineBreakConfig.Builder()
+						.SetLineBreakWordStyle((int)global::Android.Graphics.Text.LineBreakWordStyle.Phrase)
+						.Build());
+			}
+			else if (lineBreak == 2)
+				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.HighQuality);
+		}
+
 		public static Size MeasureRuns(System.Collections.Generic.IReadOnlyList<Comet.TextRun> runs,
-			float sp, double maxWidthDp, global::Android.Graphics.Typeface? baseTypeface, int lineHeightSp = 0)
+			float sp, double maxWidthDp, global::Android.Graphics.Typeface? baseTypeface, int lineHeightSp = 0, int lineBreak = 0)
 		{
 			var density = ComposeNode.Density;
 			int widthPx = (maxWidthDp > 0 && !double.IsInfinity(maxWidthDp))
@@ -185,9 +201,10 @@ namespace Comet.Platform.Compose
 			using var paint = new global::Android.Text.TextPaint { TextSize = sp * density };
 			if (baseTypeface is not null)
 				paint.SetTypeface(baseTypeface);
-			using var layout = global::Android.Text.StaticLayout.Builder
-				.Obtain(sb, 0, sb.Length(), paint, widthPx)
-				.Build();
+			var runsBuilder = global::Android.Text.StaticLayout.Builder
+				.Obtain(sb, 0, sb.Length(), paint, widthPx);
+			ApplyBreakStrategy(runsBuilder, lineBreak);
+			using var layout = runsBuilder.Build();
 
 			float used = 0f;
 			for (int i = 0; i < layout.LineCount; i++)
@@ -242,18 +259,7 @@ namespace Comet.Platform.Compose
 				paint.SetTypeface(typeface);
 			var builder = global::Android.Text.StaticLayout.Builder
 				.Obtain(s, 0, s.Length, paint, widthPx);
-			// Mirror the Compose LineBreak presets so the measured line count matches the
-			// render exactly: Heading = balanced + phrase word breaks, Paragraph = high quality.
-			if (lineBreak == 1)
-			{
-				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.Balanced);
-				if (System.OperatingSystem.IsAndroidVersionAtLeast(33))
-					builder.SetLineBreakConfig(new global::Android.Graphics.Text.LineBreakConfig.Builder()
-						.SetLineBreakWordStyle((int)global::Android.Graphics.Text.LineBreakWordStyle.Phrase)
-						.Build());
-			}
-			else if (lineBreak == 2)
-				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.HighQuality);
+			ApplyBreakStrategy(builder, lineBreak);
 			using var layout = builder.Build();
 
 			// Report the ACTUAL used width (the widest laid-out line), not the constraint — so a
