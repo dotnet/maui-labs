@@ -125,6 +125,8 @@ namespace CometComposeProbe
 			bool replyScreen = Screen == "reply";
 			if (replyScreen)
 				scheme = CometSamples.Reply.ReplyTheme.ComposeScheme();
+			else if (Screen == "jetnews")
+				scheme = CometSamples.JetNews.JetNewsTheme.ComposeScheme();
 
 			// Status bar: Surface (matches the header bar).
 			// Nav bar: SurfaceTinted (matches the footer/UserInput bar so the background is seamless).
@@ -225,13 +227,19 @@ namespace CometComposeProbe
 		// or the standalone per-sample package id — see <see cref="Screen"/>.
 #if DEBUG
 		// A [Body] root is what hot reload targets (see HotReloadDemo.cs).
-		View BuildUi() => Screen == "reply"
-			? new CometSamples.Reply.ReplyProbeRoot()
-			: new JetchatRoot();
+		View BuildUi() => Screen switch
+		{
+			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
+			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 24),
+			_ => new JetchatRoot(),
+		};
 #else
-		View BuildUi() => Screen == "reply"
-			? new CometSamples.Reply.ReplyProbeRoot()
-			: CometSamples.Jetchat.JetchatConversation.Build(topInset: 24);
+		View BuildUi() => Screen switch
+		{
+			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
+			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 24),
+			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24),
+		};
 #endif
 
 		sealed class EmptyServiceProvider : IServiceProvider

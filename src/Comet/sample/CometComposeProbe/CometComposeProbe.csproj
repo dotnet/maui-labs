@@ -54,6 +54,8 @@
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
     <!-- Shared Reply sample (M1). -->
     <Compile Include="..\Shared\Reply\*.cs" Link="Shared\Reply\%(Filename)%(Extension)" />
+    <!-- Shared JetNews sample (M2). -->
+    <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.

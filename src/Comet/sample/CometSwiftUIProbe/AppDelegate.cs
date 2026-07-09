@@ -84,10 +84,12 @@ namespace CometSwiftUIProbe
 				? bid.Substring("com.comet.sample.".Length)
 				: "jetchat");
 
-		View BuildUi() =>
-			Screen == "reply"
-				? new CometSamples.Reply.ReplyProbeRoot()
-				: CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28);
+		View BuildUi() => Screen switch
+		{
+			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
+			"jetnews" => CometSamples.JetNews.JetNewsScreens.Home(topInset: 59),
+			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28),
+		};
 
 		// Decode a bundled image to a small AARRGGBB pixel buffer for content-based theming (the
 		// material-color-utilities Quantize+Score wants raw pixels). Downscaled for a fast seed extract.

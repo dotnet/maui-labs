@@ -157,7 +157,7 @@ namespace Comet.Platform.Compose
 				_cachedWidth = rowWidth;
 			}
 
-			var lazy = new ComposeLazyColumn(indices, i =>
+			ComposableNode BuildRow(int i)
 			{
 				if (_rowCache.TryGetValue(i, out var cached))
 					return cached;
@@ -169,10 +169,28 @@ namespace Comet.Platform.Compose
 				// rows were registry ROOTS and survived every rebuild as ghost elements.
 				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context, _list as View);
 				if (yoga)
-					CometBackendLayoutEngine.LayoutContent(view, rowWidth);
+				{
+					// Vertical rows fill the list's width; horizontal (carousel) items lay out
+					// at their own intrinsic width (a fixed-size card).
+					double w = _list.Horizontal
+						? CometBackendLayoutEngine.Measure(view).Width
+						: rowWidth;
+					CometBackendLayoutEngine.LayoutContent(view, w);
+				}
 				_rowCache[i] = node;
 				return node;
-			})
+			}
+
+			// Horizontal (carousel): the REAL Compose LazyRow — same lazy row factory.
+			if (_list.Horizontal)
+			{
+				var lazyRow = new AndroidX.Compose.LazyRow<int>(indices, BuildRow);
+				((ComposableNode)lazyRow).Modifier = BuildNodeModifier();
+				lazyRow.Render(composer);
+				return;
+			}
+
+			var lazy = new ComposeLazyColumn(indices, BuildRow)
 			{
 				State = listState,
 			};

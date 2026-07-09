@@ -36,6 +36,9 @@ namespace Comet
 		/// lists (an inbox) leave this false and open at the top.</summary>
 		bool AnchorBottom { get; }
 
+		/// <summary>Horizontal (carousel) orientation — Compose <c>LazyRow</c>.</summary>
+		bool Horizontal { get; }
+
 		/// <summary>Reactive "scrolled away from the TOP" flag (content exists above the
 		/// viewport — Compose <c>canScrollBackward</c>). Reply's ExtendedFAB collapse reads
 		/// this; <see cref="ScrolledAway"/> is the bottom-relative twin.</summary>
@@ -224,6 +227,10 @@ namespace Comet
 		/// <summary>Open the list at its LAST row (a chat log's newest-at-bottom initial
 		/// position — Jetchat). Default false: ordinary lists (an inbox) open at the top.</summary>
 		public bool AnchorBottom { get; set; }
+
+		/// <summary>Lay the list HORIZONTALLY (a card carousel — Compose <c>LazyRow</c>).
+		/// Default false = vertical. Set before the node materializes.</summary>
+		public bool Horizontal { get; set; }
 
 		/// <summary>Reactive "scrolled away from the top" flag (top-relative twin of
 		/// <see cref="ScrolledAway"/>); drives Reply's ExtendedFAB collapse.</summary>

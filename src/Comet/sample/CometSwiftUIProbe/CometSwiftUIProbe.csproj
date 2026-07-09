@@ -54,6 +54,8 @@
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
     <!-- Shared Reply sample (M1). -->
     <Compile Include="..\Shared\Reply\*.cs" Link="Shared\Reply\%(Filename)%(Extension)" />
+    <!-- Shared JetNews sample (M2). -->
+    <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
     <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
     <BundleResource Include="Fonts\Montserrat-Regular.ttf" />
     <BundleResource Include="Fonts\Montserrat-Medium.ttf" />
@@ -78,6 +80,19 @@
     <BundleResource Include="Resources\avatar_8.jpg"><LogicalName>avatar_8.jpg</LogicalName></BundleResource>
     <BundleResource Include="Resources\avatar_9.jpg"><LogicalName>avatar_9.jpg</LogicalName></BundleResource>
     <BundleResource Include="Resources\avatar_express.png"><LogicalName>avatar_express.png</LogicalName></BundleResource>
+    <!-- JetNews post images (M2). -->
+    <BundleResource Include="Resources\post_1.png"><LogicalName>post_1.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_1_thumb.png"><LogicalName>post_1_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_2.png"><LogicalName>post_2.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_2_thumb.png"><LogicalName>post_2_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_3.png"><LogicalName>post_3.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_3_thumb.png"><LogicalName>post_3_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_4.png"><LogicalName>post_4.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_4_thumb.png"><LogicalName>post_4_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_5.png"><LogicalName>post_5.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_5_thumb.png"><LogicalName>post_5_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_6.png"><LogicalName>post_6.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_6_thumb.png"><LogicalName>post_6_thumb.png</LogicalName></BundleResource>
   </ItemGroup>
 
   <!-- Link + embed the Swift framework directly in the app so the static registrar's
