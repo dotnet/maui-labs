@@ -45,6 +45,14 @@ Order of samples (reuse-ordered): **Reply → JetNews → Jetsnack → Jetcaster
    (`<sample>.ios.sh`); same values-from-source bar. Parity bar is **structure,
    values, and interaction** — not cross-OS pixel identity. Budget for known iOS debt
    the sample exercises (SelectorPanel, FormattedText runs, hot-reload own-content).
+   **Hand-composed chrome checklist** (anything an iOS twin builds from Comet
+   primitives where Android uses a real M3 widget): capture SAME-SCALE
+   side-by-side screenshots and pixel-measure each chrome piece — Yoga's
+   cross-axis default is flex-start while M3 widgets CENTER their slots, so
+   every slot needs explicit centering, every strip an explicit background,
+   every shape the real M3 token (16dp CornerLarge, 28dp capsule…). The Reply
+   gate shipped four such misses (search-pill slots, bar/rail icons, safe-area
+   strip, FAB shape) that only a measured side-by-side caught.
    The sample is not done — and the next does not start — until this gate passes.
 
 8. **Perf/size snapshot (emulator).** `tools/bench/size.sh` trimmed Release APK,
