@@ -32,6 +32,17 @@
     <OutputPath>bin/sample-$(CometSample)/</OutputPath>
   </PropertyGroup>
 
+  <!-- Launcher icon: per-variant art linked in as @mipmap/appicon (the Activity attribute
+       references it). Probe = the Comet mark; samples = their gold app's launcher art. -->
+  <PropertyGroup>
+    <CometIconVariant>probe</CometIconVariant>
+    <CometIconVariant Condition="'$(CometSample)' != ''">$(CometSample)</CometIconVariant>
+  </PropertyGroup>
+  <ItemGroup>
+    <AndroidResource Include="Icons\$(CometIconVariant)\appicon.png" Link="Resources\mipmap-xxxhdpi\appicon.png" />
+    <AndroidResource Include="Icons\$(CometIconVariant)\strings.xml" Link="Resources\values\comet_app_name.xml" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- ComponentActivity host for ComposeView. -->

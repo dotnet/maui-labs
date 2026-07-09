@@ -2,5 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 	<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
 	<uses-permission android:name="android.permission.INTERNET" />
-	<application android:label="Comet+Compose" android:theme="@android:style/Theme.Material.Light"></application>
+	<!-- Label comes from the per-variant string resource (Icons/<variant>/strings.xml,
+	     selected by -p:CometSample) so standalone sample apps get their own launcher name. -->
+	<application android:label="@string/comet_app_name" android:theme="@android:style/Theme.Material.Light"></application>
 </manifest>

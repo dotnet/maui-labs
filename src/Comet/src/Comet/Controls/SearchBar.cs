@@ -17,7 +17,8 @@ namespace Comet
 	public partial class SearchBar : View, IContainerView
 	{
 		public SearchBar(Signal<string> query, View placeholder, View content,
-			View? leading = null, View? trailing = null, Action<string>? onSearch = null)
+			View? leading = null, View? trailing = null, Action<string>? onSearch = null,
+			Microsoft.Maui.Graphics.Color? containerColor = null)
 		{
 			Query = query;
 			PlaceholderView = placeholder;
@@ -25,6 +26,7 @@ namespace Comet
 			LeadingView = leading;
 			TrailingView = trailing;
 			OnSearch = onSearch;
+			ContainerColor = containerColor;
 			placeholder.Parent = this;
 			content.Parent = this;
 			if (leading is not null)
@@ -42,6 +44,11 @@ namespace Comet
 		public View? TrailingView { get; }
 		/// <summary>Invoked on the IME Search action with the current text.</summary>
 		public Action<string>? OnSearch { get; }
+
+		/// <summary>Pill/pane container color (M3 default: surfaceContainerHigh). The Android
+		/// widget themes itself from the Compose scheme; the iOS twin composes its own chrome
+		/// and needs the token explicitly.</summary>
+		public Microsoft.Maui.Graphics.Color? ContainerColor { get; }
 
 		/// <summary>Whether the bar is expanded (pane open). Lives on the CONTROL, not the
 		/// backend node: an ancestor own-content refresh re-materializes the node, and

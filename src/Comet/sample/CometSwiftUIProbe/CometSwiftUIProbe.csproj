@@ -31,6 +31,20 @@
     <OutputPath>bin/sample-$(CometSample)/</OutputPath>
   </PropertyGroup>
 
+  <!-- App icon: one asset catalog per variant, each holding an AppIcon.appiconset with a
+       1024 single-size icon; only the current variant's catalog is compiled (the default
+       item glob would include all three). Info.plist's XSAppIconAssets names the icon set.
+       The probe uses the Comet mark; the sample variants use their gold app's launcher art. -->
+  <PropertyGroup>
+    <CometIconVariant>probe</CometIconVariant>
+    <CometIconVariant Condition="'$(CometSample)' != ''">$(CometSample)</CometIconVariant>
+    <AppIcon>AppIcon</AppIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ImageAsset Remove="Icons\**" />
+    <ImageAsset Include="Icons\$(CometIconVariant).xcassets\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,

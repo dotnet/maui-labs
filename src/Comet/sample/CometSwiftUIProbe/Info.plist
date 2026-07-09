@@ -9,6 +9,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+<!-- App icon comes from the csproj <AppIcon> property (icon-set NAME) — each variant
+	     catalog holds an AppIcon.appiconset and only one catalog is included per build. -->
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIDeviceFamily</key>

@@ -19,8 +19,9 @@ namespace CometComposeProbe
 	/// backend — no MAUI handlers in the path.
 	/// </summary>
 	// No Label on the attribute: the launcher shows the application label, which comes from
-	// <ApplicationTitle> — so `-p:CometSample=…` names each standalone sample app.
-	[Activity(MainLauncher = true)]
+	// <ApplicationTitle> — so `-p:CometSample=…` names each standalone sample app. The icon
+	// resource is likewise per-variant (Icons/<variant>/appicon.png linked into mipmap).
+	[Activity(MainLauncher = true, Icon = "@mipmap/appicon")]
 	public class MainActivity : AndroidX.Activity.ComponentActivity
 	{
 		/// <summary>Which sample to show: the `--es screen` intent extra (the smoke scripts /

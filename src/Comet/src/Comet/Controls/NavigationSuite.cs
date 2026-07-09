@@ -24,7 +24,9 @@ namespace Comet
 	{
 		public NavigationSuite(Signal<int> selectedIndex, IReadOnlyList<NavigationItem> items,
 			View content, View? railHeader = null, View? drawerHeader = null,
-			Signal<bool>? drawerOpen = null)
+			Signal<bool>? drawerOpen = null,
+			Microsoft.Maui.Graphics.Color? containerColor = null,
+			Microsoft.Maui.Graphics.Color? indicatorColor = null)
 		{
 			SelectedIndex = selectedIndex;
 			Items = items;
@@ -32,6 +34,8 @@ namespace Comet
 			RailHeaderView = railHeader;
 			DrawerHeaderView = drawerHeader;
 			DrawerOpen = drawerOpen;
+			ContainerColor = containerColor;
+			IndicatorColor = indicatorColor;
 			foreach (var item in items)
 				item.Parent = this;
 			content.Parent = this;
@@ -52,6 +56,14 @@ namespace Comet
 		/// <see cref="DrawerHeaderView"/> + labeled items. Open it from chrome (the rail's
 		/// menu item); scrim tap / back / swipe dismissal writes the signal back to false.</summary>
 		public Signal<bool>? DrawerOpen { get; }
+
+		/// <summary>M3 chrome container color (bar/rail background — surfaceContainer in the
+		/// gold). Android's real widgets theme themselves from the Compose scheme; the iOS
+		/// twin composes its own chrome and needs the tokens explicitly.</summary>
+		public Microsoft.Maui.Graphics.Color? ContainerColor { get; }
+
+		/// <summary>Selected-item indicator (pill) color — secondaryContainer in the gold.</summary>
+		public Microsoft.Maui.Graphics.Color? IndicatorColor { get; }
 
 		/// <summary>See <see cref="NavigationBar.SelectItem"/> — same contract.</summary>
 		public void SelectItem(int index)

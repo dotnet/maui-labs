@@ -60,7 +60,17 @@ namespace Comet.Backend
 
 		/// <summary>Called by the owning backend root when the window's safe-area insets
 		/// change (equality-gated like <see cref="Update"/>).</summary>
-		public void UpdateSafeArea(Microsoft.Maui.Thickness insetsDp) => SafeAreaDp.Value = insetsDp;
+		public void UpdateSafeArea(Microsoft.Maui.Thickness insetsDp)
+		{
+#if DEBUG
+			// Safe-area changes refresh the whole NavigationSuite subtree — surface them in
+			// dev builds so unexpected jitter (a rebuild storm source) is visible in the log.
+			if (SafeAreaDp.Peek() != insetsDp)
+				System.Console.WriteLine(
+					$"[Metrics] SafeAreaDp {SafeAreaDp.Peek()} -> {insetsDp}");
+#endif
+			SafeAreaDp.Value = insetsDp;
+		}
 
 		/// <summary>M3 width breakpoints: Compact &lt; 600 ≤ Medium &lt; 840 ≤ Expanded.</summary>
 		public static WindowWidthClass ClassifyWidth(double widthDp) =>

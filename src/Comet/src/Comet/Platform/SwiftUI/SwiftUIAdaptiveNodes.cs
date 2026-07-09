@@ -275,6 +275,11 @@ namespace Comet.Platform.SwiftUI
 			};
 		}
 
+		// M3 chrome tokens from the control (surfaceContainer / secondaryContainer in the
+		// gold); neutral-overlay fallbacks when the sample didn't pass them.
+		Color BarColor => _suite.ContainerColor ?? Color.FromArgb("#14000000");
+		Color PillColor => _suite.IndicatorColor ?? Color.FromArgb("#33000000");
+
 		View BottomBar(float safeBottom)
 		{
 			var row = new HStack(spacing: 0f);
@@ -292,7 +297,7 @@ namespace Comet.Platform.SwiftUI
 						new HStack().FlexGrow(1),
 					}
 					.Frame(width: 64, height: 32)
-					.Background(index == _selected ? Color.FromArgb("#33000000") : null)
+					.Background(index == _selected ? PillColor : null)
 					.CornerRadius(16),
 					new HStack().FlexGrow(1),
 				}
@@ -304,7 +309,7 @@ namespace Comet.Platform.SwiftUI
 			{
 				row.Frame(height: (float)BarHeight),
 				new HStack().Frame(height: safeBottom),
-			}.Background(Color.FromArgb("#14000000"));
+			}.Background(BarColor);
 		}
 
 		View Rail(float safeTop)
@@ -322,12 +327,12 @@ namespace Comet.Platform.SwiftUI
 					new HStack().FlexGrow(1),
 				}
 				.Frame(width: 56, height: 32)
-				.Background(index == _selected ? Color.FromArgb("#33000000") : null)
+				.Background(index == _selected ? PillColor : null)
 				.CornerRadius(16)
 				.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center)
 				.OnTap(_ => _suite.SelectItem(index)));
 			}
-			return col.Background(Color.FromArgb("#14000000"));
+			return col.Background(BarColor);
 		}
 
 		bool _applied;
@@ -379,6 +384,10 @@ namespace Comet.Platform.SwiftUI
 
 		protected override View BuildContent()
 		{
+			// The M3 SearchBar container token (Android's widget themes itself); fall back to
+			// the old neutral overlay when the sample didn't pass one.
+			var container = _bar.ContainerColor ?? Color.FromArgb("#14000000");
+
 			if (!_bar.Expanded.Peek())
 			{
 				var pill = new HStack(spacing: 12f) { };
@@ -390,7 +399,7 @@ namespace Comet.Platform.SwiftUI
 				return pill
 					.Padding(new Microsoft.Maui.Thickness(16, 0))
 					.Frame(height: 56)
-					.Background(Color.FromArgb("#14000000"))
+					.Background(container)
 					.CornerRadius(28)
 					.OnTap(_ => _bar.Expanded.Value = true);
 			}
@@ -407,7 +416,7 @@ namespace Comet.Platform.SwiftUI
 				}.Frame(height: 56),
 				_bar.ContentView.FlexGrow(1).FlexBasis(0),
 			}
-			.Background(Color.FromArgb("#0A000000"))
+			.Background(container)
 			.CornerRadius(16);
 		}
 	}

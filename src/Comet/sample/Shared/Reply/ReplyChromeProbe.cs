@@ -41,14 +41,17 @@ namespace CometSamples.Reply
 
 			return new NavigationSuite(Selected, items, routes,
 					railHeader: RailHeader(), drawerHeader: DrawerHeader(),
-					drawerOpen: DrawerOpen)
+					drawerOpen: DrawerOpen,
+					// M3 chrome tokens for the hand-composed iOS twin (Android's real
+					// widgets take these from the Compose scheme).
+					containerColor: T.SurfaceContainer, indicatorColor: T.SecondaryContainer)
 				.Background(T.Background);   // paints the safe-area strips too
 		}
 
 		// The gold drawer variant shows labeled items — label views feed NavigationDrawerItem
 		// slots; the bar/rail render icon-only, matching the gold.
 		static NavigationItem NavItem(string icon, string label) =>
-			new(new Icon(icon).IconSize(24), new Text(label).FontSize(14));
+			new(new Icon(icon).IconSize(24).Color(T.OnSurfaceVariant), new Text(label).FontSize(14));
 
 		// The gold rail header: a menu affordance above the compose FAB (drawer wiring lands
 		// with the modal-drawer increment).

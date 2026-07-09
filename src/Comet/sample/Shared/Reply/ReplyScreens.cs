@@ -123,7 +123,8 @@ namespace CometSamples.Reply
 				placeholder: new Text("Search emails").FontSize(16).Color(T.OnSurfaceVariant),
 				content: content,
 				leading: new Icon("search").IconSize(24).Color(T.OnSurfaceVariant),
-				trailing: new Image("avatar_6").Frame(width: 32, height: 32).CornerRadius(16));
+				trailing: new Image("avatar_6").Frame(width: 32, height: 32).CornerRadius(16),
+				containerColor: T.SurfaceContainerHigh);
 		}
 
 		// Gold search result rows: M3 ListItem shape — 32dp avatar, subject headline,

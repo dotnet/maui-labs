@@ -26,6 +26,9 @@ namespace Comet.Platform.SwiftUI
 
 		public CometNode Native => _native;
 
+		bool _extended;
+		Rect _frame;
+
 		public SwiftUIFabNode(Fab fab, BackendContext context)
 		{
 			_fab = fab;
@@ -34,17 +37,28 @@ namespace Comet.Platform.SwiftUI
 			CometSwiftUIHost.SetTapHandler(_native, () => _sink?.OnEvent(EventIds.Clicked));
 			BuildContent();
 
-			// Subscribe to the reactive extended signal so the shim can animate the label.
+			// Subscribe to the reactive extended signal so the shim can animate the label —
+			// AND contract the frame itself (see ApplyExtendedFrame): the shim only hides the
+			// label; the capsule keeps whatever frame we set.
 			if (fab.ExtendedSignal is { } sig)
 			{
-				CometSwiftUIHost.SetBool(_native, "fabextended", sig.Peek());
+				_extended = sig.Peek();
+				CometSwiftUIHost.SetBool(_native, "fabextended", _extended);
 				sig.PropertyChanged += (_, __) =>
-					CometSwiftUIHost.SetBool(_native, "fabextended", sig.Peek());
+				{
+					_extended = sig.Peek();
+					ThreadHelper.RunOnMainThread(() =>
+					{
+						CometSwiftUIHost.SetBool(_native, "fabextended", _extended);
+						ApplyExtendedFrame();
+					});
+				};
 			}
 			else
 			{
 				// No reactive signal → use the static extended value.
-				CometSwiftUIHost.SetBool(_native, "fabextended", fab.Extended);
+				_extended = fab.Extended;
+				CometSwiftUIHost.SetBool(_native, "fabextended", _extended);
 			}
 		}
 
@@ -73,8 +87,9 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetColor(label.Native, "textcolor", ToArgb(fc));
 			}
 
-			// Capsule: corner radius = half the height.
-			float r = (float)(_fab.Height / 2);
+			// M3 extended-FAB shape: CornerLarge = 16dp rounded rect (NOT a capsule) — what the
+			// real ExtendedFloatingActionButton renders on Android, in both states.
+			const float r = 16f;
 			CometSwiftUIHost.SetDouble(_native, "corner.tl", r);
 			CometSwiftUIHost.SetDouble(_native, "corner.tr", r);
 			CometSwiftUIHost.SetDouble(_native, "corner.br", r);
@@ -114,8 +129,26 @@ namespace Comet.Platform.SwiftUI
 			return new Size(width, _fab.Height);
 		}
 
-		public void Arrange(Rect frame) =>
-			CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
+		public void Arrange(Rect frame)
+		{
+			_frame = frame;
+			ApplyExtendedFrame();
+		}
+
+		// Yoga computed the frame for the EXTENDED (wide) FAB; when contracted, shrink to a
+		// square of Height dp and shift right by the width difference so the RIGHT edge stays
+		// pinned — the iOS twin of ComposeFabNode's adjustedX (BottomEnd alignment preserved
+		// in both states; the real M3 widget self-sizes the same way on Android).
+		void ApplyExtendedFrame()
+		{
+			if (_frame.Width <= 0)
+				return;
+			if (_extended)
+				CometSwiftUIHost.SetFrame(_native, _frame.X, _frame.Y, _frame.Width, _frame.Height);
+			else
+				CometSwiftUIHost.SetFrame(_native,
+					_frame.X + _frame.Width - _fab.Height, _frame.Y, _fab.Height, _fab.Height);
+		}
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 		public void Dispose() { }
