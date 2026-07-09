@@ -64,7 +64,7 @@ namespace CometSamples.JetNews
 		/// <summary>The compact Home screen: center-aligned top app bar + the feed.
 		/// <paramref name="topInset"/> clears the status bar (no NavigationSuite here —
 		/// JetNews chrome is drawer-first; the drawer lands in the next increment).</summary>
-		public static View Home(double topInset)
+		public static View Home(double topInset, System.Action? openDrawer = null)
 		{
 			JetNewsIcons.Register();
 
@@ -84,7 +84,7 @@ namespace CometSamples.JetNews
 			return new VStack(spacing: 0f)
 			{
 				new HStack().Frame(height: (float)topInset).FlexShrink(0),
-				HomeTopAppBar().FlexShrink(0),
+				HomeTopAppBar(openDrawer).FlexShrink(0),
 				list.FlexGrow(1).FlexBasis(0),
 			}
 			.HorizontalLayoutAlignment(LayoutAlignment.Fill)
@@ -95,11 +95,12 @@ namespace CometSamples.JetNews
 		// Gold HomeTopAppBar: CenterAlignedTopAppBar — brand icon nav slot, centered
 		// lowercase wordmark, search action (HomeScreens.kt bottom). The gold wordmark is a
 		// vector drawable; a styled Text stands in until the asset lands (backlog).
-		static View HomeTopAppBar() => new HStack(spacing: 0f)
+		static View HomeTopAppBar(System.Action? openDrawer) => new HStack(spacing: 0f)
 		{
 			new Icon("menu").IconSize(24).Color(T.Primary)
 				.Frame(width: 48, height: 48).Padding(new Thickness(12))
-				.FlexShrink(0),
+				.FlexShrink(0)
+				.OnTap(_ => openDrawer?.Invoke()),
 			new HStack().FlexGrow(1),
 			Tx("jetnews").FontSize(24)
 				.FontWeight(FontWeight.Medium).Color(T.Primary)
