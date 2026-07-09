@@ -29,6 +29,7 @@ namespace Comet.Platform.Compose
 		readonly MutableState<int> _childVersion = new(0);
 		ICometEventSink? _sink;
 		readonly MutableState<bool> _hasTap = new(false);
+		readonly MutableState<bool> _hasLongPress = new(false);
 		readonly MutableState<bool> _hasRecord = new(false);
 		// Color/Thickness aren't Java-boxable, so they can't live in a Compose MutableState.
 		// They're held as plain fields and a style-version state drives recomposition.
@@ -131,6 +132,8 @@ namespace Comet.Platform.Compose
 		{
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
+			else if (id == PropertyIds.HasLongPressGesture)
+				_hasLongPress.Value = value.AsBool;
 			else if (id == PropertyIds.HasRecordGesture)
 				_hasRecord.Value = value.AsBool;
 			else if (id == PropertyIds.Opacity)
@@ -249,10 +252,16 @@ namespace Comet.Platform.Compose
 					.Padding((float)p.Left, (float)p.Top, (float)p.Right, (float)p.Bottom);
 
 			// Skip the clickable when faded out / invisible so a hidden overlay doesn't eat taps.
-			if (_hasTap.Value && alpha > 0f)
+			// With a long-press present, use combinedClickable (the gold's combinedClickable
+			// onClick/onLongClick — Reply row selection); otherwise the plain clickable.
+			if ((_hasTap.Value || _hasLongPress.Value) && alpha > 0f)
 			{
-				var clickable = Modifier.Clickable(() =>
-					Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default)));
+				void FireTap() => Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
+				var clickable = _hasLongPress.Value
+					? Modifier.CombinedClickable(
+						onClick: FireTap,
+						onLongClick: () => Sink?.OnGesture(GestureKind.LongPress, new GestureData(GestureState.Ended, default)))
+					: Modifier.Clickable(FireTap);
 				m = m is null ? clickable : m.Then(clickable);
 			}
 

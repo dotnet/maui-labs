@@ -48,6 +48,26 @@ namespace Comet.Platform.SwiftUI
 			// of ComposeListNode's CanScrollBackward flow (Reply's ExtendedFAB collapse).
 			CometSwiftUIHost.SetScrollTopHandler(_native, away =>
 				_list.ScrolledFromTop.Value = away > 0.5);
+
+			// Scroll DIRECTION → LastScrolledBackward (the gold FAB re-expands on any upward
+			// scroll). The shim reports each row's (index, visible) as rows realize; the
+			// minimum visible index moving DOWN means the viewport moved toward the start.
+			CometSwiftUIHost.SetRowVisibilityHandler(_native, (index, visible) =>
+			{
+				int i = (int)index;
+				if (visible > 0.5) _visibleRows.Add(i); else _visibleRows.Remove(i);
+				if (_visibleRows.Count == 0)
+					return;
+				int min = int.MaxValue;
+				foreach (var r in _visibleRows)
+					if (r < min) min = r;
+				if (min != _lastMinVisible)
+				{
+					// Equal-min churn (rows realizing at the bottom) leaves the signal alone.
+					_list.LastScrolledBackward.Value = min < _lastMinVisible;
+					_lastMinVisible = min;
+				}
+			});
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
@@ -78,6 +98,8 @@ namespace Comet.Platform.SwiftUI
 
 			CometSwiftUIHost.ClearChildren(_native);
 			_rows.Clear();
+			_visibleRows.Clear();
+			_lastMinVisible = int.MaxValue;
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			var generation = new List<ICometBackendNode>();
 			using (var scope = CometBackendBridge.CollectNodes(generation))
@@ -135,6 +157,8 @@ namespace Comet.Platform.SwiftUI
 
 		bool _seededToNewest;
 		bool _disposed;
+		readonly HashSet<int> _visibleRows = new();
+		int _lastMinVisible = int.MaxValue;
 		double _lastAway = 1;   // 1 = not at bottom yet
 
 		// Seed the list at the newest message (iOS twin of ComposeListNode's one-shot

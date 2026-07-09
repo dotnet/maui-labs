@@ -56,6 +56,20 @@ namespace Comet.DevTools
 						return ActionOk();
 					});
 
+				case ("POST", "/api/v1/ui/actions/longpress"):
+					return RunOnMain(() =>
+					{
+						// Long-press twin of tap: bubble to the nearest long-press-bearing
+						// ancestor (a Text inside a selectable card) and fire the gesture.
+						var view = ResolveElement(body);
+						var target = view;
+						for (int depth = 0; target is not null && !HasLongPress(target) && depth < 32; depth++)
+							target = target.Parent as View;
+						target ??= view;
+						target.OnBackendGesture(GestureKind.LongPress, new GestureData(GestureState.Ended, default));
+						return ActionOk();
+					});
+
 				case ("POST", "/api/v1/ui/actions/fill"):
 					return RunOnMain(() =>
 					{
@@ -143,6 +157,17 @@ namespace Comet.DevTools
 				return false;
 			for (int i = 0; i < gestures.Count; i++)
 				if (gestures[i] is TapGesture)
+					return true;
+			return false;
+		}
+
+		static bool HasLongPress(View view)
+		{
+			var gestures = view.Gestures;
+			if (gestures is null)
+				return false;
+			for (int i = 0; i < gestures.Count; i++)
+				if (gestures[i] is LongPressGesture)
 					return true;
 			return false;
 		}

@@ -68,6 +68,12 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setScrollTopHandler:handler:")]
 		void SetScrollTopHandler(CometNode node, Action<double> handler);
 
+		[Static, Export("setLongPressGestureHandler:handler:")]
+		void SetLongPressGestureHandler(CometNode node, Action handler);
+
+		[Static, Export("setRowVisibilityHandler:handler:")]
+		void SetRowVisibilityHandler(CometNode node, Action<double, double> handler);
+
 		[Static, Export("insertChild:atIndex:child:")]
 		void InsertChild(CometNode node, nint index, CometNode child);
 

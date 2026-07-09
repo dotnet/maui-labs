@@ -40,6 +40,11 @@ namespace Comet
 		/// viewport — Compose <c>canScrollBackward</c>). Reply's ExtendedFAB collapse reads
 		/// this; <see cref="ScrolledAway"/> is the bottom-relative twin.</summary>
 		Comet.Reactive.Signal<bool> ScrolledFromTop { get; }
+
+		/// <summary>Reactive scroll DIRECTION flag: true while the most recent scroll moved
+		/// toward the start (Compose <c>LazyListState.lastScrolledBackward</c>). The gold
+		/// Reply ExtendedFAB re-expands on any upward scroll, not only at the very top.</summary>
+		Comet.Reactive.Signal<bool> LastScrolledBackward { get; }
 	}
 
 	public class ListView<T> : ListView
@@ -223,6 +228,10 @@ namespace Comet
 		/// <summary>Reactive "scrolled away from the top" flag (top-relative twin of
 		/// <see cref="ScrolledAway"/>); drives Reply's ExtendedFAB collapse.</summary>
 		public Comet.Reactive.Signal<bool> ScrolledFromTop { get; } = new(false);
+
+		/// <summary>Reactive scroll direction: true while the most recent scroll moved toward
+		/// the start (<c>lastScrolledBackward</c>); the gold Reply FAB re-expands on it.</summary>
+		public Comet.Reactive.Signal<bool> LastScrolledBackward { get; } = new(false);
 
 		System.Action _scrollToBottom;
 

@@ -42,6 +42,7 @@ namespace Comet.Platform.SwiftUI
 			// don't raise a given event (their handler simply never fires).
 			CometSwiftUIHost.SetTapHandler(_native, OnNativeTap);
 			CometSwiftUIHost.SetTapGestureHandler(_native, OnNativeTapGesture);
+			CometSwiftUIHost.SetLongPressGestureHandler(_native, OnNativeLongPress);
 			CometSwiftUIHost.SetStringChangeHandler(_native, OnNativeTextChanged);
 			CometSwiftUIHost.SetBoolChangeHandler(_native, OnNativeToggled);
 			CometSwiftUIHost.SetDoubleChangeHandler(_native, OnNativeValueChanged);
@@ -50,6 +51,7 @@ namespace Comet.Platform.SwiftUI
 
 		void OnNativeTap() => _sink?.OnEvent(EventIds.Clicked);
 		void OnNativeTapGesture() => _sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
+		void OnNativeLongPress() => _sink?.OnGesture(GestureKind.LongPress, new GestureData(GestureState.Ended, default));
 		void OnNativeTextChanged(string s) => _sink?.OnEvent(EventIds.TextChanged, s);
 		// TextField gained focus (gold onTextFieldFocused) → e.g. the composer closes an open selector panel.
 		void OnNativeFocused() => _sink?.OnEvent(EventIds.Focused);
@@ -93,6 +95,8 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetDouble(_native, "value", value.AsDouble);
 			else if (id == PropertyIds.HasTapGesture)
 				CometSwiftUIHost.SetBool(_native, "hastapgesture", value.AsBool);
+			else if (id == PropertyIds.HasLongPressGesture)
+				CometSwiftUIHost.SetBool(_native, "haslongpressgesture", value.AsBool);
 			else if (id == PropertyIds.Opacity)
 				CometSwiftUIHost.SetDouble(_native, "opacity", value.AsDouble);
 			else if (id == PropertyIds.IsVisible)

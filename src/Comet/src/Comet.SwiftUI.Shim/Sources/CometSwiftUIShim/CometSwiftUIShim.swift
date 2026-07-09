@@ -50,6 +50,7 @@ struct CometTextRun {
     @Published var borderWidth: CGFloat = 0      // stroke width (e.g. avatar ring)
     @Published var borderColorARGB: UInt32 = 0   // stroke color
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
+    @Published var hasLongPressGesture: Bool = false
     @Published var borderless: Bool = false      // TextField: no rounded-border box (foundation field)
     @Published var outlined: Bool = false        // Button: OutlinedButton (bordered, no fill) vs filled
     @Published var drawerOpen: Bool = false     // Drawer: side panel shown
@@ -67,6 +68,8 @@ struct CometTextRun {
     // Callbacks into C# (set via host fns). ObjC blocks so .NET binds them as Actions.
     var onTap: (() -> Void)?            // Button action (-> Clicked)
     var onTapGesture: (() -> Void)?     // arbitrary-view tap gesture (-> OnGesture(Tap))
+    var onLongPressGesture: (() -> Void)?   // long-press gesture (-> OnGesture(LongPress); Reply selection)
+    var onRowVisibility: ((Double, Double) -> Void)?   // list rows: (index, 1=appeared/0=disappeared) -> scroll direction
     var onChangeString: ((String) -> Void)?
     var onChangeBool: ((Bool) -> Void)?
     var onChangeDouble: ((Double) -> Void)?
@@ -112,6 +115,7 @@ struct CometTextRun {
         switch property {
         case "ison": node.isOn = value
         case "hastapgesture": node.hasTapGesture = value
+        case "haslongpressgesture": node.hasLongPressGesture = value
         case "borderless": node.borderless = value
         case "outlined": node.outlined = value
         case "isvisible": node.isVisible = value
@@ -223,6 +227,16 @@ struct CometTextRun {
     @objc(setScrollTopHandler:handler:)
     public static func setScrollTopHandler(_ node: CometNode, handler: @escaping @convention(block) (Double) -> Void) {
         node.onScrollTop = handler
+    }
+
+    @objc(setLongPressGestureHandler:handler:)
+    public static func setLongPressGestureHandler(_ node: CometNode, handler: @escaping @convention(block) () -> Void) {
+        node.onLongPressGesture = handler
+    }
+
+    @objc(setRowVisibilityHandler:handler:)
+    public static func setRowVisibilityHandler(_ node: CometNode, handler: @escaping @convention(block) (Double, Double) -> Void) {
+        node.onRowVisibility = handler
     }
 
     @objc(insertChild:atIndex:child:)
@@ -669,10 +683,16 @@ struct CometNodeView: View {
                             .onAppear {
                                 if child.id == node.children.last?.id { node.onScroll?(0) }
                                 if child.id == node.children.first?.id { node.onScrollTop?(0) }
+                                if let idx = node.children.firstIndex(where: { $0.id == child.id }) {
+                                    node.onRowVisibility?(Double(idx), 1)
+                                }
                             }
                             .onDisappear {
                                 if child.id == node.children.last?.id { node.onScroll?(1) }
                                 if child.id == node.children.first?.id { node.onScrollTop?(1) }
+                                if let idx = node.children.firstIndex(where: { $0.id == child.id }) {
+                                    node.onRowVisibility?(Double(idx), 0)
+                                }
                             }
                     }
                 }
@@ -823,10 +843,19 @@ private struct CometScrollOffsetKey: PreferenceKey {
 private struct TapGestureModifier: ViewModifier {
     @ObservedObject var node: CometNode
     func body(content: Content) -> some View {
-        if node.hasTapGesture {
+        if node.hasTapGesture && node.hasLongPressGesture {
             content
                 .contentShape(Rectangle())
                 .onTapGesture { node.onTapGesture?() }
+                .onLongPressGesture { node.onLongPressGesture?() }
+        } else if node.hasTapGesture {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { node.onTapGesture?() }
+        } else if node.hasLongPressGesture {
+            content
+                .contentShape(Rectangle())
+                .onLongPressGesture { node.onLongPressGesture?() }
         } else {
             content
         }

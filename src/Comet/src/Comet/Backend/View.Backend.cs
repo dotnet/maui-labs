@@ -141,6 +141,10 @@ namespace Comet
 			// A record gesture becomes a detectDragGesturesAfterLongPress modifier (gold RecordButton).
 			if (HasRecordGesture())
 				node.ApplyProperty(PropertyIds.HasRecordGesture, PropertyValue.From(true));
+
+			// A long-press gesture becomes a combinedClickable onLongClick (Reply row selection).
+			if (HasLongPressGesture())
+				node.ApplyProperty(PropertyIds.HasLongPressGesture, PropertyValue.From(true));
 		}
 
 		// Parse a ClipShape into the per-corner radii the backend nodes consume. Only the rounded
@@ -170,6 +174,17 @@ namespace Comet
 				return false;
 			for (int i = 0; i < gestures.Count; i++)
 				if (gestures[i] is RecordGesture)
+					return true;
+			return false;
+		}
+
+		bool HasLongPressGesture()
+		{
+			var gestures = Gestures;
+			if (gestures is null)
+				return false;
+			for (int i = 0; i < gestures.Count; i++)
+				if (gestures[i] is LongPressGesture)
 					return true;
 			return false;
 		}
@@ -219,6 +234,14 @@ namespace Comet
 				for (int i = 0; i < gestures.Count; i++)
 					if (gestures[i] is TapGesture tap)
 						tap.Invoke();
+				return;
+			}
+
+			if (kind == Backend.GestureKind.LongPress)
+			{
+				for (int i = 0; i < gestures.Count; i++)
+					if (gestures[i] is LongPressGesture lp)
+						lp.Invoke();
 				return;
 			}
 

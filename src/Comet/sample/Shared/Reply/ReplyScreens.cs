@@ -30,6 +30,17 @@ namespace CometSamples.Reply
 			OpenedEmailId.PropertyChanged += (_, __) => _inboxList?.ReloadData();
 		}
 
+		// ── Selection mode (gold ReplyHomeViewModel.toggleSelectedEmail + ReplyEmailListItem
+		// combinedClickable onLongClick): long-press a row (or tap its avatar) to toggle it
+		// into the selection; selected rows show primaryContainer + a check avatar. ──
+		static readonly HashSet<long> SelectedIds = new();
+		static void ToggleSelection(long id)
+		{
+			if (!SelectedIds.Add(id))
+				SelectedIds.Remove(id);
+			_inboxList?.ReloadData();
+		}
+
 		static ReplyEmail Opened()
 		{
 			foreach (var e in ReplyData.AllEmails)
@@ -56,7 +67,12 @@ namespace CometSamples.Reply
 			// (The gold also re-expands on any upward scroll — lastScrolledBackward — that
 			// direction signal is a fidelity-pass follow-up.)
 			var extended = new Signal<bool>(true);
-			list.ScrolledFromTop.PropertyChanged += (_, __) => extended.Value = !list.ScrolledFromTop.Peek();
+			// Gold driver (ReplyListContent.kt:124-125): expanded = lastScrolledBackward ||
+			// !canScrollBackward — re-expands on ANY upward scroll, not only at the very top.
+			void UpdateFab() => extended.Value =
+				list.LastScrolledBackward.Peek() || !list.ScrolledFromTop.Peek();
+			list.ScrolledFromTop.PropertyChanged += (_, __) => UpdateFab();
+			list.LastScrolledBackward.PropertyChanged += (_, __) => UpdateFab();
 			var fab = new Fab(
 					icon: new Icon("edit").IconSize(18).Color(T.OnTertiaryContainer),
 					label: new Text("Compose").FontSize(14).Color(T.OnTertiaryContainer),
@@ -148,13 +164,22 @@ namespace CometSamples.Reply
 		// ── One list row (gold ReplyEmailListItem.kt:52-142). Outer wrapper carries the
 		// h16/v4 gutter as PADDING (list rows are laid at full list width; root margins
 		// aren't part of the row's own layout box); the inner card paints/clips. ──
+		// Selected avatar (gold SelectedProfileImage): primary circle + centered onPrimary
+		// check; tapping either avatar state toggles selection (gold clickModifier).
+		static View AvatarSlot(ReplyEmail email) => (SelectedIds.Contains(email.Id)
+			? (View)new ZStack { new Icon("check").IconSize(24).Color(T.OnPrimary) }
+				.Background(T.Primary)
+			: new Image(email.Sender.Avatar))
+			.Frame(width: 40, height: 40).CornerRadius(20).FlexShrink(0)
+			.OnTap(_ => ToggleSelection(email.Id));
+
 		static View EmailListItem(ReplyEmail email) => new VStack(spacing: 0f)
 		{
 			new VStack(spacing: 0f)
 			{
 				new HStack(spacing: 0f)
 				{
-					new Image(email.Sender.Avatar).Frame(width: 40, height: 40).CornerRadius(20).FlexShrink(0),
+					AvatarSlot(email),
 					new VStack(spacing: 0f)
 					{
 						new Text(email.Sender.FirstName).FontSize(12).FontWeight(FontWeight.Medium).Color(T.OnSurface),
@@ -174,15 +199,19 @@ namespace CometSamples.Reply
 					.MaxLines(2),
 			}
 			.Padding(new Thickness(20))
-			// Gold: secondaryContainer while this is the OPENED email (the home state opens
-			// the first email at launch), regardless of the detail being on screen (:72-76).
-			.Background(email.Id == OpenedEmailId.Value ? T.SecondaryContainer : T.SurfaceVariant)
+			// Gold precedence (:72-76): SELECTED wins (primaryContainer), then OPENED
+			// (secondaryContainer — the home state opens the first email at launch), else
+			// surfaceVariant.
+			.Background(SelectedIds.Contains(email.Id) ? T.PrimaryContainer
+				: email.Id == OpenedEmailId.Value ? T.SecondaryContainer : T.SurfaceVariant)
 			.CornerRadius(16)
 			.OnTap(_ =>
 			{
 				OpenedEmailId.Value = (int)email.Id;
 				DetailOpen.Value = true;
-			}),
+			})
+			// Gold combinedClickable onLongClick: long-press toggles selection.
+			.OnLongPress(_ => ToggleSelection(email.Id)),
 		}.Padding(new Thickness(16, 4, 16, 4));
 
 		// ── Detail pane (gold ReplyEmailDetail :207-225 + EmailDetailAppBar) ──

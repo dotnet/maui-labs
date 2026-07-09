@@ -56,6 +56,7 @@ namespace Comet.Backend
 		public static readonly PropertyId HasTapGesture = new(19);
 		public static readonly PropertyId Padding = new(20);
 		public static readonly PropertyId HasRecordGesture = new(21);   // press-and-hold voice-record drag (gold RecordButton)
+		public static readonly PropertyId HasLongPressGesture = new(22);   // long-press (gold combinedClickable onLongClick — Reply selection)
 
 		// --- Text (64–79) ---
 		public static readonly PropertyId Text_Value = new(64);

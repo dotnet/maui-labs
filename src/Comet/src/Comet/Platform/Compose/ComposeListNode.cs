@@ -118,6 +118,18 @@ namespace Comet.Platform.Compose
 				}
 			});
 
+			// Scroll DIRECTION: lastScrolledBackward — the gold FAB re-expands on any upward
+			// scroll (ReplyListContent.kt:124-125), not only at the very top.
+			composer.LaunchedEffect(3, async ct =>
+			{
+				await foreach (var backward in ComposeExtensions.SnapshotFlow(() => capturedState.LastScrolledBackward)
+					.WithCancellation(ct))
+				{
+					var signal = _list.LastScrolledBackward;   // re-read: owner re-points _list on re-render
+					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = backward);
+				}
+			});
+
 			// Single-section (the common case); multi-section flattening is a follow-up.
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			var indices = Enumerable.Range(0, count).ToList();
