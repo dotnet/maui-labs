@@ -307,7 +307,9 @@ namespace Comet.Platform.SwiftUI
 					new HStack(spacing: 0f)
 					{
 						new HStack().FlexGrow(1),
-						item.IconView,
+						// Center on the pill row's cross axis (default flex-start pinned
+						// the icon to the pill's top edge).
+						item.IconView.VerticalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
 						new HStack().FlexGrow(1),
 					}
 					.Frame(width: 64, height: 32)
@@ -340,7 +342,7 @@ namespace Comet.Platform.SwiftUI
 				col.Add(new HStack(spacing: 0f)
 				{
 					new HStack().FlexGrow(1),
-					_suite.Items[i].IconView,
+					_suite.Items[i].IconView.VerticalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
 					new HStack().FlexGrow(1),
 				}
 				.Frame(width: 56, height: 32)
