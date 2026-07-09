@@ -121,10 +121,21 @@ namespace Comet.Platform.Compose
 			var box = new Box();
 			((ComposableNode)box).Modifier = BuildNodeModifier() ?? Modifier.Companion;
 
-			var bar = new AndroidX.Compose.SearchBar(_searchState) { InputField = MakeInputField() };
+			// Pin the INPUT FIELD (the visible pill) to the Yoga-arranged width — it otherwise
+			// renders at its intrinsic minimum (SearchBarMinWidth = 360dp) and leaves the
+			// right margin short of the gutter the sample asked for.
+			SearchBarInputField SizedInputField()
+			{
+				var field = MakeInputField();
+				if (FrameWidth > 0)
+					((ComposableNode)field).Modifier = Modifier.Companion.RequiredWidth(new Dp(FrameWidth));
+				return field;
+			}
+
+			var bar = new AndroidX.Compose.SearchBar(_searchState) { InputField = SizedInputField() };
 			box.Add(bar);
 
-			var expanded = new ExpandedDockedSearchBar(_searchState) { InputField = MakeInputField() };
+			var expanded = new ExpandedDockedSearchBar(_searchState) { InputField = SizedInputField() };
 			expanded.Add(_content!);
 			box.Add(expanded);
 

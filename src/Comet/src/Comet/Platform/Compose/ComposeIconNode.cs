@@ -62,12 +62,20 @@ namespace Comet.Platform.Compose
 			// An icon-font glyph (e.g. Material Icons) renders as a tinted, sized character in the
 			// registered font — the SAME glyph the iOS backend draws, so the icon set is identical
 			// cross-platform. Wins over the native ImageVector/drawable path when a glyph is set.
+			// AnnotatedText (not plain Text) so the LINE box can be pinned to the icon size and
+			// centered: the default line height exceeds the glyph box and pushed the ink below
+			// center (the Reply back-arrow rendered low + clipped by its circular clip).
 			if (!string.IsNullOrEmpty(_glyph.Value))
 			{
-				var glyph = new ComposeText(_glyph.Value);
+				var glyph = new AndroidX.Compose.AnnotatedText(new AndroidX.Compose.AnnotatedString(_glyph.Value))
+				{
+					FontSize = new AndroidX.Compose.Sp((int)_size),
+					LineHeight = new AndroidX.Compose.Sp((int)_size),
+					Align = AndroidX.Compose.TextAlign.Center,
+					SoftWrap = false,
+				};
 				if (_tint is { } gc)
 					glyph.Color = ToComposeColor(gc);
-				glyph.FontSize = new AndroidX.Compose.Sp((int)_size);
 				if (ComposeFontRegistry.Resolve(_glyphFont.Value, 400) is { } r)
 					glyph.FontFamily = r.Family;
 				((ComposableNode)glyph).Modifier = IconModifier();

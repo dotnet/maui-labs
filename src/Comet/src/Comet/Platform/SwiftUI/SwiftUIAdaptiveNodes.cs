@@ -90,7 +90,15 @@ namespace Comet.Platform.SwiftUI
 			return new Size(b.Width, b.Height);
 		}
 
-		public virtual void ApplyProperty(PropertyId id, in PropertyValue value) { }
+		public virtual void ApplyProperty(PropertyId id, in PropertyValue value)
+		{
+			// Honour the control's .Background(): the suite's safe-area strips paint with it
+			// (without this the strips showed the bare window — white above the content).
+			if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
+				CometSwiftUIHost.SetColor(_native, "background",
+					((uint)(c.Alpha * 255) << 24) | ((uint)(c.Red * 255) << 16) |
+					((uint)(c.Green * 255) << 8) | (uint)(c.Blue * 255));
+		}
 		public void InsertChild(int index, ICometBackendNode child) { }
 		public void RemoveChildAt(int index) { }
 		public void MoveChild(int fromIndex, int toIndex) { }
@@ -149,7 +157,10 @@ namespace Comet.Platform.SwiftUI
 		public override void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id != PropertyIds.ContentSwitcher_Index)
+			{
+				base.ApplyProperty(id, in value);
 				return;
+			}
 			if (_applied && value.AsInt == _index)
 				return;   // re-pushed unchanged (a re-materialize) — keep the built subtree
 			_applied = true;
@@ -187,7 +198,10 @@ namespace Comet.Platform.SwiftUI
 		public override void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id != PropertyIds.ListDetail_IsDetailOpen)
+			{
+				base.ApplyProperty(id, in value);
 				return;
+			}
 			if (_applied && value.AsBool == _open)
 				return;
 			_applied = true;
@@ -298,7 +312,10 @@ namespace Comet.Platform.SwiftUI
 					}
 					.Frame(width: 64, height: 32)
 					.Background(index == _selected ? PillColor : null)
-					.CornerRadius(16),
+					.CornerRadius(16)
+					// Center the pill in its quarter cell (a fixed-width child of a column
+					// otherwise sits at flex-start — the bar read flush-left on iOS).
+					.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
 					new HStack().FlexGrow(1),
 				}
 				.FlexGrow(1).FlexBasis(0)
@@ -340,7 +357,10 @@ namespace Comet.Platform.SwiftUI
 		public override void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id != PropertyIds.Nav_SelectedIndex)
+			{
+				base.ApplyProperty(id, in value);
 				return;
+			}
 			if (_applied && value.AsInt == _selected)
 				return;
 			_applied = true;
