@@ -410,12 +410,16 @@ namespace Comet.Platform.SwiftUI
 
 			if (!_bar.Expanded.Peek())
 			{
+				// Children CENTER on the row's cross axis (Yoga's default is flex-start —
+				// the icon/placeholder/avatar sat pinned to the pill's top edge; the M3
+				// input field centers its slots).
+				var center = Microsoft.Maui.Primitives.LayoutAlignment.Center;
 				var pill = new HStack(spacing: 12f) { };
 				if (_bar.LeadingView is { } leading)
-					pill.Add(leading.FlexShrink(0));
-				pill.Add(_bar.PlaceholderView.FlexGrow(1).FlexBasis(0));
+					pill.Add(leading.FlexShrink(0).VerticalLayoutAlignment(center));
+				pill.Add(_bar.PlaceholderView.FlexGrow(1).FlexBasis(0).VerticalLayoutAlignment(center));
 				if (_bar.TrailingView is { } trailing)
-					pill.Add(trailing.FlexShrink(0));
+					pill.Add(trailing.FlexShrink(0).VerticalLayoutAlignment(center));
 				return pill
 					.Padding(new Microsoft.Maui.Thickness(16, 0))
 					.Frame(height: 56)
@@ -424,15 +428,16 @@ namespace Comet.Platform.SwiftUI
 					.OnTap(_ => _bar.Expanded.Value = true);
 			}
 
+			var centerV = Microsoft.Maui.Primitives.LayoutAlignment.Center;
 			var field = SignalExtensions.TextField(_bar.Query, placeholder: "Search");
 			return new VStack(spacing: 8f)
 			{
 				new HStack(spacing: 8f)
 				{
-					field.FlexGrow(1).FlexBasis(0),
+					field.FlexGrow(1).FlexBasis(0).VerticalLayoutAlignment(centerV),
 					new Text("Close").FontSize(14)
 						.OnTap(_ => { _bar.Query.Value = ""; _bar.Expanded.Value = false; })
-						.FlexShrink(0),
+						.FlexShrink(0).VerticalLayoutAlignment(centerV),
 				}.Frame(height: 56),
 				_bar.ContentView.FlexGrow(1).FlexBasis(0),
 			}
