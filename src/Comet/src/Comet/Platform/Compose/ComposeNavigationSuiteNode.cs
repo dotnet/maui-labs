@@ -302,6 +302,10 @@ namespace Comet.Platform.Compose
 			{
 				if (_drawerHolder.IsClosed && _drawerOpen.Value)
 					Sink?.OnEvent(EventIds.DrawerClosed);
+				// Symmetric gesture-open report — see ComposeDrawerNode (signal desync
+				// otherwise swallows the next programmatic close).
+				else if (_drawerHolder.IsOpen && !_drawerOpen.Value)
+					Sink?.OnEvent(EventIds.DrawerOpened);
 				return System.Threading.Tasks.Task.CompletedTask;
 			});
 

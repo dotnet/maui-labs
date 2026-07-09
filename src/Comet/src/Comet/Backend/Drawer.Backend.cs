@@ -26,9 +26,11 @@ namespace Comet
 
 		protected internal override void OnBackendEvent(Backend.EventId id)
 		{
-			// The drawer was dismissed by scrim tap / swipe — reflect it back into the signal.
+			// Gesture open/dismiss (edge-swipe, scrim tap) — reflect back into the signal.
 			if (id == Backend.EventIds.DrawerClosed)
 				IsOpen.Value = false;
+			else if (id == Backend.EventIds.DrawerOpened)
+				IsOpen.Value = true;
 		}
 	}
 }

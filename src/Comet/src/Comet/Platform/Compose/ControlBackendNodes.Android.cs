@@ -75,6 +75,12 @@ namespace Comet
 			=> new ComposeContentSwitcherNode(this, context);
 	}
 
+	public partial class TabBar
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeTabRowNode(this);
+	}
+
 	public partial class SearchBar
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

@@ -114,6 +114,10 @@ namespace Comet.Platform.Compose
 			{
 				if (_holder.IsClosed && _open.Value)
 					Sink?.OnEvent(EventIds.DrawerClosed);
+				// Symmetric: an edge-swipe OPEN must reflect back too, or the signal
+				// desyncs and (being equality-gated) swallows the next programmatic close.
+				else if (_holder.IsOpen && !_open.Value)
+					Sink?.OnEvent(EventIds.DrawerOpened);
 				return Task.CompletedTask;
 			});
 

@@ -58,6 +58,23 @@ namespace Comet
 		}
 	}
 
+	public partial class TabBar
+	{
+		bool _hooked;
+
+		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
+		{
+			base.ApplyAllSetProperties(node);
+			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+			if (!_hooked)
+			{
+				_hooked = true;
+				SelectedIndex.PropertyChanged += (_, _) =>
+					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+			}
+		}
+	}
+
 	public partial class NavigationSuite
 	{
 		bool _hooked;
@@ -81,9 +98,11 @@ namespace Comet
 
 		protected internal override void OnBackendEvent(Backend.EventId id)
 		{
-			// Scrim tap / swipe / back dismissed the modal drawer — reflect into the signal.
+			// Gesture open/dismiss (scrim tap / swipe / back) — reflect into the signal.
 			if (id == Backend.EventIds.DrawerClosed && DrawerOpen is { } drawer)
 				drawer.Value = false;
+			else if (id == Backend.EventIds.DrawerOpened && DrawerOpen is { } opened)
+				opened.Value = true;
 		}
 	}
 }
