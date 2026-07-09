@@ -53,10 +53,20 @@ namespace Comet.Platform.Compose
 			// Honor IconSize even when the engine hasn't given this node a frame (e.g. an icon inside a
 			// native control's slot — a FAB — which lays its own content out). With a frame, the size
 			// already comes from the frame; without one, pin it here so the glyph isn't the default 24dp.
+			// A frame LARGER than the icon size (a 24dp star in a 40dp circle) centers the glyph via
+			// symmetric padding — nothing else does (the glyph otherwise draws at the box origin).
 			Modifier IconModifier()
 			{
 				var m = BuildNodeModifier() ?? Modifier.Companion;
-				return HasFrame ? m : m.Size(new Dp(_size), new Dp(_size));
+				if (!HasFrame)
+					return m.Size(new Dp(_size), new Dp(_size));
+				// Remaining slack after any explicit leaf padding (BuildNodeModifier applied it).
+				float padH = (float)((FrameWidth - Padding.Left - Padding.Right - _size) / 2.0);
+				float padV = (float)((FrameHeight - Padding.Top - Padding.Bottom - _size) / 2.0);
+				if (padH > 0.5f || padV > 0.5f)
+					m = m.Padding(System.Math.Max(0f, padH), System.Math.Max(0f, padV),
+						System.Math.Max(0f, padH), System.Math.Max(0f, padV));
+				return m;
 			}
 
 			// An icon-font glyph (e.g. Material Icons) renders as a tinted, sized character in the

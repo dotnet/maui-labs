@@ -793,11 +793,15 @@ struct CometNodeView: View {
 }
 
 // Sizes a node to its Yoga-computed frame (observing the node, so reflow re-applies it).
+// Icons CENTER in their frame (a 24dp star glyph in a 40dp circle — nothing else would
+// center it, and topLeading pinned it to the corner); everything else keeps topLeading,
+// matching Yoga's coordinate origin.
 private struct SizeModifier: ViewModifier {
     @ObservedObject var node: CometNode
     func body(content: Content) -> some View {
         if node.hasFrame {
-            content.frame(width: node.frame.width, height: node.frame.height, alignment: .topLeading)
+            content.frame(width: node.frame.width, height: node.frame.height,
+                          alignment: node.kind == "icon" ? .center : .topLeading)
         } else {
             content
         }
