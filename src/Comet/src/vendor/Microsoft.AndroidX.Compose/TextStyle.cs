@@ -45,6 +45,10 @@ public sealed class TextStyle
     /// <summary>Text decoration (None / Underline / LineThrough). Leave <see langword="null"/> to inherit.</summary>
     public TextDecoration? TextDecoration { get; set; }
 
+    /// <summary>Packed <c>androidx.compose.ui.text.style.LineBreak</c> value
+    /// (obtain from <see cref="LineBreakValues"/>). Leave <see langword="null"/> to inherit.</summary>
+    public int? LineBreak { get; set; }
+
     static T? Cast<T>(Java.Lang.Object? wrapper) where T : Java.Lang.Object =>
         wrapper is null ? null : Java.Lang.Object.GetObject<T>(wrapper.Handle, JniHandleOwnership.DoNotTransfer);
 
@@ -61,7 +65,7 @@ public sealed class TextStyle
     /// copied verbatim from <c>TextStyle.Default</c>; properties the
     /// caller set replace the corresponding slot.
     /// </summary>
-    internal AndroidX.Compose.UI.Text.TextStyle Build()
+    public AndroidX.Compose.UI.Text.TextStyle Build()
     {
         var d = TextStyleCompanion.Default;
         return d.Copy(
@@ -86,7 +90,7 @@ public sealed class TextStyle
             textIndent:             d.TextIndent,
             platformStyle:          d.PlatformStyle,
             lineHeightStyle:        d.LineHeightStyle,
-            lineBreak:              d.GetLineBreak(),
+            lineBreak:              LineBreak ?? d.GetLineBreak(),
             hyphens:                d.GetHyphens(),
             textMotion:             d.TextMotion);
     }

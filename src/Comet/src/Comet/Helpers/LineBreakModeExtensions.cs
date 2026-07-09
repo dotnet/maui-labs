@@ -20,5 +20,24 @@ namespace Comet
 
 		public static T LineBreakMode<T>(this T view, Func<LineBreakMode> mode) where T : View =>
 			view.LineBreakMode(mode());
+
+		/// <summary>Wrap STRATEGY (where soft breaks fall), distinct from LineBreakMode
+		/// (wrap vs truncate): Heading balances lines at phrase boundaries, Paragraph uses
+		/// high-quality (non-greedy) breaking — Compose's LineBreak presets. Android drives
+		/// the real Compose lineBreak; SwiftUI has no public wrap-strategy API, so iOS keeps
+		/// greedy wrapping (documented deviation).</summary>
+		public static T LineBreak<T>(this T view, TextLineBreak strategy) where T : View =>
+			view.SetEnvironment(EnvironmentKeys.Text.LineBreak, strategy);
+	}
+
+	/// <summary>Soft-wrap strategy presets mirroring Compose's <c>LineBreak</c>.</summary>
+	public enum TextLineBreak
+	{
+		/// <summary>Greedy wrapping (the platform default).</summary>
+		Default = 0,
+		/// <summary>Balanced lines, phrase-boundary breaks — for titles.</summary>
+		Heading = 1,
+		/// <summary>High-quality non-greedy wrapping — for body copy.</summary>
+		Paragraph = 2,
 	}
 }

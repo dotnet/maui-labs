@@ -85,6 +85,7 @@ namespace Comet
 		public static class Text
 		{
 			public const string MaxLines = "Comet.Text.MaxLines";
+			public const string LineBreak = "Comet.Text.LineBreak";
 			public const string HorizontalAlignment = nameof(Microsoft.Maui.ITextAlignment.HorizontalTextAlignment);
 			public const string VerticalAlignment = nameof(Microsoft.Maui.ITextAlignment.VerticalTextAlignment);
 			public static class Style

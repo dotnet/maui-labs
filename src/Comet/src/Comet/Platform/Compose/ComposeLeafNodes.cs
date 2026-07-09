@@ -19,6 +19,7 @@ namespace Comet.Platform.Compose
 		int _maxLines;
 		int _fontSize;
 		int _lineHeight;
+		int _lineBreak;   // (int)TextLineBreak — wrap strategy, threaded to render AND measure
 		int _fontWeight;
 		string? _fontFamily;
 		readonly MutableState<int> _colorVersion = new(0);
@@ -47,6 +48,11 @@ namespace Comet.Platform.Compose
 				_lineHeight = (int)System.Math.Round(value.AsDouble);
 				_colorVersion.Value++;
 			}
+			else if (id == PropertyIds.Text_LineBreak)
+			{
+				_lineBreak = value.AsInt;
+				_colorVersion.Value++;
+			}
 			else if (id == PropertyIds.Text_FontWeight)
 			{
 				_fontWeight = value.AsInt;   // emitted as From((int)weight) — read as Int, not Double
@@ -68,7 +74,7 @@ namespace Comet.Platform.Compose
 		// with StaticLayout (synchronous, no composition needed). Uses the resolved custom typeface
 		// so measurement matches the rendered (custom-font) glyphs. 16sp ~ Material bodyLarge.
 		public override Size Measure(double widthConstraint, double heightConstraint)
-			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface(), EffectiveLineHeightSp(), _maxLines);
+			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface(), EffectiveLineHeightSp(), _maxLines, _lineBreak);
 
 		// First-baseline offset (Dp) measured by Compose's OWN layout (TextMeasurer) so the reported
 		// baseline equals the drawn one (the RN single-engine model). Only invoked for baseline-aligned
@@ -129,6 +135,14 @@ namespace Comet.Platform.Compose
 				text.MaxLines = _maxLines;
 				text.Overflow = AndroidX.Compose.TextOverflow.Ellipsis;
 			}
+			// Wrap strategy rides in on a base TextStyle (Compose has no direct lineBreak
+			// param); the explicit params above still win over the style, so only lineBreak
+			// changes. Measurement mirrors it via StaticLayout break-strategy (below).
+			if (_lineBreak != 0)
+				text.Style = new AndroidX.Compose.TextStyle
+				{
+					LineBreak = _lineBreak == 1 ? LineBreakValues.Heading : LineBreakValues.Paragraph,
+				}.Build();
 			text.Render(composer);
 		}
 
@@ -216,7 +230,7 @@ namespace Comet.Platform.Compose
 		// Wrapped to the available width: StaticLayout lays the text out to widthPx and reports
 		// the multi-line height (the Compose analog of iOS TextKit boundingRect). When a custom
 		// typeface is supplied it is used so the measurement matches the rendered glyph metrics.
-		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp, global::Android.Graphics.Typeface? typeface = null, int lineHeightSp = 0, int maxLines = 0)
+		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp, global::Android.Graphics.Typeface? typeface = null, int lineHeightSp = 0, int maxLines = 0, int lineBreak = 0)
 		{
 			var density = ComposeNode.Density;
 			var s = text ?? string.Empty;
@@ -226,9 +240,21 @@ namespace Comet.Platform.Compose
 			using var paint = new global::Android.Text.TextPaint { TextSize = sp * density };
 			if (typeface is not null)
 				paint.SetTypeface(typeface);
-			using var layout = global::Android.Text.StaticLayout.Builder
-				.Obtain(s, 0, s.Length, paint, widthPx)
-				.Build();
+			var builder = global::Android.Text.StaticLayout.Builder
+				.Obtain(s, 0, s.Length, paint, widthPx);
+			// Mirror the Compose LineBreak presets so the measured line count matches the
+			// render exactly: Heading = balanced + phrase word breaks, Paragraph = high quality.
+			if (lineBreak == 1)
+			{
+				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.Balanced);
+				if (System.OperatingSystem.IsAndroidVersionAtLeast(33))
+					builder.SetLineBreakConfig(new global::Android.Graphics.Text.LineBreakConfig.Builder()
+						.SetLineBreakWordStyle((int)global::Android.Graphics.Text.LineBreakWordStyle.Phrase)
+						.Build());
+			}
+			else if (lineBreak == 2)
+				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.HighQuality);
+			using var layout = builder.Build();
 
 			// Report the ACTUAL used width (the widest laid-out line), not the constraint — so a
 			// short label hugs its text (and the flex row packs it tight) while a long one still

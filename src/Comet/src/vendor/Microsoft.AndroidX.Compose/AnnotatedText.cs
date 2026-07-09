@@ -71,6 +71,11 @@ public sealed class AnnotatedText : ComposableNode
     /// <summary>Minimum visible line count.</summary>
     public int? MinLines { get; set; }
 
+    /// <summary>Base <c>TextStyle</c> (explicit slots above still win — Compose's
+    /// Text merges direct params over the style). Use for slots with no direct
+    /// param, e.g. <c>lineBreak</c>.</summary>
+    public AndroidX.Compose.UI.Text.TextStyle? Style { get; set; }
+
     /// <inheritdoc/>
     public override void Render(IComposer composer)
     {
@@ -90,6 +95,7 @@ public sealed class AnnotatedText : ComposableNode
             softWrap:      SoftWrap,
             maxLines:      MaxLines,
             minLines:      MinLines,
+            style:         Style,
             composer:      composer);
     }
 }

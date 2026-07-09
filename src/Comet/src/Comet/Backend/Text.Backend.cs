@@ -34,6 +34,9 @@ namespace Comet
 
 			if (this.GetEnvironment<int?>(EnvironmentKeys.Text.MaxLines) is { } maxLines and > 0)
 				node.ApplyProperty(PropertyIds.Text_MaxLines, PropertyValue.From(maxLines));
+
+			if (this.GetEnvironment<TextLineBreak?>(EnvironmentKeys.Text.LineBreak) is { } lineBreak and not TextLineBreak.Default)
+				node.ApplyProperty(PropertyIds.Text_LineBreak, PropertyValue.From((int)lineBreak));
 		}
 	}
 }

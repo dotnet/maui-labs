@@ -335,6 +335,7 @@ internal static partial class ComposeBridges
         bool? softWrap,
         int? maxLines,
         int? minLines,
+        AndroidX.Compose.UI.Text.TextStyle? style,
         IComposer composer);
 
     // androidx.compose.material3.TextKt.Text-IbK3jfQ — the
@@ -375,6 +376,7 @@ internal static partial class ComposeBridges
         bool? softWrap,
         int? maxLines,
         int? minLines,
+        AndroidX.Compose.UI.Text.TextStyle? style,
         IComposer composer);
 
     // androidx.compose.material3.ButtonKt.Button
