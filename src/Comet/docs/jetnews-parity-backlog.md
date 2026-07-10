@@ -162,3 +162,35 @@ rail items top-aligned vs gold centered; article bookmark action inert;
 scroll-position restore; iOS gate (TabBar twin + horizontal list +
 None-variant suite twin + article/interests screens); RESULTS.md row;
 /code-review.
+
+## /code-review (2026-07-09, 8-angle fan-out on bd797be8~1..HEAD) — outcome
+
+FIXED (commits `cd69df98`, `ee35663b`): stale-article-on-destination-change;
+FeedLists / article-shell subscription leaks; SwiftUIListDetailNode ignoring
+ListFraction (iOS rendered 50/50); hosted-twin OnOwnerViewChanged never
+dispatching (virtual on the base now); suite per-flush env-chain walk; JNI
+TextStyle/LineBreakConfig rebuilt per render/measure (cached); compact app-bar
+wordmark still the Text stand-in (replacement had silently missed); wrong
+"inert in the gold too" search comment; no-op TrimIndent; dead topInset param.
+
+REPORTED, BACKLOGGED (not fixed):
+- REAL-widget promotions the facade already bridges: expanded search →
+  OutlinedTextField (gold accepts input; submit is toasted), popular card →
+  M3 Card, bookmark → IconToggleButton. AGENTS.md-grade fidelity items.
+- LineBreakValues reflection hardening (R8/mangling → Release crash risk;
+  current Release publish survives). Consider deriving packed values from
+  public Strategy/Strictness/WordBreak constants.
+- MulticolorAssets hardcoded set → promote to a control-level .Multicolor()
+  property (both backends).
+- TabBar styling via ctor tokens → migrate to the env styling system.
+- iOS suite drawer only wraps the None variant (documented); DrawerOpen set
+  during Rail is swallowed/stale (also: reset the signal on variant switch).
+- Text_LineBreak has no reset-to-Default path on a reused node (hot reload).
+- Android horizontal ListView branch skips header/footer/scroll-state wiring.
+- ListFraction unvalidated (0/1/out-of-range).
+- TabBar backend hook + ContentSwitcher/NavigationSuite share the
+  subscribe-without-unsubscribe idiom on long-lived signals (framework-wide).
+- Dedup nits: Tx() ×4, ToArgbUint/C() color conversions ×3, 48dp icon-button
+  composition ×6, JetNewsRoot derived signals (ContentSwitcher bool overload).
+- Style base swap: LineBreak text uses TextStyle.Default (not LocalTextStyle)
+  as its base — benign while all slots are explicit; semantic trap noted.
