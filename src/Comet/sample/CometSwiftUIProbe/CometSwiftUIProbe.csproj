@@ -65,6 +65,9 @@
     <BundleResource Include="Fonts\MaterialIcons-Regular.ttf" />
     <!-- Jetchat avatars/sticker at the bundle root so UIImage(named:) finds them. -->
     <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetnews_logo.png"><LogicalName>jetnews_logo.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetnews_wordmark.png"><LogicalName>jetnews_wordmark.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetnews_badge.png"><LogicalName>jetnews_badge.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\someone_else.jpg"><LogicalName>someone_else.jpg</LogicalName></BundleResource>
     <BundleResource Include="Resources\sticker.png"><LogicalName>sticker.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\jetchat.png"><LogicalName>jetchat.png</LogicalName></BundleResource>

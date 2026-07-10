@@ -87,6 +87,8 @@ namespace CometSamples.JetNews
 			return new NavigationSuite(SelectedDest, items, routes,
 					railHeader: RailHeader(), drawerHeader: DrawerHeader(),
 					drawerOpen: DrawerOpen,
+					// M3 tokens for the hand-composed iOS twin (Android's real widgets self-theme).
+					containerColor: T.Background, indicatorColor: T.SecondaryContainer,
 					// JetnewsApp.kt: expanded (≥840dp) = rail; below = drawer-only chrome.
 					variantFor: (w, _) => w >= 840 ? NavigationSuiteVariant.Rail : NavigationSuiteVariant.None,
 					railShowsSelectedLabel: true,
