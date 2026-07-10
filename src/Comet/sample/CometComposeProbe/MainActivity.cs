@@ -231,6 +231,7 @@ namespace CometComposeProbe
 		{
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
+			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 52),
 			_ => new JetchatRoot(),
 		};
 #else
@@ -238,6 +239,7 @@ namespace CometComposeProbe
 		{
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
+			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 52),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24),
 		};
 #endif
