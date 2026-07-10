@@ -5,7 +5,15 @@ using Comet.Reactive;
 namespace Comet
 {
 	/// <summary>Which nav chrome a <see cref="NavigationSuite"/> shows for the current window.</summary>
-	public enum NavigationSuiteVariant { BottomBar, Rail, PermanentDrawer }
+	public enum NavigationSuiteVariant
+	{
+		BottomBar,
+		Rail,
+		PermanentDrawer,
+		/// <summary>No persistent chrome — content fills the window; navigation happens
+		/// through the modal drawer alone (JetNews' drawer-first compact chrome).</summary>
+		None,
+	}
 
 	/// <summary>
 	/// The adaptive navigation chrome (docs/adaptive-primitives-design.md): ONE control that
@@ -26,7 +34,10 @@ namespace Comet
 			View content, View? railHeader = null, View? drawerHeader = null,
 			Signal<bool>? drawerOpen = null,
 			Microsoft.Maui.Graphics.Color? containerColor = null,
-			Microsoft.Maui.Graphics.Color? indicatorColor = null)
+			Microsoft.Maui.Graphics.Color? indicatorColor = null,
+			System.Func<double, double, NavigationSuiteVariant>? variantFor = null,
+			bool railShowsSelectedLabel = false,
+			Signal<int>? variantSignal = null)
 		{
 			SelectedIndex = selectedIndex;
 			Items = items;
@@ -36,6 +47,9 @@ namespace Comet
 			DrawerOpen = drawerOpen;
 			ContainerColor = containerColor;
 			IndicatorColor = indicatorColor;
+			VariantPolicy = variantFor;
+			RailShowsSelectedLabel = railShowsSelectedLabel;
+			VariantSignal = variantSignal;
 			foreach (var item in items)
 				item.Parent = this;
 			content.Parent = this;
@@ -64,6 +78,24 @@ namespace Comet
 
 		/// <summary>Selected-item indicator (pill) color — secondaryContainer in the gold.</summary>
 		public Microsoft.Maui.Graphics.Color? IndicatorColor { get; }
+
+		/// <summary>App-specific breakpoint policy; null = the Reply defaults
+		/// (<see cref="VariantFor"/>). JetNews: rail ≥ 840dp, otherwise <see cref="NavigationSuiteVariant.None"/>.</summary>
+		public System.Func<double, double, NavigationSuiteVariant>? VariantPolicy { get; }
+
+		/// <summary>Rail items show their label under the icon when selected
+		/// (M3 <c>alwaysShowLabel=false</c> — the JetNews rail). Off = icon-only (Reply).</summary>
+		public bool RailShowsSelectedLabel { get; }
+
+		/// <summary>Optional out-signal the backend writes with the ACTIVE variant
+		/// ((int)<see cref="NavigationSuiteVariant"/>) so content can adapt (JetNews swaps
+		/// its home list chrome: app bar on compact, search field on expanded).</summary>
+		public Signal<int>? VariantSignal { get; }
+
+		/// <summary>The active-variant resolution every backend uses: the app policy if
+		/// supplied, else the Reply defaults.</summary>
+		public NavigationSuiteVariant VariantForWindow(double widthDp, double heightDp) =>
+			VariantPolicy?.Invoke(widthDp, heightDp) ?? VariantFor(widthDp, heightDp);
 
 		/// <summary>See <see cref="NavigationBar.SelectItem"/> — same contract.</summary>
 		public void SelectItem(int index)

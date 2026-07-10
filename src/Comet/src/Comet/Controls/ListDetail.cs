@@ -15,11 +15,12 @@ namespace Comet
 	/// </summary>
 	public partial class ListDetail : View, IContainerView
 	{
-		public ListDetail(Signal<bool> isDetailOpen, View list, View detail)
+		public ListDetail(Signal<bool> isDetailOpen, View list, View detail, double listFraction = 0.5)
 		{
 			IsDetailOpen = isDetailOpen;
 			List = list;
 			Detail = detail;
+			ListFraction = listFraction;
 			list.Parent = this;
 			detail.Parent = this;
 		}
@@ -29,6 +30,10 @@ namespace Comet
 		public Signal<bool> IsDetailOpen { get; }
 		public View List { get; }
 		public View Detail { get; }
+
+		/// <summary>Two-pane list share of the width. Reply: 0.5 (50/50 TwoPane); JetNews'
+		/// ListDetailScene keeps the list ≈ a third of an expanded window.</summary>
+		public double ListFraction { get; }
 
 		/// <summary>The gold two-pane threshold: WindowWidthSizeClass.Expanded (≥ 840dp) —
 		/// ReplyApp.kt:76-88 (folding postures out of scope). Pure for host tests + every backend.</summary>

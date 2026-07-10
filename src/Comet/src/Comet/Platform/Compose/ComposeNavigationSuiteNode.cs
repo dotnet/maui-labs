@@ -135,7 +135,9 @@ namespace Comet.Platform.Compose
 				return;
 			_windowDp = size;
 			_safeDp = safe;
-			_variantValue = NavigationSuite.VariantFor(size.Width, size.Height);
+			_variantValue = _suite.VariantForWindow(size.Width, size.Height);
+			if (_suite.VariantSignal is { } vs)
+				vs.Value = (int)_variantValue;
 			_variant.Value = (int)_variantValue;
 			_geometry.Value++;
 			LayoutContent();
@@ -153,6 +155,9 @@ namespace Comet.Platform.Compose
 				_windowDp.Height - _safeDp.Top - _safeDp.Bottom),
 			NavigationSuiteVariant.PermanentDrawer => new Size(
 				_windowDp.Width - DrawerWidthDp,
+				_windowDp.Height - _safeDp.Top - _safeDp.Bottom),
+			NavigationSuiteVariant.None => new Size(
+				_windowDp.Width,
 				_windowDp.Height - _safeDp.Top - _safeDp.Bottom),
 			_ => new Size(
 				_windowDp.Width,
@@ -177,7 +182,13 @@ namespace Comet.Platform.Compose
 		void ReflowContent()
 		{
 			if (_contentNode is not null)
+			{
+				// Re-check bounds too (the ComposeListDetailNode idiom): a resize that
+				// recreates the activity can land before the metrics hook, so per-flush
+				// recheck is what keeps the variant honest.
+				UpdateFromMetrics();
 				LayoutContent();
+			}
 		}
 
 		public override Size Measure(double widthConstraint, double heightConstraint)
@@ -242,10 +253,18 @@ namespace Comet.Platform.Compose
 					for (int i = 0; i < _items.Length; i++)
 					{
 						int index = i;
-						rail.Add(new AndroidX.Compose.NavigationRailItem(
+					var railItem = new AndroidX.Compose.NavigationRailItem(
 							selected: index == selected,
 							onClick: () => _suite.SelectItem(index))
-						{ Icon = _items[i].icon });
+						{ Icon = _items[i].icon };
+						// JetNews rail: label under the icon only while selected (gold
+						// alwaysShowLabel=false). Reply stays icon-only.
+						if (_suite.RailShowsSelectedLabel && _items[i].label is { } railLabel)
+						{
+							railItem.Label = railLabel;
+							railItem.AlwaysShowLabel = false;
+						}
+						rail.Add(railItem);
 					}
 					((ComposableNode)rail).Modifier = Modifier.Companion.Height(new Dp(h));
 					box.Add(rail);

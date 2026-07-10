@@ -1713,6 +1713,7 @@ internal static partial class ComposeBridges
         IFunction2  icon,
         IModifier?  modifier,
         IFunction2? label,
+        bool?       alwaysShowLabel,
         int         defaults,
         IComposer   composer);
 

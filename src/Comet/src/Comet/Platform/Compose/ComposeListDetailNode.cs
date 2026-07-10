@@ -120,9 +120,11 @@ namespace Comet.Platform.Compose
 				return;
 			if (_twoPaneValue)
 			{
-				var paneW = (_windowDp.Width - ListDetail.GapDp) / 2;
-				CometBackendLayoutEngine.Layout(_listDetail.List, new Size(paneW, _windowDp.Height));
-				CometBackendLayoutEngine.Layout(_listDetail.Detail, new Size(paneW, _windowDp.Height));
+				// Split per the control's list fraction (Reply 0.5; JetNews ~⅓), gap between.
+				var usable = _windowDp.Width - ListDetail.GapDp;
+				var listW = usable * _listDetail.ListFraction;
+				CometBackendLayoutEngine.Layout(_listDetail.List, new Size(listW, _windowDp.Height));
+				CometBackendLayoutEngine.Layout(_listDetail.Detail, new Size(usable - listW, _windowDp.Height));
 			}
 			else
 			{
@@ -164,7 +166,7 @@ namespace Comet.Platform.Compose
 			{
 				var detailHost = new Box();
 				((ComposableNode)detailHost).Modifier = Modifier.Companion
-					.AbsoluteOffset(new Dp((w + (float)ListDetail.GapDp) / 2), new Dp(0));
+					.AbsoluteOffset(new Dp((float)((w - ListDetail.GapDp) * _listDetail.ListFraction + ListDetail.GapDp)), new Dp(0));
 				detailHost.Add(_detailNode!);
 				box.Add(_listNode!);
 				box.Add(detailHost);
