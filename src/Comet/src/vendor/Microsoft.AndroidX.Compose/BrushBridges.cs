@@ -21,10 +21,13 @@ internal static partial class ComposeBridges
 {
     static BoundBrush.Companion? s_brushCompanion;
 
-    static IntPtr s_color_class;
+    // The Java.Lang.Class OBJECTS are retained — caching only .Handle left a global
+    // ref the runtime could invalidate once the wrapper was collected ("jclass is an
+    // invalid global reference" SIGABRT on the first gradient after a GC).
+    static Java.Lang.Class? s_colorClass;
     static IntPtr s_color_boxImpl;
 
-    static IntPtr s_solidColor_class;
+    static Java.Lang.Class? s_solidColorClass;
     static IntPtr s_solidColor_ctor;
 
     // Lazy access to the `androidx.compose.ui.graphics.Brush$Companion`
@@ -62,14 +65,14 @@ internal static partial class ComposeBridges
     {
         if (s_color_boxImpl == IntPtr.Zero)
         {
-            s_color_class = Java.Lang.Class.FromType(typeof(BoundColor)).Handle;
+            s_colorClass = Java.Lang.Class.FromType(typeof(BoundColor));
             s_color_boxImpl = JNIEnv.GetStaticMethodID(
-                s_color_class, "box-impl", "(J)Landroidx/compose/ui/graphics/Color;");
+                s_colorClass.Handle, "box-impl", "(J)Landroidx/compose/ui/graphics/Color;");
         }
         var args = stackalloc JValue[1];
         args[0] = new JValue(packed);
         IntPtr handle = JNIEnv.CallStaticObjectMethod(
-            s_color_class, s_color_boxImpl, args);
+            s_colorClass!.Handle, s_color_boxImpl, args);
         return Java.Lang.Object.GetObject<BoundColor>(
             handle, JniHandleOwnership.TransferLocalRef)!;
     }
@@ -95,12 +98,12 @@ internal static partial class ComposeBridges
     {
         if (s_solidColor_ctor == IntPtr.Zero)
         {
-            s_solidColor_class = Java.Lang.Class.FromType(
-                typeof(AndroidX.Compose.UI.Graphics.SolidColor)).Handle;
-            s_solidColor_ctor = JNIEnv.GetMethodID(s_solidColor_class, "<init>", "(J)V");
+            s_solidColorClass = Java.Lang.Class.FromType(
+                typeof(AndroidX.Compose.UI.Graphics.SolidColor));
+            s_solidColor_ctor = JNIEnv.GetMethodID(s_solidColorClass.Handle, "<init>", "(J)V");
         }
         var args = stackalloc JValue[1];
         args[0] = new JValue(color);
-        return JNIEnv.NewObject(s_solidColor_class, s_solidColor_ctor, args);
+        return JNIEnv.NewObject(s_solidColorClass!.Handle, s_solidColor_ctor, args);
     }
 }
