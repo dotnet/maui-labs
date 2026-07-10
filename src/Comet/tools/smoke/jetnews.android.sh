@@ -80,7 +80,8 @@ android_shot 07-home-again
 trap android_resize_reset EXIT
 android_resize 3780 2856
 sleep 4
-assert_element "expanded search field"     "type=Text&text=Search posts"
+# (The REAL OutlinedTextField renders its placeholder facade-internally — assert the field.)
+assert_element "expanded search field"     "type=TextField"
 assert_element "select-a-post placeholder" "type=Text&text=Select a post"
 android_shot 08-expanded
 # Open a post into the detail pane (hero title tap).

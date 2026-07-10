@@ -18,6 +18,7 @@ namespace CometSamples.JetNews
 	public static class JetNewsScreens
 	{
 		// ── Bookmarks (gold favorites: Set<String> in HomeViewModel) ──
+		static readonly Comet.Reactive.Signal<string> SearchQuery = new(string.Empty);
 		static readonly HashSet<string> Favorites = new();
 		static readonly List<ListView<HomeRow>> FeedLists = new();
 
@@ -101,26 +102,20 @@ namespace CometSamples.JetNews
 			.Background(T.Background);
 		}
 
-		/// <summary>The expanded home LIST pane (HomeFeedWithArticleDetailsScreen): a
-		/// "Search posts" field above the same feed — no app bar. DEVIATION: the gold is a
-		/// REAL OutlinedTextField accepting input (submit is toast-stubbed); promoting this
-		/// look-alike to the real widget is backlogged (facade already bridges it).</summary>
+		/// <summary>The expanded home LIST pane (HomeFeedWithArticleDetailsScreen): the REAL
+		/// OutlinedTextField search (submit toast-stubbed in the gold) above the same feed.</summary>
 		public static View ExpandedListPane()
 		{
 			JetNewsIcons.Register();
 
-			var field = new HStack(spacing: 0f)
-			{
-				new Icon("search").IconSize(24).Color(T.OnSurfaceVariant)
-					.Frame(width: 48, height: 48).Padding(new Thickness(12))
-					.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0),
-				Tx("Search posts").FontSize(16).Color(T.OnSurfaceVariant)
-					.VerticalLayoutAlignment(LayoutAlignment.Center),
-			}
-			.Frame(height: 56)
-			.Border(1, T.Outline).CornerRadius(4)
-			.Margin(new Thickness(16, 8, 16, 8))
-			.HorizontalLayoutAlignment(LayoutAlignment.Fill);
+		// The REAL Material OutlinedTextField (gold HomeSearch:578): accepts input;
+			// submit is toast-stubbed in the gold. Android drives the exact widget; the
+			// iOS twin renders Comet's standard field (documented deviation).
+			var field = SignalExtensions.TextField(SearchQuery, "Search posts")
+				.Outlined().LeadingIcon("search")
+				.Frame(height: 56)
+				.Margin(new Thickness(16, 8, 16, 8))
+				.HorizontalLayoutAlignment(LayoutAlignment.Fill);
 
 			return new VStack(spacing: 0f)
 			{
@@ -190,13 +185,14 @@ namespace CometSamples.JetNews
 			BookmarkButton(post).FlexShrink(0),
 		}.OnTap(_ => OpenPost(post.Id));
 
+		// The REAL M3 IconToggleButton (gold utils/JetnewsIcons.kt BookmarkButton) —
+		// checked + onCheckedChange; rows rebuild with the new glyph via ReloadData.
 		static View BookmarkButton(Post post) =>
-			new Icon(Favorites.Contains(post.Id) ? "bookmark" : "bookmark_border")
-				.IconSize(24).Color(T.OnSurfaceVariant)
-				.Frame(width: 48, height: 48)
+			new IconToggleButton(Favorites.Contains(post.Id), _ => ToggleFavorite(post.Id),
+					new Icon(Favorites.Contains(post.Id) ? "bookmark" : "bookmark_border")
+						.IconSize(24).Color(T.OnSurfaceVariant))
 				.Margin(new Thickness(6, 2, 6, 2))
-				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnTap(_ => ToggleFavorite(post.Id));
+				.VerticalLayoutAlignment(LayoutAlignment.Center);
 
 		// ── Popular section (HomeScreens.kt:516-541): title titleLarge pad 16; horizontal
 		// card row pad h16 spacing 8 (gold: Row+horizontalScroll; a horizontal ListView is
@@ -234,7 +230,11 @@ namespace CometSamples.JetNews
 			}.Padding(new Thickness(16)),
 		}
 		.Frame(width: 280)
-		.Background(T.SurfaceContainerLow).CornerRadius(4).Shadow(new Comet.Graphics.Shadow().WithRadius(2))
+		// The REAL M3 Card (clickable — gold PostCardYourNetwork.kt:55): self-themed
+		// containerColor (surfaceContainerLow) + elevation on Android; the iOS twin has no
+		// Card widget, so the tokens stay for the hand-composed side.
+		.AsCard()
+		.Background(T.SurfaceContainerLow).CornerRadius(4)
 		.Margin(right: 8)
 		.OnTap(_ => OpenPost(post.Id));
 
