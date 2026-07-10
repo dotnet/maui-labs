@@ -21,7 +21,7 @@ namespace Comet.Platform.SwiftUI
 		public SwiftUITabRowNode(TabBar bar, BackendContext context)
 			: base(context) => _bar = bar;
 
-		public void OnOwnerViewChanged(View newView, bool isHotReload)
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is TabBar bar)
 				_bar = bar;

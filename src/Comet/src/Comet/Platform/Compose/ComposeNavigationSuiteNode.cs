@@ -126,7 +126,9 @@ namespace Comet.Platform.Compose
 
 		void UpdateFromMetrics()
 		{
-			var metrics = _suite.GetWindowMetrics();
+			// Per-flush path: reuse the hooked metrics object — GetWindowMetrics walks the
+			// environment parent chain, too hot for every reactive flush.
+			var metrics = _hookedMetrics ?? _suite.GetWindowMetrics();
 			var size = metrics.SizeDp.Peek();
 			if (size.Width <= 0 || size.Height <= 0)
 				size = ScreenSizeDp();

@@ -113,12 +113,9 @@ namespace Comet.Platform.Compose
 			// Base (non-code) runs use the body family; code runs override to monospace above.
 			if (ComposeFontRegistry.Resolve(_fontFamily, 400) is { } r)
 				text.FontFamily = r.Family;
-			// Wrap strategy via a base TextStyle (see ComposeTextNode) — explicit params still win.
+			// Wrap strategy via the cached base TextStyle (see ComposeTextNode) — explicit params still win.
 			if (_lineBreak != 0)
-				text.Style = new AndroidX.Compose.TextStyle
-				{
-					LineBreak = _lineBreak == 1 ? LineBreakValues.Heading : LineBreakValues.Paragraph,
-				}.Build();
+				text.Style = TextMeasure.LineBreakStyleFor(_lineBreak);
 			text.Render(composer);
 		}
 	}

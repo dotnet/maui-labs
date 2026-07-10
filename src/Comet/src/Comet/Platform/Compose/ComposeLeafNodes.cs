@@ -139,10 +139,7 @@ namespace Comet.Platform.Compose
 			// param); the explicit params above still win over the style, so only lineBreak
 			// changes. Measurement mirrors it via StaticLayout break-strategy (below).
 			if (_lineBreak != 0)
-				text.Style = new AndroidX.Compose.TextStyle
-				{
-					LineBreak = _lineBreak == 1 ? LineBreakValues.Heading : LineBreakValues.Paragraph,
-				}.Build();
+				text.Style = TextMeasure.LineBreakStyleFor(_lineBreak);
 			text.Render(composer);
 		}
 
@@ -166,18 +163,36 @@ namespace Comet.Platform.Compose
 		// ("code") spans the renderer uses, so wrapping/height match the composed AnnotatedText.
 		// Mirror the Compose LineBreak presets in StaticLayout so measured line count matches
 		// the render: Heading = balanced + phrase word breaks (33+), Paragraph = high quality.
+		// The immutable LineBreakConfig is cached — Measure is the layout hot path and this
+		// otherwise allocates two JNI objects per text per pass.
+		static global::Android.Graphics.Text.LineBreakConfig? s_phraseConfig;
+
 		static void ApplyBreakStrategy(global::Android.Text.StaticLayout.Builder builder, int lineBreak)
 		{
 			if (lineBreak == 1)
 			{
 				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.Balanced);
 				if (System.OperatingSystem.IsAndroidVersionAtLeast(33))
-					builder.SetLineBreakConfig(new global::Android.Graphics.Text.LineBreakConfig.Builder()
+					builder.SetLineBreakConfig(s_phraseConfig ??= new global::Android.Graphics.Text.LineBreakConfig.Builder()
 						.SetLineBreakWordStyle((int)global::Android.Graphics.Text.LineBreakWordStyle.Phrase)
 						.Build());
 			}
 			else if (lineBreak == 2)
 				builder.SetBreakStrategy(global::Android.Text.BreakStrategy.HighQuality);
+		}
+
+		public static AndroidX.Compose.UI.Text.TextStyle LineBreakStyleFor(int lineBreak)
+			=> LineBreakStyles.For(lineBreak);
+
+		/// <summary>The two wrap-strategy base styles, built ONCE — Render otherwise crosses
+		/// JNI for a ~23-slot TextStyle copy on every recomposition of every LineBreak text.</summary>
+		static class LineBreakStyles
+		{
+			static AndroidX.Compose.UI.Text.TextStyle? s_heading, s_paragraph;
+
+			public static AndroidX.Compose.UI.Text.TextStyle For(int lineBreak) => lineBreak == 1
+				? s_heading ??= new AndroidX.Compose.TextStyle { LineBreak = LineBreakValues.Heading }.Build()
+				: s_paragraph ??= new AndroidX.Compose.TextStyle { LineBreak = LineBreakValues.Paragraph }.Build();
 		}
 
 		public static Size MeasureRuns(System.Collections.Generic.IReadOnlyList<Comet.TextRun> runs,

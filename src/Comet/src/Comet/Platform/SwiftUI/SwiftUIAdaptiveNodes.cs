@@ -38,6 +38,11 @@ namespace Comet.Platform.SwiftUI
 		/// <summary>Compose the full subtree for the CURRENT control state.</summary>
 		protected abstract View BuildContent();
 
+		/// <summary>Re-point the node at a re-built owner view (hot reload / ancestor
+		/// refresh). Virtual so the interface member dispatches into subclasses — a plain
+		/// method on a subclass never gets called (the ICometBackendNode default no-op wins).</summary>
+		public virtual void OnOwnerViewChanged(View newView, bool isHotReload) { }
+
 		/// <summary>Nodes materialized for the CURRENT hosted subtree; disposed on the next
 		/// swap so stale generations release their static hooks (AfterFlush, signals, metrics).</summary>
 		List<ICometBackendNode>? _generation;
@@ -185,10 +190,12 @@ namespace Comet.Platform.SwiftUI
 			bool twoPane = ListDetail.TwoPaneFor(
 				_listDetail.GetWindowMetrics().SizeDp.Peek() is { Width: > 0 } s ? s.Width : ScreenDp().Width);
 			if (twoPane)
+				// Split per the control's list fraction (flexGrow ratios) — keeps the iOS
+				// twin on the SAME split as ComposeListDetailNode (Reply 0.5, JetNews ~1/3).
 				return new HStack(spacing: (float)ListDetail.GapDp)
 				{
-					_listDetail.List.FlexGrow(1).FlexBasis(0),
-					_listDetail.Detail.FlexGrow(1).FlexBasis(0),
+					_listDetail.List.FlexGrow((float)_listDetail.ListFraction).FlexBasis(0),
+					_listDetail.Detail.FlexGrow((float)(1 - _listDetail.ListFraction)).FlexBasis(0),
 				};
 			return _open ? _listDetail.Detail : _listDetail.List;
 		}
