@@ -56,7 +56,7 @@ jobs:
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   # Step 3: Run device tests on Mac Catalyst via DeviceRunners + dotnet test.
-  # Requires macOS 26+ for Apple Intelligence (FoundationModels framework).
+  # Uses --filter to exclude tests requiring Apple Intelligence models (not available on CI runners).
   device-tests-maccatalyst:
     runs-on: macos-26
     steps:
@@ -64,17 +64,6 @@ jobs:
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-
-      - name: Check Apple Intelligence availability
-        id: ai-check
-        run: |
-          echo "Checking Apple Intelligence model availability..."
-          AVAIL=$(swift -e 'import FoundationModels; print(SystemLanguageModel.default.availability)')
-          echo "availability=$AVAIL" >> "$GITHUB_OUTPUT"
-          echo "Apple Intelligence availability: $AVAIL"
-          if [ "$AVAIL" != "available" ]; then
-            echo "::warning::Apple Intelligence models not available ($AVAIL). Tests with RequiresModel trait will be excluded via --filter."
-          fi
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -92,9 +81,7 @@ jobs:
           -c Release
           --logger trx
           --results-directory artifacts/TestResults
-          ${{ steps.ai-check.outputs.availability != 'available' && '--filter "RequiresModel!=true"' || '' }}
-        env:
-          APPLE_INTELLIGENCE_AVAILABLE: ${{ steps.ai-check.outputs.availability }}
+          --filter "RequiresModel!=true"
 
       - name: Upload test results
         if: always()
