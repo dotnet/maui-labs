@@ -94,16 +94,19 @@ namespace CometSamples.JetNews
 				.Background(T.Background);
 		}
 
-		// AppNavRail.kt header: the jetnews logo tinted primary, 12dp vertical padding
-		// (menu-glyph stand-in until the gold vector lands).
+		// AppNavRail.kt header: the jetnews logo vector tinted primary, 12dp vertical padding.
 		static View RailHeader() =>
-			new Icon("menu").IconSize(24).Color(T.Primary)
+			new Icon("jetnews_logo").IconSize(24).Color(T.Primary)
 				.Frame(width: 80, height: 48).Padding(new Thickness(28, 12, 28, 12));
 
-		// AppDrawer.kt JetNewsLogo row: logo + wordmark (pad h28/v24).
+		// AppDrawer.kt JetNewsLogo row: logo (primary) + wordmark (onSurfaceVariant), 8dp gap.
 		static View DrawerHeader() => new HStack(spacing: 0f)
 		{
-			Tx("jetnews").FontSize(20).FontWeight(FontWeight.Medium).Color(T.Primary),
+			new Icon("jetnews_logo").IconSize(24).Color(T.Primary).FlexShrink(0),
+			new HStack().Frame(width: 8),
+			new Icon("jetnews_wordmark").Color(T.OnSurfaceVariant).IconFillFrame()
+				.Frame(width: 80, height: 24)
+				.VerticalLayoutAlignment(LayoutAlignment.Center),
 		}.Padding(new Thickness(28, 24, 28, 24));
 
 		// HomeScreens.kt: expanded detail placeholder — centered "Select a post".

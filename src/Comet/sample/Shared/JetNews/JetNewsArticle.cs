@@ -76,9 +76,9 @@ namespace CometSamples.JetNews
 				.FlexShrink(0)
 				.OnTap(_ => onBack()),
 			new HStack().FlexGrow(1),
-			new Icon("android").IconSize(22).Color(Color.FromArgb("#3DDC84"))
-				.Frame(width: 36, height: 36)
-				.Background(Color.FromArgb("#073042")).CornerRadius(18)
+			// The gold icon_post_background vector (multicolor — renders untinted).
+			new Icon("jetnews_badge").IconSize(36)
+				.Frame(width: 36, height: 36).CornerRadius(18)
 				.VerticalLayoutAlignment(LayoutAlignment.Center)
 				.FlexShrink(0),
 			new VStack(spacing: 0f)

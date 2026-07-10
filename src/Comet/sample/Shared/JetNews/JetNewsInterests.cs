@@ -87,7 +87,7 @@ namespace CometSamples.JetNews
 		// "Interests" titleLarge tinted primary, search action.
 		static View TopBar(System.Action openDrawer) => new HStack(spacing: 0f)
 		{
-			new Icon("menu").IconSize(24).Color(T.Primary)
+			new Icon("jetnews_logo").IconSize(24).Color(T.Primary)
 				.Frame(width: 48, height: 48).Padding(new Thickness(12))
 				.FlexShrink(0)
 				.OnTap(_ => openDrawer()),
