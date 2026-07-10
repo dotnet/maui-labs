@@ -335,6 +335,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_WithCancellationToken_SupportsCancellation()
 	{
 		var client = new T();
