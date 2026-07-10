@@ -435,6 +435,31 @@ Notes: <one paragraph — anything anomalous, descopes affecting perf, screen us
 for the scroll test, fixture vs live data mode>
 -->
 
+## JetNews — 2026-07-09
+
+Emulator = Pixel 9 Pro AVD (API 36, arm64, Apple M4 Max host). Gold = the Kotlin
+JetNews app from ~/work/compose-samples. NOTE: the gold's minified
+`app-release.apk` (3.8 MiB) CRASHES at launch on this emulator (sample-side
+proguard/deeplink issue), so runtime comparisons use the gold DEBUG build —
+gold cold start and jank read worse than a healthy release would.
+
+| Metric | Comet (emulator) | Comet (Pixel 5, B1) | Gold Kotlin app |
+|---|---|---|---|
+| Release APK, trimmed single-RID (`tools/bench/size.sh <probe> -p:CometSingleRid=true`) | 26.2 MiB (27,475,468 B) | — | 3.8 MiB (release artifact) |
+| Cold start median, 10 runs (`am start -W --es screen jetnews`) | 2347 ms | — | 2914 ms (DEBUG build — release crashes) |
+| gfxinfo scroll jank, home feed (6 fling swipes) | 13.8% janky, p50 17ms / p90 46ms / p95 81ms | — | 11.3% janky, p50 26ms / p90 42ms / p95 65ms (DEBUG) |
+| iOS .ipa trimmed size / launch feel (manual note) | not measured (sim-only gate; Debug launch feels instant after splash) | n/a | n/a |
+| Comet.dll (linked, android-arm64) | 829 KiB (849,408 B) | — | n/a |
+
+Notes: the probe APK now bundles THREE samples (Jetchat + Reply + JetNews,
+incl. all post images + fonts) — the total is still dominated by the AndroidX
+Compose dex + CoreCLR preview runtime, so the size delta vs the Reply row is
++0.1 MiB for a whole extra sample. Comet cold start improved vs the Reply row
+(3705 → 2347 ms median) with no tuning; against the DEBUG gold it now reads
+faster, but the honest release-gold comparison is blocked on the gold's own
+launch crash. Jank is near parity (worse p95, better p50) on the paragraph-
+heavy home feed. Pixel 5 column lands with batch B1.
+
 ## Reply — 2026-07-08
 
 Emulator = Pixel 9 Pro AVD (API 36, arm64, Apple M4 Max host). Gold = the Kotlin
