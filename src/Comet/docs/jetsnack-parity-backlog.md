@@ -49,3 +49,22 @@ profile) + medium-700dp + expanded-1260dp.
   Next: gradient-fill capability (Compose Brush.linearGradient / shim
   LinearGradient), then the Home screen (destination bar + filter row +
   Highlight/Normal collection rows + custom bottom bar).
+
+## Status 2026-07-10 (later) — Home feed LANDED on Android
+
+Commits `8aef7b35`…`a4e62294`: BackgroundGradient capability (Compose
+Brush.horizontalGradient / shim LinearGradient; BrushBridges stale-jclass
+crash fixed — first real exercise of the vendored gradient path), Home feed
++ chrome near-gold (destination bar, chips, highlight gradient cards,
+circle rows, hand-composed bottom bar with routes).
+
+Known deviations / next:
+- Gradient parallax: the gold's offsetGradientBackground shifts the band
+  with scroll (gradientWidth 6×card); ours is a static horizontal gradient.
+- Chip border: gold uses a diagonal fade gradient border; ours solid
+  brand@40%. Filter icon metrics eyeballed.
+- Section-header arrow: gold mirrors ic_arrow_back; ours arrow_forward glyph.
+- Next increments: Snack detail (gradient header, qty stepper, ADD TO CART
+  bar), Filters sheet (FiltersOpen signal is wired, sheet unbuilt), Search,
+  Cart, iOS pass (bundle snack jpgs + verify gradients/rows), smokes,
+  standalone app id, RESULTS row, /code-review.
