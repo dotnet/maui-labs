@@ -89,6 +89,8 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetColor(_native, "textcolor", ToArgb(it));
 			else if (id == PropertyIds.Icon_Size)
 				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
+			else if (id == PropertyIds.Icon_FillFrame)
+				CometSwiftUIHost.SetBool(_native, "iconfillframe", value.AsBool);
 			else if (id == PropertyIds.Toggle_IsOn)
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
 			else if (id == PropertyIds.Slider_Value)

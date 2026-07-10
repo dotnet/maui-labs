@@ -266,27 +266,84 @@ namespace Comet.Platform.SwiftUI
 			// with the real values the moment they publish.
 			if (safe.Top == 0 && safe.Bottom == 0)
 				safe = new Microsoft.Maui.Thickness(0, 59, 0, 34);
-			var variant = NavigationSuite.VariantFor(size.Width, size.Height);
+			var variant = _suite.VariantForWindow(size.Width, size.Height);
+			// Publish the active variant (equality-gated) so content can adapt —
+			// mirrors ComposeNavigationSuiteNode.UpdateFromMetrics.
+			if (_suite.VariantSignal is { } vs && vs.Peek() != (int)variant)
+				vs.Value = (int)variant;
 
+			View chromed;
 			if (variant == NavigationSuiteVariant.BottomBar)
-				return new VStack(spacing: 0f)
+				chromed = new VStack(spacing: 0f)
 				{
 					new HStack().Frame(height: (float)safe.Top).FlexShrink(0),
 					_suite.Content.FlexGrow(1).FlexBasis(0),
 					BottomBar((float)safe.Bottom).FlexShrink(0),
 				};
-
-			// Rail (and, until a dedicated variant lands, the ≥1200dp case too): left rail
-			// with the header + items, content beside it.
-			return new HStack(spacing: 0f)
-			{
-				Rail((float)safe.Top).Frame(width: 80).FlexShrink(0),
-				new VStack(spacing: 0f)
+			else if (variant == NavigationSuiteVariant.None)
+				// Chromeless (JetNews compact): content fills; navigation via the modal drawer.
+				chromed = new VStack(spacing: 0f)
 				{
 					new HStack().Frame(height: (float)safe.Top).FlexShrink(0),
 					_suite.Content.FlexGrow(1).FlexBasis(0),
-				}.FlexGrow(1).FlexBasis(0),
-			};
+				};
+			else
+				// Rail (and, until a dedicated variant lands, the ≥1200dp case too): left rail
+				// with the header + items, content beside it.
+				chromed = new HStack(spacing: 0f)
+				{
+					Rail((float)safe.Top).Frame(width: 80).FlexShrink(0),
+					new VStack(spacing: 0f)
+					{
+						new HStack().Frame(height: (float)safe.Top).FlexShrink(0),
+						_suite.Content.FlexGrow(1).FlexBasis(0),
+					}.FlexGrow(1).FlexBasis(0),
+				};
+
+			// Modal drawer wrap — chromeless variant only: the item views compose into the
+			// sheet here, and a view materializes into exactly ONE node per generation, so
+			// the sheet and a bar/rail can't share them. (The bar/rail variants never show
+			// a drawer in the golds this twin serves.)
+			if (variant == NavigationSuiteVariant.None && _suite.DrawerOpen is { } open)
+				chromed = new Drawer(open, DrawerSheet((float)safe.Top), chromed);
+			return chromed;
+		}
+
+		// Hand-composed to the M3 NavigationDrawerItem metrics (56dp pill, r28, icon 24 +
+		// 12 gap, labelLarge) — the Android side renders the real widget.
+		View DrawerSheet(float safeTop)
+		{
+			var col = new VStack(spacing: 0f) { new HStack().Frame(height: safeTop).FlexShrink(0) };
+			if (_suite.DrawerHeaderView is { } header)
+				col.Add(header.FlexShrink(0));
+			for (int i = 0; i < _suite.Items.Count; i++)
+			{
+				int index = i;
+				var item = _suite.Items[i];
+				var row = new HStack(spacing: 0f)
+				{
+					item.IconView.Margin(new Microsoft.Maui.Thickness(16, 0, 12, 0))
+						.VerticalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center)
+						.FlexShrink(0),
+				};
+				if (item.LabelView is { } label)
+					row.Add(label.VerticalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center));
+				col.Add(row
+					.Frame(height: 56)
+					.Background(index == _selected ? PillColor : null)
+					.CornerRadius(28)
+					.Margin(new Microsoft.Maui.Thickness(12, index == 0 ? 0 : 4, 12, 0))
+					.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Fill)
+					.OnTap(_ =>
+					{
+						_suite.SelectItem(index);
+						if (_suite.DrawerOpen is { } o)
+							o.Value = false;   // gold closes on selection
+					}));
+			}
+			return col
+				.VerticalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Fill)
+				.Background(_suite.ContainerColor ?? Colors.White);
 		}
 
 		// M3 chrome tokens from the control (surfaceContainer / secondaryContainer in the
@@ -339,7 +396,7 @@ namespace Comet.Platform.SwiftUI
 			for (int i = 0; i < _suite.Items.Count; i++)
 			{
 				int index = i;
-				col.Add(new HStack(spacing: 0f)
+				var pill = new HStack(spacing: 0f)
 				{
 					new HStack().FlexGrow(1),
 					_suite.Items[i].IconView.VerticalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
@@ -348,8 +405,16 @@ namespace Comet.Platform.SwiftUI
 				.Frame(width: 56, height: 32)
 				.Background(index == _selected ? PillColor : null)
 				.CornerRadius(16)
-				.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center)
-				.OnTap(_ => _suite.SelectItem(index)));
+				.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center);
+				// M3 alwaysShowLabel=false: label under the icon only while selected (JetNews).
+				if (_suite.RailShowsSelectedLabel && index == _selected && _suite.Items[i].LabelView is { } label)
+					col.Add(new VStack(spacing: 4f)
+					{
+						pill,
+						label.HorizontalLayoutAlignment(Microsoft.Maui.Primitives.LayoutAlignment.Center),
+					}.OnTap(_ => _suite.SelectItem(index)));
+				else
+					col.Add(pill.OnTap(_ => _suite.SelectItem(index)));
 			}
 			return col.Background(BarColor);
 		}

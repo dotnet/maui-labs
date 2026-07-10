@@ -29,6 +29,8 @@ namespace Comet.Platform.SwiftUI
 			_list = list;
 			_context = context;
 			_native = CometSwiftUIHost.MakeNode("list");
+			if (_list.Horizontal)
+				CometSwiftUIHost.SetBool(_native, "horizontal", true);
 
 			// Drive ScrollToBottom (JumpToBottom FAB / after-send) through the native
 			// ScrollViewReader — the iOS counterpart of the Compose LazyListState scroller.
@@ -121,7 +123,13 @@ namespace Comet.Platform.SwiftUI
 		// row's nodes self-position from the frames this pushes; the row root self-sizes for the List.
 		void LayoutRow(View row)
 		{
-			if (_width > 0)
+			if (_width <= 0)
+				return;
+			// Horizontal rows lay at their intrinsic width (the ComposeListNode LazyRow
+			// branch does the same); vertical rows fill the list width.
+			if (_list.Horizontal)
+				CometBackendLayoutEngine.LayoutContent(row, CometBackendLayoutEngine.Measure(row).Width);
+			else
 				CometBackendLayoutEngine.LayoutContent(row, _width);
 		}
 

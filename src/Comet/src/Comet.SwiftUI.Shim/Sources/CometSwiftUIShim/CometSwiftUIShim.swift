@@ -75,6 +75,8 @@ struct CometTextRun {
     var onChangeDouble: ((Double) -> Void)?
     var onDialogDismiss: (() -> Void)?  // native .alert dismissed (-> DialogDismissed)
     var onFocused: (() -> Void)?        // TextField gained focus (-> Focused; gold onTextFieldFocused)
+    @Published var horizontal = false   // "list": row axis (LazyHStack in a horizontal ScrollView)
+    @Published var iconFillFrame = false // "icon": non-square asset draws at the node frame
     var onScroll: ((Double) -> Void)?   // ScrollView scrolled (-> ScrollView.AtTop / ScrollOffset)
     var onScrollTop: ((Double) -> Void)?   // list first row visibility (-> ListView.ScrolledFromTop)
 
@@ -120,6 +122,8 @@ struct CometTextRun {
         case "outlined": node.outlined = value
         case "isvisible": node.isVisible = value
         case "draweropen": node.drawerOpen = value
+        case "horizontal": node.horizontal = value
+        case "iconfillframe": node.iconFillFrame = value
         case "fabextended": node.fabExtended = value
         case "dialogopen": node.dialogOpen = value
         default: break
@@ -397,15 +401,18 @@ struct CometLeafContent: View {
             } else if let logo = bundledImage(node.iconName) {
                 // A bundled brand logo (e.g. the jetchat mark) — colourful when untinted (header),
                 // a tinted template when a colour is set (the mono chat-row logo). Mirrors the Android
-                // multicolor-asset path. Pinned to the icon size so it measures + can't overflow the text.
-                let logoSize = node.fontSize > 0 ? node.fontSize : 24
+                // multicolor-asset path. Pinned to the icon size so it measures + can't overflow the
+                // text — unless iconFillFrame asks for the node's (non-square) frame (the JetNews
+                // 80×24 wordmark, the Android IconFillFrame twin).
+                let logoW = node.iconFillFrame && node.frame.width > 0 ? node.frame.width : (node.fontSize > 0 ? node.fontSize : 24)
+                let logoH = node.iconFillFrame && node.frame.height > 0 ? node.frame.height : (node.fontSize > 0 ? node.fontSize : 24)
                 if node.textColorARGB != 0 {
                     Image(uiImage: logo).renderingMode(.template).resizable().aspectRatio(contentMode: .fit)
-                        .frame(width: logoSize, height: logoSize)
+                        .frame(width: logoW, height: logoH)
                         .modifier(ForegroundModifier(argb: node.textColorARGB))
                 } else {
                     Image(uiImage: logo).resizable().aspectRatio(contentMode: .fit)
-                        .frame(width: logoSize, height: logoSize)
+                        .frame(width: logoW, height: logoH)
                 }
             } else {
                 // Real SF Symbol, tinted + sized — the iOS native icon idiom.
@@ -664,6 +671,19 @@ struct CometNodeView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: node.drawerOpen)
+        case "list" where node.horizontal:
+            // Horizontal list (JetNews' popular carousel): the LazyHStack twin of the
+            // Compose LazyRow branch. Rows are Yoga-laid at their intrinsic width by C#;
+            // each renders as its own lazy item.
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(node.children) { child in
+                        CometNodeView(node: child)
+                            .frame(width: child.frame.width, height: child.frame.height)
+                            .id(child.id)
+                    }
+                }
+            }
         case "list":
             // Full-bleed, separator-free rows so a Yoga-laid-out row (which already carries its
             // own padding) spans edge-to-edge exactly like the Compose LazyColumn. Wrapped in a

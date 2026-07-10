@@ -130,6 +130,12 @@ namespace Comet
 			=> new SwiftUIContentSwitcherNode(this, context);
 	}
 
+	public partial class TabBar
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUITabRowNode(this, context);
+	}
+
 	public partial class ListDetail
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
