@@ -174,9 +174,10 @@ wordmark still the Text stand-in (replacement had silently missed); wrong
 "inert in the gold too" search comment; no-op TrimIndent; dead topInset param.
 
 REPORTED, BACKLOGGED (not fixed):
-- REAL-widget promotions the facade already bridges: expanded search →
-  OutlinedTextField (gold accepts input; submit is toasted), popular card →
-  M3 Card, bookmark → IconToggleButton. AGENTS.md-grade fidelity items.
+- ~~REAL-widget promotions~~ **DONE 2026-07-10 (`4412942c`/`25700132`)**:
+  popular card → clickable M3 Card (View.AsCard()), bookmark →
+  IconToggleButton control, expanded search → OutlinedTextField
+  (TextField.Outlined().LeadingIcon()). All verified interactive on device.
 - LineBreakValues reflection hardening (R8/mangling → Release crash risk;
   current Release publish survives). Consider deriving packed values from
   public Strategy/Strictness/WordBreak constants.
