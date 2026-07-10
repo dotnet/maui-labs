@@ -137,3 +137,28 @@ gold medium-700dp/expanded-1260dp), per-sample app id + icons
 (`-p:CometSample=jetnews`), iOS gate (SwiftUI twins: horizontal list =
 ScrollView(.horizontal)+LazyHStack design noted; TabBar twin; article),
 RESULTS.md row, /code-review.
+
+## Status 2026-07-09 (later) — expanded chrome + standalone app + gold vectors LANDED
+
+Commits `ca09ce4b`…`bf775607`:
+- Expanded chrome (gold expanded-1260dp): root rebuilt on NavigationSuite
+  (JetNews policy: None <840dp + modal drawer w/ REAL NavigationDrawerItems;
+  REAL NavigationRail ≥840 with selected-only labels) + ListDetail at ~1/3
+  split (compact pushes article full-screen w/ system back; expanded shows
+  "Select a post" placeholder). Home list pane variant-aware via the suite's
+  new variant signal (app bar ↔ "Search posts" field). Smoke now 20/20 incl.
+  the 1260dp resize walk.
+- Framework: NavigationSuiteVariant.None + variantFor policy + variantSignal;
+  railShowsSelectedLabel (alwaysShowLabel slot exposed on the bridge);
+  ListDetail.ListFraction; suite per-flush metrics recheck (resize could
+  strand the variant); Icon.IconFillFrame (non-square vectors).
+- Standalone com.comet.sample.jetnews (-p:CometSample=jetnews, gold launcher).
+- Gold vectors landed: logo/wordmark/badge everywhere (stand-ins gone).
+- Drawer-item selected highlight now reactive (real NavigationDrawerItems).
+
+Still open for M2: app-bar collapse-on-scroll; expanded article chrome
+(floating toolbar, no top bar — currently shows compact chrome in the pane);
+rail items top-aligned vs gold centered; article bookmark action inert;
+scroll-position restore; iOS gate (TabBar twin + horizontal list +
+None-variant suite twin + article/interests screens); RESULTS.md row;
+/code-review.
