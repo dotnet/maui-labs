@@ -18,6 +18,12 @@ namespace Comet
 	public static class IconExtensions
 	{
 		/// <summary>Sets the icon's square size in Dp (default 24).</summary>
+		/// <summary>The asset draws at the FRAME's size instead of the square
+		/// <c>IconSize</c>-with-centering-slack rule — for non-square bundled vectors
+		/// (JetNews' 80×24 wordmark). Frame the view to the asset's aspect.</summary>
+		public static T IconFillFrame<T>(this T icon) where T : Icon
+			=> icon.SetEnvironment("Comet.IconFillFrame", true, false);
+
 		public static T IconSize<T>(this T icon, double size) where T : Icon
 		{
 			icon.SetEnvironment("Comet.IconSize", size, false);

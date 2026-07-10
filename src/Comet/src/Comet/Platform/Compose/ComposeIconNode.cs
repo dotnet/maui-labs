@@ -20,11 +20,12 @@ namespace Comet.Platform.Compose
 		readonly MutableState<string> _glyphFont = new(string.Empty);   // icon-font family
 		Microsoft.Maui.Graphics.Color? _tint;
 		float _size = 24f;
+		bool _fillFrame;
 		readonly MutableState<int> _iconVersion = new(0);
 
 		// Brand logos that ship their own colors — rendered as an Image (untinted) so
 		// painterResource preserves them. Every other bundled "ic_<symbol>" is tinted.
-		static readonly System.Collections.Generic.HashSet<string> MulticolorAssets = new() { "jetchat" };
+		static readonly System.Collections.Generic.HashSet<string> MulticolorAssets = new() { "jetchat", "jetnews_badge" };
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
@@ -41,6 +42,8 @@ namespace Comet.Platform.Compose
 			}
 			else if (id == PropertyIds.Icon_Size)
 				_size = (float)value.AsDouble;
+			else if (id == PropertyIds.Icon_FillFrame)
+				_fillFrame = value.AsBool;
 		}
 
 		public override Size Measure(double widthConstraint, double heightConstraint)
@@ -60,6 +63,9 @@ namespace Comet.Platform.Compose
 				var m = BuildNodeModifier() ?? Modifier.Companion;
 				if (!HasFrame)
 					return m.Size(new Dp(_size), new Dp(_size));
+				// Non-square asset: draw at the frame's size, no slack centering.
+				if (_fillFrame)
+					return m;
 				// Remaining slack after any explicit leaf padding (BuildNodeModifier applied it).
 				float padH = (float)((FrameWidth - Padding.Left - Padding.Right - _size) / 2.0);
 				float padV = (float)((FrameHeight - Padding.Top - Padding.Bottom - _size) / 2.0);

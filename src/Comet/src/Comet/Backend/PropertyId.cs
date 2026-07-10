@@ -116,6 +116,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Icon_Size = new(194);
 		public static readonly PropertyId Icon_Glyph = new(195);        // icon-font codepoint string
 		public static readonly PropertyId Icon_FontFamily = new(196);   // icon-font family name
+		public static readonly PropertyId Icon_FillFrame = new(197);    // non-square asset fills the frame (no slack centering)
 
 		// --- Drawer (208–223) ---
 		public static readonly PropertyId Drawer_IsOpen = new(208);

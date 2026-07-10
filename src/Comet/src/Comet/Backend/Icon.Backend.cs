@@ -30,6 +30,9 @@ namespace Comet
 
 			if (this.GetEnvironment<double?>(this, "Comet.IconSize", false) is { } size && size > 0)
 				node.ApplyProperty(PropertyIds.Icon_Size, PropertyValue.From(size));
+
+			if (this.GetEnvironment<bool?>(this, "Comet.IconFillFrame", false) is true)
+				node.ApplyProperty(PropertyIds.Icon_FillFrame, PropertyValue.From(true));
 		}
 	}
 }
