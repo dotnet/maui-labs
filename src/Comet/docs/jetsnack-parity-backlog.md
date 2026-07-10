@@ -21,9 +21,9 @@ profile) + medium-700dp + expanded-1260dp.
   summary + checkout bar), Profile (work-in-progress placeholder).
 - Model: Snack.kt / SnackCollection.kt / Filter.kt / Search.kt (~575 lines
   total — small port).
-- Images: REMOTE (Coil, unsplash URLs) — exercises Comet's remote-image path
-  (Android native ImageView fallback; iOS async load) instead of bundled
-  drawables. Network required on device.
+- Images: LOCAL drawables in this gold revision (drawable-nodpi *.jpg —
+  copied to the Android probe; iOS bundle entries land with the screens).
+  (An older Jetsnack used Coil remote URLs — not this checkout.)
 
 ## Capability classification (framework work expected)
 
@@ -42,5 +42,10 @@ profile) + medium-700dp + expanded-1260dp.
 
 ## Status
 
-- 2026-07-10: golds captured; backlog skeleton. Next: port model/data, theme
-  (custom palette + gradients capability), Home screen first increment.
+- 2026-07-10: golds captured; backlog skeleton.
+- 2026-07-10 (`a3e92c3a`): model/data + custom palette ported (28 snacks,
+  collections, cart, filters as Signals; JetsnackColors roles + 8 gradient
+  stop lists); snack photos in the Android probe; both probes compile.
+  Next: gradient-fill capability (Compose Brush.linearGradient / shim
+  LinearGradient), then the Home screen (destination bar + filter row +
+  Highlight/Normal collection rows + custom bottom bar).
