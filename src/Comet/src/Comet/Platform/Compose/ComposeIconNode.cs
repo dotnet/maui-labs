@@ -137,6 +137,8 @@ namespace Comet.Platform.Compose
 		// Cross-platform symbol name → Material ImageVector. Core set (material-icons-core);
 		// a few footer icons fall back to the nearest available until the facade exposes the
 		// extended set (mood/alternate_email/photo/duo).
+	internal static ImageVector ResolveSymbol(string s) => Resolve(s);
+
 		static ImageVector Resolve(string s) => s switch
 		{
 			"search" => Icons.Filled.Search,

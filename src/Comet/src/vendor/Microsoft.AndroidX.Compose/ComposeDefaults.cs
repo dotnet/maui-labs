@@ -421,6 +421,12 @@ using AndroidX.Compose;
 [assembly: ComposeDefaults("CardDefault",
     "modifier", "shape", "colors", "elevation", "border", "!content")]
 
+// androidx.compose.material3.CardKt.Card (CLICKABLE overload): 9 user params,
+// bits 0 (onClick) and 8 (content) always provided.
+[assembly: ComposeDefaults("ClickableCardDefault",
+    "!onClick", "modifier", "enabled", "shape", "colors",
+    "elevation", "border", "interactionSource", "!content")]
+
 // androidx.compose.material3.CardKt.ElevatedCard (non-clickable): 5 user
 // params (no border) — bit 4 = content provided.
 [assembly: ComposeDefaults("ElevatedCardDefault",

@@ -1477,6 +1477,20 @@ internal static partial class ComposeBridges
     [ComposeFacade]
     public static partial void Card(IModifier? modifier, Shape? shape, IFunction3 content, IComposer composer);
 
+    // androidx.compose.material3.CardKt.Card — the CLICKABLE overload (the gold's
+    // tappable cards, e.g. JetNews PostCardPopular). Same JvmName; resolved by signature.
+    [ComposeBridge(
+        Class     = "androidx/compose/material3/CardKt",
+        JvmName   = "Card",
+        Signature = "(Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Z" +
+                    "Landroidx/compose/ui/graphics/Shape;Landroidx/compose/material3/CardColors;" +
+                    "Landroidx/compose/material3/CardElevation;Landroidx/compose/foundation/BorderStroke;" +
+                    "Landroidx/compose/foundation/interaction/MutableInteractionSource;" +
+                    "Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V",
+        Defaults  = typeof(ClickableCardDefault))]
+    [ComposeFacade]
+    public static partial void ClickableCard(IFunction0 onClick, IModifier? modifier, Shape? shape, IFunction3 content, IComposer composer);
+
     // androidx.compose.material3.CardKt.OutlinedCard (same shape as Card)
     [ComposeBridge(
         Class     = "androidx/compose/material3/CardKt",

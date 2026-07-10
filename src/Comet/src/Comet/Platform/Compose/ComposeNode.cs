@@ -29,6 +29,17 @@ namespace Comet.Platform.Compose
 		readonly MutableState<int> _childVersion = new(0);
 		ICometEventSink? _sink;
 		readonly MutableState<bool> _hasTap = new(false);
+
+		/// <summary>A widget-rendering branch (e.g. the clickable Card) that takes over the
+		/// tap sets this so BuildNodeModifier doesn't ALSO add a clickable (double ripple).</summary>
+		protected bool GesturesHandledByWidget;
+
+		/// <summary>Whether the view carries a tap gesture (for widget branches that choose
+		/// a clickable overload).</summary>
+		protected bool HasTapGesture => _hasTap.Value;
+
+		/// <summary>Fire the Comet tap event — for widgets that own the click (Card.onClick).</summary>
+		protected void FireTapEvent() => Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
 		readonly MutableState<bool> _hasLongPress = new(false);
 		readonly MutableState<bool> _hasRecord = new(false);
 		// Color/Thickness aren't Java-boxable, so they can't live in a Compose MutableState.
@@ -254,7 +265,7 @@ namespace Comet.Platform.Compose
 			// Skip the clickable when faded out / invisible so a hidden overlay doesn't eat taps.
 			// With a long-press present, use combinedClickable (the gold's combinedClickable
 			// onClick/onLongClick — Reply row selection); otherwise the plain clickable.
-			if ((_hasTap.Value || _hasLongPress.Value) && alpha > 0f)
+			if (!GesturesHandledByWidget && (_hasTap.Value || _hasLongPress.Value) && alpha > 0f)
 			{
 				void FireTap() => Sink?.OnGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
 				var clickable = _hasLongPress.Value

@@ -25,11 +25,35 @@ namespace Comet.Platform.Compose
 				_spacing.Value = (int)value.AsDouble;
 			else if (id == PropertyIds.Container_Surface)
 				_asSurface.Value = value.AsBool;
+			else if (id == PropertyIds.Container_Card)
+				_asCard.Value = value.AsBool;
 		}
+
+	readonly MutableState<bool> _asCard = new(false);
 
 		public override void Render(IComposer composer)
 		{
 			int spacing = _spacing.Value;
+
+			// Opt-in: the REAL Material 3 Card (gold PostCardPopular et al). Self-themed
+			// containerColor/elevation; the clickable overload owns the tap (ripple +
+			// semantics), so the node modifier must not add a second clickable.
+			if (_asCard.Value)
+			{
+				GesturesHandledByWidget = HasTapGesture;
+				var shape = HasRoundedCorners ? CornerShape() : null;
+				ComposableContainer card = HasTapGesture
+					? new AndroidX.Compose.ClickableCard(FireTapEvent) { Shape = shape }
+					: new AndroidX.Compose.Card { Shape = shape };
+				((ComposableNode)card).Modifier = BuildNodeModifier();
+				// Card's content slot is a ColumnScope — Yoga children carry ABSOLUTE offsets,
+				// so they must sit in a Box or the column stacking double-offsets them.
+				var content = new Box();
+				AddChildrenTo(content);
+				card.Add(content);
+				((ComposableNode)card).Render(composer);
+				return;
+			}
 
 			// Opt-in: a real Material Surface (color + shape) — the widget the gold standard draws
 			// chat bubbles with. The Surface owns the fill + clip, so children sit inside it.

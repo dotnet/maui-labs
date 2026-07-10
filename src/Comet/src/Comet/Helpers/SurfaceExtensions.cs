@@ -52,6 +52,12 @@ namespace Comet
 		/// <summary>Renders this container as a Material <c>Surface</c> (its <c>.Background</c> color +
 		/// <c>.CornerRadius</c> shape) instead of a plain Box — matching the gold standard's
 		/// <c>Surface(color, shape)</c> chat bubble. A no-op on backends without a Surface widget.</summary>
+		/// <summary>Render this container as the REAL Material 3 <c>Card</c> (self-themed
+		/// containerColor/elevation; clickable overload when the view has a tap gesture) —
+		/// the widget the gold standard uses for tappable cards. Shape from .CornerRadius().</summary>
+		public static T AsCard<T>(this T view) where T : View
+			=> view.SetEnvironment("Comet.AsCard", true, false);
+
 		public static T AsSurface<T>(this T view) where T : View
 		{
 			view.SetEnvironment("Comet.AsSurface", true, false);

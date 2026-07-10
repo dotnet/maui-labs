@@ -81,6 +81,12 @@ namespace Comet
 			=> new ComposeTabRowNode(this);
 	}
 
+	public partial class IconToggleButton
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeIconToggleNode(this, context);
+	}
+
 	public partial class SearchBar
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

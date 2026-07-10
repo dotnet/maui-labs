@@ -88,6 +88,8 @@ namespace Comet.Backend
 		public static readonly PropertyId TextField_Keyboard = new(101);
 		public static readonly PropertyId TextField_Borderless = new(102);
 		public static readonly PropertyId TextField_ReturnType = new(103);   // soft-keyboard action key (ImeAction)
+		public static readonly PropertyId TextField_Outlined = new(104);     // Material OutlinedTextField
+		public static readonly PropertyId TextField_LeadingIcon = new(105);  // leading icon symbol name
 
 		// --- Image (112–127) ---
 		public static readonly PropertyId Image_Source = new(112);
@@ -97,6 +99,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Stack_Orientation = new(128);
 		public static readonly PropertyId Stack_Spacing = new(129);
 		public static readonly PropertyId Container_Surface = new(130);
+		public static readonly PropertyId Container_Card = new(131);     // real M3 Card (clickable when tappable)
 
 		// --- Toggle / Switch (144–159) ---
 		public static readonly PropertyId Toggle_IsOn = new(144);

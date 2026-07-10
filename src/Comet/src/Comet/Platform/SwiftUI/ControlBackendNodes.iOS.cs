@@ -136,6 +136,12 @@ namespace Comet
 			=> new SwiftUITabRowNode(this, context);
 	}
 
+	public partial class IconToggleButton
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIIconToggleNode(this, context);
+	}
+
 	public partial class ListDetail
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

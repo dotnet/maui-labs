@@ -99,6 +99,9 @@ namespace Comet
 			if (this.GetEnvironment<bool?>(this, "Comet.AsSurface", false) == true)
 				node.ApplyProperty(PropertyIds.Container_Surface, PropertyValue.From(true));
 
+			if (this.GetEnvironment<bool?>(this, "Comet.AsCard", false) is true)
+				node.ApplyProperty(PropertyIds.Container_Card, PropertyValue.From(true));
+
 			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /
 			// Border), so .ClipShape/.Shadow/.RoundedBorder, ButtonStyles, ViewModifier and the
 			// .CornerRadius/.Elevation/.Border sugar all flow to the backend through one path.

@@ -24,6 +24,12 @@ namespace Comet
 			if (this.GetEnvironment<bool?>(this, "Comet.TextFieldBorderless", false) == true)
 				node.ApplyProperty(PropertyIds.TextField_Borderless, PropertyValue.From(true));
 
+			if (this.GetEnvironment<bool?>(this, "Comet.TextFieldOutlined", false) == true)
+				node.ApplyProperty(PropertyIds.TextField_Outlined, PropertyValue.From(true));
+
+			if (this.GetEnvironment<string>(this, "Comet.TextFieldLeadingIcon", false) is { Length: > 0 } leading)
+				node.ApplyProperty(PropertyIds.TextField_LeadingIcon, PropertyValue.From(leading));
+
 			// Soft-keyboard "Send" action key (the gold composer). A dedicated bool flag set/read EXACTLY
 			// like Borderless (cascades:false) — the generic ReturnType env (enum, cascades:true) doesn't
 			// round-trip through the node-backend GetEnvironment read.
@@ -36,6 +42,22 @@ namespace Comet
 		public TextField SendOnReturn()
 		{
 			this.SetEnvironment("Comet.TextFieldSendAction", true, false);
+			return this;
+		}
+
+		/// <summary>Renders the REAL Material <c>OutlinedTextField</c> (the gold JetNews
+		/// search field) — self-themed outline + label metrics.</summary>
+		public TextField Outlined()
+		{
+			this.SetEnvironment("Comet.TextFieldOutlined", true, false);
+			return this;
+		}
+
+		/// <summary>A leading icon inside the field, from the cross-platform symbol set
+		/// (e.g. "search" — the gold search field's magnifier).</summary>
+		public TextField LeadingIcon(string symbol)
+		{
+			this.SetEnvironment("Comet.TextFieldLeadingIcon", (object)symbol, false);
 			return this;
 		}
 

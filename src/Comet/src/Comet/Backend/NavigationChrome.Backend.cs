@@ -58,6 +58,15 @@ namespace Comet
 		}
 	}
 
+	public partial class IconToggleButton
+	{
+		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
+		{
+			base.ApplyAllSetProperties(node);
+			node.ApplyProperty(PropertyIds.Toggle_IsOn, PropertyValue.From(IsChecked));
+		}
+	}
+
 	public partial class TabBar
 	{
 		bool _hooked;

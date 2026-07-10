@@ -78,6 +78,10 @@ namespace Comet.Platform.Compose
 			}
 			else if (id == PropertyIds.TextField_Placeholder)
 				_placeholder.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.TextField_Outlined)
+				_outlined.Value = value.AsBool;
+			else if (id == PropertyIds.TextField_LeadingIcon)
+				_leadingIcon.Value = value.AsString ?? string.Empty;
 			else if (id == PropertyIds.TextField_Borderless)
 				_borderless.Value = value.AsBool;
 			else if (id == PropertyIds.TextField_TextColor)
@@ -110,6 +114,9 @@ namespace Comet.Platform.Compose
 
 		const int BorderlessFontSp = 16;
 
+		readonly MutableState<bool> _outlined = new(false);
+		readonly MutableState<string> _leadingIcon = new(string.Empty);
+
 		public override void Render(IComposer composer)
 		{
 			if (_borderless.Value)
@@ -118,11 +125,28 @@ namespace Comet.Platform.Compose
 				return;
 			}
 
+			var placeholder = _placeholder.Value;
+
+			// The REAL Material OutlinedTextField (gold HomeSearch) — self-themed outline,
+			// optional leading icon from the shared cross-platform symbol set.
+			if (_outlined.Value)
+			{
+				var outlined = new AndroidX.Compose.OutlinedTextField(
+					value: _text.Value,
+					onValueChange: s => Sink?.OnEvent(EventIds.TextChanged, s));
+				if (!string.IsNullOrEmpty(placeholder))
+					outlined.Placeholder = new AndroidX.Compose.Text(placeholder);
+				if (_leadingIcon.Value is { Length: > 0 } leading)
+					outlined.LeadingIcon = new AndroidX.Compose.Icon(ComposeIconNode.ResolveSymbol(leading), leading);
+				((ComposableNode)outlined).Modifier = BuildNodeModifier();
+				outlined.Render(composer);
+				return;
+			}
+
 			var field = new ComposeTextField(
 				value: _text.Value,
 				onValueChange: s => Sink?.OnEvent(EventIds.TextChanged, s));
 
-			var placeholder = _placeholder.Value;
 			if (!string.IsNullOrEmpty(placeholder))
 				field.Placeholder = new AndroidX.Compose.Text(placeholder);
 
