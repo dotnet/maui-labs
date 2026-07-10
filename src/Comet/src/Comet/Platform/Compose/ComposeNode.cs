@@ -131,6 +131,8 @@ namespace Comet.Platform.Compose
 		/// that needs interior padding (e.g. a borderless text field) applies this itself.</summary>
 		protected Microsoft.Maui.Thickness Padding => _padding;
 
+	Microsoft.Maui.Graphics.Color[]? _gradient;
+
 		/// <summary>The background color set via <c>.Background()</c>, if any. Lets a container render
 		/// as a Material <c>Surface</c> (color + shape) rather than a plain Box.</summary>
 		protected Microsoft.Maui.Graphics.Color? Background => _background;
@@ -157,6 +159,8 @@ namespace Comet.Platform.Compose
 				_isVisible = value.AsBool;
 				_styleVersion.Value++;
 			}
+			else if (id == PropertyIds.GradientBackground)
+				_gradient = value.AsObject as Microsoft.Maui.Graphics.Color[];
 			else if (id == PropertyIds.BackgroundColor)
 			{
 				_background = value.AsColor;
@@ -244,7 +248,17 @@ namespace Comet.Platform.Compose
 			if (rounded)
 				m = (m ?? Modifier.Companion).Clip(CornerShape());
 
-			if (_background is { } bg)
+			// Gradient fill wins over a solid background (Jetsnack's design-system fills) —
+			// the REAL Compose Brush.horizontalGradient, evenly-spaced stops.
+			if (_gradient is { Length: > 1 } stops)
+			{
+				var composeStops = new AndroidX.Compose.Color[stops.Length];
+				for (int i = 0; i < stops.Length; i++)
+					composeStops[i] = ToComposeColor(stops[i]);
+				m = (m ?? Modifier.Companion).Background(
+					AndroidX.Compose.Brush.HorizontalGradient(composeStops));
+			}
+			else if (_background is { } bg)
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
 
 			// Stroke (e.g. avatar ring) following the same rounded outline, drawn over the fill.

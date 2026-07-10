@@ -28,6 +28,7 @@ struct CometTextRun {
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
+    @Published var gradientStops: [UInt32] = [] // horizontal linear-gradient fill (wins over background)
     @Published var opacity: CGFloat = 1         // Comet Opacity → SwiftUI .opacity(); 1 = opaque
     @Published var isVisible: Bool = true       // Comet IsVisible; false => hidden + non-interactive
     @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
@@ -165,6 +166,16 @@ struct CometTextRun {
     }
 
     // Animate a "list" node to its newest row (the ScrollViewReader observes scrollToken).
+    @objc(clearGradientStops:)
+    public static func clearGradientStops(_ node: CometNode) {
+        node.gradientStops = []
+    }
+
+    @objc(addGradientStop:argb:)
+    public static func addGradientStop(_ node: CometNode, argb: UInt32) {
+        node.gradientStops.append(argb)
+    }
+
     @objc(scrollNodeToBottom:)
     public static func scrollToBottom(_ node: CometNode) {
         node.scrollToken &+= 1
@@ -626,7 +637,7 @@ struct CometNodeView: View {
         // (so it fills the arranged frame) → offset (move the whole node into place).
         content
             .modifier(SizeModifier(node: node))
-            .modifier(BackgroundModifier(argb: node.backgroundARGB))
+            .modifier(BackgroundModifier(argb: node.backgroundARGB, stops: node.gradientStops))
             .modifier(SurfaceModifier(node: node)) // rounded corners + elevation (Material card)
             .modifier(TapGestureModifier(node: node))
             .modifier(OffsetModifier(node: node))
@@ -921,17 +932,28 @@ private func colorFromARGB(_ argb: UInt32) -> Color {
           opacity: Double((argb >> 24) & 0xFF) / 255.0)
 }
 
+private func argbColor(_ argb: UInt32) -> Color {
+    Color(
+        red:   Double((argb >> 16) & 0xFF) / 255.0,
+        green: Double((argb >> 8) & 0xFF) / 255.0,
+        blue:  Double(argb & 0xFF) / 255.0,
+        opacity: Double((argb >> 24) & 0xFF) / 255.0)
+}
+
 private struct BackgroundModifier: ViewModifier {
     let argb: UInt32
+    var stops: [UInt32] = []
     func body(content: Content) -> some View {
-        if argb == 0 {
+        if stops.count > 1 {
+            // Horizontal linear gradient (Jetsnack fills) — the LinearGradient twin of
+            // Compose's Brush.horizontalGradient; stops spaced evenly.
+            content.background(LinearGradient(
+                colors: stops.map(argbColor),
+                startPoint: .leading, endPoint: .trailing))
+        } else if argb == 0 {
             content
         } else {
-            content.background(Color(
-                red:   Double((argb >> 16) & 0xFF) / 255.0,
-                green: Double((argb >> 8) & 0xFF) / 255.0,
-                blue:  Double(argb & 0xFF) / 255.0,
-                opacity: Double((argb >> 24) & 0xFF) / 255.0))
+            content.background(argbColor(argb))
         }
     }
 }

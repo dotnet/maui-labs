@@ -35,6 +35,12 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("scrollNodeToBottom:")]
 		void ScrollToBottom(CometNode node);
 
+		[Static, Export("clearGradientStops:")]
+		void ClearGradientStops(CometNode node);
+
+		[Static, Export("addGradientStop:argb:")]
+		void AddGradientStop(CometNode node, uint argb);
+
 		[Static, Export("clearTextRuns:")]
 		void ClearTextRuns(CometNode node);
 

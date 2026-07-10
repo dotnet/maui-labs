@@ -102,6 +102,9 @@ namespace Comet
 			if (this.GetEnvironment<bool?>(this, "Comet.AsCard", false) is true)
 				node.ApplyProperty(PropertyIds.Container_Card, PropertyValue.From(true));
 
+			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color[]>(this, "Comet.BackgroundGradient", false) is { Length: > 1 } gradient)
+				node.ApplyProperty(PropertyIds.GradientBackground, PropertyValue.FromObject(gradient));
+
 			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /
 			// Border), so .ClipShape/.Shadow/.RoundedBorder, ButtonStyles, ViewModifier and the
 			// .CornerRadius/.Elevation/.Border sugar all flow to the backend through one path.

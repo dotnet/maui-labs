@@ -52,6 +52,12 @@ namespace Comet
 		/// <summary>Renders this container as a Material <c>Surface</c> (its <c>.Background</c> color +
 		/// <c>.CornerRadius</c> shape) instead of a plain Box — matching the gold standard's
 		/// <c>Surface(color, shape)</c> chat bubble. A no-op on backends without a Surface widget.</summary>
+		/// <summary>A horizontal linear-gradient background (Compose
+		/// <c>Brush.horizontalGradient</c> / SwiftUI <c>LinearGradient</c>) — the Jetsnack
+		/// design system's gradient fills. Stops are spaced evenly; respects .CornerRadius().</summary>
+		public static T BackgroundGradient<T>(this T view, params Microsoft.Maui.Graphics.Color[] colors) where T : View
+			=> view.SetEnvironment("Comet.BackgroundGradient", (object)colors, false);
+
 		/// <summary>Render this container as the REAL Material 3 <c>Card</c> (self-themed
 		/// containerColor/elevation; clickable overload when the view has a tap gesture) —
 		/// the widget the gold standard uses for tappable cards. Shape from .CornerRadius().</summary>

@@ -91,6 +91,12 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetDouble(_native, "fontsize", value.AsDouble);
 			else if (id == PropertyIds.Icon_FillFrame)
 				CometSwiftUIHost.SetBool(_native, "iconfillframe", value.AsBool);
+			else if (id == PropertyIds.GradientBackground && value.AsObject is Microsoft.Maui.Graphics.Color[] stops)
+			{
+				CometSwiftUIHost.ClearGradientStops(_native);
+				foreach (var stop in stops)
+					CometSwiftUIHost.AddGradientStop(_native, ToArgb(stop));
+			}
 			else if (id == PropertyIds.Toggle_IsOn)
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
 			else if (id == PropertyIds.Slider_Value)
