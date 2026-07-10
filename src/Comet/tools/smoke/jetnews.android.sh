@@ -76,4 +76,20 @@ sleep 2
 assert_element "home via drawer"       "type=Text&text=Top stories for you"
 android_shot 07-home-again
 
+# ── Expanded chrome (gold expanded-1260dp-01): rail + list-detail ──
+trap android_resize_reset EXIT
+android_resize 3780 2856
+sleep 4
+assert_element "expanded search field"     "type=Text&text=Search posts"
+assert_element "select-a-post placeholder" "type=Text&text=Select a post"
+android_shot 08-expanded
+# Open a post into the detail pane (hero title tap).
+adb_ shell input swipe 794 800 794 800 120
+sleep 2
+assert_element "expanded article"          "type=Text&text=Published in:"
+android_shot 09-expanded-detail
+android_resize_reset
+sleep 4
+assert_element "compact restored"          "type=Text&text=Top stories for you"
+
 smoke_end

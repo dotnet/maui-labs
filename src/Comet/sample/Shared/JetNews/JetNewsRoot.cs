@@ -9,84 +9,113 @@ using T = CometSamples.JetNews.JetNewsTheme;
 namespace CometSamples.JetNews
 {
 	/// <summary>
-	/// JetNews chrome + routing (the gold JetnewsApp): the whole app wrapped in the REAL
-	/// ModalNavigationDrawer (Home / Interests destinations), routes swapped through
-	/// ContentSwitcher — body-level structure swaps don't reach the retained node tree,
-	/// and the Article slot is ONE shell re-bound via <see cref="CurrentPost"/>.
+	/// JetNews chrome + routing over the adaptive primitives (the gold JetnewsApp):
+	/// NavigationSuite with the JetNews breakpoint policy (chromeless + modal drawer
+	/// below 840dp, REAL NavigationRail with selected-only labels above — JetnewsApp.kt's
+	/// isExpandedScreen), destinations = Home / Interests (real NavigationDrawerItems in
+	/// the sheet), and Home = ListDetail (compact: full-screen article with system-back;
+	/// expanded: feed | detail at the gold's ~⅓ split with a "Select a post" placeholder).
 	/// </summary>
 	public class JetNewsRoot : View
 	{
-		/// <summary>0 = Home, 1 = Article, 2 = Interests.</summary>
-		public static readonly Signal<int> ScreenIndex = new(0);
+		/// <summary>0 = Home, 1 = Interests (the drawer/rail destinations).</summary>
+		public static readonly Signal<int> SelectedDest = new(0);
+		public static readonly Signal<bool> ArticleOpen = new(false);
 		public static readonly Signal<Post> CurrentPost = new(JetNewsData.Posts.HighlightedPost);
 		public static readonly Signal<bool> DrawerOpen = new(false);
+
+		// Backend-written active chrome variant → derived indices for the variant-aware
+		// slots (compact app bar vs expanded search field; placeholder vs article).
+		static readonly Signal<int> Variant = new((int)NavigationSuiteVariant.None);
+		static readonly Signal<int> HomeChrome = new(0);
+		static readonly Signal<int> DetailContent = new(0);
+
+		static JetNewsRoot()
+		{
+			Variant.PropertyChanged += (_, _) =>
+				HomeChrome.Value = Variant.Peek() == (int)NavigationSuiteVariant.Rail ? 1 : 0;
+			ArticleOpen.PropertyChanged += (_, _) =>
+				DetailContent.Value = ArticleOpen.Peek() ? 1 : 0;
+		}
 
 		public static void OpenPost(string id)
 		{
 			if (JetNewsData.Posts.AllPosts.FirstOrDefault(p => p.Id == id) is { } post)
 			{
 				CurrentPost.Value = post;
-				ScreenIndex.Value = 1;
+				ArticleOpen.Value = true;
 			}
 		}
 
-		readonly double _topInset;
+		public JetNewsRoot(double topInset = 0) { _ = topInset; }
 
-		public JetNewsRoot(double topInset) => _topInset = topInset;
+		static Text Tx(string s) => new Text(s).FontFamily("Montserrat");
 
 		[Body]
 		View body()
 		{
 			JetNewsIcons.Register();
-			var routes = new ContentSwitcher(ScreenIndex, new View[]
+
+			// Home pane: compact = wordmark app bar; expanded = search field (gold
+			// HomeFeedWithArticleDetailsScreen swaps chrome the same way).
+			var homeList = new ContentSwitcher(HomeChrome, new View[]
 			{
-				JetNewsScreens.Home(_topInset, openDrawer: () => DrawerOpen.Value = true),
-				JetNewsArticle.Screen(CurrentPost, _topInset, onBack: () => ScreenIndex.Value = 0),
-				JetNewsInterests.Screen(_topInset, openDrawer: () => DrawerOpen.Value = true),
+				JetNewsScreens.Home(topInset: 0, openDrawer: () => DrawerOpen.Value = true),
+				JetNewsScreens.ExpandedListPane(),
 			});
-			return new Drawer(DrawerOpen, DrawerSheet(), routes);
-		}
 
-		// AppDrawer.kt: logo row (pad h28/v24) + Home / Interests drawer items. The row
-		// pills are hand-composed to the NavigationDrawerItem metrics (56dp, r28, icon 24 +
-		// 12 gap, labelLarge) — promoting to the real widget is backlogged (the Drawer
-		// control takes a free-form sheet; NavigationSuite owns the real-item path).
-		static View DrawerSheet()
-		{
-			static Text Tx(string s) => new Text(s).FontFamily("Montserrat");
-
-			static View Item(string icon, string label, int index) =>
-				new HStack(spacing: 0f)
-				{
-					new Icon(icon).IconSize(24)
-						.Color(ScreenIndex.Peek() == index ? T.OnSecondaryContainer : T.OnSurfaceVariant)
-						.Margin(new Thickness(16, 0, 12, 0)).FlexShrink(0),
-					Tx(label).FontSize(14).FontWeight(FontWeight.Medium)
-						.Color(ScreenIndex.Peek() == index ? T.OnSecondaryContainer : T.OnSurfaceVariant)
-						.VerticalLayoutAlignment(LayoutAlignment.Center),
-				}
-				.Frame(height: 56)
-				.Background(ScreenIndex.Peek() == index ? T.SecondaryContainer : null)
-				.CornerRadius(28)
-				.Margin(new Thickness(12, 0, 12, 0))
-				.HorizontalLayoutAlignment(LayoutAlignment.Fill)
-				.OnTap(_ =>
-				{
-					ScreenIndex.Value = index;
-					DrawerOpen.Value = false;
-				});
-
-			return new VStack(spacing: 0f)
+			var detail = new ContentSwitcher(DetailContent, new View[]
 			{
-				new HStack(spacing: 0f)
-				{
-					Tx("jetnews").FontSize(20).FontWeight(FontWeight.Medium).Color(T.Primary),
-				}.Padding(new Thickness(28, 24, 28, 24)),
-				Item("home", "Home", 0),
-				new HStack().Frame(height: 4),
-				Item("list_alt", "Interests", 2),
-			}
-			.VerticalLayoutAlignment(LayoutAlignment.Fill);
+				SelectAPost(),
+				JetNewsArticle.Screen(CurrentPost, topInset: 0, onBack: () => ArticleOpen.Value = false),
+			});
+
+			var home = new ListDetail(ArticleOpen, homeList, detail, listFraction: 1 / 3.0);
+
+			var routes = new ContentSwitcher(SelectedDest, new View[]
+			{
+				home,
+				JetNewsInterests.Screen(topInset: 0, openDrawer: () => DrawerOpen.Value = true),
+			});
+
+			var items = new[]
+			{
+				new NavigationItem(new Icon("home").IconSize(24), Tx("Home").FontSize(14)),
+				new NavigationItem(new Icon("list_alt").IconSize(24), Tx("Interests").FontSize(14)),
+			};
+
+			return new NavigationSuite(SelectedDest, items, routes,
+					railHeader: RailHeader(), drawerHeader: DrawerHeader(),
+					drawerOpen: DrawerOpen,
+					// JetnewsApp.kt: expanded (≥840dp) = rail; below = drawer-only chrome.
+					variantFor: (w, _) => w >= 840 ? NavigationSuiteVariant.Rail : NavigationSuiteVariant.None,
+					railShowsSelectedLabel: true,
+					variantSignal: Variant)
+				.Background(T.Background);
 		}
+
+		// AppNavRail.kt header: the jetnews logo tinted primary, 12dp vertical padding
+		// (menu-glyph stand-in until the gold vector lands).
+		static View RailHeader() =>
+			new Icon("menu").IconSize(24).Color(T.Primary)
+				.Frame(width: 80, height: 48).Padding(new Thickness(28, 12, 28, 12));
+
+		// AppDrawer.kt JetNewsLogo row: logo + wordmark (pad h28/v24).
+		static View DrawerHeader() => new HStack(spacing: 0f)
+		{
+			Tx("jetnews").FontSize(20).FontWeight(FontWeight.Medium).Color(T.Primary),
+		}.Padding(new Thickness(28, 24, 28, 24));
+
+		// HomeScreens.kt: expanded detail placeholder — centered "Select a post".
+		static View SelectAPost() => new VStack(spacing: 0f)
+		{
+			new HStack().FlexGrow(1),
+			Tx("Select a post").FontSize(16).FontWeight(FontWeight.Medium).Color(T.OnSurface)
+				.HorizontalLayoutAlignment(LayoutAlignment.Center),
+			new HStack().FlexGrow(1),
+		}
+		.HorizontalLayoutAlignment(LayoutAlignment.Fill)
+		.VerticalLayoutAlignment(LayoutAlignment.Fill)
+		.Background(T.Background);
 	}
 }

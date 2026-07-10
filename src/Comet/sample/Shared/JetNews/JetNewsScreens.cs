@@ -19,12 +19,13 @@ namespace CometSamples.JetNews
 	{
 		// ── Bookmarks (gold favorites: Set<String> in HomeViewModel) ──
 		static readonly HashSet<string> Favorites = new();
-		static ListView<HomeRow>? _homeList;
+		static readonly List<ListView<HomeRow>> FeedLists = new();
 		static void ToggleFavorite(string id)
 		{
 			if (!Favorites.Add(id))
 				Favorites.Remove(id);
-			_homeList?.ReloadData();
+			foreach (var list in FeedLists)
+				list.ReloadData();
 		}
 
 		public static void OpenPost(string id) => JetNewsRoot.OpenPost(id);
@@ -64,10 +65,8 @@ namespace CometSamples.JetNews
 		/// <summary>The compact Home screen: center-aligned top app bar + the feed.
 		/// <paramref name="topInset"/> clears the status bar (no NavigationSuite here —
 		/// JetNews chrome is drawer-first; the drawer lands in the next increment).</summary>
-		public static View Home(double topInset, System.Action? openDrawer = null)
+		static ListView<HomeRow> FeedList()
 		{
-			JetNewsIcons.Register();
-
 			var list = new ListView<HomeRow>(HomeRows)
 			{
 				ViewFor = r => r switch
@@ -79,13 +78,48 @@ namespace CometSamples.JetNews
 					_ => Divider(),
 				},
 			};
-			_homeList = list;
+			FeedLists.Add(list);
+			return list;
+		}
+
+		public static View Home(double topInset, System.Action? openDrawer = null)
+		{
+			JetNewsIcons.Register();
 
 			return new VStack(spacing: 0f)
 			{
 				new HStack().Frame(height: (float)topInset).FlexShrink(0),
 				HomeTopAppBar(openDrawer).FlexShrink(0),
-				list.FlexGrow(1).FlexBasis(0),
+				FeedList().FlexGrow(1).FlexBasis(0),
+			}
+			.HorizontalLayoutAlignment(LayoutAlignment.Fill)
+			.VerticalLayoutAlignment(LayoutAlignment.Fill)
+			.Background(T.Background);
+		}
+
+		/// <summary>The expanded home LIST pane (HomeFeedWithArticleDetailsScreen): a
+		/// "Search posts" field (inert in the gold too) above the same feed — no app bar.</summary>
+		public static View ExpandedListPane()
+		{
+			JetNewsIcons.Register();
+
+			var field = new HStack(spacing: 0f)
+			{
+				new Icon("search").IconSize(24).Color(T.OnSurfaceVariant)
+					.Frame(width: 48, height: 48).Padding(new Thickness(12))
+					.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0),
+				Tx("Search posts").FontSize(16).Color(T.OnSurfaceVariant)
+					.VerticalLayoutAlignment(LayoutAlignment.Center),
+			}
+			.Frame(height: 56)
+			.Border(1, T.Outline).CornerRadius(4)
+			.Margin(new Thickness(16, 8, 16, 8))
+			.HorizontalLayoutAlignment(LayoutAlignment.Fill);
+
+			return new VStack(spacing: 0f)
+			{
+				field.FlexShrink(0),
+				FeedList().FlexGrow(1).FlexBasis(0),
 			}
 			.HorizontalLayoutAlignment(LayoutAlignment.Fill)
 			.VerticalLayoutAlignment(LayoutAlignment.Fill)
