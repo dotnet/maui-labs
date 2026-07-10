@@ -12,7 +12,8 @@ public abstract class ChatClientStreamingTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_ReturnsStreamingUpdates()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_ReturnsStreamingUpdates()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -31,7 +32,8 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_UpdatesHaveContents()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_UpdatesHaveContents()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -50,7 +52,8 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_CanBuildCompleteResponseFromUpdates()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_CanBuildCompleteResponseFromUpdates()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -75,7 +78,8 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_DeliversMultipleIncrementalUpdates()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_DeliversMultipleIncrementalUpdates()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -106,7 +110,8 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_ConcatenatedTextMatchesNonStreaming()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_ConcatenatedTextMatchesNonStreaming()
 	{
 		var client = new T();
 		var prompt = "What is the capital of France? Answer in one word.";

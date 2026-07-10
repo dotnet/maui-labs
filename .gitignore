@@ -433,4 +433,4 @@ sim_tap.py
 # Personal / per-machine agent state
 .claude/settings.local.json
 .claude/skills/**/.skill-version
-tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/test-results/
+test-results/

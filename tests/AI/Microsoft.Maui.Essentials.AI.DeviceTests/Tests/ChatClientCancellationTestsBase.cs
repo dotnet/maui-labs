@@ -12,7 +12,8 @@ public abstract class ChatClientCancellationTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public virtual async Task GetResponseAsync_AcceptsCancellationToken()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_AcceptsCancellationToken()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -26,7 +27,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithCanceledToken_ThrowsOperationCanceledException()
+	public async Task GetResponseAsync_WithCanceledToken_ThrowsOperationCanceledException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -41,7 +42,8 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_CancelAfterStart_ThrowsOperationCanceledException()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_CancelAfterStart_ThrowsOperationCanceledException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -60,7 +62,8 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithTimeout_ThrowsOperationCanceledException()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithTimeout_ThrowsOperationCanceledException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -74,7 +77,8 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_AcceptsCancellationToken()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_AcceptsCancellationToken()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -91,7 +95,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithCanceledToken_ThrowsOperationCanceledException()
+	public async Task GetStreamingResponseAsync_WithCanceledToken_ThrowsOperationCanceledException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -112,7 +116,8 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_CancelDuringStreaming_ThrowsOperationCanceledException()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_CancelDuringStreaming_ThrowsOperationCanceledException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -137,7 +142,8 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithTimeout_ThrowsOperationCanceledException()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithTimeout_ThrowsOperationCanceledException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>

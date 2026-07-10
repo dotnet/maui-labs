@@ -12,7 +12,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public virtual async Task GetResponseAsync_WithEmptyMessages_ThrowsException()
+	public async Task GetResponseAsync_WithEmptyMessages_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>();
@@ -21,7 +21,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithSystemMessage_AcceptsSystemRole()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithSystemMessage_AcceptsSystemRole()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -34,7 +35,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -48,7 +50,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithLongMessage_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithLongMessage_HandlesGracefully()
 	{
 		var client = new T();
 		var longText = string.Join(" ", Enumerable.Repeat("This is a test message.", 100));
@@ -61,7 +64,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithEmptyMessageContent_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithEmptyMessageContent_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -73,7 +77,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithSpecialCharacters_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithSpecialCharacters_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -85,7 +90,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithEmptyMessages_ThrowsException()
+	public async Task GetStreamingResponseAsync_WithEmptyMessages_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>();
@@ -100,7 +105,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithSystemMessage_AcceptsSystemRole()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithSystemMessage_AcceptsSystemRole()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -116,7 +122,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -133,7 +140,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithLongMessage_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithLongMessage_HandlesGracefully()
 	{
 		var client = new T();
 		var longText = string.Join(" ", Enumerable.Repeat("This is a test message.", 100));
@@ -149,7 +157,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithEmptyMessageContent_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithEmptyMessageContent_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -164,7 +173,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithSpecialCharacters_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithSpecialCharacters_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>

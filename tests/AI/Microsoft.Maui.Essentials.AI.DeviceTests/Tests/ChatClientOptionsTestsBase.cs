@@ -12,7 +12,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public virtual async Task GetResponseAsync_AcceptsNullOptions()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_AcceptsNullOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -24,7 +25,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -59,7 +61,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -76,7 +79,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
+	public async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -92,7 +95,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_AcceptsNullOptions()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_AcceptsNullOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -107,7 +111,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public virtual async Task GetStreamingResponseAsync_WithChatOptions_AcceptsValidOptions()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>

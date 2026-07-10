@@ -12,7 +12,8 @@ public abstract class ChatClientResponseTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public virtual async Task GetResponseAsync_ReturnsNonNullResponse()
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_ReturnsNonNullResponse()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
