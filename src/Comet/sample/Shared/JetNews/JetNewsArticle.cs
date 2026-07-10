@@ -49,7 +49,14 @@ namespace CometSamples.JetNews
 				},
 			};
 			// One retained shell serves every post: swapping CurrentPost re-pulls the rows.
-			post.PropertyChanged += (_, _) => list.ReloadData();
+			// Subscribed ONCE to the (static) signal via the current-list slot — a per-Screen
+			// subscription would leak a handler + captured list per rebuild.
+			_currentList = list;
+			if (!_postHooked)
+			{
+				_postHooked = true;
+				post.PropertyChanged += (_, _) => _currentList?.ReloadData();
+			}
 
 			return new VStack(spacing: 0f)
 			{
@@ -62,6 +69,9 @@ namespace CometSamples.JetNews
 			.VerticalLayoutAlignment(LayoutAlignment.Fill)
 			.Background(T.Background);
 		}
+
+		static ListView<ArticleRow>? _currentList;
+		static bool _postHooked;
 
 		static Text Tx(string s) => new Text(s).FontFamily("Montserrat");
 

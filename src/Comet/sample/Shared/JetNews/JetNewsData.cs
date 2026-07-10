@@ -96,7 +96,7 @@ namespace CometSamples.JetNews
 		        include ':module1'
 		        include ':module1'
 		        include ':module1'
-		        """.TrimIndent()
+		        """
 		    ),
 		    new Paragraph(
 		        ParagraphType.CodeBlock,
@@ -107,7 +107,7 @@ namespace CometSamples.JetNews
 		        project(":module2").projectDir=new File(rootDir, "features/module2")
 		        project(":module3").projectDir=new File(rootDir, "features/module3")
 		        project(":module4").projectDir=new File(rootDir, "features/module4")
-		        """.TrimIndent()
+		        """
 		    ),
 		    new Paragraph(
 		        ParagraphType.Text,
@@ -313,7 +313,7 @@ namespace CometSamples.JetNews
 		        """
 		        @Inject @MinimumBalance lateinit var minimumBalance: BigDecimal 
 		        // @MinimumBalance is ignored!
-		        """.TrimIndent(),
+		        """,
 		        L(new Markup(MarkupType.Bold, 65, 95))
 		    ),
 		    new Paragraph(
@@ -407,7 +407,7 @@ namespace CometSamples.JetNews
 		        ) { 
 		            ... 
 		        }
-		        """.TrimIndent(),
+		        """,
 		        L(new Markup(MarkupType.Bold, 72, 93))
 		    ),
 		    new Paragraph(
@@ -1172,31 +1172,4 @@ namespace CometSamples.JetNews
 		    );
 	}
 
-	/// <summary>Kotlin's String.trimIndent(): remove the common leading whitespace and
-	/// surrounding blank lines from a raw multi-line literal.</summary>
-	internal static class JetNewsStringExtensions
-	{
-		public static string TrimIndent(this string s)
-		{
-			var lines = s.Replace("\r\n", "\n").Split('\n');
-			int start = 0, end = lines.Length;
-			while (start < end && lines[start].Trim().Length == 0) start++;
-			while (end > start && lines[end - 1].Trim().Length == 0) end--;
-			int indent = int.MaxValue;
-			for (int i = start; i < end; i++)
-			{
-				if (lines[i].Trim().Length == 0) continue;
-				int w = 0;
-				while (w < lines[i].Length && char.IsWhiteSpace(lines[i][w])) w++;
-				if (w < indent) indent = w;
-			}
-			var sb = new System.Text.StringBuilder();
-			for (int i = start; i < end; i++)
-			{
-				if (i > start) sb.Append('\n');
-				sb.Append(lines[i].Length >= indent ? lines[i].Substring(indent) : lines[i].TrimStart());
-			}
-			return sb.ToString();
-		}
-	}
 }

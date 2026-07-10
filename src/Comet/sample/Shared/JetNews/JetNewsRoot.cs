@@ -36,6 +36,9 @@ namespace CometSamples.JetNews
 				HomeChrome.Value = Variant.Peek() == (int)NavigationSuiteVariant.Rail ? 1 : 0;
 			ArticleOpen.PropertyChanged += (_, _) =>
 				DetailContent.Value = ArticleOpen.Peek() ? 1 : 0;
+			// Selecting a destination dismisses an open article (the gold's PopUpTo reset) —
+			// without this, drawer → Home while an article is open lands on the stale article.
+			SelectedDest.PropertyChanged += (_, _) => ArticleOpen.Value = false;
 		}
 
 		public static void OpenPost(string id)
@@ -47,7 +50,7 @@ namespace CometSamples.JetNews
 			}
 		}
 
-		public JetNewsRoot(double topInset = 0) { _ = topInset; }
+		public JetNewsRoot() { }
 
 		static Text Tx(string s) => new Text(s).FontFamily("Montserrat");
 
@@ -55,6 +58,7 @@ namespace CometSamples.JetNews
 		View body()
 		{
 			JetNewsIcons.Register();
+			JetNewsScreens.ResetFeedLists();   // a rebuild replaces the live lists — drop the old generation
 
 			// Home pane: compact = wordmark app bar; expanded = search field (gold
 			// HomeFeedWithArticleDetailsScreen swaps chrome the same way).
@@ -80,7 +84,10 @@ namespace CometSamples.JetNews
 
 			var items = new[]
 			{
-				new NavigationItem(new Icon("home").IconSize(24), Tx("Home").FontSize(14)),
+				// onSelect fires even when the index is unchanged — re-tapping Home
+				// still dismisses an open article (the equality-gated signal wouldn't).
+				new NavigationItem(new Icon("home").IconSize(24), Tx("Home").FontSize(14),
+					onSelect: () => ArticleOpen.Value = false),
 				new NavigationItem(new Icon("list_alt").IconSize(24), Tx("Interests").FontSize(14)),
 			};
 

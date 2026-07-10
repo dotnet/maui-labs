@@ -20,6 +20,10 @@ namespace CometSamples.JetNews
 		// ── Bookmarks (gold favorites: Set<String> in HomeViewModel) ──
 		static readonly HashSet<string> Favorites = new();
 		static readonly List<ListView<HomeRow>> FeedLists = new();
+
+		/// <summary>Root rebuild: drop the previous generation of feed lists so
+		/// ToggleFavorite stops reloading dead ones (and they can be collected).</summary>
+		internal static void ResetFeedLists() => FeedLists.Clear();
 		static void ToggleFavorite(string id)
 		{
 			if (!Favorites.Add(id))
@@ -98,7 +102,9 @@ namespace CometSamples.JetNews
 		}
 
 		/// <summary>The expanded home LIST pane (HomeFeedWithArticleDetailsScreen): a
-		/// "Search posts" field (inert in the gold too) above the same feed — no app bar.</summary>
+		/// "Search posts" field above the same feed — no app bar. DEVIATION: the gold is a
+		/// REAL OutlinedTextField accepting input (submit is toast-stubbed); promoting this
+		/// look-alike to the real widget is backlogged (facade already bridges it).</summary>
 		public static View ExpandedListPane()
 		{
 			JetNewsIcons.Register();
@@ -126,9 +132,8 @@ namespace CometSamples.JetNews
 			.Background(T.Background);
 		}
 
-		// Gold HomeTopAppBar: CenterAlignedTopAppBar — brand icon nav slot, centered
-		// lowercase wordmark, search action (HomeScreens.kt bottom). The gold wordmark is a
-		// vector drawable; a styled Text stands in until the asset lands (backlog).
+		// Gold HomeTopAppBar: CenterAlignedTopAppBar — brand logo nav slot, centered
+		// wordmark VECTOR tinted primary, search action (HomeScreens.kt:630-660).
 		static View HomeTopAppBar(System.Action? openDrawer) => new HStack(spacing: 0f)
 		{
 			new Icon("jetnews_logo").IconSize(24).Color(T.Primary)
@@ -136,8 +141,8 @@ namespace CometSamples.JetNews
 				.FlexShrink(0)
 				.OnTap(_ => openDrawer?.Invoke()),
 			new HStack().FlexGrow(1),
-			Tx("jetnews").FontSize(24)
-				.FontWeight(FontWeight.Medium).Color(T.Primary)
+			new Icon("jetnews_wordmark").Color(T.Primary).IconFillFrame()
+				.Frame(width: 80, height: 24)
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
 			new HStack().FlexGrow(1),
 			new Icon("search").IconSize(24).Color(T.OnSurfaceVariant)
