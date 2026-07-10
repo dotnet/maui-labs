@@ -1,0 +1,106 @@
+name: Device Tests
+
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        required: true
+        type: string
+        description: 'Path to the device test project (.csproj) for running tests'
+      solution-path:
+        required: false
+        type: string
+        default: ''
+        description: 'Path to a solution (.slnx/.sln) for restore and build. When empty, uses project-path directly.'
+      project-name:
+        required: true
+        type: string
+        description: 'Human-readable name for artifact naming (e.g. essentialsai)'
+      target-framework:
+        required: true
+        type: string
+        description: 'Target framework to run tests against (e.g. net10.0-maccatalyst, net10.0-android)'
+      filter:
+        required: false
+        type: string
+        default: ''
+        description: 'Test filter expression (e.g. "RequiresModel!=true")'
+      os:
+        required: false
+        type: string
+        default: 'macos-26'
+        description: 'Runner label for the job'
+      install-workloads:
+        required: false
+        type: boolean
+        default: true
+        description: 'Install MAUI workloads (not needed if already present on runner)'
+      workloads:
+        required: false
+        type: string
+        default: 'maui macos maccatalyst'
+        description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
+      xcode-version:
+        required: false
+        type: string
+        default: ''
+        description: 'Xcode version to select on macOS (e.g. "26.3"). Empty uses runner default.'
+      native-deps:
+        required: false
+        type: string
+        default: ''
+        description: 'Shell command to install native dependencies (e.g. apt-get for GTK4)'
+      dotnet-args:
+        required: false
+        type: string
+        default: ''
+        description: 'Additional arguments to pass to dotnet test'
+
+jobs:
+  device-tests:
+    runs-on: ${{ inputs.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        if: inputs.xcode-version != '' && runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install native dependencies
+        if: inputs.native-deps != ''
+        run: ${{ inputs.native-deps }}
+
+      - name: Install workloads
+        if: inputs.install-workloads
+        run: dotnet workload install ${{ inputs.workloads }} --version 10.0.203
+
+      - name: Build device tests
+        run: |
+          dotnet restore ${{ inputs.solution-path || inputs.project-path }}
+          dotnet build ${{ inputs.solution-path || inputs.project-path }} -c Release --no-restore
+
+      - name: Run device tests
+        run: |
+          SOLUTION="${{ inputs.solution-path || inputs.project-path }}"
+          cd "$(dirname "$SOLUTION")"
+          dotnet test "$(basename "$SOLUTION")" \
+            -f ${{ inputs.target-framework }} \
+            -c Release \
+            --no-build \
+            --no-restore \
+            --logger trx \
+            --results-directory ${{ github.workspace }}/artifacts/TestResults \
+            ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }} \
+            ${{ inputs.dotnet-args }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ inputs.project-name }}-device-${{ inputs.target-framework }}
+          path: artifacts/TestResults/**/*.trx

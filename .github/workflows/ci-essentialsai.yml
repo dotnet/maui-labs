@@ -56,36 +56,12 @@ jobs:
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   # Step 3: Run device tests on Mac Catalyst via DeviceRunners + dotnet test.
-  # Uses --filter to exclude tests requiring Apple Intelligence models (not available on CI runners).
   device-tests-maccatalyst:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Install workloads
-        run: dotnet workload install maui macos maccatalyst --version 10.0.203
-
-      - name: Run device tests (Mac Catalyst)
-        run: >
-          dotnet test
-          tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
-          -f net10.0-maccatalyst
-          -c Release
-          --logger trx
-          --results-directory artifacts/TestResults
-          --filter "RequiresModel!=true"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-essentialsai-device-maccatalyst
-          path: artifacts/TestResults/**/*.trx
+    uses: ./.github/workflows/_device-tests.yml
+    with:
+      project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
+      solution-path: tests/AI/DeviceTests.slnx
+      project-name: essentialsai
+      target-framework: net10.0-maccatalyst
+      filter: 'RequiresModel!=true'
+      xcode-version: '26.3'
