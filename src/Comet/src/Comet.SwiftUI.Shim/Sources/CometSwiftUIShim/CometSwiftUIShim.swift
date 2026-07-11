@@ -78,6 +78,7 @@ struct CometTextRun {
     var onFocused: (() -> Void)?        // TextField gained focus (-> Focused; gold onTextFieldFocused)
     @Published var horizontal = false   // "list": row axis (LazyHStack in a horizontal ScrollView)
     @Published var iconFillFrame = false // "icon": non-square asset draws at the node frame
+    @Published var fontItalic = false
     var onScroll: ((Double) -> Void)?   // ScrollView scrolled (-> ScrollView.AtTop / ScrollOffset)
     var onScrollTop: ((Double) -> Void)?   // list first row visibility (-> ListView.ScrolledFromTop)
 
@@ -125,6 +126,7 @@ struct CometTextRun {
         case "draweropen": node.drawerOpen = value
         case "horizontal": node.horizontal = value
         case "iconfillframe": node.iconFillFrame = value
+        case "fontitalic": node.fontItalic = value
         case "fabextended": node.fabExtended = value
         case "dialogopen": node.dialogOpen = value
         default: break
@@ -590,16 +592,19 @@ private struct FontModifier: ViewModifier {
     @ObservedObject var node: CometNode
     func body(content: Content) -> some View {
         let size = node.fontSize > 0 ? node.fontSize : UIFont.preferredFont(forTextStyle: .body).pointSize
+        let italicize: (AnyView) -> AnyView = node.fontItalic
+            ? { v in AnyView(v.italic()) }
+            : { v in v }
         if !node.fontFamily.isEmpty, let f = customUIFont(node.fontFamily, size, node.fontWeight) {
-            return AnyView(content.font(Font(f)))
+            return italicize(AnyView(content.font(Font(f))))
         }
         if node.fontSize > 0 {
-            return AnyView(content.font(.system(size: node.fontSize, weight: swiftFontWeight(node.fontWeight))))
+            return italicize(AnyView(content.font(.system(size: node.fontSize, weight: swiftFontWeight(node.fontWeight)))))
         }
         if node.fontWeight > 0 {
-            return AnyView(content.fontWeight(swiftFontWeight(node.fontWeight)))
+            return italicize(AnyView(content.fontWeight(swiftFontWeight(node.fontWeight))))
         }
-        return AnyView(content)
+        return italicize(AnyView(content))
     }
 }
 

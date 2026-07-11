@@ -71,6 +71,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Text_Runs = new(73);   // FormattedText: IReadOnlyList<TextRun>
 		public static readonly PropertyId Text_LineHeight = new(74);  // explicit line height (sp)
 		public static readonly PropertyId Text_LineBreak = new(75);   // wrap strategy ((int)TextLineBreak)
+		public static readonly PropertyId Text_Italic = new(76);      // FontSlant.Italic
 
 		// --- Button (80–95) ---
 		public static readonly PropertyId Button_Text = new(80);

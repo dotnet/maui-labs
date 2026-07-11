@@ -37,6 +37,9 @@ namespace Comet
 
 			if (this.GetEnvironment<TextLineBreak?>(EnvironmentKeys.Text.LineBreak) is { } lineBreak and not TextLineBreak.Default)
 				node.ApplyProperty(PropertyIds.Text_LineBreak, PropertyValue.From((int)lineBreak));
+
+			if (this.GetEnvironment<Microsoft.Maui.FontSlant?>(EnvironmentKeys.Fonts.Slant) is Microsoft.Maui.FontSlant.Italic)
+				node.ApplyProperty(PropertyIds.Text_Italic, PropertyValue.From(true));
 		}
 	}
 }

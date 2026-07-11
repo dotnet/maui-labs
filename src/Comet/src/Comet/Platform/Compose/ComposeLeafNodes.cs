@@ -20,6 +20,7 @@ namespace Comet.Platform.Compose
 		int _fontSize;
 		int _lineHeight;
 		int _lineBreak;   // (int)TextLineBreak — wrap strategy, threaded to render AND measure
+		bool _italic;
 		int _fontWeight;
 		string? _fontFamily;
 		readonly MutableState<int> _colorVersion = new(0);
@@ -51,6 +52,11 @@ namespace Comet.Platform.Compose
 			else if (id == PropertyIds.Text_LineBreak)
 			{
 				_lineBreak = value.AsInt;
+				_colorVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_Italic)
+			{
+				_italic = value.AsBool;
 				_colorVersion.Value++;
 			}
 			else if (id == PropertyIds.Text_FontWeight)
@@ -125,6 +131,8 @@ namespace Comet.Platform.Compose
 				text.FontFamily = r.Family;
 			else if (_fontWeight > 0)
 				text.FontWeight = MapWeight(_fontWeight);
+			if (_italic)
+				text.FontStyle = AndroidX.Compose.FontStyle.Italic;
 			// Pin the rendered line-height to exactly what the measurement used (instead of the
 			// MaterialTheme bodyLarge default of 24sp) so multi-line text doesn't clip, a single
 			// line isn't an over-tall box (which threw off vertical centering + the title/subtitle
