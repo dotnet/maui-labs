@@ -21,6 +21,7 @@ namespace CometSamples.Jetsnack
 		public static readonly Color Shadow4 = C(0xff7057f5);
 		public static readonly Color Shadow3 = C(0xff9b86fa);
 		public static readonly Color Shadow2 = C(0xffc8bbfd);
+		public static readonly Color Ocean11 = C(0xff005687);
 		public static readonly Color Ocean3 = C(0xff86f7fa);
 		public static readonly Color Lavender3 = C(0xffc186fa);
 		public static readonly Color Rose4 = C(0xfff4568b);
@@ -50,6 +51,7 @@ namespace CometSamples.Jetsnack
 		public static readonly Color IconSecondary = Neutral7;
 		public static readonly Color IconInteractive = Neutral0;
 		public static readonly Color IconInteractiveInactive = Neutral1;
+		public static readonly Color TextLink = Ocean11;
 		public static readonly Color Error = FunctionalRed;
 
 		// ── Gradient stop lists (light) — Theme.kt:42-49 ──

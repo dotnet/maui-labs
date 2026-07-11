@@ -69,9 +69,14 @@ namespace CometSamples.Jetsnack
 			.HorizontalLayoutAlignment(LayoutAlignment.Fill)
 			.VerticalLayoutAlignment(LayoutAlignment.Fill);
 
+			// Compact push: DetailOpen swaps feed ↔ detail full-screen (system back closes) —
+			// the ListDetail primitive, same as JetNews.
+			var feedWithDetail = new ListDetail(DetailOpen, feed,
+				JetsnackDetail.Screen(CurrentSnack, _topInset, onBack: () => DetailOpen.Value = false));
+
 			var routes = new ContentSwitcher(SelectedTab, new View[]
 			{
-				feed,
+				feedWithDetail,
 				Placeholder("Search lands in the next increment"),
 				Placeholder("Cart lands in the next increment"),
 				// The gold Profile IS a work-in-progress placeholder.

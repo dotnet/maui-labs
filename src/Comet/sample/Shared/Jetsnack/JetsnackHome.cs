@@ -109,6 +109,9 @@ namespace CometSamples.Jetsnack
 
 		// ── Collection section (Snacks.kt SnackCollection): header (name titleLarge BRAND,
 		// min 56, start 24, arrow at end) + Highlight card row or plain circle row + divider. ──
+		/// <summary>A collection section for reuse outside the feed (the detail's related rows).</summary>
+		public static View RelatedCollection(SnackCollection collection) => CollectionSection(collection);
+
 		static View CollectionSection(SnackCollection collection) => new VStack(spacing: 0f)
 		{
 			new HStack(spacing: 0f)
