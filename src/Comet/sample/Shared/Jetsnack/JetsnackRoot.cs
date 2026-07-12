@@ -77,8 +77,8 @@ namespace CometSamples.Jetsnack
 			var routes = new ContentSwitcher(SelectedTab, new View[]
 			{
 				feedWithDetail,
-				Placeholder("Search lands in the next increment"),
-				Placeholder("Cart lands in the next increment"),
+				JetsnackSearch.Screen(_topInset),
+				JetsnackCart.Screen(_topInset),
 				// The gold Profile IS a work-in-progress placeholder.
 				Placeholder("This is currently work in progress"),
 			});
