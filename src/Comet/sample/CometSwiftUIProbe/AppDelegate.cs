@@ -88,6 +88,7 @@ namespace CometSwiftUIProbe
 		{
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
+			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 59),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28),
 		};
 
