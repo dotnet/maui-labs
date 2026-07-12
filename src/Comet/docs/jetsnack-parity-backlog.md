@@ -68,3 +68,50 @@ Known deviations / next:
   bar), Filters sheet (FiltersOpen signal is wired, sheet unbuilt), Search,
   Cart, iOS pass (bundle snack jpgs + verify gradients/rows), smokes,
   standalone app id, RESULTS row, /code-review.
+
+## Status 2026-07-10 (night) — M3 COMPLETE on both platforms + reviewed
+
+Landed since the Home increment: Snack detail (gradient header, italic
+title/tagline via NEW Text italic support, SEE MORE/LESS, qty stepper, cart
+bar), Filters sheet (scrim overlay, sort/price/category — the walk exposed
+and fixed the framework-level invisible-overlay input interception), Search
+(uiFloated bar + gradient category grids), Cart (live totals, row remove),
+iOS pass (36 jpgs — BundleResource Remove+re-Include flattening trap),
+standalone app id, smokes (android 24, ios 24), RESULTS row (678ms cold
+start — best Comet number yet; jank at parity).
+
+## /code-review round 2 (4412942c~1..HEAD) — outcome
+
+FIXED (`06750c5f`/`8a8f1616` + earlier `3335eeda`): frozen bottom-bar pill
+(Peek-built, never re-styled); GradientBackground missing invalidation + the
+per-recomposition JNI brush rebuild (now cached per node); filters-overlay
+per-rebuild subscription leak; icon-toggle double materialization
+(IBackendManagesOwnContent); AsCard suppressing long-press; italic
+measure/render divergence; BrushBridges publication ordering; iOS card
+elevation lost in the AsCard promotion; _seeMore leaking across snacks; dead
+BodyVersion/DetailContent signals; sign-safe shared FormatPrice; captured
+gradient-index counter; Take2/Skip2 chip slicing.
+
+REPORTED, BACKLOGGED:
+- Stock-M3 promotions the gold demonstrably uses: DestinationBar → real
+  TopAppBar; IconButton control for the ~13 hand-rolled circular icon
+  buttons (section arrows, detail Up, cart X, filters close); filters
+  MaxCalories Slider (Comet has a real Slider node), Lifestyle chip section,
+  Reset button — currently silently omitted.
+- Alpha-0 compose-nothing guard: stacks only (list/scroll/switcher/suite
+  containers keep the input hole); tension with ComposeFabNode's
+  keep-composed contract (hidden subtrees now lose remember{} state).
+  Needs a node-level hit-test story; consider a first-class Overlay
+  primitive instead of the reactive-Opacity idiom (3rd copy).
+- Gradient payload is Color[]+horizontal only — the gold's parallax
+  offsetGradientBackground/diagonal gradients need a richer spec (define
+  the struct BEFORE more callers bake in the Color[] wire shape).
+- IconToggleButton takes bool+callback (vs Toggle's Binding<bool>) — the
+  node's Toggle_IsOn path is undriveable; bind it.
+- Outlined TextField branch drops color/fontSize/returnType; borderless
+  wins over outlined silently.
+- FontSlant.Oblique silently dropped; iOS gradient stops re-marshal per
+  rebuild; reload-storm granularity (whole sheet/cart per toggle vs the
+  gold's single-node recomposition); shim bundledImage subdir search
+  (would remove the csproj flattening incantation); QuantitySelector/CTA
+  pill/placeholder-panel dedup.
