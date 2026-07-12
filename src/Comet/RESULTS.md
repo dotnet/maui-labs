@@ -435,6 +435,29 @@ Notes: <one paragraph — anything anomalous, descopes affecting perf, screen us
 for the scroll test, fixture vs live data mode>
 -->
 
+## Jetsnack — 2026-07-10
+
+Emulator = Pixel 9 Pro AVD (API 36, arm64, Apple M4 Max host). Gold = the Kotlin
+Jetsnack app from ~/work/compose-samples. NOTE: like JetNews, the gold's
+minified `app-release.apk` (10.6 MiB) fails to launch on this emulator
+(sample-side issue), so runtime comparisons use the gold DEBUG build.
+
+| Metric | Comet (emulator) | Comet (Pixel 5, B1) | Gold Kotlin app |
+|---|---|---|---|
+| Release APK, trimmed single-RID (`tools/bench/size.sh <probe> -p:CometSingleRid=true`) | 33.5 MiB (35,159,321 B) | — | 10.6 MiB (release artifact) |
+| Cold start median, 10 runs (`am start -W --es screen jetsnack`) | 678 ms | — | 876 ms (DEBUG build — release fails to launch) |
+| gfxinfo scroll jank, home feed (6 fling swipes) | 7.4% janky, p50 17ms / p90 20ms / p95 26ms | — | 5.3% janky, p50 17ms / p90 21ms / p95 25ms (DEBUG) |
+| iOS .ipa trimmed size / launch feel (manual note) | not measured (sim-only gate; Debug launch feels instant after splash) | n/a | n/a |
+| Comet.dll (linked, android-arm64) | 834 KiB (854,016 B) | — | n/a |
+
+Notes: the probe now bundles FOUR samples; the +7.3 MiB over the JetNews row
+is almost entirely the 36 snack photo jpgs (7.5 MiB of assets), not code.
+Cold start at 678 ms is the best Comet number yet (Reply 3705 → JetNews 2347 →
+Jetsnack 678 on the same runtime — the Jetsnack feed composes far less at
+first frame than JetNews' suite+list-detail chrome) and beats even the DEBUG
+gold. Scroll jank is at parity on the gradient-heavy feed. Pixel 5 column
+lands with batch B1.
+
 ## JetNews — 2026-07-09
 
 Emulator = Pixel 9 Pro AVD (API 36, arm64, Apple M4 Max host). Gold = the Kotlin
