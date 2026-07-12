@@ -33,6 +33,13 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			// A fully transparent container composes NOTHING (the SubscribeAndGetAlpha
+			// contract): children carry their own alpha=1 clickables and would otherwise
+			// keep intercepting input under an invisible overlay (the Jetsnack filters
+			// scrim swallowed the feed's taps after closing).
+			if (SubscribeAndGetAlpha() <= 0f)
+				return;
+
 			int spacing = _spacing.Value;
 
 			// Opt-in: the REAL Material 3 Card (gold PostCardPopular et al). Self-themed
