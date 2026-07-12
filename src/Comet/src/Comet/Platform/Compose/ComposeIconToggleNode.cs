@@ -9,7 +9,10 @@ namespace Comet.Platform.Compose
 	/// <summary>Renders Comet <see cref="Comet.IconToggleButton"/> as the REAL Material 3
 	/// <c>IconToggleButton</c> (the gold bookmark control): 48dp state-layer target, checked
 	/// state + onCheckedChange routed back to the control's handler.</summary>
-	sealed class ComposeIconToggleNode : ComposeNode
+	// IBackendManagesOwnContent: the icon slot is materialized by THIS node into the
+	// widget's content lambda — without it the bridge ALSO auto-materializes the
+	// IContainerView child, double-wiring the same Icon view.
+	sealed class ComposeIconToggleNode : ComposeNode, IBackendManagesOwnContent
 	{
 		const float TargetDp = 48f;   // M3 icon-button minimum touch target
 

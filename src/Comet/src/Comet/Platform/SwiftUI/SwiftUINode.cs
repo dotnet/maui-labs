@@ -93,6 +93,11 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.SetBool(_native, "iconfillframe", value.AsBool);
 			else if (id == PropertyIds.Text_Italic)
 				CometSwiftUIHost.SetBool(_native, "fontitalic", value.AsBool);
+			else if (id == PropertyIds.Container_Card && value.AsBool)
+				// The iOS twin has no Card widget: give the hand-composed card the M3
+				// resting elevation the real Android Card self-themes (was a Shadow token
+				// before the AsCard promotion — this keeps the iOS render elevated).
+				CometSwiftUIHost.SetDouble(_native, "elevation", 1);
 			else if (id == PropertyIds.GradientBackground && value.AsObject is Microsoft.Maui.Graphics.Color[] stops)
 			{
 				CometSwiftUIHost.ClearGradientStops(_native);

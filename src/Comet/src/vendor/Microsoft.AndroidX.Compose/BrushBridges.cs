@@ -1,3 +1,4 @@
+using System.Threading;
 using Android.Runtime;
 using BoundBrush = AndroidX.Compose.UI.Graphics.Brush;
 using BoundColor = AndroidX.Compose.UI.Graphics.Color;
@@ -63,11 +64,15 @@ internal static partial class ComposeBridges
     // objects — packed longs alone aren't acceptable.
     internal static unsafe BoundColor BoxColor(long packed)
     {
-        if (s_color_boxImpl == IntPtr.Zero)
+        if (Volatile.Read(ref s_color_boxImpl) == IntPtr.Zero)
         {
-            s_colorClass = Java.Lang.Class.FromType(typeof(BoundColor));
-            s_color_boxImpl = JNIEnv.GetStaticMethodID(
-                s_colorClass.Handle, "box-impl", "(J)Landroidx/compose/ui/graphics/Color;");
+            // Publication order matters: the guard is the method id, written LAST via
+            // Volatile so the class reference is visible before the fast path takes it.
+            var cls = Java.Lang.Class.FromType(typeof(BoundColor));
+            var mid = JNIEnv.GetStaticMethodID(
+                cls.Handle, "box-impl", "(J)Landroidx/compose/ui/graphics/Color;");
+            s_colorClass = cls;
+            Volatile.Write(ref s_color_boxImpl, mid);
         }
         var args = stackalloc JValue[1];
         args[0] = new JValue(packed);
@@ -96,11 +101,13 @@ internal static partial class ComposeBridges
     // is stripped because its parameter is a value-class `Color`.
     internal static unsafe IntPtr BrushSolidColor(long color)
     {
-        if (s_solidColor_ctor == IntPtr.Zero)
+        if (Volatile.Read(ref s_solidColor_ctor) == IntPtr.Zero)
         {
-            s_solidColorClass = Java.Lang.Class.FromType(
+            var cls = Java.Lang.Class.FromType(
                 typeof(AndroidX.Compose.UI.Graphics.SolidColor));
-            s_solidColor_ctor = JNIEnv.GetMethodID(s_solidColorClass.Handle, "<init>", "(J)V");
+            var ctor = JNIEnv.GetMethodID(cls.Handle, "<init>", "(J)V");
+            s_solidColorClass = cls;
+            Volatile.Write(ref s_solidColor_ctor, ctor);
         }
         var args = stackalloc JValue[1];
         args[0] = new JValue(color);

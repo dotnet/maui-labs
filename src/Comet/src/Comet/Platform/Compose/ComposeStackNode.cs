@@ -47,9 +47,12 @@ namespace Comet.Platform.Compose
 			// semantics), so the node modifier must not add a second clickable.
 			if (_asCard.Value)
 			{
-				GesturesHandledByWidget = HasTapGesture;
+				// The clickable Card owns the tap ONLY when there's no long-press — Card.onClick
+				// can't carry onLongClick, so a long-press view keeps the combinedClickable.
+				bool widgetOwnsClick = HasTapGesture && !HasLongPress;
+				GesturesHandledByWidget = widgetOwnsClick;
 				var shape = HasRoundedCorners ? CornerShape() : null;
-				ComposableContainer card = HasTapGesture
+				ComposableContainer card = widgetOwnsClick
 					? new AndroidX.Compose.ClickableCard(FireTapEvent) { Shape = shape }
 					: new AndroidX.Compose.Card { Shape = shape };
 				((ComposableNode)card).Modifier = BuildNodeModifier();

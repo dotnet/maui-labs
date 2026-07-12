@@ -103,10 +103,15 @@ namespace Comet.Platform.Compose
 		// width (which clips the heavier rendered glyphs).
 		global::Android.Graphics.Typeface? MeasureTypeface()
 		{
+			// Measure == render: slant (and weight) must reach the measuring typeface too,
+			// or italic glyphs render wider than the upright-measured frame and clip.
 			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight)?.Typeface is { } custom)
-				return custom;
-			if (_fontWeight >= 500 && System.OperatingSystem.IsAndroidVersionAtLeast(28))
-				return global::Android.Graphics.Typeface.Create(global::Android.Graphics.Typeface.Default, _fontWeight, false);
+				return _italic && System.OperatingSystem.IsAndroidVersionAtLeast(28)
+					? global::Android.Graphics.Typeface.Create(custom, _fontWeight > 0 ? _fontWeight : 400, true)
+					: custom;
+			if ((_fontWeight >= 500 || _italic) && System.OperatingSystem.IsAndroidVersionAtLeast(28))
+				return global::Android.Graphics.Typeface.Create(global::Android.Graphics.Typeface.Default,
+					_fontWeight > 0 ? _fontWeight : 400, _italic);
 			return null;
 		}
 

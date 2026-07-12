@@ -132,6 +132,11 @@ namespace Comet.Platform.Compose
 		protected Microsoft.Maui.Thickness Padding => _padding;
 
 	Microsoft.Maui.Graphics.Color[]? _gradient;
+		AndroidX.Compose.UI.Graphics.Brush? _cachedBrush;
+
+		/// <summary>Whether the view carries a long-press gesture (widget branches that own
+		/// the click must NOT take over when a long-press also needs the combinedClickable).</summary>
+		protected bool HasLongPress => _hasLongPress.Value;
 
 		/// <summary>The background color set via <c>.Background()</c>, if any. Lets a container render
 		/// as a Material <c>Surface</c> (color + shape) rather than a plain Box.</summary>
@@ -160,7 +165,11 @@ namespace Comet.Platform.Compose
 				_styleVersion.Value++;
 			}
 			else if (id == PropertyIds.GradientBackground)
+			{
 				_gradient = value.AsObject as Microsoft.Maui.Graphics.Color[];
+				_cachedBrush = null;   // stops changed — rebuild on next render
+				_styleVersion.Value++;
+			}
 			else if (id == PropertyIds.BackgroundColor)
 			{
 				_background = value.AsColor;
@@ -249,14 +258,19 @@ namespace Comet.Platform.Compose
 				m = (m ?? Modifier.Companion).Clip(CornerShape());
 
 			// Gradient fill wins over a solid background (Jetsnack's design-system fills) —
-			// the REAL Compose Brush.horizontalGradient, evenly-spaced stops.
+			// the REAL Compose Brush.horizontalGradient. The BoundBrush is CACHED per node:
+			// rebuilding it costs ~stops+2 JNI crossings and Render runs per recomposition
+			// (a fling over the gradient-heavy feed would churn hundreds of Java objects).
 			if (_gradient is { Length: > 1 } stops)
 			{
-				var composeStops = new AndroidX.Compose.Color[stops.Length];
-				for (int i = 0; i < stops.Length; i++)
-					composeStops[i] = ToComposeColor(stops[i]);
-				m = (m ?? Modifier.Companion).Background(
-					AndroidX.Compose.Brush.HorizontalGradient(composeStops));
+				if (_cachedBrush is null)
+				{
+					var composeStops = new AndroidX.Compose.Color[stops.Length];
+					for (int i = 0; i < stops.Length; i++)
+						composeStops[i] = ToComposeColor(stops[i]);
+					_cachedBrush = AndroidX.Compose.Brush.HorizontalGradient(composeStops);
+				}
+				m = (m ?? Modifier.Companion).Background(_cachedBrush);
 			}
 			else if (_background is { } bg)
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
