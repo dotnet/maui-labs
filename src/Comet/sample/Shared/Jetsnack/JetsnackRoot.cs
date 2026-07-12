@@ -22,12 +22,13 @@ namespace CometSamples.Jetsnack
 		public static readonly Signal<bool> DetailOpen = new(false);
 		public static readonly Signal<bool> FiltersOpen = new(false);
 
-		static readonly Signal<int> DetailContent = new(0);
-
 		static JetsnackRoot()
 		{
-			DetailOpen.PropertyChanged += (_, _) => DetailContent.Value = DetailOpen.Peek() ? 1 : 0;
-			SelectedTab.PropertyChanged += (_, _) => DetailOpen.Value = false;
+			SelectedTab.PropertyChanged += (_, _) =>
+			{
+				DetailOpen.Value = false;
+				_bottomBar?.ReloadData();   // the selected pill follows the active tab
+			};
 		}
 
 		public static void OpenSnack(long id)
@@ -74,6 +75,9 @@ namespace CometSamples.Jetsnack
 			var feedWithDetail = new ListDetail(DetailOpen, feed,
 				JetsnackDetail.Screen(CurrentSnack, _topInset, onBack: () => DetailOpen.Value = false));
 
+			var bottomBar = new ListView<int>(() => new[] { 0 }) { ViewFor = _ => BottomBarRow() };
+			_bottomBar = bottomBar;
+
 			var routes = new ContentSwitcher(SelectedTab, new View[]
 			{
 				feedWithDetail,
@@ -88,7 +92,7 @@ namespace CometSamples.Jetsnack
 				new VStack(spacing: 0f)
 				{
 					routes.FlexGrow(1).FlexBasis(0),
-					BottomBar().FlexShrink(0),
+					bottomBar.Frame(height: 80).FlexShrink(0),
 				}
 				.HorizontalLayoutAlignment(LayoutAlignment.Fill)
 				.VerticalLayoutAlignment(LayoutAlignment.Fill),
@@ -105,9 +109,13 @@ namespace CometSamples.Jetsnack
 			("home", "HOME"), ("search", "SEARCH"), ("shopping_cart", "MY CART"), ("account_circle", "PROFILE"),
 		};
 
+		static ListView<int>? _bottomBar;
+
 		/// <summary>JetsnackBottomBar: brand background; SELECTED item = bordered pill with
-		/// icon + uppercase label (iconInteractive), others icon-only (iconInteractiveInactive).</summary>
-		View BottomBar()
+		/// icon + uppercase label (iconInteractive), others icon-only (iconInteractiveInactive).
+		/// Rendered as a one-row list reloaded on tab change so the pill FOLLOWS the selection
+		/// (a Peek-built bar froze on HOME — caught by review).</summary>
+		static View BottomBarRow()
 		{
 			var row = new HStack(spacing: 0f);
 			for (int i = 0; i < Tabs.Length; i++)

@@ -78,9 +78,7 @@ namespace CometSamples.Jetsnack
 			.Background(T.UiBackground);
 		}
 
-		static string FormatPrice(long price) => $"${price / 100}.{price % 100:00}";
-
-		static View Header() =>
+			static View Header() =>
 			new Text(() => $"Order ({Lines.Sum(l => l.Count)} items)").FontSize(22).Color(T.Brand)
 				.Padding(new Thickness(24, 16, 24, 4));
 
@@ -100,7 +98,7 @@ namespace CometSamples.Jetsnack
 						.FontSize(14).Color(T.TextHelp).Padding(new Thickness(0, 2, 0, 0)),
 					new HStack(spacing: 0f)
 					{
-						new Text(FormatPrice(line.Snack.Price)).FontSize(16).FontWeight(FontWeight.Bold).Color(T.TextPrimary)
+						new Text(Jetsnack.FormatPrice(line.Snack.Price)).FontSize(16).FontWeight(FontWeight.Bold).Color(T.TextPrimary)
 							.VerticalLayoutAlignment(LayoutAlignment.Center),
 						new HStack().FlexGrow(1),
 						QuantityStepper(line),
@@ -142,7 +140,7 @@ namespace CometSamples.Jetsnack
 				new Text(label).FontSize(16).Color(T.TextSecondary)
 					.FontWeight(bold ? FontWeight.Bold : FontWeight.Regular)
 					.FlexGrow(1).FlexBasis(0),
-				new Text(FormatPrice(amount)).FontSize(16).Color(T.TextPrimary)
+				new Text(Jetsnack.FormatPrice(amount)).FontSize(16).Color(T.TextPrimary)
 					.FontWeight(bold ? FontWeight.Bold : FontWeight.Regular)
 					.FlexShrink(0),
 			}.Padding(new Thickness(24, 6, 24, 6)).HorizontalLayoutAlignment(LayoutAlignment.Fill);

@@ -131,11 +131,12 @@ namespace CometSamples.Jetsnack
 
 		static View HighlightRow(SnackCollection collection)
 		{
-			int index = 0;
+			// Index derived from the item, NOT a captured counter — ViewFor re-runs on
+			// every rebuild/reload and a counter would shift the gradient alternation.
 			var row = new ListView<Snack>(() => collection.Snacks)
 			{
 				Horizontal = true,
-				ViewFor = snack => HighlightSnackItem(snack, index++),
+				ViewFor = snack => HighlightSnackItem(snack, IndexOf(collection.Snacks, snack)),
 			};
 			return row.Frame(height: 266).Margin(left: 24)
 				.HorizontalLayoutAlignment(LayoutAlignment.Fill);
@@ -169,6 +170,14 @@ namespace CometSamples.Jetsnack
 		.Border(1, T.UiBorder)
 		.Margin(new Thickness(0, 0, 16, 16))
 		.OnTap(_ => OpenSnack(snack.Id));
+
+		static int IndexOf(System.Collections.Generic.IReadOnlyList<Snack> snacks, Snack snack)
+		{
+			for (int i = 0; i < snacks.Count; i++)
+				if (ReferenceEquals(snacks[i], snack))
+					return i;
+			return 0;
+		}
 
 		/// <summary>SnackItem (Normal rows): 120 circle image + name titleMedium under it.</summary>
 		static View SnackItem(Snack snack) => new VStack(spacing: 0f)

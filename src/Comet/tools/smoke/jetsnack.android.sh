@@ -57,6 +57,8 @@ android_shot 04-search
 # ── Cart (gold compact-07): totals + row remove ──
 adb_ shell input swipe 800 2700 800 2700 120
 sleep 2
+# The selected pill's label only exists while selected — proves the bar follows the tab.
+assert_element "cart pill selected"  "type=Text&text=MY CART"
 assert_element "order header"        "type=Text&text=Order (6 items)"
 assert_element "cart row"            "type=Text&text=Ice Cream Sandwich"
 assert_element "summary total"       "type=Text&text=\$58.13"

@@ -20,7 +20,6 @@ namespace CometSamples.Jetsnack
 		const float BottomBarHeight = 56f;
 
 		static readonly Signal<int> Count = new(1);
-		static readonly Signal<int> BodyVersion = new(0);
 
 		static ListView<object>? _list;
 
@@ -36,7 +35,7 @@ namespace CometSamples.Jetsnack
 			if (!_hooked)
 			{
 				_hooked = true;
-				snackId.PropertyChanged += (_, _) => { Count.Value = 1; _list?.ReloadData(); };
+				snackId.PropertyChanged += (_, _) => { Count.Value = 1; _seeMore = false; _list?.ReloadData(); };
 				Count.PropertyChanged += (_, _) => _list?.ReloadData();
 			}
 
@@ -75,9 +74,7 @@ namespace CometSamples.Jetsnack
 
 		static bool _hooked;
 
-		static string FormatPrice(long price) => $"${price / 100}.{price % 100:00}";
-
-		// The scrolling body — one row holding the whole column (Column+verticalScroll in
+			// The scrolling body — one row holding the whole column (Column+verticalScroll in
 		// the gold; a single-row LazyColumn here so ReloadData re-binds on snack change).
 		static View Body(Snack snack, double topInset) => new VStack(spacing: 0f)
 		{
@@ -109,7 +106,7 @@ namespace CometSamples.Jetsnack
 				new Text(snack.Tagline).FontSize(20).FontSlant(Microsoft.Maui.FontSlant.Italic).Color(T.TextHelp)
 					.Padding(new Thickness(24, 0, 24, 0)),
 				new HStack().Frame(height: 4),
-				new Text(FormatPrice(snack.Price)).FontSize(16).FontWeight(FontWeight.Bold).Color(T.Brand)
+				new Text(Jetsnack.FormatPrice(snack.Price)).FontSize(16).FontWeight(FontWeight.Bold).Color(T.Brand)
 					.Padding(new Thickness(24, 0, 24, 8)),
 				JetsnackHome.Divider(1),
 			},
@@ -129,7 +126,7 @@ namespace CometSamples.Jetsnack
 					.Color(T.TextLink)
 					.Padding(new Thickness(24, 15, 24, 0))
 					.HorizontalLayoutAlignment(LayoutAlignment.Center)
-					.OnTap(_ => { _seeMore = !_seeMore; BodyVersion.Value++; _list?.ReloadData(); }),
+					.OnTap(_ => { _seeMore = !_seeMore; _list?.ReloadData(); }),
 				new HStack().Frame(height: 40),
 				new Text("Ingredients").FontSize(11).FontWeight(FontWeight.Medium).Color(T.TextHelp)
 					.Padding(new Thickness(24, 0, 24, 0)),

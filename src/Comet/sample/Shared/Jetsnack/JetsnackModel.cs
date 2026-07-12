@@ -47,6 +47,17 @@ namespace CometSamples.Jetsnack
 	public sealed record SearchCategory(string Name, string ImageRes);
 	public sealed record SearchSuggestionGroup(long Id, string Name, IReadOnlyList<string> Suggestions);
 
+	/// <summary>The gold's single formatPrice (ui/utils/Currency.kt) — cents → "$x.yy",
+	/// sign-safe (integer / and % both carry the sign in C#).</summary>
+	public static class Jetsnack
+	{
+		public static string FormatPrice(long price)
+		{
+			long abs = System.Math.Abs(price);
+			return $"{(price < 0 ? "-" : "")}${abs / 100}.{abs % 100:00}";
+		}
+	}
+
 	public static class SnackRepo
 	{
 		static long _nextId = 1;

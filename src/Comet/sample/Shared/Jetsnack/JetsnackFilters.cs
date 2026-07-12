@@ -18,7 +18,9 @@ namespace CometSamples.Jetsnack
 	{
 		static readonly Signal<string> SortSelection = new(SnackRepo.SortDefault);
 		static ListView<object>? _sheetList;
-		static bool _hooked;
+		static View? _currentOverlay;
+	static bool _hooked;
+		static bool _openHooked;
 
 		public static View Overlay(Signal<bool> open)
 		{
@@ -35,7 +37,7 @@ namespace CometSamples.Jetsnack
 					f.Enabled.PropertyChanged += (_, _) => _sheetList?.ReloadData();
 			}
 
-			var overlay = new ZStack
+		var overlay = new ZStack
 			{
 				// Scrim — tap closes (FilterScreen dismissOnClickOutside).
 				new VStack(spacing: 0f)
@@ -94,8 +96,7 @@ namespace CometSamples.Jetsnack
 			ChipRow(SnackRepo.PriceFilters),
 
 			SectionHeader("Category"),
-			ChipRow(SnackRepo.CategoryFilters.Take2()),
-			ChipRow(SnackRepo.CategoryFilters.Skip2()),
+			ChipRows(SnackRepo.CategoryFilters, perRow: 2),
 			new HStack().Frame(height: 16),
 		}.Padding(new Thickness(16, 0, 16, 0));
 
@@ -128,13 +129,18 @@ namespace CometSamples.Jetsnack
 				row.Add(JetsnackHome.FilterChip(filter).FlexShrink(0));
 			return row.Frame(height: 44).Padding(new Thickness(8, 4, 8, 4));
 		}
-	}
 
-	static class FilterListSlices
-	{
-		public static IReadOnlyList<Filter> Take2(this IReadOnlyList<Filter> list) =>
-			new[] { list[0], list[1] };
-		public static IReadOnlyList<Filter> Skip2(this IReadOnlyList<Filter> list) =>
-			new[] { list[2], list[3] };
+		static View ChipRows(IReadOnlyList<Filter> filters, int perRow)
+		{
+			var column = new VStack(spacing: 0f);
+			for (int i = 0; i < filters.Count; i += perRow)
+			{
+				var slice = new List<Filter>();
+				for (int j = i; j < filters.Count && j < i + perRow; j++)
+					slice.Add(filters[j]);
+				column.Add(ChipRow(slice));
+			}
+			return column;
+		}
 	}
 }
