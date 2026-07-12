@@ -83,10 +83,17 @@ namespace CometSamples.Jetsnack
 				Placeholder("This is currently work in progress"),
 			});
 
-			return new VStack(spacing: 0f)
+			return new ZStack
 			{
-				routes.FlexGrow(1).FlexBasis(0),
-				BottomBar().FlexShrink(0),
+				new VStack(spacing: 0f)
+				{
+					routes.FlexGrow(1).FlexBasis(0),
+					BottomBar().FlexShrink(0),
+				}
+				.HorizontalLayoutAlignment(LayoutAlignment.Fill)
+				.VerticalLayoutAlignment(LayoutAlignment.Fill),
+				// Filters sheet floats over everything; reactive-opacity show/hide.
+				JetsnackFilters.Overlay(FiltersOpen),
 			}
 			.HorizontalLayoutAlignment(LayoutAlignment.Fill)
 			.VerticalLayoutAlignment(LayoutAlignment.Fill)

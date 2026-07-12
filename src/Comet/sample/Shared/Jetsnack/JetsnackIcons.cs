@@ -32,6 +32,7 @@ namespace CometSamples.Jetsnack
 			Add("remove", 0xE15B);
 			Add("close", 0xE5CD);           // filters sheet / cart remove
 			Add("star", 0xE838);            // sort filter
+			Add("check", 0xE5CA);           // sort selection
 			Add("sort_by_alpha", 0xE053);
 			Add("android", 0xE859);
 
