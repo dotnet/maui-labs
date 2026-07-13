@@ -79,7 +79,8 @@ namespace CometSamples.Jetsnack
 		}
 
 			static View Header() =>
-			new Text(() => $"Order ({Lines.Sum(l => l.Count)} items)").FontSize(22).Color(T.Brand)
+			new Text(() => $"Order ({Lines.Sum(l => l.Count)} items)")
+				.FontFamily("Montserrat").FontWeight(FontWeight.Semibold).FontSize(20).Color(T.Brand)
 				.Padding(new Thickness(24, 16, 24, 4));
 
 		// Cart.kt CartItem: image 100 (pad v16) | name titleMedium + tagline help + price |
@@ -93,16 +94,19 @@ namespace CometSamples.Jetsnack
 					.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0),
 				new VStack(spacing: 0f)
 				{
-					new Text(line.Snack.Name).FontSize(16).FontWeight(FontWeight.Medium).Color(T.TextSecondary),
-					new Text(line.Snack.Tagline.Length > 0 ? line.Snack.Tagline : "A tag line")
-						.FontSize(14).Color(T.TextHelp).Padding(new Thickness(0, 2, 0, 0)),
+					T.TitleMedium(line.Snack.Name).Color(T.TextSecondary),
+					// Gold CartItem: tagline (bodyLarge Karla, textHelp) sits between the
+					// name and the price row, spacer 8 above the price.
+					T.BodyLarge(line.Snack.Tagline.Length > 0 ? line.Snack.Tagline : "A tag line")
+						.Color(T.TextHelp).Padding(new Thickness(0, 4, 0, 0)),
+					new HStack().Frame(height: 8),
 					new HStack(spacing: 0f)
 					{
-						new Text(Jetsnack.FormatPrice(line.Snack.Price)).FontSize(16).FontWeight(FontWeight.Bold).Color(T.TextPrimary)
+						T.TitleMedium(Jetsnack.FormatPrice(line.Snack.Price)).Color(T.TextPrimary)
 							.VerticalLayoutAlignment(LayoutAlignment.Center),
 						new HStack().FlexGrow(1),
 						QuantityStepper(line),
-					}.Padding(new Thickness(0, 12, 0, 0)).HorizontalLayoutAlignment(LayoutAlignment.Fill),
+					}.HorizontalLayoutAlignment(LayoutAlignment.Fill),
 				}.Padding(new Thickness(16, 16, 0, 16)).FlexGrow(1).FlexBasis(0),
 				new Icon("close").IconSize(18).Color(T.IconSecondary)
 					.Frame(width: 40, height: 40).Padding(new Thickness(11))
@@ -112,49 +116,72 @@ namespace CometSamples.Jetsnack
 			JetsnackHome.Divider(1).Margin(new Thickness(24, 0, 24, 0)),
 		};
 
-		static View QuantityStepper(Line line) => new HStack(spacing: 0f)
+		static View QuantityStepper(Line line) => new HStack(spacing: 4f)
 		{
-			new Text("Qty").FontSize(11).FontWeight(FontWeight.Medium).Color(T.TextHelp)
-				.Padding(new Thickness(0, 0, 10, 0))
+			new Text("Qty").FontFamily("Montserrat").FontSize(16).Color(T.TextSecondary)
+				.Padding(new Thickness(0, 0, 14, 0))
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
-			new Icon("remove").IconSize(18).Color(T.Brand)
-				.Frame(width: 32, height: 32).Padding(new Thickness(7))
-				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnTap(_ => { if (line.Count > 1) { line.Count--; _list?.ReloadData(); } }),
-			new Text(line.Count.ToString()).FontSize(16).Color(T.TextPrimary)
-				.Frame(width: 22)
+			StepperCircle("remove", () => { if (line.Count > 1) { line.Count--; _list?.ReloadData(); } }),
+			new Text(line.Count.ToString()).FontFamily("Karla").FontWeight(FontWeight.Bold).FontSize(18)
+				.Color(T.TextPrimary)
+				.Frame(width: 24)
 				.HorizontalLayoutAlignment(LayoutAlignment.Center)
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
-			new Icon("add").IconSize(18).Color(T.Brand)
-				.Frame(width: 32, height: 32).Padding(new Thickness(7))
-				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnTap(_ => { line.Count++; _list?.ReloadData(); }),
+			StepperCircle("add", () => { line.Count++; _list?.ReloadData(); }),
 		}.FlexShrink(0);
+
+		/// <summary>JetsnackGradientTintedIconButton: a circle with the interactiveSecondary
+		/// DIAGONAL-GRADIENT border over uiBackground (per-glyph gradient tint approximated
+		/// with the ramp's Shadow3 — backlogged).</summary>
+		internal static View StepperCircle(string icon, System.Action onTap) =>
+			new Icon(icon).IconSize(16).Color(T.Shadow3)
+				.Frame(width: 28, height: 28).Padding(new Thickness(6))
+				.BorderGradient(T.Gradient2_2).CornerRadius(14)
+				.Background(T.UiBackground)
+				.VerticalLayoutAlignment(LayoutAlignment.Center)
+				.OnTap(_ => onTap());
 
 		// Cart.kt SummaryItem.
 		static View Summary()
 		{
 			long subtotal = Lines.Sum(l => l.Snack.Price * l.Count);
-			View Row(string label, long amount, bool bold = false) => new HStack(spacing: 0f)
+			// Gold SummaryItem: label + amount both bodyLarge (Karla) in the DEFAULT dark
+			// content color; only the Total's AMOUNT steps up to titleMedium.
+			// The Total row's label hugs the amount (gold: weight(1f) +
+			// wrapContentWidth(End) + padding end 16); the others sit at the start.
+			View Row(string label, long amount, bool totalRow = false)
 			{
-				new Text(label).FontSize(16).Color(T.TextSecondary)
-					.FontWeight(bold ? FontWeight.Bold : FontWeight.Regular)
-					.FlexGrow(1).FlexBasis(0),
-				new Text(Jetsnack.FormatPrice(amount)).FontSize(16).Color(T.TextPrimary)
-					.FontWeight(bold ? FontWeight.Bold : FontWeight.Regular)
-					.FlexShrink(0),
-			}.Padding(new Thickness(24, 6, 24, 6)).HorizontalLayoutAlignment(LayoutAlignment.Fill);
+				var amountText = (totalRow
+					? T.TitleMedium(Jetsnack.FormatPrice(amount))
+					: T.BodyLarge(Jetsnack.FormatPrice(amount))).Color(T.TextSecondary)
+					.FlexShrink(0);
+				var row = totalRow
+					? new HStack(spacing: 0f)
+					{
+						new HStack().FlexGrow(1),
+						T.BodyLarge(label).Color(T.TextSecondary)
+							.Padding(new Thickness(0, 0, 16, 0)).FlexShrink(0),
+						amountText,
+					}
+					: new HStack(spacing: 0f)
+					{
+						T.BodyLarge(label).Color(T.TextSecondary)
+							.FlexGrow(1).FlexBasis(0),
+						amountText,
+					};
+				return row.Padding(new Thickness(24, 6, 24, 6)).HorizontalLayoutAlignment(LayoutAlignment.Fill);
+			}
 
 			return new VStack(spacing: 0f)
 			{
-				new Text("Summary").FontSize(22).Color(T.Brand)
+				T.TitleLarge("Summary").Color(T.Brand)
 					.Padding(new Thickness(24, 16, 24, 8)),
 				Row("Subtotal", subtotal),
 				Row("Shipping & Handling", ShippingCosts),
 				new HStack().Frame(height: 8),
 				JetsnackHome.Divider(1).Margin(new Thickness(24, 0, 24, 0)),
 				new HStack().Frame(height: 8),
-				Row("Total", subtotal + ShippingCosts, bold: true),
+				Row("Total", subtotal + ShippingCosts, totalRow: true),
 				new HStack().Frame(height: 8),
 				JetsnackHome.Divider(1),
 			};
@@ -169,7 +196,7 @@ namespace CometSamples.Jetsnack
 				new HStack(spacing: 0f)
 				{
 					new HStack().FlexGrow(1),
-					new Text("Checkout").FontSize(14).FontWeight(FontWeight.Bold)
+					T.LabelLarge("Checkout")
 						.Color(T.TextInteractive).MaxLines(1)
 						.VerticalLayoutAlignment(LayoutAlignment.Center),
 					new HStack().FlexGrow(1),

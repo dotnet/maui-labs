@@ -1,4 +1,5 @@
 #nullable enable
+using Comet;
 using Microsoft.Maui.Graphics;
 
 namespace CometSamples.Jetsnack
@@ -53,6 +54,21 @@ namespace CometSamples.Jetsnack
 		public static readonly Color IconInteractiveInactive = Neutral1;
 		public static readonly Color TextLink = Ocean11;
 		public static readonly Color Error = FunctionalRed;
+
+		// ── Typography (Type.kt): Montserrat (SemiBold headings/labels) + Karla (body).
+		// Both families ship in the probes; helpers keep every screen on the gold styles. ──
+		public static Comet.Text TitleLarge(string s) => (Comet.Text)new Comet.Text(s)
+			.FontFamily("Montserrat").FontWeight(Microsoft.Maui.FontWeight.Semibold).FontSize(20);
+		public static Comet.Text TitleMedium(string s) => (Comet.Text)new Comet.Text(s)
+			.FontFamily("Montserrat").FontWeight(Microsoft.Maui.FontWeight.Semibold).FontSize(16);
+		public static Comet.Text BodyLarge(string s) => (Comet.Text)new Comet.Text(s)
+			.FontFamily("Karla").FontSize(16);
+		public static Comet.Text BodySmall(string s) => (Comet.Text)new Comet.Text(s)
+			.FontFamily("Karla").FontWeight(Microsoft.Maui.FontWeight.Bold).FontSize(12);
+		public static Comet.Text LabelLarge(string s) => (Comet.Text)new Comet.Text(s)
+			.FontFamily("Montserrat").FontWeight(Microsoft.Maui.FontWeight.Semibold).FontSize(14);
+		public static Comet.Text LabelSmall(string s) => (Comet.Text)new Comet.Text(s)
+			.FontFamily("Montserrat").FontWeight(Microsoft.Maui.FontWeight.Semibold).FontSize(12);
 
 		// ── Gradient stop lists (light) — Theme.kt:42-49 ──
 		public static readonly Color[] Gradient6_1 = { Shadow4, Ocean3, Shadow2, Ocean3, Shadow4 };

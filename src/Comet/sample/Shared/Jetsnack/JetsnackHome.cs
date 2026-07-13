@@ -56,7 +56,7 @@ namespace CometSamples.Jetsnack
 			new HStack(spacing: 0f)
 			{
 				new HStack().Frame(width: 48).FlexShrink(0),   // balances the action slot
-				new Text("Delivery to 1600 Amphitheater Way").FontSize(16).FontWeight(FontWeight.Medium)
+				T.TitleMedium("Delivery to 1600 Amphitheater Way")
 					.Color(T.TextSecondary).MaxLines(1)
 					.HorizontalLayoutAlignment(LayoutAlignment.Center)
 					.VerticalLayoutAlignment(LayoutAlignment.Center)
@@ -68,33 +68,60 @@ namespace CometSamples.Jetsnack
 			Divider(1),
 		}.Background(T.UiBackground);
 
-		// FilterBar.kt: filter-list icon in a bordered circle + the filter chips, 8dp gaps,
-		// horizontal list padded to the section inset.
+		// FilterBar.kt: a REAL LazyRow (spacing 8, contentPadding start 12) — the gold's
+		// bar scrolls horizontally; the filter circle is the first item.
+		abstract record BarItem;
+		sealed record FilterCircle : BarItem;
+		sealed record ChipItem(Filter Filter) : BarItem;
+
+		static ListView<BarItem>? _filterBar;
+		static bool _filterBarHooked;
+
 		static View FilterBar(System.Action openFilters)
 		{
-			var row = new HStack(spacing: 8f)
+			var items = new List<BarItem> { new FilterCircle() };
+			items.AddRange(SnackRepo.Filters.Select(f => (BarItem)new ChipItem(f)));
+			var row = new ListView<BarItem>(() => items)
 			{
-				new Icon("filter_list").IconSize(20).Color(T.Brand)
-					.Frame(width: 46, height: 46).Padding(new Thickness(13))
-					.Border(1, T.UiBorder).CornerRadius(23)
-					.VerticalLayoutAlignment(LayoutAlignment.Center)
-					.FlexShrink(0)
-					.OnTap(_ => openFilters()),
+				Horizontal = true,
+				ViewFor = item => new VStack(spacing: 0f)
+				{
+					new HStack().FlexGrow(1),
+					item switch
+					{
+						FilterCircle => (View)new Icon("filter_list").IconSize(20).Color(T.Brand)
+							.Frame(width: 46, height: 46).Padding(new Thickness(13))
+							.BorderGradient(T.Gradient2_2).CornerRadius(23)
+							.OnTap(_ => openFilters()),
+						ChipItem c => FilterChip(c.Filter),
+						_ => new HStack(),
+					},
+					new HStack().FlexGrow(1),
+				}.Frame(height: 66).Padding(new Thickness(0, 0, 8, 0)),
 			};
-			foreach (var filter in SnackRepo.Filters)
-				row.Add(FilterChip(filter).VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0));
-			return row.Frame(height: 66).Padding(new Thickness(12, 4, 12, 4));
+			_filterBar = row;
+			if (!_filterBarHooked)
+			{
+				// Subscribe ONCE (static filters outlive every rebuild); reload the
+				// current bar instance so the chip ON/OFF visuals follow the signal.
+				_filterBarHooked = true;
+				foreach (var f in SnackRepo.Filters)
+					f.Enabled.PropertyChanged += (_, _) => _filterBar?.ReloadData();
+			}
+			return row.Frame(height: 66).Margin(left: 12)
+				.HorizontalLayoutAlignment(LayoutAlignment.Fill);
 		}
 
-		/// <summary>FilterChip.kt: pill (50% corner) with the diagonal-gradient border when
-		/// off / gradient fill when on; text brand ↔ textInteractive.</summary>
+		/// <summary>FilterChip.kt: shapes.small pill — OFF = uiBackground with the
+		/// interactiveSecondary DIAGONAL GRADIENT border, bodySmall textSecondary;
+		/// ON = brandSecondary fill, black text, no border.</summary>
 		public static View FilterChip(Filter filter)
 		{
 			bool on = filter.Enabled.Peek();
 			var chip = new HStack(spacing: 0f)
 			{
-				new Text(filter.Name).FontSize(14).FontWeight(FontWeight.Medium)
-					.Color(on ? T.TextInteractive : T.TextSecondary)
+				T.BodySmall(filter.Name)
+					.Color(on ? Colors.Black : T.TextSecondary)
 					.VerticalLayoutAlignment(LayoutAlignment.Center)
 					.HorizontalLayoutAlignment(LayoutAlignment.Center),
 			}
@@ -103,8 +130,8 @@ namespace CometSamples.Jetsnack
 			.CornerRadius(14)
 			.OnTap(_ => filter.Enabled.Value = !filter.Enabled.Peek());
 			return on
-				? chip.BackgroundGradient(T.Tornado1)
-				: chip.Border(1, T.Brand.WithAlpha(0.4f)).Background(T.UiBackground);
+				? chip.Background(T.BrandSecondary)
+				: chip.BorderGradient(T.Gradient2_2).Background(T.UiBackground);
 		}
 
 		// ── Collection section (Snacks.kt SnackCollection): header (name titleLarge BRAND,
@@ -116,10 +143,10 @@ namespace CometSamples.Jetsnack
 		{
 			new HStack(spacing: 0f)
 			{
-				new Text(collection.Name).FontSize(22).Color(T.Brand)
+				T.TitleLarge(collection.Name).Color(T.Brand)
 					.VerticalLayoutAlignment(LayoutAlignment.Center)
 					.FlexGrow(1).FlexBasis(0),
-				new Icon("arrow_forward").IconSize(24).Color(T.Brand)
+				new Icon("arrow_back").IconSize(24).Color(T.Brand)
 					.Frame(width: 48, height: 48).Padding(new Thickness(12))
 					.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0),
 			}.Frame(height: 56).Padding(new Thickness(24, 0, 4, 0)),
@@ -136,7 +163,12 @@ namespace CometSamples.Jetsnack
 			var row = new ListView<Snack>(() => collection.Snacks)
 			{
 				Horizontal = true,
-				ViewFor = snack => HighlightSnackItem(snack, IndexOf(collection.Snacks, snack)),
+				// Wrapper padding, not item margin: the LazyRow item box is the row root's
+				// measured width, which excludes margins — cards rendered flush without it.
+				ViewFor = snack => new VStack(spacing: 0f)
+				{
+					HighlightSnackItem(snack, IndexOf(collection.Snacks, snack)),
+				}.Padding(new Thickness(0, 0, 16, 0)),
 			};
 			return row.Frame(height: 266).Margin(left: 24)
 				.HorizontalLayoutAlignment(LayoutAlignment.Fill);
@@ -159,16 +191,15 @@ namespace CometSamples.Jetsnack
 					.Margin(new Thickness(25, 40, 25, 0)),
 			}.Frame(width: HighlightCardWidth, height: 160),
 			new HStack().Frame(height: 8),
-			new Text(snack.Name).FontSize(22).Color(T.TextSecondary).MaxLines(1)
+			T.TitleLarge(snack.Name).Color(T.TextSecondary).MaxLines(1)
 				.Padding(new Thickness(16, 0, 16, 0)),
 			new HStack().Frame(height: 4),
-			new Text(snack.Tagline).FontSize(16).Color(T.TextHelp).MaxLines(1)
+			T.BodyLarge(snack.Tagline).Color(T.TextHelp).MaxLines(1)
 				.Padding(new Thickness(16, 0, 16, 0)),
 		}
 		.Frame(width: HighlightCardWidth, height: 250)
 		.Background(T.UiBackground).CornerRadius(20)
 		.Border(1, T.UiBorder)
-		.Margin(new Thickness(0, 0, 16, 16))
 		.OnTap(_ => OpenSnack(snack.Id));
 
 		static int IndexOf(System.Collections.Generic.IReadOnlyList<Snack> snacks, Snack snack)
@@ -183,11 +214,11 @@ namespace CometSamples.Jetsnack
 		static View SnackItem(Snack snack) => new VStack(spacing: 0f)
 		{
 			new Image(snack.ImageRes).Frame(width: 120, height: 120).CornerRadius(60),
-			new Text(snack.Name).FontSize(16).FontWeight(FontWeight.Medium).Color(T.TextSecondary)
+			T.TitleMedium(snack.Name).Color(T.TextSecondary)
 				.Padding(new Thickness(0, 8, 0, 0))
 				.HorizontalLayoutAlignment(LayoutAlignment.Center),
 		}
-		.Padding(new Thickness(4, 0, 4, 8))
+		.Padding(new Thickness(8, 0, 8, 8))
 		.OnTap(_ => OpenSnack(snack.Id));
 
 		static View SnackRow(SnackCollection collection)

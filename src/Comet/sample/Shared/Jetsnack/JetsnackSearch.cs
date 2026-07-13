@@ -71,7 +71,7 @@ namespace CometSamples.Jetsnack
 		{
 			var grid = new VStack(spacing: 0f)
 			{
-				new Text(collection.Name).FontSize(22).Color(T.Brand)
+				T.TitleLarge(collection.Name).Color(T.Brand)
 					.Padding(new Thickness(24, 16, 24, 4)),
 			};
 			// VerticalGrid: two columns, pad 16, item pad 8.
@@ -98,7 +98,7 @@ namespace CometSamples.Jetsnack
 		// Lifestyles), name titleMedium left, circular image right, min image 134.
 		static View CategoryCard(SearchCategory category, int collectionIndex) => new HStack(spacing: 0f)
 		{
-			new Text(category.Name).FontSize(16).FontWeight(FontWeight.Medium).Color(T.TextSecondary)
+			T.TitleMedium(category.Name).Color(T.TextSecondary)
 				.LineBreakMode(LineBreakMode.WordWrap)
 				.VerticalLayoutAlignment(LayoutAlignment.Center)
 				.Padding(new Thickness(12, 4, 4, 4))

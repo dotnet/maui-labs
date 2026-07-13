@@ -130,7 +130,7 @@ namespace CometSamples.Jetsnack
 						.VerticalLayoutAlignment(LayoutAlignment.Center),
 				};
 				if (selected)
-					content.Add(new Text(Tabs[i].Label).FontSize(14).FontWeight(FontWeight.Medium)
+					content.Add(T.LabelLarge(Tabs[i].Label)
 						.Color(T.IconInteractive)
 						.VerticalLayoutAlignment(LayoutAlignment.Center));
 				var pill = new VStack(spacing: 0f)
@@ -158,9 +158,9 @@ namespace CometSamples.Jetsnack
 		static View Placeholder(string message) => new VStack(spacing: 0f)
 		{
 			new HStack().FlexGrow(1),
-			new Text(message).FontSize(16).FontWeight(FontWeight.Medium).Color(T.TextSecondary)
+			T.TitleMedium(message).Color(T.TextSecondary)
 				.HorizontalLayoutAlignment(LayoutAlignment.Center),
-			new Text("Grab a beverage and check back later!").FontSize(14).Color(T.TextHelp)
+			T.BodyLarge("Grab a beverage and check back later!").Color(T.TextHelp)
 				.HorizontalLayoutAlignment(LayoutAlignment.Center).Padding(new Thickness(0, 8, 0, 0)),
 			new HStack().FlexGrow(1),
 		}

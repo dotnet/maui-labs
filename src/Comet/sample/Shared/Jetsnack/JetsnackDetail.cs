@@ -101,12 +101,14 @@ namespace CometSamples.Jetsnack
 			new VStack(spacing: 0f)
 			{
 				new HStack().Frame(height: 16),
-				new Text(snack.Name).FontSize(28).FontSlant(Microsoft.Maui.FontSlant.Italic).Color(T.TextSecondary)
+				new Text(snack.Name).FontFamily("Montserrat").FontWeight(FontWeight.Semibold).FontSize(30)
+					.FontSlant(Microsoft.Maui.FontSlant.Italic).Color(T.TextSecondary)
 					.Padding(new Thickness(24, 0, 24, 0)),
-				new Text(snack.Tagline).FontSize(20).FontSlant(Microsoft.Maui.FontSlant.Italic).Color(T.TextHelp)
+				new Text(snack.Tagline).FontFamily("Karla").FontWeight(FontWeight.Bold).FontSize(20)
+					.FontSlant(Microsoft.Maui.FontSlant.Italic).Color(T.TextHelp)
 					.Padding(new Thickness(24, 0, 24, 0)),
 				new HStack().Frame(height: 4),
-				new Text(Jetsnack.FormatPrice(snack.Price)).FontSize(16).FontWeight(FontWeight.Bold).Color(T.Brand)
+				T.TitleMedium(Jetsnack.FormatPrice(snack.Price)).Color(T.TextPrimary)
 					.Padding(new Thickness(24, 0, 24, 8)),
 				JetsnackHome.Divider(1),
 			},
@@ -116,23 +118,23 @@ namespace CometSamples.Jetsnack
 			new VStack(spacing: 0f)
 			{
 				new HStack().Frame(height: 16),
-				new Text("Details").FontSize(11).FontWeight(FontWeight.Medium).Color(T.TextHelp)
+				T.LabelSmall("Details").Color(T.TextHelp)
 					.Padding(new Thickness(24, 0, 24, 0)),
 				new HStack().Frame(height: 16),
-				new Text(DetailPlaceholder).FontSize(16).LineHeight(24).Color(T.TextHelp)
+				new Text(DetailPlaceholder).FontFamily("Karla").FontSize(16).LineHeight(28).Color(T.TextHelp)
 					.LineBreakMode(LineBreakMode.WordWrap).MaxLines(_seeMore ? 0 : 6)
 					.Padding(new Thickness(24, 0, 24, 0)),
-				new Text(_seeMore ? "SEE LESS" : "SEE MORE").FontSize(14).FontWeight(FontWeight.Medium)
+				T.LabelLarge(_seeMore ? "SEE LESS" : "SEE MORE")
 					.Color(T.TextLink)
 					.Padding(new Thickness(24, 15, 24, 0))
 					.HorizontalLayoutAlignment(LayoutAlignment.Center)
 					.OnTap(_ => { _seeMore = !_seeMore; _list?.ReloadData(); }),
 				new HStack().Frame(height: 40),
-				new Text("Ingredients").FontSize(11).FontWeight(FontWeight.Medium).Color(T.TextHelp)
+				T.LabelSmall("Ingredients").Color(T.TextHelp)
 					.Padding(new Thickness(24, 0, 24, 0)),
 				new HStack().Frame(height: 4),
-				new Text("Vanilla, Almond Flour, Eggs, Butter, Cream, Sugar")
-					.FontSize(16).Color(T.TextHelp)
+				T.BodyLarge("Vanilla, Almond Flour, Eggs, Butter, Cream, Sugar")
+					.Color(T.TextHelp)
 					.LineBreakMode(LineBreakMode.WordWrap)
 					.Padding(new Thickness(24, 0, 24, 0)),
 				new HStack().Frame(height: 16),
@@ -167,7 +169,7 @@ namespace CometSamples.Jetsnack
 					new HStack(spacing: 0f)
 					{
 						new HStack().FlexGrow(1),
-						new Text("ADD TO CART").FontSize(14).FontWeight(FontWeight.Bold)
+						T.LabelLarge("ADD TO CART")
 							.Color(T.TextInteractive).MaxLines(1)
 							.VerticalLayoutAlignment(LayoutAlignment.Center),
 						new HStack().FlexGrow(1),
@@ -184,24 +186,20 @@ namespace CometSamples.Jetsnack
 			return bar;
 		}
 
-		// QuantitySelector.kt: "Qty" label (end pad 18) + gradient-tinted −/+ around the count.
-		static View QuantitySelector() => new HStack(spacing: 0f)
+		// QuantitySelector.kt: "Qty" (titleMedium, normal weight) + the gradient-bordered
+		// −/+ circles (shared with the cart) around the Karla-bold count.
+		static View QuantitySelector() => new HStack(spacing: 4f)
 		{
-			new Text("Qty").FontSize(11).FontWeight(FontWeight.Medium).Color(T.TextHelp)
-				.Padding(new Thickness(0, 0, 18, 0))
+			new Text("Qty").FontFamily("Montserrat").FontSize(16).Color(T.TextSecondary)
+				.Padding(new Thickness(0, 0, 14, 0))
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
-			new Icon("remove").IconSize(20).Color(T.Brand)
-				.Frame(width: 36, height: 36).Padding(new Thickness(8))
-				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnTap(_ => { if (Count.Peek() > 0) Count.Value = Count.Peek() - 1; }),
-			new Text(() => Count.Value.ToString()).FontSize(18).Color(T.TextPrimary)
+			JetsnackCart.StepperCircle("remove", () => { if (Count.Peek() > 0) Count.Value = Count.Peek() - 1; }),
+			new Text(() => Count.Value.ToString()).FontFamily("Karla").FontWeight(FontWeight.Bold).FontSize(18)
+				.Color(T.TextPrimary)
 				.Frame(width: 24)
 				.HorizontalLayoutAlignment(LayoutAlignment.Center)
 				.VerticalLayoutAlignment(LayoutAlignment.Center),
-			new Icon("add").IconSize(20).Color(T.Brand)
-				.Frame(width: 36, height: 36).Padding(new Thickness(8))
-				.VerticalLayoutAlignment(LayoutAlignment.Center)
-				.OnTap(_ => Count.Value = Count.Peek() + 1),
+			JetsnackCart.StepperCircle("add", () => Count.Value = Count.Peek() + 1),
 		}.FlexShrink(0);
 
 		const string DetailPlaceholder =
