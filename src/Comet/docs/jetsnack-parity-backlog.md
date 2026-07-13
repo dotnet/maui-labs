@@ -115,3 +115,36 @@ REPORTED, BACKLOGGED:
   gold's single-node recomposition); shim bundledImage subdir search
   (would remove the csproj flattening incantation); QuantitySelector/CTA
   pill/placeholder-panel dedup.
+
+## Status 2026-07-13 — David's fidelity feedback round (all 8 items fixed)
+
+Commits `760d193f` (framework) + `3fb988ed` (sample):
+1. Gradient (not solid) chip/circle borders — NEW BorderGradient capability;
+   the vendored border-brush bridge bound a nonexistent
+   `border-ziNgDLE$default` synthetic (Brush overload has no shape default →
+   no synthetic in the AAR) and crash-looped at first compose. The identical
+   "stale" screenshots during diagnosis were the RECENTS SNAPSHOT Android
+   paints while an activity crash-loops — pixel-compare across relaunches
+   before trusting a screenshot.
+2. Typography — gold Type.kt helpers in JetsnackTheme, applied everywhere.
+3. Horizontal-scroll spacing — wrapper Padding inside LazyRow items.
+4. Section arrows point LEFT (ic_arrow_back).
+5. Bottom-bar selected state — was the pre-8a8f1616 stale standalone install;
+   rebuilt both standalone apps (first launch on a loaded emulator can ANR
+   twice, then settles — CPU 0% after warm-up).
+6. Cart tagline sits above the price row.
+7. Stepper circles: 28dp gradient-border circles over uiBackground.
+8. Summary label+amount both default dark; Total label right-aligned beside
+   its titleMedium amount (gold wrapContentWidth(End) + pad end 16).
+
+Also fixed: home FilterBar chips froze on toggle (Peek-built; subscribe-once
++ ReloadData); custom-font italic never rendered on EITHER backend
+(Typeface-backed FontFamily bypasses Compose font matching; SwiftUI .italic()
+no-op on custom UIFont) — slant now baked into the resolved font on both.
+
+Verification: jetsnack smokes 24/24 android + 24/24 iOS; jetchat 13/13 +
+24/24; reply 14/14 + 22/22; jetnews iOS 22/22. KNOWN FLAKE: jetnews.android
+expanded-resize segment (2 fails: activity recreation after `wm size`
+restores Interests+open drawer instead of Home) — pre-existing, not in this
+round's paths. Comet.Tests host project doesn't compile on this branch
+(SelectionMode/BodyAttribute drift) — pre-existing.
