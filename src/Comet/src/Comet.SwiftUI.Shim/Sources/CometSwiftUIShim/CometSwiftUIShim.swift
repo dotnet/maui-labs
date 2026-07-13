@@ -50,6 +50,7 @@ struct CometTextRun {
     @Published var elevation: CGFloat = 0        // soft drop shadow depth
     @Published var borderWidth: CGFloat = 0      // stroke width (e.g. avatar ring)
     @Published var borderColorARGB: UInt32 = 0   // stroke color
+    @Published var borderGradientStops: [UInt32] = []   // diagonal gradient stroke (wins over color)
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     @Published var hasLongPressGesture: Bool = false
     @Published var borderless: Bool = false      // TextField: no rounded-border box (foundation field)
@@ -171,6 +172,16 @@ struct CometTextRun {
     @objc(clearGradientStops:)
     public static func clearGradientStops(_ node: CometNode) {
         node.gradientStops = []
+    }
+
+    @objc(clearBorderGradientStops:)
+    public static func clearBorderGradientStops(_ node: CometNode) {
+        node.borderGradientStops = []
+    }
+
+    @objc(addBorderGradientStop:argb:)
+    public static func addBorderGradientStop(_ node: CometNode, argb: UInt32) {
+        node.borderGradientStops.append(argb)
     }
 
     @objc(addGradientStop:argb:)
@@ -565,14 +576,31 @@ private func uiFontWeight(_ w: Int) -> UIFont.Weight {
 
 // A registered custom font (e.g. Montserrat/Karla, bundled + listed in UIAppFonts) at the given
 // weight, or nil if not available. Derives the weight on a variable font via the descriptor.
-private func customUIFont(_ family: String, _ size: CGFloat, _ weight: Int) -> UIFont? {
+private func customUIFont(_ family: String, _ size: CGFloat, _ weight: Int, italic: Bool = false) -> UIFont? {
     // Prefer the real per-weight face by PostScript name (e.g. "Montserrat-Medium", "Karla-Bold") so
     // the actual weight renders rather than a synthesized one.
-    if let f = UIFont(name: weightedFontName(family, weight), size: size) { return f }
-    guard let base = UIFont(name: family, size: size) else { return nil }
-    let traits: [UIFontDescriptor.TraitKey: Any] = [.weight: uiFontWeight(weight)]
-    let descriptor = base.fontDescriptor.addingAttributes([.traits: traits])
-    return UIFont(descriptor: descriptor, size: size)
+    var font: UIFont?
+    if let f = UIFont(name: weightedFontName(family, weight), size: size) {
+        font = f
+    } else if let base = UIFont(name: family, size: size) {
+        let traits: [UIFontDescriptor.TraitKey: Any] = [.weight: uiFontWeight(weight)]
+        font = UIFont(descriptor: base.fontDescriptor.addingAttributes([.traits: traits]), size: size)
+    }
+    guard var resolved = font else { return nil }
+    if italic {
+        // SwiftUI's .italic() can't slant a custom UIFont-backed Font, so bake the
+        // slant here: a real italic face via the symbolic trait when the family has
+        // one, else a synthesized oblique (skew matrix) — same idea as Android.
+        if let d = resolved.fontDescriptor.withSymbolicTraits(
+               resolved.fontDescriptor.symbolicTraits.union(.traitItalic)),
+           d.symbolicTraits.contains(.traitItalic) {
+            resolved = UIFont(descriptor: d, size: size)
+        } else {
+            let skew = CGAffineTransform(a: 1, b: 0, c: 0.25, d: 1, tx: 0, ty: 0)
+            resolved = UIFont(descriptor: resolved.fontDescriptor.withMatrix(skew), size: size)
+        }
+    }
+    return resolved
 }
 
 // "<Family>-<Weight>" PostScript-name convention for the bundled per-weight faces.
@@ -595,8 +623,10 @@ private struct FontModifier: ViewModifier {
         let italicize: (AnyView) -> AnyView = node.fontItalic
             ? { v in AnyView(v.italic()) }
             : { v in v }
-        if !node.fontFamily.isEmpty, let f = customUIFont(node.fontFamily, size, node.fontWeight) {
-            return italicize(AnyView(content.font(Font(f))))
+        if !node.fontFamily.isEmpty,
+           let f = customUIFont(node.fontFamily, size, node.fontWeight, italic: node.fontItalic) {
+            // Slant is baked into the UIFont — .italic() is a no-op on custom fonts.
+            return AnyView(content.font(Font(f)))
         }
         if node.fontSize > 0 {
             return italicize(AnyView(content.font(.system(size: node.fontSize, weight: swiftFontWeight(node.fontWeight)))))
@@ -916,10 +946,15 @@ private struct SurfaceModifier: ViewModifier {
             bottomTrailingRadius: node.cornerBR,
             topTrailingRadius: node.cornerTR,
             style: .continuous)
-        if hasCorners || elevation > 0 || node.borderWidth > 0 {
+        if hasCorners || elevation > 0 || node.borderWidth > 0 || node.borderGradientStops.count > 1 {
             content
                 .clipShape(shape)
-                .overlay(node.borderWidth > 0
+                .overlay(node.borderGradientStops.count > 1
+                    // Diagonal gradient stroke — the gold's diagonalGradientBorder twin.
+                    ? AnyView(shape.strokeBorder(LinearGradient(
+                        colors: node.borderGradientStops.map(argbColor),
+                        startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 2))
+                    : node.borderWidth > 0
                     ? AnyView(shape.strokeBorder(colorFromARGB(node.borderColorARGB), lineWidth: node.borderWidth))
                     : AnyView(EmptyView()))
                 .shadow(color: Color.black.opacity(elevation > 0 ? 0.18 : 0),

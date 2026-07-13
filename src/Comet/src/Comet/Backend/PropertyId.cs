@@ -102,6 +102,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Container_Surface = new(130);
 		public static readonly PropertyId Container_Card = new(131);     // real M3 Card (clickable when tappable)
 		public static readonly PropertyId GradientBackground = new(132); // Color[] stops, horizontal (Jetsnack)
+		public static readonly PropertyId GradientBorder = new(133);     // Color[] stops, 2dp diagonal stroke (Jetsnack)
 
 		// --- Toggle / Switch (144–159) ---
 		public static readonly PropertyId Toggle_IsOn = new(144);

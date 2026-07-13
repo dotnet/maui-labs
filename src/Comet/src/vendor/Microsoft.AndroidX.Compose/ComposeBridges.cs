@@ -2105,20 +2105,21 @@ internal static partial class ComposeBridges
         Defaults  = typeof(ModifierBorderDefault))]
     internal static partial IntPtr ModifierBorder(IntPtr modifier, float width, long color, IntPtr? shape);
 
-    // androidx.compose.foundation.BorderKt.border-ziNgDLE$default —
+    // androidx.compose.foundation.BorderKt.border-ziNgDLE —
     // (Modifier, Dp width, Brush, Shape). width is mangled because Dp
-    // is a @JvmInline value class. shape is optional (null → Kotlin
-    // default of RectangleShape).
+    // is a @JvmInline value class. Unlike the Color overload, the Brush
+    // overload declares NO default for shape, so the AAR ships no
+    // $default synthetic — bind the real method and have the caller
+    // always supply a shape (Shape.Rectangle when it wants "none").
     [ComposeBridge(
         Class     = "androidx/compose/foundation/BorderKt",
-        JvmName   = "border-ziNgDLE$default",
+        JvmName   = "border-ziNgDLE",
         Signature = "(Landroidx/compose/ui/Modifier;F" +
                     "Landroidx/compose/ui/graphics/Brush;" +
-                    "Landroidx/compose/ui/graphics/Shape;ILjava/lang/Object;)" +
-                    "Landroidx/compose/ui/Modifier;",
-        Defaults  = typeof(ModifierBorderBrushDefault))]
+                    "Landroidx/compose/ui/graphics/Shape;)" +
+                    "Landroidx/compose/ui/Modifier;")]
     internal static partial IntPtr ModifierBorderBrush(
-        IntPtr modifier, float width, AndroidX.Compose.UI.Graphics.Brush brush, Shape? shape);
+        IntPtr modifier, float width, AndroidX.Compose.UI.Graphics.Brush brush, Shape shape);
 
     // androidx.compose.foundation.ClickableKt.clickable-XHw0xAI$default —
     // (Modifier, Boolean enabled, String onClickLabel, Role role,

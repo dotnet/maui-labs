@@ -105,6 +105,9 @@ namespace Comet
 			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color[]>(this, "Comet.BackgroundGradient", false) is { Length: > 1 } gradient)
 				node.ApplyProperty(PropertyIds.GradientBackground, PropertyValue.FromObject(gradient));
 
+			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color[]>(this, "Comet.BorderGradient", false) is { Length: > 1 } borderGradient)
+				node.ApplyProperty(PropertyIds.GradientBorder, PropertyValue.FromObject(borderGradient));
+
 			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /
 			// Border), so .ClipShape/.Shadow/.RoundedBorder, ButtonStyles, ViewModifier and the
 			// .CornerRadius/.Elevation/.Border sugar all flow to the backend through one path.

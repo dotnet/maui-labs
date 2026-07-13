@@ -289,7 +289,11 @@ public static class ModifierExtensions
     {
         ArgumentNullException.ThrowIfNull(brush);
         var w = width.Value;
-        return modifier.Append(curr => ComposeBridges.ModifierBorderBrush(curr, w, brush, shape));
+        // The Brush overload of BorderKt.border declares no default for
+        // shape, so the AAR has no $default synthetic — substitute
+        // RectangleShape here instead.
+        var s = shape ?? Shape.Rectangle;
+        return modifier.Append(curr => ComposeBridges.ModifierBorderBrush(curr, w, brush, s));
     }
 
     /// <summary>

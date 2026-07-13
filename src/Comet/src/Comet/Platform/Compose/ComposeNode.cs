@@ -133,6 +133,8 @@ namespace Comet.Platform.Compose
 
 	Microsoft.Maui.Graphics.Color[]? _gradient;
 		AndroidX.Compose.UI.Graphics.Brush? _cachedBrush;
+		Microsoft.Maui.Graphics.Color[]? _borderGradient;
+		AndroidX.Compose.UI.Graphics.Brush? _cachedBorderBrush;
 
 		/// <summary>Whether the view carries a long-press gesture (widget branches that own
 		/// the click must NOT take over when a long-press also needs the combinedClickable).</summary>
@@ -168,6 +170,12 @@ namespace Comet.Platform.Compose
 			{
 				_gradient = value.AsObject as Microsoft.Maui.Graphics.Color[];
 				_cachedBrush = null;   // stops changed — rebuild on next render
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.GradientBorder)
+			{
+				_borderGradient = value.AsObject as Microsoft.Maui.Graphics.Color[];
+				_cachedBorderBrush = null;
 				_styleVersion.Value++;
 			}
 			else if (id == PropertyIds.BackgroundColor)
@@ -276,7 +284,21 @@ namespace Comet.Platform.Compose
 				m = (m ?? Modifier.Companion).Background(ToComposeColor(bg));
 
 			// Stroke (e.g. avatar ring) following the same rounded outline, drawn over the fill.
-			if (_borderWidth > 0 && _borderColor is { } bc)
+			// A gradient stroke (the gold's diagonalGradientBorder — Jetsnack chips/steppers)
+			// wins over a solid one; the diagonal Brush.linearGradient is cached per node.
+			if (_borderGradient is { Length: > 1 } borderStops)
+			{
+				if (_cachedBorderBrush is null)
+				{
+					var stops2 = new AndroidX.Compose.Color[borderStops.Length];
+					for (int i = 0; i < borderStops.Length; i++)
+						stops2[i] = ToComposeColor(borderStops[i]);
+					_cachedBorderBrush = AndroidX.Compose.Brush.LinearGradient(stops2);
+				}
+				m = (m ?? Modifier.Companion).Border(new Dp(2f), _cachedBorderBrush,
+					rounded ? CornerShape() : null);
+			}
+			else if (_borderWidth > 0 && _borderColor is { } bc)
 				m = (m ?? Modifier.Companion).Border(new Dp(_borderWidth), ToComposeColor(bc),
 					rounded ? CornerShape() : null);
 

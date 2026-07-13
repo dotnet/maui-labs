@@ -22,7 +22,7 @@ namespace Comet.Platform.Compose
 		static readonly Dictionary<string, Typeface> Bases = new(StringComparer.OrdinalIgnoreCase);
 		// Per-family weight → typeface, when the app registers real per-weight files.
 		static readonly Dictionary<string, SortedDictionary<int, Typeface>> Weights = new(StringComparer.OrdinalIgnoreCase);
-		static readonly Dictionary<(string, int), (Typeface Typeface, FontFamily Family)?> Cache = new();
+		static readonly Dictionary<(string, int, bool), (Typeface Typeface, FontFamily Family)?> Cache = new();
 
 		/// <summary>Registers a single base typeface under a family name (e.g. "Montserrat").
 		/// Used when no per-weight files are available; <see cref="Resolve"/> synthesizes weights.</summary>
@@ -52,12 +52,12 @@ namespace Comet.Platform.Compose
 		/// registered weight nearest the request; if a family has only a single base, synthesizes the
 		/// weight. Returns null when unregistered or if wrapping fails (so text falls back to the
 		/// default font).</summary>
-		public static (Typeface Typeface, FontFamily Family)? Resolve(string? family, int weight)
+		public static (Typeface Typeface, FontFamily Family)? Resolve(string? family, int weight, bool italic = false)
 		{
 			if (string.IsNullOrEmpty(family))
 				return null;
 
-			var key = (family, weight);
+			var key = (family, weight, italic);
 			if (Cache.TryGetValue(key, out var cached))
 				return cached;
 
@@ -65,6 +65,11 @@ namespace Comet.Platform.Compose
 			try
 			{
 				var typeface = PickTypeface(family, weight);
+				// A Typeface-backed FontFamily bypasses Compose's font matching, so a
+				// TextStyle fontStyle=Italic never synthesizes a slant — bake the italic
+				// into the typeface itself (same as the measurement path).
+				if (italic && typeface is not null && OperatingSystem.IsAndroidVersionAtLeast(28))
+					typeface = Typeface.Create(typeface, weight <= 0 ? 400 : weight, true);
 				result = typeface is null ? null : ((Typeface, FontFamily)?)(typeface, FontFamily.FromTypeface(typeface));
 			}
 			catch (Exception ex)

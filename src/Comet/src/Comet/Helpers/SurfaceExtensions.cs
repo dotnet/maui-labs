@@ -58,6 +58,12 @@ namespace Comet
 		public static T BackgroundGradient<T>(this T view, params Microsoft.Maui.Graphics.Color[] colors) where T : View
 			=> view.SetEnvironment("Comet.BackgroundGradient", (object)colors, false);
 
+		/// <summary>A 2dp diagonal linear-gradient border (the gold's
+		/// <c>diagonalGradientBorder</c> — Jetsnack chips and stepper circles).
+		/// Follows .CornerRadius(); stops spaced evenly corner-to-corner.</summary>
+		public static T BorderGradient<T>(this T view, params Microsoft.Maui.Graphics.Color[] colors) where T : View
+			=> view.SetEnvironment("Comet.BorderGradient", (object)colors, false);
+
 		/// <summary>Render this container as the REAL Material 3 <c>Card</c> (self-themed
 		/// containerColor/elevation; clickable overload when the view has a tap gesture) —
 		/// the widget the gold standard uses for tappable cards. Shape from .CornerRadius().</summary>

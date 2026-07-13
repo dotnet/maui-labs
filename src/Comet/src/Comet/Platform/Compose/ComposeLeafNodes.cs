@@ -88,7 +88,7 @@ namespace Comet.Platform.Compose
 		public override double? MeasureBaseline(double width, double height)
 		{
 			int sp = _fontSize > 0 ? _fontSize : 16;
-			var resolved = ComposeFontRegistry.Resolve(_fontFamily, _fontWeight);
+			var resolved = ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _italic);
 			// Mirror Render: a resolved custom family carries the weight (no FontWeight); otherwise
 			// apply the weight to the default family.
 			AndroidX.Compose.FontFamily? family = resolved?.Family;
@@ -105,10 +105,9 @@ namespace Comet.Platform.Compose
 		{
 			// Measure == render: slant (and weight) must reach the measuring typeface too,
 			// or italic glyphs render wider than the upright-measured frame and clip.
-			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight)?.Typeface is { } custom)
-				return _italic && System.OperatingSystem.IsAndroidVersionAtLeast(28)
-					? global::Android.Graphics.Typeface.Create(custom, _fontWeight > 0 ? _fontWeight : 400, true)
-					: custom;
+			// The registry bakes the slant into the resolved typeface itself.
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _italic)?.Typeface is { } custom)
+				return custom;
 			if ((_fontWeight >= 500 || _italic) && System.OperatingSystem.IsAndroidVersionAtLeast(28))
 				return global::Android.Graphics.Typeface.Create(global::Android.Graphics.Typeface.Default,
 					_fontWeight > 0 ? _fontWeight : 400, _italic);
@@ -131,7 +130,7 @@ namespace Comet.Platform.Compose
 			// Custom font: the resolved typeface already carries the weight, so set the family and
 			// DON'T also set FontWeight (which would synthesize bold on top). Falls back to the
 			// weight when no custom family is registered.
-			var resolved = ComposeFontRegistry.Resolve(_fontFamily, _fontWeight);
+			var resolved = ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _italic);
 			if (resolved is { } r)
 				text.FontFamily = r.Family;
 			else if (_fontWeight > 0)

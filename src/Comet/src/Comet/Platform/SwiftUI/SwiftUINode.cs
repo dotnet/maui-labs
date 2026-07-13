@@ -104,6 +104,12 @@ namespace Comet.Platform.SwiftUI
 				foreach (var stop in stops)
 					CometSwiftUIHost.AddGradientStop(_native, ToArgb(stop));
 			}
+			else if (id == PropertyIds.GradientBorder && value.AsObject is Microsoft.Maui.Graphics.Color[] borderStops)
+			{
+				CometSwiftUIHost.ClearBorderGradientStops(_native);
+				foreach (var stop in borderStops)
+					CometSwiftUIHost.AddBorderGradientStop(_native, ToArgb(stop));
+			}
 			else if (id == PropertyIds.Toggle_IsOn)
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);
 			else if (id == PropertyIds.Slider_Value)

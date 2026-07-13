@@ -38,6 +38,12 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("clearGradientStops:")]
 		void ClearGradientStops(CometNode node);
 
+		[Static, Export("clearBorderGradientStops:")]
+		void ClearBorderGradientStops(CometNode node);
+
+		[Static, Export("addBorderGradientStop:argb:")]
+		void AddBorderGradientStop(CometNode node, uint argb);
+
 		[Static, Export("addGradientStop:argb:")]
 		void AddGradientStop(CometNode node, uint argb);
 
