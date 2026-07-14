@@ -7,11 +7,6 @@ on:
         required: true
         type: string
         description: 'Path to the device test project (.csproj) for running tests'
-      solution-path:
-        required: false
-        type: string
-        default: ''
-        description: 'Path to a solution (.slnx/.sln) for restore and build. When empty, uses project-path directly.'
       project-name:
         required: true
         type: string
@@ -81,14 +76,14 @@ jobs:
 
       - name: Build device tests
         run: |
-          dotnet restore ${{ inputs.solution-path || inputs.project-path }}
-          dotnet build ${{ inputs.solution-path || inputs.project-path }} -c Release --no-restore
+          cd "$(dirname "${{ inputs.project-path }}")"
+          dotnet restore "$(basename "${{ inputs.project-path }}")"
+          dotnet build "$(basename "${{ inputs.project-path }}")" -c Release --no-restore
 
       - name: Run device tests
         run: |
-          SOLUTION="${{ inputs.solution-path || inputs.project-path }}"
-          cd "$(dirname "$SOLUTION")"
-          dotnet test "$(basename "$SOLUTION")" \
+          cd "$(dirname "${{ inputs.project-path }}")"
+          dotnet test "$(basename "${{ inputs.project-path }}")" \
             -f ${{ inputs.target-framework }} \
             -c Release \
             --no-build \

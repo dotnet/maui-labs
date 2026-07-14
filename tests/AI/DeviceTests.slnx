@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="../../src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
-  <Project Path="Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj" />
-</Solution>
