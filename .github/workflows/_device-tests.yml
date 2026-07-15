@@ -35,6 +35,11 @@ on:
         type: string
         default: 'maui macos maccatalyst'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
+      workload-version:
+        required: false
+        type: string
+        default: '10.0.203'
+        description: 'Workload version to install (pinned for reproducibility)'
       xcode-version:
         required: false
         type: string
@@ -72,7 +77,7 @@ jobs:
 
       - name: Install workloads
         if: inputs.install-workloads
-        run: dotnet workload install ${{ inputs.workloads }} --version 10.0.203
+        run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
       - name: Build device tests
         run: |
