@@ -146,7 +146,14 @@ Verification: jetsnack smokes 24/24 android + 24/24 iOS; jetchat 13/13 +
 24/24; reply 14/14 + 22/22; jetnews iOS 22/22. KNOWN FLAKE: jetnews.android
 expanded-resize segment (2 fails: activity recreation after `wm size`
 restores Interests+open drawer instead of Home) — pre-existing, not in this
-round's paths. (A "Comet.Tests doesn't compile" scare was self-inflicted:
+round's paths. DIAGNOSED 2026-07-15: the resize-restore signature was the
+EMULATOR, not the app — the 3GB AVD throws system/launcher ANR dialogs under
+load that EAT smoke taps (the "home via drawer" tap never landed, so the
+resize happened on Interests with the drawer open). Two real harness fixes
+landed: curl 127.0.0.1 not localhost (a Mac-side MAUI DevFlow process squats
+the same port on IPv6 [::1] and answers instead of the adb forward), and
+agent_wait 20s -> 60s (first launch after emulator boot exceeds 20s of JIT).
+Recommend recreating the AVD with 6-8GB RAM. (A "Comet.Tests doesn't compile" scare was self-inflicted:
 clean-android.sh deletes src/Comet/bin, and the test project links Comet via
 a HintPath to the net11.0-maccatalyst DLL — rebuild that target first. Suite
 is green: 932 pass / 27 skip / 1 known scheduler failure.)

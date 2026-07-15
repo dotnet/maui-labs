@@ -12,7 +12,10 @@ set -euo pipefail
 # to 19223 because 9223 is commonly squatted on dev Macs (FoundrySt… does on David's).
 : "${ANDROID_SERIAL:=emulator-5554}"
 : "${AGENT_HOST_PORT:=19223}"
-AGENT="http://localhost:${AGENT_HOST_PORT}"
+# 127.0.0.1, NOT localhost: `adb forward` binds IPv4 only, and a Mac-side MAUI
+# DevFlow process can squat the same port on IPv6 [::1] — curl to `localhost`
+# prefers IPv6 and silently talks to the WRONG server ("agent did not come up").
+AGENT="http://127.0.0.1:${AGENT_HOST_PORT}"
 
 adb_() { adb -s "$ANDROID_SERIAL" "$@"; }
 
@@ -26,7 +29,9 @@ android_launch() {  # android_launch <package>
 }
 
 agent_wait() {  # poll the agent until it answers (app startup)
-	for _ in $(seq 1 40); do
+	# 60s: the FIRST launch after an emulator boot carries full JIT warmup and
+	# can hold the agent's accept loop past 20s (backlog fills, then clears).
+	for _ in $(seq 1 120); do
 		if curl -s -m 2 "$AGENT/api/v1/agent/status" | grep -q '"running":true'; then
 			return 0
 		fi
