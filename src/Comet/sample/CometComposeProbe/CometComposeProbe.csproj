@@ -58,6 +58,11 @@
     <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
     <!-- Shared Jetsnack sample (M3). -->
     <Compile Include="..\Shared\Jetsnack\*.cs" Link="Shared\Jetsnack\%(Filename)%(Extension)" />
+    <!-- Shared Jetcaster sample (M4): fixture feed snapshots ride as assets
+         (streamed by JetcasterFixtures.Load), artwork as drawable resources. -->
+    <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
+    <AndroidAsset Include="..\Shared\Jetcaster\fixtures\*.rss" Link="Assets\jetcaster\%(Filename)%(Extension)" />
+    <AndroidResource Include="..\Shared\Jetcaster\fixtures\*_art.jpg" Link="Resources\drawable-nodpi\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.

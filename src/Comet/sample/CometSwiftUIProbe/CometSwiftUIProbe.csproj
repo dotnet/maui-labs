@@ -57,6 +57,11 @@
     <!-- Shared JetNews sample (M2). -->
     <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
     <Compile Include="..\Shared\Jetsnack\*.cs" Link="Shared\Jetsnack\%(Filename)%(Extension)" />
+    <!-- Shared Jetcaster sample (M4): fixture feeds + artwork at the bundle root
+         (explicit LogicalName — the SDK ignores subdir'd duplicates otherwise). -->
+    <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
+    <BundleResource Include="..\Shared\Jetcaster\fixtures\*.rss" LogicalName="%(Filename)%(Extension)" />
+    <BundleResource Include="..\Shared\Jetcaster\fixtures\*_art.jpg" LogicalName="%(Filename)%(Extension)" />
     <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
     <BundleResource Include="Fonts\Montserrat-Regular.ttf" />
     <BundleResource Include="Fonts\Montserrat-Medium.ttf" />
