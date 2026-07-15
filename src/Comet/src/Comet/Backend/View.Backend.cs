@@ -102,10 +102,10 @@ namespace Comet
 			if (this.GetEnvironment<bool?>(this, "Comet.AsCard", false) is true)
 				node.ApplyProperty(PropertyIds.Container_Card, PropertyValue.From(true));
 
-			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color[]>(this, "Comet.BackgroundGradient", false) is { Length: > 1 } gradient)
+			if (this.GetEnvironment<GradientSpec>(this, "Comet.BackgroundGradient", false) is { Stops.Length: > 1 } gradient)
 				node.ApplyProperty(PropertyIds.GradientBackground, PropertyValue.FromObject(gradient));
 
-			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color[]>(this, "Comet.BorderGradient", false) is { Length: > 1 } borderGradient)
+			if (this.GetEnvironment<GradientSpec>(this, "Comet.BorderGradient", false) is { Stops.Length: > 1 } borderGradient)
 				node.ApplyProperty(PropertyIds.GradientBorder, PropertyValue.FromObject(borderGradient));
 
 			// Surface styling read from the canonical styling vocabulary (ClipShape / Shadow /

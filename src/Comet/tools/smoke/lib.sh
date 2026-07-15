@@ -12,6 +12,9 @@ set -euo pipefail
 # to 19223 because 9223 is commonly squatted on dev Macs (FoundrySt… does on David's).
 : "${ANDROID_SERIAL:=emulator-5554}"
 : "${AGENT_HOST_PORT:=19223}"
+# Which simulator simctl targets — override with a UDID when two sims are booted
+# ("booted" is ambiguous then and terminate/launch/screenshot all fail).
+: "${IOS_SIM:=booted}"
 # 127.0.0.1, NOT localhost: `adb forward` binds IPv4 only, and a Mac-side MAUI
 # DevFlow process can squat the same port on IPv6 [::1] — curl to `localhost`
 # prefers IPv6 and silently talks to the WRONG server ("agent did not come up").
@@ -100,12 +103,12 @@ ios_agent_discover() {
 }
 
 ios_launch() {  # ios_launch <bundle-id>
-	xcrun simctl terminate booted "$1" 2>/dev/null || true
-	xcrun simctl launch booted "$1" > /dev/null
+	xcrun simctl terminate "$IOS_SIM" "$1" 2>/dev/null || true
+	xcrun simctl launch "$IOS_SIM" "$1" > /dev/null
 }
 
 ios_shot() {  # ios_shot <name>
-	xcrun simctl io booted screenshot "$OUT/$1.png" > /dev/null 2>&1
+	xcrun simctl io "$IOS_SIM" screenshot "$OUT/$1.png" > /dev/null 2>&1
 	echo "  shot: $1"
 }
 

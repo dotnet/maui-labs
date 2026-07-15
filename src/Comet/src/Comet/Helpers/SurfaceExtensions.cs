@@ -56,13 +56,27 @@ namespace Comet
 		/// <c>Brush.horizontalGradient</c> / SwiftUI <c>LinearGradient</c>) — the Jetsnack
 		/// design system's gradient fills. Stops are spaced evenly; respects .CornerRadius().</summary>
 		public static T BackgroundGradient<T>(this T view, params Microsoft.Maui.Graphics.Color[] colors) where T : View
-			=> view.SetEnvironment("Comet.BackgroundGradient", (object)colors, false);
+			=> view.BackgroundGradient(new GradientSpec(colors));
+
+		/// <summary>A linear-gradient background along <paramref name="direction"/> —
+		/// vertical covers the Jetcaster artwork scrims (per-stop alpha rides in the ARGB).</summary>
+		public static T BackgroundGradient<T>(this T view, GradientDirection direction, params Microsoft.Maui.Graphics.Color[] colors) where T : View
+			=> view.BackgroundGradient(new GradientSpec(colors, direction));
+
+		/// <summary>The full gradient spec — extent/offset/mirror model the gold's
+		/// <c>offsetGradientBackground</c> parallax (see <see cref="GradientSpec"/>).</summary>
+		public static T BackgroundGradient<T>(this T view, GradientSpec spec) where T : View
+			=> view.SetEnvironment("Comet.BackgroundGradient", spec, false);
 
 		/// <summary>A 2dp diagonal linear-gradient border (the gold's
 		/// <c>diagonalGradientBorder</c> — Jetsnack chips and stepper circles).
 		/// Follows .CornerRadius(); stops spaced evenly corner-to-corner.</summary>
 		public static T BorderGradient<T>(this T view, params Microsoft.Maui.Graphics.Color[] colors) where T : View
-			=> view.SetEnvironment("Comet.BorderGradient", (object)colors, false);
+			=> view.BorderGradient(new GradientSpec(colors, GradientDirection.Diagonal));
+
+		/// <summary>Gradient border with an explicit spec (direction per stop layout).</summary>
+		public static T BorderGradient<T>(this T view, GradientSpec spec) where T : View
+			=> view.SetEnvironment("Comet.BorderGradient", spec, false);
 
 		/// <summary>Render this container as the REAL Material 3 <c>Card</c> (self-themed
 		/// containerColor/elevation; clickable overload when the view has a tap gesture) —

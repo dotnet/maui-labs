@@ -28,7 +28,8 @@ struct CometTextRun {
     @Published var doubleValue: Double = 0
     @Published var children: [CometNode] = []
     @Published var backgroundARGB: UInt32 = 0   // 0 = none
-    @Published var gradientStops: [UInt32] = [] // horizontal linear-gradient fill (wins over background)
+    @Published var gradientStops: [UInt32] = [] // linear-gradient fill (wins over background)
+    @Published var gradientDirection = 0 // 0 horizontal, 1 vertical, 2 diagonal (TL→BR)
     @Published var opacity: CGFloat = 1         // Comet Opacity → SwiftUI .opacity(); 1 = opaque
     @Published var isVisible: Bool = true       // Comet IsVisible; false => hidden + non-interactive
     @Published var textColorARGB: UInt32 = 0    // 0 = inherit (default foreground)
@@ -164,6 +165,7 @@ struct CometTextRun {
         case "maxlines": node.maxLines = Int(value)
         case "fontweight": node.fontWeight = Int(value)
         case "borderwidth": node.borderWidth = CGFloat(value)
+        case "gradientdirection": node.gradientDirection = Int(value)
         default: break
         }
     }
@@ -672,7 +674,8 @@ struct CometNodeView: View {
         // (so it fills the arranged frame) → offset (move the whole node into place).
         content
             .modifier(SizeModifier(node: node))
-            .modifier(BackgroundModifier(argb: node.backgroundARGB, stops: node.gradientStops))
+            .modifier(BackgroundModifier(argb: node.backgroundARGB, stops: node.gradientStops,
+                                         direction: node.gradientDirection))
             .modifier(SurfaceModifier(node: node)) // rounded corners + elevation (Material card)
             .modifier(TapGestureModifier(node: node))
             .modifier(OffsetModifier(node: node))
@@ -983,13 +986,19 @@ private func argbColor(_ argb: UInt32) -> Color {
 private struct BackgroundModifier: ViewModifier {
     let argb: UInt32
     var stops: [UInt32] = []
+    var direction: Int = 0
     func body(content: Content) -> some View {
         if stops.count > 1 {
-            // Horizontal linear gradient (Jetsnack fills) — the LinearGradient twin of
-            // Compose's Brush.horizontalGradient; stops spaced evenly.
+            // Linear gradient (Jetsnack fills, Jetcaster scrims) — the LinearGradient
+            // twin of Compose's horizontal/vertical/linearGradient; stops spaced evenly.
+            let (start, end): (UnitPoint, UnitPoint) = switch direction {
+            case 1: (.top, .bottom)
+            case 2: (.topLeading, .bottomTrailing)
+            default: (.leading, .trailing)
+            }
             content.background(LinearGradient(
                 colors: stops.map(argbColor),
-                startPoint: .leading, endPoint: .trailing))
+                startPoint: start, endPoint: end))
         } else if argb == 0 {
             content
         } else {

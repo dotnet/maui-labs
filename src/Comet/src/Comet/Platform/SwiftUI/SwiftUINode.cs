@@ -98,16 +98,19 @@ namespace Comet.Platform.SwiftUI
 				// resting elevation the real Android Card self-themes (was a Shadow token
 				// before the AsCard promotion — this keeps the iOS render elevated).
 				CometSwiftUIHost.SetDouble(_native, "elevation", 1);
-			else if (id == PropertyIds.GradientBackground && value.AsObject is Microsoft.Maui.Graphics.Color[] stops)
+			else if (id == PropertyIds.GradientBackground && value.AsObject is GradientSpec spec)
 			{
 				CometSwiftUIHost.ClearGradientStops(_native);
-				foreach (var stop in stops)
+				foreach (var stop in spec.Stops)
 					CometSwiftUIHost.AddGradientStop(_native, ToArgb(stop));
+				// 0 horizontal / 1 vertical / 2 diagonal — extent/offset/mirror (the
+				// parallax fields) are an Android-first capability, documented deviation here.
+				CometSwiftUIHost.SetDouble(_native, "gradientdirection", (double)spec.Direction);
 			}
-			else if (id == PropertyIds.GradientBorder && value.AsObject is Microsoft.Maui.Graphics.Color[] borderStops)
+			else if (id == PropertyIds.GradientBorder && value.AsObject is GradientSpec borderSpec)
 			{
 				CometSwiftUIHost.ClearBorderGradientStops(_native);
-				foreach (var stop in borderStops)
+				foreach (var stop in borderSpec.Stops)
 					CometSwiftUIHost.AddBorderGradientStop(_native, ToArgb(stop));
 			}
 			else if (id == PropertyIds.Toggle_IsOn)

@@ -131,10 +131,29 @@ namespace Comet.Platform.Compose
 		/// that needs interior padding (e.g. a borderless text field) applies this itself.</summary>
 		protected Microsoft.Maui.Thickness Padding => _padding;
 
-	Microsoft.Maui.Graphics.Color[]? _gradient;
+	GradientSpec? _gradient;
 		AndroidX.Compose.UI.Graphics.Brush? _cachedBrush;
-		Microsoft.Maui.Graphics.Color[]? _borderGradient;
+		GradientSpec? _borderGradient;
 		AndroidX.Compose.UI.Graphics.Brush? _cachedBorderBrush;
+
+		// Builds the REAL Compose gradient brush for a spec: direction picks the factory,
+		// extent/offset/mirror (the gold's offsetGradientBackground parallax) ride on the
+		// horizontal overload's startX/endX + TileMode.
+		static AndroidX.Compose.UI.Graphics.Brush BuildGradientBrush(GradientSpec spec)
+		{
+			var stops = new AndroidX.Compose.Color[spec.Stops.Length];
+			for (int i = 0; i < spec.Stops.Length; i++)
+				stops[i] = ToComposeColor(spec.Stops[i]);
+			var tile = spec.Mirror ? AndroidX.Compose.TileMode.Mirror : AndroidX.Compose.TileMode.Clamp;
+			return spec.Direction switch
+			{
+				GradientDirection.Vertical => AndroidX.Compose.Brush.VerticalGradient(stops),
+				GradientDirection.Diagonal => AndroidX.Compose.Brush.LinearGradient(stops),
+				_ when spec.ExtentDp is { } extent => AndroidX.Compose.Brush.HorizontalGradient(
+					stops, -spec.OffsetDp * Density, (extent - spec.OffsetDp) * Density, tile),
+				_ => AndroidX.Compose.Brush.HorizontalGradient(stops),
+			};
+		}
 
 		/// <summary>Whether the view carries a long-press gesture (widget branches that own
 		/// the click must NOT take over when a long-press also needs the combinedClickable).</summary>
@@ -168,13 +187,13 @@ namespace Comet.Platform.Compose
 			}
 			else if (id == PropertyIds.GradientBackground)
 			{
-				_gradient = value.AsObject as Microsoft.Maui.Graphics.Color[];
-				_cachedBrush = null;   // stops changed — rebuild on next render
+				_gradient = value.AsObject as GradientSpec;
+				_cachedBrush = null;   // spec changed — rebuild on next render
 				_styleVersion.Value++;
 			}
 			else if (id == PropertyIds.GradientBorder)
 			{
-				_borderGradient = value.AsObject as Microsoft.Maui.Graphics.Color[];
+				_borderGradient = value.AsObject as GradientSpec;
 				_cachedBorderBrush = null;
 				_styleVersion.Value++;
 			}
@@ -269,15 +288,9 @@ namespace Comet.Platform.Compose
 			// the REAL Compose Brush.horizontalGradient. The BoundBrush is CACHED per node:
 			// rebuilding it costs ~stops+2 JNI crossings and Render runs per recomposition
 			// (a fling over the gradient-heavy feed would churn hundreds of Java objects).
-			if (_gradient is { Length: > 1 } stops)
+			if (_gradient is { Stops.Length: > 1 } gradientSpec)
 			{
-				if (_cachedBrush is null)
-				{
-					var composeStops = new AndroidX.Compose.Color[stops.Length];
-					for (int i = 0; i < stops.Length; i++)
-						composeStops[i] = ToComposeColor(stops[i]);
-					_cachedBrush = AndroidX.Compose.Brush.HorizontalGradient(composeStops);
-				}
+				_cachedBrush ??= BuildGradientBrush(gradientSpec);
 				m = (m ?? Modifier.Companion).Background(_cachedBrush);
 			}
 			else if (_background is { } bg)
@@ -286,15 +299,9 @@ namespace Comet.Platform.Compose
 			// Stroke (e.g. avatar ring) following the same rounded outline, drawn over the fill.
 			// A gradient stroke (the gold's diagonalGradientBorder — Jetsnack chips/steppers)
 			// wins over a solid one; the diagonal Brush.linearGradient is cached per node.
-			if (_borderGradient is { Length: > 1 } borderStops)
+			if (_borderGradient is { Stops.Length: > 1 } borderSpec)
 			{
-				if (_cachedBorderBrush is null)
-				{
-					var stops2 = new AndroidX.Compose.Color[borderStops.Length];
-					for (int i = 0; i < borderStops.Length; i++)
-						stops2[i] = ToComposeColor(borderStops[i]);
-					_cachedBorderBrush = AndroidX.Compose.Brush.LinearGradient(stops2);
-				}
+				_cachedBorderBrush ??= BuildGradientBrush(borderSpec);
 				m = (m ?? Modifier.Companion).Border(new Dp(2f), _cachedBorderBrush,
 					rounded ? CornerShape() : null);
 			}

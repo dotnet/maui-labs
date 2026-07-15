@@ -8,8 +8,8 @@ source "$(dirname "$0")/lib.sh"
 BUNDLE=com.comet.swiftuiprobe
 smoke_begin jetnews.ios
 
-xcrun simctl terminate booted "$BUNDLE" 2>/dev/null || true
-SIMCTL_CHILD_COMET_SCREEN=jetnews xcrun simctl launch booted "$BUNDLE" > /dev/null
+xcrun simctl terminate "$IOS_SIM" "$BUNDLE" 2>/dev/null || true
+SIMCTL_CHILD_COMET_SCREEN=jetnews xcrun simctl launch "$IOS_SIM" "$BUNDLE" > /dev/null
 sleep 4
 ios_agent_discover
 agent_wait
