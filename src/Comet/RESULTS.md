@@ -508,3 +508,28 @@ needs the `CometSingleRid` csproj switch — a raw `-p:RuntimeIdentifiers` flows
 into the netstandard2.0 source generator and breaks its copy step. Pixel 5
 column lands with batch B1 (after JetNews).
 
+
+## Pixel 5 batch B1 — 2026-07-15 (Reply + JetNews + Jetsnack)
+
+Physical Pixel 5 (`13041FDD4007MT`, Android 14). Comet = today's Release
+trimmed single-RID probe (bundles FOUR samples, 33.5 MiB — same APK as the
+Jetsnack row) launched with `am start -W --es screen <sample>`; 10 runs,
+0 FATALs across all 30 launches. Gold = Reply release APK; JetNews/Jetsnack
+DEBUG builds (their release APKs fail to launch — sample-side minify issue,
+same caveat as the emulator rows). Jank = 6 fling swipes on the same screens
+as the emulator rows, `dumpsys gfxinfo` after a post-launch reset.
+
+| Metric | Reply | JetNews | Jetsnack |
+|---|---|---|---|
+| Comet cold start median (range) | 1373 ms (1342–1439) | 1395 ms (1379–1423) | 1795 ms (1764–2127) |
+| Gold cold start median | 365 ms (release) | 1237 ms (DEBUG) | 1919 ms (DEBUG) |
+| Comet scroll jank | 26.7% janky, p50 13 / p90 150 ms | 21.9%, p50 11 / p90 105 ms | 20.0%, p50 13 / p90 250 ms |
+| Gold scroll jank | 1.6%, p50 10 / p90 20 ms (release) | 10.8%, p50 10 / p90 29 ms (DEBUG) | 25.0%, p50 14 / p90 97 ms (DEBUG) |
+
+Notes: on real hardware the full-JIT cost shows up in both cold start and the
+fling p90s (first-fling JIT warmup lands inside the 6-swipe window) — p50s are
+at parity everywhere, and Jetsnack Comet BEATS the debug gold on cold start
+(1795 vs 1919) and janky-frame rate (20.0 vs 25.0%). Reply remains the honest
+headline gap (1373 vs 365 release gold; 3.8× — emulator was 4.8×): no AOT /
+startup profile tuning yet. The per-sample emulator tables' "Pixel 5 (B1)"
+columns are superseded by this batch table.
