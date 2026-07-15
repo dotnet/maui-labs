@@ -17,6 +17,7 @@ At a glance:
 | [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
+| [Browser Essentials](#browser-essentials) | MAUI Essentials for Blazor WebAssembly and wasm browser apps via web APIs. |
 | [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
 | [AppProjectReference](#appprojectreference) | MSBuild package for referencing MAUI app projects and consuming their platform artifacts. |
 
@@ -126,6 +127,21 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 |---------|-------------|
 | `Microsoft.Maui.Platforms.Windows.WPF` | Core WPF backend — handlers, hosting, Blazor WebView |
 | `Microsoft.Maui.Platforms.Windows.WPF.Essentials` | Essentials APIs for WPF |
+
+### Browser Essentials
+
+MAUI Essentials implementations for the browser (WebAssembly) — use the standard Essentials interfaces (`IPreferences`, `ISecureStorage`, `IClipboard`, `IGeolocation`, and more) in Blazor WebAssembly and plain wasm browser apps, backed by web APIs via `[JSImport]` interop. No Blazor dependency in the library itself.
+
+- **Storage** — Preferences on `localStorage`, SecureStorage with WebCrypto AES-GCM encryption
+- **Device** — device/display/app info, connectivity, battery, vibration, haptics, wake lock
+- **Sensors** — geolocation, accelerometer, gyroscope, orientation, compass
+- **Sharing & launching** — Web Share API (incl. files), clipboard, `mailto:`/`tel:`/`sms:` handlers
+- **Files** — file picker, app package files over `fetch`
+- **Tested in the browser** — Playwright-driven test suite runs inside headless Chromium
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.Platforms.Browser.Essentials` | Essentials APIs for the browser (WebAssembly) |
 
 ### Essentials.AI
 
