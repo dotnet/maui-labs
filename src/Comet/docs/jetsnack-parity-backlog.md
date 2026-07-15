@@ -146,5 +146,7 @@ Verification: jetsnack smokes 24/24 android + 24/24 iOS; jetchat 13/13 +
 24/24; reply 14/14 + 22/22; jetnews iOS 22/22. KNOWN FLAKE: jetnews.android
 expanded-resize segment (2 fails: activity recreation after `wm size`
 restores Interests+open drawer instead of Home) — pre-existing, not in this
-round's paths. Comet.Tests host project doesn't compile on this branch
-(SelectionMode/BodyAttribute drift) — pre-existing.
+round's paths. (A "Comet.Tests doesn't compile" scare was self-inflicted:
+clean-android.sh deletes src/Comet/bin, and the test project links Comet via
+a HintPath to the net11.0-maccatalyst DLL — rebuild that target first. Suite
+is green: 932 pass / 27 skip / 1 known scheduler failure.)
