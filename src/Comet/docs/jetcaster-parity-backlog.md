@@ -105,9 +105,16 @@ SwipeToDismissBox, basicMarquee modifier.
 
 - [x] Source survey (this doc)
 - [x] Gold mobile-debug.apk built
-- [ ] Gold captures (screen list: home-library, home-discover ×2 categories,
-      podcast details pane compact+expanded, player compact+expanded,
-      offline dialog) — needs live network on the capture device
+- [x] Gold captures, first set 2026-07-15 (emulator, live feeds):
+      compact-01-discover / 02-podcast-details / 03-player in
+      sample/Shared/Jetcaster/gold/. Capture notes: the floating
+      Library|Discover toolbar renders TOP-docked overlapping the status bar
+      on this build (survey said bottom-center — verify against source when
+      building it) and its Library half sits under the status clock, so the
+      library view + expanded/two-pane + offline-dialog captures are PENDING
+      (grab during build phase; details pane already proves the pane nav).
+      Player screen: episode CARD opens the player; the row's play button
+      only toggles mock playback in place.
 - [ ] Fixture feed snapshot + C# pipeline (fixture mode first)
 - [ ] Framework: grid/carousel/search-bar/chip-row nodes; radial GradientSpec
 - [ ] Screens: Home (Library/Discover) → PodcastDetails pane → Player
