@@ -119,8 +119,16 @@ SwipeToDismissBox, basicMarquee modifier.
       RSS+iTunes XDocument parser (host-verified on all 6 fixtures), in-memory
       PodcastStore, MockEpisodePlayer ticker; fixtures wired into both probes
       (Android assets + iOS bundle root). Live mode = later increment.
-- [ ] Framework: grid/carousel/search-bar/chip-row nodes; radial GradientSpec
-- [ ] Screens: Home (Library/Discover) → PodcastDetails pane → Player
+- [x] Framework (`a92229d9`): radial GradientSpec; ListView grid
+      (LazyVerticalGrid Adaptive) + M3 carousel flavors; FilterChip control
+      (real widget + iOS twin); SearchBar control already existed (Reply).
+- [x] Home screen (`0bdaef8e`): Discover + Library on the floating pill,
+      verified interactive on Pixel 5. Known follow-ups: full-span grid
+      headers (span API unbound), HorizontalFloatingToolbar binding, Library
+      empty state, chip-label color nuance, reload granularity (whole-grid
+      ReloadData per chip tap ANRs the 3GB AVD; fine on hardware — the M3
+      reload-storm backlog item now has a concrete heavy consumer).
+- [ ] Screens remaining: PodcastDetails pane → Player (Home DONE)
 - [ ] Smokes both platforms; standalone app id; RESULTS row (+ Pixel 5 B2
       with Jetsnack per plan); /code-review
 - [ ] Canvas feasibility spike (1 day, for M5 JetLagged) DURING this sample
