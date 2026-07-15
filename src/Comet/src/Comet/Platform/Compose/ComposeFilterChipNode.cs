@@ -46,6 +46,9 @@ namespace Comet.Platform.Compose
 
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
+			// The label view only measures once its backend node exists — materialize the
+			// slot first (idempotent; Render reuses the same node).
+			_labelNode ??= (ComposeNode)CometBackendBridge.Materialize(_control.LabelView, _context, _control);
 			// Label width + M3 chip paddings (16dp label-only sides, +check room selected).
 			var label = CometBackendLayoutEngine.Measure(_control.LabelView);
 			double lead = _control.LeadingIconView is null ? 0 : 26;

@@ -75,6 +75,15 @@ namespace CometComposeProbe
 				ComposeFontRegistry.Register("Karla", 400, Asset("karla_regular.ttf"));
 				ComposeFontRegistry.Register("Karla", 700, Asset("karla_bold.ttf"));
 
+				// Jetcaster display font: RobotoFlex is a VARIABLE font — instantiate the
+				// gold's display weights from the single file (Typeface.Create(tf, w, italic)
+				// resolves variable-font weight axes on API 28+).
+				var robotoFlex = Asset("roboto_flex.ttf");
+				ComposeFontRegistry.Register("RobotoFlex", 400, robotoFlex);
+				if (OperatingSystem.IsAndroidVersionAtLeast(28))
+					ComposeFontRegistry.Register("RobotoFlex", 738,
+						Android.Graphics.Typeface.Create(robotoFlex, 738, false));
+
 				// Google's Material Icons font as the cross-platform icon set (same glyphs as iOS).
 				ComposeFontRegistry.Register(CometSamples.Jetchat.JetchatIcons.Font, 400, Asset("material_icons.ttf"));
 				CometSamples.Jetchat.JetchatIcons.Register();
@@ -127,6 +136,8 @@ namespace CometComposeProbe
 				scheme = CometSamples.Reply.ReplyTheme.ComposeScheme();
 			else if (Screen == "jetnews")
 				scheme = CometSamples.JetNews.JetNewsTheme.ComposeScheme();
+			else if (Screen == "jetcaster")
+				scheme = CometSamples.Jetcaster.JetcasterTheme.ComposeScheme();
 
 			// Status bar: Surface (matches the header bar).
 			// Nav bar: SurfaceTinted (matches the footer/UserInput bar so the background is seamless).
@@ -232,6 +243,7 @@ namespace CometComposeProbe
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
 			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 52),
+			"jetcaster" => BuildJetcaster(),
 			_ => new JetchatRoot(),
 		};
 #else
@@ -240,9 +252,19 @@ namespace CometComposeProbe
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
 			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 52),
+			"jetcaster" => BuildJetcaster(),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24),
 		};
 #endif
+
+		// Fixture mode: parse the six bundled feed snapshots once, on first entry
+		// (keeps the other samples' cold-start numbers untouched).
+		View BuildJetcaster()
+		{
+			CometSamples.Jetcaster.JetcasterFixtures.Load(
+				name => Assets!.Open("jetcaster/" + name));
+			return new CometSamples.Jetcaster.JetcasterRoot(topInset: 52);
+		}
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{
