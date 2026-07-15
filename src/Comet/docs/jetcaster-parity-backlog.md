@@ -115,7 +115,10 @@ SwipeToDismissBox, basicMarquee modifier.
       (grab during build phase; details pane already proves the pane nav).
       Player screen: episode CARD opens the player; the row's play button
       only toggles mock playback in place.
-- [ ] Fixture feed snapshot + C# pipeline (fixture mode first)
+- [x] Fixture feed snapshot (`30230406`) + C# pipeline (`03f3ca5c`): models,
+      RSS+iTunes XDocument parser (host-verified on all 6 fixtures), in-memory
+      PodcastStore, MockEpisodePlayer ticker; fixtures wired into both probes
+      (Android assets + iOS bundle root). Live mode = later increment.
 - [ ] Framework: grid/carousel/search-bar/chip-row nodes; radial GradientSpec
 - [ ] Screens: Home (Library/Discover) → PodcastDetails pane → Player
 - [ ] Smokes both platforms; standalone app id; RESULTS row (+ Pixel 5 B2
