@@ -9,6 +9,15 @@ using Microsoft.Maui;
 
 namespace Comet
 {
+	/// <summary>Horizontal list container flavor — the plain <c>LazyRow</c> or one of
+	/// the real Material 3 carousels the Jetcaster gold uses.</summary>
+	public enum ListCarousel
+	{
+		None,
+		MultiBrowse,
+		Uncontained,
+	}
+
 	public interface IListView : IView
 	{
 		int Sections();
@@ -38,6 +47,19 @@ namespace Comet
 
 		/// <summary>Horizontal (carousel) orientation — Compose <c>LazyRow</c>.</summary>
 		bool Horizontal { get; }
+
+		/// <summary>Adaptive grid mode: when &gt; 0 the vertical list renders as the REAL
+		/// Compose <c>LazyVerticalGrid(GridCells.Adaptive(minDp))</c> (Jetcaster Home's
+		/// Adaptive(362dp) content grid). 0 = plain <c>LazyColumn</c>.</summary>
+		double GridAdaptiveMinWidth { get; }
+
+		/// <summary>Which horizontal container renders the row items — the plain
+		/// <c>LazyRow</c> or one of the real M3 carousels (Jetcaster).</summary>
+		ListCarousel Carousel { get; }
+
+		/// <summary>Item width (Dp) for the carousel kinds: MultiBrowse's
+		/// <c>preferredItemWidth</c> / Uncontained's fixed <c>itemWidth</c>.</summary>
+		double CarouselItemWidth { get; }
 
 		/// <summary>Reactive "scrolled away from the TOP" flag (content exists above the
 		/// viewport — Compose <c>canScrollBackward</c>). Reply's ExtendedFAB collapse reads
@@ -231,6 +253,16 @@ namespace Comet
 		/// <summary>Lay the list HORIZONTALLY (a card carousel — Compose <c>LazyRow</c>).
 		/// Default false = vertical. Set before the node materializes.</summary>
 		public bool Horizontal { get; set; }
+
+		/// <summary>Adaptive-grid mode (Compose <c>LazyVerticalGrid(GridCells.Adaptive)</c>):
+		/// the minimum cell width in Dp, 0 = plain vertical list. Set before materialize.</summary>
+		public double GridAdaptiveMinWidth { get; set; }
+
+		/// <summary>Horizontal container flavor: LazyRow (default) or a real M3 carousel.</summary>
+		public ListCarousel Carousel { get; set; }
+
+		/// <summary>Carousel item width in Dp (MultiBrowse preferred / Uncontained fixed).</summary>
+		public double CarouselItemWidth { get; set; }
 
 		/// <summary>Reactive "scrolled away from the top" flag (top-relative twin of
 		/// <see cref="ScrolledAway"/>); drives Reply's ExtendedFAB collapse.</summary>

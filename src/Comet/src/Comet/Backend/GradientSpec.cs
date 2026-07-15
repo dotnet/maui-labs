@@ -9,6 +9,8 @@ namespace Comet
 		Horizontal,
 		Vertical,
 		Diagonal,
+		/// <summary>Center-out radial (Jetcaster's radialGradientScrim home background).</summary>
+		Radial,
 	}
 
 	/// <summary>

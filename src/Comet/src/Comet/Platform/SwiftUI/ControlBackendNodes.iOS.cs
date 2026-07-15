@@ -142,6 +142,12 @@ namespace Comet
 			=> new SwiftUIIconToggleNode(this, context);
 	}
 
+	public partial class FilterChip
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIFilterChipNode(this, context);
+	}
+
 	public partial class ListDetail
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

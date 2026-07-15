@@ -157,6 +157,12 @@ namespace Comet.Platform.Compose
 				_cachedWidth = rowWidth;
 			}
 
+			// Adaptive grid (Jetcaster Home): cells share the row width across the column
+			// count Compose's GridCells.Adaptive will compute — mirror that math so the
+			// Yoga-laid cell content matches the rendered cell box.
+			double gridMin = _list.GridAdaptiveMinWidth;
+			int gridColumns = gridMin > 0 ? System.Math.Max(1, (int)(rowWidth / gridMin)) : 0;
+
 			ComposableNode BuildRow(int i)
 			{
 				if (_rowCache.TryGetValue(i, out var cached))
@@ -170,10 +176,12 @@ namespace Comet.Platform.Compose
 				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context, _list as View);
 				if (yoga)
 				{
-					// Vertical rows fill the list's width; horizontal (carousel) items lay out
-					// at their own intrinsic width (a fixed-size card).
-					double w = _list.Horizontal
-						? CometBackendLayoutEngine.Measure(view).Width
+					// Vertical rows fill the list's width; grid cells the computed column
+					// width; carousel items their stated width; LazyRow items their own
+					// intrinsic width (a fixed-size card).
+					double w = gridColumns > 0 ? rowWidth / gridColumns
+						: _list.Horizontal && _list.Carousel != ListCarousel.None ? _list.CarouselItemWidth
+						: _list.Horizontal ? CometBackendLayoutEngine.Measure(view).Width
 						: rowWidth;
 					CometBackendLayoutEngine.LayoutContent(view, w);
 				}
@@ -181,12 +189,31 @@ namespace Comet.Platform.Compose
 				return node;
 			}
 
-			// Horizontal (carousel): the REAL Compose LazyRow — same lazy row factory.
+			// Horizontal: the REAL Compose LazyRow, or the real M3 carousel the gold
+			// uses (Jetcaster followed-podcasts / top-podcasts rows).
 			if (_list.Horizontal)
 			{
-				var lazyRow = new AndroidX.Compose.LazyRow<int>(indices, BuildRow);
-				((ComposableNode)lazyRow).Modifier = BuildNodeModifier();
-				lazyRow.Render(composer);
+				ComposableNode row = _list.Carousel switch
+				{
+					ListCarousel.MultiBrowse => new AndroidX.Compose.HorizontalMultiBrowseCarousel<int>(
+						indices, (float)_list.CarouselItemWidth, BuildRow),
+					ListCarousel.Uncontained => new AndroidX.Compose.HorizontalUncontainedCarousel<int>(
+						indices, (float)_list.CarouselItemWidth, BuildRow),
+					_ => new AndroidX.Compose.LazyRow<int>(indices, BuildRow),
+				};
+				row.Modifier = BuildNodeModifier();
+				row.Render(composer);
+				return;
+			}
+
+			// Adaptive grid: the REAL LazyVerticalGrid (full-span header rows are a
+			// follow-up — Jetcaster's headers land as ordinary cells until spans bind).
+			if (gridColumns > 0)
+			{
+				var grid = new AndroidX.Compose.LazyVerticalGrid<int>(
+					AndroidX.Compose.GridCells.Adaptive((float)gridMin), indices, BuildRow);
+				((ComposableNode)grid).Modifier = BuildNodeModifier();
+				grid.Render(composer);
 				return;
 			}
 

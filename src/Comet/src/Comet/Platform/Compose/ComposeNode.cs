@@ -149,6 +149,7 @@ namespace Comet.Platform.Compose
 			{
 				GradientDirection.Vertical => AndroidX.Compose.Brush.VerticalGradient(stops),
 				GradientDirection.Diagonal => AndroidX.Compose.Brush.LinearGradient(stops),
+				GradientDirection.Radial => AndroidX.Compose.Brush.RadialGradient(stops),
 				_ when spec.ExtentDp is { } extent => AndroidX.Compose.Brush.HorizontalGradient(
 					stops, -spec.OffsetDp * Density, (extent - spec.OffsetDp) * Density, tile),
 				_ => AndroidX.Compose.Brush.HorizontalGradient(stops),

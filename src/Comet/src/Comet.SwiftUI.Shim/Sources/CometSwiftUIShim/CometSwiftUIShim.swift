@@ -988,7 +988,14 @@ private struct BackgroundModifier: ViewModifier {
     var stops: [UInt32] = []
     var direction: Int = 0
     func body(content: Content) -> some View {
-        if stops.count > 1 {
+        if stops.count > 1, direction == 3 {
+            // Radial (Jetcaster's home scrim). SwiftUI needs explicit radii — size
+            // isn't known here, so a screen-scale end radius approximates Compose's
+            // bounds-fitted radial (documented deviation until a consumer needs more).
+            content.background(RadialGradient(
+                colors: stops.map(argbColor),
+                center: .center, startRadius: 0, endRadius: 500))
+        } else if stops.count > 1 {
             // Linear gradient (Jetsnack fills, Jetcaster scrims) — the LinearGradient
             // twin of Compose's horizontal/vertical/linearGradient; stops spaced evenly.
             let (start, end): (UnitPoint, UnitPoint) = switch direction {

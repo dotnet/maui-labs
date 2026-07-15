@@ -67,6 +67,15 @@ namespace Comet
 		}
 	}
 
+	public partial class FilterChip
+	{
+		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
+		{
+			base.ApplyAllSetProperties(node);
+			node.ApplyProperty(PropertyIds.Toggle_IsOn, PropertyValue.From(IsSelected));
+		}
+	}
+
 	public partial class TabBar
 	{
 		bool _hooked;
