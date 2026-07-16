@@ -132,3 +132,22 @@ SwipeToDismissBox, basicMarquee modifier.
 - [ ] Smokes both platforms; standalone app id; RESULTS row (+ Pixel 5 B2
       with Jetsnack per plan); /code-review
 - [ ] Canvas feasibility spike (1 day, for M5 JetLagged) DURING this sample
+
+## /code-review round 1 (417bdcc7..HEAD) — outcome 2026-07-16
+
+11 verified findings, ALL FIXED (`022829a2` framework, `f9919ac8` sample):
+iOS FilterChip measured slots before Arrange materialized them (EnsureContent
+on the hosted base now guarantees it) and never Refresh()ed on state patches;
+ComposeListNode flavor precedence unified + carousel 0-width fallback + the
+scroll-state bridge no longer observes a state the grid can't attach
+(rememberLazyGridState binding BACKLOGGED); iOS border gradients honor
+spec.Direction; GradientSpec extent works on Vertical (Diagonal/Radial
+documented); RobotoFlex loads lazily; MockEpisodePlayer duration/threading/CTS
+hygiene; NEW IconButton control (real M3 widget both platforms) replacing the
+episode-card look-alikes. Verified: host 936, jetsnack 24+24 both platforms.
+
+Deferred cleanup themes (from the review's cleanup angles): one-row-ListView
+reload idiom → framework reactive-chrome primitive (3+ copies); per-sample
+ComposeScheme()/icon-map/typography boilerplate consolidation; gradient-over-
+solid on ONE node (the two-layer ZStack idiom will spread to player/details);
+grid full-span headers; sample registry for MainActivity's 3-site growth.
