@@ -44,8 +44,10 @@ agent_wait() {  # poll the agent until it answers (app startup)
 	return 1
 }
 
-agent_get()  { curl -s -m 10 "$AGENT$1"; }
-agent_post() { curl -s -m 30 -X POST "$AGENT$1" -d "$2"; }
+# 30/60s: a loaded emulator can hold a tree query past 10s while the app is
+# healthy — set -e turns one slow curl into a dead smoke run otherwise.
+agent_get()  { curl -s -m 30 "$AGENT$1"; }
+agent_post() { curl -s -m 60 -X POST "$AGENT$1" -d "$2"; }
 
 # elements <query>          → the raw JSON array for ?type=&text=&automationId=
 # (spaces in text= values are URL-encoded here so callers can write them naturally)
@@ -90,10 +92,13 @@ android_resize_reset() { adb_ shell wm size reset; sleep 2; }
 # port 9223 is often held by a Mac-side process (a MAUI DevFlow agent squats it on
 # David's machine), so CometDevAgent scans forward. Discover the COMET agent by probing.
 ios_agent_discover() {
+	# 127.0.0.1 here too: the Comet agent binds IPv4-only, so an IPv6 [::1]
+	# squatter on the SAME port would win a `localhost` curl, fail the framework
+	# grep, and make discovery skip the real agent (the Android fix's twin).
 	for p in $(seq 9223 9232); do
-		if curl -s -m 1 "http://localhost:$p/api/v1/agent/status" | grep -q '"framework":"comet"'; then
+		if curl -s -m 1 "http://127.0.0.1:$p/api/v1/agent/status" | grep -q '"framework":"comet"'; then
 			AGENT_HOST_PORT=$p
-			AGENT="http://localhost:$p"
+			AGENT="http://127.0.0.1:$p"
 			echo "  agent: $AGENT"
 			return 0
 		fi

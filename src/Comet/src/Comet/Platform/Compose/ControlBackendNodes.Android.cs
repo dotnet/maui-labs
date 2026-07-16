@@ -93,6 +93,12 @@ namespace Comet
 			=> new ComposeFilterChipNode(this, context);
 	}
 
+	public partial class IconButton
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeIconButtonNode(this, context);
+	}
+
 	public partial class SearchBar
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)

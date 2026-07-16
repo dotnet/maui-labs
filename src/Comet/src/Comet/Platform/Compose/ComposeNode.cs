@@ -147,6 +147,9 @@ namespace Comet.Platform.Compose
 			var tile = spec.Mirror ? AndroidX.Compose.TileMode.Mirror : AndroidX.Compose.TileMode.Clamp;
 			return spec.Direction switch
 			{
+				GradientDirection.Vertical when spec.ExtentDp is { } vExtent =>
+					AndroidX.Compose.Brush.VerticalGradient(
+						stops, -spec.OffsetDp * Density, (vExtent - spec.OffsetDp) * Density, tile),
 				GradientDirection.Vertical => AndroidX.Compose.Brush.VerticalGradient(stops),
 				GradientDirection.Diagonal => AndroidX.Compose.Brush.LinearGradient(stops),
 				GradientDirection.Radial => AndroidX.Compose.Brush.RadialGradient(stops),

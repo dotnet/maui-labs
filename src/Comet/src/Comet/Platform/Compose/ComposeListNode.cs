@@ -77,10 +77,24 @@ namespace Comet.Platform.Compose
 		{
 			int version = _version.Value; // subscribe so data changes recompose the list
 
+			// Container flavor resolves FIRST so every later decision (state bridge, row
+			// width, container) agrees: Horizontal wins (grid is a vertical concept), then
+			// adaptive grid, then the plain LazyColumn.
+			bool horizontal = _list.Horizontal;
+			double gridMin = horizontal ? 0 : _list.GridAdaptiveMinWidth;
+
+			// The scroll-state bridge (ScrolledAway/ScrolledFromTop/LastScrolledBackward,
+			// AnchorBottom, ScrollToBottom) attaches a LazyListState, which only the
+			// LazyColumn accepts — the grid needs a rememberLazyGridState binding
+			// (backlogged) and the row/carousel paths have never carried it. Skip the
+			// observers entirely for those flavors instead of watching a detached state
+			// that never changes.
+			bool scrollBridge = !horizontal && gridMin <= 0;
+
 			// Remembered scroll state (survives recomposition). The first time, register a scroller
 			// that animates to the last item (newest = bottom of a forward-order list).
 			var listState = composer.RememberLazyListState();
-			if (!_scrollerRegistered)
+			if (scrollBridge && !_scrollerRegistered)
 			{
 				_scrollerRegistered = true;
 				var captured = listState;
@@ -96,46 +110,49 @@ namespace Comet.Platform.Compose
 			// the list leaves the composition.
 			var capturedList = _list;
 			var capturedState = listState;
-			composer.LaunchedEffect(true, async ct =>
+			if (scrollBridge)
 			{
-				// AnchorBottom (chat log): open at the newest message — the gold Jetchat's
-				// reverseLayout initial position; instant so launch doesn't visibly scroll.
-				// Ordinary lists (inbox) open at the top.
-				int lastIndex = capturedList.Sections() > 0 ? System.Math.Max(0, capturedList.Rows(0) - 1) : 0;
-				if (capturedList.AnchorBottom && lastIndex > 0)
-					await capturedState.ScrollToItemAsync(lastIndex);
-
-				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
-					.WithCancellation(ct))
+				composer.LaunchedEffect(true, async ct =>
 				{
-					var signal = _list.ScrolledAway;   // re-read: owner re-points _list on re-render
-					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
-				}
-			});
+					// AnchorBottom (chat log): open at the newest message — the gold Jetchat's
+					// reverseLayout initial position; instant so launch doesn't visibly scroll.
+					// Ordinary lists (inbox) open at the top.
+					int lastIndex = capturedList.Sections() > 0 ? System.Math.Max(0, capturedList.Rows(0) - 1) : 0;
+					if (capturedList.AnchorBottom && lastIndex > 0)
+						await capturedState.ScrollToItemAsync(lastIndex);
 
-			// Top-relative twin: canScrollBackward = content above the viewport. Drives
-			// Reply's ExtendedFAB (expanded at the top, contracted once scrolled).
-			composer.LaunchedEffect(2, async ct =>
-			{
-				await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollBackward)
-					.WithCancellation(ct))
-				{
-					var signal = _list.ScrolledFromTop;   // re-read: owner re-points _list on re-render
-					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
-				}
-			});
+					await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
+						.WithCancellation(ct))
+					{
+						var signal = _list.ScrolledAway;   // re-read: owner re-points _list on re-render
+						Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
+					}
+				});
 
-			// Scroll DIRECTION: lastScrolledBackward — the gold FAB re-expands on any upward
-			// scroll (ReplyListContent.kt:124-125), not only at the very top.
-			composer.LaunchedEffect(3, async ct =>
-			{
-				await foreach (var backward in ComposeExtensions.SnapshotFlow(() => capturedState.LastScrolledBackward)
-					.WithCancellation(ct))
+				// Top-relative twin: canScrollBackward = content above the viewport. Drives
+				// Reply's ExtendedFAB (expanded at the top, contracted once scrolled).
+				composer.LaunchedEffect(2, async ct =>
 				{
-					var signal = _list.LastScrolledBackward;   // re-read: owner re-points _list on re-render
-					Comet.ThreadHelper.RunOnMainThread(() => signal.Value = backward);
-				}
-			});
+					await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollBackward)
+						.WithCancellation(ct))
+					{
+						var signal = _list.ScrolledFromTop;   // re-read: owner re-points _list on re-render
+						Comet.ThreadHelper.RunOnMainThread(() => signal.Value = away);
+					}
+				});
+
+				// Scroll DIRECTION: lastScrolledBackward — the gold FAB re-expands on any upward
+				// scroll (ReplyListContent.kt:124-125), not only at the very top.
+				composer.LaunchedEffect(3, async ct =>
+				{
+					await foreach (var backward in ComposeExtensions.SnapshotFlow(() => capturedState.LastScrolledBackward)
+						.WithCancellation(ct))
+					{
+						var signal = _list.LastScrolledBackward;   // re-read: owner re-points _list on re-render
+						Comet.ThreadHelper.RunOnMainThread(() => signal.Value = backward);
+					}
+				});
+			}
 
 			// Single-section (the common case); multi-section flattening is a follow-up.
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
@@ -159,9 +176,20 @@ namespace Comet.Platform.Compose
 
 			// Adaptive grid (Jetcaster Home): cells share the row width across the column
 			// count Compose's GridCells.Adaptive will compute — mirror that math so the
-			// Yoga-laid cell content matches the rendered cell box.
-			double gridMin = _list.GridAdaptiveMinWidth;
+			// Yoga-laid cell content matches the rendered cell box. (gridMin is already 0
+			// for horizontal lists — the flavor precedence is resolved once, up top.)
 			int gridColumns = gridMin > 0 ? System.Math.Max(1, (int)(rowWidth / gridMin)) : 0;
+
+			// Carousel item width: the stated Dp, or (when the caller forgot it) the
+			// FIRST item's intrinsic width — a 0 here would Yoga-lay every item at zero
+			// and hand the M3 carousel a 0dp itemWidth (an invisible carousel).
+			double carouselWidth = 0;
+			if (horizontal && _list.Carousel != ListCarousel.None && count > 0)
+			{
+				carouselWidth = _list.CarouselItemWidth > 0
+					? _list.CarouselItemWidth
+					: CometBackendLayoutEngine.Measure(_list.ViewFor(0, 0)).Width;
+			}
 
 			ComposableNode BuildRow(int i)
 			{
@@ -177,11 +205,11 @@ namespace Comet.Platform.Compose
 				if (yoga)
 				{
 					// Vertical rows fill the list's width; grid cells the computed column
-					// width; carousel items their stated width; LazyRow items their own
-					// intrinsic width (a fixed-size card).
-					double w = gridColumns > 0 ? rowWidth / gridColumns
-						: _list.Horizontal && _list.Carousel != ListCarousel.None ? _list.CarouselItemWidth
-						: _list.Horizontal ? CometBackendLayoutEngine.Measure(view).Width
+					// width; carousel items their (resolved) item width; LazyRow items
+					// their own intrinsic width (a fixed-size card).
+					double w = horizontal && carouselWidth > 0 ? carouselWidth
+						: horizontal ? CometBackendLayoutEngine.Measure(view).Width
+						: gridColumns > 0 ? rowWidth / gridColumns
 						: rowWidth;
 					CometBackendLayoutEngine.LayoutContent(view, w);
 				}
@@ -191,14 +219,14 @@ namespace Comet.Platform.Compose
 
 			// Horizontal: the REAL Compose LazyRow, or the real M3 carousel the gold
 			// uses (Jetcaster followed-podcasts / top-podcasts rows).
-			if (_list.Horizontal)
+			if (horizontal)
 			{
 				ComposableNode row = _list.Carousel switch
 				{
 					ListCarousel.MultiBrowse => new AndroidX.Compose.HorizontalMultiBrowseCarousel<int>(
-						indices, (float)_list.CarouselItemWidth, BuildRow),
+						indices, (float)carouselWidth, BuildRow),
 					ListCarousel.Uncontained => new AndroidX.Compose.HorizontalUncontainedCarousel<int>(
-						indices, (float)_list.CarouselItemWidth, BuildRow),
+						indices, (float)carouselWidth, BuildRow),
 					_ => new AndroidX.Compose.LazyRow<int>(indices, BuildRow),
 				};
 				row.Modifier = BuildNodeModifier();

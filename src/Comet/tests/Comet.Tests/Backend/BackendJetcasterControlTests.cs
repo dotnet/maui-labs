@@ -47,6 +47,19 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void IconButton_ExposesSlotAndClick()
+		{
+			bool clicked = false;
+			var icon = new Icon("playlist_add");
+			var button = new IconButton(() => clicked = true, icon);
+
+			Assert.Equal(new View[] { icon }, ((IContainerView)button).GetChildren());
+			Assert.Same(button, icon.Parent);
+			button.OnClick();
+			Assert.True(clicked);
+		}
+
+		[Fact]
 		public void ListView_GridAndCarouselFlavorsFlowThroughTheInterface()
 		{
 			var list = new ListView<int>(() => Enumerable.Range(0, 4).ToList())

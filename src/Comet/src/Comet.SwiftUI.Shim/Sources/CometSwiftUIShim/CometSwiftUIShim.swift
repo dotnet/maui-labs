@@ -51,7 +51,8 @@ struct CometTextRun {
     @Published var elevation: CGFloat = 0        // soft drop shadow depth
     @Published var borderWidth: CGFloat = 0      // stroke width (e.g. avatar ring)
     @Published var borderColorARGB: UInt32 = 0   // stroke color
-    @Published var borderGradientStops: [UInt32] = []   // diagonal gradient stroke (wins over color)
+    @Published var borderGradientStops: [UInt32] = []   // gradient stroke (wins over color)
+    @Published var borderGradientDirection = 2 // 0 horizontal, 1 vertical, 2 diagonal (TL→BR), 3 radial
     @Published var hasTapGesture: Bool = false  // view carries a Comet TapGesture
     @Published var hasLongPressGesture: Bool = false
     @Published var borderless: Bool = false      // TextField: no rounded-border box (foundation field)
@@ -166,6 +167,7 @@ struct CometTextRun {
         case "fontweight": node.fontWeight = Int(value)
         case "borderwidth": node.borderWidth = CGFloat(value)
         case "gradientdirection": node.gradientDirection = Int(value)
+        case "bordergradientdirection": node.borderGradientDirection = Int(value)
         default: break
         }
     }
@@ -953,10 +955,14 @@ private struct SurfaceModifier: ViewModifier {
             content
                 .clipShape(shape)
                 .overlay(node.borderGradientStops.count > 1
-                    // Diagonal gradient stroke — the gold's diagonalGradientBorder twin.
+                    // Gradient stroke along the spec's axis (Android twin honors it too;
+                    // radial borders fall back to diagonal until a consumer needs them).
                     ? AnyView(shape.strokeBorder(LinearGradient(
                         colors: node.borderGradientStops.map(argbColor),
-                        startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 2))
+                        startPoint: node.borderGradientDirection == 0 ? .leading
+                            : node.borderGradientDirection == 1 ? .top : .topLeading,
+                        endPoint: node.borderGradientDirection == 0 ? .trailing
+                            : node.borderGradientDirection == 1 ? .bottom : .bottomTrailing), lineWidth: 2))
                     : node.borderWidth > 0
                     ? AnyView(shape.strokeBorder(colorFromARGB(node.borderColorARGB), lineWidth: node.borderWidth))
                     : AnyView(EmptyView()))

@@ -81,6 +81,18 @@ namespace Comet.Platform.SwiftUI
 				n.Dispose();
 		}
 
+		/// <summary>Whether the hosted subtree has been built (Arrange builds lazily).</summary>
+		protected bool IsBuilt => _shown is not null;
+
+		/// <summary>Build the hosted subtree if it doesn't exist yet. Nodes whose
+		/// <see cref="Measure"/> reads a slot view's size must call this first — Yoga
+		/// measures BEFORE Arrange, and an un-materialized slot measures Size.Zero.</summary>
+		protected void EnsureContent()
+		{
+			if (_shown is null)
+				Refresh();
+		}
+
 		protected void Relayout()
 		{
 			if (_shown is not { } v)

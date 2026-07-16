@@ -31,14 +31,20 @@ namespace Comet.Platform.SwiftUI
 			{
 				_control = control;
 				_selected = control.IsSelected;
+				if (IsBuilt)
+					Refresh();   // slot views were rebuilt with the owner — swap the subtree
 			}
 		}
 
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
+			// Yoga measures before Arrange builds the subtree — an un-materialized label
+			// measures Size.Zero (the chips collapsed to bare 32dp pills without this).
+			EnsureContent();
 			var label = CometBackendLayoutEngine.Measure(_control.LabelView);
-			double check = _selected ? 26 : 0;
-			return new(label.Width + 32 + check, HeightDp);
+			// Mirror BuildContent: the check replaces the leading icon when selected.
+			double lead = _selected || _control.LeadingIconView is not null ? 26 : 0;
+			return new(label.Width + 32 + lead, HeightDp);
 		}
 
 		protected override View BuildContent()
@@ -72,6 +78,10 @@ namespace Comet.Platform.SwiftUI
 				return;
 			_applied = true;
 			_selected = value.AsBool;
+			// Rebuild the hosted subtree — the fill/check/outline all branch on _selected,
+			// and only Refresh() re-runs BuildContent (the sibling hosted nodes' contract).
+			if (IsBuilt)
+				Refresh();
 		}
 	}
 }

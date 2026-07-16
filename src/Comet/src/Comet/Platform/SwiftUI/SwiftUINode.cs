@@ -112,6 +112,9 @@ namespace Comet.Platform.SwiftUI
 				CometSwiftUIHost.ClearBorderGradientStops(_native);
 				foreach (var stop in borderSpec.Stops)
 					CometSwiftUIHost.AddBorderGradientStop(_native, ToArgb(stop));
+				// Same 0/1/2/3 mapping as the background — Android honors the spec's
+				// direction for borders via BuildGradientBrush, so the shim must too.
+				CometSwiftUIHost.SetDouble(_native, "bordergradientdirection", (double)borderSpec.Direction);
 			}
 			else if (id == PropertyIds.Toggle_IsOn)
 				CometSwiftUIHost.SetBool(_native, "ison", value.AsBool);

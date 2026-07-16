@@ -25,9 +25,10 @@ namespace Comet
 	/// <para><see cref="ExtentDp"/>/<see cref="OffsetDp"/>/<see cref="Mirror"/> model the
 	/// gold's <c>offsetGradientBackground</c> parallax: the gradient spans
 	/// <c>ExtentDp</c> along the axis starting at <c>-OffsetDp</c> (instead of filling
-	/// the node bounds), tiling mirrored beyond it. Android-first; the SwiftUI shim
-	/// renders direction + stops and documents extent/offset as a deviation until a
-	/// consumer needs it there.</para>
+	/// the node bounds), tiling mirrored beyond it. Supported for the Horizontal and
+	/// Vertical axes on Android; Diagonal/Radial ignore them (no gold consumer). The
+	/// SwiftUI shim renders direction + stops and documents extent/offset as a
+	/// deviation until a consumer needs it there.</para>
 	/// </summary>
 	public sealed record GradientSpec(
 		Microsoft.Maui.Graphics.Color[] Stops,
