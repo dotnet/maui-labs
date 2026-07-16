@@ -21,7 +21,12 @@ namespace CometSamples.Jetcaster
 
 		static readonly List<string> Queue = new();
 		static CancellationTokenSource? _ticker;
-		static SynchronizationContext? _ui;
+
+		// One rule for "how long is this episode" everywhere (play limit and seek
+		// clamps): unknown duration = unbounded — ticks continue and the queue only
+		// auto-advances on a KNOWN completion.
+		static double LimitSeconds(Episode? episode) =>
+			episode?.Duration?.TotalSeconds ?? double.MaxValue;
 
 		public static void SetCurrent(string episodeUri)
 		{
@@ -40,22 +45,30 @@ namespace CometSamples.Jetcaster
 		{
 			if (IsPlaying.Peek() || PodcastStore.GetEpisode(CurrentEpisodeUri.Peek()) is not { } episode)
 				return;
-			_ui ??= SynchronizationContext.Current;   // capture the UI context on first use
 			IsPlaying.Value = true;
 			var cts = new CancellationTokenSource();
 			_ticker = cts;
-			double limit = episode.Duration?.TotalSeconds ?? 0;
+			double limit = LimitSeconds(episode);
 			_ = Task.Run(async () =>
 			{
 				while (!cts.IsCancellationRequested)
 				{
-					await Task.Delay(1000, cts.Token).ConfigureAwait(false);
-					Post(() =>
+					try
+					{
+						await Task.Delay(1000, cts.Token).ConfigureAwait(false);
+					}
+					catch (OperationCanceledException)
+					{
+						break;   // paused/advanced — no exception per pause
+					}
+					// Signals must mutate on the UI thread (the repo-wide contract) —
+					// ThreadHelper is wired by every probe, unlike SynchronizationContext.
+					Comet.ThreadHelper.RunOnMainThread(() =>
 					{
 						if (cts.IsCancellationRequested)
 							return;
 						var next = TimeElapsedSeconds.Peek() + 1;
-						if (limit > 0 && next >= limit)
+						if (next >= limit)
 						{
 							TimeElapsedSeconds.Value = limit;
 							Next();   // the gold auto-advances the queue at the end
@@ -70,21 +83,17 @@ namespace CometSamples.Jetcaster
 		public static void Pause()
 		{
 			_ticker?.Cancel();
+			_ticker?.Dispose();
 			_ticker = null;
 			IsPlaying.Value = false;
 		}
 
-		public static void SeekBy(double deltaSeconds)
-		{
-			var episode = PodcastStore.GetEpisode(CurrentEpisodeUri.Peek());
-			double limit = episode?.Duration?.TotalSeconds ?? double.MaxValue;
-			TimeElapsedSeconds.Value = Math.Clamp(TimeElapsedSeconds.Peek() + deltaSeconds, 0, limit);
-		}
+		public static void SeekBy(double deltaSeconds) =>
+			SeekTo(TimeElapsedSeconds.Peek() + deltaSeconds);
 
 		public static void SeekTo(double seconds)
 		{
-			var episode = PodcastStore.GetEpisode(CurrentEpisodeUri.Peek());
-			double limit = episode?.Duration?.TotalSeconds ?? double.MaxValue;
+			double limit = LimitSeconds(PodcastStore.GetEpisode(CurrentEpisodeUri.Peek()));
 			TimeElapsedSeconds.Value = Math.Clamp(seconds, 0, limit);
 		}
 
@@ -105,12 +114,5 @@ namespace CometSamples.Jetcaster
 			TimeElapsedSeconds.Value = 0;
 		}
 
-		static void Post(Action action)
-		{
-			if (_ui is { } ctx)
-				ctx.Post(_ => action(), null);
-			else
-				action();
-		}
 	}
 }

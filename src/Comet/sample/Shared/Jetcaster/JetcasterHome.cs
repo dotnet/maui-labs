@@ -297,12 +297,13 @@ namespace CometSamples.Jetcaster
 						.Padding(new Thickness(12, 0, 0, 0))
 						.VerticalLayoutAlignment(LayoutAlignment.Center)
 						.FlexGrow(1).FlexBasis(0),
-					new Icon("playlist_add").IconSize(22).Color(T.OnSurfaceVariant)
-						.Frame(width: 40, height: 40).Padding(new Thickness(9))
-						.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0)
-						.OnTap(_ => MockEpisodePlayer.AddToQueue(item.Episode.Uri)),
-					new Icon("more_vert").IconSize(22).Color(T.OnSurfaceVariant)
-						.Frame(width: 40, height: 40).Padding(new Thickness(9))
+					// REAL M3 IconButtons — the gold's EpisodeListItem uses IconButton for
+					// queue-add and overflow (the play button is the gold's own hand-roll).
+					new IconButton(() => MockEpisodePlayer.AddToQueue(item.Episode.Uri),
+							new Icon("playlist_add").IconSize(22).Color(T.OnSurfaceVariant))
+						.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0),
+					new IconButton(() => { /* the gold's overflow is a TODO too */ },
+							new Icon("more_vert").IconSize(22).Color(T.OnSurfaceVariant))
 						.VerticalLayoutAlignment(LayoutAlignment.Center).FlexShrink(0),
 				}.HorizontalLayoutAlignment(LayoutAlignment.Fill),
 			}

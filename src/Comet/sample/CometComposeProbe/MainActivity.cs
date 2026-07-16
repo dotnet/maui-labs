@@ -75,15 +75,6 @@ namespace CometComposeProbe
 				ComposeFontRegistry.Register("Karla", 400, Asset("karla_regular.ttf"));
 				ComposeFontRegistry.Register("Karla", 700, Asset("karla_bold.ttf"));
 
-				// Jetcaster display font: RobotoFlex is a VARIABLE font — instantiate the
-				// gold's display weights from the single file (Typeface.Create(tf, w, italic)
-				// resolves variable-font weight axes on API 28+).
-				var robotoFlex = Asset("roboto_flex.ttf");
-				ComposeFontRegistry.Register("RobotoFlex", 400, robotoFlex);
-				if (OperatingSystem.IsAndroidVersionAtLeast(28))
-					ComposeFontRegistry.Register("RobotoFlex", 738,
-						Android.Graphics.Typeface.Create(robotoFlex, 738, false));
-
 				// Google's Material Icons font as the cross-platform icon set (same glyphs as iOS).
 				ComposeFontRegistry.Register(CometSamples.Jetchat.JetchatIcons.Font, 400, Asset("material_icons.ttf"));
 				CometSamples.Jetchat.JetchatIcons.Register();
@@ -257,10 +248,24 @@ namespace CometComposeProbe
 		};
 #endif
 
-		// Fixture mode: parse the six bundled feed snapshots once, on first entry
-		// (keeps the other samples' cold-start numbers untouched).
+		static bool _robotoFlexRegistered;
+
+		// Fixture mode: parse the six bundled feed snapshots — and load Jetcaster's
+		// 1.6MB RobotoFlex variable font — once, on first entry, so the other samples'
+		// cold-start numbers stay untouched.
 		View BuildJetcaster()
 		{
+			if (!_robotoFlexRegistered)
+			{
+				_robotoFlexRegistered = true;
+				// Instantiate the gold's display weights from the single variable file
+				// (Typeface.Create(tf, w, italic) resolves weight axes on API 28+).
+				var robotoFlex = Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/roboto_flex.ttf");
+				ComposeFontRegistry.Register("RobotoFlex", 400, robotoFlex);
+				if (OperatingSystem.IsAndroidVersionAtLeast(28))
+					ComposeFontRegistry.Register("RobotoFlex", 738,
+						Android.Graphics.Typeface.Create(robotoFlex, 738, false));
+			}
 			CometSamples.Jetcaster.JetcasterFixtures.Load(
 				name => Assets!.Open("jetcaster/" + name));
 			return new CometSamples.Jetcaster.JetcasterRoot(topInset: 52);
