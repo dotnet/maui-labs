@@ -54,8 +54,12 @@ feedback. Do not run it automatically.
      `Warning` with an auto-fixable `maui android sdk accept-licenses`). Doctor
      status enums are PascalCase (`Ok`/`Warning`/`Error`/`Skipped`/
      `NotApplicable`), distinct from the lowercase error envelope below.
-   - `maui devflow diagnose --json` emits DevFlow's error shape
-     (`{ "error", "type", "retryable", "suggestions" }`) on **stderr**.
+   - `maui devflow diagnose --json` writes a health report to **stdout** on
+     success — `cli_version`, `broker_running`, `agent_count`, `agents`,
+     `projects`, plus optional `broker_port` (when the broker is up) and
+     `android` (emulator forwarding status). It only emits DevFlow's error
+     shape (`{ "error", "type", "retryable", "suggestions" }`) on **stderr**
+     when the command itself fails.
 
    The flat `code` / `remediation` envelope (no `error` wrapper; `snake_case`;
    lowercase `remediation.type`, e.g. `autofixable`) applies to the other `maui`

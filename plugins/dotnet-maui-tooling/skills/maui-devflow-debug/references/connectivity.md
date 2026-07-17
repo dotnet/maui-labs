@@ -48,7 +48,7 @@ Use this when a project already has DevFlow package references and `builder.AddM
 Android emulators run in a separate network namespace, so broker registration and CLI-to-agent traffic need opposite forwarding directions. The unified `maui` CLI sets up **both** automatically: `maui devflow wait` establishes the broker `reverse` before polling and the agent `forward` once the agent registers, while `maui devflow list` / `agent status` / `ui status` re-establish (repair) the agent forward on demand. All honor `--device <serial>`.
 
 ```bash
-maui devflow wait --platform android  # sets up broker reverse + agent forward, waits for the agent
+maui devflow wait --wait-platform android  # sets up broker reverse + agent forward, waits for the agent
 maui devflow list                 # re-establishes the agent forward + notes the assigned port
 maui device list --platform android  # confirm the emulator is connected
 maui devflow diagnose             # reports broker reverse + agent forward mapping status
