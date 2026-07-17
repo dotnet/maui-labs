@@ -124,6 +124,322 @@ Put enums, structs, delegates, and supporting types in `StructsAndEnums.cs` or o
 
 Review enum backing types and flag semantics. Objective Sharpie often needs manual cleanup around `NS_ENUM`, `NS_OPTIONS`, prefix stripping, and availability.
 
+## API definition patterns
+
+These are the binding-definition patterns for a traditional/full ObjC binding.
+They also apply when you bind a hand-written `@objc` wrapper framework (the
+pure-Swift case below): the wrapper's generated `-Swift.h` is ObjC, so the same
+`[BaseType]`/`[Export]` contracts apply. The quick table above is the at-a-glance
+version; this section is the fuller reference. Every attribute here ships in the
+.NET for iOS/macOS binding tooling and is usable from a third-party binding
+project — you do not need the dotnet/macios repo to use them.
+
+### Availability: usually skip it
+
+A third-party binding owns its own minimum deployment target, so you generally
+do **not** annotate per-member OS availability at all. Do not try to reproduce
+the exhaustive `[iOS (x, y)]` / `[Mac (x, y)]` / `[NoTV]` version attributes you
+see on every member in the dotnet/macios source — that exhaustiveness exists to
+mirror Apple's SDK exactly and is driven by that repo's own API-diff tooling; a
+binding you control does not need it.
+
+If a specific member genuinely requires a newer OS than your project's minimum,
+express it with the standard .NET attributes (not the macios-internal short
+forms), on the API-definition member or on hand-written partial-class code:
+
+```csharp
+[SupportedOSPlatform ("ios17.0")]
+[UnsupportedOSPlatform ("tvos")]
+[Export ("newApiOnlyOniOS17")]
+void NewApi ();
+```
+
+### Classes, properties, and methods
+
+```csharp
+[BaseType (typeof (NSObject))]
+interface MyClass {
+    // Read-write / read-only properties
+    [Export ("name")]
+    string Name { get; set; }
+
+    [NullAllowed]
+    [Export ("subtitle")]
+    string Subtitle { get; }
+
+    // Reference-semantics matter for delegates/blocks/closures held by the object
+    [Export ("delegate", ArgumentSemantic.Weak)]
+    [NullAllowed]
+    NSObject WeakDelegate { get; set; }
+
+    // Method with a nullable parameter and a nullable return
+    [Export ("titleForState:")]
+    [return: NullAllowed]
+    string GetTitle (UIControlState state);
+
+    // Static member
+    [Static]
+    [Export ("sharedInstance")]
+    MyClass SharedInstance { get; }
+
+    // Bind an init selector as a constructor
+    [Export ("initWithApiKey:")]
+    NativeHandle Constructor (string apiKey);
+}
+```
+
+- `ArgumentSemantic` (`Weak`, `Strong`, `Copy`, `Assign`, `Retain`) mirrors the
+  ObjC property attribute; get it right for delegate/block properties.
+- Use `[DisableDefaultCtor]` on `[BaseType(...)]` when the native type has no
+  usable parameterless initializer, so the generator does not emit one.
+- Use `string`, not `NSString`, for string parameters/returns — the generator
+  marshals automatically. Reserve `NSString` for dictionary keys and
+  strongly-typed constants.
+
+### Enums
+
+```csharp
+// NSInteger/NSUInteger-backed native enum
+[Native]
+public enum MyMode : long {
+    Off = 0,
+    On,
+}
+
+// Smart enum backed by NSString constants
+[Native]
+public enum MyReason : long {
+    [Field ("MyReasonUserInitiated")]
+    UserInitiated = 0,
+    [Field ("MyReasonSystemInitiated")]
+    SystemInitiated,
+}
+```
+
+`[Native]` is required whenever the native enum is `NSInteger`/`NSUInteger`-based
+(most Apple enums) so the managed size matches the native ABI.
+
+### Notification fields
+
+```csharp
+[Notification]
+[Field ("MyClassDidChangeNotification")]
+NSString DidChangeNotification { get; }
+
+// With strongly-typed event args generated from the notification's userInfo
+[Notification (typeof (MyClassEventArgs))]
+[Field ("MyClassDidUpdateNotification")]
+NSString DidUpdateNotification { get; }
+```
+
+### Protocols, models, and the weak-delegate pattern
+
+Bind ObjC protocols used as delegates/data sources with `[Protocol, Model]`.
+Mark `@required` members `[Abstract]`; leave optional members un-attributed.
+
+```csharp
+[Protocol, Model]
+[BaseType (typeof (NSObject))]
+interface MyDelegate {
+    [Abstract]                       // @required member
+    [Export ("didFinish:")]
+    void DidFinish (MyClass sender);
+
+    [Export ("didProgress:")]        // @optional member
+    void DidProgress (nfloat fraction);
+}
+```
+
+Wire the delegate up with the **weak-delegate pattern** — expose the raw
+`NSObject` property plus a strongly-typed `[Wrap]` accessor:
+
+```csharp
+[BaseType (typeof (NSObject))]
+interface MyClass {
+    [Export ("delegate", ArgumentSemantic.Weak)]
+    [NullAllowed]
+    NSObject WeakDelegate { get; set; }
+
+    [Wrap ("WeakDelegate")]
+    [NullAllowed]
+    IMyDelegate Delegate { get; set; }
+}
+```
+
+The `I`-prefix rule trips up almost everyone:
+
+- **Definitions and conformance use the plain name.** Declare the protocol as
+  `interface MyDelegate`, and add conformance as `interface MyClass : MyDelegate`.
+- **Type references use the `I`-prefixed name.** When you reference the protocol
+  *as a type* — a `[Wrap]` property, a parameter, a return type — use
+  `IMyDelegate`. The generator produces that `I` interface for you.
+
+### Blocks and completion handlers
+
+Define a **named delegate type** for every block. Never bind a block as
+`Action<T>`/`Func<T>` — a named delegate gives consumers real IntelliSense and
+documentation, and Objective Sharpie's `Action`/`Func` output should be
+converted.
+
+```csharp
+delegate void MyCompletionHandler (bool success, [NullAllowed] NSError error);
+
+[Export ("performTaskWithCompletion:")]
+void PerformTask ([NullAllowed] MyCompletionHandler completion);
+```
+
+### Async
+
+Add `[Async]` to a method whose last parameter is a completion handler to
+generate a `Task`/`Task<T>` overload. Use `ResultTypeName` when the handler
+takes multiple non-error values, so the generated result type has a good name:
+
+```csharp
+delegate void FetchHandler (string value, nint count, [NullAllowed] NSError error);
+
+[Export ("fetchWithCompletion:")]
+[Async (ResultTypeName = "FetchResult")]
+void Fetch (FetchHandler completion);
+// generates: Task<FetchResult> FetchAsync ();
+```
+
+### Categories (ObjC extensions)
+
+```csharp
+[Category]
+[BaseType (typeof (UIView))]
+interface UIView_MyExtensions {
+    [Export ("applyMyStyle")]
+    void ApplyMyStyle ();
+}
+```
+
+### Strongly-typed dictionaries
+
+Turn an options/config `NSDictionary` into a typed surface with
+`[StrongDictionary]` plus a `[Field]`-backed keys interface:
+
+```csharp
+[StrongDictionary ("MyOptionsKeys")]
+interface MyOptions {
+    string Name { get; set; }
+    bool EnableFeature { get; set; }
+}
+
+[Static]
+interface MyOptionsKeys {
+    [Field ("MyNameKey")]
+    NSString NameKey { get; }
+
+    [Field ("MyEnableFeatureKey")]
+    NSString EnableFeatureKey { get; }
+}
+```
+
+### Type conversions with `[BindAs]`
+
+`[BindAs]` marshals an ObjC type to a friendlier managed type (e.g. an
+`NSValue`-wrapped `CGRect`, or an `NSString[]` to a smart-enum array):
+
+```csharp
+[BindAs (typeof (CGRect))]
+[Export ("bounds")]
+NSValue Bounds { get; set; }
+
+[return: BindAs (typeof (MyMode []))]
+[Export ("supportedModes")]
+NSString [] GetSupportedModes ();
+```
+
+### Memory-management attributes
+
+```csharp
+// Native returns a +1 retained object (its name starts with create/copy)
+[Export ("createObject")]
+[return: Release]
+NSObject CreateObject ();
+
+// Cast the return to a type the header under-declares
+[Export ("downloadTask")]
+[return: ForcedType]
+NSUrlSessionDownloadTask CreateDownloadTask ();
+
+// Parameter only needs to live for the duration of the call
+[Export ("processObject:")]
+void ProcessObject ([Transient] NSObject obj);
+```
+
+### Error handling
+
+Every method that takes `NSError**` (bound as `out NSError`) must mark it
+`[NullAllowed]` — the error is null on success:
+
+```csharp
+[Export ("loadAndReturnError:")]
+bool Load ([NullAllowed] out NSError error);
+```
+
+### Struct-array parameters (advanced)
+
+When a selector takes a C struct pointer plus a count (`MyPoint *` + `count`, a
+common MapKit/ARKit shape), the generator surfaces it as `IntPtr`. Bind the raw
+selector `[Internal]` and expose a hand-written factory that pins a managed
+array with `fixed`:
+
+```csharp
+// ApiDefinition.cs
+[BaseType (typeof (NSObject))]
+interface MyShape {
+    [Static]
+    [Internal]
+    [Export ("shapeWithPoints:count:")]
+    MyShape _Create (IntPtr points, nint count);
+}
+```
+
+```csharp
+// MyShape.cs (normal partial-class file, not ApiDefinition.cs)
+public partial class MyShape {
+    public static unsafe MyShape Create (MyPoint [] points) {
+        ArgumentNullException.ThrowIfNull (points);
+        fixed (MyPoint* first = points)
+            return _Create ((IntPtr) first, points.Length);
+    }
+}
+```
+
+Prefer a static factory over a public constructor here — `fixed` inside a
+constructor chain is awkward.
+
+### Resolving `[Verify]`
+
+Objective Sharpie emits `[Verify (...)]` wherever it guessed and needs you to
+confirm. The generated code will not ship until each is resolved. The common
+kinds:
+
+- `[Verify (StronglyTypedNSArray)]` — replace `NSObject []` with the real element
+  type (`MyItem []`).
+- `[Verify (MethodToProperty)]` — a getter-like selector was bound as a method;
+  turn it into a property if that reads better (`bool IsEnabled { get; }`).
+- `[Verify (ConstantsInterfaceAssociation)]` / `[Verify (PlatformInvoke)]` —
+  double-check the field/P-Invoke shape against the header.
+
+Remove the attribute only after you have verified the API against the real
+header — do not delete them blindly to make the build pass.
+
+### Conventions that prevent runtime bugs
+
+- **Selectors must match exactly.** A single character off in `[Export("...")]`
+  compiles fine and crashes at runtime with `unrecognized selector` (see the
+  "Selector mismatches" section below).
+- **Use `nint`/`nuint`** for ObjC `NSInteger`/`NSUInteger`.
+- **Name for .NET, not for ObjC.** Use verb-based method names and drop
+  redundant prefixes (`- (void)menuWithContents:` → `void BuildMenu (...)`,
+  `NSString name` → `string Name`).
+- **In hand-written code, use `GetCheckedHandle ()`** instead of `Handle` when
+  passing the native handle to a P/Invoke — it throws `ObjectDisposedException`
+  instead of crashing natively on a disposed object.
+
 ## Swift wrapper rules
 
 Objective Sharpie parses headers, not pure Swift surface. A Swift wrapper intended for binding should expose ObjC-compatible API:
