@@ -107,7 +107,7 @@ If `maui devflow ui status` fails with connection refused:
    lsof -i :<port>       # macOS/Linux
    ```
    With the broker, this is less common since ports are auto-assigned.
-6. **Android?** `maui devflow wait --platform android` (or `maui devflow list`)
+6. **Android?** `maui devflow wait --wait-platform android` (or `maui devflow list`)
    sets up the broker reverse (tcp:19223) and agent forward automatically; re-run
    `list` after each deploy to repair the agent forward. If broker/list is empty,
    the direct `.mauidevflow` port is the one forward the CLI does *not* auto-set —

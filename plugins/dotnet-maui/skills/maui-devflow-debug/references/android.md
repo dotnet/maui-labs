@@ -75,7 +75,7 @@ so broker registration and CLI-to-agent traffic need opposite forwarding
 directions. The `maui` CLI sets up **both** automatically:
 
 ```bash
-maui devflow wait --platform android   # sets up broker reverse + agent forward, waits for the agent
+maui devflow wait --wait-platform android   # sets up broker reverse + agent forward, waits for the agent
 maui devflow list                      # re-establishes (repairs) the agent forward on demand
 maui devflow diagnose                  # reports broker reverse + agent forward status
 ```

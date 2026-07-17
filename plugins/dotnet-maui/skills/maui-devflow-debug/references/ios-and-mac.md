@@ -256,11 +256,13 @@ the standard error envelope:
 
 **Prefer the `maui` CLI** — `maui apple simulator privacy` now wraps `simctl privacy`
 (the `bundle-id` is optional, so you can grant for all apps), and `maui devflow ui permission`
-drives it for the agent-detected simulator:
+drives it for the booted simulator (auto-detected). When more than one simulator
+is booted, pass `--udid` to target a specific one:
 ```bash
 maui apple simulator privacy grant <UDID> location --bundle-id com.company.appid
 maui apple simulator privacy grant <UDID> photos          # all apps (no bundle id)
 maui devflow ui permission grant location --bundle-id com.company.appid
+maui devflow ui permission grant location --udid <UDID>   # target a specific booted simulator
 ```
 
 > If `maui devflow ui permission` reports `'ui' was not matched`, your installed

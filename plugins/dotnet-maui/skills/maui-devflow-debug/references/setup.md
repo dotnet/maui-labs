@@ -285,7 +285,7 @@ traffic need opposite forwarding directions. The `maui` CLI sets up **both**
 automatically — you normally don't run `adb` by hand:
 
 ```bash
-maui devflow wait --platform android  # sets up broker reverse + agent forward
+maui devflow wait --wait-platform android  # sets up broker reverse + agent forward
 maui devflow list                     # re-establishes (repairs) the agent forward
 maui devflow diagnose                 # reports broker reverse + agent forward status
 ```
@@ -318,7 +318,7 @@ If status commands fail:
 - **Agent not registered?** `maui devflow list` — wait a few seconds for the agent to register
 - **Mac Catalyst:** Check entitlements (Step 5)
 - **macOS (AppKit):** Ensure `AddMacOSEssentials()` is called — see [references/macos.md](macos.md)
-- **Android:** `maui devflow wait --platform android` (or `list`) sets up the broker reverse + agent forward automatically; `maui devflow diagnose` reports mapping status. Drop to raw `adb reverse`/`adb forward` only to manually repair (Step 6).
+- **Android:** `maui devflow wait --wait-platform android` (or `list`) sets up the broker reverse + agent forward automatically; `maui devflow diagnose` reports mapping status. Drop to raw `adb reverse`/`adb forward` only to manually repair (Step 6).
 - **iOS Simulator:** Should work without extra config
 - **Linux/GTK:** Should work without extra config — runs directly on localhost
 - **All platforms:** Ensure the app is running and the `#if DEBUG` block is active
