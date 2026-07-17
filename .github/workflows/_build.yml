@@ -99,8 +99,14 @@ jobs:
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && matrix.os == 'windows-latest'
-        run: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
-        shell: cmd
+        run: >
+          & ./eng/common/dotnet.ps1 build
+          -t:InstallAndroidDependencies
+          -f net10.0-android
+          "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+          -p:AcceptAndroidSDKLicenses=true
+          ${{ inputs.android-project }}
+        shell: pwsh
 
       - name: Install Android SDK dependencies (macOS)
         if: inputs.install-workloads && matrix.os == 'macos-latest'
