@@ -327,6 +327,62 @@ jobs:
           --logger "console;verbosity=normal"
           --results-directory .\artifacts\TestResults\devflow-integration\windows
 
+      - name: Run live inspector Playwright tests (windows)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cliProject = 'src\Cli\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj'
+          $sampleProject = 'samples\DevFlow.Sample\DevFlow.Sample.csproj'
+          $inspectorTests = 'src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj'
+          $app = $null
+          try {
+            dotnet build $cliProject -c Debug -f net10.0 --nologo -v minimal
+            dotnet build $sampleProject -c Debug -f net10.0-windows10.0.19041.0 --nologo -v minimal
+            dotnet build $inspectorTests -c Debug --nologo -v minimal
+
+            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net10.0\maui.dll' |
+              Select-Object -First 1 -ExpandProperty FullName
+            dotnet $cli devflow broker stop 2>$null
+            dotnet $cli devflow broker start
+
+            $exe = Get-ChildItem 'artifacts\bin\DevFlow.Sample\Debug' -Filter 'DevFlow.Sample.exe' -Recurse |
+              Select-Object -First 1 -ExpandProperty FullName
+            $env:DEVFLOW_TEST_PORT = '9223'
+            $app = Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
+
+            $deadline = (Get-Date).AddSeconds(45)
+            $agents = $null
+            do {
+              Start-Sleep -Milliseconds 500
+              try {
+                $agents = Invoke-RestMethod 'http://localhost:19223/api/agents'
+                if ($null -ne $agents -and @($agents).Count -gt 0) { break }
+              } catch {
+              }
+            } while ((Get-Date) -lt $deadline)
+            if ($null -eq $agents -or @($agents).Count -eq 0) {
+              throw 'DevFlow sample did not register with the broker.'
+            }
+
+            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net10.0\playwright.ps1' |
+              Select-Object -First 1 -ExpandProperty FullName
+            & $playwright install chromium
+
+            $env:MAUI_INSPECTOR_LIVE_TESTS = '1'
+            $env:INSPECTOR_URL = 'http://localhost:19223/inspector/default/'
+            dotnet test $inspectorTests -c Debug --no-build `
+              --logger 'trx;LogFileName=devflow-inspector-windows.trx' `
+              --logger 'console;verbosity=normal' `
+              --results-directory '.\artifacts\TestResults\devflow-integration\windows'
+          }
+          finally {
+            if ($app -and -not $app.HasExited) {
+              Stop-Process -Id $app.Id
+              $app.WaitForExit(5000)
+            }
+            if ($cli) { dotnet $cli devflow broker stop 2>$null }
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
