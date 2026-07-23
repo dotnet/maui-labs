@@ -13,27 +13,27 @@ namespace Microsoft.Maui.Cli.Commands;
 
 public static partial class AndroidCommands
 {
-	// Shared across all `port` subcommands. Recursive so subcommands inherit it.
-	static readonly Option<string> s_portDeviceOption = new("--device", "-s")
-	{
-		Description = "Target device serial. Defaults to the only online device, or the ANDROID_SERIAL environment variable.",
-		Recursive = true
-	};
-
 	static Command CreatePortCommand()
 	{
-		var command = new Command("port", "Manage adb forward/reverse port rules for a device");
-		command.Add(s_portDeviceOption);
+		// Shared across all `port` subcommands. Recursive so subcommands inherit it.
+		var deviceOption = new Option<string>("--device", "-s")
+		{
+			Description = "Target device serial. Defaults to the only online device, or the ANDROID_SERIAL environment variable.",
+			Recursive = true
+		};
 
-		command.Add(CreatePortListCommand());
-		command.Add(CreatePortForwardCommand());
-		command.Add(CreatePortReverseCommand());
-		command.Add(CreatePortClearCommand());
+		var command = new Command("port", "Manage adb forward/reverse port rules for a device");
+		command.Add(deviceOption);
+
+		command.Add(CreatePortListCommand(deviceOption));
+		command.Add(CreatePortForwardCommand(deviceOption));
+		command.Add(CreatePortReverseCommand(deviceOption));
+		command.Add(CreatePortClearCommand(deviceOption));
 
 		return command;
 	}
 
-	static Command CreatePortListCommand()
+	static Command CreatePortListCommand(Option<string> deviceOption)
 	{
 		var forwardFlag = new Option<bool>("--forward") { Description = "Show only forward (host → device) rules" };
 		var reverseFlag = new Option<bool>("--reverse") { Description = "Show only reverse (device → host) rules" };
@@ -52,7 +52,7 @@ public static partial class AndroidCommands
 
 			try
 			{
-				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(s_portDeviceOption), cancellationToken);
+				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(deviceOption), cancellationToken);
 
 				var showForward = parseResult.GetValue(forwardFlag);
 				var showReverse = parseResult.GetValue(reverseFlag);
@@ -115,7 +115,7 @@ public static partial class AndroidCommands
 		return listCommand;
 	}
 
-	static Command CreatePortForwardCommand()
+	static Command CreatePortForwardCommand(Option<string> deviceOption)
 	{
 		var portArg = new Argument<int?>("port")
 		{
@@ -163,7 +163,7 @@ public static partial class AndroidCommands
 				var devicePort = remote ?? hostPort.Value;
 				ValidatePort(devicePort);
 
-				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(s_portDeviceOption), cancellationToken);
+				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(deviceOption), cancellationToken);
 				await provider.AddForwardPortAsync(serial, hostPort.Value, devicePort, cancellationToken);
 
 				var message = $"Forwarding host tcp:{hostPort} → device tcp:{devicePort} on {serial}.";
@@ -195,7 +195,7 @@ public static partial class AndroidCommands
 		return forwardCommand;
 	}
 
-	static Command CreatePortReverseCommand()
+	static Command CreatePortReverseCommand(Option<string> deviceOption)
 	{
 		var portArg = new Argument<int?>("port")
 		{
@@ -227,7 +227,7 @@ public static partial class AndroidCommands
 				var hostPort = parseResult.GetValue(hostArg) ?? devicePort;
 				ValidatePort(hostPort);
 
-				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(s_portDeviceOption), cancellationToken);
+				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(deviceOption), cancellationToken);
 				await provider.AddReversePortAsync(serial, devicePort, hostPort, cancellationToken);
 
 				var message = $"Reversing device tcp:{devicePort} → host tcp:{hostPort} on {serial}.";
@@ -259,7 +259,7 @@ public static partial class AndroidCommands
 		return reverseCommand;
 	}
 
-	static Command CreatePortClearCommand()
+	static Command CreatePortClearCommand(Option<string> deviceOption)
 	{
 		var forwardFlag = new Option<bool>("--forward") { Description = "Clear only forward (host → device) rules" };
 		var reverseFlag = new Option<bool>("--reverse") { Description = "Clear only reverse (device → host) rules" };
@@ -283,7 +283,7 @@ public static partial class AndroidCommands
 				if (!clearForward && !clearReverse)
 					clearForward = clearReverse = true;
 
-				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(s_portDeviceOption), cancellationToken);
+				var serial = await ResolveDeviceSerialAsync(provider, parseResult.GetValue(deviceOption), cancellationToken);
 
 				if (clearForward)
 					await provider.ClearForwardPortsAsync(serial, cancellationToken);
