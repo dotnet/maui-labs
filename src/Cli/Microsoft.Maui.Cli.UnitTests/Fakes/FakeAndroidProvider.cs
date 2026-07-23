@@ -64,6 +64,16 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<int?> InstallJdkCalls { get; } = new();
 	public bool Disposed { get; private set; }
 
+	// --- Port management: configurable return values + call tracking ---
+
+	public List<AndroidPortMapping> ForwardPorts { get; set; } = new();
+	public List<AndroidPortMapping> ReversePorts { get; set; } = new();
+
+	public List<(string Serial, int HostPort, int DevicePort)> AddedForwardPorts { get; } = new();
+	public List<(string Serial, int DevicePort, int HostPort)> AddedReversePorts { get; } = new();
+	public List<string> ClearedForwardPorts { get; } = new();
+	public List<string> ClearedReversePorts { get; } = new();
+
 	// --- IAndroidProvider implementation ---
 
 	public Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default)
@@ -104,6 +114,36 @@ public class FakeAndroidProvider : IAndroidProvider
 	public Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default)
 	{
 		StoppedEmulators.Add(deviceSerial);
+		return Task.CompletedTask;
+	}
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+		=> Task.FromResult<IReadOnlyList<AndroidPortMapping>>(ForwardPorts);
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+		=> Task.FromResult<IReadOnlyList<AndroidPortMapping>>(ReversePorts);
+
+	public Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default)
+	{
+		AddedForwardPorts.Add((deviceSerial, hostPort, devicePort));
+		return Task.CompletedTask;
+	}
+
+	public Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default)
+	{
+		AddedReversePorts.Add((deviceSerial, devicePort, hostPort));
+		return Task.CompletedTask;
+	}
+
+	public Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		ClearedForwardPorts.Add(deviceSerial);
+		return Task.CompletedTask;
+	}
+
+	public Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		ClearedReversePorts.Add(deviceSerial);
 		return Task.CompletedTask;
 	}
 

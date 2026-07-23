@@ -78,6 +78,36 @@ public interface IAndroidProvider : IDisposable
 	Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// Lists active <c>adb forward</c> (host → device) port rules for a device.
+	/// </summary>
+	Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Lists active <c>adb reverse</c> (device → host) port rules for a device.
+	/// </summary>
+	Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Adds an <c>adb forward tcp:hostPort tcp:devicePort</c> rule.
+	/// </summary>
+	Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Adds an <c>adb reverse tcp:devicePort tcp:hostPort</c> rule.
+	/// </summary>
+	Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Removes all <c>adb forward</c> rules for a device.
+	/// </summary>
+	Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Removes all <c>adb reverse</c> rules for a device.
+	/// </summary>
+	Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Lists installed SDK packages.
 	/// </summary>
 	Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default);
