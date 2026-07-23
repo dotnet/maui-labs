@@ -128,4 +128,66 @@ public class Adb
 		await runner.StopEmulatorAsync(deviceSerial, cancellationToken);
 	}
 
+	/// <summary>Lists active <c>adb forward</c> (host → device) port rules for a device.</summary>
+	public async Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		var runner = RequireRunner();
+		var rules = await runner.ListForwardPortsAsync(deviceSerial, cancellationToken);
+		return rules.Select(MapPortRule).ToList();
+	}
+
+	/// <summary>Lists active <c>adb reverse</c> (device → host) port rules for a device.</summary>
+	public async Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		var runner = RequireRunner();
+		var rules = await runner.ListReversePortsAsync(deviceSerial, cancellationToken);
+		return rules.Select(MapPortRule).ToList();
+	}
+
+	/// <summary>Adds an <c>adb forward tcp:hostPort tcp:devicePort</c> rule.</summary>
+	public async Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default)
+	{
+		var runner = RequireRunner();
+		await runner.ForwardPortAsync(
+			deviceSerial,
+			new AdbPortSpec(AdbProtocol.Tcp, hostPort),
+			new AdbPortSpec(AdbProtocol.Tcp, devicePort),
+			cancellationToken);
+	}
+
+	/// <summary>Adds an <c>adb reverse tcp:devicePort tcp:hostPort</c> rule.</summary>
+	public async Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default)
+	{
+		var runner = RequireRunner();
+		await runner.ReversePortAsync(
+			deviceSerial,
+			new AdbPortSpec(AdbProtocol.Tcp, devicePort),
+			new AdbPortSpec(AdbProtocol.Tcp, hostPort),
+			cancellationToken);
+	}
+
+	/// <summary>Removes all <c>adb forward</c> rules for a device.</summary>
+	public async Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		var runner = RequireRunner();
+		await runner.RemoveAllForwardPortsAsync(deviceSerial, cancellationToken);
+	}
+
+	/// <summary>Removes all <c>adb reverse</c> rules for a device.</summary>
+	public async Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		var runner = RequireRunner();
+		await runner.RemoveAllReversePortsAsync(deviceSerial, cancellationToken);
+	}
+
+	AdbRunner RequireRunner() =>
+		Runner ?? throw new MauiToolException(ErrorCodes.AndroidAdbNotFound, "ADB not found");
+
+	static AndroidPortMapping MapPortRule(AdbPortRule rule) => new()
+	{
+		Local = rule.Local.Port,
+		Remote = rule.Remote.Port,
+		Protocol = rule.Local.Protocol.ToString().ToLowerInvariant(),
+	};
+
 }
