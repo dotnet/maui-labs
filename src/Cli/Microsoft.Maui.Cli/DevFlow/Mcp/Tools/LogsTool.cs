@@ -18,7 +18,7 @@ public sealed class LogsTool
 		[Description("Minimum log level: trace, debug, info, warning, error, critical")] string? minLevel = null,
 		[Description("Log source filter: native, webview, or all (default: all)")] string? source = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var response = await agent.GetLogsAsync(limit, skip, source);
 
 		if (string.IsNullOrEmpty(minLevel))

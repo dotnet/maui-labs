@@ -13,19 +13,23 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 /// </summary>
 public class AgentHttpServer : IDisposable
 {
+    private const int MaxRequestBodyBytes = 1_048_576;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
     private bool _disposed;
     private readonly int _port;
-    private readonly Dictionary<string, Func<HttpRequest, Task<HttpResponse>>> _getRoutes = new();
-    private readonly Dictionary<string, Func<HttpRequest, Task<HttpResponse>>> _postRoutes = new();
-    private readonly Dictionary<string, Func<HttpRequest, Task<HttpResponse>>> _putRoutes = new();
-    private readonly Dictionary<string, Func<HttpRequest, Task<HttpResponse>>> _deleteRoutes = new();
+    private readonly Dictionary<string, RouteHandler> _getRoutes = new();
+    private readonly Dictionary<string, RouteHandler> _postRoutes = new();
+    private readonly Dictionary<string, RouteHandler> _putRoutes = new();
+    private readonly Dictionary<string, RouteHandler> _deleteRoutes = new();
     private readonly Dictionary<string, Func<TcpClient, NetworkStream, HttpRequest, CancellationToken, Task>> _wsRoutes = new();
+    private readonly SemaphoreSlim _mutationAdmissionGate = new(1, 1);
 
     public int Port => _port;
     public bool IsRunning => _listenTask != null && !_listenTask.IsCompleted;
+    internal Func<HttpRequest, Task<MutationLeaseStatus>>? MutationLeaseValidator { get; set; }
+    internal Func<HttpRequest, HttpResponse, Task>? MutationObserver { get; set; }
 
     public AgentHttpServer(int port = 9223)
     {
@@ -33,16 +37,23 @@ public class AgentHttpServer : IDisposable
     }
 
     public void MapGet(string path, Func<HttpRequest, Task<HttpResponse>> handler)
-        => _getRoutes[path.TrimEnd('/')] = handler;
+        => _getRoutes[path.TrimEnd('/')] = new RouteHandler(handler, RequiresMutationLease: false);
 
-    public void MapPost(string path, Func<HttpRequest, Task<HttpResponse>> handler)
-        => _postRoutes[path.TrimEnd('/')] = handler;
+    public void MapPost(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
+        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption: null);
 
-    public void MapPut(string path, Func<HttpRequest, Task<HttpResponse>> handler)
-        => _putRoutes[path.TrimEnd('/')] = handler;
+    public void MapPost(
+        string path,
+        Func<HttpRequest, Task<HttpResponse>> handler,
+        bool requiresMutationLease,
+        Func<HttpRequest, bool>? mutationLeaseExemption)
+        => _postRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease, mutationLeaseExemption);
 
-    public void MapDelete(string path, Func<HttpRequest, Task<HttpResponse>> handler)
-        => _deleteRoutes[path.TrimEnd('/')] = handler;
+    public void MapPut(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
+        => _putRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease);
+
+    public void MapDelete(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
+        => _deleteRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease);
 
     public void MapWebSocket(string path, Func<TcpClient, NetworkStream, HttpRequest, CancellationToken, Task> handler)
         => _wsRoutes[path.TrimEnd('/')] = handler;
@@ -86,10 +97,38 @@ public class AgentHttpServer : IDisposable
         try
         {
             var stream = client.GetStream();
-            var request = await ReadRequestAsync(stream, ct).ConfigureAwait(false);
+            HttpRequest? request;
+            try
+            {
+                request = await ReadRequestAsync(stream, ct).ConfigureAwait(false);
+            }
+            catch (RequestBodyTooLargeException)
+            {
+                using (client)
+                {
+                    await WriteResponseAsync(
+                        stream,
+                        HttpResponse.Error("Request body too large.", 413),
+                        ct).ConfigureAwait(false);
+                }
+                return;
+            }
             if (request == null)
             {
                 client.Dispose();
+                return;
+            }
+
+            request.Headers.TryGetValue("Origin", out var origin);
+            if (!IsTrustedBrowserOrigin(origin))
+            {
+                using (client)
+                {
+                    await WriteResponseAsync(
+                        stream,
+                        HttpResponse.Error("Browser origin is not allowed.", 403),
+                        ct).ConfigureAwait(false);
+                }
                 return;
             }
 
@@ -110,7 +149,6 @@ public class AgentHttpServer : IDisposable
                     + "Upgrade: websocket\r\n"
                     + "Connection: Upgrade\r\n"
                     + $"Sec-WebSocket-Accept: {acceptKey}\r\n"
-                    + "Access-Control-Allow-Origin: *\r\n"
                     + "\r\n";
                 var handshakeBytes = Encoding.UTF8.GetBytes(handshake);
                 await stream.WriteAsync(handshakeBytes, ct).ConfigureAwait(false);
@@ -132,9 +170,13 @@ public class AgentHttpServer : IDisposable
             // Normal HTTP flow
             using (client)
             {
-                var response = await RouteRequestAsync(request).ConfigureAwait(false);
-                await WriteResponseAsync(stream, response, ct).ConfigureAwait(false);
+                var response = await RouteRequestAsync(request, ct).ConfigureAwait(false);
+                await WriteResponseAsync(stream, response, ct, origin).ConfigureAwait(false);
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            client.Dispose();
         }
         catch (Exception ex) { Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] Request error: {ex.GetType().Name}: {ex.Message}"); }
     }
@@ -192,32 +234,49 @@ public class AgentHttpServer : IDisposable
                 headers[lines[i][..colonIdx].Trim()] = lines[i][(colonIdx + 1)..].Trim();
         }
 
-        // Find body (after blank line)
+        // Find body (after blank line).
+        //
+        // IMPORTANT: HTTP Content-Length counts BYTES, but the decoded `raw` string counts CHARS.
+        // For any body containing multi-byte UTF-8 (e.g. "✓", emoji, accented text) char-count is
+        // LESS than byte-count, so measuring the body in chars under-counts what we already have and
+        // makes us block on ReadAsync waiting for "missing" bytes that never arrive (the client has
+        // already sent everything and is awaiting our response) — a multi-second hang until timeout.
+        // So we must locate and measure the body in BYTES, and decode it exactly once at the end.
         string? body = null;
-        var blankLineIdx = raw.IndexOf("\r\n\r\n");
+        var blankLineIdx = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
         if (blankLineIdx >= 0)
         {
-            body = raw[(blankLineIdx + 4)..];
+            // The request line and headers are ASCII, so the char index of the "\r\n\r\n" separator
+            // equals its byte offset — giving us the byte position where the body starts.
+            var bodyStart = blankLineIdx + 4;
+            var bodyBytesInBuffer = totalRead - bodyStart;
 
-            // Check Content-Length for more body data
-            var contentLengthLine = lines.FirstOrDefault(l => l.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase));
-            if (contentLengthLine != null)
+            // Default to exactly what's already buffered; extend to the declared length if larger.
+            var contentLength = bodyBytesInBuffer;
+            if (headers.TryGetValue("Content-Length", out var clValue))
             {
-                var clValue = contentLengthLine.Split(':', 2)[1].Trim();
-                if (int.TryParse(clValue, out var contentLength) && body.Length < contentLength)
-                {
-                    var remaining = contentLength - body.Length;
-                    var bodyBuffer = new byte[remaining];
-                    var bodyRead = 0;
-                    while (bodyRead < remaining)
-                    {
-                        var r = await stream.ReadAsync(bodyBuffer.AsMemory(bodyRead, remaining - bodyRead), ct).ConfigureAwait(false);
-                        if (r == 0) break;
-                        bodyRead += r;
-                    }
-                    body += Encoding.UTF8.GetString(bodyBuffer, 0, bodyRead);
-                }
+                if (!int.TryParse(clValue, out var declared) || declared < 0)
+                    return null;
+                if (declared > MaxRequestBodyBytes)
+                    throw new RequestBodyTooLargeException();
+                if (declared > contentLength)
+                    contentLength = declared;
             }
+            if (contentLength > MaxRequestBodyBytes)
+                throw new RequestBodyTooLargeException();
+
+            // Assemble the whole body as bytes (already-read prefix + any remainder), then decode once.
+            var bodyBytes = new byte[contentLength];
+            var have = Math.Min(bodyBytesInBuffer, contentLength);
+            Array.Copy(buffer, bodyStart, bodyBytes, 0, have);
+            var bodyRead = have;
+            while (bodyRead < contentLength)
+            {
+                var r = await stream.ReadAsync(bodyBytes.AsMemory(bodyRead, contentLength - bodyRead), ct).ConfigureAwait(false);
+                if (r == 0) break;
+                bodyRead += r;
+            }
+            body = Encoding.UTF8.GetString(bodyBytes, 0, bodyRead);
         }
 
         return new HttpRequest
@@ -230,7 +289,7 @@ public class AgentHttpServer : IDisposable
         };
     }
 
-    private async Task<HttpResponse> RouteRequestAsync(HttpRequest request)
+    private async Task<HttpResponse> RouteRequestAsync(HttpRequest request, CancellationToken ct)
     {
         var routes = request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase) ? _postRoutes
             : request.Method.Equals("PUT", StringComparison.OrdinalIgnoreCase) ? _putRoutes
@@ -239,7 +298,7 @@ public class AgentHttpServer : IDisposable
 
         // Try exact match first
         if (routes.TryGetValue(request.Path, out var handler))
-            return await handler(request).ConfigureAwait(false);
+            return await InvokeRouteAsync(handler, request, ct).ConfigureAwait(false);
 
         // Try pattern match (e.g., /api/element/{id})
         foreach (var kvp in routes)
@@ -264,7 +323,7 @@ public class AgentHttpServer : IDisposable
                 }
             }
             if (match)
-                return await kvp.Value(request).ConfigureAwait(false);
+                return await InvokeRouteAsync(kvp.Value, request, ct).ConfigureAwait(false);
 
             request.RouteParams.Clear();
         }
@@ -272,14 +331,71 @@ public class AgentHttpServer : IDisposable
         return HttpResponse.NotFound("Route not found");
     }
 
-    private static async Task WriteResponseAsync(NetworkStream stream, HttpResponse response, CancellationToken ct)
+    private async Task<HttpResponse> InvokeRouteAsync(
+        RouteHandler route,
+        HttpRequest request,
+        CancellationToken ct)
+    {
+        var requiresMutationLease = route.RequiresMutationLease &&
+            !(route.MutationLeaseExemption?.Invoke(request) ?? false);
+        var coordinatesLease = route.RequiresMutationLease ||
+            request.Path.Equals("/api/v1/agent/lease", StringComparison.OrdinalIgnoreCase);
+        if (coordinatesLease)
+            await _mutationAdmissionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (requiresMutationLease && MutationLeaseValidator is not null)
+            {
+                var status = await MutationLeaseValidator(request).ConfigureAwait(false);
+                request.MutationLease = status;
+                if (!status.Allowed)
+                {
+                    return HttpResponse.Error(
+                        "Another DevFlow session is driving this app. Take control before mutating it.",
+                        statusCode: 409,
+                        reason: "lease",
+                        details: new
+                        {
+                            status.HolderKind,
+                            status.Label,
+                            status.ExpiresInMs,
+                            status.Authority
+                        });
+                }
+            }
+
+            var response = await route.Handler(request).ConfigureAwait(false);
+            if (requiresMutationLease &&
+                response.StatusCode is >= 200 and < 300 &&
+                MutationObserver is not null)
+            {
+                try { await MutationObserver(request, response).ConfigureAwait(false); }
+                catch { }
+            }
+            return response;
+        }
+        finally
+        {
+            if (coordinatesLease) _mutationAdmissionGate.Release();
+        }
+    }
+
+    private static async Task WriteResponseAsync(
+        NetworkStream stream,
+        HttpResponse response,
+        CancellationToken ct,
+        string? origin = null)
     {
         var bodyBytes = response.Body != null ? Encoding.UTF8.GetBytes(response.Body) : Array.Empty<byte>();
         var headerBuilder = new StringBuilder();
         headerBuilder.Append($"HTTP/1.1 {response.StatusCode} {response.StatusText}\r\n");
         headerBuilder.Append($"Content-Type: {response.ContentType}\r\n");
         headerBuilder.Append($"Content-Length: {(response.BodyBytes ?? bodyBytes).Length}\r\n");
-        headerBuilder.Append("Access-Control-Allow-Origin: *\r\n");
+        if (!string.IsNullOrWhiteSpace(origin))
+        {
+            headerBuilder.Append($"Access-Control-Allow-Origin: {origin}\r\n");
+            headerBuilder.Append("Vary: Origin\r\n");
+        }
         headerBuilder.Append("Connection: close\r\n");
         headerBuilder.Append("\r\n");
 
@@ -287,6 +403,18 @@ public class AgentHttpServer : IDisposable
         await stream.WriteAsync(headerBytes, ct).ConfigureAwait(false);
         await stream.WriteAsync(response.BodyBytes ?? bodyBytes, ct).ConfigureAwait(false);
         await stream.FlushAsync(ct).ConfigureAwait(false);
+    }
+
+    private bool IsTrustedBrowserOrigin(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+            return true;
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttp || uri.Port != _port)
+            return false;
+        if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address);
     }
 
     public void Dispose()
@@ -297,6 +425,13 @@ public class AgentHttpServer : IDisposable
         _listener?.Stop();
         _cts?.Dispose();
     }
+
+    private sealed record RouteHandler(
+        Func<HttpRequest, Task<HttpResponse>> Handler,
+        bool RequiresMutationLease,
+        Func<HttpRequest, bool>? MutationLeaseExemption = null);
+
+    private sealed class RequestBodyTooLargeException : Exception;
 
     // ── WebSocket helpers (RFC 6455) ──
 
@@ -442,6 +577,8 @@ public class HttpRequest
     public Dictionary<string, string> RouteParams { get; set; } = new();
     public Dictionary<string, string> Headers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string? Body { get; set; }
+    internal MutationLeaseStatus? MutationLease { get; set; }
+    internal string? MutationTargetAutomationId { get; set; }
 
     private static readonly JsonSerializerOptions _readOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -496,6 +633,7 @@ public class HttpResponse
                 404 => "Not Found",
                 408 => "Request Timeout",
                 409 => "Conflict",
+                503 => "Service Unavailable",
                 501 => "Not Implemented",
                 500 => "Internal Server Error",
                 _ => "Bad Request"

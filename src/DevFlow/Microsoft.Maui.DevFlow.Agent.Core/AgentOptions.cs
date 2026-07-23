@@ -117,6 +117,19 @@ public class AgentOptions
     public bool EnableDetailedUiHooks { get; set; } = false;
 
     /// <summary>
+    /// Whether mutating HTTP endpoints require a valid DevFlow mutation lease.
+    /// The lease is broker-authoritative when connected and falls back to the local agent when
+    /// no broker is available. Default: true.
+    /// </summary>
+    public bool RequireMutationLease { get; set; } = true;
+
+    /// <summary>
+    /// How long a mutation lease remains active without a successful mutation or heartbeat.
+    /// Default: 10 seconds.
+    /// </summary>
+    public int MutationLeaseTimeoutMs { get; set; } = 10_000;
+
+    /// <summary>
     /// Custom routes registered under /api/v1/ext/{namespace}/...
     /// </summary>
     public IList<AgentExtension> Extensions { get; } = new List<AgentExtension>();

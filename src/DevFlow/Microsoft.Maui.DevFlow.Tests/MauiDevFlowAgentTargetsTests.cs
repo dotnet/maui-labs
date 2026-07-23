@@ -122,6 +122,33 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     [Theory]
     [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
     [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_DoesNotEmbedFullProjectPath_ByDefault(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget();
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        Assert.Contains("\"Microsoft.Maui.DevFlowProject\", \"Test.csproj\"", contents);
+        Assert.DoesNotContain(_projectDirectory, contents, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_EmbedsFullProjectPath_WhenExplicitlyEnabled(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowIncludeProjectPath=true");
+
+        var escapedPath = ProjectFilePath.Replace("\\", "\\\\", StringComparison.Ordinal);
+        Assert.Contains($"\"Microsoft.Maui.DevFlowProject\", \"{escapedPath}\"", File.ReadAllText(GeneratedFilePath));
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
     public void SetMauiDevFlowPort_EmitsSessionId_ForReleaseBuilds(string relativeTargetPath)
     {
         CreateTestProject(relativeTargetPath);

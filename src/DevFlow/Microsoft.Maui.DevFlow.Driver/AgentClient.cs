@@ -31,9 +31,22 @@ public class AgentClient : IDisposable
 
     private readonly HttpClient _http;
     private readonly string _baseUrl;
+    private readonly AsyncLocal<MutationLeaseIdentity?> _mutationLeaseOverride = new();
     private bool _disposed;
 
     public string BaseUrl => _baseUrl;
+
+    /// <summary>Stable identity used to coordinate mutating calls from this client.</summary>
+    public string MutationLeaseId { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Caller kind shown to other DevFlow hosts when this client holds the lease.</summary>
+    public string MutationLeaseHolderKind { get; set; } = "driver";
+
+    /// <summary>Human-readable holder label shown by inspector hosts.</summary>
+    public string? MutationLeaseLabel { get; set; }
+
+    /// <summary>Automatically claim the mutation lease before non-GET requests. Default: true.</summary>
+    public bool AutoAcquireMutationLease { get; set; } = true;
 
     /// <summary>
     /// Additional attempts for transient transport failures such as a dropped ADB port
@@ -73,32 +86,237 @@ public class AgentClient : IDisposable
     public AgentClient(string host = "localhost", int port = 9223)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(host);
+        _http = CreateHttpClient(host, GetCurrentMutationLease);
+    }
+
+    /// <summary>
+    /// Temporarily uses a caller-provided mutation lease identity for all asynchronous calls made
+    /// within the returned scope. Used by shared proxy hosts that serve multiple browser sessions.
+    /// </summary>
+    public IDisposable UseMutationLease(string leaseId, string holderKind, string? label = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseId);
+        var previous = _mutationLeaseOverride.Value;
+        _mutationLeaseOverride.Value = new MutationLeaseIdentity(leaseId, holderKind, label);
+        return new MutationLeaseScope(_mutationLeaseOverride, previous);
+    }
+
+    /// <summary>Claim, query, heartbeat, or release this caller's mutation lease.</summary>
+    public Task<MutationLeaseStatus> ControlMutationLeaseAsync(
+        string action,
+        bool force = false,
+        string? leaseId = null,
+        string? holderKind = null,
+        string? label = null)
+        => ControlMutationLeaseAsync(action, force, leaseId, holderKind, label, transactionId: null);
+
+    public async Task<MutationLeaseStatus> ControlMutationLeaseAsync(
+        string action,
+        bool force,
+        string? leaseId,
+        string? holderKind,
+        string? label,
+        string? transactionId)
+    {
+        var current = GetCurrentMutationLease();
+        var id = string.IsNullOrWhiteSpace(leaseId) ? current?.LeaseId : leaseId;
+        var kind = string.IsNullOrWhiteSpace(holderKind) ? current?.HolderKind : holderKind;
+        var display = label ?? current?.Label;
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["leaseId"] = id,
+            ["holderKind"] = kind,
+            ["label"] = display,
+            ["force"] = force,
+            ["transactionId"] = transactionId
+        };
+
+        using var content = DriverJson.CreateJsonContent(body);
+        using var response = await _http.PostAsync($"{_baseUrl}{AgentApi}/lease", content);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Rolling-upgrade compatibility: older agents predate mutation leases. They remain
+            // usable during a public-preview upgrade, while current agents enforce the lease.
+            return new MutationLeaseStatus
+            {
+                Ok = true,
+                Allowed = true,
+                YouHold = true,
+                Authority = "unsupported"
+            };
+        }
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var status = DriverJson.Deserialize<MutationLeaseStatus>(responseBody) ?? new MutationLeaseStatus
+        {
+            Ok = false,
+            Error = $"Mutation lease request failed with HTTP {(int)response.StatusCode}."
+        };
+        status.Ok &= response.IsSuccessStatusCode;
+        return status;
+    }
+
+    public Task<MutationRecordingStatus> ControlMutationRecordingAsync(
+        string action,
+        string? name = null,
+        string? app = null,
+        string? platform = null,
+        string? preconditions = null)
+        => ControlMutationRecordingAsync(action, name, app, platform, preconditions, recordingId: null);
+
+    public async Task<MutationRecordingStatus> ControlMutationRecordingAsync(
+        string action,
+        string? name,
+        string? app,
+        string? platform,
+        string? preconditions,
+        string? recordingId)
+    {
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["recordingId"] = recordingId,
+            ["name"] = name,
+            ["app"] = app,
+            ["platform"] = platform,
+            ["preconditions"] = preconditions
+        };
+        using var response = string.Equals(action, "status", StringComparison.OrdinalIgnoreCase)
+            ? await SendRecordingRequestAsync(body)
+            : await SendWithTransientRetriesAsync(HttpMethod.Post, () => SendRecordingRequestAsync(body));
+        return await ReadMutationRecordingResponseAsync(response);
+    }
+
+    public Task<MutationRecordingStatus> ObserveMutationRecordingAsync(MutationRecordingObservation observation)
+        => ObserveMutationRecordingAsync(observation, recordingId: null);
+
+    public async Task<MutationRecordingStatus> ObserveMutationRecordingAsync(
+        MutationRecordingObservation observation,
+        string? recordingId)
+    {
+        ArgumentNullException.ThrowIfNull(observation);
+        if (string.IsNullOrWhiteSpace(observation.Action))
+            throw new ArgumentException("A recording observation action is required.", nameof(observation));
+
+        var observationBody = new JsonObject
+        {
+            ["action"] = observation.Action,
+            ["automationId"] = observation.AutomationId,
+            ["text"] = observation.Text,
+            ["type"] = observation.Type,
+            ["index"] = observation.Index,
+            ["id"] = observation.Id,
+            ["value"] = observation.Value,
+            ["name"] = observation.Name,
+            ["dx"] = observation.Dx,
+            ["dy"] = observation.Dy,
+            ["itemIndex"] = observation.ItemIndex,
+            ["position"] = observation.Position,
+            ["page"] = observation.Page,
+            ["navigated"] = observation.Navigated,
+            ["assertsJson"] = observation.AssertsJson
+        };
+        var body = new JsonObject
+        {
+            ["action"] = "observe",
+            ["recordingId"] = recordingId,
+            ["observation"] = observationBody
+        };
+        using var response = await SendWithTransientRetriesAsync(
+            HttpMethod.Post,
+            () => SendRecordingRequestAsync(body));
+        return await ReadMutationRecordingResponseAsync(response);
+    }
+
+    private static async Task<MutationRecordingStatus> ReadMutationRecordingResponseAsync(
+        HttpResponseMessage response)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new MutationRecordingStatus
+            {
+                Ok = false,
+                Error = "The connected agent does not support coordinated workflow recording."
+            };
+        }
+        return DriverJson.Deserialize<MutationRecordingStatus>(responseBody) ?? new MutationRecordingStatus
+        {
+            Ok = false,
+            Error = $"Recording request failed with HTTP {(int)response.StatusCode}."
+        };
+    }
+
+    private async Task<HttpResponseMessage> SendRecordingRequestAsync(JsonObject body)
+    {
+        using var content = DriverJson.CreateJsonContent(body);
+        return await _http.PostAsync($"{_baseUrl}{AgentApi}/recording", content);
+    }
+
+    private MutationLeaseIdentity? GetCurrentMutationLease()
+    {
+        var current = _mutationLeaseOverride.Value;
+        if (current is not null)
+            return current;
+        if (string.IsNullOrWhiteSpace(MutationLeaseId))
+            return null;
+        return new MutationLeaseIdentity(
+            MutationLeaseId,
+            string.IsNullOrWhiteSpace(MutationLeaseHolderKind) ? "driver" : MutationLeaseHolderKind,
+            MutationLeaseLabel);
+    }
+
+    private async Task EnsureMutationLeaseAsync()
+    {
+        if (!AutoAcquireMutationLease)
+            return;
+
+        var identity = GetCurrentMutationLease();
+        if (identity is null)
+            throw new MutationLeaseException(new MutationLeaseStatus
+            {
+                Ok = false,
+                Error = "No DevFlow mutation lease identity is configured."
+            });
+
+        var status = await ControlMutationLeaseAsync(
+            "claim",
+            force: false,
+            identity.LeaseId,
+            identity.HolderKind,
+            identity.Label);
+        if (!status.YouHold)
+            throw new MutationLeaseException(status);
     }
 
     /// <summary>
     /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
-    /// <c>localhost</c> alias, a custom connect callback attempts both the IPv4 (<c>127.0.0.1</c>)
-    /// and IPv6 (<c>::1</c>) loopback addresses and uses whichever accepts the connection first.
+    /// <c>localhost</c> alias, a custom connect callback prefers the IPv4 (<c>127.0.0.1</c>)
+    /// loopback used by the built-in agent and falls back to IPv6 (<c>::1</c>).
     /// </summary>
     /// <remarks>
     /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
     /// may resolve <c>localhost</c> to IPv6 <c>::1</c> first and fail with "connection refused"
-    /// without falling back to IPv4 (see dotnet/maui-labs#341). Rather than forcing a single
-    /// address family — which has caused target-specific problems — this honors the OS-preferred
-    /// resolution order and falls back to the other loopback family on refusal. Explicit hosts
-    /// (a literal IP or a real hostname) are left on the default connect path unchanged.
+    /// without falling back to IPv4 (see dotnet/maui-labs#341). Trying the server's known address
+    /// first avoids paying an OS-level IPv6 connect timeout on every request while retaining IPv6
+    /// fallback for custom agents. Explicit hosts (a literal IP or a real hostname) are left on the
+    /// default connect path unchanged.
     /// </remarks>
-    private static HttpClient CreateHttpClient(string host)
+    private static HttpClient CreateHttpClient(
+        string host,
+        Func<MutationLeaseIdentity?> mutationLeaseProvider)
     {
-        if (!IsLoopbackAlias(host))
-            return new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-
-        var handler = new SocketsHttpHandler
+        HttpMessageHandler transport = !IsLoopbackAlias(host)
+            ? new HttpClientHandler()
+            : new SocketsHttpHandler
         {
             ConnectCallback = ConnectLoopbackAsync
         };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
+        {
+            InnerHandler = transport
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
     }
 
     private static bool IsLoopbackAlias(string host)
@@ -157,7 +375,6 @@ public class AgentClient : IDisposable
 
         try
         {
-            // Honor the OS-preferred resolution order (e.g. macOS commonly yields ::1 first).
             foreach (var address in await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
             {
                 if ((address.AddressFamily == AddressFamily.InterNetwork
@@ -171,9 +388,10 @@ public class AgentClient : IDisposable
             // DNS lookup failed (unusual for "localhost") — fall through to the explicit loopbacks below.
         }
 
-        // Guarantee both loopback families are attempted, regardless of hosts-file quirks.
-        if (!ordered.Contains(IPAddress.Loopback))
-            ordered.Add(IPAddress.Loopback);
+        // The built-in agent listens on IPv4 loopback. Keep all resolved candidates as fallbacks,
+        // but avoid an OS-level IPv6 timeout on every request when localhost resolves to ::1 first.
+        ordered.Remove(IPAddress.Loopback);
+        ordered.Insert(0, IPAddress.Loopback);
         if (Socket.OSSupportsIPv6 && !ordered.Contains(IPAddress.IPv6Loopback))
             ordered.Add(IPAddress.IPv6Loopback);
 
@@ -538,6 +756,10 @@ public class AgentClient : IDisposable
         return null;
     }
 
+    /// <summary>Get curated editable property descriptors and current values for an element.</summary>
+    public Task<JsonElement> GetPropertyDescriptorsAsync(string elementId)
+        => GetJsonAsync($"{UiApi}/elements/{elementId}/properties");
+
     /// <summary>
     /// Set a property value on an element.
     /// </summary>
@@ -848,8 +1070,11 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var content = DriverJson.CreateJsonContent(body);
-            var response = await _http.PutAsync($"{_baseUrl}{path}", content);
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(body);
+                return await _http.PutAsync($"{_baseUrl}{path}", content);
+            });
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -908,6 +1133,8 @@ public class AgentClient : IDisposable
     {
         var retryCount = Math.Max(0, TransientFailureRetryCount);
         var isMutating = method != HttpMethod.Get;
+        if (isMutating)
+            await EnsureMutationLeaseAsync();
         if (isMutating && !RetryMutatingRequests)
             retryCount = 0;
 
@@ -1099,11 +1326,16 @@ public class AgentClient : IDisposable
         return await GetJsonAsync($"{DeviceApi}/sensors");
     }
 
-    public async Task<bool> StartSensorAsync(string sensor, string? speed = null)
+    public Task<bool> StartSensorAsync(string sensor, string? speed = null)
+        => StartSensorAsync(sensor, speed, throttleMs: null);
+
+    public async Task<bool> StartSensorAsync(string sensor, string? speed, int? throttleMs)
     {
         var path = $"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/start";
-        if (!string.IsNullOrEmpty(speed))
-            path += $"?speed={Uri.EscapeDataString(speed)}";
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(speed)) query.Add($"speed={Uri.EscapeDataString(speed)}");
+        if (throttleMs is >= 0) query.Add($"throttleMs={throttleMs.Value}");
+        if (query.Count > 0) path += "?" + string.Join("&", query);
         return await PostActionAsync(path, new JsonObject());
     }
 
@@ -1255,6 +1487,61 @@ public class AgentClient : IDisposable
         [System.Text.Json.Serialization.JsonPropertyName("success")]
         public bool Success { get; set; }
     }
+
+    private sealed record MutationLeaseIdentity(string LeaseId, string HolderKind, string? Label);
+
+    private sealed class MutationLeaseScope : IDisposable
+    {
+        private readonly AsyncLocal<MutationLeaseIdentity?> _slot;
+        private readonly MutationLeaseIdentity? _previous;
+        private bool _disposed;
+
+        public MutationLeaseScope(
+            AsyncLocal<MutationLeaseIdentity?> slot,
+            MutationLeaseIdentity? previous)
+        {
+            _slot = slot;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _slot.Value = _previous;
+        }
+    }
+
+    private sealed class MutationLeaseHeaderHandler : DelegatingHandler
+    {
+        private readonly Func<MutationLeaseIdentity?> _leaseProvider;
+
+        public MutationLeaseHeaderHandler(Func<MutationLeaseIdentity?> leaseProvider)
+        {
+            _leaseProvider = leaseProvider;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var lease = _leaseProvider();
+            if (lease is not null)
+            {
+                request.Headers.Remove("X-DevFlow-Lease");
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", lease.LeaseId);
+                request.Headers.Remove("X-DevFlow-Holder");
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Holder", lease.HolderKind);
+                if (!string.IsNullOrWhiteSpace(lease.Label))
+                {
+                    request.Headers.Remove("X-DevFlow-Label");
+                    request.Headers.TryAddWithoutValidation("X-DevFlow-Label", lease.Label);
+                }
+            }
+
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
 }
 
 public class AgentStatus
@@ -1273,6 +1560,9 @@ public class AgentStatus
     public string? Timestamp { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("running")]
     public bool Running { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("route")]
+    public string? Route { get; set; }
 
     [System.Text.Json.Serialization.JsonIgnore]
     public string? Version => Agent?.Version;
@@ -1320,6 +1610,8 @@ public class AppDescriptor
 {
     [System.Text.Json.Serialization.JsonPropertyName("name")]
     public string? Name { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processId")]
+    public int? ProcessId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("packageId")]
     public string? PackageId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]

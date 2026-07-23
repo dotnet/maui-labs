@@ -1,6 +1,7 @@
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core.Css;
+using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
@@ -307,6 +308,7 @@ public class VisualTreeWalker
                 if (info != null)
                     results.Add(info);
             }
+            ApplySourceMap(results);
             return results;
         }
 
@@ -317,7 +319,309 @@ public class VisualTreeWalker
                 results.Add(info);
         }
 
+        ApplySourceMap(results);
         return results;
+    }
+
+    /// <summary>
+    /// Optional provider of XAML source maps. When set, <see cref="WalkTree"/> attaches
+    /// sourceFile/sourceLine/sourceColumn to statically-declared elements. When null (default),
+    /// source mapping is skipped entirely (no behavior change).
+    /// </summary>
+    public IXamlSourceMapProvider? SourceMapProvider { get; set; }
+
+    /// <summary>
+    /// True when source mapping can actually produce results — a provider is set and, if it is the
+    /// shared <see cref="XamlSourceMapRegistry"/>, at least one provider has registered. Lets callers
+    /// skip a full mapped walk in the common (no maps) case.
+    /// </summary>
+    internal bool HasActiveSourceMaps => SourceMapProvider switch
+    {
+        null => false,
+        XamlSourceMapRegistry registry => registry.HasProviders,
+        _ => true,
+    };
+
+    /// <summary>
+    /// Collects <c>id → (file, line, column, hash)</c> from a source-mapped ElementInfo tree (as
+    /// produced by <see cref="WalkTree"/>). Used to transfer source onto a separately-built,
+    /// depth-limited element-detail subtree whose nodes lack the parent-path context to map directly.
+    /// </summary>
+    internal static Dictionary<string, (string File, int Line, int Column, string? Hash)> CollectSourceById(IReadOnlyList<ElementInfo> roots)
+    {
+        var map = new Dictionary<string, (string, int, int, string?)>(StringComparer.Ordinal);
+        foreach (var root in roots)
+            CollectSourceByIdCore(root, map);
+        return map;
+    }
+
+    private static void CollectSourceByIdCore(ElementInfo node, Dictionary<string, (string, int, int, string?)> map)
+    {
+        if (node.Id is { } id && node.SourceFile is { } file && node.SourceLine is { } line)
+            map[id] = (file, line, node.SourceColumn ?? 0, node.SourceHash);
+        if (node.Children is { } children)
+            foreach (var child in children)
+                CollectSourceByIdCore(child, map);
+    }
+
+    /// <summary>Copies collected source locations onto a detail subtree, matching nodes by id.</summary>
+    internal static void ApplySourceById(ElementInfo detail, IReadOnlyDictionary<string, (string File, int Line, int Column, string? Hash)> sources)
+    {
+        if (detail.Id is { } id && sources.TryGetValue(id, out var s))
+        {
+            detail.SourceFile = s.File;
+            detail.SourceLine = s.Line;
+            detail.SourceColumn = s.Column;
+            detail.SourceHash = s.Hash;
+        }
+        if (detail.Children is { } children)
+            foreach (var child in children)
+                ApplySourceById(child, sources);
+    }
+
+    /// <summary>
+    /// Identity-checked post-pass that attaches XAML source locations to a built ElementInfo tree.
+    /// Source is attached only where mapped content children have exactly one order-preserving
+    /// alignment with the runtime children. Alignment uses the resolved full CLR type (from a
+    /// <c>clr-namespace</c> xmlns) or short type name, plus a sibling-unique AutomationId when the
+    /// XAML declared one (<see cref="IdentityMatches"/>). Runtime-only children such as toolbar
+    /// items, applied shapes, and DevFlow synthetics are skipped without shifting XAML paths, while
+    /// ambiguous same-type insertions, removals, reorders, and identity mismatches resolve to null.
+    /// <para>
+    /// Siblings with identical static identities are left unmapped because runtime order cannot
+    /// prove which declaration they came from. Add sibling-unique AutomationIds for precise
+    /// tooling. Short-name type collisions are only resolved for
+    /// <c>clr-namespace</c> custom controls (not <c>XmlnsDefinition</c>/URI namespaces).
+    /// </para>
+    /// </summary>
+    public void ApplySourceMap(IReadOnlyList<ElementInfo>? roots)
+    {
+        if (SourceMapProvider is null || roots is null) return;
+        foreach (var root in roots)
+            ApplySourceMapToNode(root, default);
+    }
+
+    private void ApplySourceMapToNode(ElementInfo info, XamlSourceContext ctx)
+    {
+        var childContext = AttachSource(info, ctx);
+        if (info.Children is null) return;
+
+        var alignment = AlignSourceChildren(info.Children, childContext);
+        for (var i = 0; i < info.Children.Count; i++)
+        {
+            var child = info.Children[i];
+            ApplySourceMapToNode(
+                child,
+                alignment is not null && alignment[i] >= 0
+                    ? childContext.ForChild(alignment[i])
+                    : default);
+        }
+    }
+
+    private XamlSourceContext AttachSource(ElementInfo info, XamlSourceContext ctx)
+    {
+        XamlSourceMap? childMap = null;
+        var childBasePath = string.Empty;
+        var expectedChildCount = -1;
+
+        // 1) "Usage" location from the parent XAML at this path — only when the element's identity
+        // (resolved CLR type and/or unique AutomationId) matches what was declared there.
+        var attached = false;
+        if (ctx.Matched && ctx.Map is not null && ctx.Map.TryGet(ctx.Path, out var entry)
+            && IdentityMatches(entry, info))
+        {
+            AttachLocation(info, ctx.Map, entry);
+            attached = true;
+            childMap = ctx.Map;
+            childBasePath = ctx.Path;
+            expectedChildCount = entry.ChildCount;
+        }
+
+        // 2) If this element is itself a XAML file root, its descendants use that file's map.
+        // Keyed by the element's runtime FullType, so a returned map means the element genuinely IS
+        // that type: attaching its own root definition is precise even when the parent "usage" path
+        // above did not match. Hence SourceFile means "usage line in the parent XAML" when (1)
+        // attached, otherwise "definition line of this element's own XAML" — both precise, never a
+        // guessed line.
+        var ownMap = info.FullType is not null ? SourceMapProvider!.GetMap(info.FullType) : null;
+        if (ownMap is not null && ownMap.TryGet(string.Empty, out var rootEntry))
+        {
+            if (!attached)
+                AttachLocation(info, ownMap, rootEntry);
+            childMap = ownMap;
+            childBasePath = string.Empty;
+            expectedChildCount = rootEntry.ChildCount;
+        }
+        else if (!attached)
+        {
+            // No source for this element and no own map → break the chain (subtree stays null).
+            return default;
+        }
+
+        if (childMap is null)
+            return default;
+
+        return new XamlSourceContext(childMap, childBasePath, matched: true, expectedChildCount);
+    }
+
+    /// <summary>
+    /// Finds the unique order-preserving alignment from parsed XAML content children to runtime
+    /// children. Unmatched runtime children are framework extras and receive no parent source
+    /// context. Zero or multiple alignments are rejected so source is precise or null.
+    /// </summary>
+    private static int[]? AlignSourceChildren(IReadOnlyList<ElementInfo> children, XamlSourceContext ctx)
+    {
+        if (!ctx.Matched || ctx.Map is null || ctx.ExpectedChildCount < 0)
+            return null;
+
+        var expected = new XamlSourceEntry[ctx.ExpectedChildCount];
+        for (var i = 0; i < expected.Length; i++)
+        {
+            if (!ctx.Map.TryGet(ctx.ChildPath(i), out expected[i]))
+                return null;
+        }
+
+        var ambiguousExpected = new bool[expected.Length];
+        for (var i = 0; i < expected.Length; i++)
+        {
+            for (var j = i + 1; j < expected.Length; j++)
+            {
+                if (!HasSameStaticIdentity(expected[i], expected[j]))
+                    continue;
+
+                ambiguousExpected[i] = true;
+                ambiguousExpected[j] = true;
+            }
+        }
+
+        var runtime = new List<(int OriginalIndex, ElementInfo Info)>();
+        for (var i = 0; i < children.Count; i++)
+        {
+            if (!IsSyntheticElement(children[i]))
+                runtime.Add((i, children[i]));
+        }
+
+        // Count order-preserving embeddings, saturating at 2 because only uniqueness matters.
+        var ways = new byte[expected.Length + 1, runtime.Count + 1];
+        for (var j = 0; j <= runtime.Count; j++)
+            ways[expected.Length, j] = 1;
+
+        for (var i = expected.Length - 1; i >= 0; i--)
+        {
+            for (var j = runtime.Count - 1; j >= 0; j--)
+            {
+                var count = ways[i, j + 1];
+                if (IdentityMatches(expected[i], runtime[j].Info))
+                    count = (byte)Math.Min(2, count + ways[i + 1, j + 1]);
+                ways[i, j] = count;
+            }
+        }
+
+        if (ways[0, 0] != 1)
+            return null;
+
+        var alignment = Enumerable.Repeat(-1, children.Count).ToArray();
+        var expectedIndex = 0;
+        var runtimeIndex = 0;
+        while (expectedIndex < expected.Length)
+        {
+            if (runtimeIndex >= runtime.Count)
+                return null;
+
+            var skipWays = ways[expectedIndex, runtimeIndex + 1];
+            var takeWays = IdentityMatches(expected[expectedIndex], runtime[runtimeIndex].Info)
+                ? ways[expectedIndex + 1, runtimeIndex + 1]
+                : 0;
+
+            if (takeWays == 1 && skipWays == 0)
+            {
+                if (!ambiguousExpected[expectedIndex])
+                    alignment[runtime[runtimeIndex].OriginalIndex] = expectedIndex;
+                expectedIndex++;
+                runtimeIndex++;
+            }
+            else if (skipWays == 1 && takeWays == 0)
+            {
+                runtimeIndex++;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        return alignment;
+    }
+
+    private static bool HasSameStaticIdentity(XamlSourceEntry left, XamlSourceEntry right)
+        => string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal)
+            && string.Equals(left.FullTypeName, right.FullTypeName, StringComparison.Ordinal)
+            && string.Equals(left.AutomationId, right.AutomationId, StringComparison.Ordinal);
+
+    private static void AttachLocation(ElementInfo info, XamlSourceMap map, XamlSourceEntry entry)
+    {
+        info.SourceFile = map.File;
+        info.SourceLine = entry.Line;
+        info.SourceColumn = entry.Column;
+        info.SourceHash = map.ContentHash;
+    }
+
+    /// <summary>
+    /// Matches a parsed entry to a runtime element by identity: the resolved full CLR type when the
+    /// XAML namespace gave one (closing short-name collisions like <c>maui:Label</c> vs
+    /// <c>local:Label</c>), otherwise the short type name; PLUS, when the entry carries a
+    /// (sibling-unique) AutomationId, the runtime element must carry the same one. The AutomationId
+    /// check makes a same-type, same-count sibling reorder resolve to null rather than a wrong line.
+    /// </summary>
+    private static bool IdentityMatches(XamlSourceEntry entry, ElementInfo info)
+    {
+        if (entry.FullTypeName is { Length: > 0 } fullType)
+        {
+            if (!string.Equals(fullType, info.FullType, StringComparison.Ordinal))
+                return false;
+        }
+        else if (!TypeMatches(entry.TypeName, info.Type))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(entry.AutomationId) &&
+            !string.Equals(entry.AutomationId, info.AutomationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TypeMatches(string expected, string? actual)
+        => !string.IsNullOrEmpty(actual) && string.Equals(expected, actual, StringComparison.Ordinal);
+
+    private static bool IsSyntheticElement(ElementInfo info)
+        => info.FullType is { } ft && ft.StartsWith("Microsoft.Maui.DevFlow.Agent.Core.", StringComparison.Ordinal);
+
+    private readonly struct XamlSourceContext
+    {
+        public readonly XamlSourceMap? Map;
+        public readonly string Path;
+        public readonly bool Matched;
+        public readonly int ExpectedChildCount;
+
+        public XamlSourceContext(XamlSourceMap? map, string path, bool matched, int expectedChildCount)
+        {
+            Map = map;
+            Path = path;
+            Matched = matched;
+            ExpectedChildCount = expectedChildCount;
+        }
+
+        public XamlSourceContext ForChild(int index)
+            => Map is null || !Matched
+                ? default
+                : new XamlSourceContext(Map, ChildPath(index), true, expectedChildCount: -1);
+
+        public string ChildPath(int index)
+            => Path.Length == 0 ? index.ToString() : $"{Path}/{index}";
     }
 
     /// <summary>
@@ -749,7 +1053,7 @@ public class VisualTreeWalker
             // ToolbarItems
             foreach (var toolbarItem in page.ToolbarItems)
             {
-                var tiId = GenerateObjectId(toolbarItem, toolbarItem.AutomationId);
+                var tiId = GetToolbarItemId(toolbarItem);
                 if (tiId == targetId) return toolbarItem;
             }
 
@@ -1252,7 +1556,8 @@ public class VisualTreeWalker
 
     private ElementInfo CreateToolbarItemInfo(ToolbarItem item, string parentId)
     {
-        var id = GenerateObjectId(item, item.AutomationId);
+        var id = GetToolbarItemId(item);
+        _usedIds.Add(id);
         var tiInfo = new ElementInfo
         {
             Id = id,
@@ -1266,6 +1571,14 @@ public class VisualTreeWalker
         };
         TryPopulateSyntheticBounds(id, item, tiInfo);
         return tiInfo;
+    }
+
+    internal static string GetToolbarItemId(ToolbarItem item)
+    {
+        var suffix = item.Id.ToString("N")[..8];
+        return string.IsNullOrWhiteSpace(item.AutomationId)
+            ? $"ToolbarItem_{suffix}"
+            : $"{item.AutomationId}_{suffix}";
     }
 
     private ElementInfo? CreateBackButtonInfo(Page page, string parentId)
