@@ -25,6 +25,16 @@ public class Adb
 		_environmentVariables = environmentVariables;
 	}
 
+	/// <summary>
+	/// Test-only constructor that injects a preconfigured <see cref="AdbRunner"/> so the
+	/// port-rule mapping can be exercised without a real <c>adb</c> binary.
+	/// </summary>
+	internal Adb(AdbRunner runner)
+	{
+		_runner = runner ?? throw new ArgumentNullException(nameof(runner));
+		_adbPath = "adb";
+	}
+
 	public string? AdbPath => _adbPath;
 
 	public bool IsAvailable => _adbPath != null;
@@ -141,7 +151,7 @@ public class Adb
 	{
 		var runner = RequireRunner();
 		var rules = await runner.ListReversePortsAsync(deviceSerial, cancellationToken);
-		return rules.Select(MapPortRule).ToList();
+		return rules.Select(MapReversePortRule).ToList();
 	}
 
 	/// <summary>Adds an <c>adb forward tcp:hostPort tcp:devicePort</c> rule.</summary>
@@ -183,10 +193,22 @@ public class Adb
 	AdbRunner RequireRunner() =>
 		Runner ?? throw new MauiToolException(ErrorCodes.AndroidAdbNotFound, "ADB not found");
 
+	// Upstream AdbPortRule normalizes both forward AND reverse rules so that
+	// rule.Local is always the host port and rule.Remote is always the device port.
+	// AndroidPortMapping keeps adb's own per-direction convention: for a forward rule
+	// Local=host/Remote=device (no swap), but for a reverse rule Local=device/Remote=host,
+	// matching what 'port reverse' emits — so reverse rules must be mapped with axes swapped.
 	static AndroidPortMapping MapPortRule(AdbPortRule rule) => new()
 	{
 		Local = rule.Local.Port,
 		Remote = rule.Remote.Port,
+		Protocol = rule.Local.Protocol.ToString().ToLowerInvariant(),
+	};
+
+	static AndroidPortMapping MapReversePortRule(AdbPortRule rule) => new()
+	{
+		Local = rule.Remote.Port,   // device
+		Remote = rule.Local.Port,   // host
 		Protocol = rule.Local.Protocol.ToString().ToLowerInvariant(),
 	};
 

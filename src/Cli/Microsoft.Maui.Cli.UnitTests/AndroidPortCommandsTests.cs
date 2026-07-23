@@ -4,7 +4,9 @@
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Models;
+using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
+using Xamarin.Android.Tools;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -210,14 +212,16 @@ public class AndroidPortCommandsTests
 	{
 		var fake = WithOnlineDevice();
 		fake.ForwardPorts.Add(new AndroidPortMapping { Local = 8080, Remote = 9090 });
-		fake.ReversePorts.Add(new AndroidPortMapping { Local = 19223, Remote = 19223 });
+		// Distinct device/host ports so a device/host swap would be visible.
+		fake.ReversePorts.Add(new AndroidPortMapping { Local = 5000, Remote = 6000 });
 
 		var (exitCode, stdOut, _) = await InvokePortAsync(fake, "android port list --json");
 
 		Assert.Equal(0, exitCode);
 		Assert.Contains("emulator-5554", stdOut);
 		Assert.Contains("8080", stdOut);
-		Assert.Contains("19223", stdOut);
+		Assert.Contains("5000", stdOut);
+		Assert.Contains("6000", stdOut);
 	}
 
 	[Fact]
@@ -320,5 +324,68 @@ public class AndroidPortCommandsTests
 		Assert.Equal(0, exitCode);
 		var call = Assert.Single(fake.AddedForwardPorts);
 		Assert.Equal("emulator-5556", call.Serial);
+	}
+}
+
+/// <summary>
+/// Exercises the real <see cref="Adb"/> port-rule mapping against a stub <see cref="AdbRunner"/>.
+/// Upstream <see cref="AdbPortRule"/> normalizes BOTH forward and reverse rules so
+/// <c>rule.Local</c> is the host port and <c>rule.Remote</c> is the device port. The CLI keeps
+/// adb's per-direction convention: forward mappings are Local=host/Remote=device (no swap),
+/// reverse mappings are Local=device/Remote=host (axes swapped). These tests use DISTINCT ports
+/// so a missing swap is observable.
+/// </summary>
+public class AdbPortMappingTests
+{
+	sealed class StubRunner : AdbRunner
+	{
+		readonly IReadOnlyList<AdbPortRule> _forward;
+		readonly IReadOnlyList<AdbPortRule> _reverse;
+
+		public StubRunner(IReadOnlyList<AdbPortRule>? forward = null, IReadOnlyList<AdbPortRule>? reverse = null)
+			: base("adb")
+		{
+			_forward = forward ?? Array.Empty<AdbPortRule>();
+			_reverse = reverse ?? Array.Empty<AdbPortRule>();
+		}
+
+		public override Task<IReadOnlyList<AdbPortRule>> ListForwardPortsAsync(string serial, CancellationToken cancellationToken = default)
+			=> Task.FromResult(_forward);
+
+		public override Task<IReadOnlyList<AdbPortRule>> ListReversePortsAsync(string serial, CancellationToken cancellationToken = default)
+			=> Task.FromResult(_reverse);
+	}
+
+	// Upstream AdbPortRule is a record (Remote, Local). Both ParseForwardListOutput and
+	// ParseReverseListOutput normalize so that rule.Local is always the host port and
+	// rule.Remote is always the device port, regardless of direction.
+	static AdbPortRule Rule(int host, int device)
+		=> new(new AdbPortSpec(AdbProtocol.Tcp, device), new AdbPortSpec(AdbProtocol.Tcp, host));
+
+	[Fact]
+	public async Task ListForwardPorts_KeepsHostAsLocalAndDeviceAsRemote()
+	{
+		var adb = new Adb(new StubRunner(forward: new[] { Rule(host: 8080, device: 9090) }));
+
+		var result = await adb.ListForwardPortsAsync("emulator-5554");
+
+		var m = Assert.Single(result);
+		Assert.Equal(8080, m.Local);   // host
+		Assert.Equal(9090, m.Remote);  // device
+		Assert.Equal("tcp", m.Protocol);
+	}
+
+	[Fact]
+	public async Task ListReversePorts_SwapsToDeviceAsLocalAndHostAsRemote()
+	{
+		// adb reverse tcp:5000 (device) → tcp:6000 (host); upstream stores Local=host=6000, Remote=device=5000.
+		var adb = new Adb(new StubRunner(reverse: new[] { Rule(host: 6000, device: 5000) }));
+
+		var result = await adb.ListReversePortsAsync("emulator-5554");
+
+		var m = Assert.Single(result);
+		Assert.Equal(5000, m.Local);   // device
+		Assert.Equal(6000, m.Remote);  // host
+		Assert.Equal("tcp", m.Protocol);
 	}
 }
