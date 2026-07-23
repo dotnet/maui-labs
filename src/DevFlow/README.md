@@ -69,17 +69,22 @@ maui devflow ui tap --automationid "MyButton"
 
 # Start MCP server for AI agent integration
 maui devflow mcp
+
+# Open the DevFlow Web Inspector
+# http://localhost:19223/inspector/
+maui devflow broker start
 ```
 
 ### Session identity
 
 When `Microsoft.Maui.DevFlow.Agent` is referenced, builds are tagged with a **session identity**
-derived from the project path. This metadata-only identifier helps DevFlow distinguish builds
-from different environments (e.g. worktrees, CI agents, dev machines) without modifying
-the app's `ApplicationId` or bundle identifier.
+derived from a one-way, sanitized project-path value. This metadata-only identifier helps DevFlow
+distinguish builds from different environments without modifying the app's `ApplicationId` or
+bundle identifier. The full project path is not embedded by default.
 
 The session identity is included in:
 - Assembly metadata (`Microsoft.Maui.DevFlowSessionId`) — compile-time injected by the `Microsoft.Maui.DevFlow.Agent` MSBuild targets
+- Project identity metadata (`Microsoft.Maui.DevFlowProject`) — the project filename by default
 - Broker registration (visible via `maui devflow list`)
 - Agent status endpoint (`/api/v1/agent/status`)
 
@@ -97,6 +102,9 @@ dotnet build -p:MauiDevFlowSessionId=mysession
 
 The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environment variable.
 
+For local debugging that needs full-path project disambiguation, opt in explicitly with
+`-p:MauiDevFlowIncludeProjectPath=true`. This embeds the project path in the app assembly.
+
 ## Features
 
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
@@ -106,7 +114,11 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
 - **Blazor CDP Bridge** — Chrome DevTools Protocol for Blazor WebViews (DOM, JS eval, navigation, input)
-- **MCP Server** — 69 structured tools for AI agent integration (Claude, etc.)
+- **DevFlow Web Inspector** — the shared browser UI, embedded by MAUI DevFlow Inspector hosts for VS Code and GitHub Copilot Canvas
+- **Global Mutation Lease** — prevents browser, VS Code, Canvas, MCP, and CLI callers from driving the app concurrently
+- **Workflow Recording** — broker-owned recording observes successful mutations from every host and emits replayable Markdown
+- **Click-to-XAML** — Debug source maps connect visual-tree elements to their XAML declarations
+- **MCP Server** — 75 structured tools for AI agent integration
 - **Logging** — buffered JSONL file logging with WebView JS console capture
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
 - **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
@@ -158,6 +170,7 @@ These options apply to all `maui devflow` subcommands:
 
 ## Documentation
 
+- [DevFlow Web Inspector and MAUI DevFlow Inspector hosts](../../docs/DevFlow/inspector.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
 - [Protocol Spec](../../docs/DevFlow/spec/README.md)
 - [Android Setup](../../docs/DevFlow/setup-guides/android-setup.md)
