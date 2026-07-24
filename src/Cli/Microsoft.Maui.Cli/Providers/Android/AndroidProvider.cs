@@ -129,11 +129,24 @@ public class AndroidProvider : IAndroidProvider
 		}
 		else
 		{
+			// Surface the resolved command-line tools revision (new in the android-tools
+			// resolver API) so `maui doctor` reports which cmdline-tools build is in use.
+			var commandLineTools = _sdkManager.FindCommandLineTools();
 			checks.Add(new HealthCheck
 			{
 				Category = "android",
 				Name = "SDK Manager",
-				Status = CheckStatus.Ok
+				Status = CheckStatus.Ok,
+				Message = commandLineTools?.Revision is { Length: > 0 } rev
+					? $"command-line tools {rev}"
+					: null,
+				Details = commandLineTools is not null
+					? new JsonObject
+					{
+						["path"] = commandLineTools.Path,
+						["revision"] = commandLineTools.Revision
+					}
+					: null
 			});
 
 			// Check licenses
@@ -473,6 +486,16 @@ public class AndroidProvider : IAndroidProvider
 			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
 			cancellationToken);
 		_sdkPath = targetPath;
+	}
+
+	public async Task<string?> EnsureLatestSdkToolsAsync(string targetPath,
+		Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default)
+	{
+		var tool = await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath,
+			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
+			cancellationToken);
+		_sdkPath = targetPath;
+		return tool.Revision;
 	}
 
 	public void OverrideSdkPath(string path)

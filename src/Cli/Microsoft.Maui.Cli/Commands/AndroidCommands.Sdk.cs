@@ -475,10 +475,86 @@ public static partial class AndroidCommands
 			}
 		});
 
+		// sdk update-tools
+		var updateToolsCommand = new Command("update-tools",
+			"Ensure the latest Android SDK command-line tools (cmdline-tools;latest) are installed");
+		updateToolsCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
+		{
+			var androidProvider = GetAndroidProvider(parseResult);
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
+			var formatter = Program.GetFormatter(parseResult);
+
+			var targetPath = androidProvider.SdkPath ?? PlatformDetector.Paths.DefaultAndroidSdkPath;
+
+			try
+			{
+				if (dryRun)
+				{
+					formatter.WriteInfo($"[dry-run] Would ensure latest command-line tools at: {targetPath}");
+					return 0;
+				}
+
+				string? revision = null;
+				if (!useJson && formatter is SpectreOutputFormatter spectre)
+				{
+					await spectre.LiveProgressAsync(async (ctx) =>
+					{
+						var task = ctx.AddTask("Updating command-line tools");
+						revision = await androidProvider.EnsureLatestSdkToolsAsync(targetPath,
+							onProgress: (phase, pct, msg) =>
+							{
+								var label = phase switch
+								{
+									"CheckingForUpdates" => "Checking for updates...",
+									"Downloading" => $"Downloading: {msg}",
+									"Verifying" => "Verifying checksum...",
+									"Extracting" => "Extracting...",
+									"Installing" => "Installing...",
+									"Complete" => "Command-line tools updated",
+									_ => msg
+								};
+								task.Update(Math.Max(0, pct), label);
+							},
+							cancellationToken);
+						task.Complete(revision is null ? "Command-line tools up to date" : $"cmdline-tools {revision}");
+					});
+				}
+				else
+				{
+					revision = await androidProvider.EnsureLatestSdkToolsAsync(targetPath, onProgress: null, cancellationToken);
+				}
+
+				if (useJson)
+				{
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Status = "updated",
+						Message = revision is null ? "command-line tools up to date" : $"command-line tools {revision}",
+						Path = targetPath
+					});
+				}
+				else
+				{
+					formatter.WriteSuccess(revision is null
+						? "Command-line tools are up to date"
+						: $"Command-line tools updated to revision {revision}");
+				}
+				return 0;
+			}
+			catch (Exception ex)
+			{
+				return Program.HandleCommandException(formatter, ex);
+			}
+		});
+
 		command.Add(checkCommand);
 		command.Add(installCommand);
 		command.Add(listCommand);
 		command.Add(acceptLicensesCommand);
+		command.Add(updateToolsCommand);
 		command.Add(CreateSdkUninstallCommand());
 
 		return command;
