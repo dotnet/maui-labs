@@ -284,9 +284,10 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
                 useGlobalJson: true
             # CUSTOMIZE: If the product needs MAUI workloads, add these steps
             # before the build (copy from the DevFlow job):
-            #   - Provision .NET SDK via Arcade (eng\common\dotnet.cmd --info)
-            #   - Install MAUI workloads (.dotnet\dotnet workload install maui ...)
-            #   - Install Android SDK dependencies
+            #   - Install MAUI workloads through Arcade's wrapper
+            #     (eng\common\dotnet.cmd workload install maui ...)
+            #   - Install Android SDK dependencies through eng/common/dotnet.ps1
+            #     in a pwsh step so quoted paths remain a single argument
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
