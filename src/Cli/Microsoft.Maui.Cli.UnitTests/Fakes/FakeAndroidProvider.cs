@@ -67,6 +67,8 @@ public class FakeAndroidProvider : IAndroidProvider
 	public int AcceptLicensesCalled { get; private set; }
 	public List<(string? SdkPath, string? JdkPath, int? JdkVersion, List<string>? AdditionalPackages)> InstallCalls { get; } = new();
 	public List<string> InstallSdkToolsCalls { get; } = new();
+	public List<string> EnsureLatestSdkToolsCalls { get; } = new();
+	public string? EnsureLatestSdkToolsRevision { get; set; }
 	public List<int?> InstallJdkCalls { get; } = new();
 	public bool Disposed { get; private set; }
 
@@ -210,6 +212,12 @@ public class FakeAndroidProvider : IAndroidProvider
 	{
 		InstallSdkToolsCalls.Add(targetPath);
 		return Task.CompletedTask;
+	}
+
+	public Task<string?> EnsureLatestSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default)
+	{
+		EnsureLatestSdkToolsCalls.Add(targetPath);
+		return Task.FromResult(EnsureLatestSdkToolsRevision);
 	}
 
 	public void OverrideSdkPath(string path) => SdkPath = path;

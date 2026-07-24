@@ -532,6 +532,71 @@ public class AndroidCommandsTests
 		Assert.DoesNotContain(installCommand.Options, o => o.Name == "--sdk-path");
 	}
 
+	// --- Handler-level tests for 'android sdk update-tools' (cmdline-tools resolver API) ---
+
+	[Fact]
+	public void SdkCommand_HasUpdateToolsSubcommand()
+	{
+		var androidCommand = AndroidCommands.Create();
+		var sdkCommand = androidCommand.Subcommands.First(c => c.Name == "sdk");
+
+		Assert.Contains(sdkCommand.Subcommands, c => c.Name == "update-tools");
+	}
+
+	[Fact]
+	public async Task SdkUpdateToolsCommand_Json_InvokesProvider_WithResolvedSdkPath()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-test"),
+			EnsureLatestSdkToolsRevision = "19.0"
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk update-tools --json");
+			var exitCode = await parseResult.InvokeAsync();
+
+			Assert.Equal(0, exitCode);
+			Assert.Single(fakeAndroid.EnsureLatestSdkToolsCalls);
+			Assert.Equal(fakeAndroid.SdkPath, fakeAndroid.EnsureLatestSdkToolsCalls[0]);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task SdkUpdateToolsCommand_DryRun_DoesNotInvokeProvider()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-dryrun-test")
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk update-tools --json --dry-run");
+			var exitCode = await parseResult.InvokeAsync();
+
+			Assert.Equal(0, exitCode);
+			Assert.Empty(fakeAndroid.EnsureLatestSdkToolsCalls);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
 	// --- Handler-level tests for 'android sdk accept-licenses' exit code behaviour ---
 	// Verifies that the command returns non-zero when the user declines so that callers
 	// (e.g. the VS Code MAUI extension) can trust the exit code.

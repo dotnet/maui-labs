@@ -168,6 +168,14 @@ public interface IAndroidProvider : IDisposable
 	Task InstallSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved command-line tools revision, or
+	/// <see langword="null"/> when the revision could not be determined.
+	/// </summary>
+	Task<string?> EnsureLatestSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Overrides the Android SDK path for the current session.
 	/// Rebuilds downstream tool wrappers (SdkManager, AvdManager, Adb) to use the new path.
 	/// </summary>
