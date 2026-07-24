@@ -103,6 +103,43 @@ public class SdkManagerTests : IDisposable
 
 		Assert.Null(SdkManager.ResolveSdkManagerPath(_tempDir));
 	}
+
+	[Fact]
+	public void FindCommandLineTools_ReturnsPathAndRevision_FromSourceProperties()
+	{
+		var toolDir = Path.Combine(_tempDir, "cmdline-tools", "latest");
+		var sdkManagerPath = Path.Combine(toolDir, "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
+		File.WriteAllText(sdkManagerPath, string.Empty);
+		File.WriteAllText(Path.Combine(toolDir, "source.properties"),
+			"Pkg.Revision=19.0\nPkg.Path=cmdline-tools;latest\n");
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		var tool = sdkManager.FindCommandLineTools();
+
+		Assert.NotNull(tool);
+		Assert.Equal(sdkManagerPath, tool!.Path);
+		Assert.Equal("19.0", tool.Revision);
+	}
+
+	[Fact]
+	public void FindCommandLineTools_ReturnsNull_WhenSdkPathIsNull()
+	{
+		using var sdkManager = new SdkManager(() => null, () => null);
+
+		Assert.Null(sdkManager.FindCommandLineTools());
+	}
+
+	[Fact]
+	public async Task EnsureLatestCommandLineToolsAsync_Throws_OnEmptyTargetPath()
+	{
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		await Assert.ThrowsAsync<ArgumentNullException>(
+			() => sdkManager.EnsureLatestCommandLineToolsAsync(string.Empty));
+	}
 }
 
 [Collection("AndroidEnvironment")]

@@ -543,6 +543,32 @@ public partial class SdkManager : IDisposable
 		await _sdkManager.BootstrapAsync(targetPath, bootstrapProgress, cancellationToken);
 	}
 
+	/// <summary>
+	/// Resolves the installed command-line tools (sdkmanager path + revision) from the highest
+	/// <c>cmdline-tools</c> revision reported by <c>source.properties</c>. Returns
+	/// <see langword="null"/> when no SDK path is configured or no sdkmanager is installed.
+	/// </summary>
+	public Xamarin.Android.Tools.CommandLineTool? FindCommandLineTools()
+	{
+		SyncPaths();
+		return _sdkManager.FindSdkManager();
+	}
+
+	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved sdkmanager executable and installed revision.
+	/// </summary>
+	public async Task<Xamarin.Android.Tools.CommandLineTool> EnsureLatestCommandLineToolsAsync(
+		string targetPath,
+		Action<Xamarin.Android.Tools.SdkBootstrapPhase, int, string>? onProgress = null,
+		CancellationToken cancellationToken = default)
+	{
+		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
+			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
+		return await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath, bootstrapProgress, cancellationToken);
+	}
+
 	void EnsureAvailable()
 	{
 		if (!IsAvailable)

@@ -3,9 +3,9 @@
   <ProductDependencies>
     <!-- dotnet/android-tools: Android SDK tooling (SdkManager, AdbRunner, JdkInstaller, etc.)
          The package is built by dotnet/android which includes android-tools as a submodule. -->
-    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="1.0.189-preview.58">
+    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="99.61.4269-preview.2131">
       <Uri>https://github.com/dotnet/android</Uri>
-      <Sha>2114bc81fed892c4d166aeff637ca2387b0fcd8a</Sha>
+      <Sha>d76473e37910077edea90389f8a0ce71d11a5651</Sha>
     </Dependency>
     <!-- dotnet/maui -->
     <Dependency Name="Microsoft.Maui.Controls" Version="10.0.41">
