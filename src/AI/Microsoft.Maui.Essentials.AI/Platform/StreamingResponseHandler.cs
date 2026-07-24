@@ -112,9 +112,9 @@ internal sealed class StreamingResponseHandler
 	}
 
 	/// <summary>
-	/// Flushes remaining chunker content and completes the channel successfully.
+	/// Flushes remaining chunker content, emits usage, and completes the channel successfully.
 	/// </summary>
-	public void Complete()
+	public void Complete(UsageDetails? usage = null)
 	{
 		if (_chunker is not null)
 		{
@@ -128,6 +128,15 @@ internal sealed class StreamingResponseHandler
 					Contents = { new TextContent(finalChunk) }
 				});
 			}
+		}
+
+		if (usage is not null)
+		{
+			_channel.Writer.TryWrite(new ChatResponseUpdate
+			{
+				ModelId = _modelId,
+				Contents = { new UsageContent(usage) }
+			});
 		}
 
 		_channel.Writer.TryComplete();

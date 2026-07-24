@@ -74,6 +74,42 @@ var response = await _chat.GetResponseAsync([message]);
 
 On Apple, a `CGImage` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed through without re-decoding by setting `RawRepresentation` on the `DataContent`; retain valid encoded bytes for recording and cross-platform consumers. Local `file://` `UriContent` is supported, while remote image URLs are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
 
+### Token usage
+
+Token usage requires the native Swift bridge to be built with Xcode 27 or
+later and the app to run on Apple OS 27 or later. Usage is returned through
+the standard `Microsoft.Extensions.AI` response APIs:
+
+```csharp
+var response = await _chat.GetResponseAsync("Summarize this text.");
+
+if (response.Usage is { } usage)
+{
+    Console.WriteLine($"Input: {usage.InputTokenCount}");
+    Console.WriteLine($"Output: {usage.OutputTokenCount}");
+    Console.WriteLine($"Cached input: {usage.CachedInputTokenCount}");
+    Console.WriteLine($"Reasoning: {usage.ReasoningTokenCount}");
+    Console.WriteLine($"Total: {usage.TotalTokenCount}");
+}
+```
+
+Streaming responses emit a final `UsageContent` update. Aggregate the stream
+into a `ChatResponse` to read it from `ChatResponse.Usage`:
+
+```csharp
+var response = await _chat
+    .GetStreamingResponseAsync("Plan a day trip to Tokyo")
+    .ToChatResponseAsync();
+
+Console.WriteLine($"Total tokens: {response.Usage?.TotalTokenCount}");
+```
+
+Each response reports usage for that request. To track a conversation or
+application total, accumulate responses with `UsageDetails.Add`. Usage is
+`null` on Apple OS 26 because the native Foundation Models usage API was
+introduced in OS 27. Counts come directly from Foundation Models; the client
+does not reconstruct or estimate missing usage.
+
 ### Embeddings for semantic search
 
 ```csharp

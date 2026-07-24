@@ -22,7 +22,8 @@
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(EnableOpenAIClient)' == 'true'">
+  <!-- Opt in with -p:EnableOpenAIClient=true or -p:EnableOpenAITests=true. -->
+  <PropertyGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">
     <DefineConstants>$(DefineConstants);ENABLE_OPENAI_CLIENT</DefineConstants>
   </PropertyGroup>
 
@@ -58,7 +59,7 @@
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true'">
+  <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="OpenAI" />
   </ItemGroup>
