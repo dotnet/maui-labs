@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CoreGraphics;
+using ImageIO;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -352,6 +354,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 					functionResult.CallId,
 					functionResult.Result),
 
+			ImageContentNative image =>
+				FromNative(image),
+
 			_ => throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(content))
 		};
 
@@ -442,6 +447,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
 			TextContent => Array.Empty<AIContentNative>(),
 
+			// Image content (analyzed by the model on 27.0+; the native layer throws below that).
+			DataContent data when IsImage(data.MediaType) => [ToNative(data)],
+			UriContent uri when IsImage(uri.MediaType) => [ToNative(uri)],
+
 			// Function call/result content from prior tool-calling turns is converted to native types.
 			// The native Swift layer gracefully skips these when building the Transcript, since Apple's
 			// LanguageModelSession manages tool call state internally.
@@ -478,6 +487,79 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	private static NSNumber? ToNative(long? value) =>
 		value.HasValue ? NSNumber.FromInt64(value.Value) : null;
+
+	// internal for unit testing (InternalsVisibleTo).
+	internal static bool IsImage(string? mediaType) =>
+		mediaType is not null && mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+	internal static ImageContentNative ToNative(DataContent data)
+	{
+		// Fast path: the caller attached a native image handle via RawRepresentation (zero-copy).
+		switch (data.RawRepresentation)
+		{
+			case CGImage cg:
+				return new ImageContentNative(cg, 0, null);
+#if IOS || MACCATALYST
+			case UIKit.UIImage ui when ui.CGImage is { } uiCg:
+				return new ImageContentNative(uiCg, 0, null);
+#elif MACOS
+			case AppKit.NSImage ns when ToCGImage(ns) is { } nsCg:
+				return new ImageContentNative(nsCg, 0, null);
+#endif
+		}
+
+		// Byte fallback: the Swift shim decodes the bytes to a CGImage.
+		var bytes = data.Data.ToArray();
+		return new ImageContentNative(NSData.FromArray(bytes), data.MediaType ?? "image/png", 0, null);
+	}
+
+	internal static ImageContentNative ToNative(UriContent uri)
+	{
+		if (uri.RawRepresentation is CGImage cg)
+			return new ImageContentNative(cg, 0, null);
+
+		if (uri.Uri.IsFile)
+			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), 0, null);
+
+		throw new NotSupportedException(
+			"Apple Intelligence image prompts require in-memory DataContent or a file:// UriContent. " +
+			"Remote http(s) image URLs are not downloaded automatically.");
+	}
+
+	internal static AIContent FromNative(ImageContentNative image)
+	{
+		var mediaType = image.MimeType ?? "image/png";
+
+		if (image.ImageUrl?.AbsoluteString is { } uri)
+			return new UriContent(uri, mediaType) { RawRepresentation = image.CgImage };
+
+		if (image.Data is { } data)
+			return new DataContent(data.ToArray(), mediaType) { RawRepresentation = image.CgImage };
+
+		if (image.CgImage is { } cg)
+			return new DataContent(EncodePng(cg), "image/png") { RawRepresentation = cg };
+
+		return new DataContent(ReadOnlyMemory<byte>.Empty, mediaType);
+	}
+
+	private static byte[] EncodePng(CGImage image)
+	{
+		using var data = new NSMutableData();
+		using var destination = CGImageDestination.Create(data, "public.png", 1)
+			?? throw new InvalidOperationException("Failed to create a PNG image destination.");
+		destination.AddImage(image);
+		if (!destination.Close())
+			throw new InvalidOperationException("Failed to encode the image to PNG.");
+		return data.ToArray();
+	}
+
+#if MACOS
+	private static CGImage? ToCGImage(AppKit.NSImage image)
+	{
+		var rect = new CGRect(0, 0, image.Size.Width, image.Size.Height);
+		return image.AsCGImage(ref rect, null, null);
+	}
+#endif
 
 	private sealed partial class AIFunctionToolAdapter(AIFunction function, ILogger logger, CancellationToken cancellationToken, IServiceProvider? services) : AIToolNative
 	{
