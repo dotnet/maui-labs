@@ -457,6 +457,8 @@ internal static partial class NativeUi
                 break;
         }
 
+        AddCanonicalAliases(properties, isChecked: (view as UISwitch)?.On);
+
         return properties;
     }
 

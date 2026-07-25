@@ -480,6 +480,8 @@ internal static partial class NativeUi
                 break;
         }
 
+        AddCanonicalAliases(properties, opacity: view.AlphaValue);
+
         return properties;
     }
 

@@ -45,4 +45,49 @@ internal static partial class NativeUi
 
         return null;
     }
+
+    /// <summary>
+    /// Stamps the framework-neutral property names every backend must expose, on top of whatever
+    /// native names it has already published.
+    ///
+    /// The invariant is that anything <c>TrySetProperty</c> accepts has to be readable back. Getters and
+    /// setters drifted apart independently on two backends before this existed: AppKit accepted
+    /// <c>Text</c>/<c>IsVisible</c> while publishing only <c>StringValue</c>/<c>Hidden</c>, and Android
+    /// accepted <c>IsVisible</c>/<c>IsEnabled</c>/<c>Opacity</c> while publishing only
+    /// <c>Visibility</c>/<c>Enabled</c>/<c>Alpha</c>. Both shipped as write-only properties. Defining the
+    /// set in one place is what stops the next backend repeating it.
+    ///
+    /// Null arguments are skipped, so a backend passes only the concepts its control actually has.
+    /// Existing keys win: a backend that has already published a more accurate value keeps it.
+    /// </summary>
+    public static void AddCanonicalAliases(
+        IDictionary<string, string?> properties,
+        bool? isVisible = null,
+        bool? isEnabled = null,
+        double? opacity = null,
+        string? text = null,
+        string? value = null,
+        bool? isChecked = null,
+        string? accessibilityIdentifier = null,
+        string? placeholder = null)
+    {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+
+        Add("IsVisible", isVisible?.ToString());
+        Add("IsEnabled", isEnabled?.ToString());
+        Add("Opacity", opacity?.ToString(culture));
+        Add("Alpha", opacity?.ToString(culture));
+        Add("Text", text);
+        Add("Value", value ?? text);
+        Add("IsChecked", isChecked?.ToString());
+        Add("On", isChecked?.ToString());
+        Add("AccessibilityIdentifier", accessibilityIdentifier);
+        Add("Placeholder", placeholder);
+
+        void Add(string name, string? resolved)
+        {
+            if (resolved != null && !properties.ContainsKey(name))
+                properties[name] = resolved;
+        }
+    }
 }

@@ -546,6 +546,16 @@ internal static partial class NativeUi
         if (view is CompoundButton toggle)
             properties["Checked"] = toggle.Checked ? "True" : "False";
 
+        AddCanonicalAliases(
+            properties,
+            isVisible: view.Visibility == ViewStates.Visible,
+            isEnabled: view.Enabled,
+            opacity: view.Alpha,
+            text: (view as TextView)?.Text,
+            isChecked: (view as CompoundButton)?.Checked,
+            accessibilityIdentifier: GetAutomationId(view),
+            placeholder: (view as EditText)?.Hint);
+
         return properties;
     }
 
