@@ -18,7 +18,7 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// Platform-specific agent service that provides native tap and screenshot
 /// implementations for Android, iOS, Mac Catalyst, Windows, and macOS AppKit.
 /// </summary>
-public class PlatformAgentService : DevFlowAgentService
+public class PlatformAgentService : MauiDevFlowAgentService
 {
     public PlatformAgentService(AgentOptions? options = null) : base(options) { }
 

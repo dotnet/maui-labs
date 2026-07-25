@@ -2,10 +2,12 @@
   "solution": {
     "path": "../../MauiLabs.slnx",
     "projects": [
+      "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Abstractions\\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Core\\Microsoft.Maui.DevFlow.Agent.Core.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Analyzers\\Microsoft.Maui.DevFlow.Analyzers.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent\\Microsoft.Maui.DevFlow.Agent.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.Gtk\\Microsoft.Maui.DevFlow.Agent.Gtk.csproj",
+      "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.IntegrationTests\\Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Blazor\\Microsoft.Maui.DevFlow.Blazor.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Blazor.Gtk\\Microsoft.Maui.DevFlow.Blazor.Gtk.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Driver\\Microsoft.Maui.DevFlow.Driver.csproj",

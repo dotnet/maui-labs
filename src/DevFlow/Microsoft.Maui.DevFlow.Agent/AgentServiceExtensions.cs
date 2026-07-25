@@ -96,6 +96,7 @@ public static class AgentServiceExtensions
             service.SetBrokerRegistration(brokerReg);
         }
         builder.Services.AddSingleton<DevFlowAgentService>(service);
+        builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
         if (options.EnableFileLogging)
         {
@@ -217,7 +218,7 @@ public static class AgentServiceExtensions
     }
 
     private static async Task StartWhenApplicationAvailableAsync(
-        DevFlowAgentService service,
+        MauiDevFlowAgentService service,
         AgentOptions options,
         IDispatcher? mainDispatcher)
     {

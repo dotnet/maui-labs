@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Microsoft.Maui.Devices;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 
@@ -308,11 +307,20 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
         return (FallbackFrameTimeMs, "estimated.default-60hz");
     }
 
+    /// <summary>
+    /// Supplies the main display refresh rate in Hz. Backends that can read display
+    /// metadata assign this so the profiler can derive an accurate frame budget.
+    /// </summary>
+    public static Func<double?>? DisplayRefreshRateProvider { get; set; }
+
     private static double? TryReadDisplayRefreshRate()
     {
         try
         {
-            var refreshRate = DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
+            if (DisplayRefreshRateProvider is not { } provider)
+                return null;
+
+            var refreshRate = provider() ?? 0d;
             if (!IsPositiveFinite(refreshRate) || refreshRate <= 1d)
                 return null;
 

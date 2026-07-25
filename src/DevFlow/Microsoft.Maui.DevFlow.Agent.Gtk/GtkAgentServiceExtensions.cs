@@ -65,6 +65,7 @@ public static class GtkAgentServiceExtensions
             service.SetBrokerRegistration(brokerReg);
         }
         builder.Services.AddSingleton<DevFlowAgentService>(service);
+        builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
         if (options.EnableFileLogging)
         {
@@ -138,11 +139,11 @@ public static class GtkAgentServiceExtensions
         }
     }
 
-    private static DevFlowAgentService? GetAgentService(Application app)
+    private static MauiDevFlowAgentService? GetAgentService(Application app)
     {
         try
         {
-            return app.Handler?.MauiContext?.Services.GetService<DevFlowAgentService>();
+            return app.Handler?.MauiContext?.Services.GetService<MauiDevFlowAgentService>();
         }
         catch
         {

@@ -14,7 +14,7 @@ namespace Microsoft.Maui.DevFlow.Agent.WPF;
 /// <summary>
 /// WPF-specific agent service with native tap, screenshot, and scroll support for MAUI WPF apps.
 /// </summary>
-public class WpfAgentService : DevFlowAgentService
+public class WpfAgentService : MauiDevFlowAgentService
 {
     public WpfAgentService(AgentOptions? options = null) : base(options) { }
 

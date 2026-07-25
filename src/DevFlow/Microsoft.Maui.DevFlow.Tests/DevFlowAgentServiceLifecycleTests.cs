@@ -14,7 +14,7 @@ public class DevFlowAgentServiceLifecycleTests
     public async Task StartServerOnly_AllowsLateAppBinding()
     {
         var port = GetFreePort();
-        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
         using var client = new AgentClient("localhost", port);
 
         service.StartServerOnly(new ImmediateDispatcher());
@@ -37,7 +37,7 @@ public class DevFlowAgentServiceLifecycleTests
     public async Task BaseAgent_ReportsJobsUnsupportedConsistently()
     {
         var port = GetFreePort();
-        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
         using var client = new AgentClient("localhost", port);
 
         service.StartServerOnly(new ImmediateDispatcher());
@@ -136,7 +136,7 @@ public class DevFlowAgentServiceLifecycleTests
                 Category = "diagnostics"
             });
 
-        using var service = new DevFlowAgentService(options);
+        using var service = new MauiDevFlowAgentService(options);
         using var client = new AgentClient("localhost", port);
 
         service.StartServerOnly(new ImmediateDispatcher());
@@ -185,7 +185,7 @@ public class DevFlowAgentServiceLifecycleTests
         extension.MapGet("echo", _ => Task.FromResult(HttpResponse.Json(new { method = "GET" })));
         extension.MapPost("echo", _ => Task.FromResult(HttpResponse.Json(new { method = "POST" })));
 
-        using var service = new DevFlowAgentService(options);
+        using var service = new MauiDevFlowAgentService(options);
         using var client = new AgentClient("localhost", port);
 
         service.StartServerOnly(new ImmediateDispatcher());
@@ -204,7 +204,7 @@ public class DevFlowAgentServiceLifecycleTests
         options.RegisterExtension("com.example.diagnostics", "First");
         options.RegisterExtension("com.example.diagnostics", "Second");
 
-        Assert.Throws<InvalidOperationException>(() => new DevFlowAgentService(options));
+        Assert.Throws<InvalidOperationException>(() => new MauiDevFlowAgentService(options));
     }
 
     private static async Task<AgentStatus?> WaitForStatusAsync(AgentClient client)
@@ -228,20 +228,20 @@ public class DevFlowAgentServiceLifecycleTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
-    private sealed class ListOnlyJobsAgentService(AgentOptions options) : DevFlowAgentService(options)
+    private sealed class ListOnlyJobsAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
     {
         protected override bool IsJobsSupported => true;
 
         protected override bool IsJobRunSupported => false;
     }
 
-    private sealed class DispatchProbeAgentService : DevFlowAgentService
+    private sealed class DispatchProbeAgentService : MauiDevFlowAgentService
     {
         private readonly bool _mainThreadDispatchRequired;
 
         public DispatchProbeAgentService(IDispatcher dispatcher, bool mainThreadDispatchRequired)
         {
-            _dispatcher = dispatcher;
+            _dispatcher = ToAgentDispatcher(dispatcher);
             _mainThreadDispatchRequired = mainThreadDispatchRequired;
         }
 

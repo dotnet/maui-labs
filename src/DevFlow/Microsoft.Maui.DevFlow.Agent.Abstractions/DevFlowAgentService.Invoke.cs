@@ -302,6 +302,54 @@ public partial class DevFlowAgentService
 
 	#region Invoke Execution
 
+	/// <summary>
+	/// Optional UI framework specific value formatter. Backends assign this so property and
+	/// action return values render using framework aware formatting without the neutral layer
+	/// referencing the framework.
+	/// </summary>
+	protected static Func<object?, string?>? FrameworkValueFormatter;
+
+	/// <summary>
+	/// Formats a value for transport, preferring the framework formatter when one is registered.
+	/// </summary>
+	protected static string? FormatPropertyValue(object? value)
+	{
+		if (value == null) return null;
+		if (value is string str) return str;
+
+		if (FrameworkValueFormatter is { } formatter)
+		{
+			try
+			{
+				if (formatter(value) is { } formatted) return formatted;
+			}
+			catch
+			{
+			}
+		}
+
+		var converter = System.ComponentModel.TypeDescriptor.GetConverter(value.GetType());
+		if (converter.CanConvertTo(typeof(string))
+			&& converter.GetType() != typeof(System.ComponentModel.TypeConverter)
+			&& converter is not System.ComponentModel.CollectionConverter)
+		{
+			try
+			{
+				if (converter.ConvertToString(value) is { } result) return result;
+			}
+			catch
+			{
+			}
+		}
+
+		return value switch
+		{
+			System.Collections.ICollection col => $"{col.GetType().Name} ({col.Count} items)",
+			IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+			_ => value.ToString() ?? value.GetType().Name,
+		};
+	}
+
 	private static async Task<(bool success, string? returnValue, string? returnType, string? error)> InvokeMethodAsync(
 		MethodInfo method, object? target, object?[] args)
 	{
@@ -402,7 +450,7 @@ public partial class DevFlowAgentService
 		return Task.FromResult(HttpResponse.Json(new { actions = result }));
 	}
 
-	private async Task<HttpResponse> HandleInvokeAction(HttpRequest request)
+	protected async Task<HttpResponse> HandleInvokeAction(HttpRequest request)
 	{
 		if (!request.RouteParams.TryGetValue("name", out var actionName))
 			return InvokeError("Action name required");

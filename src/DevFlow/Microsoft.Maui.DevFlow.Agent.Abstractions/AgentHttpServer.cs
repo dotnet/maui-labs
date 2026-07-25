@@ -462,10 +462,31 @@ public class HttpResponse
         Body = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true })
     };
 
+    public static HttpResponse Json(object data, int statusCode) => new()
+    {
+        StatusCode = statusCode,
+        StatusText = StatusTextFor(statusCode),
+        Body = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true })
+    };
+
     public static HttpResponse Png(byte[] data) => new()
     {
         ContentType = "image/png",
         BodyBytes = data
+    };
+
+    internal static string StatusTextFor(int statusCode) => statusCode switch
+    {
+        200 => "OK",
+        201 => "Created",
+        204 => "No Content",
+        403 => "Forbidden",
+        404 => "Not Found",
+        408 => "Request Timeout",
+        409 => "Conflict",
+        500 => "Internal Server Error",
+        501 => "Not Implemented",
+        _ => "Bad Request"
     };
 
     public static HttpResponse Ok(string? message = null) => new()
@@ -490,16 +511,7 @@ public class HttpResponse
         return new HttpResponse
         {
             StatusCode = statusCode,
-            StatusText = statusCode switch
-            {
-                403 => "Forbidden",
-                404 => "Not Found",
-                408 => "Request Timeout",
-                409 => "Conflict",
-                501 => "Not Implemented",
-                500 => "Internal Server Error",
-                _ => "Bad Request"
-            },
+            StatusText = StatusTextFor(statusCode),
             Body = JsonSerializer.Serialize(body, new JsonSerializerOptions
             {
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull

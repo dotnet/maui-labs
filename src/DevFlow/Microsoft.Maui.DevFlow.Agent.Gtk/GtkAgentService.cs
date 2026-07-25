@@ -8,7 +8,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Gtk;
 /// <summary>
 /// GTK-specific agent service with native tap and screenshot support for Linux/GTK.
 /// </summary>
-public class GtkAgentService : DevFlowAgentService
+public class GtkAgentService : MauiDevFlowAgentService
 {
     public GtkAgentService(AgentOptions? options = null) : base(options) { }
 

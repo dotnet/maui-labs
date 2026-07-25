@@ -64,6 +64,7 @@ public static class WpfAgentServiceExtensions
             service.SetBrokerRegistration(brokerReg);
         }
         builder.Services.AddSingleton<DevFlowAgentService>(service);
+        builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
         if (options.EnableFileLogging)
         {
@@ -129,9 +130,9 @@ public static class WpfAgentServiceExtensions
         service?.Start(app, app.Dispatcher);
     }
 
-    private static DevFlowAgentService? GetAgentService(Application app)
+    private static MauiDevFlowAgentService? GetAgentService(Application app)
     {
-        try { return app.Handler?.MauiContext?.Services.GetService<DevFlowAgentService>(); }
+        try { return app.Handler?.MauiContext?.Services.GetService<MauiDevFlowAgentService>(); }
         catch { return null; }
     }
 

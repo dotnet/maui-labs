@@ -22,61 +22,229 @@ using Microsoft.Maui.DevFlow.Agent.Core.Network;
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 /// <summary>
-/// The main agent service that hosts the HTTP API and coordinates
-/// visual tree inspection and element interactions.
+/// The .NET MAUI backend for <see cref="DevFlowAgentService"/>.
 /// </summary>
-public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
+/// <remarks>
+/// Implements every UI, storage, device and theme seam using MAUI Controls and Essentials.
+/// Platform agent packages derive from this type and override the <c>protected virtual</c>
+/// native hooks it declares.
+/// </remarks>
+public partial class MauiDevFlowAgentService : DevFlowAgentService
 {
-    private readonly AgentOptions _options;
-    private readonly AgentHttpServer _server;
-    private readonly VisualTreeWalker _treeWalker;
-    private FileLogProvider? _logProvider;
-    private BrokerRegistration? _brokerRegistration;
-    private string? _sessionId;
-    protected Application? _app;
-    protected IDispatcher? _dispatcher;
-    private bool _disposed;
+    static MauiDevFlowAgentService()
+    {
+        FrameworkValueFormatter = FormatMauiPropertyValue;
+        Profiling.RuntimeProfilerCollector.DisplayRefreshRateProvider =
+            static () => DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
+    }
 
     /// <summary>
-    /// The network request store for capturing HTTP traffic.
+    /// Creates a new MAUI-backed agent service.
     /// </summary>
-    public NetworkRequestStore NetworkStore { get; }
+    public MauiDevFlowAgentService(AgentOptions? options = null)
+        : base(options)
+    {
+        _treeWalker = CreateTreeWalker();
+        Sensors = new SensorManager();
+    }
+
+    // ── Framework identity ────────────────────────────────────────────────
+
+    /// <inheritdoc />
+    protected override string FrameworkName => "maui";
+
+    /// <inheritdoc />
+    protected override string FrameworkDisplayName => ".NET MAUI";
+
+    /// <inheritdoc />
+    protected override string UiFrameworkName => "maui-controls";
+
+    /// <inheritdoc />
+    protected override string FrameworkVersion =>
+        typeof(Microsoft.Maui.Controls.Application).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+
+    /// <inheritdoc />
+    protected override bool IsUiSupported => true;
+
+    /// <inheritdoc />
+    protected override bool IsScreenshotSupported => true;
+
+    /// <inheritdoc />
+    protected override bool IsStorageSupported => true;
+
+    /// <inheritdoc />
+    protected override bool IsDeviceInfoSupported => true;
+
+    /// <inheritdoc />
+    protected override bool IsSensorsSupported => true;
+
+    /// <inheritdoc />
+    protected override bool IsThemeSupported => true;
+
+    /// <inheritdoc />
+    protected override string AppDisplayName
+        => TryGetAppInfoString(() => AppInfo.Current.Name)
+            ?? _app?.GetType().Assembly.GetName().Name
+            ?? "unknown";
+
+    /// <inheritdoc />
+    protected override string AppPackageId
+        => TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown";
+
+    /// <inheritdoc />
+    protected override string AppVersionString
+        => TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown";
+
+    /// <inheritdoc />
+    protected override string AppBuildString
+        => TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown";
+
+    /// <inheritdoc />
+    protected override int WindowCount => _app?.Windows.Count ?? 0;
+
+    /// <inheritdoc />
+    protected override (double Width, double Height, double Density) GetWindowMetrics(int? windowIndex)
+    {
+        var window = GetWindow(windowIndex);
+        var w = window?.Width ?? 0;
+        var h = window?.Height ?? 0;
+
+        // Try getting window size from native platform view if MAUI reports invalid values
+        if (window != null && (!double.IsFinite(w) || !double.IsFinite(h) || w <= 0 || h <= 0))
+        {
+            var (nw, nh) = GetNativeWindowSize(window);
+            if (nw > 0) w = nw;
+            if (nh > 0) h = nh;
+        }
+
+        return (w, h, GetWindowDisplayDensity(window));
+    }
+
+    /// <inheritdoc />
+    protected override string? GetCurrentRouteLocation()
+    {
+        try { return Shell.Current?.CurrentState?.Location?.ToString(); }
+        catch { return null; }
+    }
+
+    /// <inheritdoc />
+    protected override void DisposeBackendResources() => Sensors.Dispose();
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Starts the agent and binds to the running MAUI app.
+    /// </summary>
+    public void Start(Application app, IDispatcher dispatcher)
+    {
+        _app = app;
+        StartServerOnly(new MauiAgentDispatcher(dispatcher));
+    }
+
+    /// <summary>
+    /// Starts the HTTP server without an Application binding.
+    /// Use when Application.Current is unavailable (e.g., Comet apps).
+    /// Endpoints requiring the app will return errors until BindApp() is called.
+    /// </summary>
+    public void StartServerOnly(IDispatcher dispatcher)
+        => StartServerOnly(new MauiAgentDispatcher(dispatcher));
+
+    /// <summary>
+    /// Late-binds the Application instance after the server is already running.
+    /// </summary>
+    public void BindApp(Application app)
+    {
+        if (!_options.Enabled) return;
+        _app = app;
+        try
+        {
+            if (app.Dispatcher is { } dispatcher)
+                _dispatcher = new MauiAgentDispatcher(dispatcher);
+        }
+        catch (InvalidOperationException)
+        {
+            // Keep the dispatcher captured during server-only startup if the app
+            // has not been associated with one yet.
+        }
+        Console.WriteLine("[Microsoft.Maui.DevFlow.Agent] Application bound to running agent");
+        PublishUiEvent("lifecycle", new
+        {
+            state = "started",
+            timestamp = DateTimeOffset.UtcNow.ToString("O")
+        });
+    }
+
+    /// <inheritdoc />
+    protected override bool IsMainThreadDispatchRequired()
+    {
+        try { return !MainThread.IsMainThread; }
+        catch { return false; }
+    }
+
+    /// <inheritdoc />
+    protected override Task<T> DispatchViaMainThreadAsync<T>(Func<T> func)
+        => MainThread.InvokeOnMainThreadAsync(func);
+
+    /// <inheritdoc />
+    protected override Task<T?> DispatchViaMainThreadAsync<T>(Func<Task<T?>> func) where T : class
+        => MainThread.InvokeOnMainThreadAsync(func);
+
+    /// <summary>
+    /// Adapts a MAUI <see cref="IDispatcher"/> to the framework-neutral <see cref="IAgentDispatcher"/>.
+    /// </summary>
+    protected static IAgentDispatcher ToAgentDispatcher(IDispatcher dispatcher) => new MauiAgentDispatcher(dispatcher);
+
+    private sealed class MauiAgentDispatcher(IDispatcher dispatcher) : IAgentDispatcher
+    {
+        public bool IsDispatchRequired => dispatcher.IsDispatchRequired;
+
+        public bool Dispatch(Action action) => dispatcher.Dispatch(action);
+
+        public bool DispatchDelayed(TimeSpan delay, Action action) => dispatcher.DispatchDelayed(delay, action);
+    }
+
+    private readonly VisualTreeWalker _treeWalker;
+
+    protected Application? _app;
 
     /// <summary>
     /// Manages sensor subscriptions and broadcasts readings to WebSocket clients.
     /// </summary>
     public SensorManager Sensors { get; }
 
-    private readonly IProfilerCollector _profilerCollector;
-    private readonly ProfilerSessionStore _profilerSessions;
-    private readonly SemaphoreSlim _profilerStateGate = new(1, 1);
-    private CancellationTokenSource? _profilerLoopCts;
-    private Task? _profilerLoopTask;
-    private DateTime _lastAutoJankSpanTsUtc = DateTime.MinValue;
     private const int UiHookScanIntervalMs = 3000;
+
     private readonly ConditionalWeakTable<BindableObject, UiHookState> _uiHookStates = new();
+
     private readonly List<Action> _uiHookUnsubscribers = new();
-    private readonly object _uiHookGate = new();
+
     private int _uiHookGeneration = 1;
+
     private int _uiHookScanInFlight;
+
     private DateTime _lastUiHookScanTsUtc = DateTime.MinValue;
+
     private const int NativeUiProbeTimeoutMs = 1500;
+
     // Tracks a previously-dispatched UI capture task that timed out. If still
     // pending when a new CaptureUiOrNativeAsync arrives we skip enqueuing another
     // uiCallback to avoid unbounded queueing on a blocked dispatcher.
     private Task? _pendingCaptureUiTask;
+
     private readonly object _pendingCaptureUiGate = new();
+
     private Shell? _hookedShell;
+
     private DateTime? _navigationStartedAtUtc;
+
     private string? _navigationTargetRoute;
-    private DateTime _lastUserActionTsUtc = DateTime.MinValue;
-    private string? _lastUserActionName;
-    private string? _lastUserActionElementPath;
+
     private readonly ConditionalWeakTable<Page, PageLifecycleState> _pageLifecycleStates = new();
+
     private readonly ConditionalWeakTable<VisualElement, ElementRenderState> _elementRenderStates = new();
+
     private readonly ConditionalWeakTable<BindableObject, ScrollBatchState> _scrollBatchStates = new();
-    private readonly List<UiEventSubscription> _uiEventSubscriptions = new();
-    private readonly object _uiEventSubscriptionGate = new();
 
     private sealed class UiHookState
     {
@@ -119,167 +287,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         public int? LastLastVisibleIndex { get; set; }
     }
 
-    private sealed class UiEventSubscription
-    {
-        public System.Collections.Concurrent.ConcurrentQueue<string> Queue { get; } = new();
-        public HashSet<string> Events { get; } = new(StringComparer.OrdinalIgnoreCase) { "all" };
-    }
-
-    /// <summary>
-    /// Delegate for sending CDP commands to the Blazor WebView.
-    /// Set by the Blazor package when both are registered.
-    /// Deprecated: use RegisterCdpWebView() for multi-WebView support.
-    /// Setting this property registers the handler as WebView index 0.
-    /// </summary>
-    public Func<string, Task<string>>? CdpCommandHandler
-    {
-        get => _cdpWebViews.Count > 0 ? _cdpWebViews[0].CommandHandler : null;
-        set
-        {
-            if (value == null)
-            {
-                if (_cdpWebViews.Count > 0)
-                    _cdpWebViews.RemoveAt(0);
-                return;
-            }
-            if (_cdpWebViews.Count > 0)
-                _cdpWebViews[0].CommandHandler = value;
-            else
-                _cdpWebViews.Add(new CdpWebViewInfo { Index = 0, CommandHandler = value, ReadyCheck = () => true });
-        }
-    }
-
-    /// <summary>Whether the CDP handler is ready to process commands.
-    /// Deprecated: use RegisterCdpWebView() for multi-WebView support.</summary>
-    public Func<bool>? CdpReadyCheck
-    {
-        get => _cdpWebViews.Count > 0 ? _cdpWebViews[0].ReadyCheck : null;
-        set
-        {
-            if (_cdpWebViews.Count > 0 && value != null)
-                _cdpWebViews[0].ReadyCheck = value;
-        }
-    }
-
-    private readonly List<CdpWebViewInfo> _cdpWebViews = new();
-    private int _nextWebViewIndex = 0;
-
-    /// <summary>Register a CDP-capable WebView with the agent.</summary>
-    public int RegisterCdpWebView(Func<string, Task<string>> commandHandler, Func<bool> readyCheck,
-        string? automationId = null, string? elementId = null, string? url = null)
-    {
-        // Shell route changes can recreate the same logical BlazorWebView multiple times.
-        // Reuse the existing slot for the same AutomationId/ElementId so callers don't get
-        // stranded on a stale index 0 bridge after navigating away and back.
-        var existing = _cdpWebViews.LastOrDefault(w =>
-            (!string.IsNullOrWhiteSpace(elementId) &&
-             string.Equals(w.ElementId, elementId, StringComparison.OrdinalIgnoreCase)) ||
-            (!string.IsNullOrWhiteSpace(automationId) &&
-             string.Equals(w.AutomationId, automationId, StringComparison.OrdinalIgnoreCase)));
-
-        if (existing != null)
-        {
-            existing.CommandHandler = commandHandler;
-            existing.ReadyCheck = readyCheck;
-            existing.AutomationId = automationId ?? existing.AutomationId;
-            existing.ElementId = elementId ?? existing.ElementId;
-            existing.Url = url ?? existing.Url;
-            return existing.Index;
-        }
-
-        var index = _nextWebViewIndex++;
-        _cdpWebViews.Add(new CdpWebViewInfo
-        {
-            Index = index,
-            AutomationId = automationId,
-            ElementId = elementId,
-            Url = url,
-            CommandHandler = commandHandler,
-            ReadyCheck = readyCheck,
-        });
-        return index;
-    }
-
-    /// <summary>Unregister a CDP WebView by index.</summary>
-    public void UnregisterCdpWebView(int index)
-    {
-        _cdpWebViews.RemoveAll(w => w.Index == index);
-    }
-
-    /// <summary>Update metadata for a registered WebView.</summary>
-    public void UpdateCdpWebView(int index, string? automationId = null, string? elementId = null, string? url = null)
-    {
-        var wv = _cdpWebViews.FirstOrDefault(w => w.Index == index);
-        if (wv == null) return;
-        if (automationId != null) wv.AutomationId = automationId;
-        if (elementId != null) wv.ElementId = elementId;
-        if (url != null) wv.Url = url;
-    }
-
-    private CdpWebViewInfo? ResolveCdpWebView(string? webviewId)
-    {
-        if (_cdpWebViews.Count == 0) return null;
-        if (string.IsNullOrEmpty(webviewId))
-        {
-            // Prefer the most recently registered ready bridge, falling back to the newest
-            // bridge overall. This avoids defaulting to a stale, no-longer-visible WebView
-            // after Shell recreates a page.
-            return _cdpWebViews.LastOrDefault(w => w.IsReady) ?? _cdpWebViews.Last();
-        }
-
-        // Try index
-        if (int.TryParse(webviewId, out var idx))
-        {
-            var byIndex = _cdpWebViews.FirstOrDefault(w => w.Index == idx);
-            if (byIndex != null) return byIndex;
-        }
-
-        // Try AutomationId
-        var byAutomationId = _cdpWebViews.LastOrDefault(w =>
-            !string.IsNullOrEmpty(w.AutomationId) && w.AutomationId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
-        if (byAutomationId != null) return byAutomationId;
-
-        // Try ElementId
-        var byElementId = _cdpWebViews.LastOrDefault(w =>
-            !string.IsNullOrEmpty(w.ElementId) && w.ElementId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
-        if (byElementId != null) return byElementId;
-
-        return null;
-    }
-
-    public bool IsRunning => _server.IsRunning;
-    public bool IsAppBound => _app != null;
-    public int Port => _options.Port;
-
-    public DevFlowAgentService(AgentOptions? options = null)
-    {
-        _options = options ?? new AgentOptions();
-        _server = new AgentHttpServer(_options.Port);
-        _treeWalker = CreateTreeWalker();
-        NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
-        Sensors = new SensorManager();
-        _profilerCollector = CreateProfilerCollector();
-        _profilerSessions = new ProfilerSessionStore(
-            Math.Max(1, _options.MaxProfilerSamples),
-            Math.Max(1, _options.MaxProfilerMarkers),
-            Math.Max(1, _options.MaxProfilerSpans));
-        if (_options.EnableNetworkMonitoring)
-            DevFlowHttp.SetStore(NetworkStore);
-        NetworkStore.OnRequestCaptured += HandleCapturedNetworkRequest;
-        AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoaded;
-        RegisterRoutes();
-    }
-
-    /// <summary>
-    /// Parses the optional "window" query parameter as a 0-based window index.
-    /// Returns null when not specified (callers should default to first window).
-    /// </summary>
-    private static int? ParseWindowIndex(HttpRequest request)
-    {
-        if (request.QueryParams.TryGetValue("window", out var ws) && int.TryParse(ws, out var wi))
-            return wi;
-        return null;
-    }
+    public override bool IsAppBound => _app != null;
 
     /// <summary>
     /// Gets the window at the given index, or the first window when index is null.
@@ -298,20 +306,14 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     protected virtual VisualTreeWalker CreateTreeWalker() => new VisualTreeWalker();
 
-    /// <summary>
-    /// Creates the profiler collector. Override in platform-specific subclasses
-    /// to provide native frame/CPU integrations.
-    /// </summary>
-    protected virtual IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
-
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
-    protected virtual string PlatformName => DeviceInfo.Current.Platform.ToString();
+    protected override string PlatformName => DeviceInfo.Current.Platform.ToString();
 
     /// <summary>Device type for status reporting. Override for platforms without DeviceInfo.</summary>
-    protected virtual string DeviceTypeName => DeviceInfo.Current.DeviceType.ToString();
+    protected override string DeviceTypeName => DeviceInfo.Current.DeviceType.ToString();
 
     /// <summary>Device idiom for status reporting. Override for platforms without DeviceInfo.</summary>
-    protected virtual string IdiomName => DeviceInfo.Current.Idiom.ToString();
+    protected override string IdiomName => DeviceInfo.Current.Idiom.ToString();
 
     /// <summary>
     /// Gets the display density (scale factor) for a specific window. Returns 1.0 for standard,
@@ -329,503 +331,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// <summary>Gets native window dimensions when MAUI reports 0. Override for platform-specific access.</summary>
     protected virtual (double width, double height) GetNativeWindowSize(IWindow window) => (0, 0);
 
-    /// <summary>Whether platform background jobs can be queried on this agent.</summary>
-    protected virtual bool IsJobsSupported => false;
 
-    /// <summary>Whether platform background jobs can be triggered on this agent.</summary>
-    protected virtual bool IsJobRunSupported => IsJobsSupported;
-
-    /// <summary>
-    /// Gets the list of platform background jobs (Android Workers / iOS BGTasks).
-    /// Override in platform-specific subclasses to query WorkManager or BGTaskScheduler.
-    /// </summary>
-    protected virtual Task<object?> GetPlatformJobsAsync() => Task.FromResult<object?>(null);
-
-    /// <summary>
-    /// Triggers a platform background job by identifier.
-    /// Override in platform-specific subclasses to enqueue via WorkManager or submit via BGTaskScheduler.
-    /// </summary>
-    protected virtual Task<object?> RunPlatformJobAsync(string identifier, string? type = null) => Task.FromResult<object?>(null);
-
-    private bool IsProfilerFeatureAvailable => _options.EnableProfiler;
-
-    /// <summary>
-    /// Sets the file log provider for serving logs via the API.
-    /// Called by AgentServiceExtensions during registration.
-    /// </summary>
-    public void SetLogProvider(FileLogProvider provider)
-        => _logProvider = provider;
-
-    public void SetBrokerRegistration(BrokerRegistration registration)
-        => _brokerRegistration = registration;
-
-    /// <summary>
-    /// Sets the DevFlow session identity for this agent, derived from the build environment.
-    /// Included in status responses so clients can identify which environment built the running app.
-    /// </summary>
-    public void SetSessionId(string? sessionId)
-        => _sessionId = sessionId;
-
-    /// <summary>
-    /// Writes a log entry originating from the WebView/Blazor console.
-    /// Called by the Blazor package via reflection to route JS console output through ILogger.
-    /// </summary>
-    public void WriteWebViewLog(string level, string category, string message, string? exception = null)
-    {
-        if (_logProvider == null) return;
-
-        var entry = new Logging.FileLogEntry(
-            Timestamp: DateTime.UtcNow,
-            Level: level,
-            Category: category,
-            Message: message,
-            Exception: exception,
-            Source: "webview"
-        );
-        _logProvider.Writer.Write(entry);
-    }
-
-    /// <summary>
-    /// Starts the agent and binds to the running MAUI app.
-    /// </summary>
-    public void Start(Application app, IDispatcher dispatcher)
-    {
-        if (_disposed || !_options.Enabled) return;
-        _app = app;
-        _dispatcher = dispatcher;
-        try
-        {
-            _server.Start();
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] Failed to start HTTP server: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Starts the HTTP server without an Application binding.
-    /// Use when Application.Current is unavailable (e.g., Comet apps).
-    /// Endpoints requiring the app will return errors until BindApp() is called.
-    /// </summary>
-    public void StartServerOnly(IDispatcher dispatcher)
-    {
-        if (_disposed || !_options.Enabled) return;
-        _dispatcher = dispatcher;
-        try
-        {
-            _server.Start();
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port} (app not yet bound)");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] Failed to start HTTP server: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Late-binds the Application instance after the server is already running.
-    /// </summary>
-    public void BindApp(Application app)
-    {
-        if (_disposed || !_options.Enabled) return;
-        _app = app;
-        try
-        {
-            _dispatcher = app.Dispatcher ?? _dispatcher;
-        }
-        catch (InvalidOperationException)
-        {
-            // Keep the dispatcher captured during server-only startup if the app
-            // has not been associated with one yet.
-        }
-        Console.WriteLine("[Microsoft.Maui.DevFlow.Agent] Application bound to running agent");
-        PublishUiEvent("lifecycle", new
-        {
-            state = "started",
-            timestamp = DateTimeOffset.UtcNow.ToString("O")
-        });
-    }
-
-    public async Task StopAsync()
-    {
-        await StopProfilerAsync();
-        await _server.StopAsync();
-    }
-
-    private void RegisterRoutes()
-    {
-        // Canonical DevFlow v1 routes aligned with the formal spec.
-        _server.MapGet("/api/v1/agent/status", HandleStatus);
-        _server.MapGet("/api/v1/agent/capabilities", HandleCapabilities);
-
-        _server.MapGet("/api/v1/ui/tree", HandleTree);
-        _server.MapGet("/api/v1/ui/elements", HandleQuery);
-        _server.MapGet("/api/v1/ui/elements/{id}", HandleElement);
-        _server.MapGet("/api/v1/ui/hit-test", HandleHitTest);
-        _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
-        _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
-        _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", HandleSetProperty);
-        _server.MapPost("/api/v1/ui/actions/tap", HandleTap);
-        _server.MapPost("/api/v1/ui/actions/fill", HandleFill);
-        _server.MapPost("/api/v1/ui/actions/clear", HandleClear);
-        _server.MapPost("/api/v1/ui/actions/focus", HandleFocus);
-        _server.MapPost("/api/v1/ui/actions/navigate", HandleNavigate);
-        _server.MapPost("/api/v1/ui/actions/resize", HandleResize);
-        _server.MapPost("/api/v1/ui/actions/scroll", HandleScroll);
-        _server.MapPost("/api/v1/ui/actions/back", HandleBack);
-        _server.MapPost("/api/v1/ui/actions/key", HandleKey);
-        _server.MapPost("/api/v1/ui/actions/gesture", HandleGesture);
-        _server.MapPost("/api/v1/ui/actions/batch", HandleBatch);
-
-        _server.MapGet("/api/v1/logs", HandleLogs);
-        _server.MapWebSocket("/ws/v1/logs", HandleLogsWebSocket);
-
-        _server.MapPost("/api/v1/webview/evaluate", HandleCdp);
-        _server.MapGet("/api/v1/webview/contexts", HandleCdpWebViews);
-        _server.MapGet("/api/v1/webview/source", HandleCdpSource);
-        _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
-        _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery);
-        _server.MapPost("/api/v1/webview/navigate", HandleWebViewNavigate);
-        _server.MapPost("/api/v1/webview/input/click", HandleWebViewInputClick);
-        _server.MapPost("/api/v1/webview/input/fill", HandleWebViewInputFill);
-        _server.MapPost("/api/v1/webview/input/text", HandleWebViewInputText);
-        _server.MapGet("/api/v1/webview/network", HandleWebViewNetwork);
-        _server.MapGet("/api/v1/webview/console", HandleWebViewConsole);
-        _server.MapGet("/api/v1/webview/screenshot", HandleWebViewScreenshot);
-
-        _server.MapGet("/api/v1/profiler/capabilities", HandleProfilerCapabilities);
-        _server.MapPost("/api/v1/profiler/sessions", HandleProfilerStart);
-        _server.MapDelete("/api/v1/profiler/sessions/{id}", HandleProfilerStop);
-        _server.MapGet("/api/v1/profiler/sessions/{id}/samples", HandleProfilerSamples);
-        _server.MapPost("/api/v1/profiler/markers", HandleProfilerMarker);
-        _server.MapPost("/api/v1/profiler/spans", HandleProfilerSpan);
-        _server.MapGet("/api/v1/profiler/hotspots", HandleProfilerHotspots);
-        _server.MapWebSocket("/ws/v1/profiler", HandleProfilerWebSocket);
-
-        _server.MapGet("/api/v1/network/requests", HandleNetworkList);
-        _server.MapGet("/api/v1/network/requests/{id}", HandleNetworkDetail);
-        _server.MapDelete("/api/v1/network/requests", HandleNetworkClear);
-        _server.MapWebSocket("/ws/v1/network", HandleNetworkWebSocket);
-
-        _server.MapWebSocket("/ws/v1/ui/events", HandleUiEventsWebSocket);
-
-        _server.MapGet("/api/v1/device/app", HandlePlatformAppInfo);
-        _server.MapGet("/api/v1/device/info", HandlePlatformDeviceInfo);
-        _server.MapGet("/api/v1/device/display", HandlePlatformDeviceDisplay);
-        _server.MapGet("/api/v1/device/battery", HandlePlatformBattery);
-        _server.MapGet("/api/v1/device/connectivity", HandlePlatformConnectivity);
-        _server.MapGet("/api/v1/device/version-tracking", HandlePlatformVersionTracking);
-        _server.MapGet("/api/v1/device/permissions", HandlePlatformPermissions);
-        _server.MapGet("/api/v1/device/permissions/{permission}", HandlePlatformPermissionCheck);
-        _server.MapGet("/api/v1/device/geolocation", HandlePlatformGeolocation);
-        _server.MapGet("/api/v1/device/sensors", HandleSensorsList);
-        _server.MapPost("/api/v1/device/sensors/{sensor}/start", HandleSensorStart);
-        _server.MapPost("/api/v1/device/sensors/{sensor}/stop", HandleSensorStop);
-        _server.MapWebSocket("/ws/v1/sensors", HandleSensorWebSocket);
-
-        _server.MapGet("/api/v1/device/jobs", HandleJobsList);
-        _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleJobRun);
-
-        _server.MapGet("/api/v1/device/app/theme", HandleThemeGet);
-        _server.MapPut("/api/v1/device/app/theme", HandleThemeSet);
-        _server.MapGet("/api/v1/storage/preferences", HandlePreferencesList);
-        _server.MapGet("/api/v1/storage/preferences/{key}", HandlePreferencesGet);
-        _server.MapPut("/api/v1/storage/preferences/{key}", HandlePreferencesSet);
-        _server.MapDelete("/api/v1/storage/preferences/{key}", HandlePreferencesDelete);
-        _server.MapDelete("/api/v1/storage/preferences", HandlePreferencesClear);
-        _server.MapGet("/api/v1/storage/secure/{key}", HandleSecureStorageGet);
-        _server.MapPut("/api/v1/storage/secure/{key}", HandleSecureStorageSet);
-        _server.MapDelete("/api/v1/storage/secure/{key}", HandleSecureStorageDelete);
-        _server.MapDelete("/api/v1/storage/secure", HandleSecureStorageClear);
-
-        _server.MapGet("/api/v1/storage/roots", HandleStorageRoots);
-        _server.MapGet("/api/v1/storage/files", HandleFilesList);
-        _server.MapGet("/api/v1/storage/files/{path}", HandleFileDownload);
-        _server.MapPut("/api/v1/storage/files/{path}", HandleFileUpload);
-        _server.MapDelete("/api/v1/storage/files/{path}", HandleFileDelete);
-
-        // Invoke / reflection
-        _server.MapGet("/api/v1/invoke/actions", HandleListActions);
-        _server.MapPost("/api/v1/invoke/actions/{name}", HandleInvokeAction);
-
-        RegisterExtensionRoutes();
-    }
-
-    private void RegisterExtensionRoutes()
-    {
-        var namespaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var extension in _options.Extensions)
-        {
-            if (!namespaces.Add(extension.Namespace))
-                throw new InvalidOperationException($"Duplicate extension namespace registration: {extension.Namespace}");
-
-            foreach (var route in extension.Routes)
-            {
-                var key = $"{route.Method} {route.Path}";
-                if (!seen.Add(key))
-                    throw new InvalidOperationException($"Duplicate extension route registration: {key}");
-
-                switch (route.Method)
-                {
-                    case "GET":
-                        _server.MapGet(route.Path, route.Handler);
-                        break;
-                    case "POST":
-                        _server.MapPost(route.Path, route.Handler);
-                        break;
-                    case "PUT":
-                        _server.MapPut(route.Path, route.Handler);
-                        break;
-                    case "DELETE":
-                        _server.MapDelete(route.Path, route.Handler);
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
-                }
-            }
-        }
-    }
-
-    private async Task<HttpResponse> HandleStatus(HttpRequest request)
-    {
-        var windowIndex = ParseWindowIndex(request);
-        var appName = TryGetAppInfoString(() => AppInfo.Current.Name)
-            ?? _app?.GetType().Assembly.GetName().Name
-            ?? "unknown";
-        var packageId = TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown";
-        var appVersion = TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown";
-        var appBuild = TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown";
-        var result = await DispatchAsync(() =>
-        {
-            var window = GetWindow(windowIndex);
-            var w = window?.Width ?? 0;
-            var h = window?.Height ?? 0;
-
-            // Try getting window size from native platform view if MAUI reports invalid values
-            if (window != null && (!double.IsFinite(w) || !double.IsFinite(h) || w <= 0 || h <= 0))
-            {
-                var (nw, nh) = GetNativeWindowSize(window);
-                if (nw > 0) w = nw;
-                if (nh > 0) h = nh;
-            }
-
-            return new
-            {
-                timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                agent = new
-                {
-                    name = "Microsoft.Maui.DevFlow.Agent",
-                    version = typeof(DevFlowAgentService).Assembly
-                        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
-                    framework = ".NET MAUI",
-                    frameworkVersion = Environment.Version.ToString(),
-                    sessionId = _sessionId,
-                },
-                device = new
-                {
-                    platform = PlatformName,
-                    deviceType = DeviceTypeName,
-                    idiom = IdiomName,
-                    displayDensity = GetWindowDisplayDensity(window),
-                    windowCount = _app?.Windows.Count ?? 0,
-                    windowWidth = double.IsFinite(w) ? w : 0,
-                    windowHeight = double.IsFinite(h) ? h : 0,
-                },
-                app = new
-                {
-                    name = appName,
-                    packageId = packageId,
-                    version = appVersion,
-                    build = appBuild,
-                },
-                capabilities = new
-                {
-                    ui = true,
-                    screenshots = true,
-                    webview = _cdpWebViews.Any(v => v.IsReady),
-                    network = true,
-                    logs = true,
-                    sensors = true,
-                    storage = true,
-                    profiler = IsProfilerFeatureAvailable,
-                    jobs = IsJobsSupported,
-                    theme = true,
-                },
-                running = _app != null,
-                cdpReady = _cdpWebViews.Any(v => v.IsReady),
-                cdpWebViewCount = _cdpWebViews.Count,
-                profiler = BuildProfilerCapabilitiesPayload(),
-                profilerSession = _profilerSessions.CurrentSession,
-                extensions = BuildExtensionsMarker()
-            };
-        });
-
-        return HttpResponse.Json(result!);
-    }
-
-    private static string? TryGetAppInfoString(Func<string?> getter)
-    {
-        try
-        {
-            return getter();
-        }
-        catch (Exception ex) when (ex.GetType().Name == "NotImplementedInReferenceAssemblyException")
-        {
-            return null;
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
-    }
-
-    private Task<HttpResponse> HandleCapabilities(HttpRequest request)
-    {
-        var version = typeof(DevFlowAgentService).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-
-        var capabilities = new Dictionary<string, object>();
-
-        capabilities["ui.tree"] = new { version = 1, features = new[] { "css-selector", "type", "text", "accessibility-id" } };
-        capabilities["ui.actions"] = new { version = 1, features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties" } };
-        capabilities["ui.screenshot"] = new { version = 1, features = new[] { "element", "fullscreen", "selector" } };
-
-        if (_cdpWebViews.Count > 0)
-            capabilities["webview"] = new { version = 1, features = new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" } };
-
-        capabilities["profiler"] = new { version = 1, features = BuildProfilerFeatureList() };
-        capabilities["network"] = new { version = 1, features = new[] { "list", "detail", "clear", "stream" } };
-        capabilities["logs"] = new { version = 1, features = new[] { "list", "stream" } };
-        capabilities["device.info"] = new { version = 1, features = new[] { "app", "device", "display", "battery", "connectivity" } };
-        capabilities["device.sensors"] = new { version = 1, features = new[] { "list", "start", "stop", "stream" } };
-        capabilities["device.jobs"] = new
-        {
-            version = 1,
-            features = IsJobsSupported
-                ? IsJobRunSupported ? new[] { "list", "run" } : new[] { "list" }
-                : Array.Empty<string>(),
-            supported = IsJobsSupported
-        };
-        capabilities["storage.preferences"] = new { version = 1, features = new[] { "list", "get", "set", "delete", "clear" } };
-        capabilities["storage.secure"] = new { version = 1, features = new[] { "get", "set", "delete", "clear" } };
-        capabilities["storage.files"] = new { version = 1, features = new[] { "roots", "list", "download", "upload", "delete" } };
-        capabilities["invoke"] = new { version = 1, features = new[] { "actions" } };
-        var themeCapability = new { version = 1, supported = true, features = new[] { "get", "set" } };
-        capabilities["theme"] = themeCapability;
-        capabilities["app.theme"] = themeCapability;
-
-        var result = new Dictionary<string, object?>
-        {
-            ["agent"] = new
-            {
-                name = "Microsoft.Maui.DevFlow.Agent",
-                version,
-                framework = "maui",
-                frameworkVersion = typeof(Microsoft.Maui.Controls.Application).Assembly
-                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown"
-            },
-            ["capabilities"] = capabilities
-        };
-
-        if (_options.Extensions.Count > 0)
-        {
-            var extensions = BuildExtensionMetadata();
-            foreach (var extension in _options.Extensions)
-            {
-                capabilities[extension.Namespace] = new
-                {
-                    version = GetCapabilityVersion(extension.Version),
-                    features = extension.Features.Count > 0
-                        ? extension.Features
-                        : extension.Tools.Select(tool => tool.Name).ToArray()
-                };
-            }
-
-            result["extensions"] = extensions;
-        }
-
-        return Task.FromResult(HttpResponse.Json(result));
-    }
-
-    private object BuildExtensionsMarker()
-    {
-        var metadata = BuildExtensionMetadata();
-        return new
-        {
-            count = metadata.Count,
-            hash = ComputeExtensionHash(metadata)
-        };
-    }
-
-    private Dictionary<string, object> BuildExtensionMetadata()
-    {
-        var extensions = new Dictionary<string, object>(StringComparer.Ordinal);
-
-        foreach (var extension in _options.Extensions.OrderBy(e => e.Namespace, StringComparer.Ordinal))
-        {
-            extensions[extension.Namespace] = new
-            {
-                version = extension.Version,
-                description = extension.Description,
-                tools = extension.Tools.Select(tool => new
-                {
-                    name = tool.Name,
-                    description = tool.Description,
-                    method = tool.Method,
-                    path = tool.Path,
-                    parameters = tool.Parameters,
-                    returns = tool.Returns,
-                    annotations = tool.Annotations is null ? null : new
-                    {
-                        readOnly = tool.Annotations.ReadOnly,
-                        idempotent = tool.Annotations.Idempotent,
-                        destructive = tool.Annotations.Destructive,
-                        category = tool.Annotations.Category
-                    }
-                }).ToArray()
-            };
-        }
-
-        return extensions;
-    }
-
-    private static string ComputeExtensionHash(Dictionary<string, object> metadata)
-    {
-        var json = JsonSerializer.Serialize(metadata);
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
-    private static int GetCapabilityVersion(string version)
-    {
-        var dot = version.IndexOf('.');
-        var major = dot >= 0 ? version[..dot] : version;
-        return int.TryParse(major, out var parsed) && parsed > 0 ? parsed : 1;
-    }
-
-    private string[] BuildProfilerFeatureList()
-    {
-        if (!IsProfilerFeatureAvailable)
-            return Array.Empty<string>();
-
-        var features = new List<string> { "capabilities", "sessions", "samples", "markers", "spans", "hotspots" };
-        var capabilities = _profilerCollector.GetCapabilities();
-        if (capabilities.ManagedMemorySupported)
-            features.Add("managed-memory");
-        if (capabilities.NativeMemorySupported)
-            features.Add("native-memory");
-        if (capabilities.CpuPercentSupported)
-            features.Add("cpu");
-        if (capabilities.FpsSupported)
-            features.Add("fps");
-
-        return features.ToArray();
-    }
-
-    private async Task<HttpResponse> HandleTree(HttpRequest request)
+    protected override async Task<HttpResponse> HandleTree(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -841,7 +348,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return HttpResponse.Json(tree);
     }
 
-    private async Task<HttpResponse> HandleElement(HttpRequest request)
+    protected override async Task<HttpResponse> HandleElement(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
@@ -869,7 +376,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return element != null ? HttpResponse.Json(element) : HttpResponse.NotFound($"Element '{id}' not found");
     }
 
-    private async Task<HttpResponse> HandleQuery(HttpRequest request)
+    protected override async Task<HttpResponse> HandleQuery(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -1060,7 +567,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     private static bool IsNativeElementId(string? elementId)
         => elementId?.StartsWith("native:", StringComparison.Ordinal) == true;
 
-    private async Task<HttpResponse> HandleHitTest(HttpRequest request)
+    protected override async Task<HttpResponse> HandleHitTest(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -1234,7 +741,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         };
     }
 
-    protected virtual async Task<HttpResponse> HandleScreenshot(HttpRequest request)
+    protected override async Task<HttpResponse> HandleScreenshot(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -1478,78 +985,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         public ScreenshotCaptureFailure? Failure { get; init; }
     }
 
-    /// <summary>
-    /// Builds an HTTP error response for a failed screenshot capture, enriching it with an
-    /// actionable, retryable cause when the platform described one (see
-    /// <see cref="DescribeScreenshotFailure"/>). Falls back to <paramref name="defaultMessage"/>.
-    /// </summary>
-    private static HttpResponse BuildScreenshotFailureResponse(ScreenshotCaptureFailure? failure, string defaultMessage)
-    {
-        if (failure == null)
-            return HttpResponse.Error(defaultMessage);
-
-        var details = new Dictionary<string, object?>
-        {
-            ["retryable"] = failure.Retryable
-        };
-        if (failure.Suggestions is { Length: > 0 })
-            details["suggestions"] = failure.Suggestions;
-
-        var message = string.IsNullOrWhiteSpace(failure.Message) ? defaultMessage : failure.Message;
-
-        // 409 Conflict signals a transient, retryable precondition (window focus/visibility);
-        // the structured body carries the authoritative retryable flag for clients.
-        return HttpResponse.Error(
-            message,
-            statusCode: failure.Retryable ? 409 : 400,
-            reason: failure.Reason,
-            details: details);
-    }
-
-    /// <summary>
-    /// Resizes a PNG image based on display density and/or max width constraint.
-    /// By default, HiDPI screenshots are scaled to 1x logical resolution (e.g., a 3x iPhone
-    /// screenshot of 1290px becomes 430px). An explicit maxWidth overrides density scaling.
-    /// </summary>
-    private static byte[] ResizePngIfNeeded(byte[] pngData, int? maxWidth, double density = 1.0, bool autoScale = true)
-    {
-        // Determine target width: explicit maxWidth takes priority, then auto-scale by density
-        int? targetWidth = maxWidth;
-        if (targetWidth == null && autoScale && density > 1.0)
-        {
-            try
-            {
-                using var probe = SkiaSharp.SKBitmap.Decode(pngData);
-                if (probe != null)
-                    targetWidth = (int)(probe.Width / density);
-            }
-            catch { return pngData; }
-        }
-
-        if (targetWidth == null || targetWidth <= 0) return pngData;
-
-        try
-        {
-            using var original = SkiaSharp.SKBitmap.Decode(pngData);
-            if (original == null || original.Width <= targetWidth.Value) return pngData;
-
-            var scale = (float)targetWidth.Value / original.Width;
-            var newHeight = (int)(original.Height * scale);
-
-            using var resized = original.Resize(new SkiaSharp.SKImageInfo(targetWidth.Value, newHeight), SkiaSharp.SKSamplingOptions.Default);
-            if (resized == null) return pngData;
-
-            using var image = SkiaSharp.SKImage.FromBitmap(resized);
-            using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
-            return encoded.ToArray();
-        }
-        catch
-        {
-            return pngData;
-        }
-    }
-
-    private async Task<HttpResponse> HandleProperty(HttpRequest request)
+    protected override async Task<HttpResponse> HandleProperty(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
@@ -1574,7 +1010,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 if (prop == null) return null;
                 current = prop.GetValue(current);
             }
-            return FormatPropertyValue(current);
+            return FormatMauiPropertyValue(current);
         });
 
         return value != null
@@ -1582,7 +1018,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             : HttpResponse.NotFound($"Property '{propName}' not found on element '{id}'");
     }
 
-    private static string? FormatPropertyValue(object? value)
+    private static string? FormatMauiPropertyValue(object? value)
     {
         if (value == null) return null;
         if (value is string s) return s;
@@ -1609,7 +1045,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             LinearGradientBrush lgb => $"LinearGradientBrush StartPoint={lgb.StartPoint}, EndPoint={lgb.EndPoint}, Stops=[{FormatGradientStops(lgb.GradientStops)}]",
             RadialGradientBrush rgb => $"RadialGradientBrush Center={rgb.Center}, Radius={rgb.Radius}, Stops=[{FormatGradientStops(rgb.GradientStops)}]",
             Brush brush => brush.GetType().Name,
-            Microsoft.Maui.Controls.Shapes.RoundRectangle rr => $"RoundRectangle CornerRadius={FormatPropertyValue(rr.CornerRadius)}",
+            Microsoft.Maui.Controls.Shapes.RoundRectangle rr => $"RoundRectangle CornerRadius={FormatMauiPropertyValue(rr.CornerRadius)}",
             Microsoft.Maui.Controls.Shapes.Shape shape => shape.GetType().Name,
             ColumnDefinitionCollection cols => string.Join(", ", cols.Select(c => FormatGridLength(c.Width))),
             RowDefinitionCollection rows => string.Join(", ", rows.Select(r => FormatGridLength(r.Height))),
@@ -1676,7 +1112,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return null;
     }
 
-    private async Task<HttpResponse> HandleSetProperty(HttpRequest request)
+    protected override async Task<HttpResponse> HandleSetProperty(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
@@ -1809,7 +1245,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         throw new ArgumentException($"Cannot convert '{value}' to {targetType.Name}");
     }
 
-    private async Task<HttpResponse> HandleTap(HttpRequest request)
+    protected override async Task<HttpResponse> HandleTap(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2115,7 +1551,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return false;
     }
 
-    private async Task<HttpResponse> HandleFill(HttpRequest request)
+    protected override async Task<HttpResponse> HandleFill(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2197,7 +1633,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return result == "ok" ? HttpResponse.Ok("Text set") : HttpResponse.Error(result);
     }
 
-    private async Task<HttpResponse> HandleClear(HttpRequest request)
+    protected override async Task<HttpResponse> HandleClear(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2275,7 +1711,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return success ? HttpResponse.Ok("Cleared") : HttpResponse.Error("Element does not accept text input");
     }
 
-    private async Task<HttpResponse> HandleFocus(HttpRequest request)
+    protected override async Task<HttpResponse> HandleFocus(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2316,7 +1752,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return success ? HttpResponse.Ok("Focused") : HttpResponse.Error("Cannot focus element");
     }
 
-    private async Task<HttpResponse> HandleNavigate(HttpRequest request)
+    protected override async Task<HttpResponse> HandleNavigate(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2390,7 +1826,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return result == "ok" ? HttpResponse.Ok($"Navigated to {body.Route}") : HttpResponse.Error(result ?? "Navigation failed");
     }
 
-    private async Task<HttpResponse> HandleResize(HttpRequest request)
+    protected override async Task<HttpResponse> HandleResize(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2443,56 +1879,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private record ResizeRequest(int Width, int Height);
-
-    private sealed class KeyActionRequest
-    {
-        public string? ElementId { get; set; }
-        public string? Key { get; set; }
-        public string? Text { get; set; }
-    }
-
-    private sealed class GestureActionRequest
-    {
-        public string? ElementId { get; set; }
-        public string? Type { get; set; }
-        public string? Direction { get; set; }
-        public double Distance { get; set; } = 120;
-        public int DurationMs { get; set; } = 200;
-    }
-
-    private sealed class BatchRequest
-    {
-        public List<BatchActionRequest> Actions { get; set; } = [];
-        public bool ContinueOnError { get; set; }
-    }
-
-    private sealed class BatchActionRequest
-    {
-        public string? Action { get; set; }
-        public string? Type { get; set; }
-        public string? ElementId { get; set; }
-        public string? Text { get; set; }
-        public string? Route { get; set; }
-        public string? Property { get; set; }
-        public string? Value { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public double DeltaX { get; set; }
-        public double DeltaY { get; set; }
-        public int? ItemIndex { get; set; }
-        public int? GroupIndex { get; set; }
-        public string? ScrollToPosition { get; set; }
-        public bool Animated { get; set; } = true;
-        public string? Key { get; set; }
-        public string? Direction { get; set; }
-        public double Distance { get; set; } = 120;
-        public int DurationMs { get; set; } = 200;
-        public JsonElement[]? Args { get; set; }
-        public string? Name { get; set; }
-    }
-
-    private async Task<HttpResponse> HandleBack(HttpRequest request)
+    protected override async Task<HttpResponse> HandleBack(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2536,7 +1923,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             : HttpResponse.Error(result ?? "Back navigation failed");
     }
 
-    private async Task<HttpResponse> HandleKey(HttpRequest request)
+    protected override async Task<HttpResponse> HandleKey(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2633,7 +2020,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             : HttpResponse.Error(result ?? "Key action failed");
     }
 
-    private async Task<HttpResponse> HandleGesture(HttpRequest request)
+    protected override async Task<HttpResponse> HandleGesture(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2672,7 +2059,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         };
     }
 
-    private async Task<HttpResponse> HandleBatch(HttpRequest request)
+    protected override async Task<HttpResponse> HandleBatch(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -2807,7 +2194,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         });
     }
 
-    private async Task<HttpResponse> HandleScroll(HttpRequest request)
+    protected override async Task<HttpResponse> HandleScroll(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
@@ -3152,385 +2539,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return null;
     }
 
-    protected async Task<T> DispatchAsync<T>(Func<T> func)
-    {
-        if (_dispatcher is { IsDispatchRequired: true })
-            return await DispatchViaMauiDispatcherAsync(func);
-
-        if (IsMainThreadDispatchRequired())
-            return await DispatchViaMainThreadAsync(func);
-
-        return func();
-    }
-
-    private async Task<T> DispatchViaMauiDispatcherAsync<T>(Func<T> func)
-    {
-        var dispatcher = _dispatcher ?? throw new InvalidOperationException("Dispatcher is not available.");
-        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        dispatcher.Dispatch(() =>
-        {
-            try { tcs.SetResult(func()); }
-            catch (Exception ex) { tcs.SetException(ex); }
-        });
-        return await tcs.Task;
-    }
-
-    protected async Task<T?> DispatchAsync<T>(Func<Task<T?>> func) where T : class
-    {
-        if (_dispatcher is { IsDispatchRequired: true })
-            return await DispatchViaMauiDispatcherAsync(func);
-
-        if (IsMainThreadDispatchRequired())
-            return await DispatchViaMainThreadAsync(func);
-
-        return await func();
-    }
-
-    private async Task<T?> DispatchViaMauiDispatcherAsync<T>(Func<Task<T?>> func) where T : class
-    {
-        var dispatcher = _dispatcher ?? throw new InvalidOperationException("Dispatcher is not available.");
-        var tcs = new TaskCompletionSource<T?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        dispatcher.Dispatch(async () =>
-        {
-            try { tcs.SetResult(await func()); }
-            catch (Exception ex) { tcs.SetException(ex); }
-        });
-        return await tcs.Task;
-    }
-
-    protected virtual bool IsMainThreadDispatchRequired()
-    {
-        try { return !MainThread.IsMainThread; }
-        catch { return false; }
-    }
-
-    protected virtual Task<T> DispatchViaMainThreadAsync<T>(Func<T> func)
-        => MainThread.InvokeOnMainThreadAsync(func);
-
-    protected virtual Task<T?> DispatchViaMainThreadAsync<T>(Func<Task<T?>> func) where T : class
-        => MainThread.InvokeOnMainThreadAsync(func);
-
-    private object BuildProfilerCapabilitiesPayload()
-    {
-        var capabilities = _profilerCollector.GetCapabilities();
-        return new
-        {
-            available = IsProfilerFeatureAvailable,
-            supportedInBuild = true,
-            featureEnabled = _options.EnableProfiler,
-            platform = capabilities.Platform,
-            managedMemorySupported = capabilities.ManagedMemorySupported,
-            nativeMemorySupported = capabilities.NativeMemorySupported,
-            gcSupported = capabilities.GcSupported,
-            cpuPercentSupported = capabilities.CpuPercentSupported,
-            fpsSupported = capabilities.FpsSupported,
-            frameTimingsEstimated = capabilities.FrameTimingsEstimated,
-            nativeFrameTimingsSupported = capabilities.NativeFrameTimingsSupported,
-            jankEventsSupported = capabilities.JankEventsSupported,
-            uiThreadStallSupported = capabilities.UiThreadStallSupported,
-            threadCountSupported = capabilities.ThreadCountSupported
-        };
-    }
-
-    private string GetRequestedProfilerSessionId(HttpRequest request)
-    {
-        if (request.RouteParams.TryGetValue("id", out var routeId) && !string.IsNullOrWhiteSpace(routeId))
-            return routeId;
-        if (request.QueryParams.TryGetValue("sessionId", out var sessionId) && !string.IsNullOrWhiteSpace(sessionId))
-            return sessionId;
-        return "current";
-    }
-
-    private HttpResponse? ValidateProfilerSessionRequest(HttpRequest request, out string requestedSessionId)
-    {
-        requestedSessionId = GetRequestedProfilerSessionId(request);
-        if (requestedSessionId.Equals("current", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        var currentSession = _profilerSessions.CurrentSession;
-        return currentSession != null && currentSession.SessionId.Equals(requestedSessionId, StringComparison.Ordinal)
-            ? null
-            : HttpResponse.NotFound($"Profiler session '{requestedSessionId}' not found");
-    }
-
-    private Task<HttpResponse> HandleProfilerCapabilities(HttpRequest request)
-        => Task.FromResult(HttpResponse.Json(BuildProfilerCapabilitiesPayload()));
-
-    private async Task<HttpResponse> HandleProfilerStart(HttpRequest request)
-    {
-        if (!_options.EnableProfiler)
-            return HttpResponse.Error("Profiler is disabled. Set AgentOptions.EnableProfiler=true");
-
-        var body = request.BodyAs<StartProfilerRequest>();
-        var intervalMs = body?.SampleIntervalMs ?? _options.ProfilerSampleIntervalMs;
-        if (intervalMs < 50 || intervalMs > 60_000)
-            return HttpResponse.Error("sampleIntervalMs must be between 50 and 60000");
-
-        var session = await StartProfilerAsync(intervalMs);
-        return HttpResponse.Json(new { session, capabilities = BuildProfilerCapabilitiesPayload() });
-    }
-
-    private async Task<HttpResponse> HandleProfilerStop(HttpRequest request)
-    {
-        var validationError = ValidateProfilerSessionRequest(request, out _);
-        if (validationError != null)
-            return validationError;
-
-        var session = await StopProfilerAsync();
-        return HttpResponse.Json(new { session, stoppedAtUtc = DateTime.UtcNow });
-    }
-
-    private Task<HttpResponse> HandleProfilerSamples(HttpRequest request)
-    {
-        var validationError = ValidateProfilerSessionRequest(request, out _);
-        if (validationError != null)
-            return Task.FromResult(validationError);
-
-        if (!long.TryParse(request.QueryParams.GetValueOrDefault("sampleCursor", "0"), out var sampleCursor))
-            sampleCursor = 0;
-        if (!long.TryParse(request.QueryParams.GetValueOrDefault("markerCursor", "0"), out var markerCursor))
-            markerCursor = 0;
-        if (!long.TryParse(request.QueryParams.GetValueOrDefault("spanCursor", "0"), out var spanCursor))
-            spanCursor = 0;
-        if (!int.TryParse(request.QueryParams.GetValueOrDefault("limit", "500"), out var limit))
-            limit = 500;
-
-        limit = Math.Clamp(limit, 1, 5000);
-        var batch = _profilerSessions.GetBatch(sampleCursor, markerCursor, limit, spanCursor);
-        return Task.FromResult(HttpResponse.Json(batch));
-    }
-
-    private Task<HttpResponse> HandleProfilerMarker(HttpRequest request)
-    {
-        if (!IsProfilerFeatureAvailable)
-            return Task.FromResult<HttpResponse>(HttpResponse.Error("Profiler is not available"));
-        if (!_profilerSessions.IsActive)
-            return Task.FromResult<HttpResponse>(HttpResponse.Error("No active profiler session"));
-
-        var body = request.BodyAs<PublishProfilerMarkerRequest>();
-        if (string.IsNullOrWhiteSpace(body?.Name))
-            return Task.FromResult(HttpResponse.Error("name is required"));
-
-        var marker = new ProfilerMarker
-        {
-            TsUtc = DateTime.UtcNow,
-            Type = string.IsNullOrWhiteSpace(body.Type) ? "user.action" : body.Type!,
-            Name = body.Name!,
-            PayloadJson = body.PayloadJson
-        };
-
-        Publish(marker);
-        return Task.FromResult(HttpResponse.Ok("Marker published"));
-    }
-
-    private Task<HttpResponse> HandleProfilerSpan(HttpRequest request)
-    {
-        if (!IsProfilerFeatureAvailable)
-            return Task.FromResult<HttpResponse>(HttpResponse.Error("Profiler is not available"));
-        if (!_profilerSessions.IsActive)
-            return Task.FromResult<HttpResponse>(HttpResponse.Error("No active profiler session"));
-
-        var body = request.BodyAs<PublishProfilerSpanRequest>();
-        if (string.IsNullOrWhiteSpace(body?.Name))
-            return Task.FromResult(HttpResponse.Error("name is required"));
-
-        var startTsUtc = body.StartTsUtc?.ToUniversalTime() ?? DateTime.UtcNow;
-        var endTsUtc = body.EndTsUtc?.ToUniversalTime() ?? startTsUtc;
-
-        var span = new ProfilerSpan
-        {
-            SpanId = Guid.NewGuid().ToString("N"),
-            ParentSpanId = body.ParentSpanId,
-            TraceId = body.TraceId,
-            StartTsUtc = startTsUtc,
-            EndTsUtc = endTsUtc,
-            Kind = string.IsNullOrWhiteSpace(body.Kind) ? "ui.operation" : body.Kind!,
-            Name = body.Name!,
-            Status = string.IsNullOrWhiteSpace(body.Status) ? "ok" : body.Status!,
-            ThreadId = body.ThreadId,
-            Screen = body.Screen,
-            ElementPath = body.ElementPath,
-            TagsJson = body.TagsJson,
-            Error = body.Error
-        };
-
-        Publish(span);
-        return Task.FromResult(HttpResponse.Ok("Span published"));
-    }
-
-    private Task<HttpResponse> HandleProfilerHotspots(HttpRequest request)
-    {
-        if (!int.TryParse(request.QueryParams.GetValueOrDefault("limit", "20"), out var limit))
-            limit = 20;
-        if (!int.TryParse(request.QueryParams.GetValueOrDefault("minDurationMs", "16"), out var minDurationMs))
-            minDurationMs = 16;
-
-        limit = Math.Clamp(limit, 1, 200);
-        minDurationMs = Math.Clamp(minDurationMs, 0, 60_000);
-        var kind = request.QueryParams.GetValueOrDefault("kind");
-        var hotspots = _profilerSessions.GetHotspots(limit, minDurationMs, kind);
-        return Task.FromResult(HttpResponse.Json(hotspots));
-    }
-
-    private async Task<ProfilerSessionInfo> StartProfilerAsync(int intervalMs)
-    {
-        await _profilerStateGate.WaitAsync();
-        try
-        {
-            var current = _profilerSessions.CurrentSession;
-            if (current?.IsActive == true)
-                return current;
-
-            _profilerCollector.Start(intervalMs);
-            var session = _profilerSessions.Start(intervalMs);
-            _lastAutoJankSpanTsUtc = DateTime.MinValue;
-            EnsureAutoUiHooks();
-            _profilerLoopCts = new CancellationTokenSource();
-            _profilerLoopTask = Task.Run(() => RunProfilerLoopAsync(intervalMs, _profilerLoopCts.Token));
-            return session;
-        }
-        finally
-        {
-            _profilerStateGate.Release();
-        }
-    }
-
-    private async Task<ProfilerSessionInfo?> StopProfilerAsync()
-    {
-        await _profilerStateGate.WaitAsync();
-        try
-        {
-            var cts = _profilerLoopCts;
-            var loopTask = _profilerLoopTask;
-            _profilerLoopCts = null;
-            _profilerLoopTask = null;
-
-            cts?.Cancel();
-
-            if (loopTask != null)
-            {
-                try
-                {
-                    await loopTask;
-                }
-                catch (OperationCanceledException)
-                {
-                }
-            }
-
-            cts?.Dispose();
-            _profilerCollector.Stop();
-            StopAutoUiHooks();
-            return _profilerSessions.Stop();
-        }
-        finally
-        {
-            _profilerStateGate.Release();
-        }
-    }
-
-    private async Task RunProfilerLoopAsync(int intervalMs, CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            EnsureAutoUiHooks();
-            if (_profilerCollector.TryCollect(out var sample))
-            {
-                _profilerSessions.AddSample(sample);
-                PublishNativeFrameSignals(sample);
-                TryPublishAutoJankSpan(sample);
-            }
-
-            await Task.Delay(intervalMs, ct);
-        }
-    }
-
-    private void PublishNativeFrameSignals(ProfilerSample sample)
-    {
-        if (sample.JankFrameCount <= 0 && sample.UiThreadStallCount <= 0)
-            return;
-
-        if (sample.JankFrameCount > 0)
-        {
-            Publish(new ProfilerMarker
-            {
-                TsUtc = sample.TsUtc,
-                Type = "ui.frame.jank.native",
-                Name = sample.FrameSource,
-                PayloadJson = JsonSerializer.Serialize(new
-                {
-                    jankFrames = sample.JankFrameCount,
-                    frameTimeMsP95 = sample.FrameTimeMsP95,
-                    worstFrameTimeMs = sample.WorstFrameTimeMs,
-                    frameSource = sample.FrameSource,
-                    frameQuality = sample.FrameQuality
-                })
-            });
-        }
-
-        if (sample.UiThreadStallCount > 0)
-        {
-            Publish(new ProfilerMarker
-            {
-                TsUtc = sample.TsUtc,
-                Type = "ui.thread.stall.native",
-                Name = sample.FrameSource,
-                PayloadJson = JsonSerializer.Serialize(new
-                {
-                    stallCount = sample.UiThreadStallCount,
-                    worstFrameTimeMs = sample.WorstFrameTimeMs,
-                    frameSource = sample.FrameSource,
-                    frameQuality = sample.FrameQuality
-                })
-            });
-        }
-    }
-
-    private void TryPublishAutoJankSpan(ProfilerSample sample)
-    {
-        var frameMs = sample.FrameTimeMsP95;
-        var hasNativeJankSignal = sample.JankFrameCount > 0 || sample.UiThreadStallCount > 0;
-        if (!frameMs.HasValue || (frameMs.Value < 20d && !hasNativeJankSignal))
-            return;
-
-        var throttleMs = sample.FrameSource.StartsWith("native.", StringComparison.OrdinalIgnoreCase) ? 100d : 250d;
-        if (_lastAutoJankSpanTsUtc != DateTime.MinValue
-            && (sample.TsUtc - _lastAutoJankSpanTsUtc).TotalMilliseconds < throttleMs)
-            return;
-
-        _lastAutoJankSpanTsUtc = sample.TsUtc;
-        var (actionName, actionElementPath, actionLagMs) = GetRecentUserAction(sample.TsUtc, TimeSpan.FromSeconds(3));
-        var isStall = sample.UiThreadStallCount > 0 || (sample.WorstFrameTimeMs ?? 0d) >= 150d;
-        Publish(new ProfilerSpan
-        {
-            SpanId = Guid.NewGuid().ToString("N"),
-            TraceId = _profilerSessions.CurrentSession?.SessionId,
-            StartTsUtc = sample.TsUtc.AddMilliseconds(-frameMs.Value),
-            EndTsUtc = sample.TsUtc,
-            Kind = "ui.operation",
-            Name = isStall
-                ? (string.IsNullOrWhiteSpace(actionName) ? "ui.thread.stall" : "ui.action.stall")
-                : (string.IsNullOrWhiteSpace(actionName) ? "ui.frame.jank" : "ui.action.jank"),
-            Status = isStall ? "error" : "ok",
-            ThreadId = Environment.CurrentManagedThreadId,
-            Screen = Shell.Current?.CurrentState?.Location?.ToString(),
-            ElementPath = actionElementPath,
-            TagsJson = JsonSerializer.Serialize(new
-            {
-                frameTimeMsP95 = frameMs.Value,
-                fps = sample.Fps,
-                frameSource = sample.FrameSource,
-                frameQuality = sample.FrameQuality,
-                jankFrameCount = sample.JankFrameCount,
-                uiThreadStallCount = sample.UiThreadStallCount,
-                worstFrameTimeMs = sample.WorstFrameTimeMs,
-                actionName,
-                actionLagMs
-            })
-        });
-    }
-
-    private void EnsureAutoUiHooks()
+    protected override void EnsureAutoUiHooks()
     {
         if (!IsProfilerFeatureAvailable || !_profilerSessions.IsActive || _dispatcher == null || !_options.EnableHighLevelUiHooks)
             return;
@@ -3576,7 +2585,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private void StopAutoUiHooks()
+    protected override void StopAutoUiHooks()
     {
         if (_hookedShell != null)
         {
@@ -4240,75 +3249,6 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             });
     }
 
-    private void PublishUiEvent(string type, object data)
-    {
-        var payload = JsonSerializer.Serialize(new
-        {
-            type,
-            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-            data
-        });
-
-        lock (_uiEventSubscriptionGate)
-        {
-            foreach (var subscription in _uiEventSubscriptions)
-            {
-                if (subscription.Events.Contains("all") || subscription.Events.Contains(type))
-                    subscription.Queue.Enqueue(payload);
-            }
-        }
-    }
-
-    private static void ApplyUiEventSubscriptionMessage(UiEventSubscription subscription, JsonElement message)
-    {
-        if (!message.TryGetProperty("type", out var typeElement))
-            return;
-
-        var messageType = typeElement.GetString();
-        if (!message.TryGetProperty("data", out var dataElement) ||
-            !dataElement.TryGetProperty("events", out var eventsElement) ||
-            eventsElement.ValueKind != JsonValueKind.Array)
-        {
-            return;
-        }
-
-        var events = eventsElement.EnumerateArray()
-            .Select(static e => e.GetString())
-            .Where(static e => !string.IsNullOrWhiteSpace(e))
-            .Select(static e => e!)
-            .ToArray();
-
-        if (events.Length == 0)
-            return;
-
-        if (string.Equals(messageType, "subscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            if (events.Contains("all", StringComparer.OrdinalIgnoreCase))
-            {
-                subscription.Events.Clear();
-                subscription.Events.Add("all");
-                return;
-            }
-
-            if (subscription.Events.Contains("all"))
-                subscription.Events.Clear();
-
-            foreach (var eventName in events)
-                subscription.Events.Add(eventName);
-        }
-        else if (string.Equals(messageType, "unsubscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            if (events.Contains("all", StringComparer.OrdinalIgnoreCase))
-            {
-                subscription.Events.Clear();
-                return;
-            }
-
-            foreach (var eventName in events)
-                subscription.Events.Remove(eventName);
-        }
-    }
-
     private void TrackUiInteraction(string name, Element? element, object? tags = null)
     {
         if (!IsProfilerFeatureAvailable || !_profilerSessions.IsActive)
@@ -4359,1159 +3299,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return element.GetType().Name;
     }
 
-    private void RememberUserAction(string name, string? elementPath, DateTime timestampUtc)
-    {
-        lock (_uiHookGate)
-        {
-            _lastUserActionTsUtc = timestampUtc;
-            _lastUserActionName = name;
-            _lastUserActionElementPath = elementPath;
-        }
-    }
-
-    private (string? ActionName, string? ElementPath, double? LagMs) GetRecentUserAction(DateTime sampleTsUtc, TimeSpan maxAge)
-    {
-        lock (_uiHookGate)
-        {
-            if (_lastUserActionTsUtc == DateTime.MinValue || string.IsNullOrWhiteSpace(_lastUserActionName))
-                return (null, null, null);
-
-            var lag = sampleTsUtc - _lastUserActionTsUtc;
-            if (lag < TimeSpan.Zero || lag > maxAge)
-                return (null, null, null);
-
-            return (_lastUserActionName, _lastUserActionElementPath, lag.TotalMilliseconds);
-        }
-    }
-
-    private static double TryReadDoubleProperty(object instance, string propertyName)
-    {
-        var value = instance.GetType().GetProperty(propertyName)?.GetValue(instance);
-        return value switch
-        {
-            double asDouble => asDouble,
-            float asFloat => asFloat,
-            int asInt => asInt,
-            long asLong => asLong,
-            _ => 0d
-        };
-    }
-
-    private static int? TryReadIntProperty(object instance, string propertyName)
-    {
-        var value = instance.GetType().GetProperty(propertyName)?.GetValue(instance);
-        return value switch
-        {
-            int asInt => asInt,
-            long asLong => (int)asLong,
-            short asShort => asShort,
-            _ => null
-        };
-    }
-
-    private static string? TryReadNavigationRoute(object eventArgs, string statePropertyName)
-    {
-        var state = eventArgs.GetType().GetProperty(statePropertyName)?.GetValue(eventArgs);
-        if (state == null)
-            return null;
-
-        var location = state.GetType().GetProperty("Location")?.GetValue(state);
-        return location?.ToString() ?? state.ToString();
-    }
-
-    private static string? TryReadNavigationSource(object eventArgs)
-        => eventArgs.GetType().GetProperty("Source")?.GetValue(eventArgs)?.ToString();
-
-    public void Publish(ProfilerMarker marker)
-    {
-        if (!IsProfilerFeatureAvailable || !_profilerSessions.IsActive)
-            return;
-
-        if (marker.TsUtc == default)
-            marker.TsUtc = DateTime.UtcNow;
-        if (string.IsNullOrWhiteSpace(marker.Type))
-            marker.Type = "user.action";
-        if (string.IsNullOrWhiteSpace(marker.Name))
-            marker.Name = marker.Type;
-
-        _profilerSessions.AddMarker(marker);
-    }
-
-    public void Publish(ProfilerSpan span)
-    {
-        if (!IsProfilerFeatureAvailable || !_profilerSessions.IsActive)
-            return;
-
-        if (string.IsNullOrWhiteSpace(span.Kind))
-            span.Kind = "ui.operation";
-        if (string.IsNullOrWhiteSpace(span.Name))
-            span.Name = span.Kind;
-        if (string.IsNullOrWhiteSpace(span.Status))
-            span.Status = "ok";
-        if (span.StartTsUtc == default)
-            span.StartTsUtc = DateTime.UtcNow;
-        if (span.EndTsUtc == default || span.EndTsUtc < span.StartTsUtc)
-            span.EndTsUtc = span.StartTsUtc;
-        if (span.ThreadId == null)
-            span.ThreadId = Environment.CurrentManagedThreadId;
-
-        _profilerSessions.AddSpan(span);
-    }
-
-    private void PublishUiOperationSpan(
-        string name,
-        DateTime startedAtUtc,
-        bool success,
-        string? error = null,
-        string? elementPath = null,
-        object? tags = null)
-    {
-        var endTsUtc = DateTime.UtcNow;
-        var route = Shell.Current?.CurrentState?.Location?.ToString();
-        var span = new ProfilerSpan
-        {
-            SpanId = Guid.NewGuid().ToString("N"),
-            TraceId = _profilerSessions.CurrentSession?.SessionId,
-            StartTsUtc = startedAtUtc,
-            EndTsUtc = endTsUtc,
-            Kind = "ui.operation",
-            Name = name,
-            Status = success ? "ok" : "error",
-            ThreadId = Environment.CurrentManagedThreadId,
-            Screen = route,
-            ElementPath = elementPath,
-            TagsJson = tags == null ? null : JsonSerializer.Serialize(tags),
-            Error = error
-        };
-
-        Publish(span);
-    }
-
-    private void HandleCapturedNetworkRequest(NetworkRequestEntry entry)
-    {
-        if (!IsProfilerFeatureAvailable || !_profilerSessions.IsActive)
-            return;
-
-        var endTimestampUtc = entry.Timestamp.UtcDateTime;
-        var startTimestampUtc = endTimestampUtc - TimeSpan.FromMilliseconds(Math.Max(0, entry.DurationMs));
-        var markerName = $"{entry.Method} {entry.Path ?? entry.Url}";
-
-        Publish(new ProfilerMarker
-        {
-            TsUtc = startTimestampUtc,
-            Type = "network.request.start",
-            Name = markerName,
-            PayloadJson = JsonSerializer.Serialize(new
-            {
-                id = entry.Id,
-                method = entry.Method,
-                url = entry.Url,
-                host = entry.Host
-            })
-        });
-
-        Publish(new ProfilerMarker
-        {
-            TsUtc = endTimestampUtc,
-            Type = "network.request.end",
-            Name = markerName,
-            PayloadJson = JsonSerializer.Serialize(new
-            {
-                id = entry.Id,
-                method = entry.Method,
-                url = entry.Url,
-                statusCode = entry.StatusCode,
-                durationMs = entry.DurationMs,
-                error = entry.Error
-            })
-        });
-
-        if (entry.DurationMs >= 50 || !string.IsNullOrWhiteSpace(entry.Error))
-        {
-            Publish(new ProfilerSpan
-            {
-                SpanId = Guid.NewGuid().ToString("N"),
-                TraceId = _profilerSessions.CurrentSession?.SessionId,
-                StartTsUtc = startTimestampUtc,
-                EndTsUtc = endTimestampUtc,
-                Kind = "network.request",
-                Name = markerName,
-                Status = string.IsNullOrWhiteSpace(entry.Error) ? "ok" : "error",
-                ThreadId = Environment.CurrentManagedThreadId,
-                Screen = Shell.Current?.CurrentState?.Location?.ToString(),
-                TagsJson = JsonSerializer.Serialize(new
-                {
-                    id = entry.Id,
-                    method = entry.Method,
-                    host = entry.Host,
-                    statusCode = entry.StatusCode
-                }),
-                Error = entry.Error
-            });
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
-        AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
-        StopAutoUiHooks();
-        Sensors.Dispose();
-
-        var cts = _profilerLoopCts;
-        var loopTask = _profilerLoopTask;
-        _profilerLoopCts = null;
-        _profilerLoopTask = null;
-
-        cts?.Cancel();
-        if (loopTask != null)
-        {
-            try { loopTask.Wait(TimeSpan.FromSeconds(3)); }
-            catch (AggregateException) { }
-        }
-        cts?.Dispose();
-
-        _profilerCollector.Stop();
-        (_profilerCollector as IDisposable)?.Dispose();
-        _profilerStateGate.Dispose();
-        _brokerRegistration?.Dispose();
-        _server.Dispose();
-        _logProvider?.Dispose();
-    }
-
-    // ── Network monitoring endpoints ──
-
-    private Task<HttpResponse> HandleNetworkList(HttpRequest request)
-    {
-        var limit = int.TryParse(request.QueryParams.GetValueOrDefault("limit", "100"), out var l) ? l : 100;
-        var host = request.QueryParams.GetValueOrDefault("host");
-        var method = request.QueryParams.GetValueOrDefault("method");
-        int? status = request.QueryParams.TryGetValue("status", out var s) && int.TryParse(s, out var si) ? si : null;
-
-        var entries = NetworkStore.GetRecent(limit, host, method, status);
-        // Return summary-only (no headers/body) for the list
-        var summaries = entries.Select(e => e.ToSummary()).ToList();
-        return Task.FromResult(HttpResponse.Json(summaries));
-    }
-
-    private Task<HttpResponse> HandleNetworkDetail(HttpRequest request)
-    {
-        var id = request.RouteParams.GetValueOrDefault("id");
-        if (string.IsNullOrEmpty(id))
-            return Task.FromResult(HttpResponse.Error("Missing request ID"));
-
-        var entry = NetworkStore.GetById(id);
-        if (entry == null)
-            return Task.FromResult(HttpResponse.NotFound($"Network request '{id}' not found"));
-
-        return Task.FromResult(HttpResponse.Json(entry));
-    }
-
-    private Task<HttpResponse> HandleNetworkClear(HttpRequest request)
-    {
-        NetworkStore.Clear();
-        return Task.FromResult(HttpResponse.Ok("Network request buffer cleared"));
-    }
-
-    private async Task HandleNetworkWebSocket(
-        System.Net.Sockets.TcpClient client,
-        System.Net.Sockets.NetworkStream stream,
-        HttpRequest request,
-        CancellationToken ct)
-    {
-        // Send replay of recent entries
-        var recent = NetworkStore.GetRecent(100);
-        var replayMsg = JsonSerializer.Serialize(new
-        {
-            type = "replay",
-            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-            entries = recent.Select(e => e.ToSummary())
-        });
-        await AgentHttpServer.WebSocketSendTextAsync(stream, replayMsg, ct);
-
-        // Subscribe to live entries
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var sendQueue = new System.Collections.Concurrent.ConcurrentQueue<Network.NetworkRequestEntry>();
-
-        void OnRequest(Network.NetworkRequestEntry entry) => sendQueue.Enqueue(entry);
-        NetworkStore.OnRequestCaptured += OnRequest;
-
-        try
-        {
-            // Read loop (handles client messages + detects disconnection)
-            var readTask = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
-                    if (msg == null) { await cts.CancelAsync(); break; }
-
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(msg);
-                        var msgType = doc.RootElement.GetProperty("type").GetString();
-
-                        if (msgType == "get_details" && doc.RootElement.TryGetProperty("id", out var idEl))
-                        {
-                            var id = idEl.GetString();
-                            var entry = id != null ? NetworkStore.GetById(id) : null;
-                            var resp = JsonSerializer.Serialize(new
-                            {
-                                type = "details",
-                                timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                                entry
-                            });
-                            await AgentHttpServer.WebSocketSendTextAsync(stream, resp, cts.Token);
-                        }
-                        else if (msgType == "clear")
-                        {
-                            NetworkStore.Clear();
-                        }
-                    }
-                    catch { }
-                }
-            }, cts.Token);
-
-            // Send loop — drain queue and send pings periodically
-            var lastPing = DateTime.UtcNow;
-            while (!cts.Token.IsCancellationRequested)
-            {
-                while (sendQueue.TryDequeue(out var entry))
-                {
-                    try
-                    {
-                        var json = JsonSerializer.Serialize(new
-                        {
-                            type = "request",
-                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                            entry = entry.ToSummary()
-                        });
-                        await AgentHttpServer.WebSocketSendTextAsync(stream, json, cts.Token);
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                // Send WebSocket ping every 15 seconds to keep connection alive
-                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
-                        lastPing = DateTime.UtcNow;
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                try { await Task.Delay(50, cts.Token); }
-                catch { break; }
-            }
-
-            await readTask;
-        }
-        finally
-        {
-            NetworkStore.OnRequestCaptured -= OnRequest;
-        }
-    }
-
-    private async Task HandleLogsWebSocket(
-        System.Net.Sockets.TcpClient client,
-        System.Net.Sockets.NetworkStream stream,
-        HttpRequest request,
-        CancellationToken ct)
-    {
-        if (_logProvider == null) return;
-
-        // Parse optional source filter from query string
-        request.QueryParams.TryGetValue("source", out var sourceFilter);
-
-        // Parse optional replay count (default 100, 0 to skip replay)
-        var replayCount = 100;
-        if (request.QueryParams.TryGetValue("replay", out var replayStr) && int.TryParse(replayStr, out var rc))
-            replayCount = Math.Max(0, rc);
-
-        // Send replay of recent log entries
-        if (replayCount > 0)
-        {
-            var recent = _logProvider.Reader.Read(replayCount, 0, sourceFilter);
-            var replayMsg = JsonSerializer.Serialize(new
-            {
-                type = "replay",
-                timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                entries = recent
-            });
-            await AgentHttpServer.WebSocketSendTextAsync(stream, replayMsg, ct);
-        }
-
-        // Subscribe to live log entries
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var sendQueue = new System.Collections.Concurrent.ConcurrentQueue<Logging.FileLogEntry>();
-
-        void OnLog(Logging.FileLogEntry entry)
-        {
-            if (sourceFilter != null && !string.Equals(entry.Source, sourceFilter, StringComparison.OrdinalIgnoreCase))
-                return;
-            sendQueue.Enqueue(entry);
-        }
-        _logProvider.Writer.OnLogWritten += OnLog;
-
-        try
-        {
-            // Read loop (detects disconnection)
-            var readTask = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
-                    if (msg == null) { await cts.CancelAsync(); break; }
-                }
-            }, cts.Token);
-
-            // Send loop — drain queue and send pings periodically
-            var lastPing = DateTime.UtcNow;
-            while (!cts.Token.IsCancellationRequested)
-            {
-                while (sendQueue.TryDequeue(out var entry))
-                {
-                    try
-                    {
-                        var json = JsonSerializer.Serialize(new
-                        {
-                            type = "log",
-                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                            entry
-                        });
-                        await AgentHttpServer.WebSocketSendTextAsync(stream, json, cts.Token);
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
-                        lastPing = DateTime.UtcNow;
-                    }
-                    catch { await cts.CancelAsync(); break; }
-                }
-
-                try { await Task.Delay(50, cts.Token); }
-                catch { break; }
-            }
-
-            await readTask;
-        }
-        finally
-        {
-            _logProvider.Writer.OnLogWritten -= OnLog;
-        }
-    }
-
-    private async Task HandleProfilerWebSocket(
-        System.Net.Sockets.TcpClient client,
-        System.Net.Sockets.NetworkStream stream,
-        HttpRequest request,
-        CancellationToken ct)
-    {
-        var requestedSessionId = request.QueryParams.GetValueOrDefault("sessionId");
-        if (string.IsNullOrWhiteSpace(requestedSessionId))
-        {
-            await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
-                {
-                    type = "error",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    error = "sessionId query parameter is required"
-                }), ct);
-            return;
-        }
-
-        if (!long.TryParse(request.QueryParams.GetValueOrDefault("sampleCursor", "0"), out var sampleCursor))
-            sampleCursor = 0;
-        if (!long.TryParse(request.QueryParams.GetValueOrDefault("markerCursor", "0"), out var markerCursor))
-            markerCursor = 0;
-        if (!long.TryParse(request.QueryParams.GetValueOrDefault("spanCursor", "0"), out var spanCursor))
-            spanCursor = 0;
-        if (!int.TryParse(request.QueryParams.GetValueOrDefault("limit", "500"), out var limit))
-            limit = 500;
-
-        limit = Math.Clamp(limit, 1, 5000);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-        try
-        {
-            var readTask = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
-                    if (msg == null)
-                    {
-                        await cts.CancelAsync();
-                        break;
-                    }
-                }
-            }, cts.Token);
-
-            var sentInitialBatch = false;
-            var lastPing = DateTime.UtcNow;
-
-            while (!cts.Token.IsCancellationRequested)
-            {
-                var currentSession = _profilerSessions.CurrentSession;
-                if (currentSession == null)
-                {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
-                    {
-                        type = "stopped",
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                        data = new { sessionId = requestedSessionId }
-                    }), cts.Token);
-                    break;
-                }
-
-                if (!requestedSessionId.Equals("current", StringComparison.OrdinalIgnoreCase) &&
-                    !requestedSessionId.Equals(currentSession.SessionId, StringComparison.Ordinal))
-                {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
-                    {
-                        type = "error",
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                        error = $"Profiler session '{requestedSessionId}' not found"
-                    }), cts.Token);
-                    break;
-                }
-
-                var batch = _profilerSessions.GetBatch(sampleCursor, markerCursor, limit, spanCursor);
-                var hasNewData = batch.SampleCursor != sampleCursor ||
-                    batch.MarkerCursor != markerCursor ||
-                    batch.SpanCursor != spanCursor;
-
-                if (!sentInitialBatch || hasNewData)
-                {
-                    sampleCursor = batch.SampleCursor;
-                    markerCursor = batch.MarkerCursor;
-                    spanCursor = batch.SpanCursor;
-                    sentInitialBatch = true;
-
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
-                    {
-                        type = "batch",
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                        data = batch
-                    }), cts.Token);
-                }
-
-                if (!batch.IsActive)
-                {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
-                    {
-                        type = "stopped",
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                        data = new { sessionId = batch.SessionId }
-                    }), cts.Token);
-                    break;
-                }
-
-                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
-                        lastPing = DateTime.UtcNow;
-                    }
-                    catch
-                    {
-                        await cts.CancelAsync();
-                        break;
-                    }
-                }
-
-                try
-                {
-                    await Task.Delay(Math.Max(100, currentSession.SampleIntervalMs / 2), cts.Token);
-                }
-                catch
-                {
-                    break;
-                }
-            }
-
-            await readTask;
-        }
-        catch
-        {
-            await cts.CancelAsync();
-        }
-    }
-
-    private async Task HandleUiEventsWebSocket(
-        System.Net.Sockets.TcpClient client,
-        System.Net.Sockets.NetworkStream stream,
-        HttpRequest request,
-        CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var subscription = new UiEventSubscription();
-
-        lock (_uiEventSubscriptionGate)
-        {
-            _uiEventSubscriptions.Add(subscription);
-        }
-
-        try
-        {
-            var now = DateTimeOffset.UtcNow.ToString("O");
-            subscription.Queue.Enqueue(JsonSerializer.Serialize(new
-            {
-                type = "lifecycle",
-                timestamp = now,
-                data = new
-                {
-                    state = _app != null ? "started" : "stopped",
-                    timestamp = now
-                }
-            }));
-
-            var currentRoute = Shell.Current?.CurrentState?.Location?.ToString();
-            if (!string.IsNullOrWhiteSpace(currentRoute))
-            {
-                subscription.Queue.Enqueue(JsonSerializer.Serialize(new
-                {
-                    type = "navigation",
-                    timestamp = now,
-                    data = new
-                    {
-                        from = (string?)null,
-                        to = currentRoute,
-                        route = currentRoute,
-                        timestamp = now
-                    }
-                }));
-            }
-
-            var readTask = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    var msg = await AgentHttpServer.WebSocketReadTextAsync(stream, cts.Token);
-                    if (msg == null)
-                    {
-                        await cts.CancelAsync();
-                        break;
-                    }
-
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(msg);
-                        lock (_uiEventSubscriptionGate)
-                        {
-                            ApplyUiEventSubscriptionMessage(subscription, doc.RootElement);
-                        }
-                    }
-                    catch
-                    {
-                    }
-                }
-            }, cts.Token);
-
-            var lastPing = DateTime.UtcNow;
-            while (!cts.Token.IsCancellationRequested)
-            {
-                while (subscription.Queue.TryDequeue(out var message))
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendTextAsync(stream, message, cts.Token);
-                    }
-                    catch
-                    {
-                        await cts.CancelAsync();
-                        break;
-                    }
-                }
-
-                if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
-                {
-                    try
-                    {
-                        await AgentHttpServer.WebSocketSendPingAsync(stream, cts.Token);
-                        lastPing = DateTime.UtcNow;
-                    }
-                    catch
-                    {
-                        await cts.CancelAsync();
-                        break;
-                    }
-                }
-
-                try { await Task.Delay(50, cts.Token); }
-                catch { break; }
-            }
-
-            await readTask;
-        }
-        finally
-        {
-            lock (_uiEventSubscriptionGate)
-            {
-                _uiEventSubscriptions.Remove(subscription);
-            }
-        }
-    }
-
-    private Task<HttpResponse> HandleLogs(HttpRequest request)
-    {
-        if (_logProvider == null)
-            return Task.FromResult(HttpResponse.Error("File logging is not enabled"));
-
-        var limitStr = request.QueryParams.GetValueOrDefault("limit", "100");
-        var skipStr = request.QueryParams.GetValueOrDefault("skip", "0");
-        var source = request.QueryParams.TryGetValue("source", out var s) ? s : null;
-
-        if (!int.TryParse(limitStr, out var limit)) limit = 100;
-        if (!int.TryParse(skipStr, out var skip)) skip = 0;
-
-        var entries = _logProvider.Reader.Read(limit, skip, source);
-        return Task.FromResult(HttpResponse.Json(entries));
-    }
-
-    private static string? GetRequestedWebViewId(HttpRequest request, string? contextId = null)
-        => request.QueryParams.GetValueOrDefault("webview")
-            ?? request.QueryParams.GetValueOrDefault("contextId")
-            ?? contextId;
-
-    private bool TryResolveReadyCdpWebView(
-        string? webviewId,
-        [NotNullWhen(true)] out CdpWebViewInfo? webView,
-        [NotNullWhen(false)] out HttpResponse? error)
-    {
-        if (_cdpWebViews.Count == 0)
-        {
-            webView = null;
-            error = HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
-            return false;
-        }
-
-        webView = ResolveCdpWebView(webviewId);
-        if (webView == null)
-        {
-            error = HttpResponse.Error($"WebView '{webviewId}' not found. Use GET /api/v1/webview/contexts to list available WebViews.");
-            return false;
-        }
-
-        // Do not hard-block transient "not ready" states here. The underlying
-        // WebView bridge can re-inject chobitsu on demand inside CommandHandler,
-        // so rejecting the request at resolution time prevents the self-heal path
-        // from ever running and leaves callers stuck in a 400 loop.
-        error = null;
-        return true;
-    }
-
-    private static string BuildCdpCommand(int id, string method, object? parameters = null)
-        => JsonSerializer.Serialize(new { id, method, @params = parameters });
-
-    private static string? TryGetCdpError(JsonElement root)
-    {
-        if (!root.TryGetProperty("error", out var errorElement))
-            return null;
-
-        return errorElement.ValueKind switch
-        {
-            JsonValueKind.String => errorElement.GetString(),
-            JsonValueKind.Object when errorElement.TryGetProperty("message", out var messageElement) => messageElement.GetString(),
-            _ => errorElement.GetRawText()
-        };
-    }
-
-    private static bool TryGetCdpValue(JsonElement root, out JsonElement value)
-    {
-        value = default;
-        return root.TryGetProperty("result", out var result) &&
-               result.TryGetProperty("result", out var innerResult) &&
-               innerResult.TryGetProperty("value", out value);
-    }
-
-    private async Task<JsonElement?> EvaluateWebViewExpressionAsync(CdpWebViewInfo webView, string expression, int id = 99996)
-    {
-        var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new
-        {
-            expression,
-            returnByValue = true
-        }));
-
-        using var doc = JsonDocument.Parse(resultJson);
-        var error = TryGetCdpError(doc.RootElement);
-        if (!string.IsNullOrWhiteSpace(error))
-            throw new InvalidOperationException(error);
-
-        if (TryGetCdpValue(doc.RootElement, out var value))
-            return value.Clone();
-
-        // Some bridges (notably Android's Chobitsu-backed path) do not reliably honor
-        // returnByValue for arrays/objects and instead hand back an object reference.
-        // Fall back to JSON.stringify() so callers still get structured data.
-        var fallbackJson = await webView.CommandHandler(BuildCdpCommand(id + 1, "Runtime.evaluate", new
-        {
-            expression = $"JSON.stringify(({expression}))",
-            returnByValue = true
-        }));
-
-        using var fallbackDoc = JsonDocument.Parse(fallbackJson);
-        error = TryGetCdpError(fallbackDoc.RootElement);
-        if (!string.IsNullOrWhiteSpace(error))
-            throw new InvalidOperationException(error);
-
-        if (TryGetCdpValue(fallbackDoc.RootElement, out var fallbackValue))
-        {
-            if (fallbackValue.ValueKind == JsonValueKind.String)
-            {
-                var json = fallbackValue.GetString();
-                if (!string.IsNullOrWhiteSpace(json) && !string.Equals(json, "undefined", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        using var jsonDoc = JsonDocument.Parse(json);
-                        return jsonDoc.RootElement.Clone();
-                    }
-                    catch
-                    {
-                        return JsonSerializer.SerializeToElement(json);
-                    }
-                }
-            }
-
-            return fallbackValue.Clone();
-        }
-
-        return null;
-    }
-
-    private async Task<HttpResponse> HandleCdp(HttpRequest request)
-    {
-        request.QueryParams.TryGetValue("webview", out var webviewId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        if (string.IsNullOrEmpty(request.Body))
-            return HttpResponse.Error("Missing CDP command body");
-
-        try
-        {
-            var result = await webView.CommandHandler(request.Body);
-            return new HttpResponse
-            {
-                ContentType = "application/json",
-                Body = result
-            };
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"CDP command failed: {ex.Message}");
-        }
-    }
-
-    private sealed class WebViewDomQueryRequest
-    {
-        public string? Selector { get; set; }
-        public string? ContextId { get; set; }
-    }
-
-    private async Task<HttpResponse> HandleWebViewNavigate(HttpRequest request)
-    {
-        var body = request.BodyAs<WebViewNavigateRequest>();
-        if (string.IsNullOrWhiteSpace(body?.Url))
-            return HttpResponse.Error("url is required");
-
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99995, "Page.navigate", new { url = body.Url }));
-            using var doc = JsonDocument.Parse(resultJson);
-            var cdpError = TryGetCdpError(doc.RootElement);
-            if (!string.IsNullOrWhiteSpace(cdpError))
-                return HttpResponse.Error($"WebView navigation failed: {cdpError}");
-
-            webView.Url = body.Url;
-            PublishUiEvent("navigation", new
-            {
-                from = (string?)null,
-                to = body.Url,
-                route = body.Url,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
-            });
-
-            return HttpResponse.Json(new
-            {
-                success = true,
-                contextId = webviewId ?? webView.Index.ToString(),
-                url = body.Url
-            });
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"WebView navigation failed: {ex.Message}");
-        }
-    }
-
-    private async Task<HttpResponse> HandleWebViewInputClick(HttpRequest request)
-    {
-        var body = request.BodyAs<WebViewInputClickRequest>();
-        if (string.IsNullOrWhiteSpace(body?.Selector))
-            return HttpResponse.Error("selector is required");
-
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var selectorJson = JsonSerializer.Serialize(body.Selector);
-            var value = await EvaluateWebViewExpressionAsync(
-                webView!,
-                $@"(function() {{
-                    const el = document.querySelector({selectorJson});
-                    if (!el) return {{ success: false, error: 'Element not found' }};
-                    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({{ block: 'center', inline: 'center' }});
-                    if (typeof el.focus === 'function') el.focus();
-                    if (typeof el.click === 'function') el.click();
-                    else el.dispatchEvent(new MouseEvent('click', {{ bubbles: true, cancelable: true, view: window }}));
-                    return {{ success: true, tagName: el.tagName ? el.tagName.toLowerCase() : null }};
-                }})()");
-
-            if (value is not JsonElement clickResult)
-                return HttpResponse.Error("Click did not return a result");
-
-            if (clickResult.ValueKind == JsonValueKind.Object &&
-                clickResult.TryGetProperty("success", out var successElement) &&
-                !successElement.GetBoolean())
-            {
-                return HttpResponse.NotFound($"No element matches selector '{body.Selector}'");
-            }
-
-            return new HttpResponse
-            {
-                ContentType = "application/json",
-                Body = clickResult.GetRawText()
-            };
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"WebView click failed: {ex.Message}");
-        }
-    }
-
-    private async Task<HttpResponse> HandleWebViewInputFill(HttpRequest request)
-    {
-        var body = request.BodyAs<WebViewInputFillRequest>();
-        if (string.IsNullOrWhiteSpace(body?.Selector))
-            return HttpResponse.Error("selector is required");
-        if (body.Text == null)
-            return HttpResponse.Error("text is required");
-
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var selectorJson = JsonSerializer.Serialize(body.Selector);
-            var textJson = JsonSerializer.Serialize(body.Text);
-            var value = await EvaluateWebViewExpressionAsync(
-                webView!,
-                $@"(function() {{
-                    const el = document.querySelector({selectorJson});
-                    if (!el) return {{ success: false, error: 'Element not found' }};
-                    if (typeof el.focus === 'function') el.focus();
-
-                    if ('value' in el) el.value = {textJson};
-                    else if (el.isContentEditable) el.textContent = {textJson};
-                    else return {{ success: false, error: 'Element does not accept text input' }};
-
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    return {{ success: true, textLength: {body.Text.Length} }};
-                }})()");
-
-            if (value is not JsonElement fillResult)
-                return HttpResponse.Error("Fill did not return a result");
-
-            if (fillResult.ValueKind == JsonValueKind.Object &&
-                fillResult.TryGetProperty("success", out var successElement) &&
-                !successElement.GetBoolean())
-            {
-                var errorMessage = fillResult.TryGetProperty("error", out var errorElement)
-                    ? errorElement.GetString()
-                    : null;
-
-                return string.Equals(errorMessage, "Element not found", StringComparison.OrdinalIgnoreCase)
-                    ? HttpResponse.NotFound($"No element matches selector '{body.Selector}'")
-                    : HttpResponse.Error(errorMessage ?? "WebView fill failed");
-            }
-
-            PublishUiEvent("treeChange", new
-            {
-                changeType = "modified",
-                elementId = body.Selector,
-                elementType = "webview-input",
-                parentId = (string?)null,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
-            });
-
-            return new HttpResponse
-            {
-                ContentType = "application/json",
-                Body = fillResult.GetRawText()
-            };
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"WebView fill failed: {ex.Message}");
-        }
-    }
-
-    private async Task<HttpResponse> HandleWebViewInputText(HttpRequest request)
-    {
-        var body = request.BodyAs<WebViewInputTextRequest>();
-        if (body?.Text == null)
-            return HttpResponse.Error("text is required");
-
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99994, "Input.insertText", new { text = body.Text }));
-            using var doc = JsonDocument.Parse(resultJson);
-            var cdpError = TryGetCdpError(doc.RootElement);
-            if (!string.IsNullOrWhiteSpace(cdpError))
-                return HttpResponse.Error($"WebView text input failed: {cdpError}");
-
-            PublishUiEvent("treeChange", new
-            {
-                changeType = "modified",
-                elementId = body.ContextId ?? webviewId ?? webView.Index.ToString(),
-                elementType = "webview-input",
-                parentId = (string?)null,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
-            });
-
-            return HttpResponse.Json(new
-            {
-                success = true,
-                textLength = body.Text.Length
-            });
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"WebView text input failed: {ex.Message}");
-        }
-    }
-
-    private Task<HttpResponse> HandleWebViewDom(HttpRequest request)
-        => HandleCdpSource(request);
-
-    private async Task<HttpResponse> HandleWebViewDomQuery(HttpRequest request)
-    {
-        var body = request.BodyAs<WebViewDomQueryRequest>();
-        if (string.IsNullOrWhiteSpace(body?.Selector))
-            return HttpResponse.Error("selector is required");
-
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var selectorJson = JsonSerializer.Serialize(body.Selector);
-            var value = await EvaluateWebViewExpressionAsync(
-                webView!,
-                $@"(function() {{
-                    return Array.from(document.querySelectorAll({selectorJson})).map((el, index) => ({{
-                        index,
-                        tagName: el.tagName ? el.tagName.toLowerCase() : null,
-                        id: el.id || null,
-                        className: el.className || null,
-                        text: (el.innerText || el.textContent || '').trim()
-                    }}));
-                }})()",
-                id: 99998);
-
-            if (value is JsonElement matches)
-            {
-                return new HttpResponse
-                {
-                    ContentType = "application/json",
-                    Body = matches.GetRawText()
-                };
-            }
-
-            return HttpResponse.Error("Failed to query DOM");
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"DOM query failed: {ex.Message}");
-        }
-    }
-
-    private Task<HttpResponse> HandleWebViewNetwork(HttpRequest request)
-        => HandleNetworkList(request);
-
-    private Task<HttpResponse> HandleWebViewConsole(HttpRequest request)
-    {
-        request.QueryParams["source"] = "webview";
-        return HandleLogs(request);
-    }
-
-    private async Task<HttpResponse> HandleWebViewScreenshot(HttpRequest request)
-    {
-        var webviewId = GetRequestedWebViewId(request);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var nativeCapture = await TryCaptureRegisteredWebViewAsync(webView!);
-            if (nativeCapture != null)
-                return nativeCapture;
-
-            var cdpCommand = JsonSerializer.Serialize(new
-            {
-                id = 99997,
-                method = "Page.captureScreenshot",
-                @params = new { format = "png" }
-            });
-
-            var resultJson = await webView.CommandHandler(cdpCommand);
-            using var doc = JsonDocument.Parse(resultJson);
-            if (doc.RootElement.TryGetProperty("result", out var result) &&
-                result.TryGetProperty("data", out var data) &&
-                data.GetString() is { Length: > 0 } base64)
-            {
-                return HttpResponse.Png(Convert.FromBase64String(base64));
-            }
-
-            var fallback = await TryCaptureRegisteredWebViewAsync(webView!);
-            return fallback ?? HttpResponse.Error("Failed to capture WebView screenshot");
-        }
-        catch (Exception ex)
-        {
-            var fallback = webView != null
-                ? await TryCaptureRegisteredWebViewAsync(webView)
-                : null;
-            return fallback ?? HttpResponse.Error($"WebView screenshot failed: {ex.Message}");
-        }
-    }
-
-    private async Task<HttpResponse?> TryCaptureRegisteredWebViewAsync(CdpWebViewInfo webView)
+    protected override async Task<HttpResponse?> TryCaptureRegisteredWebViewAsync(CdpWebViewInfo webView)
     {
         if (_app == null)
             return null;
@@ -5551,68 +3339,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
-    {
-        var webviews = _cdpWebViews.Select(w => new
-        {
-            id = !string.IsNullOrWhiteSpace(w.AutomationId)
-                ? w.AutomationId
-                : !string.IsNullOrWhiteSpace(w.ElementId)
-                    ? w.ElementId
-                    : w.Index.ToString(),
-            index = w.Index,
-            automationId = w.AutomationId,
-            elementId = w.ElementId,
-            url = w.Url,
-            title = (string?)null,
-            ready = w.IsReady,
-            isReady = w.IsReady,
-        }).ToList();
-
-        return Task.FromResult(HttpResponse.Json(new { webviews }));
-    }
-
-    private async Task<HttpResponse> HandleCdpSource(HttpRequest request)
-    {
-        var webviewId = GetRequestedWebViewId(request);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
-            return error!;
-
-        try
-        {
-            var cdpCommand = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                id = 99999,
-                method = "Runtime.evaluate",
-                @params = new { expression = "document.documentElement.outerHTML", returnByValue = true }
-            });
-
-            var resultJson = await webView.CommandHandler(cdpCommand);
-            using var doc = System.Text.Json.JsonDocument.Parse(resultJson);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("result", out var result) &&
-                result.TryGetProperty("result", out var innerResult) &&
-                innerResult.TryGetProperty("value", out var value))
-            {
-                return new HttpResponse
-                {
-                    ContentType = "text/html",
-                    Body = value.GetString() ?? ""
-                };
-            }
-
-            return HttpResponse.Error("Failed to extract page source from CDP response");
-        }
-        catch (Exception ex)
-        {
-            return HttpResponse.Error($"Failed to get page source: {ex.Message}");
-        }
-    }
-
     // ── Preferences endpoints ──
 
     private const string PreferencesKeyRegistryKey = "__devflow_known_keys";
+
     private const string PreferencesKeyRegistrySeparator = "\x1F"; // unit separator
 
     private HashSet<string> GetKnownPreferenceKeys(string? sharedName)
@@ -5651,7 +3381,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             SaveKnownPreferenceKeys(keys, sharedName);
     }
 
-    private Task<HttpResponse> HandlePreferencesList(HttpRequest request)
+    protected override Task<HttpResponse> HandlePreferencesList(HttpRequest request)
     {
         try
         {
@@ -5741,7 +3471,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return (null, "unknown");
     }
 
-    private Task<HttpResponse> HandlePreferencesGet(HttpRequest request)
+    protected override Task<HttpResponse> HandlePreferencesGet(HttpRequest request)
     {
         try
         {
@@ -5781,7 +3511,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandlePreferencesSet(HttpRequest request)
+    protected override Task<HttpResponse> HandlePreferencesSet(HttpRequest request)
     {
         try
         {
@@ -5846,7 +3576,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandlePreferencesDelete(HttpRequest request)
+    protected override Task<HttpResponse> HandlePreferencesDelete(HttpRequest request)
     {
         try
         {
@@ -5869,7 +3599,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandlePreferencesClear(HttpRequest request)
+    protected override Task<HttpResponse> HandlePreferencesClear(HttpRequest request)
     {
         try
         {
@@ -5892,7 +3622,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     // ── Secure Storage endpoints ──
 
-    private async Task<HttpResponse> HandleSecureStorageGet(HttpRequest request)
+    protected override async Task<HttpResponse> HandleSecureStorageGet(HttpRequest request)
     {
         try
         {
@@ -5908,7 +3638,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private async Task<HttpResponse> HandleSecureStorageSet(HttpRequest request)
+    protected override async Task<HttpResponse> HandleSecureStorageSet(HttpRequest request)
     {
         try
         {
@@ -5928,7 +3658,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandleSecureStorageDelete(HttpRequest request)
+    protected override Task<HttpResponse> HandleSecureStorageDelete(HttpRequest request)
     {
         try
         {
@@ -5944,7 +3674,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandleSecureStorageClear(HttpRequest request)
+    protected override Task<HttpResponse> HandleSecureStorageClear(HttpRequest request)
     {
         try
         {
@@ -5957,423 +3687,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    // ── File storage endpoints ──
-
-    private const string DefaultFileStorageRootId = "appData";
-    private const string FileStorageOperationList = "list";
-    private const string FileStorageOperationDownload = "download";
-    private const string FileStorageOperationUpload = "upload";
-    private const string FileStorageOperationDelete = "delete";
-
-    protected sealed class FileStorageRoot
-    {
-        public FileStorageRoot(
-            string id,
-            string displayName,
-            string kind,
-            string basePath,
-            bool isWritable,
-            bool isPersistent,
-            bool isBackedUp,
-            bool mayBeClearedBySystem,
-            bool isUserVisible,
-            params string[] supportedOperations)
-        {
-            Id = id;
-            DisplayName = displayName;
-            Kind = kind;
-            BasePath = basePath;
-            IsWritable = isWritable;
-            IsPersistent = isPersistent;
-            IsBackedUp = isBackedUp;
-            MayBeClearedBySystem = mayBeClearedBySystem;
-            IsUserVisible = isUserVisible;
-            SupportedOperations = supportedOperations;
-        }
-
-        public string Id { get; }
-        public string DisplayName { get; }
-        public string Kind { get; }
-        public string BasePath { get; }
-        public bool IsWritable { get; }
-        public bool IsReadOnly => !IsWritable;
-        public bool IsPersistent { get; }
-        public bool IsBackedUp { get; }
-        public bool MayBeClearedBySystem { get; }
-        public bool IsUserVisible { get; }
-        public IReadOnlyList<string> SupportedOperations { get; }
-
-        public bool SupportsOperation(string operation)
-            => SupportedOperations.Contains(operation, StringComparer.Ordinal);
-    }
-
-    protected virtual string GetAppDataBasePath()
+    protected override string GetAppDataBasePath()
         => FileSystem.AppDataDirectory;
 
-    protected virtual IReadOnlyList<FileStorageRoot> GetFileStorageRoots()
-    {
-        var appDataPath = GetAppDataBasePath();
-        if (string.IsNullOrWhiteSpace(appDataPath))
-            return Array.Empty<FileStorageRoot>();
-
-        return new[]
-        {
-            new FileStorageRoot(
-                DefaultFileStorageRootId,
-                "App data",
-                "appData",
-                appDataPath,
-                isWritable: true,
-                isPersistent: true,
-                isBackedUp: true,
-                mayBeClearedBySystem: false,
-                isUserVisible: false,
-                FileStorageOperationList,
-                FileStorageOperationDownload,
-                FileStorageOperationUpload,
-                FileStorageOperationDelete)
-        };
-    }
-
-    private Task<HttpResponse> HandleStorageRoots(HttpRequest request)
-    {
-        try
-        {
-            return Task.FromResult(HttpResponse.Json(new
-            {
-                roots = GetFileStorageRoots().Select(ToFileStorageRootDescriptor).ToArray()
-            }));
-        }
-        catch (Exception)
-        {
-            return Task.FromResult(HttpResponse.Error("Failed to list storage roots"));
-        }
-    }
-
-    private static object ToFileStorageRootDescriptor(FileStorageRoot root)
-        => new
-        {
-            id = root.Id,
-            displayName = root.DisplayName,
-            kind = root.Kind,
-            isWritable = root.IsWritable,
-            isReadOnly = root.IsReadOnly,
-            isPersistent = root.IsPersistent,
-            isBackedUp = root.IsBackedUp,
-            mayBeClearedBySystem = root.MayBeClearedBySystem,
-            isUserVisible = root.IsUserVisible,
-            supportedOperations = root.SupportedOperations.ToArray()
-        };
-
-    private FileStorageRoot ResolveFileStorageRoot(HttpRequest request, string operation)
-    {
-        var rootId = request.QueryParams.GetValueOrDefault("root");
-        if (string.IsNullOrWhiteSpace(rootId))
-            rootId = DefaultFileStorageRootId;
-
-        var root = GetFileStorageRoots().FirstOrDefault(
-            r => string.Equals(r.Id, rootId, StringComparison.Ordinal));
-
-        if (root == null)
-            throw new InvalidOperationException($"Storage root '{rootId}' is not available. Use /api/v1/storage/roots to list supported roots.");
-
-        if (!root.SupportsOperation(operation))
-            throw new InvalidOperationException($"Storage root '{root.Id}' does not support '{operation}'.");
-
-        if (string.IsNullOrWhiteSpace(root.BasePath))
-            throw new InvalidOperationException($"Storage root '{root.Id}' is not available.");
-
-        return root;
-    }
-
-    private Task<HttpResponse> HandleFilesList(HttpRequest request)
-    {
-        try
-        {
-            var root = ResolveFileStorageRoot(request, FileStorageOperationList);
-            var subdir = request.QueryParams.GetValueOrDefault("path", "");
-            var resolved = FileStoragePathResolver.Resolve(root.BasePath, subdir, allowRoot: true);
-            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
-
-            if (!Directory.Exists(resolved.FullPath))
-                return Task.FromResult(HttpResponse.Json(new
-                {
-                    root = root.Id,
-                    path = resolved.RelativePath,
-                    entries = Array.Empty<object>()
-                }));
-
-            var entries = new List<object>();
-            foreach (var dir in Directory.GetDirectories(resolved.FullPath))
-            {
-                var info = new DirectoryInfo(dir);
-                entries.Add(new
-                {
-                    name = info.Name,
-                    type = "directory",
-                    lastModified = info.LastWriteTimeUtc.ToString("O")
-                });
-            }
-            foreach (var file in Directory.GetFiles(resolved.FullPath))
-            {
-                var info = new FileInfo(file);
-                entries.Add(new
-                {
-                    name = info.Name,
-                    type = "file",
-                    size = info.Length,
-                    lastModified = info.LastWriteTimeUtc.ToString("O")
-                });
-            }
-
-            return Task.FromResult(HttpResponse.Json(new
-            {
-                root = root.Id,
-                path = resolved.RelativePath,
-                entries
-            }));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(ex is InvalidOperationException
-                ? HttpResponse.Error(ex.Message)
-                : HttpResponse.Error("Failed to list files"));
-        }
-    }
-
-    private async Task<HttpResponse> HandleFileDownload(HttpRequest request)
-    {
-        try
-        {
-            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
-                return HttpResponse.Error("file path is required");
-
-            var root = ResolveFileStorageRoot(request, FileStorageOperationDownload);
-            relativePath = Uri.UnescapeDataString(relativePath);
-            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
-            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
-
-            if (!File.Exists(resolved.FullPath))
-                return HttpResponse.NotFound($"File not found: {relativePath}");
-
-            var bytes = await File.ReadAllBytesAsync(resolved.FullPath);
-            var contentBase64 = Convert.ToBase64String(bytes);
-            var info = new FileInfo(resolved.FullPath);
-
-            return HttpResponse.Json(new
-            {
-                root = root.Id,
-                path = resolved.RelativePath,
-                size = info.Length,
-                lastModified = info.LastWriteTimeUtc.ToString("O"),
-                contentBase64
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return HttpResponse.Error(ex.Message);
-        }
-        catch (Exception)
-        {
-            return HttpResponse.Error("Failed to download file");
-        }
-    }
-
-    private async Task<HttpResponse> HandleFileUpload(HttpRequest request)
-    {
-        try
-        {
-            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
-                return HttpResponse.Error("file path is required");
-
-            var root = ResolveFileStorageRoot(request, FileStorageOperationUpload);
-            relativePath = Uri.UnescapeDataString(relativePath);
-            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
-            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
-
-            var body = request.BodyAs<FileUploadRequest>();
-            if (body == null || string.IsNullOrEmpty(body.ContentBase64))
-                return HttpResponse.Error("Request body must include 'contentBase64'");
-
-            byte[] bytes;
-            try
-            {
-                bytes = Convert.FromBase64String(body.ContentBase64);
-            }
-            catch (FormatException)
-            {
-                return HttpResponse.Error("Invalid base64 content");
-            }
-
-            var dir = Path.GetDirectoryName(resolved.FullPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
-
-            await File.WriteAllBytesAsync(resolved.FullPath, bytes);
-            var info = new FileInfo(resolved.FullPath);
-
-            return HttpResponse.Json(new
-            {
-                success = true,
-                root = root.Id,
-                path = resolved.RelativePath,
-                size = info.Length,
-                lastModified = info.LastWriteTimeUtc.ToString("O")
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return HttpResponse.Error(ex.Message);
-        }
-        catch (Exception)
-        {
-            return HttpResponse.Error("Failed to upload file");
-        }
-    }
-
-    private Task<HttpResponse> HandleFileDelete(HttpRequest request)
-    {
-        try
-        {
-            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
-                return Task.FromResult(HttpResponse.Error("file path is required"));
-
-            var root = ResolveFileStorageRoot(request, FileStorageOperationDelete);
-            relativePath = Uri.UnescapeDataString(relativePath);
-            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
-            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
-
-            if (!File.Exists(resolved.FullPath))
-                return Task.FromResult(HttpResponse.NotFound($"File not found: {relativePath}"));
-
-            File.Delete(resolved.FullPath);
-            return Task.FromResult(HttpResponse.Json(new
-            {
-                success = true,
-                root = root.Id,
-                path = resolved.RelativePath,
-                message = $"File deleted: {resolved.RelativePath}"
-            }));
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Task.FromResult(HttpResponse.Error(ex.Message));
-        }
-        catch (Exception)
-        {
-            return Task.FromResult(HttpResponse.Error("Failed to delete file"));
-        }
-    }
-
-    // ── Platform info endpoints ──
-
-    private const string PlatformErrorReasonMissingPermission = "missing_permission";
-    private const string PlatformErrorReasonNotSupported = "not_supported";
-    private const string PlatformErrorReasonMainThreadRequired = "main_thread_required";
-    private const string PlatformErrorReasonTimeout = "timeout";
-    private const string PlatformErrorReasonUnknown = "unknown";
-    private const string PlatformErrorReasonInvalidRequest = "invalid_request";
-    private static readonly Regex AndroidPermissionRegex = new(@"android\.permission\.[A-Z0-9_\.]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly string[] SupportedThemeNames = ["light", "dark", "system"];
-
-    private static HttpResponse CreatePlatformError(string message, Exception ex, int statusCode = 400, Dictionary<string, object?>? details = null)
-    {
-        var payload = BuildPlatformErrorPayload(ex, details);
-        return HttpResponse.Error(message, payload.StatusCode ?? statusCode, payload.Reason, payload.Details);
-    }
-
-    private static HttpResponse CreatePlatformError(string message, string reason, int statusCode = 400, Dictionary<string, object?>? details = null)
-    {
-        var payloadDetails = CreatePlatformErrorDetails();
-        if (details != null)
-        {
-            foreach (var (key, value) in details)
-            {
-                if (value != null)
-                    payloadDetails[key] = value;
-            }
-        }
-
-        return HttpResponse.Error(message, statusCode, reason, payloadDetails.Count > 0 ? payloadDetails : null);
-    }
-
-    private static (string Reason, Dictionary<string, object?>? Details, int? StatusCode) BuildPlatformErrorPayload(
-        Exception ex,
-        Dictionary<string, object?>? details = null)
-    {
-        var payloadDetails = CreatePlatformErrorDetails();
-        if (details != null)
-        {
-            foreach (var (key, value) in details)
-            {
-                if (value != null)
-                    payloadDetails[key] = value;
-            }
-        }
-
-        if (IsMissingPermissionException(ex))
-        {
-            if (TryExtractPermission(ex.Message) is { Length: > 0 } permission)
-                payloadDetails["permission"] = permission;
-
-            return (PlatformErrorReasonMissingPermission, payloadDetails.Count > 0 ? payloadDetails : null, 403);
-        }
-
-        if (IsMainThreadAccessException(ex))
-            return (PlatformErrorReasonMainThreadRequired, payloadDetails.Count > 0 ? payloadDetails : null, null);
-
-        if (ex is TimeoutException or TaskCanceledException or OperationCanceledException)
-            return (PlatformErrorReasonTimeout, payloadDetails.Count > 0 ? payloadDetails : null, 408);
-
-        if (ex is FeatureNotSupportedException or NotSupportedException or PlatformNotSupportedException or FeatureNotEnabledException)
-        {
-            if (ex is FeatureNotEnabledException)
-                payloadDetails["enabled"] = false;
-
-            return (PlatformErrorReasonNotSupported, payloadDetails.Count > 0 ? payloadDetails : null, null);
-        }
-
-        payloadDetails["exceptionType"] = ex.GetType().Name;
-        return (PlatformErrorReasonUnknown, payloadDetails, null);
-    }
-
-    private static Dictionary<string, object?> CreatePlatformErrorDetails()
-    {
-        var details = new Dictionary<string, object?>(StringComparer.Ordinal);
-        try
-        {
-            details["platform"] = DeviceInfo.Current.Platform.ToString();
-        }
-        catch
-        {
-        }
-
-        return details;
-    }
-
-    private static bool IsMissingPermissionException(Exception ex)
-    {
-        return ex is PermissionException
-            || AndroidPermissionRegex.IsMatch(ex.Message)
-            || ex.Message.Contains("AndroidManifest", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? TryExtractPermission(string message)
-    {
-        var match = AndroidPermissionRegex.Match(message);
-        return match.Success ? match.Value : null;
-    }
-
-    private static bool IsMainThreadAccessException(Exception ex)
-    {
-        return ex.GetType().Name.Equals("UIKitThreadAccessException", StringComparison.Ordinal)
-            || ex.Message.Contains("main thread", StringComparison.OrdinalIgnoreCase)
-            || ex.Message.Contains("UI thread", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private async Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
+    protected override async Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
     {
         try
         {
@@ -6402,7 +3719,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private async Task<HttpResponse> HandleThemeGet(HttpRequest request)
+    protected override async Task<HttpResponse> HandleThemeGet(HttpRequest request)
     {
         try
         {
@@ -6419,7 +3736,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private async Task<HttpResponse> HandleThemeSet(HttpRequest request)
+    protected override async Task<HttpResponse> HandleThemeSet(HttpRequest request)
     {
         var body = request.BodyAs<ThemeSetRequest>();
         if (string.IsNullOrWhiteSpace(body?.Theme))
@@ -6547,7 +3864,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         [property: JsonPropertyName("source")] string Source,
         [property: JsonPropertyName("message")] string? Message);
 
-    private Task<HttpResponse> HandlePlatformDeviceInfo(HttpRequest request)
+    protected override Task<HttpResponse> HandlePlatformDeviceInfo(HttpRequest request)
     {
         try
         {
@@ -6569,7 +3886,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private async Task<HttpResponse> HandlePlatformDeviceDisplay(HttpRequest request)
+    protected override async Task<HttpResponse> HandlePlatformDeviceDisplay(HttpRequest request)
     {
         try
         {
@@ -6593,7 +3910,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandlePlatformBattery(HttpRequest request)
+    protected override Task<HttpResponse> HandlePlatformBattery(HttpRequest request)
     {
         try
         {
@@ -6612,7 +3929,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandlePlatformConnectivity(HttpRequest request)
+    protected override Task<HttpResponse> HandlePlatformConnectivity(HttpRequest request)
     {
         try
         {
@@ -6629,7 +3946,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private Task<HttpResponse> HandlePlatformVersionTracking(HttpRequest request)
+    protected override Task<HttpResponse> HandlePlatformVersionTracking(HttpRequest request)
     {
         try
         {
@@ -6678,7 +3995,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         ["vibrate"] = () => new Permissions.Vibrate(),
     };
 
-    private async Task<HttpResponse> HandlePlatformPermissions(HttpRequest request)
+    protected override async Task<HttpResponse> HandlePlatformPermissions(HttpRequest request)
     {
         try
         {
@@ -6704,7 +4021,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private async Task<HttpResponse> HandlePlatformPermissionCheck(HttpRequest request)
+    protected override async Task<HttpResponse> HandlePlatformPermissionCheck(HttpRequest request)
     {
         try
         {
@@ -6730,7 +4047,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         }
     }
 
-    private async Task<HttpResponse> HandlePlatformGeolocation(HttpRequest request)
+    protected override async Task<HttpResponse> HandlePlatformGeolocation(HttpRequest request)
     {
         try
         {
@@ -6787,12 +4104,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     // ── Sensor endpoints ──
 
-    private Task<HttpResponse> HandleSensorsList(HttpRequest request)
+    protected override Task<HttpResponse> HandleSensorsList(HttpRequest request)
     {
         return Task.FromResult(HttpResponse.Json(Sensors.GetStatus()));
     }
 
-    private Task<HttpResponse> HandleSensorStart(HttpRequest request)
+    protected override Task<HttpResponse> HandleSensorStart(HttpRequest request)
     {
         if (!request.RouteParams.TryGetValue("sensor", out var sensorName))
             return Task.FromResult(HttpResponse.Error("sensor name is required"));
@@ -6806,7 +4123,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             : HttpResponse.Ok($"Sensor '{sensorName}' started with speed {speed}"));
     }
 
-    private Task<HttpResponse> HandleSensorStop(HttpRequest request)
+    protected override Task<HttpResponse> HandleSensorStop(HttpRequest request)
     {
         if (!request.RouteParams.TryGetValue("sensor", out var sensorName))
             return Task.FromResult(HttpResponse.Error("sensor name is required"));
@@ -6817,7 +4134,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             : HttpResponse.Ok($"Sensor '{sensorName}' stopped"));
     }
 
-    private async Task HandleSensorWebSocket(
+    protected override async Task HandleSensorWebSocket(
         System.Net.Sockets.TcpClient client,
         System.Net.Sockets.NetworkStream stream,
         HttpRequest request,
@@ -6931,145 +4248,4 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             Sensors.Unsubscribe(sensorName, queue);
         }
     }
-
-    // ── Job endpoints ──
-
-    private async Task<HttpResponse> HandleJobsList(HttpRequest request)
-    {
-        var jobs = await GetPlatformJobsAsync();
-        if (jobs == null)
-            return HttpResponse.Json(new { platform = PlatformName, supported = false, jobs = Array.Empty<object>() });
-
-        return HttpResponse.Json(jobs);
-    }
-
-    private async Task<HttpResponse> HandleJobRun(HttpRequest request)
-    {
-        if (!request.RouteParams.TryGetValue("identifier", out var identifier) || string.IsNullOrWhiteSpace(identifier))
-            return HttpResponse.Error("job identifier is required");
-
-        var runRequest = request.BodyAs<JobRunRequest>();
-        var type = runRequest?.Type;
-        if (string.IsNullOrWhiteSpace(type) && request.QueryParams.TryGetValue("type", out var queryType))
-            type = queryType;
-
-        var result = await RunPlatformJobAsync(identifier, type);
-        if (result == null)
-            return HttpResponse.Error($"Running jobs is not supported on {PlatformName}", 501, "unsupported-capability");
-
-        return HttpResponse.Json(result);
-    }
-}
-
-/// <summary>
-/// Describes an actionable cause for a failed screenshot capture, used to return a clear,
-/// often-retryable error to clients instead of a generic failure. See
-/// <see cref="DevFlowAgentService.DescribeScreenshotFailure"/>.
-/// </summary>
-public sealed class ScreenshotCaptureFailure
-{
-    public ScreenshotCaptureFailure(string message, string reason, bool retryable, string[]? suggestions = null)
-    {
-        Message = message;
-        Reason = reason;
-        Retryable = retryable;
-        Suggestions = suggestions;
-    }
-
-    /// <summary>Human-readable, actionable error message.</summary>
-    public string Message { get; }
-
-    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-frontmost</c>).</summary>
-    public string Reason { get; }
-
-    /// <summary>Whether retrying (e.g. after foregrounding the app) may succeed.</summary>
-    public bool Retryable { get; }
-
-    /// <summary>Optional actionable suggestions for the caller.</summary>
-    public string[]? Suggestions { get; }
-}
-
-// Request DTOs
-public class ActionRequest
-{
-    public string? ElementId { get; set; }
-}
-
-public class FillRequest
-{
-    public string? ElementId { get; set; }
-    public string? Text { get; set; }
-}
-
-public class JobRunRequest
-{
-    public string? Type { get; set; }
-}
-
-public class NavigateRequest
-{
-    public string? Route { get; set; }
-}
-
-public class WebViewNavigateRequest
-{
-    public string? Url { get; set; }
-    public string? ContextId { get; set; }
-}
-
-public class WebViewInputClickRequest
-{
-    public string? Selector { get; set; }
-    public string? ContextId { get; set; }
-}
-
-public class WebViewInputFillRequest
-{
-    public string? Selector { get; set; }
-    public string? Text { get; set; }
-    public string? ContextId { get; set; }
-}
-
-public class WebViewInputTextRequest
-{
-    public string? Text { get; set; }
-    public string? ContextId { get; set; }
-}
-
-public class SetPropertyRequest
-{
-    public string? Value { get; set; }
-}
-
-public class ScrollRequest
-{
-    public string? ElementId { get; set; }
-    public double DeltaX { get; set; }
-    public double DeltaY { get; set; }
-    public bool Animated { get; set; } = true;
-    public int? ItemIndex { get; set; }
-    public int? GroupIndex { get; set; }
-    public string? ScrollToPosition { get; set; }
-}
-
-public class PreferenceSetRequest
-{
-    public object? Value { get; set; }
-    public string? Type { get; set; }
-    public string? SharedName { get; set; }
-}
-
-public class ThemeSetRequest
-{
-    public string? Theme { get; set; }
-}
-
-public class SecureStorageSetRequest
-{
-    public string? Value { get; set; }
-}
-
-public class FileUploadRequest
-{
-    public string? ContentBase64 { get; set; }
 }
