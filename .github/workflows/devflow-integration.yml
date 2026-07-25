@@ -11,6 +11,7 @@ name: DevFlow Integration Tests
 #   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
 #   iOS       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/iOSSimulatorFixture.cs
 #   Mac Catalyst -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacCatalystFixture.cs
+#   macOS     -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacOSFixture.cs (native only)
 #   Windows   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WindowsFixture.cs
 
 on:
