@@ -34,14 +34,20 @@
   </ItemGroup>
 
   <!-- Reuse the framework-agnostic MSBuild port/metadata wiring from the MAUI agent package. -->
+  <!--
+    Reuse the MAUI agent's build logic verbatim (port config, assembly metadata, Android
+    manifest overlay, iOS plist) — it is framework-agnostic. NuGet only auto-imports
+    build/<PackageId>.targets, so the shared file has to be packed under this package's
+    own name rather than copied wholesale, or consumers would silently get none of it.
+  -->
   <ItemGroup>
-    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\**"
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
           Pack="true"
-          PackagePath="build\"
+          PackagePath="build\$(PackageId).targets"
           Visible="false" />
-    <None Include="..\Microsoft.Maui.DevFlow.Agent\buildTransitive\**"
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\buildTransitive\Microsoft.Maui.DevFlow.Agent.targets"
           Pack="true"
-          PackagePath="buildTransitive\"
+          PackagePath="buildTransitive\$(PackageId).targets"
           Visible="false" />
   </ItemGroup>
 
