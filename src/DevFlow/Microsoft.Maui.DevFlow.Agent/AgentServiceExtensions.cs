@@ -24,77 +24,10 @@ public static class AgentServiceExtensions
         var options = new AgentOptions();
         configure?.Invoke(options);
 
-        // Read project identity from assembly metadata (injected by .targets)
-        var project = ReadAssemblyMetadataProject() ?? "unknown";
-        var tfm = ReadAssemblyMetadataTfm() ?? "unknown";
-        var sessionId = ReadAssemblyMetadataSessionId();
-
-        // Always register with the broker for discoverability (must run on thread pool
-        // to avoid deadlock with SynchronizationContext — AddMauiDevFlowAgent runs on
-        // the main thread). When a custom port is set, we tell the broker our port so it
-        // uses it instead of assigning from the pool; the agent stays discoverable via
-        // `maui devflow list` regardless of port configuration.
-        BrokerRegistration? brokerReg = null;
-        bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
-        try
-        {
-            string platform;
-            string appName;
-            try
-            {
-                platform = DeviceInfo.Platform.ToString();
-                appName = AppInfo.Name ?? "unknown";
-            }
-            catch
-            {
-                // MAUI not fully initialized yet during DI registration
-                platform = OperatingSystem.IsAndroid() ? "Android"
-                    : OperatingSystem.IsIOS() ? "iOS"
-                    : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
-                    : OperatingSystem.IsMacOS() ? "macOS"
-                    : OperatingSystem.IsWindows() ? "Windows"
-                    : "Unknown";
-                appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-            }
-            brokerReg = new BrokerRegistration(project, tfm, platform, appName, sessionId);
-            // If the user set a custom port, tell the broker upfront so it registers
-            // with that port instead of assigning one from the pool.
-            if (hasCustomPort)
-                brokerReg.CurrentPort = options.Port;
-            // Task.Run avoids deadlock: TryRegisterAsync uses await internally,
-            // and the main thread has a SynchronizationContext that would deadlock
-            // if we called .GetAwaiter().GetResult() directly.
-            var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
-            if (assignedPort.HasValue)
-            {
-                options.Port = assignedPort.Value;
-                Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker assigned port {assignedPort.Value}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Microsoft.Maui.DevFlow] Broker registration failed: {ex.Message}");
-            brokerReg?.Dispose();
-            brokerReg = null;
-        }
-
-        // Fall back to assembly metadata port if broker didn't assign one
-        if (!hasCustomPort && brokerReg?.AssignedPort == null)
-        {
-            var metaPort = ReadAssemblyMetadataPort();
-            if (metaPort.HasValue)
-                options.Port = metaPort.Value;
-        }
+        var hostContext = DevFlowAgentHost.Configure(options, GetMauiHostIdentity);
 
         var service = new PlatformAgentService(options);
-        service.SetSessionId(sessionId);
-        if (brokerReg != null)
-        {
-            // Tell the broker registration what port we ended up on, so late
-            // reconnections (broker started after app) register the correct port.
-            brokerReg.CurrentPort = options.Port;
-            service.SetBrokerRegistration(brokerReg);
-        }
+        hostContext.AttachTo(service, options);
         builder.Services.AddSingleton<DevFlowAgentService>(service);
         builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
@@ -265,55 +198,23 @@ public static class AgentServiceExtensions
         Console.WriteLine("[Microsoft.Maui.DevFlow] Application.Current was still null after late-bind retries; continuing in app-less mode");
     }
 
-    /// <summary>
-    /// Reads Microsoft.Maui.DevFlow metadata from AssemblyMetadataAttributes injected by the .targets file.
-    /// </summary>
-    private static string? ReadAssemblyMetadata(string key)
+    private static (string Platform, string AppName) GetMauiHostIdentity()
     {
         try
         {
-            // Try entry assembly first (works on Mac Catalyst, Windows)
-            var entry = System.Reflection.Assembly.GetEntryAssembly();
-            if (entry != null)
-            {
-                var value = FindMetadataInAssembly(entry, key);
-                if (value != null) return value;
-            }
-
-            // GetEntryAssembly() returns null on Android/iOS — scan loaded assemblies
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (asm.IsDynamic) continue;
-                var value = FindMetadataInAssembly(asm, key);
-                if (value != null) return value;
-            }
+            return (DeviceInfo.Platform.ToString(), AppInfo.Name ?? "unknown");
         }
-        catch { /* ignore reflection failures */ }
-        return null;
-    }
-
-    private static int? ReadAssemblyMetadataPort()
-    {
-        var value = ReadAssemblyMetadata("Microsoft.Maui.DevFlowPort");
-        return value != null && int.TryParse(value, out var port) ? port : null;
-    }
-
-    internal static string? ReadAssemblyMetadataProject() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject");
-    internal static string? ReadAssemblyMetadataTfm() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm");
-    internal static string? ReadAssemblyMetadataSessionId() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowSessionId");
-
-    private static string? FindMetadataInAssembly(System.Reflection.Assembly assembly, string key)
-    {
-        try
+        catch
         {
-            var attrs = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false);
-            foreach (System.Reflection.AssemblyMetadataAttribute attr in attrs)
-            {
-                if (attr.Key == key)
-                    return attr.Value;
-            }
+            // MAUI not fully initialized yet during DI registration.
+            var platform = OperatingSystem.IsAndroid() ? "Android"
+                : OperatingSystem.IsIOS() ? "iOS"
+                : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
+                : OperatingSystem.IsMacOS() ? "macOS"
+                : OperatingSystem.IsWindows() ? "Windows"
+                : "Unknown";
+            var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
+            return (platform, appName);
         }
-        catch { /* ignore per-assembly reflection failures */ }
-        return null;
     }
 }

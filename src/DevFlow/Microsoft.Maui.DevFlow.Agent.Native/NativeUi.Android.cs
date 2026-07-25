@@ -226,6 +226,198 @@ internal static partial class NativeUi
         return view.RequestFocus();
     }
 
+    public static bool TrySendKey(object? viewObject, string? key, string? text, out string? error)
+    {
+        error = null;
+
+        var view = (viewObject ?? CurrentActivity?.CurrentFocus) as View;
+        if (view == null)
+        {
+            error = "No target view: pass elementId or focus a view first";
+            return false;
+        }
+
+        view.FocusableInTouchMode = true;
+        view.RequestFocus();
+
+        if (view is EditText edit)
+        {
+            var insertion = !string.IsNullOrEmpty(text)
+                ? text
+                : key is { Length: 1 } ? key : null;
+
+            if (insertion != null)
+            {
+                InsertText(edit, insertion);
+                return true;
+            }
+
+            if (string.Equals(key, "Backspace", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(key, "Delete", StringComparison.OrdinalIgnoreCase))
+            {
+                DeleteBeforeCursor(edit);
+                return true;
+            }
+
+            if (string.Equals(key, "Enter", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(key, "Return", StringComparison.OrdinalIgnoreCase))
+            {
+                InsertText(edit, "\n");
+                return true;
+            }
+        }
+
+        if (!TryMapKeyCode(key, out var keyCode))
+        {
+            error = $"Key '{key}' is not mapped on Android";
+            return false;
+        }
+
+        var now = SystemClock.UptimeMillis();
+        using var down = new KeyEvent(now, now, KeyEventActions.Down, keyCode, 0);
+        using var up = new KeyEvent(now, now + 50, KeyEventActions.Up, keyCode, 0);
+        var handled = view.DispatchKeyEvent(down);
+        handled |= view.DispatchKeyEvent(up);
+        if (!handled)
+            error = $"Key '{key}' was not handled by the target view";
+        return handled;
+    }
+
+    public static bool TryGesture(object viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
+    {
+        error = null;
+        var view = (View)viewObject;
+        var normalizedType = string.IsNullOrWhiteSpace(type) ? "swipe" : type.Trim().ToLowerInvariant();
+        if (normalizedType == "tap")
+            return TryTap(view, null, null);
+
+        if (normalizedType is not ("swipe" or "pan" or "scroll"))
+        {
+            error = $"Gesture '{type}' is not supported on Android";
+            return false;
+        }
+
+        var logicalDistance = distance > 0 ? distance : 120;
+        var pixelDistance = logicalDistance * DisplayDensity;
+        var (dx, dy) = (direction ?? "up").Trim().ToLowerInvariant() switch
+        {
+            "down" => (0d, pixelDistance),
+            "left" => (-pixelDistance, 0d),
+            "right" => (pixelDistance, 0d),
+            _ => (0d, -pixelDistance),
+        };
+
+        if (DispatchSyntheticSwipe(view, dx, dy, durationMs))
+            return true;
+
+        return (direction ?? "up").Trim().ToLowerInvariant() switch
+        {
+            "down" => TryScrollBy(view, 0, -logicalDistance),
+            "left" => TryScrollBy(view, logicalDistance, 0),
+            "right" => TryScrollBy(view, -logicalDistance, 0),
+            _ => TryScrollBy(view, 0, logicalDistance),
+        };
+    }
+
+    private static void InsertText(EditText edit, string text)
+    {
+        var current = edit.Text ?? string.Empty;
+        var start = Math.Clamp(edit.SelectionStart, 0, current.Length);
+        var end = Math.Clamp(edit.SelectionEnd, 0, current.Length);
+        if (end < start) (start, end) = (end, start);
+
+        var updated = current.Remove(start, end - start).Insert(start, text);
+        edit.Text = updated;
+        edit.SetSelection(start + text.Length);
+    }
+
+    private static void DeleteBeforeCursor(EditText edit)
+    {
+        var current = edit.Text ?? string.Empty;
+        var start = Math.Clamp(edit.SelectionStart, 0, current.Length);
+        var end = Math.Clamp(edit.SelectionEnd, 0, current.Length);
+        if (end < start) (start, end) = (end, start);
+
+        if (start == end && start > 0)
+            start--;
+
+        var updated = current.Remove(start, end - start);
+        edit.Text = updated;
+        edit.SetSelection(start);
+    }
+
+    private static bool TryMapKeyCode(string? key, out Keycode keyCode)
+    {
+        keyCode = Keycode.Unknown;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+
+        keyCode = key.Trim().ToLowerInvariant() switch
+        {
+            "enter" or "return" => Keycode.Enter,
+            "tab" => Keycode.Tab,
+            "space" => Keycode.Space,
+            "escape" or "esc" => Keycode.Escape,
+            "backspace" or "delete" => Keycode.Del,
+            _ => Keycode.Unknown,
+        };
+
+        if (keyCode != Keycode.Unknown) return true;
+
+        if (key.Length == 1 && char.IsLetter(key[0])
+            && Enum.TryParse<Keycode>(char.ToUpperInvariant(key[0]).ToString(), out var letter))
+        {
+            keyCode = letter;
+            return true;
+        }
+
+        if (key.Length == 1 && char.IsDigit(key[0])
+            && Enum.TryParse<Keycode>($"Num{key[0]}", out var digit))
+        {
+            keyCode = digit;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool DispatchSyntheticSwipe(View view, double deltaX, double deltaY, int durationMs)
+    {
+        if (view.Width <= 1 || view.Height <= 1) return false;
+
+        var startX = ClampToView(view.Width / 2.0 - deltaX / 2.0, view.Width);
+        var startY = ClampToView(view.Height / 2.0 - deltaY / 2.0, view.Height);
+        var endX = ClampToView(view.Width / 2.0 + deltaX / 2.0, view.Width);
+        var endY = ClampToView(view.Height / 2.0 + deltaY / 2.0, view.Height);
+        var now = SystemClock.UptimeMillis();
+        var duration = Math.Max(1, durationMs);
+        var handled = false;
+
+        using (var down = MotionEvent.Obtain(now, now, MotionEventActions.Down, (float)startX, (float)startY, 0))
+            handled |= view.DispatchTouchEvent(down);
+
+        const int steps = 4;
+        for (var i = 1; i <= steps; i++)
+        {
+            var t = i / (double)(steps + 1);
+            using var move = MotionEvent.Obtain(
+                now,
+                now + (long)(duration * t),
+                MotionEventActions.Move,
+                (float)(startX + (endX - startX) * t),
+                (float)(startY + (endY - startY) * t),
+                0);
+            handled |= view.DispatchTouchEvent(move);
+        }
+
+        using (var up = MotionEvent.Obtain(now, now + duration, MotionEventActions.Up, (float)endX, (float)endY, 0))
+            handled |= view.DispatchTouchEvent(up);
+
+        return handled;
+    }
+
+    private static double ClampToView(double value, int size)
+        => Math.Clamp(value, 1, Math.Max(1, size - 1));
+
     public static bool TryScrollBy(object viewObject, double dx, double dy)
     {
         var view = (View)viewObject;
@@ -311,6 +503,8 @@ internal static partial class NativeUi
             ["Visibility"] = view.Visibility.ToString(),
             ["Width"] = (view.Width / density).ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["Height"] = (view.Height / density).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["ScrollX"] = (view.ScrollX / density).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["ScrollY"] = (view.ScrollY / density).ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["ContentDescription"] = view.ContentDescription,
             ["Clickable"] = view.Clickable ? "True" : "False",
             ["Focused"] = view.IsFocused ? "True" : "False",

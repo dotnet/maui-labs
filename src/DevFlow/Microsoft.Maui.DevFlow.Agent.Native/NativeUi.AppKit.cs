@@ -1,4 +1,5 @@
 #if MACOS
+using System.Runtime.InteropServices;
 using AppKit;
 using CoreGraphics;
 using Foundation;
@@ -90,14 +91,16 @@ internal static partial class NativeUi
             AccessibilityLabel = SafeAccessibilityLabel(view),
             IsVisible = !view.Hidden && view.AlphaValue > 0,
             IsEnabled = view is not NSControl control || control.Enabled,
-            IsFocused = window?.FirstResponder == view,
+            IsFocused = window?.FirstResponder == view
+                || view is NSTextField { CurrentEditor: { } editor } && window?.FirstResponder == editor,
             Opacity = view.AlphaValue,
             X = screenX,
             Y = screenY,
             Width = view.Bounds.Width,
             Height = view.Bounds.Height,
             IsScrollable = view is NSScrollView,
-            IsTappable = view is NSButton or NSControl,
+            IsTappable = view is NSButton
+                || view is NSControl { Enabled: true, Action: not null },
         };
 
         switch (view)
@@ -154,7 +157,7 @@ internal static partial class NativeUi
         {
             case NSTextField field:
                 field.StringValue = text;
-                field.SendAction(field.Action, field.Target);
+                SendActionIfAvailable(field);
                 return true;
             case NSTextView textView:
                 textView.Value = text;
@@ -171,6 +174,113 @@ internal static partial class NativeUi
     {
         var view = (NSView)viewObject;
         return view.Window?.MakeFirstResponder(view) ?? false;
+    }
+
+    private static void SendActionIfAvailable(NSControl control)
+    {
+        if (control.Action is { } action)
+            control.SendAction(action, control.Target ?? control);
+    }
+
+    public static bool TrySendKey(object? viewObject, string? key, string? text, out string? error)
+    {
+        error = null;
+        var keyValue = key ?? text ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(keyValue))
+            return Fail("key or text is required", out error);
+
+        var target = viewObject ?? NSApplication.SharedApplication.KeyWindow?.FirstResponder;
+        var normalizedKey = keyValue.Trim().ToLowerInvariant();
+        var textToInsert = text ?? (keyValue.Length == 1 ? keyValue : null);
+
+        switch (target)
+        {
+            case NSTextField field:
+                if (normalizedKey is "enter" or "return")
+                {
+                    SendActionIfAvailable(field);
+                    return true;
+                }
+
+                if (normalizedKey is "backspace" or "delete")
+                {
+                    field.StringValue = field.StringValue.Length > 0 ? field.StringValue[..^1] : string.Empty;
+                    SendActionIfAvailable(field);
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(textToInsert))
+                {
+                    field.StringValue += textToInsert;
+                    SendActionIfAvailable(field);
+                    return true;
+                }
+
+                return Fail($"Unsupported key '{keyValue}' for NSTextField.", out error);
+
+            case NSTextView textView:
+                if (normalizedKey is "enter" or "return")
+                {
+                    textView.Value += Environment.NewLine;
+                    return true;
+                }
+
+                if (normalizedKey is "backspace" or "delete")
+                {
+                    textView.Value = textView.Value?.Length > 0 ? textView.Value[..^1] : string.Empty;
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(textToInsert))
+                {
+                    textView.Value += textToInsert;
+                    return true;
+                }
+
+                return Fail($"Unsupported key '{keyValue}' for NSTextView.", out error);
+
+            case NSButton button when normalizedKey is "enter" or "return" or "space" or " ":
+                button.PerformClick(button);
+                return true;
+
+            case null:
+                return Fail("No focused element is available for keyboard input.", out error);
+
+            default:
+                return Fail($"Element '{target.GetType().Name}' does not accept keyboard input.", out error);
+        }
+    }
+
+    public static bool TryGesture(object viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
+    {
+        error = null;
+        var normalizedType = string.IsNullOrWhiteSpace(type) ? "swipe" : type.Trim().ToLowerInvariant();
+
+        if (normalizedType is "tap" or "longpress" or "long-press")
+        {
+            if (TryTap(viewObject, null, null)) return true;
+            error = $"Gesture '{type}' is not handled by this element";
+            return false;
+        }
+
+        if (normalizedType is not ("swipe" or "pan" or "scroll"))
+        {
+            error = $"Gesture '{type}' is not supported on AppKit";
+            return false;
+        }
+
+        var logicalDistance = distance > 0 ? distance : 120;
+        var (dx, dy) = (direction ?? "up").Trim().ToLowerInvariant() switch
+        {
+            "down" => (0d, logicalDistance),
+            "left" => (-logicalDistance, 0d),
+            "right" => (logicalDistance, 0d),
+            _ => (0d, -logicalDistance),
+        };
+
+        if (TryScrollBy(viewObject, dx, dy)) return true;
+        error = "Element is not scrollable";
+        return false;
     }
 
     public static bool TryScrollBy(object viewObject, double dx, double dy)
@@ -195,19 +305,110 @@ internal static partial class NativeUi
     public static byte[]? CaptureView(object viewObject)
     {
         var view = (NSView)viewObject;
-        if (view.Bounds.Width <= 0 || view.Bounds.Height <= 0) return null;
-
-        var rep = view.BitmapImageRepForCachingDisplayInRect(view.Bounds);
-        if (rep == null) return null;
-
-        view.CacheDisplay(view.Bounds, rep);
-
-        using var data = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, null);
-        return data?.ToArray();
+        return CaptureViewViaCacheDisplay(view) ?? CaptureViewViaPdf(view);
     }
 
     public static byte[]? CaptureScreen()
-        => GetRoots().FirstOrDefault() is { } root ? CaptureView(root) : null;
+    {
+        var window = NSApplication.SharedApplication.KeyWindow
+            ?? GetWindows().FirstOrDefault(w => w.IsVisible);
+
+        if (window?.AttachedSheet is NSWindow sheet)
+            window = sheet;
+
+        if (window != null)
+        {
+            var windowPng = CaptureWindowViaCG(window);
+            if (windowPng != null)
+                return windowPng;
+
+            if (window.ContentView is { } content)
+                return CaptureView(content);
+        }
+
+        return GetRoots().FirstOrDefault() is { } root ? CaptureView(root) : null;
+    }
+
+    private static byte[]? CaptureViewViaCacheDisplay(NSView view)
+    {
+        var bounds = view.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return null;
+
+        view.LayoutSubtreeIfNeeded();
+        view.DisplayIfNeeded();
+
+        var scale = view.Window?.BackingScaleFactor ?? NSScreen.MainScreen?.BackingScaleFactor ?? 1.0;
+        var pixelWidth = Math.Max(1, (int)Math.Ceiling(bounds.Width * scale));
+        var pixelHeight = Math.Max(1, (int)Math.Ceiling(bounds.Height * scale));
+
+        var rep = new NSBitmapImageRep(
+            IntPtr.Zero,
+            pixelWidth,
+            pixelHeight,
+            8,
+            4,
+            true,
+            false,
+            NSColorSpace.DeviceRGB,
+            0,
+            0);
+
+        rep.Size = new CGSize(bounds.Width, bounds.Height);
+
+        NSGraphicsContext.GlobalSaveGraphicsState();
+        try
+        {
+            var context = NSGraphicsContext.FromBitmap(rep);
+            if (context == null) return null;
+
+            NSGraphicsContext.CurrentContext = context;
+            view.CacheDisplay(bounds, rep);
+        }
+        finally
+        {
+            NSGraphicsContext.GlobalRestoreGraphicsState();
+        }
+
+        using var data = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary());
+        return data?.ToArray();
+    }
+
+    private static byte[]? CaptureViewViaPdf(NSView view)
+    {
+        var bounds = view.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return null;
+
+        using var pdfData = view.DataWithPdfInsideRect(bounds);
+        if (pdfData == null) return null;
+
+        using var image = new NSImage(pdfData);
+        using var tiffData = image.AsTiff();
+        if (tiffData == null) return null;
+
+        using var rep = new NSBitmapImageRep(tiffData);
+        using var data = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary());
+        return data?.ToArray();
+    }
+
+    private static byte[]? CaptureWindowViaCG(NSWindow window)
+    {
+        var cgImagePtr = CGWindowListCreateImage(CGRect.Null, 0x08, (uint)window.WindowNumber, 0x01);
+        if (cgImagePtr == IntPtr.Zero) return null;
+
+        var cgImage = Runtime.GetINativeObject<CGImage>(cgImagePtr, owns: true);
+        if (cgImage == null) return null;
+
+        var rep = new NSBitmapImageRep(cgImage);
+        using var data = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary());
+        return data?.ToArray();
+    }
+
+    [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    private static extern IntPtr CGWindowListCreateImage(
+        CGRect screenBounds,
+        uint listOption,
+        uint windowID,
+        uint imageOption);
 
     public static IReadOnlyDictionary<string, string?> GetProperties(object viewObject)
     {

@@ -69,7 +69,9 @@ public static class DevFlowAgent
         {
             if (s_service != null) return s_service;
 
+            var hostContext = DevFlowAgentHost.Configure(options, GetNativeHostIdentity);
             var service = serviceFactory(options);
+            hostContext.AttachTo(service, options);
 
             if (options.EnableFileLogging)
             {
@@ -90,6 +92,36 @@ public static class DevFlowAgent
             s_service = service;
             return service;
         }
+    }
+
+    private static (string Platform, string AppName) GetNativeHostIdentity()
+    {
+        string platform;
+        try
+        {
+            platform = NativeUi.PlatformName;
+        }
+        catch
+        {
+            platform = OperatingSystem.IsAndroid() ? "Android"
+                : OperatingSystem.IsIOS() ? "iOS"
+                : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
+                : OperatingSystem.IsMacOS() ? "macOS"
+                : OperatingSystem.IsWindows() ? "Windows"
+                : "Unknown";
+        }
+
+        string? appName = null;
+        try
+        {
+            appName = NativeUi.AppName;
+        }
+        catch
+        {
+        }
+
+        appName ??= System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
+        return (platform, appName);
     }
 
     /// <summary>

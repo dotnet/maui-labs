@@ -12,6 +12,8 @@
     <!-- Deliberately a plain .NET for Android app: no MAUI, no SingleProject. -->
     <UseMaui>false</UseMaui>
     <SingleProject>false</SingleProject>
+    <AndroidUseAssemblyStore>false</AndroidUseAssemblyStore>
+    <AndroidStoreUncompressedFileExtensions>$(AndroidStoreUncompressedFileExtensions);.so</AndroidStoreUncompressedFileExtensions>
 
     <IsPackable>false</IsPackable>
     <IsShipping>false</IsShipping>

@@ -135,6 +135,13 @@ internal static partial class NativeUi
     {
         var view = (UIView)viewObject;
 
+        if (view is UISwitch @switch && @switch.Enabled)
+        {
+            @switch.SetState(!@switch.On, animated: false);
+            @switch.SendActionForControlEvents(UIControlEvent.ValueChanged);
+            return true;
+        }
+
         if (view is UIControl control && control.Enabled)
         {
             control.SendActionForControlEvents(UIControlEvent.TouchUpInside);
@@ -192,6 +199,9 @@ internal static partial class NativeUi
                 textView.Text = text;
                 textView.Delegate?.Changed(textView);
                 return true;
+            case UIButton button:
+                button.SetTitle(text, UIControlState.Normal);
+                return true;
             case UILabel label:
                 label.Text = text;
                 return true;
@@ -201,6 +211,113 @@ internal static partial class NativeUi
     }
 
     public static bool TryFocus(object viewObject) => ((UIView)viewObject).BecomeFirstResponder();
+
+    public static bool TrySendKey(object? viewObject, string? key, string? text, out string? error)
+    {
+        error = null;
+        var keyValue = key ?? text ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(keyValue))
+        {
+            error = "key or text is required";
+            return false;
+        }
+
+        var normalizedKey = keyValue.Trim().ToLowerInvariant();
+        var textToInsert = text ?? (keyValue.Length == 1 ? keyValue : null);
+
+        switch (viewObject)
+        {
+            case UITextField field:
+                if (normalizedKey is "enter" or "return")
+                {
+                    field.SendActionForControlEvents(UIControlEvent.EditingDidEndOnExit);
+                    field.ResignFirstResponder();
+                    return true;
+                }
+
+                if (normalizedKey is "backspace" or "delete")
+                {
+                    var current = field.Text ?? string.Empty;
+                    field.Text = current.Length > 0 ? current[..^1] : string.Empty;
+                    field.SendActionForControlEvents(UIControlEvent.EditingChanged);
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(textToInsert))
+                {
+                    field.Text = (field.Text ?? string.Empty) + textToInsert;
+                    field.SendActionForControlEvents(UIControlEvent.EditingChanged);
+                    return true;
+                }
+
+                error = $"Unsupported key '{keyValue}' for UITextField.";
+                return false;
+
+            case UITextView textView:
+                if (normalizedKey is "backspace" or "delete")
+                {
+                    var current = textView.Text ?? string.Empty;
+                    textView.Text = current.Length > 0 ? current[..^1] : string.Empty;
+                    textView.Delegate?.Changed(textView);
+                    return true;
+                }
+
+                var insertion = normalizedKey is "enter" or "return" ? "\n" : textToInsert;
+                if (!string.IsNullOrEmpty(insertion))
+                {
+                    textView.Text = (textView.Text ?? string.Empty) + insertion;
+                    textView.Delegate?.Changed(textView);
+                    return true;
+                }
+
+                error = $"Unsupported key '{keyValue}' for UITextView.";
+                return false;
+
+            case UIButton button when normalizedKey is "enter" or "return" or "space" or " ":
+                button.SendActionForControlEvents(UIControlEvent.TouchUpInside);
+                return true;
+
+            case null:
+                error = "No target view: pass elementId to send a key.";
+                return false;
+
+            default:
+                error = $"Element '{viewObject.GetType().Name}' does not accept keyboard input.";
+                return false;
+        }
+    }
+
+    public static bool TryGesture(object viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
+    {
+        error = null;
+        var normalizedType = string.IsNullOrWhiteSpace(type) ? "swipe" : type.Trim().ToLowerInvariant();
+
+        if (normalizedType is "tap" or "longpress" or "long-press")
+        {
+            if (TryTap(viewObject, null, null)) return true;
+            error = $"Gesture '{type}' is not handled by this element";
+            return false;
+        }
+
+        if (normalizedType is not ("swipe" or "pan" or "scroll"))
+        {
+            error = $"Gesture '{type}' is not supported on UIKit";
+            return false;
+        }
+
+        var logicalDistance = distance > 0 ? distance : 120;
+        var (dx, dy) = (direction ?? "up").Trim().ToLowerInvariant() switch
+        {
+            "down" => (0d, logicalDistance),
+            "left" => (-logicalDistance, 0d),
+            "right" => (logicalDistance, 0d),
+            _ => (0d, -logicalDistance),
+        };
+
+        if (TryScrollBy(viewObject, dx, dy)) return true;
+        error = "Element is not scrollable";
+        return false;
+    }
 
     public static bool TryScrollBy(object viewObject, double dx, double dy)
     {
@@ -279,7 +396,9 @@ internal static partial class NativeUi
         var properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["Alpha"] = view.Alpha.ToString(culture),
+            ["Opacity"] = view.Alpha.ToString(culture),
             ["Hidden"] = view.Hidden ? "True" : "False",
+            ["IsVisible"] = (!view.Hidden && view.Alpha > 0).ToString(),
             ["Width"] = view.Bounds.Width.ToString(culture),
             ["Height"] = view.Bounds.Height.ToString(culture),
             ["AccessibilityIdentifier"] = view.AccessibilityIdentifier,
@@ -288,25 +407,36 @@ internal static partial class NativeUi
         };
 
         if (view is UIControl control)
+        {
             properties["Enabled"] = control.Enabled ? "True" : "False";
+            properties["IsEnabled"] = control.Enabled ? "True" : "False";
+            properties["IsSelected"] = control.Selected ? "True" : "False";
+        }
 
         switch (view)
         {
             case UILabel label:
                 properties["Text"] = label.Text;
+                properties["Value"] = label.Text;
                 break;
             case UITextField field:
                 properties["Text"] = field.Text;
+                properties["Value"] = field.Text;
                 properties["Placeholder"] = field.Placeholder;
                 break;
             case UITextView textView:
                 properties["Text"] = textView.Text;
+                properties["Value"] = textView.Text;
                 break;
             case UIButton button:
                 properties["Title"] = button.CurrentTitle;
+                properties["Text"] = button.CurrentTitle;
+                properties["Value"] = button.CurrentTitle;
                 break;
             case UISwitch @switch:
                 properties["On"] = @switch.On ? "True" : "False";
+                properties["Value"] = @switch.On ? "True" : "False";
+                properties["IsSelected"] = @switch.On ? "True" : "False";
                 break;
         }
 

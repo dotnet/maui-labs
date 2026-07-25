@@ -279,6 +279,8 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/ui/elements", HandleQuery);
         _server.MapGet("/api/v1/ui/elements/{id}", HandleElement);
         _server.MapGet("/api/v1/ui/hit-test", HandleHitTest);
+        // Accept POST as well so callers can send coordinates in a body; both verbs share a handler.
+        _server.MapPost("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", HandleSetProperty);

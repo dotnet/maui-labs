@@ -52,6 +52,7 @@
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Native.Essentials/Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Analyzers/Microsoft.Maui.DevFlow.Analyzers.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk/Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.WPF/Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor.Gtk/Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />

@@ -43,7 +43,9 @@ public sealed class AppDelegate : NSApplicationDelegate
         _window.MakeKeyAndOrderFront(null);
 
         NSApplication.SharedApplication.ActivationPolicy = NSApplicationActivationPolicy.Regular;
+#pragma warning disable CA1422 // Keep the sample frontmost on older and newer macOS SDKs.
         NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+#pragma warning restore CA1422
 
         RefreshTodos();
     }
@@ -56,10 +58,10 @@ public sealed class AppDelegate : NSApplicationDelegate
         root.Identifier = "RootLayout";
         root.EdgeInsets = new NSEdgeInsets(16, 16, 16, 16);
 
-        root.AddArrangedSubview(Label("HeaderLabel", SampleModel.HeaderText, NSFont.BoldSystemFontOfSize(22)));
-        _count = Label("CountLabel", _model.CountText, NSFont.SystemFontOfSize(13));
+        root.AddArrangedSubview(Label("HeaderLabel", SampleModel.HeaderText, NSFont.BoldSystemFontOfSize(22)!));
+        _count = Label("CountLabel", _model.CountText, NSFont.SystemFontOfSize(13)!);
         root.AddArrangedSubview(_count);
-        _status = Label("StatusLabel", _model.Status, NSFont.SystemFontOfSize(13));
+        _status = Label("StatusLabel", _model.Status, NSFont.SystemFontOfSize(13)!);
         root.AddArrangedSubview(_status);
 
         _titleEntry = Entry("NewTodoEntry", "What needs doing?");

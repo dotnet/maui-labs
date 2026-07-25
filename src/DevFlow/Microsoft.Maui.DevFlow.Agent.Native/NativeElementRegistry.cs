@@ -1,4 +1,7 @@
 using System.Runtime.CompilerServices;
+#if IOS || MACCATALYST || MACOS
+using ObjCRuntime;
+#endif
 
 namespace Microsoft.Maui.DevFlow.Agent.Native;
 
@@ -14,6 +17,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Native;
 internal sealed class NativeElementRegistry
 {
     private readonly ConditionalWeakTable<object, string> _idsByView = new();
+    private readonly Dictionary<string, string> _idsByStableKey = new(StringComparer.Ordinal);
     private readonly Dictionary<string, WeakReference<object>> _viewsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string?> _parents = new(StringComparer.Ordinal);
     private readonly object _gate = new();
@@ -49,7 +53,18 @@ internal sealed class NativeElementRegistry
     {
         lock (_gate)
         {
-            if (!_idsByView.TryGetValue(view, out var id))
+            var stableKey = GetStableKey(view);
+            string id;
+
+            if (stableKey != null)
+            {
+                if (!_idsByStableKey.TryGetValue(stableKey, out id!))
+                {
+                    id = $"n{++_next}";
+                    _idsByStableKey[stableKey] = id;
+                }
+            }
+            else if (!_idsByView.TryGetValue(view, out id!))
             {
                 id = $"n{++_next}";
                 _idsByView.Add(view, id);
@@ -84,5 +99,14 @@ internal sealed class NativeElementRegistry
         {
             return _parents.TryGetValue(id, out var parent) ? parent : null;
         }
+    }
+
+    private static string? GetStableKey(object view)
+    {
+#if IOS || MACCATALYST || MACOS
+        if (view is INativeObject native && native.Handle != IntPtr.Zero)
+            return $"objc:{((IntPtr)native.Handle).ToInt64():x}";
+#endif
+        return null;
     }
 }

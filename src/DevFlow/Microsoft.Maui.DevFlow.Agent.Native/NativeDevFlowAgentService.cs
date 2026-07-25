@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.Css;
 
@@ -24,6 +23,10 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     public NativeDevFlowAgentService(AgentOptions? options = null)
         : base(options)
     {
+        // No native platform has a background-job host, so replace the shared handlers
+        // (which answer 200 with supported:false) on every native TFM, not just some.
+        _server.MapGet("/api/v1/device/jobs", HandleUnsupportedJobs);
+        _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleUnsupportedJobs);
     }
 
     // ── Framework identity ────────────────────────────────────────────────
@@ -104,7 +107,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     {
         if (!_bound) return HttpResponse.Error("Agent not bound to app");
 
-        if (!request.QueryParams.TryGetValue("id", out var id) || string.IsNullOrEmpty(id))
+        if (!TryGetRouteOrQueryValue(request, "id", out var id) || string.IsNullOrEmpty(id))
             return HttpResponse.Error("id is required");
 
         var element = await DispatchAsync(() =>
@@ -170,19 +173,21 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
         var hits = await DispatchAsync(() =>
         {
-            var matches = new List<ElementInfo>();
-            Visit(BuildTree(0, null), element =>
+            var matches = new List<(ElementInfo Element, int Depth)>();
+            VisitWithDepth(BuildTree(0, null), 0, (element, depth) =>
             {
                 var bounds = element.Bounds;
                 if (bounds == null || !element.IsVisible) return;
                 if (x < bounds.X || x > bounds.X + bounds.Width) return;
                 if (y < bounds.Y || y > bounds.Y + bounds.Height) return;
-                matches.Add(Detach(element));
+                matches.Add((Detach(element), depth));
             });
 
-            // Deepest-first: the last element added while walking depth-first is the topmost hit.
-            matches.Reverse();
-            return matches;
+            return matches
+                .OrderByDescending(match => match.Depth)
+                .ThenBy(match => (match.Element.Bounds?.Width ?? double.MaxValue) * (match.Element.Bounds?.Height ?? double.MaxValue))
+                .Select(match => match.Element)
+                .ToList();
         });
 
         return HttpResponse.Json(hits);
@@ -194,7 +199,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     protected override async Task<HttpResponse> HandleProperty(HttpRequest request)
     {
         if (!TryGetElementId(request, out var id, out var error)) return error!;
-        if (!request.QueryParams.TryGetValue("name", out var name) || string.IsNullOrEmpty(name))
+        if (!TryGetRouteOrQueryValue(request, "name", out var name) || string.IsNullOrEmpty(name))
             return HttpResponse.Error("name is required");
 
         var result = await DispatchAsync(() =>
@@ -217,7 +222,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     protected override async Task<HttpResponse> HandleSetProperty(HttpRequest request)
     {
         if (!TryGetElementId(request, out var id, out var error)) return error!;
-        if (!request.QueryParams.TryGetValue("name", out var name) || string.IsNullOrEmpty(name))
+        if (!TryGetRouteOrQueryValue(request, "name", out var name) || string.IsNullOrEmpty(name))
             return HttpResponse.Error("name is required");
 
         var body = request.BodyAs<SetPropertyRequest>();
@@ -257,6 +262,84 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleFocus(HttpRequest request)
         => ActOnElement(request, "action.focus", (view, _) => NativeUi.TryFocus(view) ? "ok" : "Element cannot take focus", "Focused");
+
+    /// <inheritdoc />
+    protected override async Task<HttpResponse> HandleKey(HttpRequest request)
+    {
+        if (!_bound) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<KeyActionRequest>();
+        if (body == null || (string.IsNullOrWhiteSpace(body.Key) && string.IsNullOrWhiteSpace(body.Text)))
+            return HttpResponse.Error("key or text is required");
+
+        var startedAtUtc = DateTime.UtcNow;
+        var keyValue = body.Key ?? body.Text ?? string.Empty;
+        var result = await DispatchAsync(() =>
+        {
+            object? view = null;
+            if (!string.IsNullOrWhiteSpace(body.ElementId))
+            {
+                view = ResolveView(body.ElementId);
+                if (view == null)
+                    return $"Element '{body.ElementId}' not found";
+            }
+
+            return NativeUi.TrySendKey(view, body.Key, body.Text, out var failure) ? "ok" : failure ?? "Key action failed";
+        });
+
+        PublishUiOperationSpan(
+            "action.key",
+            startedAtUtc,
+            result == "ok",
+            result == "ok" ? null : result,
+            body.ElementId,
+            new { key = keyValue, text = body.Text });
+
+        return result == "ok"
+            ? HttpResponse.Json(new { success = true, key = keyValue, text = body.Text, elementId = body.ElementId })
+            : HttpResponse.Error(result!);
+    }
+
+    /// <inheritdoc />
+    protected override async Task<HttpResponse> HandleGesture(HttpRequest request)
+    {
+        if (!_bound) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<GestureActionRequest>();
+        if (body == null || string.IsNullOrWhiteSpace(body.Type))
+            return HttpResponse.Error("type is required");
+
+        if (string.IsNullOrEmpty(body.ElementId))
+            return HttpResponse.Error("elementId is required");
+
+        var startedAtUtc = DateTime.UtcNow;
+        var result = await DispatchAsync(() =>
+        {
+            var view = ResolveView(body.ElementId);
+            if (view == null) return $"Element '{body.ElementId}' not found";
+
+            return NativeUi.TryGesture(view, body.Type, body.Direction, body.Distance, body.DurationMs, out var failure)
+                ? "ok"
+                : failure ?? $"Gesture '{body.Type}' is not handled by this element";
+        });
+
+        PublishUiOperationSpan(
+            "action.gesture",
+            startedAtUtc,
+            result == "ok",
+            result == "ok" ? null : result,
+            body.ElementId,
+            new { type = body.Type, direction = body.Direction });
+
+        return result == "ok" ? HttpResponse.Ok("Gesture performed") : HttpResponse.Error(result!);
+    }
+
+    /// <summary>
+    /// Native backends have no background-job host, so both job endpoints degrade with the standard
+    /// <c>not_supported</c> envelope rather than the shared handlers' <c>supported:false</c> payload.
+    /// </summary>
+    private Task<HttpResponse> HandleUnsupportedJobs(HttpRequest request)
+        => Task.FromResult(NotSupported("device.jobs", $"Background jobs are not supported on {PlatformName}."));
 
     /// <inheritdoc />
     protected override async Task<HttpResponse> HandleBack(HttpRequest request)
@@ -313,25 +396,30 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
         try
         {
-            var png = await DispatchAsync(() =>
+            var result = await DispatchAsync(() =>
             {
+                byte[]? png;
                 if (hasElementId && !string.IsNullOrEmpty(elementId))
                 {
                     var view = ResolveView(elementId);
-                    return view == null ? null : NativeUi.CaptureView(view);
+                    png = view == null ? null : NativeUi.CaptureView(view);
+                }
+                else
+                {
+                    png = NativeUi.CaptureScreen();
                 }
 
-                return NativeUi.CaptureScreen();
+                return new ScreenshotCaptureResult(png, NativeUi.DisplayDensity);
             });
 
-            if (png == null)
+            if (result.Png == null)
             {
                 return hasElementId
                     ? HttpResponse.NotFound($"Element '{elementId}' not found or has no size")
                     : HttpResponse.Error("Screen capture returned no data");
             }
 
-            return HttpResponse.Png(ResizePngIfNeeded(png, maxWidth, NativeUi.DisplayDensity, autoScale));
+            return HttpResponse.Png(ResizePngIfNeeded(result.Png, maxWidth, result.Density, autoScale));
         }
         catch (Exception ex)
         {
@@ -479,6 +567,12 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             return true;
         }
 
+        if (request.RouteParams.TryGetValue("id", out value) && !string.IsNullOrEmpty(value))
+        {
+            id = Uri.UnescapeDataString(value);
+            return true;
+        }
+
         if (request.QueryParams.TryGetValue("elementId", out value) && !string.IsNullOrEmpty(value))
         {
             id = value;
@@ -506,8 +600,35 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         }
     }
 
+    private static void VisitWithDepth(List<ElementInfo> tree, int depth, Action<ElementInfo, int> visitor)
+    {
+        foreach (var element in tree)
+        {
+            visitor(element, depth);
+            if (element.Children is { Count: > 0 } children)
+                VisitWithDepth(children, depth + 1, visitor);
+        }
+    }
+
+    private static bool TryGetRouteOrQueryValue(HttpRequest request, string key, out string? value)
+    {
+        if (request.RouteParams.TryGetValue(key, out value) && !string.IsNullOrEmpty(value))
+        {
+            value = Uri.UnescapeDataString(value);
+            return true;
+        }
+
+        if (request.QueryParams.TryGetValue(key, out value) && !string.IsNullOrEmpty(value))
+            return true;
+
+        value = null;
+        return false;
+    }
+
     private static List<ElementInfo> Flatten(List<ElementInfo> matches)
         => matches.Select(Detach).ToList();
+
+    private sealed record ScreenshotCaptureResult(byte[]? Png, double Density);
 
     /// <summary>Returns a copy without children so query results stay flat.</summary>
     private static ElementInfo Detach(ElementInfo element)

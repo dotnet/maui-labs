@@ -20,7 +20,14 @@ public static class DevFlowAgentAndroidExtensions
         ArgumentNullException.ThrowIfNull(activity);
 
         NativeUi.CurrentActivity = activity;
-        return options == null ? DevFlowAgent.Start() : DevFlowAgent.Start(options);
+        options ??= new AgentOptions();
+
+        // Android's Mono runtime aborts when console/trace capture redirects the runtime log stream
+        // while loading assemblies from the APK. File logging remains available for ILogger entries.
+        options.CaptureConsole = false;
+        options.CaptureTrace = false;
+
+        return DevFlowAgent.Start(options);
     }
 
     /// <summary>

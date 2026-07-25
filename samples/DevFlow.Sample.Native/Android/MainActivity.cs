@@ -84,6 +84,12 @@ public class MainActivity : Activity
         _todoList.Tag = "TodoList";
         root.AddView(_todoList);
 
+        var spacer = new Space(this) { Tag = "BottomSpacer" };
+        spacer.LayoutParameters = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent,
+            Dp(600));
+        root.AddView(spacer);
+
         scroll.AddView(root);
         return scroll;
     }
