@@ -35,7 +35,7 @@ public class MainActivity : Activity
         base.OnCreate(savedInstanceState);
 
         // Explicit bootstrap — the agent never starts itself.
-        this.StartDevFlowAgent();
+        this.StartDevFlowAgent(SampleAgentOptions.Create());
 
         SetContentView(BuildContent());
         RefreshTodos();

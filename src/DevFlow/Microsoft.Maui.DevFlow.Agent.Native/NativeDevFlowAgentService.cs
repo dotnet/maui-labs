@@ -309,14 +309,18 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         if (body == null || string.IsNullOrWhiteSpace(body.Type))
             return HttpResponse.Error("type is required");
 
-        if (string.IsNullOrEmpty(body.ElementId))
-            return HttpResponse.Error("elementId is required");
-
         var startedAtUtc = DateTime.UtcNow;
         var result = await DispatchAsync(() =>
         {
-            var view = ResolveView(body.ElementId);
-            if (view == null) return $"Element '{body.ElementId}' not found";
+            // A null elementId is legal: the MAUI agent decomposes a gesture into tap/scroll and
+            // passes the (possibly null) element straight through, letting scroll pick a default
+            // target. Only an elementId that was supplied but doesn't resolve is an error.
+            object? view = null;
+            if (!string.IsNullOrEmpty(body.ElementId))
+            {
+                view = ResolveView(body.ElementId);
+                if (view == null) return $"Element '{body.ElementId}' not found";
+            }
 
             return NativeUi.TryGesture(view, body.Type, body.Direction, body.Distance, body.DurationMs, out var failure)
                 ? "ok"
@@ -354,15 +358,23 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         if (!_bound) return HttpResponse.Error("Agent not bound to app");
 
         var body = request.BodyAs<ScrollRequest>();
-        if (body?.ElementId == null) return HttpResponse.Error("elementId is required");
+        if (body == null) return HttpResponse.Error("Invalid request body");
 
         var result = await DispatchAsync(() =>
         {
-            var view = ResolveView(body.ElementId);
-            if (view == null) return $"Element '{body.ElementId}' not found";
+            // As with gestures, a null elementId means "scroll whatever is scrollable on screen".
+            object? view = null;
+            if (!string.IsNullOrEmpty(body.ElementId))
+            {
+                view = ResolveView(body.ElementId);
+                if (view == null) return $"Element '{body.ElementId}' not found";
+            }
 
             if (body.DeltaX == 0 && body.DeltaY == 0)
+            {
+                if (view == null) return "elementId is required to scroll an element into view";
                 return NativeUi.TryScrollIntoView(view) ? "ok" : "Element is not inside a scrollable container";
+            }
 
             return NativeUi.TryScrollBy(view, body.DeltaX, body.DeltaY) ? "ok" : "Element is not scrollable";
         });

@@ -290,9 +290,11 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
 
-        if (_cdpWebViews.Count > 0)
-            capabilities["webview"] = Capability(1, true,
-                ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"], null);
+        // Listed unconditionally so clients can discover the group and see *why* it is unavailable,
+        // per the capability protocol: unsupported groups report supported:false rather than vanish.
+        capabilities["webview"] = Capability(1, _cdpWebViews.Count > 0,
+            ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"],
+            "No WebView has registered a CDP endpoint with this agent.");
 
         capabilities["profiler"] = Capability(1, IsProfilerFeatureAvailable, BuildProfilerFeatureList(), "Profiler collector is unavailable on this platform.");
         capabilities["network"] = Capability(1, true, ["list", "detail", "clear", "stream"], null);

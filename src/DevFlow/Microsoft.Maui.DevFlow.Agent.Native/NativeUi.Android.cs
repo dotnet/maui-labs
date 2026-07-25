@@ -233,6 +233,10 @@ internal static partial class NativeUi
         var view = (viewObject ?? CurrentActivity?.CurrentFocus) as View;
         if (view == null)
         {
+            // Parity with the MAUI agent, whose key handler returns "ok" for a null element: a key
+            // with no target is a no-op success, not a client error.
+            if (viewObject == null) return true;
+
             error = "No target view: pass elementId or focus a view first";
             return false;
         }
@@ -283,13 +287,20 @@ internal static partial class NativeUi
         return handled;
     }
 
-    public static bool TryGesture(object viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
+    public static bool TryGesture(object? viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
     {
         error = null;
-        var view = (View)viewObject;
         var normalizedType = string.IsNullOrWhiteSpace(type) ? "swipe" : type.Trim().ToLowerInvariant();
         if (normalizedType == "tap")
-            return TryTap(view, null, null);
+        {
+            if (viewObject == null)
+            {
+                error = "elementId is required to tap";
+                return false;
+            }
+
+            return TryTap(viewObject, null, null);
+        }
 
         if (normalizedType is not ("swipe" or "pan" or "scroll"))
         {
@@ -307,15 +318,15 @@ internal static partial class NativeUi
             _ => (0d, -pixelDistance),
         };
 
-        if (DispatchSyntheticSwipe(view, dx, dy, durationMs))
+        if (viewObject is View view && DispatchSyntheticSwipe(view, dx, dy, durationMs))
             return true;
 
         return (direction ?? "up").Trim().ToLowerInvariant() switch
         {
-            "down" => TryScrollBy(view, 0, -logicalDistance),
-            "left" => TryScrollBy(view, logicalDistance, 0),
-            "right" => TryScrollBy(view, -logicalDistance, 0),
-            _ => TryScrollBy(view, 0, logicalDistance),
+            "down" => TryScrollBy(viewObject, 0, -logicalDistance),
+            "left" => TryScrollBy(viewObject, logicalDistance, 0),
+            "right" => TryScrollBy(viewObject, -logicalDistance, 0),
+            _ => TryScrollBy(viewObject, 0, logicalDistance),
         };
     }
 
@@ -418,9 +429,10 @@ internal static partial class NativeUi
     private static double ClampToView(double value, int size)
         => Math.Clamp(value, 1, Math.Max(1, size - 1));
 
-    public static bool TryScrollBy(object viewObject, double dx, double dy)
+    public static bool TryScrollBy(object? viewObject, double dx, double dy)
     {
-        var view = (View)viewObject;
+        if (ResolveScrollTarget(viewObject) is not { } view) return false;
+
         var density = DisplayDensity;
         var px = (int)Math.Round(dx * density);
         var py = (int)Math.Round(dy * density);
@@ -449,6 +461,21 @@ internal static partial class NativeUi
                 return true;
         }
     }
+
+    /// <summary>
+    /// Resolves the view a scroll/swipe should act on: a real scrolling container if one is the
+    /// target or encloses it, else — when no view was named — the first scroller on screen. Mirrors
+    /// the MAUI agent's <c>FindAncestor&lt;ItemsView&gt;</c> so scrolling by naming a list's child works.
+    /// Falls back to the named view so the generic <see cref="View.ScrollBy"/> path still applies.
+    /// </summary>
+    static View? ResolveScrollTarget(object? viewObject)
+        => (FindSelfOrAncestor(viewObject, IsScrollable, static candidate => (candidate as View)?.Parent as View)
+            ?? viewObject) as View;
+
+    static bool IsScrollable(object candidate)
+        => candidate is ScrollView or HorizontalScrollView or AbsListView
+            // AndroidX RecyclerView / NestedScrollView are not in this binding's type universe.
+            || candidate.GetType().GetMethod("SmoothScrollBy", [typeof(int), typeof(int)]) != null;
 
     public static bool TryScrollIntoView(object viewObject)
     {

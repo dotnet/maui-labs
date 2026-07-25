@@ -25,7 +25,12 @@ public sealed class SampleModel
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
-    public const string HeaderText = "DevFlow Native Sample";
+    /// <summary>
+    /// Matches the MAUI sample's HeaderLabel verbatim. The shared integration tests assert on this
+    /// text (Query_ByText, Query_ByAutomationId_HasCorrectProperties, GetProperty_Text), so the two
+    /// samples have to agree — same accessibility ids *and* same content.
+    /// </summary>
+    public const string HeaderText = "📝 My Todos";
 
     public List<SampleTodo> Todos { get; } =
     [

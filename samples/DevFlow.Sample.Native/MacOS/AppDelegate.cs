@@ -27,7 +27,7 @@ public sealed class AppDelegate : NSApplicationDelegate
     public override void DidFinishLaunching(NSNotification notification)
     {
         // Explicit bootstrap — the agent never starts itself.
-        DevFlowAgent.Start();
+        DevFlowAgent.Start(SampleAgentOptions.Create());
 
         _window = new NSWindow(
             new CGRect(0, 0, 520, 640),

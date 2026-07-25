@@ -13,7 +13,7 @@ public class AppDelegate : UIApplicationDelegate
     public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
     {
         // Explicit bootstrap — the agent never starts itself.
-        DevFlowAgent.Start();
+        DevFlowAgent.Start(SampleAgentOptions.Create());
 
         Window = new UIWindow(UIScreen.MainScreen.Bounds)
         {

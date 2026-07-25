@@ -120,7 +120,7 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task Query_ByCssSelector_ReturnsElements()
     {
         await NavigateToMainPageAsync();
-        var elements = await Client.QueryCssAsync("Button#AddButton");
+        var elements = await Client.QueryCssAsync($"{ButtonTypeName}#AddButton");
 
         Assert.NotEmpty(elements);
         Assert.Contains(elements, element => element.AutomationId == "AddButton");

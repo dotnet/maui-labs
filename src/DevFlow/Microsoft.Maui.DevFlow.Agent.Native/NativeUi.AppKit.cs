@@ -244,20 +244,28 @@ internal static partial class NativeUi
                 return true;
 
             case null:
-                return Fail("No focused element is available for keyboard input.", out error);
+                // Parity with the MAUI agent, whose key handler returns "ok" for a null element: a
+                // key with no target is a no-op success, not a client error.
+                return true;
 
             default:
                 return Fail($"Element '{target.GetType().Name}' does not accept keyboard input.", out error);
         }
     }
 
-    public static bool TryGesture(object viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
+    public static bool TryGesture(object? viewObject, string? type, string? direction, double distance, int durationMs, out string? error)
     {
         error = null;
         var normalizedType = string.IsNullOrWhiteSpace(type) ? "swipe" : type.Trim().ToLowerInvariant();
 
         if (normalizedType is "tap" or "longpress" or "long-press")
         {
+            if (viewObject == null)
+            {
+                error = "elementId is required to tap";
+                return false;
+            }
+
             if (TryTap(viewObject, null, null)) return true;
             error = $"Gesture '{type}' is not handled by this element";
             return false;
@@ -283,15 +291,25 @@ internal static partial class NativeUi
         return false;
     }
 
-    public static bool TryScrollBy(object viewObject, double dx, double dy)
+    public static bool TryScrollBy(object? viewObject, double dx, double dy)
     {
-        if (viewObject is not NSScrollView scroll) return false;
+        if (FindScrollView(viewObject) is not { } scroll) return false;
 
         var origin = scroll.ContentView.Bounds.Location;
         scroll.ContentView.ScrollToPoint(new CGPoint(origin.X + dx, origin.Y + dy));
         scroll.ReflectScrolledClipView(scroll.ContentView);
         return true;
     }
+
+    /// <summary>
+    /// Resolves the scroll view a scroll/swipe should act on: the view itself, else its nearest
+    /// scrolling ancestor, else — when no view was named — the first scroll view on screen.
+    /// </summary>
+    static NSScrollView? FindScrollView(object? viewObject)
+        => FindSelfOrAncestor(
+            viewObject,
+            static candidate => candidate is NSScrollView,
+            static candidate => (candidate as NSView)?.Superview) as NSScrollView;
 
     public static bool TryScrollIntoView(object viewObject)
     {
