@@ -196,8 +196,8 @@ internal static partial class NativeUi
         }
         finally
         {
-            down.Recycle();
-            up.Recycle();
+            down?.Recycle();
+            up?.Recycle();
         }
     }
 
