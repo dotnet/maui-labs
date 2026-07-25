@@ -20,9 +20,14 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">12.0</SupportedOSPlatformVersion>
 
     <PackageId>Microsoft.Maui.DevFlow.Agent.Native.Essentials</PackageId>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
     <Description>Optional add-on for Microsoft.Maui.DevFlow.Agent.Native. Lights up the preferences, secure storage, device info, display, battery, connectivity, permissions, geolocation and sensor endpoints in plain .NET apps by backing them with .NET MAUI Essentials. Does not pull in MAUI Controls.</Description>
     <PackageTags>android;ios;maccatalyst;macos;automation;testing;agent;essentials</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Native\Microsoft.Maui.DevFlow.Agent.Native.csproj" />

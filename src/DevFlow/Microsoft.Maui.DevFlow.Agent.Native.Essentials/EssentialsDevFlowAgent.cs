@@ -19,7 +19,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Native.Essentials;
 /// <code>
 /// // Android — MainActivity.OnCreate
 /// Microsoft.Maui.ApplicationModel.Platform.Init(this, savedInstanceState);
-/// EssentialsDevFlowAgent.Start();
+/// this.StartDevFlowAgentWithEssentials();
 ///
 /// // iOS / Mac Catalyst — AppDelegate.FinishedLaunching
 /// // macOS — AppDelegate.DidFinishLaunching

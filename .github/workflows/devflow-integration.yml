@@ -26,6 +26,14 @@ on:
           - ios
           - maccatalyst
           - windows
+      framework:
+        description: App framework to drive (native runs the plain .NET samples)
+        default: maui
+        type: choice
+        options:
+          - maui
+          - native
+          - both
       android-api:
         description: Android API level
         default: "35"
@@ -40,6 +48,7 @@ on:
     paths:
       - 'src/DevFlow/**'
       - 'samples/DevFlow.Sample/**'
+      - 'samples/DevFlow.Sample.Native/**'
       - '.github/workflows/devflow-integration.yml'
 
 concurrency:
@@ -63,12 +72,16 @@ jobs:
       run-ios: ${{ steps.decide.outputs.ios }}
       run-maccatalyst: ${{ steps.decide.outputs.maccatalyst }}
       run-windows: ${{ steps.decide.outputs.windows }}
+      # JSON array consumed as a matrix axis by the platform jobs. Windows has no plain .NET head,
+      # so it always runs maui only.
+      frameworks: ${{ steps.decide.outputs.frameworks }}
     steps:
       - id: decide
         shell: bash
         env:
           EVENT: ${{ github.event_name }}
           PLATFORMS: ${{ inputs.platforms }}
+          FRAMEWORK: ${{ inputs.framework }}
           LABELED: ${{ github.event_name == 'pull_request' && github.event.label.name == 'integration-tests' || 'false' }}
         run: |
           set -e
@@ -87,15 +100,27 @@ jobs:
             echo "ios=$(should_run ios)"
             echo "maccatalyst=$(should_run maccatalyst)"
             echo "windows=$(should_run windows)"
+            case "${FRAMEWORK:-maui}" in
+              native) echo 'frameworks=["native"]' ;;
+              both)   echo 'frameworks=["maui","native"]' ;;
+              *)      echo 'frameworks=["maui"]' ;;
+            esac
           } >> "$GITHUB_OUTPUT"
 
   android:
     needs: plan
     if: needs.plan.outputs.run-android == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: android
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
       DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
       DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
     steps:
@@ -158,25 +183,33 @@ jobs:
             export DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')";
             echo "Using Android emulator serial: ${DEVFLOW_TEST_ANDROID_SERIAL:-<none found>}";
             dotnet test $TEST_PROJECT -c Debug
-            --logger "trx;LogFileName=devflow-integration-android.trx"
+            --logger "trx;LogFileName=devflow-integration-android-${{ matrix.framework }}.trx"
             --logger "console;verbosity=normal"
             --results-directory ./artifacts/TestResults/devflow-integration/android
+            $TEST_FILTER
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-android-results
+          name: devflow-integration-android-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/android/
           retention-days: 30
 
   ios:
     needs: plan
     if: needs.plan.outputs.run-ios == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: macos-15
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: ios
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
     steps:
       - uses: actions/checkout@v6
@@ -225,25 +258,33 @@ jobs:
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --logger "trx;LogFileName=devflow-integration-ios.trx"
+          --logger "trx;LogFileName=devflow-integration-ios-${{ matrix.framework }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/ios
+          $TEST_FILTER
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-ios-results
+          name: devflow-integration-ios-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/ios/
           retention-days: 30
 
   maccatalyst:
     needs: plan
     if: needs.plan.outputs.run-maccatalyst == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: macos-15
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: maccatalyst
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -288,21 +329,23 @@ jobs:
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --logger "trx;LogFileName=devflow-integration-maccatalyst.trx"
+          --logger "trx;LogFileName=devflow-integration-maccatalyst-${{ matrix.framework }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/maccatalyst
+          $TEST_FILTER
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-maccatalyst-results
+          name: devflow-integration-maccatalyst-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/maccatalyst/
           retention-days: 30
 
   windows:
     needs: plan
-    if: needs.plan.outputs.run-windows == 'true'
+    # No plain .NET Windows head exists, so this job only has anything to say about MAUI.
+    if: needs.plan.outputs.run-windows == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
     runs-on: windows-latest
     timeout-minutes: 90
     env:

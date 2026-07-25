@@ -16,9 +16,14 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">12.0</SupportedOSPlatformVersion>
 
     <PackageId>Microsoft.Maui.DevFlow.Agent.Native</PackageId>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
     <Description>In-app DevFlow agent for plain .NET Android, iOS, Mac Catalyst and macOS apps. Exposes the native view hierarchy, element interactions, screenshots, logs, network capture and profiling over the same HTTP/JSON API as the MAUI agent — with no .NET MAUI dependency.</Description>
     <PackageTags>android;ios;maccatalyst;macos;automation;testing;visual-tree;agent</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
