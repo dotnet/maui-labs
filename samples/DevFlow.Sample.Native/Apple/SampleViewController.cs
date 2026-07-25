@@ -151,13 +151,22 @@ public sealed class SampleViewController : UIViewController
         TranslatesAutoresizingMaskIntoConstraints = false,
     };
 
-    private static UILabel Label(string id, string text, UIFont font) => new()
+    // The font factories are annotated as returning UIFont? in newer Apple SDKs, so accept a
+    // nullable font and leave UILabel's default in place when one is not supplied.
+    private static UILabel Label(string id, string text, UIFont? font)
     {
-        AccessibilityIdentifier = id,
-        Text = text,
-        Font = font,
-        Lines = 0,
-    };
+        var label = new UILabel
+        {
+            AccessibilityIdentifier = id,
+            Text = text,
+            Lines = 0,
+        };
+
+        if (font is not null)
+            label.Font = font;
+
+        return label;
+    }
 
     private static UITextField Entry(string id, string placeholder) => new()
     {
