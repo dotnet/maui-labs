@@ -36,6 +36,18 @@ public class BrokerRegistration : IDisposable
     public int? AssignedPort => _assignedPort;
 
     /// <summary>
+    /// The app framework hosting the agent — <c>"maui"</c> or <c>"native"</c>.
+    /// Lets the broker and CLI tell MAUI apps apart from plain .NET apps.
+    /// </summary>
+    public string? Framework { get; set; }
+
+    /// <summary>
+    /// The UI framework the agent walks — <c>"maui-controls"</c>, <c>"android-views"</c>,
+    /// <c>"uikit"</c>, <c>"appkit"</c>, <c>"gtk"</c> or <c>"wpf"</c>.
+    /// </summary>
+    public string? UiFramework { get; set; }
+
+    /// <summary>
     /// The port the agent's HTTP listener is actually running on.
     /// Set after the listener starts so late reconnections can inform the broker.
     /// </summary>
@@ -238,6 +250,8 @@ public class BrokerRegistration : IDisposable
         platform = _platform,
         appName = _appName,
         currentPort = CurrentPort,
+        framework = Framework,
+        uiFramework = UiFramework,
         version = typeof(BrokerRegistration).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         sessionId = _sessionId

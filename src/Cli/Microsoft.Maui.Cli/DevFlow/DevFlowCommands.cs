@@ -4634,8 +4634,8 @@ public class DevFlowCommands
         }
         else
         {
-            Console.WriteLine($"{"ID",-14} {"App",-20} {"Platform",-14} {"TFM",-24} {"Port",-6} {"Version",-12} {"Uptime"}");
-            Console.WriteLine(new string('-', 102));
+            Console.WriteLine($"{"ID",-14} {"App",-20} {"Platform",-14} {"UI",-14} {"TFM",-24} {"Port",-6} {"Version",-12} {"Uptime"}");
+            Console.WriteLine(new string('-', 117));
             foreach (var a in agents)
             {
                 var uptime = DateTime.UtcNow - a.ConnectedAt;
@@ -4643,7 +4643,9 @@ public class DevFlowCommands
                     ? $"{uptime.Hours}h {uptime.Minutes}m"
                     : $"{uptime.Minutes}m {uptime.Seconds}s";
                 var version = a.Version ?? "-";
-                Console.WriteLine($"{a.Id,-14} {a.AppName,-20} {a.Platform,-14} {a.Tfm,-24} {a.Port,-6} {version,-12} {uptimeStr}");
+                // Agents built before the framework fields existed report nothing; they are MAUI.
+                var ui = a.UiFramework ?? "maui-controls";
+                Console.WriteLine($"{a.Id,-14} {a.AppName,-20} {a.Platform,-14} {ui,-14} {a.Tfm,-24} {a.Port,-6} {version,-12} {uptimeStr}");
             }
         }
     }

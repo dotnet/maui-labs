@@ -898,8 +898,16 @@ public class AgentClient : IDisposable
         }
     }
 
-    private Task<string> GetStringWithTransientRetriesAsync(string url)
-        => SendWithTransientRetriesAsync(() => _http.GetStringAsync(url));
+    private async Task<string> GetStringWithTransientRetriesAsync(string url)
+    {
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"GET {url} failed with {(int)response.StatusCode}.", null, response.StatusCode);
+
+        return body;
+    }
 
     private Task<T> SendWithTransientRetriesAsync<T>(Func<Task<T>> send)
         => SendWithTransientRetriesAsync(HttpMethod.Get, send);
@@ -915,7 +923,15 @@ public class AgentClient : IDisposable
         {
             try
             {
-                return await send();
+                var result = await send();
+
+                // A backend that cannot serve an endpoint answers 501 with a not_supported
+                // envelope. Surface that as a typed exception instead of letting it decay into a
+                // null/false that looks identical to a genuine failure.
+                if (result is HttpResponseMessage message)
+                    await ThrowIfNotSupportedAsync(message);
+
+                return result;
             }
             catch (Exception ex) when (IsTransientTransportException(ex) && attempt < retryCount)
             {
@@ -924,6 +940,47 @@ public class AgentClient : IDisposable
                     await Task.Delay(delay);
             }
         }
+    }
+
+    private static async Task ThrowIfNotSupportedAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode != HttpStatusCode.NotImplemented)
+            return;
+
+        var body = await response.Content.ReadAsStringAsync();
+        string capability;
+        string? reason = null;
+
+        try
+        {
+            var json = DriverJson.ParseElement(body);
+
+            // Only the uniform not_supported envelope maps to the typed exception. Endpoints that
+            // answer 501 with their own success/error shape keep their existing contract.
+            if (json.ValueKind != JsonValueKind.Object ||
+                !json.TryGetProperty("error", out var kind) ||
+                kind.ValueKind != JsonValueKind.String ||
+                kind.GetString() != "not_supported")
+            {
+                return;
+            }
+
+            capability = json.TryGetProperty("capability", out var c) && c.ValueKind == JsonValueKind.String
+                ? c.GetString() ?? "unknown"
+                : "unknown";
+
+            if (json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String)
+                reason = r.GetString();
+        }
+        catch (JsonException)
+        {
+            // Non-JSON 501 — leave it to the caller's existing error handling.
+            return;
+        }
+
+        // The caller never receives the message, so release it here.
+        response.Dispose();
+        throw new NotSupportedByAgentException(capability, reason);
     }
 
     private TimeSpan GetTransientFailureRetryDelay(int attempt)
@@ -1292,10 +1349,28 @@ public class AgentDescriptor
     public string? Name { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]
     public string? Version { get; set; }
+    /// <summary>
+    /// Human-readable app framework, e.g. <c>".NET MAUI"</c> or <c>".NET"</c>.
+    /// </summary>
     [System.Text.Json.Serialization.JsonPropertyName("framework")]
     public string? Framework { get; set; }
+
+    /// <summary>
+    /// Machine-readable app framework: <c>"maui"</c> or <c>"native"</c>.
+    /// Null when talking to an agent built before the field was introduced.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("frameworkId")]
+    public string? FrameworkId { get; set; }
+
     [System.Text.Json.Serialization.JsonPropertyName("frameworkVersion")]
     public string? FrameworkVersion { get; set; }
+
+    /// <summary>
+    /// The UI framework the agent walks: <c>"maui-controls"</c>, <c>"android-views"</c>,
+    /// <c>"uikit"</c>, <c>"appkit"</c>, <c>"gtk"</c> or <c>"wpf"</c>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("uiFramework")]
+    public string? UiFramework { get; set; }
 }
 
 public class DeviceDescriptor

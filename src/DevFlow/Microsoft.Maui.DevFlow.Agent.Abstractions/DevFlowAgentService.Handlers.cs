@@ -224,8 +224,18 @@ public partial class DevFlowAgentService
     public void SetLogProvider(FileLogProvider provider)
         => _logProvider = provider;
 
+    /// <summary>
+    /// Attaches the broker registration and stamps it with this backend's framework identity so the
+    /// broker and CLI can tell MAUI apps apart from plain .NET apps.
+    /// </summary>
     public void SetBrokerRegistration(BrokerRegistration registration)
-        => _brokerRegistration = registration;
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+
+        registration.Framework = FrameworkName;
+        registration.UiFramework = UiFrameworkName;
+        _brokerRegistration = registration;
+    }
 
     /// <summary>
     /// Sets the DevFlow session identity for this agent, derived from the build environment.

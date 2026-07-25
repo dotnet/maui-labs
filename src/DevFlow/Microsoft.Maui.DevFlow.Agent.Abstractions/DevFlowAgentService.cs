@@ -191,6 +191,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     name = "Microsoft.Maui.DevFlow.Agent",
                     version = AgentVersion,
                     framework = FrameworkDisplayName,
+                    frameworkId = FrameworkName,
                     frameworkVersion = Environment.Version.ToString(),
                     uiFramework = UiFrameworkName,
                     sessionId = _sessionId,

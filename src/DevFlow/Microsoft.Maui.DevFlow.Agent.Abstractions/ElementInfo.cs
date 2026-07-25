@@ -148,6 +148,7 @@ public class ElementInfo
 
     private string? InferRole() => Type switch
     {
+        // .NET MAUI
         "Window" => "window",
         "Button" or "ImageButton" => "button",
         "Entry" or "Editor" or "SearchBar" => "textbox",
@@ -157,6 +158,41 @@ public class ElementInfo
         "Image" => "image",
         "CollectionView" or "ListView" or "CarouselView" => "list",
         "Label" when Gestures?.Contains("tap") == true => "link",
+
+        // Android views
+        "AppCompatButton" or "MaterialButton" or "FloatingActionButton" => "button",
+        "AppCompatEditText" or "EditText" or "TextInputEditText" or "AutoCompleteTextView" or "SearchView" => "textbox",
+        "AppCompatCheckBox" or "MaterialCheckBox" => "checkbox",
+        "AppCompatRadioButton" or "MaterialRadioButton" => "radio",
+        "SwitchCompat" or "SwitchMaterial" or "ToggleButton" => "switch",
+        "ImageView" or "AppCompatImageView" or "ShapeableImageView" => "image",
+        "RecyclerView" or "GridView" or "ViewPager2" => "list",
+        "SeekBar" or "AppCompatSeekBar" or "Slider" => "slider",
+        "ProgressBar" => "progressbar",
+        "TextView" or "AppCompatTextView" or "MaterialTextView" => "text",
+
+        // UIKit
+        "UIWindow" => "window",
+        "UIButton" => "button",
+        "UITextField" or "UITextView" or "UISearchBar" => "textbox",
+        "UISwitch" => "switch",
+        "UIImageView" => "image",
+        "UITableView" or "UICollectionView" => "list",
+        "UISlider" or "UIStepper" => "slider",
+        "UIProgressView" or "UIActivityIndicatorView" => "progressbar",
+        "UISegmentedControl" => "tablist",
+        "UILabel" => "text",
+
+        // AppKit
+        "NSWindow" => "window",
+        "NSSecureTextField" or "NSSearchField" or "NSTextView" => "textbox",
+        "NSImageView" => "image",
+        "NSTableView" or "NSOutlineView" or "NSCollectionView" => "list",
+        "NSSlider" or "NSStepper" => "slider",
+        "NSProgressIndicator" => "progressbar",
+        "NSSegmentedControl" => "tablist",
+        "NSTextField" => "text",
+
         _ => null
     };
 
@@ -165,17 +201,22 @@ public class ElementInfo
         var traits = new List<string>();
         var role = Role;
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link")
+        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider")
             traits.Add("interactive");
 
         if (Gestures is { Count: > 0 } && !traits.Contains("interactive"))
             traits.Add("interactive");
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "window" || IsFocused)
+        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider" or "window" || IsFocused)
             traits.Add("focusable");
 
-        if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView")
+        if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView"
+            or "HorizontalScrollView" or "NestedScrollView" or "RecyclerView" or "ViewPager2"
+            or "UIScrollView" or "UITableView" or "UICollectionView"
+            or "NSScrollView" or "NSTableView" or "NSOutlineView")
+        {
             traits.Add("scrollable");
+        }
 
         if (role == "heading")
             traits.Add("header");
