@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Maui.Devices.Sensors;
 
@@ -169,7 +171,17 @@ public class SensorManager : IDisposable
         }
     }
 
-    private void Broadcast(string sensorName, object data)
+    /// <summary>
+    /// Serialises a reading and fans it out to subscribers.
+    /// </summary>
+    /// <param name="writeValues">
+    /// Writes the reading's values as properties of an already-open JSON object. This is a
+    /// delegate rather than an object because reflection-based serialisation is not trim-safe
+    /// (IL2026), and because widening the sensor floats to double here would change the emitted
+    /// numbers — <c>0.1f</c> serialises as <c>0.1</c>, but <c>(double)0.1f</c> serialises as
+    /// <c>0.10000000149011612</c>.
+    /// </param>
+    private void Broadcast(string sensorName, Action<Utf8JsonWriter> writeValues)
     {
         // Throttle: drop readings that arrive faster than ThrottleMs
         var now = DateTime.UtcNow;
@@ -179,19 +191,34 @@ public class SensorManager : IDisposable
         _lastBroadcast[sensorName] = now;
 
         var timestamp = now.ToString("O");
-        var json = JsonSerializer.Serialize(new
+
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
         {
-            type = "reading",
-            timestamp,
-            sensor = sensorName,
-            data,
-            reading = new
-            {
-                sensor = sensorName,
-                timestamp,
-                values = data
-            }
-        });
+            writer.WriteStartObject();
+            writer.WriteString("type", "reading");
+            writer.WriteString("timestamp", timestamp);
+            writer.WriteString("sensor", sensorName);
+
+            writer.WritePropertyName("data");
+            writer.WriteStartObject();
+            writeValues(writer);
+            writer.WriteEndObject();
+
+            writer.WritePropertyName("reading");
+            writer.WriteStartObject();
+            writer.WriteString("sensor", sensorName);
+            writer.WriteString("timestamp", timestamp);
+            writer.WritePropertyName("values");
+            writer.WriteStartObject();
+            writeValues(writer);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+
+            writer.WriteEndObject();
+        }
+
+        var json = Encoding.UTF8.GetString(buffer.WrittenSpan);
 
         if (_subscribers.TryGetValue(sensorName, out var subs))
         {
@@ -224,22 +251,51 @@ public class SensorManager : IDisposable
     // ── Sensor event handlers ──
 
     private void OnAccelerometerReading(object? sender, AccelerometerChangedEventArgs e)
-        => Broadcast("accelerometer", new { e.Reading.Acceleration.X, e.Reading.Acceleration.Y, e.Reading.Acceleration.Z });
+    {
+        var v = e.Reading.Acceleration;
+        Broadcast("accelerometer", w => WriteXyz(w, v.X, v.Y, v.Z));
+    }
 
     private void OnBarometerReading(object? sender, BarometerChangedEventArgs e)
-        => Broadcast("barometer", new { pressureInHectopascals = e.Reading.PressureInHectopascals });
+    {
+        var pressure = e.Reading.PressureInHectopascals;
+        Broadcast("barometer", w => w.WriteNumber("pressureInHectopascals", pressure));
+    }
 
     private void OnCompassReading(object? sender, CompassChangedEventArgs e)
-        => Broadcast("compass", new { headingMagneticNorth = e.Reading.HeadingMagneticNorth });
+    {
+        var heading = e.Reading.HeadingMagneticNorth;
+        Broadcast("compass", w => w.WriteNumber("headingMagneticNorth", heading));
+    }
 
     private void OnGyroscopeReading(object? sender, GyroscopeChangedEventArgs e)
-        => Broadcast("gyroscope", new { e.Reading.AngularVelocity.X, e.Reading.AngularVelocity.Y, e.Reading.AngularVelocity.Z });
+    {
+        var v = e.Reading.AngularVelocity;
+        Broadcast("gyroscope", w => WriteXyz(w, v.X, v.Y, v.Z));
+    }
 
     private void OnMagnetometerReading(object? sender, MagnetometerChangedEventArgs e)
-        => Broadcast("magnetometer", new { e.Reading.MagneticField.X, e.Reading.MagneticField.Y, e.Reading.MagneticField.Z });
+    {
+        var v = e.Reading.MagneticField;
+        Broadcast("magnetometer", w => WriteXyz(w, v.X, v.Y, v.Z));
+    }
 
     private void OnOrientationReading(object? sender, OrientationSensorChangedEventArgs e)
-        => Broadcast("orientation", new { e.Reading.Orientation.X, e.Reading.Orientation.Y, e.Reading.Orientation.Z, e.Reading.Orientation.W });
+    {
+        var q = e.Reading.Orientation;
+        Broadcast("orientation", w =>
+        {
+            WriteXyz(w, q.X, q.Y, q.Z);
+            w.WriteNumber("W", q.W);
+        });
+    }
+
+    private static void WriteXyz(Utf8JsonWriter writer, float x, float y, float z)
+    {
+        writer.WriteNumber("X", x);
+        writer.WriteNumber("Y", y);
+        writer.WriteNumber("Z", z);
+    }
 
     public void Dispose()
     {

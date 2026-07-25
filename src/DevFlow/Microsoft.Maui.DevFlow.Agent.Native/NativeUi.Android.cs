@@ -488,7 +488,14 @@ internal static partial class NativeUi
         var activity = CurrentActivity;
         if (activity == null) return false;
 
+        // Activity.OnBackPressed is obsoleted from API 33 in favour of AndroidX's
+        // ComponentActivity.OnBackPressedDispatcher. This package deliberately takes no AndroidX
+        // dependency — it has to work in plain .NET Android apps whose activity may be a bare
+        // Android.App.Activity — and the platform offers no non-AndroidX way to request back.
+        // The API is deprecated, not removed, and still dispatches back on current Android.
+#pragma warning disable CA1422
         activity.OnBackPressed();
+#pragma warning restore CA1422
         return true;
     }
 

@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Maui.ApplicationModel;
@@ -658,11 +660,11 @@ internal sealed class EssentialsAgentSupport
         if (string.IsNullOrEmpty(sensorName))
         {
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
+                WriteJson(w =>
                 {
-                    type = "error",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    error = "sensor query parameter is required (e.g., ?sensor=accelerometer)"
+                    w.WriteString("type", "error");
+                    w.WriteString("timestamp", DateTimeOffset.UtcNow.ToString("O"));
+                    w.WriteString("error", "sensor query parameter is required (e.g., ?sensor=accelerometer)");
                 }), ct);
             return;
         }
@@ -684,11 +686,11 @@ internal sealed class EssentialsAgentSupport
         if (startError != null)
         {
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
+                WriteJson(w =>
                 {
-                    type = "error",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    error = startError
+                    w.WriteString("type", "error");
+                    w.WriteString("timestamp", DateTimeOffset.UtcNow.ToString("O"));
+                    w.WriteString("error", startError);
                 }), ct);
             return;
         }
@@ -702,19 +704,19 @@ internal sealed class EssentialsAgentSupport
             // Confirm subscription
             var subscribedAt = DateTimeOffset.UtcNow.ToString("O");
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                JsonSerializer.Serialize(new
+                WriteJson(w =>
                 {
-                    type = "subscribed",
-                    timestamp = subscribedAt,
-                    sensor = new
-                    {
-                        name = sensorName,
-                        available = Sensors.SupportedSensors.Contains(sensorName),
-                        active = true
-                    },
-                    sensorName = sensorName,
-                    speed = speed.ToString(),
-                    throttleMs = Sensors.ThrottleMs
+                    w.WriteString("type", "subscribed");
+                    w.WriteString("timestamp", subscribedAt);
+                    w.WritePropertyName("sensor");
+                    w.WriteStartObject();
+                    w.WriteString("name", sensorName);
+                    w.WriteBoolean("available", Sensors.SupportedSensors.Contains(sensorName));
+                    w.WriteBoolean("active", true);
+                    w.WriteEndObject();
+                    w.WriteString("sensorName", sensorName);
+                    w.WriteString("speed", speed.ToString());
+                    w.WriteNumber("throttleMs", Sensors.ThrottleMs);
                 }), ct);
 
             // Read loop (detects disconnection)
@@ -760,5 +762,24 @@ internal sealed class EssentialsAgentSupport
         {
             Sensors.Unsubscribe(sensorName, queue);
         }
+    }
+
+    /// <summary>
+    /// Builds a JSON object with <see cref="Utf8JsonWriter"/>. Used instead of
+    /// <c>JsonSerializer.Serialize</c> on anonymous types because reflection-based serialisation
+    /// is not trim-safe (IL2026), and this assembly ships into plain .NET Apple apps that are
+    /// routinely trimmed and AOT-compiled.
+    /// </summary>
+    private static string WriteJson(Action<Utf8JsonWriter> writeBody)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writeBody(writer);
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }

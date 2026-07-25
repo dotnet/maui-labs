@@ -51,10 +51,14 @@ internal static partial class NativeUi
 
         if (roots.Count == 0)
         {
-            foreach (var window in UIApplication.SharedApplication.Windows)
+            // Non-scene apps (a classic UIApplicationDelegate with a Window property) normally
+            // still surface through ConnectedScenes, because UIKit synthesises a scene for them.
+            // If that ever comes back empty, ask the delegate directly rather than reaching for
+            // UIApplication.Windows, which is deprecated across every OS version we support.
+            if (UIApplication.SharedApplication.Delegate?.GetWindow() is UIWindow delegateWindow &&
+                !delegateWindow.Hidden)
             {
-                if (!window.Hidden)
-                    roots.Add(window);
+                roots.Add(delegateWindow);
             }
         }
 
