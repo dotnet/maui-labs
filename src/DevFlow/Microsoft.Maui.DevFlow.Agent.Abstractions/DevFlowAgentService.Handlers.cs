@@ -2540,29 +2540,29 @@ public partial class DevFlowAgentService
 
     // ── Platform info endpoints ──
 
-    protected const string PlatformErrorReasonMissingPermission = "missing_permission";
+    public const string PlatformErrorReasonMissingPermission = "missing_permission";
 
-    protected const string PlatformErrorReasonNotSupported = "not_supported";
+    public const string PlatformErrorReasonNotSupported = "not_supported";
 
-    protected const string PlatformErrorReasonMainThreadRequired = "main_thread_required";
+    public const string PlatformErrorReasonMainThreadRequired = "main_thread_required";
 
-    protected const string PlatformErrorReasonTimeout = "timeout";
+    public const string PlatformErrorReasonTimeout = "timeout";
 
-    protected const string PlatformErrorReasonUnknown = "unknown";
+    public const string PlatformErrorReasonUnknown = "unknown";
 
-    protected const string PlatformErrorReasonInvalidRequest = "invalid_request";
+    public const string PlatformErrorReasonInvalidRequest = "invalid_request";
 
     protected static readonly Regex AndroidPermissionRegex = new(@"android\.permission\.[A-Z0-9_\.]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     protected static readonly string[] SupportedThemeNames = ["light", "dark", "system"];
 
-    protected static HttpResponse CreatePlatformError(string message, Exception ex, int statusCode = 400, Dictionary<string, object?>? details = null)
+    public static HttpResponse CreatePlatformError(string message, Exception ex, int statusCode = 400, Dictionary<string, object?>? details = null)
     {
         var payload = BuildPlatformErrorPayload(ex, details);
         return HttpResponse.Error(message, payload.StatusCode ?? statusCode, payload.Reason, payload.Details);
     }
 
-    protected static HttpResponse CreatePlatformError(string message, string reason, int statusCode = 400, Dictionary<string, object?>? details = null)
+    public static HttpResponse CreatePlatformError(string message, string reason, int statusCode = 400, Dictionary<string, object?>? details = null)
     {
         var payloadDetails = CreatePlatformErrorDetails();
         if (details != null)
@@ -2577,7 +2577,7 @@ public partial class DevFlowAgentService
         return HttpResponse.Error(message, statusCode, reason, payloadDetails.Count > 0 ? payloadDetails : null);
     }
 
-    protected static (string Reason, Dictionary<string, object?>? Details, int? StatusCode) BuildPlatformErrorPayload(
+    public static (string Reason, Dictionary<string, object?>? Details, int? StatusCode) BuildPlatformErrorPayload(
         Exception ex,
         Dictionary<string, object?>? details = null)
     {
@@ -2623,7 +2623,7 @@ public partial class DevFlowAgentService
     /// Matches an exception by simple type name so framework specific exception types
     /// can be recognised without referencing the owning assembly.
     /// </summary>
-    protected static bool IsNamedException(Exception ex, string typeName)
+    public static bool IsNamedException(Exception ex, string typeName)
     {
         for (var type = ex.GetType(); type != null; type = type.BaseType)
         {
@@ -2634,7 +2634,7 @@ public partial class DevFlowAgentService
         return false;
     }
 
-    protected static Dictionary<string, object?> CreatePlatformErrorDetails()
+    public static Dictionary<string, object?> CreatePlatformErrorDetails()
     {
         var details = new Dictionary<string, object?>(StringComparer.Ordinal);
         try

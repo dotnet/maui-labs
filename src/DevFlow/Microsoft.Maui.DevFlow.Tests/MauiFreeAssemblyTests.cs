@@ -65,6 +65,41 @@ public class MauiFreeAssemblyTests
     }
 
     [Fact]
+    public void NativeEssentials_DoesNotReferenceMauiControls()
+    {
+        // The add-on is allowed to depend on Essentials — that is its whole job — but pulling in
+        // Controls would drag the consuming plain .NET app into MAUI, which defeats the point.
+        var assemblies = TestRepo.FindBuiltAssemblies("Microsoft.Maui.DevFlow.Agent.Native.Essentials");
+
+        foreach (var assembly in assemblies)
+            AssemblyReferenceGuard.AssertControlsFree(assembly);
+    }
+
+    [Fact]
+    public void NativeEssentials_SharesTheMauiAgentEndpointImplementations()
+    {
+        // Preferences, secure storage, device and sensor endpoints have to behave identically on
+        // both agents. They do so because both compile the same source, not because someone kept
+        // two copies in sync — this asserts that arrangement is still in place.
+        var shared = Path.Combine(TestRepo.Root, "src", "DevFlow", "Shared.Essentials");
+
+        Assert.True(Directory.Exists(shared), $"Shared Essentials sources are missing: {shared}");
+
+        foreach (var project in new[]
+        {
+            Path.Combine(TestRepo.Root, "src", "DevFlow", "Microsoft.Maui.DevFlow.Agent.Core",
+                "Microsoft.Maui.DevFlow.Agent.Core.csproj"),
+            Path.Combine(TestRepo.Root, "src", "DevFlow", "Microsoft.Maui.DevFlow.Agent.Native.Essentials",
+                "Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj"),
+        })
+        {
+            Assert.Contains(
+                @"..\Shared.Essentials\**\*.cs",
+                File.ReadAllText(project));
+        }
+    }
+
+    [Fact]
     public void NativeSamples_DeclareNoMaui()
     {
         // The samples are the executable proof that a plain .NET app can host the agent. If one

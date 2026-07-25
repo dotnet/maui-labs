@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx')) or $([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst;net10.0-macos</TargetFrameworks>
+
+    <!--
+      Essentials stands on its own: it needs the MAUI workload but not MAUI Controls, so referencing
+      this add-on does not turn a plain .NET app into a MAUI app.
+    -->
+    <UseMaui>false</UseMaui>
+    <UseMauiEssentials>true</UseMauiEssentials>
+    <SingleProject>false</SingleProject>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">12.0</SupportedOSPlatformVersion>
+
+    <PackageId>Microsoft.Maui.DevFlow.Agent.Native.Essentials</PackageId>
+    <Description>Optional add-on for Microsoft.Maui.DevFlow.Agent.Native. Lights up the preferences, secure storage, device info, display, battery, connectivity, permissions, geolocation and sensor endpoints in plain .NET apps by backing them with .NET MAUI Essentials. Does not pull in MAUI Controls.</Description>
+    <PackageTags>android;ios;maccatalyst;macos;automation;testing;agent;essentials</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Native\Microsoft.Maui.DevFlow.Agent.Native.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Essentials" VersionOverride="$(DevFlowMauiMinVersion)" />
+  </ItemGroup>
+
+  <!-- Endpoint implementations shared verbatim with the MAUI agent. -->
+  <ItemGroup>
+    <Compile Include="..\Shared.Essentials\**\*.cs" LinkBase="Essentials" />
+  </ItemGroup>
+
+</Project>

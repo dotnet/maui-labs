@@ -17,6 +17,11 @@
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>
 
+  <!-- Essentials endpoint implementations, shared with the optional add-on for plain .NET apps. -->
+  <ItemGroup>
+    <Compile Include="..\Shared.Essentials\**\*.cs" LinkBase="Essentials" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />

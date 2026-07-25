@@ -61,6 +61,27 @@ internal static class AssemblyReferenceGuard
     }
 
     /// <summary>
+    /// Asserts that the compiled assembly at <paramref name="assemblyPath"/> carries no reference
+    /// to .NET MAUI Controls. Weaker than <see cref="AssertMauiFree"/>: Essentials is allowed,
+    /// because it is usable on its own without turning the consumer into a MAUI app.
+    /// </summary>
+    public static void AssertControlsFree(string assemblyPath)
+    {
+        Assert.True(File.Exists(assemblyPath), $"Expected assembly was not found: {assemblyPath}");
+
+        var controlsReferences = GetReferencedAssemblyNames(assemblyPath)
+            .Where(name => name.StartsWith("Microsoft.Maui.Controls", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        Assert.True(
+            controlsReferences.Length == 0,
+            $"'{Path.GetFileName(assemblyPath)}' must not reference .NET MAUI Controls, but references: " +
+            $"{string.Join(", ", controlsReferences)}.{Environment.NewLine}" +
+            $"Assembly: {assemblyPath}{Environment.NewLine}" +
+            "Consumers of this package are plain .NET apps and must not be forced into MAUI.");
+    }
+
+    /// <summary>
     /// Asserts that a project file opts out of MAUI entirely — no <c>UseMaui</c>, no
     /// <c>UseMauiEssentials</c>, and no <c>Microsoft.Maui.*</c> package reference. This catches
     /// re-coupling at the project level even when the project has not been built locally.

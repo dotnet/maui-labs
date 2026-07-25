@@ -49,6 +49,7 @@
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Abstractions/Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Native/Microsoft.Maui.DevFlow.Agent.Native.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Native.Essentials/Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Analyzers/Microsoft.Maui.DevFlow.Analyzers.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk/Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />

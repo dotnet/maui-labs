@@ -48,14 +48,28 @@ public static class DevFlowAgent
     /// <param name="options">Agent configuration. Port, broker registration and feature switches.</param>
     /// <returns>The running agent service.</returns>
     public static NativeDevFlowAgentService Start(AgentOptions options)
+        => Start(options, static o => new NativeDevFlowAgentService(o));
+
+    /// <summary>
+    /// Starts the agent, building the service with the supplied factory. Add-on packages use this
+    /// to substitute a service that implements endpoints the base native agent reports as
+    /// unsupported — see <c>Microsoft.Maui.DevFlow.Agent.Native.Essentials</c>.
+    /// </summary>
+    /// <param name="options">Agent configuration. Port, broker registration and feature switches.</param>
+    /// <param name="serviceFactory">Creates the agent service from <paramref name="options"/>.</param>
+    /// <returns>The running agent service.</returns>
+    public static NativeDevFlowAgentService Start(
+        AgentOptions options,
+        Func<AgentOptions, NativeDevFlowAgentService> serviceFactory)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(serviceFactory);
 
         lock (s_gate)
         {
             if (s_service != null) return s_service;
 
-            var service = new NativeDevFlowAgentService(options);
+            var service = serviceFactory(options);
 
             if (options.EnableFileLogging)
             {

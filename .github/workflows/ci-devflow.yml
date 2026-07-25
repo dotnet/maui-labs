@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -32,3 +34,16 @@ jobs:
       run-tests: true
       pack: true
       os: '["windows-latest"]'
+
+  # The native samples are the executable proof that a plain .NET app can host the agent, so they
+  # are built even though samples are otherwise out of the product solution filter. They need a Mac:
+  # .NET for macOS and iOS app heads cannot be bundled on Windows.
+  native-samples:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/DevFlow/DevFlow.Samples.Native.slnf
+      project-name: devflow-samples-native
+      run-tests: false
+      pack: false
+      os: '["macos-latest"]'
+      android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj
