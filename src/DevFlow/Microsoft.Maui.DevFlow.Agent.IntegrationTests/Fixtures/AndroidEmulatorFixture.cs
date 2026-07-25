@@ -10,7 +10,10 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class AndroidEmulatorFixture : AppFixtureBase
 {
-    const string PackageId = "com.companyname.mauitodo";
+    const string MauiPackageId = "com.companyname.mauitodo";
+    const string NativePackageId = "com.microsoft.maui.devflow.samplenative";
+
+    static string PackageId => TestFramework.IsNative ? NativePackageId : MauiPackageId;
 
     Process? _emulatorProcess;
     CancellationTokenSource? _appMonitorCts;
@@ -53,7 +56,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
                 // Best-effort only; some emulator states reject logcat clear briefly.
             }
 
-            var projectPath = GetSampleProjectPath();
+            var projectPath = GetSampleProjectPath("android");
             await BuildSampleAsync(projectPath, "net10.0-android",
                 $"-p:EmbedAssembliesIntoApk=true -p:MauiDevFlowPort={AgentPort}");
 
@@ -724,7 +727,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
     static string FindApk()
     {
-        var binDir = Path.Combine(GetSampleBuildOutputRoot(), "net10.0-android");
+        var binDir = Path.Combine(GetSampleBuildOutputRoot("android"), "net10.0-android");
 
         if (!Directory.Exists(binDir))
             throw new InvalidOperationException($"Android build output not found at: {binDir}");

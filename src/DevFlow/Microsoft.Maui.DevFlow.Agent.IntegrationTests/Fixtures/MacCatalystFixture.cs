@@ -16,7 +16,7 @@ public sealed class MacCatalystFixture : AppFixtureBase
     {
         await WithBuildLockAsync(async () =>
         {
-            var projectPath = GetSampleProjectPath();
+            var projectPath = GetSampleProjectPath("maccatalyst");
             await BuildSampleAsync(projectPath, "net10.0-maccatalyst");
 
             var appPath = FindAppBundle();
@@ -38,7 +38,7 @@ public sealed class MacCatalystFixture : AppFixtureBase
 
     static string FindAppBundle()
     {
-        var sampleBinDir = Path.Combine(GetSampleBuildOutputRoot(), "net10.0-maccatalyst");
+        var sampleBinDir = Path.Combine(GetSampleBuildOutputRoot("maccatalyst"), "net10.0-maccatalyst");
 
         if (!Directory.Exists(sampleBinDir))
             throw new InvalidOperationException($"Build output directory not found: {sampleBinDir}");

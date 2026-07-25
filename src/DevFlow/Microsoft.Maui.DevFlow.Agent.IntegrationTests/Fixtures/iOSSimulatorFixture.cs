@@ -23,7 +23,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
 
         await WithBuildLockAsync(async () =>
         {
-            var projectPath = GetSampleProjectPath();
+            var projectPath = GetSampleProjectPath("ios");
             await BuildSampleAsync(projectPath, "net10.0-ios",
                 $"-p:_DeviceTarget=simulator -p:RuntimeIdentifier={GetSimulatorRuntimeIdentifier()}");
 
@@ -154,7 +154,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
 
     static string FindSimulatorAppBundle()
     {
-        var binDir = Path.Combine(GetSampleBuildOutputRoot(), "net10.0-ios", GetSimulatorRuntimeIdentifier());
+        var binDir = Path.Combine(GetSampleBuildOutputRoot("ios"), "net10.0-ios", GetSimulatorRuntimeIdentifier());
 
         if (!Directory.Exists(binDir))
             throw new InvalidOperationException($"iOS simulator build output not found at: {binDir}");

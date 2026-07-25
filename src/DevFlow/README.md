@@ -197,6 +197,29 @@ DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Age
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
 
+#### Running the suite against a plain .NET app
+
+`DEVFLOW_TEST_FRAMEWORK` selects which sample app the fixtures deploy: `maui` (default) drives
+`samples/DevFlow.Sample`, `native` drives the matching head under `samples/DevFlow.Sample.Native`.
+Both samples expose the same automation ids, so the bulk of the suite is shared.
+
+Tests that assert on MAUI-specific behaviour (Shell routing, `AppTheme`, Essentials-backed
+preferences/secure-storage/sensors/device info, WebView CDP) are tagged
+`[Trait("framework", "maui")]` and must be filtered out of a native run:
+
+```bash
+# Native iOS Simulator
+DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=ios \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter "framework!=maui"
+
+# Native Mac Catalyst
+DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter "framework!=maui"
+```
+
+`native` is supported for `android`, `ios` and `maccatalyst`. There is no plain-.NET Windows head,
+and the AppKit head under `samples/DevFlow.Sample.Native/MacOS` does not yet have a driving fixture.
+
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 
 ## Version

@@ -225,6 +225,29 @@ public abstract class AppFixtureBase : IAppFixture
         return path;
     }
 
+    /// <summary>
+    /// Resolves the sample project for the framework under test: the MAUI sample by default, or
+    /// the plain .NET head matching <paramref name="platform"/> when DEVFLOW_TEST_FRAMEWORK=native.
+    /// </summary>
+    protected static string GetSampleProjectPath(string platform)
+    {
+        if (!TestFramework.IsNative)
+            return GetSampleProjectPath();
+
+        var head = TestFramework.NativeHeadFor(platform);
+        var path = Path.Combine(
+            FindRepoRoot(), "samples", "DevFlow.Sample.Native", head, $"{NativeSampleName(platform)}.csproj");
+
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"Native sample project not found at: {path}");
+
+        return path;
+    }
+
+    /// <summary>Assembly/project name of the native sample head for a fixture platform.</summary>
+    protected static string NativeSampleName(string platform)
+        => $"DevFlow.Sample.Native.{TestFramework.NativeHeadFor(platform)}";
+
     protected static string GetSampleBuildOutputRoot()
     {
         var repoRoot = FindRepoRoot();
@@ -238,6 +261,31 @@ public abstract class AppFixtureBase : IAppFixture
 
         throw new InvalidOperationException(
             $"Could not locate DevFlow.Sample build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
+    }
+
+    /// <summary>
+    /// Resolves the build output root for the framework under test. Mirrors
+    /// <see cref="GetSampleProjectPath(string)"/>.
+    /// </summary>
+    protected static string GetSampleBuildOutputRoot(string platform)
+    {
+        if (!TestFramework.IsNative)
+            return GetSampleBuildOutputRoot();
+
+        var repoRoot = FindRepoRoot();
+        var name = NativeSampleName(platform);
+
+        var artifactsPath = Path.Combine(repoRoot, "artifacts", "bin", name, "Debug");
+        if (Directory.Exists(artifactsPath))
+            return artifactsPath;
+
+        var projectBinPath = Path.Combine(
+            repoRoot, "samples", "DevFlow.Sample.Native", TestFramework.NativeHeadFor(platform), "bin", "Debug");
+        if (Directory.Exists(projectBinPath))
+            return projectBinPath;
+
+        throw new InvalidOperationException(
+            $"Could not locate {name} build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
     }
 
     protected static int FindFreePort()

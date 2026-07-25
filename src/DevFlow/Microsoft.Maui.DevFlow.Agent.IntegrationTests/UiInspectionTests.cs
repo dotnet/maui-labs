@@ -79,10 +79,10 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task Query_ByType_ReturnsElements()
     {
         await NavigateToMainPageAsync();
-        var buttons = await Client.QueryAsync(type: "Button");
+        var buttons = await Client.QueryAsync(type: ButtonTypeName);
 
         Assert.NotEmpty(buttons);
-        Assert.All(buttons, button => Assert.Equal("Button", button.Type));
+        Assert.All(buttons, button => Assert.Equal(ButtonTypeName, button.Type));
     }
 
     [Fact]
@@ -133,7 +133,10 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.Empty(elements);
     }
 
+    // AppKit renders both labels and text fields as NSTextField, so the Label/Entry
+    // split this asserts on is specific to MAUI's normalised control names.
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Query_MultipleTypes_ReturnsAppropriateResults()
     {
         await NavigateToMainPageAsync();
@@ -215,6 +218,7 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.True(bytes.Length > 0);
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Tree_WindowsNativeDialog_IncludesNativeElements()
     {
@@ -244,7 +248,7 @@ public class UiInspectionTests : IntegrationTestBase
         ElementInfo? match = null;
         await WaitForAsync(async () =>
         {
-            var buttons = await Client.QueryAsync(type: "Button", text: text);
+            var buttons = await Client.QueryAsync(type: ButtonTypeName, text: text);
             match = buttons.FirstOrDefault(e =>
                 e.Id.StartsWith("native:", StringComparison.Ordinal) &&
                 string.Equals(e.Text, text, StringComparison.OrdinalIgnoreCase));

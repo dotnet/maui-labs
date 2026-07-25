@@ -22,6 +22,29 @@ public class AgentMetadataTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Status_ReportsTheFrameworkUnderTest()
+    {
+        // This is what tells a client whether it is driving a MAUI app or a plain .NET one, and
+        // therefore which capabilities it can expect to be answered.
+        var status = await Client.GetStatusAsync();
+
+        Assert.NotNull(status?.Agent);
+        Assert.Equal(TestFramework.Name, status!.Agent!.FrameworkId);
+
+        var expectedUi = TestFramework.IsNative
+            ? App.Platform switch
+            {
+                "android" => "android-views",
+                "ios" or "maccatalyst" => "uikit",
+                "macos" => "appkit",
+                var other => throw new InvalidOperationException($"No native UI framework for '{other}'."),
+            }
+            : "maui-controls";
+
+        Assert.Equal(expectedUi, status.Agent.UiFramework);
+    }
+
+    [Fact]
     public async Task Status_ContainsPlatformInfo()
     {
         var status = await Client.GetStatusAsync();

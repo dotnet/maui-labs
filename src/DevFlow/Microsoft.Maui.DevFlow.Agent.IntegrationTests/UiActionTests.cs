@@ -130,6 +130,7 @@ public class UiActionTests : IntegrationTestBase
         await NavigateToMainPageAsync();
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Navigate_ToMultipleRoutes_Works()
     {
@@ -148,6 +149,7 @@ public class UiActionTests : IntegrationTestBase
         await NavigateToMainPageAsync();
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Back_Action_GoesBack()
     {
@@ -175,6 +177,7 @@ public class UiActionTests : IntegrationTestBase
         Assert.True(result);
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Resize_Window_Succeeds()
     {
@@ -245,6 +248,7 @@ public class UiActionTests : IntegrationTestBase
         await NavigateToMainPageAsync();
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Tap_ImageButton_TriggersAction()
     {
@@ -331,6 +335,7 @@ public class UiActionTests : IntegrationTestBase
         await Client.ClearAsync(descEntry.Id);
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Tap_WindowsNativeAlertButton_DismissesDialog()
     {
@@ -379,7 +384,7 @@ public class UiActionTests : IntegrationTestBase
         ElementInfo? match = null;
         await WaitForAsync(async () =>
         {
-            var buttons = await Client.QueryAsync(type: "Button", text: text);
+            var buttons = await Client.QueryAsync(type: ButtonTypeName, text: text);
             match = buttons.FirstOrDefault(e =>
                 e.Id.StartsWith("native:", StringComparison.Ordinal) &&
                 string.Equals(e.Text, text, StringComparison.OrdinalIgnoreCase));
