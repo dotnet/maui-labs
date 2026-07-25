@@ -120,15 +120,11 @@ public abstract class AppFixtureBase : IAppFixture
     {
         CleanBuildOutputs(projectPath, targetFramework);
 
-        var dotnetPath = File.Exists("/usr/local/share/dotnet/dotnet")
-            ? "/usr/local/share/dotnet/dotnet"
-            : "dotnet";
-
         var args = $"build \"{projectPath}\" -f {targetFramework} -c Debug --nologo -v q";
         if (!string.IsNullOrEmpty(extraArgs))
             args += $" {extraArgs}";
 
-        var psi = new ProcessStartInfo(dotnetPath, args)
+        var psi = new ProcessStartInfo(ResolveDotnetPath(), args)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -147,6 +143,32 @@ public abstract class AppFixtureBase : IAppFixture
             throw new InvalidOperationException(
                 $"dotnet build failed (exit code {process.ExitCode}).\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         }
+    }
+
+    /// <summary>
+    /// Finds the dotnet muxer to build the sample with. This has to be the same install that is
+    /// running the tests: side-by-side installs are common on developer machines, and only the one
+    /// selected by the repo's global.json has an SDK new enough to build the samples.
+    /// </summary>
+    private static string ResolveDotnetPath()
+    {
+        // The SDK sets this for any process it launches, including the test host.
+        var hostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
+        if (!string.IsNullOrEmpty(hostPath) && File.Exists(hostPath))
+            return hostPath;
+
+        // Otherwise the process running us is usually the muxer itself.
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrEmpty(processPath) &&
+            Path.GetFileNameWithoutExtension(processPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return processPath;
+        }
+
+        if (File.Exists("/usr/local/share/dotnet/dotnet"))
+            return "/usr/local/share/dotnet/dotnet";
+
+        return "dotnet";
     }
 
     protected static async Task WithBuildLockAsync(Func<Task> action, TimeSpan? timeout = null)
