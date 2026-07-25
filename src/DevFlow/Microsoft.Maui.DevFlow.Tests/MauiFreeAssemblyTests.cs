@@ -47,6 +47,24 @@ public class MauiFreeAssemblyTests
     }
 
     [Fact]
+    public void Native_ProjectDeclaresNoMaui()
+        => AssemblyReferenceGuard.AssertProjectDeclaresNoMaui(Path.Combine(
+            TestRepo.Root,
+            "src", "DevFlow", "Microsoft.Maui.DevFlow.Agent.Native",
+            "Microsoft.Maui.DevFlow.Agent.Native.csproj"));
+
+    [Fact]
+    public void Native_DoesNotReferenceMaui()
+    {
+        // The native agent is the whole point of the split: it must be hostable from a plain
+        // .NET Android/iOS/Mac Catalyst/macOS app that never restores a MAUI package.
+        var assemblies = TestRepo.FindBuiltAssemblies("Microsoft.Maui.DevFlow.Agent.Native");
+
+        foreach (var assembly in assemblies)
+            AssemblyReferenceGuard.AssertMauiFree(assembly);
+    }
+
+    [Fact]
     public void Guard_DetectsMauiReferences_InAMauiAssembly()
     {
         // Sanity check: the guard must actually be capable of failing. Agent.Core is the MAUI

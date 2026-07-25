@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx')) or $([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst;net10.0-macos</TargetFrameworks>
+
+    <!-- Deliberately NOT a MAUI project. This package must stay usable from plain .NET apps. -->
+    <UseMaui>false</UseMaui>
+    <SingleProject>false</SingleProject>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">12.0</SupportedOSPlatformVersion>
+
+    <PackageId>Microsoft.Maui.DevFlow.Agent.Native</PackageId>
+    <Description>In-app DevFlow agent for plain .NET Android, iOS, Mac Catalyst and macOS apps. Exposes the native view hierarchy, element interactions, screenshots, logs, network capture and profiling over the same HTTP/JSON API as the MAUI agent — with no .NET MAUI dependency.</Description>
+    <PackageTags>android;ios;maccatalyst;macos;automation;testing;visual-tree;agent</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- Reuse the framework-agnostic MSBuild port/metadata wiring from the MAUI agent package. -->
+  <ItemGroup>
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\**"
+          Pack="true"
+          PackagePath="build\"
+          Visible="false" />
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\buildTransitive\**"
+          Pack="true"
+          PackagePath="buildTransitive\"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -418,7 +418,141 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     protected virtual Task<HttpResponse> HandleGesture(HttpRequest request) => NotSupportedTask("ui.actions");
 
     /// <summary>Handles <c>POST /api/v1/ui/batch</c>.</summary>
-    protected virtual Task<HttpResponse> HandleBatch(HttpRequest request) => NotSupportedTask("ui.actions");
+    protected virtual async Task<HttpResponse> HandleBatch(HttpRequest request)
+    {
+        if (!IsUiSupported) return NotSupported("ui.actions");
+        if (!IsAppBound) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<BatchRequest>();
+        if (body?.Actions == null || body.Actions.Count == 0)
+            return HttpResponse.Error("actions are required");
+
+        var results = new List<object>(body.Actions.Count);
+        var allSucceeded = true;
+
+        foreach (var action in body.Actions)
+        {
+            var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
+            HttpResponse response;
+
+            switch (actionName)
+            {
+                case "tap":
+                    response = await HandleTap(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    break;
+                case "fill":
+                    response = await HandleFill(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new FillRequest { ElementId = action.ElementId, Text = action.Text ?? string.Empty })
+                    });
+                    break;
+                case "clear":
+                    response = await HandleClear(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    break;
+                case "focus":
+                    response = await HandleFocus(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ActionRequest { ElementId = action.ElementId }) });
+                    break;
+                case "navigate":
+                    response = await HandleNavigate(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
+                    });
+                    break;
+                case "resize":
+                    response = await HandleResize(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ResizeRequest(action.Width, action.Height)) });
+                    break;
+                case "scroll":
+                    response = await HandleScroll(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new ScrollRequest
+                        {
+                            ElementId = action.ElementId,
+                            DeltaX = action.DeltaX,
+                            DeltaY = action.DeltaY,
+                            ItemIndex = action.ItemIndex,
+                            GroupIndex = action.GroupIndex,
+                            ScrollToPosition = action.ScrollToPosition,
+                            Animated = action.Animated
+                        })
+                    });
+                    break;
+                case "back":
+                    response = await HandleBack(new HttpRequest { Method = "POST" });
+                    break;
+                case "key":
+                    response = await HandleKey(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new KeyActionRequest { ElementId = action.ElementId, Key = action.Key, Text = action.Text })
+                    });
+                    break;
+                case "gesture":
+                    response = await HandleGesture(new HttpRequest
+                    {
+                        Method = "POST",
+                        Body = JsonSerializer.Serialize(new GestureActionRequest
+                        {
+                            ElementId = action.ElementId,
+                            Type = action.Type ?? action.Action,
+                            Direction = action.Direction,
+                            Distance = action.Distance,
+                            DurationMs = action.DurationMs
+                        })
+                    });
+                    break;
+                case "set-property":
+                case "set_property":
+                    response = await HandleSetProperty(new HttpRequest
+                    {
+                        Method = "PUT",
+                        RouteParams = new Dictionary<string, string>
+                        {
+                            ["id"] = action.ElementId ?? string.Empty,
+                            ["name"] = action.Property ?? string.Empty
+                        },
+                        Body = JsonSerializer.Serialize(new SetPropertyRequest { Value = action.Value ?? string.Empty })
+                    });
+                    break;
+                case "invoke-action":
+                case "invoke_action":
+                    response = await HandleInvokeAction(new HttpRequest
+                    {
+                        Method = "POST",
+                        RouteParams = new Dictionary<string, string>
+                        {
+                            ["name"] = action.Name ?? string.Empty
+                        },
+                        Body = JsonSerializer.Serialize(new InvokeActionRequest { Args = action.Args })
+                    });
+                    break;
+                default:
+                    response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
+                    break;
+            }
+
+            var succeeded = response.StatusCode < 400;
+            allSucceeded &= succeeded;
+            results.Add(new
+            {
+                action = actionName,
+                success = succeeded,
+                statusCode = response.StatusCode,
+                response = response.Body
+            });
+
+            if (!succeeded && !body.ContinueOnError)
+                break;
+        }
+
+        return HttpResponse.Json(new
+        {
+            success = allSucceeded,
+            results
+        });
+    }
 
     /// <summary>Handles <c>POST /api/v1/ui/scroll</c>.</summary>
     protected virtual Task<HttpResponse> HandleScroll(HttpRequest request) => NotSupportedTask("ui.actions");
