@@ -18,12 +18,14 @@ public static class AppFixtureFactory
         return platform switch
         {
             "maccatalyst" or "mac" or "catalyst" => new MacCatalystFixture(),
+            // macOS is native-only: MAUI has no in-box AppKit head to drive.
+            "macos" or "appkit" => new MacOSFixture(),
             "ios" => new iOSSimulatorFixture(),
             "android" => new AndroidEmulatorFixture(),
             "windows" => new WindowsFixture(),
             _ => throw new InvalidOperationException(
                 $"Unknown test platform '{platform}'. " +
-                "Supported values: maccatalyst, ios, android, windows. " +
+                "Supported values: maccatalyst, macos, ios, android, windows. " +
                 "Set the DEVFLOW_TEST_PLATFORM environment variable.")
         };
     }

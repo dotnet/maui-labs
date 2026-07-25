@@ -436,28 +436,47 @@ internal static partial class NativeUi
         var properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["AlphaValue"] = view.AlphaValue.ToString(culture),
+            ["Opacity"] = view.AlphaValue.ToString(culture),
             ["Hidden"] = view.Hidden ? "True" : "False",
+            // Cross-framework aliases. The setter already accepts Text/IsVisible/IsEnabled/IsChecked,
+            // and UIKit publishes the same names, so reads have to match or callers can write a
+            // property they cannot read back.
+            ["IsVisible"] = (!view.Hidden && view.AlphaValue > 0).ToString(),
             ["Width"] = view.Bounds.Width.ToString(culture),
             ["Height"] = view.Bounds.Height.ToString(culture),
             ["Identifier"] = view.Identifier,
+            ["AccessibilityIdentifier"] = view.Identifier,
             ["AccessibilityLabel"] = SafeAccessibilityLabel(view),
         };
 
         if (view is NSControl control)
+        {
             properties["Enabled"] = control.Enabled ? "True" : "False";
+            properties["IsEnabled"] = control.Enabled ? "True" : "False";
+        }
 
         switch (view)
         {
             case NSTextField field:
                 properties["StringValue"] = field.StringValue;
+                properties["Text"] = field.StringValue;
+                properties["Value"] = field.StringValue;
                 properties["PlaceholderString"] = field.PlaceholderString;
+                properties["Placeholder"] = field.PlaceholderString;
                 break;
             case NSTextView textView:
                 properties["Value"] = textView.Value;
+                properties["Text"] = textView.Value;
                 break;
             case NSButton button:
                 properties["Title"] = button.Title;
+                properties["Text"] = button.Title;
                 properties["State"] = button.State.ToString();
+                // Checkboxes and switches are both NSButton on AppKit (SetButtonType(Switch)), so
+                // the checked state doubles as the button's value.
+                properties["IsChecked"] = (button.State == NSCellStateValue.On).ToString();
+                properties["On"] = (button.State == NSCellStateValue.On).ToString();
+                properties["Value"] = button.Title;
                 break;
         }
 

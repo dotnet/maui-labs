@@ -25,6 +25,7 @@ on:
           - android
           - ios
           - maccatalyst
+          - macos
           - windows
       framework:
         description: App framework to drive (native runs the plain .NET samples)
@@ -71,6 +72,7 @@ jobs:
       run-android: ${{ steps.decide.outputs.android }}
       run-ios: ${{ steps.decide.outputs.ios }}
       run-maccatalyst: ${{ steps.decide.outputs.maccatalyst }}
+      run-macos: ${{ steps.decide.outputs.macos }}
       run-windows: ${{ steps.decide.outputs.windows }}
       # JSON array consumed as a matrix axis by the platform jobs. Windows has no plain .NET head,
       # so it always runs maui only.
@@ -95,12 +97,19 @@ jobs:
               echo false
             fi
           }
+          # `framework` is a workflow_dispatch-only input, so it is empty for label-triggered PR
+          # runs. Those default to `both`: the label is an explicit opt-in to the expensive suite,
+          # and the native axis is the newer, less-proven one — defaulting it to `maui` there meant
+          # the plain .NET heads were never exercised automatically at all.
+          DEFAULT_FRAMEWORK=maui
+          [[ "$EVENT" == "pull_request" ]] && DEFAULT_FRAMEWORK=both
           {
             echo "android=$(should_run android)"
             echo "ios=$(should_run ios)"
             echo "maccatalyst=$(should_run maccatalyst)"
+            echo "macos=$(should_run macos)"
             echo "windows=$(should_run windows)"
-            case "${FRAMEWORK:-maui}" in
+            case "${FRAMEWORK:-$DEFAULT_FRAMEWORK}" in
               native) echo 'frameworks=["native"]' ;;
               both)   echo 'frameworks=["maui","native"]' ;;
               *)      echo 'frameworks=["maui"]' ;;
@@ -340,6 +349,69 @@ jobs:
         with:
           name: devflow-integration-maccatalyst-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/maccatalyst/
+          retention-days: 30
+
+  macos:
+    needs: plan
+    # AppKit only exists in the plain .NET samples: MAUI has no in-box macOS head, so this job has
+    # nothing to say about the maui axis and runs native-only regardless of the framework input.
+    if: needs.plan.outputs.run-macos == 'true' && contains(needs.plan.outputs.frameworks, 'native')
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: macos
+      DEVFLOW_TEST_FRAMEWORK: native
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
+          COMPATIBLE="${COMPATIBLE:-}"
+          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+            if [[ -d "$candidate" ]]; then
+              COMPATIBLE="$candidate"
+              break
+            fi
+          done
+          SELECTED="${COMPATIBLE:-$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)}"
+          if [[ -n "$SELECTED" ]]; then
+            echo "Using $SELECTED"
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+            ACTOOL_PATH="$(xcrun --find actool)"
+            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
+            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
+            export DEVELOPER_DIR="$DEVELOPER_ROOT"
+            export MD_APPLE_SDK_ROOT="$XCODE_APP"
+            echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
+            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Apple MAUI workloads
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run DevFlow integration tests (macos)
+        run: >
+          dotnet test $TEST_PROJECT
+          -c Debug
+          --filter framework!=maui
+          --logger "trx;LogFileName=devflow-integration-macos-native.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/macos
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-macos-native-results
+          path: ./artifacts/TestResults/devflow-integration/macos/
           retention-days: 30
 
   windows:
