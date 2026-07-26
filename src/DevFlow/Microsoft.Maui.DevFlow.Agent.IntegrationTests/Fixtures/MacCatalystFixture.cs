@@ -48,7 +48,7 @@ public sealed class MacCatalystFixture : AppFixtureBase
         if (appBundles.Length == 0)
             throw new InvalidOperationException($"No .app bundle found under {sampleBinDir}");
 
-        return appBundles[0];
+        return SelectHostArchitectureAppBundle(appBundles, "maccatalyst");
     }
 
     void LaunchApp(string appBundlePath)

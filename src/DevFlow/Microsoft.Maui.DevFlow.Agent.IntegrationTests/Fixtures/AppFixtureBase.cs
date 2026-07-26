@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -308,6 +309,40 @@ public abstract class AppFixtureBase : IAppFixture
 
         throw new InvalidOperationException(
             $"Could not locate {name} build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
+    }
+
+    /// <summary>
+    /// Picks the <c>.app</c> bundle built for this machine's architecture.
+    /// </summary>
+    /// <remarks>
+    /// A macOS or Mac Catalyst build emits one bundle per RuntimeIdentifier, and Release also
+    /// lipo's a universal one at the target-framework root. Choosing between them by enumeration
+    /// order or path length is only ever accidentally right, and choosing wrong launches the x64
+    /// slice under Rosetta on Apple Silicon — the app still runs, so nothing fails, it just is not
+    /// the architecture under test. Prefer the host RID, fall back to the universal bundle, and
+    /// refuse to launch a foreign-architecture one.
+    /// </remarks>
+    internal static string SelectHostArchitectureAppBundle(IReadOnlyList<string> bundles, string ridPrefix)
+    {
+        var hostArch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+        var hostRid = $"{ridPrefix}-{hostArch}";
+
+        static bool HasSegment(string path, Func<string, bool> predicate) =>
+            path.Split(Path.DirectorySeparatorChar).Any(predicate);
+
+        var hostBundle = bundles.FirstOrDefault(b => HasSegment(b, segment => segment == hostRid));
+        if (hostBundle is not null)
+            return hostBundle;
+
+        // The universal bundle is the one that does not sit under any RID directory.
+        var universal = bundles.FirstOrDefault(
+            b => !HasSegment(b, segment => segment.StartsWith($"{ridPrefix}-", StringComparison.Ordinal)));
+        if (universal is not null)
+            return universal;
+
+        throw new InvalidOperationException(
+            $"No .app bundle was built for {hostRid}. Found only: {string.Join(", ", bundles)}. " +
+            "Refusing to launch a foreign-architecture bundle, which would run under Rosetta.");
     }
 
     protected static int FindFreePort()

@@ -57,9 +57,8 @@ public sealed class MacOSFixture : AppFixtureBase
             throw new InvalidOperationException($"No .app bundle found under {sampleBinDir}");
 
         // A macos build emits both a runtime-identifier-specific bundle and, once it has been
-        // lipo'd, a universal one at the TFM root. Prefer the deepest path: the RID-specific bundle
-        // is always present, whereas the universal one only appears for some build configurations.
-        return appBundles.OrderByDescending(static path => path.Length).First();
+        // lipo'd, a universal one at the TFM root.
+        return SelectHostArchitectureAppBundle(appBundles, "osx");
     }
 
     void LaunchApp(string appBundlePath)
