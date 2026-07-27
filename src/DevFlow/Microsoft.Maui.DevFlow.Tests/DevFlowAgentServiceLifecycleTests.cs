@@ -34,6 +34,28 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task RecordingStatus_IsReadableByNonOwner_ButStopIsLeaseProtected()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var owner = new AgentClient("localhost", port) { MutationLeaseId = "owner" };
+        using var observer = new AgentClient("localhost", port) { MutationLeaseId = "observer" };
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        await WaitForStatusAsync(owner);
+        var claim = await owner.ControlMutationLeaseAsync("claim");
+        Assert.True(claim.YouHold);
+
+        var status = await observer.ControlMutationRecordingAsync("status");
+        Assert.False(status.Ok);
+        Assert.Contains("broker", status.Error, StringComparison.OrdinalIgnoreCase);
+
+        var stopError = await Assert.ThrowsAsync<MutationLeaseException>(() =>
+            observer.ControlMutationRecordingAsync("stop", null, null, null, null, "recording"));
+        Assert.Contains("driving", stopError.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task BaseAgent_ReportsJobsUnsupportedConsistently()
     {
         var port = GetFreePort();
@@ -46,12 +68,16 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.NotNull(status);
         Assert.NotNull(status!.Capabilities);
         Assert.False(status.Capabilities!.Jobs);
+        Assert.Equal(Environment.ProcessId, status.App?.ProcessId);
         Assert.NotNull(status.Extensions);
         Assert.Equal(0, status.Extensions!.Count);
         Assert.Matches("^[a-f0-9]{64}$", status.Extensions.Hash);
 
         var capabilities = await client.GetCapabilitiesAsync();
-        var jobsCapabilities = capabilities.GetProperty("capabilities").GetProperty("device.jobs");
+        var capabilityMap = capabilities.GetProperty("capabilities");
+        Assert.Contains("property-descriptors", capabilityMap.GetProperty("ui.actions").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        Assert.Contains("subscribe", capabilityMap.GetProperty("ui.events").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        var jobsCapabilities = capabilityMap.GetProperty("device.jobs");
         Assert.False(jobsCapabilities.GetProperty("supported").GetBoolean());
         Assert.Empty(jobsCapabilities.GetProperty("features").EnumerateArray());
 

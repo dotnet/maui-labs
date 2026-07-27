@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    DevFlow XAML source maps power "click-to-XAML-source" in the DevFlow inspector: the build-time
+    generator records each XAML element's source position so the running app's visual tree can point
+    back at the .xaml line that declared it.
+
+    Enabled for DEBUG builds only by default, because it embeds XAML text and developer-machine file
+    paths into the app assembly — undesirable for Release / AOT / store builds. Set
+    DevFlowXamlSourceMapsEnabled explicitly in your project to force it on or off.
+  -->
+  <PropertyGroup>
+    <DevFlowXamlSourceMapsEnabled Condition="'$(DevFlowXamlSourceMapsEnabled)' == '' and '$(Configuration)' == 'Debug'">true</DevFlowXamlSourceMapsEnabled>
+    <DevFlowXamlSourceMapsEnabled Condition="'$(DevFlowXamlSourceMapsEnabled)' == ''">false</DevFlowXamlSourceMapsEnabled>
+  </PropertyGroup>
+
+</Project>

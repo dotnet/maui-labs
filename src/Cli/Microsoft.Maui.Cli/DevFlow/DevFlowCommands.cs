@@ -684,16 +684,17 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiResizeCmd);
 
-        // MAUI alert subcommands — supports iOS simulator (apple CLI) and Mac Catalyst (macOS AX API)
+        // System/app alert subcommands — platform drivers cover Android, iOS simulator,
+        // Mac Catalyst, and Windows.
         var alertCommand = new Command("alert", "Detect and dismiss system/app dialogs");
 
         // detect
-        var detectUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
+        var detectUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var detectPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
         var alertDetectCmd = new Command("detect", "Check if an alert/dialog is visible") { detectUdid, detectPid };
         alertDetectCmd.SetAction(async (ctx, ct) =>
         {
-            var udid = ctx.GetValue(detectUdid);
+            var udid = ctx.GetValue(detectUdid) ?? ctx.GetValue(deviceOption);
             var pid = ctx.GetValue(detectPid);
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
@@ -704,13 +705,13 @@ public class DevFlowCommands
         alertCommand.Add(alertDetectCmd);
 
         // dismiss
-        var dismissUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
+        var dismissUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var dismissPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
         var dismissButtonArg = new Argument<string?>("button") { Description = "Button label to tap (default: first accept-style button)", DefaultValueFactory = _ => null };
         var alertDismissCmd = new Command("dismiss", "Dismiss the current alert/dialog") { dismissButtonArg, dismissUdid, dismissPid };
         alertDismissCmd.SetAction(async (ctx, ct) =>
         {
-            var udid = ctx.GetValue(dismissUdid);
+            var udid = ctx.GetValue(dismissUdid) ?? ctx.GetValue(deviceOption);
             var pid = ctx.GetValue(dismissPid);
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
@@ -722,12 +723,12 @@ public class DevFlowCommands
         alertCommand.Add(alertDismissCmd);
 
         // tree
-        var treeUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
+        var treeUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var treePid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
         var alertTreeCmd = new Command("tree", "Show raw accessibility tree") { treeUdid, treePid };
         alertTreeCmd.SetAction(async (ctx, ct) =>
         {
-            var udid = ctx.GetValue(treeUdid);
+            var udid = ctx.GetValue(treeUdid) ?? ctx.GetValue(deviceOption);
             var pid = ctx.GetValue(treePid);
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
@@ -1718,6 +1719,8 @@ public class DevFlowCommands
     
     // ===== CDP Helper: Send command via AgentClient =====
 
+    private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
+
     private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
     {
         EnsureAgentPortResolved(port);
@@ -1736,7 +1739,12 @@ public class DevFlowCommands
             }
         }
 
-        return new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+        return new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port)
+        {
+            MutationLeaseId = s_cliMutationLeaseId,
+            MutationLeaseHolderKind = "cli",
+            MutationLeaseLabel = "MAUI CLI"
+        };
     }
 
     private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
@@ -2371,8 +2379,16 @@ public class DevFlowCommands
         EnsureAgentPortResolved(port);
         try
         {
+            using var agent = new AgentClient(host, port);
+            if (!await agent.StartSensorAsync(sensor, speed, throttleMs))
+            {
+                Output.WriteError($"Failed to start sensor '{sensor}'.", json);
+                _errorOccurred = true;
+                return;
+            }
+
             using var client = new System.Net.WebSockets.ClientWebSocket();
-            var uri = new Uri($"ws://{host}:{port}/ws/v1/sensors?sensor={Uri.EscapeDataString(sensor)}&speed={Uri.EscapeDataString(speed)}&throttleMs={throttleMs}");
+            var uri = new Uri($"ws://{host}:{port}/ws/v1/sensors?sensor={Uri.EscapeDataString(sensor)}");
             using var cts = duration > 0
                 ? new CancellationTokenSource(TimeSpan.FromSeconds(duration))
                 : new CancellationTokenSource();

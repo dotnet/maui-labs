@@ -130,109 +130,131 @@ public static class BlazorDevFlowExtensions
     /// </summary>
     private static void WireAgentCdp(BlazorWebViewDebugServiceBase blazorService)
     {
-        // Delay to let the agent start first
+        if (!blazorService.TryBeginAgentWiring())
+            return;
+
         Task.Run(async () =>
         {
+            var wired = false;
+            Action<int, BlazorWebViewDebugServiceBase.WebViewBridge>? bridgeAddedHandler = null;
             await Task.Delay(1000);
             try
             {
-                var app = Microsoft.Maui.Controls.Application.Current;
-                if (app == null) return;
+                Type? agentType = null;
+                object? agentService = null;
+                IServiceProvider? services = null;
 
-                // Find DevFlowAgentService via reflection to avoid package dependency
-                var handler = app.Handler;
-                var services = handler?.MauiContext?.Services;
-                if (services == null) return;
-
-                // Look for the agent service by type name
-                foreach (var svcDescriptor in services.GetServices<object>())
+                // Lifecycle callbacks can run before the app handler and DevFlow agent service are
+                // fully available. Retry here so one-shot iOS/Windows/macOS launch callbacks are as
+                // reliable as Android's repeatable OnResume callback.
+                for (var attempt = 0; attempt < 120 && agentService is null; attempt++)
                 {
-                    // Skip non-agent types
+                    var app = Microsoft.Maui.Controls.Application.Current;
+                    services = app?.Handler?.MauiContext?.Services;
+                    agentType = FindAgentType();
+                    if (services is not null && agentType is not null)
+                        agentService = services.GetService(agentType);
+
+                    if (agentService is null)
+                        await Task.Delay(500);
                 }
 
-                // Try to get the agent service directly by its well-known type
-                var agentType = Type.GetType("Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService, Microsoft.Maui.DevFlow.Agent.Core");
-                if (agentType == null)
+                if (agentType is null || agentService is null || services is null)
                 {
-                    // Try scanning loaded assemblies for the Core type
-                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        agentType = asm.GetType("Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService");
-                        if (agentType != null) break;
-                    }
-                }
-
-                if (agentType == null)
-                {
-                    // Fallback: try legacy type name
-                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        agentType = asm.GetType("Microsoft.Maui.DevFlow.Agent.DevFlowAgentService");
-                        if (agentType != null) break;
-                    }
-                }
-
-                if (agentType == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Microsoft.Maui.DevFlow] Agent service type not found - CDP endpoint won't be available");
+                    System.Diagnostics.Debug.WriteLine(
+                        "[Microsoft.Maui.DevFlow] Agent service not available after 60 seconds - CDP endpoint won't be available");
                     return;
                 }
 
-                var agentService = services.GetService(agentType);
-                if (agentService == null)
+                // Wire WebViewLogCallback → Agent.WriteWebViewLog before subscribing for bridges,
+                // so no failure after subscription can leave a duplicate handler on a retry.
+                var writeLogMethod = agentType.GetMethod("WriteWebViewLog");
+                if (writeLogMethod != null)
                 {
-                    System.Diagnostics.Debug.WriteLine("[Microsoft.Maui.DevFlow] Agent service not registered - CDP endpoint won't be available");
-                    return;
+                    blazorService.WebViewLogCallback = (level, message, exception) =>
+                    {
+                        try
+                        {
+                            writeLogMethod.Invoke(agentService, new object?[] { level, "WebView.Console", message, exception });
+                        }
+                        catch { /* ignore logging failures */ }
+                    };
                 }
 
                 // Register each WebView bridge with the agent as they appear
                 var registerMethod = agentType.GetMethod("RegisterCdpWebView");
-                var updateMethod = agentType.GetMethod("UpdateCdpWebView");
 
                 if (registerMethod != null)
                 {
-                    // Register existing bridges (if any were created before wiring)
-                    foreach (var bridge in blazorService.Bridges)
-                    {
-                        var bridgeRef = bridge; // capture for closure
-                        registerMethod.Invoke(agentService, new object?[]
-                        {
-                            new Func<string, Task<string>>(bridgeRef.SendCdpCommandAsync),
-                            new Func<bool>(() => bridgeRef.IsReady),
-                            bridgeRef.AutomationId,
-                            bridgeRef.ElementId,
-                            null // url
-                        });
-                    }
+                    var registered = new HashSet<BlazorWebViewDebugServiceBase.WebViewBridge>(
+                        ReferenceEqualityComparer.Instance);
+                    var registering = new HashSet<BlazorWebViewDebugServiceBase.WebViewBridge>(
+                        ReferenceEqualityComparer.Instance);
+                    var registrationGate = new object();
 
-                    // Watch for new bridges via polling (bridges added when WebViews appear)
-                    var registeredCount = blazorService.Bridges.Count;
-                    _ = Task.Run(async () =>
+                    async Task<bool> RegisterBridgeAsync(
+                        int index,
+                        BlazorWebViewDebugServiceBase.WebViewBridge bridge)
                     {
-                        // Poll for new bridges for up to 10 minutes
-                        for (int i = 0; i < 600; i++)
+                        lock (registrationGate)
                         {
-                            await Task.Delay(1000);
-                            while (registeredCount < blazorService.Bridges.Count)
+                            if (registered.Contains(bridge))
+                                return true;
+                            if (!registering.Add(bridge))
+                                return true;
+                        }
+
+                        try
+                        {
+                            for (var attempt = 1; attempt <= 3; attempt++)
                             {
-                                var bridge = blazorService.Bridges[registeredCount];
                                 try
                                 {
-                                    registerMethod.Invoke(agentService, new object?[]
+                                    // Serialize reflection calls because the agent registry is also
+                                    // read by concurrent HTTP requests.
+                                    lock (registrationGate)
                                     {
-                                        new Func<string, Task<string>>(bridge.SendCdpCommandAsync),
-                                        new Func<bool>(() => bridge.IsReady),
-                                        bridge.AutomationId,
-                                        bridge.ElementId,
-                                        null
-                                    });
-                                    System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Registered CDP WebView bridge {registeredCount}");
+                                        registerMethod.Invoke(agentService, new object?[]
+                                        {
+                                            new Func<string, Task<string>>(bridge.SendCdpCommandAsync),
+                                            new Func<bool>(() => bridge.IsReady),
+                                            bridge.AutomationId,
+                                            bridge.ElementId,
+                                            null // url
+                                        });
+                                        registered.Add(bridge);
+                                    }
+                                    System.Diagnostics.Debug.WriteLine(
+                                        $"[Microsoft.Maui.DevFlow] Registered CDP WebView bridge {index}");
+                                    return true;
                                 }
-                                catch { }
-                                registeredCount++;
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine(
+                                        $"[Microsoft.Maui.DevFlow] Failed to register CDP WebView bridge {index} " +
+                                        $"(attempt {attempt}/3): {ex.Message}");
+                                    if (attempt < 3)
+                                        await Task.Delay(500);
+                                }
                             }
+                            return false;
                         }
-                    });
+                        finally
+                        {
+                            lock (registrationGate)
+                                registering.Remove(bridge);
+                        }
+                    }
+
+                    // Subscribe before enumerating existing bridges so a WebView created during
+                    // wiring cannot be missed. Reference deduplication closes the overlap race.
+                    bridgeAddedHandler = (index, bridge) => _ = RegisterBridgeAsync(index, bridge);
+                    blazorService.WebViewBridgeAdded += bridgeAddedHandler;
+                    var existingBridges = blazorService.Bridges;
+                    var registrations = new List<Task<bool>>(existingBridges.Count);
+                    for (var i = 0; i < existingBridges.Count; i++)
+                        registrations.Add(RegisterBridgeAsync(i, existingBridges[i]));
+                    await Task.WhenAll(registrations);
                 }
                 else
                 {
@@ -253,26 +275,40 @@ public static class BlazorDevFlowExtensions
                     }
                 }
 
-                // Wire WebViewLogCallback → Agent.WriteWebViewLog
-                var writeLogMethod = agentType.GetMethod("WriteWebViewLog");
-                if (writeLogMethod != null)
-                {
-                    blazorService.WebViewLogCallback = (level, message, exception) =>
-                    {
-                        try
-                        {
-                            writeLogMethod.Invoke(agentService, new object?[] { level, "WebView.Console", message, exception });
-                        }
-                        catch { /* ignore logging failures */ }
-                    };
-                }
-
+                wired = true;
                 System.Diagnostics.Debug.WriteLine("[Microsoft.Maui.DevFlow] Blazor CDP wired to Agent /api/cdp endpoint");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Failed to wire CDP to Agent: {ex.Message}");
             }
+            finally
+            {
+                if (!wired)
+                {
+                    if (bridgeAddedHandler is not null)
+                        blazorService.WebViewBridgeAdded -= bridgeAddedHandler;
+                    blazorService.ResetAgentWiring();
+                }
+            }
         });
+    }
+
+    private static Type? FindAgentType()
+    {
+        var agentType = Type.GetType(
+            "Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService, Microsoft.Maui.DevFlow.Agent.Core");
+        if (agentType is not null)
+            return agentType;
+
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            agentType = assembly.GetType("Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService")
+                ?? assembly.GetType("Microsoft.Maui.DevFlow.Agent.DevFlowAgentService");
+            if (agentType is not null)
+                return agentType;
+        }
+
+        return null;
     }
 }

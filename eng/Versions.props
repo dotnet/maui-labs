@@ -84,7 +84,7 @@
     <EssentialsAIMinorVersion>0</EssentialsAIMinorVersion>
     <EssentialsAIPatchVersion>0</EssentialsAIPatchVersion>
     <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
-    <EssentialsAIPreviewVersionIteration>5</EssentialsAIPreviewVersionIteration>
+    <EssentialsAIPreviewVersionIteration>6</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
     <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->

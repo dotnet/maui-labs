@@ -8,6 +8,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 public class McpAgentSession
 {
 	int? _defaultAgentPort;
+	readonly string _mutationLeaseId = Guid.NewGuid().ToString("N");
 
 	public int? DefaultAgentPort
 	{
@@ -22,13 +23,19 @@ public class McpAgentSession
 	public string DefaultAgentHost { get; set; } = "localhost";
 	AgentRegistration? DefaultAgent { get; set; }
 
+	/// <summary>Creates an agent client owned by the caller. Dispose it after the tool call completes.</summary>
 	public async Task<AgentClient> GetAgentClientAsync(int? agentPort = null)
 	{
 		var selectedPort = agentPort ?? DefaultAgentPort;
 		var port = selectedPort ?? await ResolveAgentPortAsync();
 		if (selectedPort.HasValue && DefaultAgentHost.Equals("localhost", StringComparison.OrdinalIgnoreCase))
 			await TryEnsureAndroidForwardingForAgentPortAsync(port, ensureBrokerReverse: false);
-		return new AgentClient(DefaultAgentHost, port);
+		return new AgentClient(DefaultAgentHost, port)
+		{
+			MutationLeaseId = _mutationLeaseId,
+			MutationLeaseHolderKind = "mcp",
+			MutationLeaseLabel = "MCP client"
+		};
 	}
 
 	public void SetDefaultAgent(AgentRegistration agent)

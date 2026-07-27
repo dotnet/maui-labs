@@ -14,7 +14,7 @@ public sealed class PropertyTools
 		[Description("Property name (e.g., 'Text', 'IsVisible', 'BackgroundColor')")] string property,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var value = await agent.GetPropertyAsync(elementId, property);
 		return value ?? $"Property '{property}' not found on element '{elementId}'.";
 	}
@@ -27,7 +27,7 @@ public sealed class PropertyTools
 		[Description("New value for the property")] string value,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.SetPropertyAsync(elementId, property, value);
 		return success
 			? $"Set '{property}' = '{value}' on element '{elementId}'."

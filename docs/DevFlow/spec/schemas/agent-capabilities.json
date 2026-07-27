@@ -79,7 +79,16 @@
               "tap",
               "fill",
               "scroll",
-              "gesture"
+              "gesture",
+              "properties",
+              "property-descriptors"
+            ]
+          },
+          "ui.events": {
+            "version": 1,
+            "features": [
+              "stream",
+              "subscribe"
             ]
           },
           "ui.screenshot": {

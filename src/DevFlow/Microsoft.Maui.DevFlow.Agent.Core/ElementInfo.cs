@@ -137,6 +137,34 @@ public class ElementInfo
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string?>? FrameworkProperties { get; set; }
 
+    /// <summary>
+    /// Absolute path to the .xaml file where this element is statically declared, or null when
+    /// it has no static XAML source (synthetic DevFlow elements, code-created elements, or
+    /// template-realized rows). When populated, points at the element's "usage" line in its parent
+    /// XAML, or — for an element that is itself a XAML root (e.g. a nested user control) — its own
+    /// definition line. Populated only when a XAML source map is available. Additive.
+    /// </summary>
+    [JsonPropertyName("sourceFile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceFile { get; set; }
+
+    [JsonPropertyName("sourceLine")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceLine { get; set; }
+
+    [JsonPropertyName("sourceColumn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceColumn { get; set; }
+
+    /// <summary>
+    /// Short hash of the source <c>.xaml</c> at build time (when a source map is available). A
+    /// click-to-source consumer can hash the current file and, on mismatch, show source as stale
+    /// rather than navigating to a line that may have moved. Additive.
+    /// </summary>
+    [JsonPropertyName("sourceHash")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceHash { get; set; }
+
     [JsonPropertyName("children")]
     public List<ElementInfo>? Children { get; set; }
 

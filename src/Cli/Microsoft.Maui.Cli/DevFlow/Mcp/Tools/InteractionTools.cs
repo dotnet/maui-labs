@@ -13,7 +13,7 @@ public sealed class InteractionTools
 		[Description("Element ID from the visual tree")] string elementId,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.TapAsync(elementId);
 		return success
 			? $"Tapped element '{elementId}' successfully."
@@ -27,7 +27,7 @@ public sealed class InteractionTools
 		[Description("Text to fill into the element")] string text,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.FillAsync(elementId, text);
 		return success
 			? $"Filled element '{elementId}' with text."
@@ -40,7 +40,7 @@ public sealed class InteractionTools
 		[Description("Element ID from the visual tree")] string elementId,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.ClearAsync(elementId);
 		return success
 			? $"Cleared element '{elementId}' successfully."
@@ -55,7 +55,7 @@ public sealed class InteractionTools
 		[Description("Text to type character by character into the element")] string? text = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.KeyAsync(key, elementId, text);
 		return success
 			? elementId is not null
@@ -95,7 +95,7 @@ public sealed class InteractionTools
 				return $"Unsupported swipe direction '{direction}'. Supported directions: up, down, left, right.";
 		}
 
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.GestureAsync(normalizedType, elementId, normalizedDirection, distance, durationMs);
 		return success
 			? elementId is not null ? $"Performed {normalizedType} gesture on element '{elementId}'." : $"Performed {normalizedType} gesture."
@@ -115,7 +115,7 @@ public sealed class InteractionTools
 		[Description("Scroll position: MakeVisible (default), Start, Center, End")] string? scrollToPosition = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.ScrollAsync(elementId, x ?? 0, y ?? 0, animated ?? true, window, itemIndex, groupIndex, scrollToPosition);
 		return success
 			? elementId is not null ? $"Scrolled element '{elementId}' successfully." : "Scrolled successfully."

@@ -136,6 +136,24 @@ public class ElementInfo
     [JsonPropertyName("children")]
     public List<ElementInfo>? Children { get; set; }
 
+    // Click-to-XAML source location, populated by the agent from build-time XAML source maps
+    // when available; null otherwise). Additive — mirrors the agent's ElementInfo field names.
+    [JsonPropertyName("sourceFile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceFile { get; set; }
+
+    [JsonPropertyName("sourceLine")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceLine { get; set; }
+
+    [JsonPropertyName("sourceColumn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceColumn { get; set; }
+
+    [JsonPropertyName("sourceHash")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceHash { get; set; }
+
     [JsonIgnore]
     public bool IsSelected { get; set; }
 

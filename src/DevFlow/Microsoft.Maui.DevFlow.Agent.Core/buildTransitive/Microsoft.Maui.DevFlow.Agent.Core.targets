@@ -1,0 +1,42 @@
+<Project>
+
+  <!--
+    Surface the DevFlowXaml metadata on AdditionalFiles to source generators, so the DevFlow
+    XAML source-map generator can distinguish the XAML files it should map (build_metadata.
+    AdditionalFiles.DevFlowXaml == "true") from any other AdditionalFiles in the project.
+  -->
+  <ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="DevFlowXaml" />
+  </ItemGroup>
+
+  <!--
+    Deliver the DevFlow XAML source-map generator. NuGet only auto-adds analyzers for DIRECTLY
+    referenced packages; apps typically reference a DevFlow head package (which depends on
+    Agent.Core), so the generator would otherwise never reach them. buildTransitive assets DO flow
+    through the dependency graph, so we add the analyzer ourselves here. Gated on
+    DevFlowXamlSourceMapsEnabled (Debug by default) so Release builds pay nothing. Roslyn dedupes
+    analyzers by path, so a direct Agent.Core reference (where NuGet also adds it) won't double-load.
+  -->
+  <ItemGroup Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
+    <Analyzer Include="$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll"
+              Condition="Exists('$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll')" />
+  </ItemGroup>
+
+  <!--
+    MAUI's _MauiInjectXamlCssAdditionalFiles target creates the canonical AdditionalFiles entries
+    (including TargetPath/RelativePath metadata). Run after that target and tag its XAML entries
+    instead of adding a second copy from @(MauiXaml); this works for both NuGet and repository
+    ProjectReference builds and guarantees the metadata reaches the generated editorconfig.
+  -->
+  <Target Name="_DevFlowPromoteXamlSourceMaps"
+          DependsOnTargets="_MauiInjectXamlCssAdditionalFiles"
+          AfterTargets="_MauiInjectXamlCssAdditionalFiles"
+          BeforeTargets="GenerateMSBuildEditorConfigFileCore"
+          Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
+    <ItemGroup>
+      <AdditionalFiles DevFlowXaml="true"
+                       Condition="'%(AdditionalFiles.GenKind)' == 'Xaml'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

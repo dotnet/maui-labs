@@ -16,7 +16,16 @@ public static class HtmlRenderer
 {
     private static readonly Lazy<string> _templateCache = new(LoadTemplate, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0, double density = 1, double elementScale = 1, double rootOffsetX = 0, double rootOffsetY = 0)
+    public static string Render(
+        List<ElementInfo> tree,
+        bool hasScreenshot,
+        int screenshotWidth = 0,
+        int screenshotHeight = 0,
+        double density = 1,
+        double elementScale = 1,
+        double rootOffsetX = 0,
+        double rootOffsetY = 0,
+        string screenshotUrl = "screenshot.png")
     {
         var template = _templateCache.Value;
         var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);
@@ -27,7 +36,7 @@ public static class HtmlRenderer
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
-            ? "<img id=\"screenshot\" src=\"screenshot.png\" alt=\"App screenshot\">"
+            ? $"<img id=\"screenshot\" src=\"{Escape(screenshotUrl)}\" alt=\"App screenshot\">"
             : "";
 
         // Replace scalar placeholders first (all produce known-safe, non-user
@@ -43,6 +52,8 @@ public static class HtmlRenderer
             .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("F0", CultureInfo.InvariantCulture))
             .Replace("{{DENSITY}}", density.ToString("F1", CultureInfo.InvariantCulture))
             .Replace("{{ELEMENT_SCALE}}", elementScale.ToString("F4", CultureInfo.InvariantCulture))
+            .Replace("{{ROOT_OFFSET_X}}", rootOffsetX.ToString("F4", CultureInfo.InvariantCulture))
+            .Replace("{{ROOT_OFFSET_Y}}", rootOffsetY.ToString("F4", CultureInfo.InvariantCulture))
             .Replace("{{SCREENSHOT}}", screenshotHtml);
 
         const string ElementsMarker = "{{ELEMENTS}}";
@@ -70,9 +81,12 @@ public static class HtmlRenderer
     public static string RenderElements(List<ElementInfo> tree, double elementScale = 1, double rootOffsetX = 0, double rootOffsetY = 0)
     {
         var sb = new StringBuilder();
+        // Drop inactive Shell tab/flyout pages (mounted but not on screen) so the overlay + visual
+        // tree reflect only the displayed page instead of stacking every page's elements.
+        var dropIds = PageFilter.InactivePageIds(tree);
         foreach (var element in tree)
         {
-            RenderElementsFlat(sb, element, elementScale, rootOffsetX, rootOffsetY);
+            RenderElementsFlat(sb, element, elementScale, rootOffsetX, rootOffsetY, parentRenderedId: null, dropIds);
         }
         return sb.ToString();
     }
@@ -101,26 +115,38 @@ public static class HtmlRenderer
 
     /// <summary>
     /// Renders all elements as flat siblings (no nesting) using window-absolute bounds.
+    /// <paramref name="parentRenderedId"/> is the id of the nearest ANCESTOR that actually
+    /// produced a div (elements with no meaningful bounds are skipped). Threading it lets the
+    /// client rebuild the visual hierarchy from the flat div list via data-parentId without
+    /// orphaning children of a skipped parent.
     /// </summary>
-    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY)
+    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY, string? parentRenderedId, HashSet<string> dropIds)
     {
-        RenderSingleElement(sb, element, scale, rootOffsetX, rootOffsetY);
+        // Skip an inactive Shell page (or its exclusive wrapper) and its entire subtree — it's mounted
+        // but not on screen, so rendering it would stack a stale page's elements over the live one.
+        if (element.Id is { Length: > 0 } id && dropIds.Contains(id))
+            return;
+
+        var rendered = RenderSingleElement(sb, element, scale, rootOffsetX, rootOffsetY, parentRenderedId);
+        // Children attach to this element if it rendered a div, otherwise to the nearest
+        // rendered ancestor (so a bounds-less container doesn't break the tree).
+        var childParentId = rendered ? element.Id : parentRenderedId;
         if (element.Children != null)
         {
             foreach (var child in element.Children)
             {
-                RenderElementsFlat(sb, child, scale, rootOffsetX, rootOffsetY);
+                RenderElementsFlat(sb, child, scale, rootOffsetX, rootOffsetY, childParentId, dropIds);
             }
         }
     }
 
-    private static void RenderSingleElement(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY)
+    private static bool RenderSingleElement(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY, string? parentRenderedId)
     {
         // Build style for positioning using window-absolute bounds, adjusted by the
         // root page offset so overlays align with the per-page screenshot.
         var bounds = element.WindowBounds ?? element.Bounds;
         if (bounds == null || (bounds.Width <= 0 && bounds.Height <= 0))
-            return; // Skip elements with no meaningful bounds
+            return false; // Skip elements with no meaningful bounds
 
         var left = (bounds.X - rootOffsetX) * scale;
         var top = (bounds.Y - rootOffsetY) * scale;
@@ -130,6 +156,8 @@ public static class HtmlRenderer
         // Build data attributes
         var attrs = new StringBuilder();
         attrs.Append($" data-id=\"{Escape(element.Id)}\"");
+        if (!string.IsNullOrEmpty(parentRenderedId))
+            attrs.Append($" data-parentId=\"{Escape(parentRenderedId)}\"");
         attrs.Append($" data-type=\"{Escape(element.Type)}\"");
 
         if (!string.IsNullOrEmpty(element.FullType))
@@ -150,16 +178,27 @@ public static class HtmlRenderer
         attrs.Append($" data-isFocused=\"{element.IsFocused.ToString().ToLowerInvariant()}\"");
         attrs.Append(CultureInfo.InvariantCulture, $" data-opacity=\"{element.Opacity:0.###}\"");
 
-        if (element.Traits is { Count: > 0 })
-            attrs.Append($" data-traits=\"{Escape(string.Join(",", element.Traits))}\"");
+        var traits = element.Traits;
+        var isInteractable = element.IsVisible && element.IsEnabled && traits?.Any(trait =>
+            trait.Equals("interactive", StringComparison.OrdinalIgnoreCase) ||
+            trait.Equals("scrollable", StringComparison.OrdinalIgnoreCase)) == true;
+        attrs.Append($" data-interactable=\"{isInteractable.ToString().ToLowerInvariant()}\"");
+        if (traits is { Count: > 0 })
+            attrs.Append($" data-traits=\"{Escape(string.Join(",", traits))}\"");
         if (element.Gestures is { Count: > 0 })
             attrs.Append($" data-gestures=\"{Escape(string.Join(",", element.Gestures))}\"");
         if (element.StyleClass is { Count: > 0 })
             attrs.Append($" data-styleClass=\"{Escape(string.Join(",", element.StyleClass))}\"");
         if (!string.IsNullOrEmpty(element.NativeType))
             attrs.Append($" data-nativeType=\"{Escape(element.NativeType)}\"");
+        // Boolean availability flag only — the absolute source path is fetched on demand via
+        // /api/source resolves click-to-XAML locations on demand, so local filesystem paths are
+        // never embedded in every div.
+        if (!string.IsNullOrEmpty(element.SourceFile))
+            attrs.Append(" data-hasSource=\"true\"");
 
         sb.AppendLine($"    <div class=\"devflow-element\"{attrs} style=\"{style}\"></div>");
+        return true;
     }
 
     private static string Escape(string value) => HttpUtility.HtmlAttributeEncode(value);

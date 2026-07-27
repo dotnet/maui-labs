@@ -627,6 +627,18 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
         _emulatorProcess = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start emulator for AVD {avdName}");
+        _emulatorProcess.OutputDataReceived += static (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                Console.WriteLine($"[AndroidEmulator] {e.Data}");
+        };
+        _emulatorProcess.ErrorDataReceived += static (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                Console.WriteLine($"[AndroidEmulator] {e.Data}");
+        };
+        _emulatorProcess.BeginOutputReadLine();
+        _emulatorProcess.BeginErrorReadLine();
         _weStartedEmulator = true;
 
         var newSerial = await WaitForEmulatorSerialAsync(adb, expectedSerial, avdName, timeoutSeconds: 120);
