@@ -24,8 +24,20 @@ public interface IAgentDispatcher
     /// Queues the supplied action to run on the UI thread after <paramref name="delay"/> elapses.
     /// </summary>
     bool DispatchDelayed(TimeSpan delay, Action action)
+        => AgentDispatcherDefaults.DispatchDelayed(this, delay, action);
+}
+
+// Single source of truth for the default delayed-dispatch behaviour. Both the IAgentDispatcher
+// default interface method and the DelegateAgentDispatcher concrete override delegate here so the
+// two entry points cannot drift, while DelegateAgentDispatcher keeps a concrete-type
+// DispatchDelayed for callers that hold a DelegateAgentDispatcher-typed reference (a default
+// interface method is only reachable through the interface). Dispatch resolves virtually against
+// the supplied instance, preserving each backend's own Dispatch behaviour.
+internal static class AgentDispatcherDefaults
+{
+    internal static bool DispatchDelayed(IAgentDispatcher dispatcher, TimeSpan delay, Action action)
     {
-        _ = Task.Delay(delay).ContinueWith(_ => Dispatch(action), TaskScheduler.Default);
+        _ = Task.Delay(delay).ContinueWith(_ => dispatcher.Dispatch(action), TaskScheduler.Default);
         return true;
     }
 }
@@ -57,8 +69,5 @@ public sealed class DelegateAgentDispatcher(Func<bool> isDispatchRequired, Actio
 
     /// <inheritdoc />
     public bool DispatchDelayed(TimeSpan delay, Action action)
-    {
-        _ = Task.Delay(delay).ContinueWith(_ => Dispatch(action), TaskScheduler.Default);
-        return true;
-    }
+        => AgentDispatcherDefaults.DispatchDelayed(this, delay, action);
 }

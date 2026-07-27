@@ -25,13 +25,13 @@ internal sealed class NativeElementRegistry
 
     /// <summary>
     /// Drops entries whose views have been collected. Called at the start of every tree walk so the
-    /// dictionary does not grow without bound across navigations.
+    /// bookkeeping does not grow without bound across navigations.
     /// </summary>
     public void BeginWalk()
     {
         lock (_gate)
         {
-            if (_viewsById.Count < 512) return;
+            if (_viewsById.Count < 512 && _idsByStableKey.Count < 512) return;
 
             var dead = _viewsById
                 .Where(pair => !pair.Value.TryGetTarget(out _))
@@ -43,12 +43,22 @@ internal sealed class NativeElementRegistry
                 _viewsById.Remove(id);
                 _parents.Remove(id);
             }
+
+            PruneStableKeys();
         }
     }
 
     /// <summary>
     /// Returns the id for <paramref name="view"/>, allocating one on first sight.
     /// </summary>
+    /// <remarks>
+    /// A native handle can be reused for an unrelated view once its previous owner is gone, so a
+    /// stable-key hit whose bound view is dead (or no longer sits at that handle) yields a fresh id
+    /// rather than silently handing the recycled handle its predecessor's id. A collected managed
+    /// peer is indistinguishable from a recycled handle here, so an id whose peer was collected is
+    /// retired rather than revived: callers see a clean miss instead of a possible wrong element.
+    /// See https://github.com/dotnet/maui-labs/issues/413 for making both cases distinguishable.
+    /// </remarks>
     public string Register(object view, string? parentId)
     {
         lock (_gate)
@@ -58,7 +68,7 @@ internal sealed class NativeElementRegistry
 
             if (stableKey != null)
             {
-                if (!_idsByStableKey.TryGetValue(stableKey, out id!))
+                if (!_idsByStableKey.TryGetValue(stableKey, out id!) || !IsBoundTo(id, stableKey))
                 {
                     id = $"n{++_next}";
                     _idsByStableKey[stableKey] = id;
@@ -99,6 +109,31 @@ internal sealed class NativeElementRegistry
         {
             return _parents.TryGetValue(id, out var parent) ? parent : null;
         }
+    }
+
+    /// <summary>
+    /// True while <paramref name="id"/> still resolves to a live view sitting at the same native
+    /// handle that produced <paramref name="stableKey"/>. Guards against a recycled handle whose
+    /// stale key would otherwise rebind an unrelated view onto a dead element's id.
+    /// </summary>
+    private bool IsBoundTo(string id, string stableKey)
+        => _viewsById.TryGetValue(id, out var reference)
+            && reference.TryGetTarget(out var view)
+            && GetStableKey(view) == stableKey;
+
+    /// <summary>
+    /// Drops stable-key mappings whose id no longer backs a live view. Their handles may be reused
+    /// for unrelated views, so the mappings must not outlive the element they were minted for.
+    /// </summary>
+    private void PruneStableKeys()
+    {
+        var orphaned = _idsByStableKey
+            .Where(pair => !_viewsById.TryGetValue(pair.Value, out var reference) || !reference.TryGetTarget(out _))
+            .Select(pair => pair.Key)
+            .ToList();
+
+        foreach (var key in orphaned)
+            _idsByStableKey.Remove(key);
     }
 
     private static string? GetStableKey(object view)

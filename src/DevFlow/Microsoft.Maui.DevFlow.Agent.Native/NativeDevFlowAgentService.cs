@@ -532,8 +532,11 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         var view = _registry.Resolve(id);
         if (view != null) return view;
 
-        // The client may be holding an id from a tree it fetched before a navigation.
-        // Re-walk once so stale-but-still-live ids resolve instead of hard-failing.
+        // The client may be holding an id from a tree it fetched before a navigation, so re-walk
+        // once and try again. This recovers ids whose binding was dropped while the view lived on.
+        // It deliberately cannot resurrect an id whose view is gone: the registry mints a fresh id
+        // when a native handle is reused, because reviving the old id there would silently retarget
+        // the caller at an unrelated view. Such ids stay unresolved and the caller re-fetches.
         BuildTree(0, null);
         return _registry.Resolve(id);
     }

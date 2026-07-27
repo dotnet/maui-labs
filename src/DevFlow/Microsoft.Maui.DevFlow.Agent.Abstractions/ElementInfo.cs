@@ -185,6 +185,12 @@ public class ElementInfo
 
         // AppKit
         "NSWindow" => "window",
+        // AppKit models push buttons, checkboxes and radios all as NSButton (distinguished at
+        // runtime by ButtonType, not by class), so a type-name-only switch can only resolve the
+        // shared "button" role. NSSwitch is the dedicated 10.15+ toggle and maps cleanly, mirroring
+        // UISwitch on UIKit.
+        "NSButton" => "button",
+        "NSSwitch" => "switch",
         "NSSecureTextField" or "NSSearchField" or "NSTextView" => "textbox",
         "NSImageView" => "image",
         "NSTableView" or "NSOutlineView" or "NSCollectionView" => "list",

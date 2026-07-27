@@ -21,11 +21,24 @@ internal static partial class NativeUi
     public static string DeviceTypeName =>
         Build.Fingerprint?.Contains("generic", StringComparison.OrdinalIgnoreCase) == true ? "virtual" : "physical";
 
+    private static Activity? _currentActivity;
+
     /// <summary>
     /// The activity the agent walks. Set by <see cref="DevFlowAgent"/> at bootstrap and refreshed
     /// on every resume so the tree always reflects the foreground activity.
     /// </summary>
-    public static Activity? CurrentActivity { get; set; }
+    /// <remarks>
+    /// Read from HTTP handler threads but written on the UI thread, so access goes through
+    /// Volatile.Read/Volatile.Write to keep a rebind visible on weakly ordered hardware. The
+    /// activity is held strongly and replaced on each bind, so only the most recent one is retained;
+    /// a strong hold is intentional so an activity collected mid-session cannot leave the agent
+    /// walking an empty tree on a diagnostic build.
+    /// </remarks>
+    public static Activity? CurrentActivity
+    {
+        get => Volatile.Read(ref _currentActivity);
+        set => Volatile.Write(ref _currentActivity, value);
+    }
 
     public static IAgentDispatcher CreateDispatcher()
     {
