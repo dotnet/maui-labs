@@ -18,6 +18,76 @@ public class WpfVisualTreeWalker : VisualTreeWalker
     private readonly NativeWindowProbe _nativeProbe = new();
     private readonly object _nativeObjectsLock = new();
     private Dictionary<string, object> _nativeObjects = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, object> _nativeHitObjects = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ElementInfo> _nativeHitInfos = new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxNativeHitCacheSize = 256;
+
+    internal override bool AreElementIdentitiesEqual(object first, object second)
+        => NativeWindowProbe.SameIdentity(first, second);
+
+    internal override object GetElementIdentity(object element)
+        => element is System.Windows.Automation.AutomationElement automationElement
+            ? NativeWindowProbe.GetStableIdentity(automationElement)
+            : base.GetElementIdentity(element);
+
+    internal override bool ShouldRetainElementIdentityStrongly(object identity)
+        => NativeWindowProbe.IsDurableIdentity(identity)
+            || base.ShouldRetainElementIdentityStrongly(identity);
+
+    internal static byte[]? CaptureNativeElementScreenshot(object nativeElement)
+        => nativeElement is System.Windows.Automation.AutomationElement automationElement
+            ? NativeWindowProbe.CaptureElementScreenshot(automationElement)
+            : null;
+
+    public WpfVisualTreeWalker()
+    {
+    }
+
+    internal WpfVisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+        : base(nativeElementRegistry)
+    {
+    }
+
+    internal override ElementInfo CreateRegisteredNativeElementInfo(
+        NativeElementRegistrationSnapshot registration,
+        string? ownerId)
+    {
+        var info = base.CreateRegisteredNativeElementInfo(registration, ownerId);
+        info.Framework = "wpf-native";
+        if (registration.NativeElement is not FrameworkElement element)
+            return info;
+
+        var window = System.Windows.Window.GetWindow(element);
+        if (window is not null)
+        {
+            var point = element.TranslatePoint(new System.Windows.Point(0, 0), window);
+            info.WindowBounds = new BoundsInfo
+            {
+                X = point.X,
+                Y = point.Y,
+                Width = element.ActualWidth,
+                Height = element.ActualHeight
+            };
+            info.BoundsQuality = "exact";
+        }
+
+        info.IsVisible = element.IsVisible;
+        info.IsEnabled = element.IsEnabled;
+        info.IsFocused = element.IsKeyboardFocusWithin;
+        info.AutomationId = System.Windows.Automation.AutomationProperties.GetAutomationId(element);
+        info.Text = System.Windows.Automation.AutomationProperties.GetName(element);
+        if (string.IsNullOrEmpty(info.Text))
+        {
+            info.Text = element switch
+            {
+                System.Windows.Controls.Button button => button.Content?.ToString(),
+                TextBlock textBlock => textBlock.Text,
+                _ => null
+            };
+        }
+
+        return info;
+    }
 
     protected override BoundsInfo? ResolveWindowBounds(VisualElement ve)
     {
@@ -195,13 +265,53 @@ public class WpfVisualTreeWalker : VisualTreeWalker
         return roots;
     }
 
-    public override object? GetNativeElementById(string id)
+    public override List<ElementInfo> HitTestNativeElements(
+        IReadOnlyList<IntPtr> knownWindowHandles,
+        double x,
+        double y)
     {
         lock (_nativeObjectsLock)
         {
+            var hitObjects = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var hits = _nativeProbe.HitTest(hitObjects, knownWindowHandles, x, y);
+            foreach (var hit in hits)
+            {
+                if (hitObjects.TryGetValue(hit.Id, out var nativeObject))
+                {
+                    if (!_nativeHitObjects.ContainsKey(hit.Id)
+                        && _nativeHitObjects.Count >= MaxNativeHitCacheSize)
+                    {
+                        var expiredId = _nativeHitObjects.Keys.First();
+                        _nativeHitObjects.Remove(expiredId);
+                        _nativeHitInfos.Remove(expiredId);
+                    }
+
+                    _nativeHitObjects[hit.Id] = nativeObject;
+                    _nativeHitInfos[hit.Id] = hit;
+                }
+            }
+
+            return hits;
+        }
+    }
+
+    public override object? GetNativeElementById(string id)
+    {
+        if (id.StartsWith("native:registered:", StringComparison.Ordinal))
+            return base.GetNativeElementById(id);
+
+        lock (_nativeObjectsLock)
+        {
+            if (NativeWindowProbe.TryGetAutomationElement(_nativeHitObjects, id) is { } hitElement)
+                return hitElement;
             if (NativeWindowProbe.TryGetAutomationElement(_nativeObjects, id) is { } cached)
                 return cached;
         }
+
+        if (_nativeProbe.FindByRuntimeId(id) is { } runtimeElement)
+            return runtimeElement;
+        if (_nativeProbe.FindByHitId(id) is { } recoveredHitElement)
+            return recoveredHitElement;
 
         // Preserve native ID stability on cache miss: re-walk with the same HWND
         // the id was originally produced under. A plain Array.Empty<IntPtr>() walk
@@ -215,15 +325,27 @@ public class WpfVisualTreeWalker : VisualTreeWalker
 
     public override ElementInfo? GetNativeElementInfoById(string id)
     {
+        if (id.StartsWith("native:registered:", StringComparison.Ordinal))
+            return base.GetNativeElementInfoById(id);
+
         // Cache-first: avoid a full UIA tree walk (which calls EnumerateProcessTopLevels
         // and enumerates every same-process window) when the requested id was already
         // resolved by a recent tree/query call.
         Dictionary<string, object> cache;
         lock (_nativeObjectsLock)
+        {
+            if (_nativeHitInfos.TryGetValue(id, out var hitInfo))
+                return hitInfo;
             cache = _nativeObjects;
+        }
 
         if (NativeWindowProbe.TryBuildCachedElementInfo(cache, id) is { } cached)
             return cached;
+
+        if (_nativeProbe.FindByRuntimeId(id) is { } runtimeElement)
+            return NativeWindowProbe.TryBuildElementInfo(runtimeElement, id);
+        if (_nativeProbe.FindByHitId(id) is { } recoveredHitElement)
+            return NativeWindowProbe.TryBuildElementInfo(recoveredHitElement, id);
 
         var seedHwnds = NativeWindowProbe.ExtractHwndsFromId(id);
         return FlattenElementInfos(WalkNativeTree(seedHwnds))
@@ -232,6 +354,9 @@ public class WpfVisualTreeWalker : VisualTreeWalker
 
     public override string TryNativeElementTap(string elementId)
     {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+            return base.TryNativeElementTap(elementId);
+
         var element = GetNativeAutomationElement(elementId);
         if (element is null)
             return $"Native element '{elementId}' was not found";
@@ -241,8 +366,22 @@ public class WpfVisualTreeWalker : VisualTreeWalker
             : $"Native element '{elementId}' does not support invoke, toggle, selection, or expand/collapse";
     }
 
+    protected internal override string TryNativeElementTap(string elementId, object nativeElement)
+    {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+            return base.TryNativeElementTap(elementId, nativeElement);
+
+        return nativeElement is System.Windows.Automation.AutomationElement element
+            && NativeWindowProbe.TryInvoke(element)
+                ? "ok"
+                : $"Native element '{elementId}' does not support invoke, toggle, selection, or expand/collapse";
+    }
+
     public override string TryNativeElementSetValue(string elementId, string value)
     {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+            return base.TryNativeElementSetValue(elementId, value);
+
         var element = GetNativeAutomationElement(elementId);
         if (element is null)
             return $"Native element '{elementId}' was not found";
@@ -252,8 +391,33 @@ public class WpfVisualTreeWalker : VisualTreeWalker
             : $"Native element '{elementId}' does not support writable value";
     }
 
+    protected internal override string TryNativeElementSetValue(
+        string elementId,
+        object nativeElement,
+        string value)
+    {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+            return base.TryNativeElementSetValue(elementId, nativeElement, value);
+
+        return nativeElement is System.Windows.Automation.AutomationElement element
+            && NativeWindowProbe.TrySetValue(element, value)
+                ? "ok"
+                : $"Native element '{elementId}' does not support writable value";
+    }
+
     public override string TryNativeElementFocus(string elementId)
     {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+        {
+            if (GetNativeElementById(elementId) is System.Windows.IInputElement inputElement)
+            {
+                System.Windows.Input.Keyboard.Focus(inputElement);
+                return "ok";
+            }
+
+            return $"Native element '{elementId}' could not be focused";
+        }
+
         var element = GetNativeAutomationElement(elementId);
         if (element is null)
             return $"Native element '{elementId}' was not found";
@@ -263,8 +427,38 @@ public class WpfVisualTreeWalker : VisualTreeWalker
             : $"Native element '{elementId}' could not be focused";
     }
 
+    protected internal override string TryNativeElementFocus(string elementId, object nativeElement)
+    {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+        {
+            if (nativeElement is System.Windows.IInputElement inputElement)
+            {
+                System.Windows.Input.Keyboard.Focus(inputElement);
+                return "ok";
+            }
+
+            return $"Native element '{elementId}' could not be focused";
+        }
+
+        return nativeElement is System.Windows.Automation.AutomationElement element
+            && NativeWindowProbe.TryFocus(element)
+                ? "ok"
+                : $"Native element '{elementId}' could not be focused";
+    }
+
     public override string TryNativeElementScroll(string elementId, double deltaX, double deltaY)
     {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+        {
+            if (GetNativeElementById(elementId) is System.Windows.FrameworkElement frameworkElement)
+            {
+                frameworkElement.BringIntoView();
+                return "ok";
+            }
+
+            return $"Native element '{elementId}' does not support scrolling";
+        }
+
         var element = GetNativeAutomationElement(elementId);
         if (element is null)
             return $"Native element '{elementId}' was not found";
@@ -272,6 +466,29 @@ public class WpfVisualTreeWalker : VisualTreeWalker
         return NativeWindowProbe.TryScroll(element, deltaX, deltaY)
             ? "ok"
             : $"Native element '{elementId}' does not support scrolling";
+    }
+
+    protected internal override string TryNativeElementScroll(
+        string elementId,
+        object nativeElement,
+        double deltaX,
+        double deltaY)
+    {
+        if (elementId.StartsWith("native:registered:", StringComparison.Ordinal))
+        {
+            if (nativeElement is System.Windows.FrameworkElement frameworkElement)
+            {
+                frameworkElement.BringIntoView();
+                return "ok";
+            }
+
+            return $"Native element '{elementId}' does not support scrolling";
+        }
+
+        return nativeElement is System.Windows.Automation.AutomationElement element
+            && NativeWindowProbe.TryScroll(element, deltaX, deltaY)
+                ? "ok"
+                : $"Native element '{elementId}' does not support scrolling";
     }
 
     private System.Windows.Automation.AutomationElement? GetNativeAutomationElement(string id)

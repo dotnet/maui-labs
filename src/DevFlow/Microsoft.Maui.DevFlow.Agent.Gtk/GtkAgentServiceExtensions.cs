@@ -58,12 +58,19 @@ public static class GtkAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var service = new GtkAgentService(options);
+        var nativeElementRegistry = new NativeElementRegistrationRegistry();
+        var nativeElementDiagnosticSubscriber =
+            new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
+        var service = new GtkAgentService(
+            options,
+            nativeElementRegistry,
+            nativeElementDiagnosticSubscriber);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
             service.SetBrokerRegistration(brokerReg);
         }
+        builder.Services.AddSingleton(nativeElementRegistry);
         builder.Services.AddSingleton<DevFlowAgentService>(service);
         builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 

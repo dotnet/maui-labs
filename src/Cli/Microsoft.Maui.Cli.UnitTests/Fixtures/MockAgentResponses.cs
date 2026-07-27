@@ -57,7 +57,7 @@ internal static class MockAgentResponses
           },
           "capabilities": {
             "ui.tree": { "version": 1, "features": ["tree", "query"] },
-            "ui.actions": { "version": 1, "features": ["tap", "fill", "batch"] },
+            "ui.actions": { "version": 2, "features": ["tap", "fill", "batch", "stale-capture-rejection"] },
             "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
             "network": { "version": 1, "features": ["list", "detail", "clear"] },
             "logs": { "version": 1, "features": ["list", "stream"] },
@@ -108,6 +108,21 @@ internal static class MockAgentResponses
         }
         """;
 
+    public const string LegacyAgentCapabilities = """
+        {
+          "agent": {
+            "name": "Microsoft.Maui.DevFlow.Agent",
+            "version": "0.1.0-legacy",
+            "framework": "maui",
+            "frameworkVersion": "10.0.0"
+          },
+          "capabilities": {
+            "ui.tree": { "version": 1, "features": ["tree", "query"] },
+            "ui.actions": { "version": 1, "features": ["tap", "fill", "batch"] }
+          }
+        }
+        """;
+
     public const string VisualTree = """
         [
           {
@@ -132,6 +147,64 @@ internal static class MockAgentResponses
         ]
         """;
 
+    public const string VisualTreeWithDetachedNativeRoot = """
+        [
+          {
+            "id": "window-root",
+            "type": "Window",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 100
+            },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 100
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "native:window",
+            "type": "Window",
+            "origin": "native",
+            "isVisible": false,
+            "isEnabled": true,
+            "children": [
+              {
+                "id": "native:dialog",
+                "type": "Dialog",
+                "origin": "native",
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": {
+                  "x": 10,
+                  "y": 10,
+                  "width": 80,
+                  "height": 60
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
+
     public const string QueryElements = """
         [
           {
@@ -141,6 +214,60 @@ internal static class MockAgentResponses
             "text": "Click Me",
             "isVisible": true,
             "isEnabled": true
+          }
+        ]
+        """;
+
+    public const string DuplicateActionElements = """
+        [
+          {
+            "id": "wrapper-grid",
+            "type": "Grid",
+            "fullType": "Microsoft.Maui.Controls.Grid",
+            "automationId": "DuplicateActionTarget",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 42,
+            "registryGeneration": 7
+          },
+          {
+            "id": "native:registered:action-target",
+            "type": "NavigationViewItem",
+            "fullType": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+            "automationId": "DuplicateActionTarget",
+            "text": "Action target",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "capabilities": ["invoke", "set-value", "focus"]
+          }
+        ]
+        """;
+
+    public const string DistinctActionElements = """
+        [
+          {
+            "id": "first-button",
+            "type": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "text": "Shared action",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 51,
+            "registryGeneration": 9
+          },
+          {
+            "id": "native:registered:second-button",
+            "type": "Button",
+            "fullType": "Microsoft.UI.Xaml.Controls.Button",
+            "origin": "native",
+            "text": "Shared action",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 51,
+            "registryGeneration": 9,
+            "capabilities": ["invoke"]
           }
         ]
         """;
@@ -156,11 +283,41 @@ internal static class MockAgentResponses
         }
         """;
 
-    public const string HitTestResult = """
+    public static string HitTestResult(int captureEpoch, string parentId = "hit-parent") => $$"""
         {
-          "id": "el-1",
-          "type": "Button",
-          "automationId": "ClickMeButton"
+          "captureEpoch": {{captureEpoch}},
+          "registryGeneration": 7,
+          "elements": [
+            {
+              "id": "hit-child",
+              "type": "Label"
+            },
+            {
+              "id": "{{parentId}}",
+              "type": "Button"
+            }
+          ]
+        }
+        """;
+
+    public static string ScrollableHitTestResult(int captureEpoch) => $$"""
+        {
+          "captureEpoch": {{captureEpoch}},
+          "registryGeneration": 7,
+          "elements": [
+            {
+              "id": "hit-child",
+              "type": "Label"
+            },
+            {
+              "id": "hit-scroll",
+              "type": "ScrollView"
+            },
+            {
+              "id": "hit-parent",
+              "type": "Button"
+            }
+          ]
         }
         """;
 

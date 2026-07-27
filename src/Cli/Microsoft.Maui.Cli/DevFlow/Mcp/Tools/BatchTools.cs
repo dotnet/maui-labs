@@ -35,7 +35,9 @@ public sealed class BatchTools
 		McpAgentSession session,
 		[Description("JSON array of action objects. Each must have an 'action' or 'type' field (see tool description for schema)")] string actionsJson,
 		[Description("If true, continue executing remaining actions after a failure (default: false)")] bool continueOnError = false,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree; the batch stops if its element snapshot becomes stale")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
 		JsonArray parsed;
 		try
@@ -69,7 +71,11 @@ public sealed class BatchTools
 		try
 		{
 			var agent = await session.GetAgentClientAsync(agentPort);
-			var result = await agent.BatchAsync(actions, continueOnError);
+			var result = await agent.BatchAsync(
+				actions,
+				continueOnError,
+				captureEpoch,
+				registryGeneration);
 			return CliJson.SerializeUntyped(result, indented: false);
 		}
 		catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)

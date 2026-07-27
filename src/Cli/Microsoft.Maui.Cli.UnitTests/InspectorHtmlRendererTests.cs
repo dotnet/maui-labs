@@ -131,4 +131,46 @@ public class InspectorHtmlRendererTests
         Assert.Contains("top:80px", html);
         Assert.Contains("left:30px", html);
     }
+
+    [Fact]
+    public void RenderElements_RedactedPasswordEntry_IsMarkedSensitive()
+    {
+        var tree = new List<ElementInfo>
+        {
+            new()
+            {
+                Id = "password",
+                Type = "Entry",
+                Text = "[REDACTED]",
+                Bounds = new BoundsInfo { X = 0, Y = 0, Width = 100, Height = 30 },
+            },
+        };
+
+        var html = HtmlRenderer.RenderElements(tree);
+
+        Assert.Contains("data-sensitive=\"true\"", html);
+    }
+
+    [Fact]
+    public void RenderElements_NativePasswordElement_IsMarkedSensitive()
+    {
+        var tree = new List<ElementInfo>
+        {
+            new()
+            {
+                Id = "native-password",
+                Type = "TextBox",
+                Value = "[REDACTED]",
+                NativeProperties = new Dictionary<string, string?>
+                {
+                    ["isPassword"] = "True",
+                },
+                Bounds = new BoundsInfo { X = 0, Y = 0, Width = 100, Height = 30 },
+            },
+        };
+
+        var html = HtmlRenderer.RenderElements(tree);
+
+        Assert.Contains("data-sensitive=\"true\"", html);
+    }
 }

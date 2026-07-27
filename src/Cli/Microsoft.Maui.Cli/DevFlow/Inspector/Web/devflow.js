@@ -12,7 +12,7 @@
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
-  let refreshInProgress = false;
+  let refreshPromise = null;
 
   // Convert browser coordinates to app logical coordinates
   function toAppCoords(clientX, clientY) {
@@ -20,36 +20,113 @@
     return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
+  function getElementCaptureMetadata(el) {
+    const metadata = {};
+    if (!el || typeof el.getAttribute !== 'function') return metadata;
+
+    const captureEpochValue = el.getAttribute('data-captureEpoch');
+    if (captureEpochValue !== null) {
+      const captureEpoch = Number(captureEpochValue);
+      if (Number.isSafeInteger(captureEpoch) && captureEpoch > 0) {
+        metadata.captureEpoch = captureEpoch;
+      }
+    }
+
+    const registryGenerationValue = el.getAttribute('data-registryGeneration');
+    if (registryGenerationValue !== null) {
+      const registryGeneration = Number(registryGenerationValue);
+      if (Number.isSafeInteger(registryGeneration) && registryGeneration >= 0) {
+        metadata.registryGeneration = registryGeneration;
+      }
+    }
+
+    return metadata;
+  }
+
+  function copyElementCaptureMetadata(source, target) {
+    target.removeAttribute('data-captureEpoch');
+    target.removeAttribute('data-registryGeneration');
+    const metadata = getElementCaptureMetadata(source);
+    if (metadata.captureEpoch) {
+      target.setAttribute('data-captureEpoch', String(metadata.captureEpoch));
+    }
+    if (metadata.registryGeneration !== undefined) {
+      target.setAttribute('data-registryGeneration', String(metadata.registryGeneration));
+    }
+  }
+
+  const EDITOR_TARGET_ATTRIBUTES = [
+    'data-type',
+    'data-origin',
+    'data-ownerId',
+    'data-automationId',
+    'data-discriminator',
+  ];
+
+  function copyEditorTargetIdentity(source, target) {
+    for (const attribute of EDITOR_TARGET_ATTRIBUTES) {
+      const value = source.getAttribute(attribute);
+      if (value !== null) {
+        target.setAttribute(`data-target-${attribute.substring(5)}`, value);
+      }
+    }
+  }
+
+  function matchesEditorTarget(editor, target) {
+    return EDITOR_TARGET_ATTRIBUTES.every(attribute => {
+      const expected = editor.getAttribute(`data-target-${attribute.substring(5)}`);
+      return expected === null || target.getAttribute(attribute) === expected;
+    });
+  }
+
+  function findElementById(elementId) {
+    for (const element of viewport.querySelectorAll('.devflow-element')) {
+      if (element.getAttribute('data-id') === elementId) return element;
+    }
+    return null;
+  }
+
   // Refresh state via AJAX (no full page reload — avoids flash)
-  async function refreshState() {
-    if (refreshInProgress) return;
-    refreshInProgress = true;
+  async function refreshState(force = false) {
+    if (refreshPromise) {
+      if (!force) return refreshPromise;
+      await refreshPromise;
+    }
+
+    const currentRefresh = (async () => {
+      try {
+        const resp = await fetch(`${basePath}/api/state`);
+        if (!resp.ok) return null;
+        const state = await resp.json();
+
+        // Update screenshot without flash
+        if (screenshot && state.screenshotUrl) {
+          screenshot.src = state.screenshotUrl;
+        }
+
+        // Update viewport size if changed
+        if (state.viewportWidth && state.viewportHeight) {
+          viewport.style.width = state.viewportWidth + 'px';
+          viewport.style.height = state.viewportHeight + 'px';
+          viewport.dataset.width = state.viewportWidth;
+          viewport.dataset.height = state.viewportHeight;
+        }
+
+        // Smart DOM diff — only update elements that changed, preserving hover/selection
+        if (state.elements) {
+          patchElements(state.elements);
+        }
+        return state;
+      } catch (err) {
+        console.error('State refresh failed:', err);
+        return null;
+      }
+    })();
+    refreshPromise = currentRefresh;
     try {
-      const resp = await fetch(`${basePath}/api/state`);
-      if (!resp.ok) return;
-      const state = await resp.json();
-
-      // Update screenshot without flash
-      if (screenshot && state.screenshotUrl) {
-        screenshot.src = state.screenshotUrl;
-      }
-
-      // Update viewport size if changed
-      if (state.viewportWidth && state.viewportHeight) {
-        viewport.style.width = state.viewportWidth + 'px';
-        viewport.style.height = state.viewportHeight + 'px';
-        viewport.dataset.width = state.viewportWidth;
-        viewport.dataset.height = state.viewportHeight;
-      }
-
-      // Smart DOM diff — only update elements that changed, preserving hover/selection
-      if (state.elements) {
-        patchElements(state.elements);
-      }
-    } catch (err) {
-      console.error('State refresh failed:', err);
+      return await currentRefresh;
     } finally {
-      refreshInProgress = false;
+      if (refreshPromise === currentRefresh) refreshPromise = null;
     }
   }
 
@@ -182,6 +259,8 @@
     if (!el || !el.classList || !el.classList.contains('devflow-element')) return false;
     const type = el.dataset.type || '';
     if (TEXT_INPUT_TYPES.has(type)) return true;
+    const capabilities = (el.dataset.capabilities || '').toLowerCase().split(',');
+    if (capabilities.includes('set-value')) return true;
     // Heuristic: traits often expose "TextInput" / "Editable"
     const traits = (el.dataset.traits || '').toLowerCase();
     return traits.includes('textinput') || traits.includes('editable');
@@ -189,23 +268,81 @@
 
   // Overlay editor that we float on top of the clicked text element.
   let activeEditor = null;
-  function closeEditor(commit) {
-    if (!activeEditor) return;
-    const editor = activeEditor;
-    activeEditor = null;
-    if (commit) {
-      const elementId = editor.dataset.elementId;
-      const text = editor.value;
-      fetch(`${basePath}/api/fill`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ elementId, text }),
-      }).then(() => scheduleRefresh(300)).catch(err => console.error('Fill failed:', err));
-    }
+
+  function removeEditor(editor) {
+    if (activeEditor === editor) activeEditor = null;
     editor.remove();
   }
 
+  function preserveEditorAfterFailure(editor, status) {
+    delete editor.dataset.commitInProgress;
+    editor.readOnly = false;
+    editor.setAttribute('aria-invalid', 'true');
+    editor.style.borderColor = '#d13438';
+    editor.title = status
+      ? `Unable to update the app (${status}). Your text has been preserved.`
+      : 'Unable to update the app. Your text has been preserved.';
+    if (activeEditor === editor) {
+      setTimeout(() => editor.focus(), 0);
+    }
+  }
+
+  async function commitEditor(editor, retryStaleCapture) {
+    try {
+      const response = await fetch(`${basePath}/api/fill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          elementId: editor.dataset.elementId,
+          text: editor.value,
+          ...getElementCaptureMetadata(editor),
+        }),
+      });
+
+      if (response.ok) {
+        removeEditor(editor);
+        scheduleRefresh(300);
+        return;
+      }
+
+      if (retryStaleCapture && response.status === 409) {
+        await refreshState(true);
+        const currentTarget = findElementById(editor.dataset.elementId);
+        if (currentTarget
+            && isTextInput(currentTarget)
+            && matchesEditorTarget(editor, currentTarget)) {
+          copyElementCaptureMetadata(currentTarget, editor);
+          await commitEditor(editor, false);
+          return;
+        }
+      }
+
+      preserveEditorAfterFailure(editor, response.status);
+    } catch (err) {
+      console.error('Fill failed:', err);
+      preserveEditorAfterFailure(editor);
+    }
+  }
+
+  function closeEditor(commit) {
+    if (!activeEditor) return;
+    const editor = activeEditor;
+    if (commit) {
+      if (editor.dataset.dirty !== 'true') {
+        removeEditor(editor);
+        return;
+      }
+      if (editor.dataset.commitInProgress === 'true') return;
+      editor.dataset.commitInProgress = 'true';
+      editor.readOnly = true;
+      commitEditor(editor, true);
+      return;
+    }
+    removeEditor(editor);
+  }
+
   function openEditor(targetEl) {
+    if (activeEditor?.dataset.commitInProgress === 'true') return;
     closeEditor(false);
     const elementId = targetEl.getAttribute('data-id');
     if (!elementId) return;
@@ -213,10 +350,14 @@
     const rect = targetEl.getBoundingClientRect();
     const vpRect = viewport.getBoundingClientRect();
     const isMultiline = ['Editor', 'TextArea', 'TextView', 'UITextView'].includes(targetEl.dataset.type || '');
+    const isSensitive = targetEl.dataset.sensitive === 'true';
     const editor = document.createElement(isMultiline ? 'textarea' : 'input');
-    if (!isMultiline) editor.type = 'text';
-    editor.value = targetEl.dataset.text || targetEl.dataset.value || '';
+    if (!isMultiline) editor.type = isSensitive ? 'password' : 'text';
+    editor.value = isSensitive ? '' : targetEl.dataset.text || targetEl.dataset.value || '';
     editor.dataset.elementId = elementId;
+    editor.dataset.dirty = 'false';
+    copyElementCaptureMetadata(targetEl, editor);
+    copyEditorTargetIdentity(targetEl, editor);
     Object.assign(editor.style, {
       position: 'absolute',
       left: (rect.left - vpRect.left) + 'px',
@@ -236,6 +377,9 @@
       resize: 'none',
     });
 
+    editor.addEventListener('input', () => {
+      editor.dataset.dirty = 'true';
+    });
     editor.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
         ev.preventDefault();
@@ -269,13 +413,6 @@
     let textEl = underCursor;
     while (textEl && textEl !== viewport && !isTextInput(textEl)) textEl = textEl.parentElement;
     if (textEl && textEl !== viewport && isTextInput(textEl)) {
-      // Still send a tap so the native control gets focus on the app side.
-      const { x: tx, y: ty } = toAppCoords(e.clientX, e.clientY);
-      fetch(`${basePath}/api/tap`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x: tx, y: ty }),
-      }).catch(err => console.error('Tap failed:', err));
       openEditor(textEl);
       return;
     }

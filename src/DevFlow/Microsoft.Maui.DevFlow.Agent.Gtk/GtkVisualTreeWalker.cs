@@ -8,6 +8,70 @@ namespace Microsoft.Maui.DevFlow.Agent.Gtk;
 /// </summary>
 public class GtkVisualTreeWalker : VisualTreeWalker
 {
+    public GtkVisualTreeWalker()
+    {
+    }
+
+    internal GtkVisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+        : base(nativeElementRegistry)
+    {
+    }
+
+    internal override ElementInfo CreateRegisteredNativeElementInfo(
+        NativeElementRegistrationSnapshot registration,
+        string? ownerId)
+    {
+        var info = base.CreateRegisteredNativeElementInfo(registration, ownerId);
+        info.Framework = "gtk-native";
+        if (registration.NativeElement is not global::Gtk.Widget widget)
+            return info;
+
+        var root = widget.GetRoot();
+        if (root is global::Gtk.Widget rootWidget
+            && widget.ComputeBounds(rootWidget, out var rect))
+        {
+            info.WindowBounds = new BoundsInfo
+            {
+                X = rect.GetX(),
+                Y = rect.GetY(),
+                Width = rect.GetWidth(),
+                Height = rect.GetHeight()
+            };
+            info.BoundsQuality = "exact";
+        }
+
+        info.IsVisible = IsEffectivelyVisible(widget);
+        info.IsEnabled = widget.GetSensitive();
+        info.IsFocused = widget.HasFocus;
+        info.AutomationId = widget.GetName();
+        info.Text = widget switch
+        {
+            global::Gtk.Button button => button.GetLabel(),
+            global::Gtk.Label label => label.GetText(),
+            global::Gtk.Entry entry => SensitiveValueRedactor.Redact(
+                entry.GetText(),
+                !entry.GetVisibility()),
+            _ => widget.GetTooltipText()
+        };
+        return info;
+    }
+
+    private static bool IsEffectivelyVisible(global::Gtk.Widget widget)
+    {
+        if (widget.GetRoot() is null)
+            return false;
+
+        global::Gtk.Widget? current = widget;
+        while (current is not null)
+        {
+            if (!current.GetVisible() || !current.GetMapped())
+                return false;
+            current = current.GetParent();
+        }
+
+        return true;
+    }
+
     protected override BoundsInfo? ResolveWindowBounds(VisualElement ve)
     {
         try
@@ -70,8 +134,10 @@ public class GtkVisualTreeWalker : VisualTreeWalker
                 }
                 else if (widget is global::Gtk.Entry entry)
                 {
-                    props["text"] = entry.GetText();
-                    props["visibility"] = entry.GetVisibility().ToString();
+                    var isVisible = entry.GetVisibility();
+                    props["text"] = SensitiveValueRedactor.Redact(entry.GetText(), !isVisible);
+                    props["visibility"] = isVisible.ToString();
+                    props["isPassword"] = (!isVisible).ToString();
                 }
                 else if (widget is global::Gtk.Label gtkLabel)
                 {

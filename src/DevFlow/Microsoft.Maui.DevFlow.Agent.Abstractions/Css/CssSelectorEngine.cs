@@ -38,7 +38,7 @@ public static class CssSelectorEngine
                 if (seen.Add(match.Id))
                 {
                     // Return matches without children (flat, like Query())
-                    results.Add(StripChildren(match));
+                    results.Add(match.WithoutChildren());
                 }
             }
         }
@@ -62,24 +62,4 @@ public static class CssSelectorEngine
             FlattenRecursive(child, result);
     }
 
-    static ElementInfo StripChildren(ElementInfo el) => new()
-    {
-        Id = el.Id,
-        ParentId = el.ParentId,
-        Type = el.Type,
-        FullType = el.FullType,
-        AutomationId = el.AutomationId,
-        Text = el.Text,
-        Value = el.Value,
-        IsVisible = el.IsVisible,
-        IsEnabled = el.IsEnabled,
-        IsFocused = el.IsFocused,
-        Opacity = el.Opacity,
-        Bounds = el.Bounds,
-        Gestures = el.Gestures,
-        StyleClass = el.StyleClass,
-        NativeType = el.NativeType,
-        NativeProperties = el.NativeProperties,
-        Children = null,
-    };
 }

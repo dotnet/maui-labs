@@ -14,10 +14,27 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 /// </summary>
 public class VisualTreeWalker
 {
+    private const string RegisteredNativeElementPrefix = "native:registered:";
+    private readonly NativeElementRegistrationRegistry? _nativeElementRegistry;
+    private readonly object _registeredNativeGate = new();
+    private Dictionary<string, ElementInfo> _registeredNativeInfos = new(StringComparer.Ordinal);
+    private Dictionary<string, string?> _elementInfoParents = new(StringComparer.Ordinal);
+
     // Per-walk state — fully rebuilt on each WalkTree call
     private readonly HashSet<string> _usedIds = new();
     private readonly Dictionary<Guid, string> _elementIdToExternalId = new();
+    private readonly Dictionary<object, string> _objectToExternalId = new(ReferenceEqualityComparer.Instance);
     private readonly ConcurrentDictionary<string, (BoundsInfo Bounds, object Marker)> _syntheticBounds = new();
+    private int _currentWindowId;
+
+    public VisualTreeWalker()
+    {
+    }
+
+    internal VisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+    {
+        _nativeElementRegistry = nativeElementRegistry;
+    }
 
     /// <summary>
     /// Marker object representing the navigation back button in Shell or NavigationPage.
@@ -26,6 +43,8 @@ public class VisualTreeWalker
     {
         public INavigation Navigation { get; init; } = null!;
         public string Title { get; init; } = "Back";
+        public BackButtonBehavior? Behavior { get; init; }
+        public Page? Page { get; init; }
     }
 
     /// <summary>
@@ -35,19 +54,45 @@ public class VisualTreeWalker
     public object? GetElementById(string id, Application? app)
     {
         if (app == null || string.IsNullOrEmpty(id)) return null;
+        if (_nativeElementRegistry?.TryGet(id, out var registration) == true)
+            return registration.NativeElement;
 
         // Walk tree fresh, searching for matching ID
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
         _syntheticBounds.Clear();
 
-        if (app is not IVisualTreeElement appElement) return null;
-        foreach (var child in appElement.GetVisualChildren())
+        try
         {
-            var result = FindByIdRecursive(child, id, null);
-            if (result != null) return result;
+            if (app is not IVisualTreeElement appElement) return null;
+            if (app.Windows.Count == 0)
+            {
+                _currentWindowId = 0;
+                foreach (var child in appElement.GetVisualChildren())
+                {
+                    var result = FindByIdRecursive(child, id, null);
+                    if (result != null) return result;
+                }
+            }
+            else
+            {
+                for (var index = 0; index < app.Windows.Count; index++)
+                {
+                    _currentWindowId = index;
+                    if (app.Windows[index] is not IVisualTreeElement windowElement)
+                        continue;
+
+                    var result = FindByIdRecursive(windowElement, id, null);
+                    if (result != null) return result;
+                }
+            }
+            return null;
         }
-        return null;
+        finally
+        {
+            _objectToExternalId.Clear();
+        }
     }
 
     /// <summary>
@@ -84,6 +129,58 @@ public class VisualTreeWalker
         // Sort by area (smallest first) — more specific elements on top
         hits.Sort((a, b) => (a.Item3.Width * a.Item3.Height).CompareTo(b.Item3.Width * b.Item3.Height));
         return hits;
+    }
+
+    public List<ElementInfo> HitTestRegisteredNativeElements(double x, double y)
+        => HitTestRegisteredNativeElements(x, y, windowId: null);
+
+    public List<ElementInfo> HitTestRegisteredNativeElements(double x, double y, int? windowId)
+    {
+        lock (_registeredNativeGate)
+        {
+            return _registeredNativeInfos.Values
+                .Where(info =>
+                {
+                    if (!info.IsVisible || windowId.HasValue && info.WindowId != windowId)
+                        return false;
+                    var bounds = info.WindowBounds ?? info.Bounds;
+                    return bounds is not null
+                        && x >= bounds.X
+                        && x <= bounds.X + bounds.Width
+                        && y >= bounds.Y
+                        && y <= bounds.Y + bounds.Height;
+                })
+                .OrderBy(info =>
+                {
+                    var bounds = info.WindowBounds ?? info.Bounds;
+                    return bounds is null ? double.MaxValue : bounds.Width * bounds.Height;
+                })
+                .ThenByDescending(info => info.Capabilities?.Count ?? 0)
+                .ToList();
+        }
+    }
+
+    public bool IsRegisteredNativeElementUnderPage(string nativeElementId, Page page)
+    {
+        if (!_elementIdToExternalId.TryGetValue(page.Id, out var pageId))
+            return false;
+
+        lock (_registeredNativeGate)
+        {
+            if (!_registeredNativeInfos.TryGetValue(nativeElementId, out var info))
+                return false;
+
+            var currentId = info.OwnerId;
+            while (currentId is not null)
+            {
+                if (currentId.Equals(pageId, StringComparison.Ordinal))
+                    return true;
+                if (!_elementInfoParents.TryGetValue(currentId, out currentId))
+                    return false;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -178,12 +275,20 @@ public class VisualTreeWalker
         var info = new ElementInfo
         {
             Id = id,
+            IdentityToken = GetStableIdentity(marker),
+            WindowId = _currentWindowId,
             Type = GetSyntheticTypeName(marker),
             FullType = $"Microsoft.Maui.DevFlow.Agent.Core.{GetSyntheticTypeName(marker)}",
             Text = GetSyntheticText(marker),
             IsVisible = true,
             IsEnabled = true,
         };
+        if (marker is BackButtonMarker backButton)
+        {
+            info.IsVisible = (backButton.Behavior?.IsVisible ?? true)
+                && (backButton.Page is null || IsNavigationBarVisible(backButton.Page));
+            info.IsEnabled = backButton.Behavior?.IsEnabled ?? true;
+        }
 
         // Set bounds if available (synthetic bounds are already window-absolute)
         if (_syntheticBounds.TryGetValue(id, out var entry))
@@ -291,33 +396,71 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
         _syntheticBounds.Clear();
-        var results = new List<ElementInfo>();
-        if (app is not IVisualTreeElement appElement)
-            return results;
-
-        if (windowIndex != null)
+        try
         {
-            if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+            var results = new List<ElementInfo>();
+            if (app is not IVisualTreeElement appElement)
                 return results;
-            var window = app.Windows[windowIndex.Value];
-            if (window is IVisualTreeElement windowElement)
+
+            if (windowIndex != null)
             {
-                var info = WalkElement(windowElement, null, 1, maxDepth);
-                if (info != null)
-                    results.Add(info);
+                if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+                    return results;
+                _currentWindowId = windowIndex.Value;
+                var window = app.Windows[windowIndex.Value];
+                if (window is IVisualTreeElement windowElement)
+                {
+                    var info = WalkElement(windowElement, null, 1, maxDepth);
+                    if (info != null)
+                    {
+                        SetWindowId(info, windowIndex.Value);
+                        results.Add(info);
+                    }
+                }
+                AppendRegisteredNativeElements(results, maxDepth);
+                return results;
             }
+
+            if (app.Windows.Count == 0)
+            {
+                _currentWindowId = 0;
+                foreach (var child in appElement.GetVisualChildren())
+                {
+                    var info = WalkElement(child, null, 1, maxDepth);
+                    if (info == null)
+                        continue;
+
+                    SetWindowId(info, 0);
+                    results.Add(info);
+                }
+            }
+            else
+            {
+                for (var index = 0; index < app.Windows.Count; index++)
+                {
+                    _currentWindowId = index;
+                    if (app.Windows[index] is not IVisualTreeElement windowElement)
+                        continue;
+
+                    var info = WalkElement(windowElement, null, 1, maxDepth);
+                    if (info == null)
+                        continue;
+
+                    SetWindowId(info, index);
+                    results.Add(info);
+                }
+            }
+
+            AppendRegisteredNativeElements(results, maxDepth);
             return results;
         }
-
-        foreach (var child in appElement.GetVisualChildren())
+        finally
         {
-            var info = WalkElement(child, null, 1, maxDepth);
-            if (info != null)
-                results.Add(info);
+            _objectToExternalId.Clear();
+            _currentWindowId = 0;
         }
-
-        return results;
     }
 
     /// <summary>
@@ -340,17 +483,80 @@ public class VisualTreeWalker
         => [];
 
     /// <summary>
+    /// Performs a platform-native hit test in window logical coordinates.
+    /// Results are ordered from the deepest native element to its ancestors.
+    /// </summary>
+    public virtual List<ElementInfo> HitTestNativeElements(
+        IReadOnlyList<IntPtr> knownWindowHandles,
+        double x,
+        double y)
+        => [];
+
+    /// <summary>
     /// Resolves a native platform object by DevFlow element id.
     /// </summary>
     public virtual object? GetNativeElementById(string id)
-        => null;
+        => _nativeElementRegistry?.TryGet(id, out var registration) == true
+            ? registration.NativeElement
+            : null;
+
+    protected object? GetRegisteredNativeOwner(string id)
+        => _nativeElementRegistry?.TryGet(id, out var registration) == true
+            ? registration.Owner
+            : null;
+
+    public int? GetRegisteredNativeWindowId(string id, Application app)
+        => _nativeElementRegistry?.TryGet(id, out var registration) == true
+            ? GetWindowIdForElement(registration.Owner, app)
+            : null;
+
+    public static int? GetWindowIdForElement(object element, Application app)
+    {
+        if (element is not Element current)
+            return null;
+
+        while (current.Parent is Element parent)
+            current = parent;
+
+        for (var index = 0; index < app.Windows.Count; index++)
+        {
+            if (ReferenceEquals(app.Windows[index], current))
+                return index;
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Resolves native element details by DevFlow element id.
     /// </summary>
     public virtual ElementInfo? GetNativeElementInfoById(string id)
-        => FlattenElementInfos(WalkNativeTree(Array.Empty<IntPtr>()))
+    {
+        if (id.StartsWith("native:registered:", StringComparison.Ordinal))
+        {
+            if (_nativeElementRegistry?.TryGet(id, out var registration) != true)
+            {
+                lock (_registeredNativeGate)
+                    _registeredNativeInfos.Remove(id);
+                return null;
+            }
+
+            lock (_registeredNativeGate)
+            {
+                if (_registeredNativeInfos.TryGetValue(id, out var registeredInfo))
+                {
+                    var info = CreateRegisteredNativeElementInfo(registration, registeredInfo.OwnerId);
+                    info.WindowId = registeredInfo.WindowId;
+                    return info;
+                }
+            }
+
+            return CreateRegisteredNativeElementInfo(registration, ownerId: null);
+        }
+
+        return FlattenElementInfos(WalkNativeTree(Array.Empty<IntPtr>()))
             .FirstOrDefault(e => e.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// Queries native platform elements using the same filter shape as MAUI tree queries.
@@ -382,13 +588,144 @@ public class VisualTreeWalker
     /// Performs a native tap/invoke action for a native element id.
     /// </summary>
     public virtual string TryNativeElementTap(string elementId)
-        => "Native element actions are not supported on this platform";
+    {
+        if (!elementId.StartsWith(RegisteredNativeElementPrefix, StringComparison.Ordinal))
+            return "Native element actions are not supported on this platform";
+
+        if (_nativeElementRegistry?.TryGet(elementId, out var registration) != true)
+            return $"Native element '{elementId}' was not found";
+
+        var semanticResult = registration.Owner switch
+        {
+            MenuItem menuItem => ActivateMenuItem(menuItem),
+            ShellContent shellContent
+                when !registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+                    || IsOverflowRow(registration)
+                => ActivateShellContent(shellContent, registration.Role),
+            ShellSection shellSection
+                when !registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+                    || IsOverflowRow(registration)
+                => ActivateShellSection(shellSection, registration.Role),
+            ShellItem shellItem
+                when !registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+                => ActivateShellItem(shellItem, registration.Role),
+            Shell shell
+                when registration.Role.Equals("ShellFlyoutToggle", StringComparison.Ordinal)
+                => ToggleShellFlyout(shell),
+            Page page
+                when page.Parent is TabbedPage
+                    && (IsTabRole(registration.Role) || IsOverflowRow(registration))
+                => ActivateTabbedPage(page),
+            SearchHandler => TryNativeElementFocus(elementId),
+            _ => null
+        };
+        if (semanticResult is null
+            && registration.NativeElement is MenuItem logicalAction)
+        {
+            semanticResult = ActivateMenuItem(logicalAction);
+        }
+
+        if (semanticResult is not null)
+            return semanticResult;
+
+        return TryInvokeRegisteredNativeElement(elementId, registration.NativeElement)
+            ?? $"Native element '{elementId}' owner '{registration.Owner.GetType().FullName}' does not support invoke";
+    }
+
+    protected virtual string? TryInvokeRegisteredNativeElement(
+        string elementId,
+        object nativeElement)
+        => null;
+
+    protected internal virtual string TryNativeElementTap(
+        string elementId,
+        object nativeElement)
+    {
+        if (elementId.StartsWith(RegisteredNativeElementPrefix, StringComparison.Ordinal)
+            && (_nativeElementRegistry?.TryGet(elementId, out var registration) != true
+                || !ReferenceEquals(registration.NativeElement, nativeElement)))
+        {
+            return $"Native element '{elementId}' is stale";
+        }
+
+        return TryNativeElementTap(elementId);
+    }
+
+    public virtual async Task<string> TryRegisteredNativeElementTapAsync(string elementId)
+    {
+        if (_nativeElementRegistry?.TryGet(elementId, out var registration) != true)
+            return $"Native element '{elementId}' was not found";
+
+        if (registration.Owner is Page page
+            && registration.Role.Equals("BackButton", StringComparison.Ordinal))
+        {
+            return await ActivateBackButtonAsync(page);
+        }
+
+        return TryNativeElementTap(elementId);
+    }
+
+    protected internal virtual async Task<string> TryRegisteredNativeElementTapAsync(
+        string elementId,
+        object nativeElement)
+    {
+        if (_nativeElementRegistry?.TryGet(elementId, out var registration) != true
+            || !ReferenceEquals(registration.NativeElement, nativeElement))
+        {
+            return $"Native element '{elementId}' is stale";
+        }
+
+        if (registration.Owner is Page page
+            && registration.Role.Equals("BackButton", StringComparison.Ordinal))
+        {
+            return await ActivateBackButtonAsync(page);
+        }
+
+        return TryNativeElementTap(elementId, nativeElement);
+    }
 
     /// <summary>
     /// Sets native element text/value for a native element id.
     /// </summary>
     public virtual string TryNativeElementSetValue(string elementId, string value)
-        => "Native element value actions are not supported on this platform";
+    {
+        if (!elementId.StartsWith(RegisteredNativeElementPrefix, StringComparison.Ordinal))
+            return "Native element value actions are not supported on this platform";
+
+        if (_nativeElementRegistry?.TryGet(elementId, out var registration) != true)
+            return $"Native element '{elementId}' was not found";
+
+        if (registration.Owner is SearchHandler searchHandler)
+        {
+            searchHandler.Query = value;
+            _ = TrySetValueRegisteredNativeElement(elementId, registration.NativeElement, value);
+            return "ok";
+        }
+
+        return TrySetValueRegisteredNativeElement(elementId, registration.NativeElement, value)
+            ?? $"Native element '{elementId}' owner '{registration.Owner.GetType().FullName}' does not support writable value";
+    }
+
+    protected virtual string? TrySetValueRegisteredNativeElement(
+        string elementId,
+        object nativeElement,
+        string value)
+        => null;
+
+    protected internal virtual string TryNativeElementSetValue(
+        string elementId,
+        object nativeElement,
+        string value)
+    {
+        if (elementId.StartsWith(RegisteredNativeElementPrefix, StringComparison.Ordinal)
+            && (_nativeElementRegistry?.TryGet(elementId, out var registration) != true
+                || !ReferenceEquals(registration.NativeElement, nativeElement)))
+        {
+            return $"Native element '{elementId}' is stale";
+        }
+
+        return TryNativeElementSetValue(elementId, value);
+    }
 
     /// <summary>
     /// Sets native keyboard focus for a native element id.
@@ -396,11 +733,41 @@ public class VisualTreeWalker
     public virtual string TryNativeElementFocus(string elementId)
         => "Native element focus is not supported on this platform";
 
+    protected internal virtual string TryNativeElementFocus(
+        string elementId,
+        object nativeElement)
+    {
+        if (elementId.StartsWith(RegisteredNativeElementPrefix, StringComparison.Ordinal)
+            && (_nativeElementRegistry?.TryGet(elementId, out var registration) != true
+                || !ReferenceEquals(registration.NativeElement, nativeElement)))
+        {
+            return $"Native element '{elementId}' is stale";
+        }
+
+        return TryNativeElementFocus(elementId);
+    }
+
     /// <summary>
     /// Scrolls or scrolls into view a native element id.
     /// </summary>
     public virtual string TryNativeElementScroll(string elementId, double deltaX, double deltaY)
         => "Native element scrolling is not supported on this platform";
+
+    protected internal virtual string TryNativeElementScroll(
+        string elementId,
+        object nativeElement,
+        double deltaX,
+        double deltaY)
+    {
+        if (elementId.StartsWith(RegisteredNativeElementPrefix, StringComparison.Ordinal)
+            && (_nativeElementRegistry?.TryGet(elementId, out var registration) != true
+                || !ReferenceEquals(registration.NativeElement, nativeElement)))
+        {
+            return $"Native element '{elementId}' is stale";
+        }
+
+        return TryNativeElementScroll(elementId, deltaX, deltaY);
+    }
 
     public static IEnumerable<ElementInfo> FlattenElementInfos(IEnumerable<ElementInfo> roots)
     {
@@ -413,6 +780,369 @@ public class VisualTreeWalker
                     yield return child;
             }
         }
+    }
+
+    internal virtual ElementInfo CreateRegisteredNativeElementInfo(
+        NativeElementRegistrationSnapshot registration,
+        string? ownerId)
+    {
+        var nativeType = registration.NativeElement.GetType();
+        var info = new ElementInfo
+        {
+            Id = registration.Id,
+            IdentityToken = registration.Id,
+            ParentId = ownerId,
+            OwnerId = ownerId,
+            Type = nativeType.Name,
+            FullType = nativeType.FullName ?? nativeType.Name,
+            Framework = "native",
+            Origin = "native",
+            Role = NormalizeRegisteredRole(registration.Role),
+            Discriminator = registration.Discriminator,
+            IsVisible = true,
+            IsEnabled = true,
+            BoundsQuality = "unknown",
+            Capabilities = GetRegisteredNativeCapabilities(registration),
+            NativeType = nativeType.FullName,
+            NativeProperties = new Dictionary<string, string?>
+            {
+                ["ownerType"] = registration.Owner.GetType().FullName,
+                ["registrationRole"] = registration.Role
+            }
+        };
+        if (registration.NativeElement is MenuItem logicalAction)
+        {
+            info.Type = "DialogAction";
+            info.Text = logicalAction.Text;
+            info.AutomationId = logicalAction.AutomationId;
+            info.IsEnabled = logicalAction.IsEnabled;
+        }
+
+        return info;
+    }
+
+    private List<string> GetRegisteredNativeCapabilities(
+        NativeElementRegistrationSnapshot registration)
+    {
+        var capabilities = new List<string> { "select" };
+        if (registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+            && registration.Discriminator?.Equals("TabBarItem", StringComparison.Ordinal) == true)
+        {
+            capabilities.Add("invoke");
+        }
+        else if (registration.Owner is MenuItem
+            || registration.NativeElement is MenuItem
+            || registration.Owner is ShellSection or ShellContent
+                && (!registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+                    || IsOverflowRow(registration))
+            || registration.Owner is ShellItem
+                && !registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+            || registration.Owner is Shell
+                && registration.Role.Equals("ShellFlyoutToggle", StringComparison.Ordinal)
+            || registration.Owner is Page
+                && registration.Role.Equals("BackButton", StringComparison.Ordinal))
+        {
+            capabilities.Add("invoke");
+        }
+        else if (registration.Owner is Page { Parent: TabbedPage }
+            && (IsTabRole(registration.Role) || IsOverflowRow(registration)))
+        {
+            capabilities.Add("invoke");
+        }
+        else if (registration.Owner is SearchHandler)
+        {
+            capabilities.Add("invoke");
+            capabilities.Add("focus");
+            capabilities.Add("set-value");
+        }
+        else if (CanInvokeRegisteredNativeElement(registration.NativeElement))
+        {
+            capabilities.Add("invoke");
+        }
+
+        if (CanFocusRegisteredNativeElement(registration.NativeElement)
+            && !capabilities.Contains("focus", StringComparer.Ordinal))
+        {
+            capabilities.Add("focus");
+        }
+
+        if (CanSetValueRegisteredNativeElement(registration.NativeElement)
+            && !capabilities.Contains("set-value", StringComparer.Ordinal))
+        {
+            capabilities.Add("set-value");
+        }
+
+        return capabilities;
+    }
+
+    protected virtual bool CanInvokeRegisteredNativeElement(object nativeElement)
+        => false;
+
+    protected virtual bool CanFocusRegisteredNativeElement(object nativeElement)
+        => false;
+
+    protected virtual bool CanSetValueRegisteredNativeElement(object nativeElement)
+        => false;
+
+    private static string ActivateMenuItem(MenuItem menuItem)
+    {
+        ((IMenuItemController)menuItem).Activate();
+        return "ok";
+    }
+
+    private static string ToggleShellFlyout(Shell shell)
+    {
+        if (shell.FlyoutBehavior == FlyoutBehavior.Locked)
+            return "Shell flyout is locked and cannot be toggled";
+
+        shell.FlyoutIsPresented = !shell.FlyoutIsPresented;
+        return "ok";
+    }
+
+    private static string ActivateTabbedPage(Page page)
+    {
+        if (page.Parent is not TabbedPage tabbedPage)
+            return $"Tab page '{page.Title}' is not attached to a TabbedPage";
+        if (!page.IsEnabled)
+            return $"Tab page '{page.Title}' is disabled";
+
+        tabbedPage.CurrentPage = page;
+        return "ok";
+    }
+
+    private static bool IsTabRole(string role)
+        => role.Equals("ShellTab", StringComparison.Ordinal);
+
+    private static bool IsOverflowRow(NativeElementRegistrationSnapshot registration)
+        => registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal)
+            && registration.Discriminator?.Equals("OverflowRow", StringComparison.Ordinal) == true;
+
+    private static async Task<string> ActivateBackButtonAsync(Page page)
+    {
+        try
+        {
+            var behavior = GetEffectiveBackButtonBehavior(page);
+            if (behavior is { IsEnabled: false })
+                return "Back button is disabled";
+            if (behavior?.Command is { } command)
+            {
+                if (!command.CanExecute(behavior.CommandParameter))
+                    return "Back button command cannot execute";
+                command.Execute(behavior.CommandParameter);
+                return "ok";
+            }
+
+            var navigation = page.Navigation;
+            if (navigation.ModalStack.Count > 0
+                && ReferenceEquals(navigation.ModalStack[^1], page))
+            {
+                await navigation.PopModalAsync();
+                return "ok";
+            }
+
+            if (navigation.NavigationStack.Count > 1)
+            {
+                await navigation.PopAsync();
+                return "ok";
+            }
+
+            if (FindOwningShell(page) is { } shell)
+            {
+                await shell.GoToAsync("..");
+                return "ok";
+            }
+
+            return "No navigation stack available";
+        }
+        catch (Exception ex)
+        {
+            return $"Back navigation failed: {ex.GetBaseException().Message}";
+        }
+    }
+
+    internal static async Task<string> ActivateBackButtonMarkerAsync(BackButtonMarker marker)
+    {
+        if (marker.Page is not null && !IsNavigationBarVisible(marker.Page))
+            return "Back button is hidden";
+        if (marker.Behavior is { IsVisible: false })
+            return "Back button is hidden";
+        if (marker.Behavior is { IsEnabled: false })
+            return "Back button is disabled";
+        if (marker.Behavior?.Command is { } command)
+        {
+            if (!command.CanExecute(marker.Behavior.CommandParameter))
+                return "Back button command cannot execute";
+            command.Execute(marker.Behavior.CommandParameter);
+            return "ok";
+        }
+
+        await marker.Navigation.PopAsync();
+        return "ok";
+    }
+
+    private static Shell? FindOwningShell(Page page)
+    {
+        Element? current = page;
+        while (current is not null)
+        {
+            if (current is Shell shell)
+                return shell;
+            current = current.Parent;
+        }
+
+        var app = Application.Current;
+        if (app is null)
+            return null;
+
+        foreach (var window in app.Windows)
+        {
+            if (window.Page is not Shell shell)
+                continue;
+
+            if (ReferenceEquals(shell.CurrentPage, page)
+                || shell.CurrentItem?.CurrentItem?.Navigation?.NavigationStack.Contains(page) == true
+                || shell.CurrentItem?.CurrentItem?.Navigation?.ModalStack.Contains(page) == true)
+            {
+                return shell;
+            }
+        }
+
+        return null;
+    }
+
+    private static string ActivateShellItem(ShellItem shellItem, string role)
+    {
+        if (shellItem.Parent is not Shell shell)
+            return $"Shell item '{shellItem.Title}' is not attached to a Shell";
+
+        shell.CurrentItem = shellItem;
+        CloseFlyoutAfterActivation(shell, role);
+        return "ok";
+    }
+
+    private static string ActivateShellSection(ShellSection shellSection, string role)
+    {
+        if (shellSection.Parent is not ShellItem shellItem || shellItem.Parent is not Shell shell)
+            return $"Shell section '{shellSection.Title}' is not attached to a Shell";
+
+        shellItem.CurrentItem = shellSection;
+        shell.CurrentItem = shellItem;
+        CloseFlyoutAfterActivation(shell, role);
+        return "ok";
+    }
+
+    private static string ActivateShellContent(ShellContent shellContent, string role)
+    {
+        if (shellContent.Parent is not ShellSection shellSection
+            || shellSection.Parent is not ShellItem shellItem
+            || shellItem.Parent is not Shell shell)
+        {
+            return $"Shell content '{shellContent.Title}' is not attached to a Shell";
+        }
+
+        shellSection.CurrentItem = shellContent;
+        shellItem.CurrentItem = shellSection;
+        shell.CurrentItem = shellItem;
+        CloseFlyoutAfterActivation(shell, role);
+        return "ok";
+    }
+
+    private static void CloseFlyoutAfterActivation(Shell shell, string role)
+    {
+        if (role.Equals("ShellFlyout", StringComparison.Ordinal)
+            && shell.FlyoutBehavior != FlyoutBehavior.Locked)
+            shell.FlyoutIsPresented = false;
+    }
+
+    private static string NormalizeRegisteredRole(string role)
+    {
+        if (string.IsNullOrWhiteSpace(role) || role.Contains('-'))
+            return role;
+
+        var builder = new System.Text.StringBuilder(role.Length + 4);
+        for (var index = 0; index < role.Length; index++)
+        {
+            var character = role[index];
+            if (index > 0 && char.IsUpper(character))
+                builder.Append('-');
+            builder.Append(char.ToLowerInvariant(character));
+        }
+        return builder.ToString();
+    }
+
+    private void AppendRegisteredNativeElements(List<ElementInfo> roots, int maxDepth)
+    {
+        if (_nativeElementRegistry is null)
+            return;
+
+        var registrations = _nativeElementRegistry.GetSnapshot();
+        if (registrations.Count == 0)
+        {
+            lock (_registeredNativeGate)
+            {
+                _registeredNativeInfos = new Dictionary<string, ElementInfo>(StringComparer.Ordinal);
+                _elementInfoParents = new Dictionary<string, string?>(StringComparer.Ordinal);
+            }
+            return;
+        }
+
+        var infosById = new Dictionary<string, (ElementInfo Info, int Depth)>(StringComparer.Ordinal);
+        foreach (var root in roots)
+            IndexElementInfo(root, depth: 1, infosById);
+        var registeredInfos = new Dictionary<string, ElementInfo>(StringComparer.Ordinal);
+
+        foreach (var registration in registrations)
+        {
+            string? ownerId = null;
+            if (!_objectToExternalId.TryGetValue(registration.Owner, out ownerId)
+                && registration.Owner is Element owner
+                && _elementIdToExternalId.TryGetValue(owner.Id, out var mappedOwnerId))
+                ownerId = mappedOwnerId;
+
+            if (ownerId is null
+                || !infosById.TryGetValue(ownerId, out var ownerEntry)
+                || (maxDepth > 0 && ownerEntry.Depth >= maxDepth))
+                continue;
+
+            var info = CreateRegisteredNativeElementInfo(registration, ownerId);
+            info.WindowId = ownerEntry.Info.WindowId;
+            registeredInfos[info.Id] = info;
+            ownerEntry.Info.Children ??= [];
+            ownerEntry.Info.Children.Add(info);
+        }
+
+        var elementInfoParents = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var elementInfo in FlattenElementInfos(roots))
+            elementInfoParents[elementInfo.Id] = elementInfo.ParentId;
+
+        lock (_registeredNativeGate)
+        {
+            _registeredNativeInfos = registeredInfos;
+            _elementInfoParents = elementInfoParents;
+        }
+    }
+
+    private static void IndexElementInfo(
+        ElementInfo info,
+        int depth,
+        Dictionary<string, (ElementInfo Info, int Depth)> infosById)
+    {
+        infosById[info.Id] = (info, depth);
+        if (info.Children is null)
+            return;
+
+        foreach (var child in info.Children)
+            IndexElementInfo(child, depth + 1, infosById);
+    }
+
+    private static void SetWindowId(ElementInfo info, int windowId)
+    {
+        info.WindowId = windowId;
+        if (info.Children is null)
+            return;
+
+        foreach (var child in info.Children)
+            SetWindowId(child, windowId);
     }
 
     private static bool MatchesElementInfo(ElementInfo info, string? type, string? automationId, string? text)
@@ -528,12 +1258,32 @@ public class VisualTreeWalker
     /// </summary>
     public List<ElementInfo> Query(Application app, string? type = null, string? automationId = null, string? text = null)
     {
-        var results = new List<ElementInfo>();
-        if (app is not IVisualTreeElement appElement)
-            return results;
+        return FlattenElementInfos(WalkTree(app))
+            .Where(info => MatchesManagedQueryElement(info, type, automationId, text))
+            .Select(info => info.WithoutChildren())
+            .ToList();
+    }
 
-        QueryRecursive(appElement, type, automationId, text, null, results);
-        return results;
+    private static bool MatchesManagedQueryElement(
+        ElementInfo info,
+        string? type,
+        string? automationId,
+        string? text)
+    {
+        if (type is not null
+            && !info.Type.Equals(type, StringComparison.OrdinalIgnoreCase)
+            && !info.FullType.Equals(type, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (automationId is not null
+            && !string.Equals(info.AutomationId, automationId, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (text is not null
+            && (info.Text is null || !info.Text.Contains(text, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        return type is not null || automationId is not null || text is not null;
     }
 
     private void QueryRecursive(IVisualTreeElement element, string? type, string? automationId, string? text, string? parentId, List<ElementInfo> results)
@@ -599,7 +1349,7 @@ public class VisualTreeWalker
         string id;
         if (element is VisualElement ve && !string.IsNullOrEmpty(ve.AutomationId))
         {
-            id = ve.AutomationId;
+            id = ApplyWindowScope(ve.AutomationId);
             if (_usedIds.Contains(id))
             {
                 // Duplicate AutomationId — suffix with Element.Id
@@ -611,7 +1361,7 @@ public class VisualTreeWalker
         }
         else if (element is Element elem)
         {
-            id = elem.Id.ToString("N")[..12];
+            id = ApplyWindowScope(elem.Id.ToString("N")[..12]);
         }
         else
         {
@@ -623,7 +1373,7 @@ public class VisualTreeWalker
 
             if (automId != null)
             {
-                id = automId;
+                id = ApplyWindowScope(automId);
                 if (_usedIds.Contains(id))
                     id = $"{id}_{RuntimeHelpers.GetHashCode(element):x8}";
             }
@@ -640,13 +1390,15 @@ public class VisualTreeWalker
                     if (platformView != null)
                         platformId = EnsurePlatformStableId(platformView);
                 }
-                id = platformId ?? RuntimeHelpers.GetHashCode(element).ToString("x8");
+                id = ApplyWindowScope(
+                    platformId ?? RuntimeHelpers.GetHashCode(element).ToString("x8"));
             }
         }
 
         _usedIds.Add(id);
         if (element is Element elFinal)
             _elementIdToExternalId[elFinal.Id] = id;
+        _objectToExternalId.TryAdd(element, id);
         return id;
     }
 
@@ -664,7 +1416,7 @@ public class VisualTreeWalker
             string id;
             if (!string.IsNullOrEmpty(automationId))
             {
-                id = automationId;
+                id = ApplyWindowScope(automationId);
                 if (_usedIds.Contains(id))
                     id = $"{id}_{el.Id.ToString("N")[..8]}";
             }
@@ -672,19 +1424,21 @@ public class VisualTreeWalker
             {
                 // No automationId — use Element.Id directly, but check for collisions
                 // with MAUI elements that share the same Element.Id
-                id = el.Id.ToString("N")[..12];
+                id = ApplyWindowScope(el.Id.ToString("N")[..12]);
                 if (_usedIds.Contains(id))
                     id = $"{id}_{RuntimeHelpers.GetHashCode(element):x8}";
             }
 
             _usedIds.Add(id);
+            _elementIdToExternalId.TryAdd(el.Id, id);
+            _objectToExternalId.TryAdd(identity, id);
             return id;
         }
 
         // Non-Element backing — use automationId + platform stamp or hash
         if (!string.IsNullOrEmpty(automationId))
         {
-            var id = automationId;
+            var id = ApplyWindowScope(automationId);
             if (_usedIds.Contains(id))
             {
                 var platformId = EnsurePlatformStableId(identity);
@@ -692,17 +1446,27 @@ public class VisualTreeWalker
                 id = $"{id}_{suffix[..Math.Min(8, suffix.Length)]}";
             }
             _usedIds.Add(id);
+            _objectToExternalId.TryAdd(identity, id);
             return id;
         }
 
         // Last resort
         {
             var platformId = EnsurePlatformStableId(identity);
-            var id = platformId ?? RuntimeHelpers.GetHashCode(identity).ToString("x8");
+            var id = ApplyWindowScope(
+                platformId ?? RuntimeHelpers.GetHashCode(identity).ToString("x8"));
+            if (_usedIds.Contains(id))
+                id = $"{id}_{RuntimeHelpers.GetHashCode(element):x8}";
             _usedIds.Add(id);
+            _objectToExternalId.TryAdd(identity, id);
             return id;
         }
     }
+
+    private string ApplyWindowScope(string id)
+        => _currentWindowId > 0
+            ? $"{id}:window:{_currentWindowId}"
+            : id;
 
     /// <summary>
     /// Override in platform-specific subclasses to stamp a stable GUID on a platform view.
@@ -724,9 +1488,17 @@ public class VisualTreeWalker
         SearchHandlerMarker m => m.Handler,
         FlyoutToggleMarker m => m.FlyoutPage,
         TabbedPageTabMarker m => m.Page,
-        BackButtonMarker m => m.Navigation,
+        BackButtonMarker m => m.Behavior is not null ? m.Behavior : m.Navigation,
         _ => element
     };
+
+    internal virtual object GetElementIdentity(object element) => GetStableIdentity(element);
+
+    internal virtual bool AreElementIdentitiesEqual(object first, object second)
+        => ReferenceEquals(first, second);
+
+    internal virtual bool ShouldRetainElementIdentityStrongly(object identity)
+        => identity.GetType().IsValueType || identity is string;
 
     /// <summary>
     /// Recursively walks the tree searching for an element whose generated ID matches targetId.
@@ -833,10 +1605,19 @@ public class VisualTreeWalker
 
     private object? FindBackButtonById(Page page, string parentId, string targetId)
     {
+        if (!IsNavigationBarVisible(page))
+            return null;
+
         var (nav, title) = ResolveBackNavigation(page);
         if (nav == null) return null;
 
-        var marker = new BackButtonMarker { Navigation = nav, Title = title };
+        var marker = new BackButtonMarker
+        {
+            Navigation = nav,
+            Title = title,
+            Behavior = GetEffectiveBackButtonBehavior(page),
+            Page = page
+        };
         var id = GenerateObjectId(marker, "BackButton");
         return id == targetId ? marker : null;
     }
@@ -949,19 +1730,8 @@ public class VisualTreeWalker
 
     private void AddNavBarTitle(Page page, string parentId, ElementInfo parentInfo)
     {
-        // Skip if nav bar is hidden
-        try
-        {
-            if (page.Parent is Shell || FindAncestor<Shell>(page) != null)
-            {
-                if (!Shell.GetNavBarIsVisible(page)) return;
-            }
-            else if (page.Parent is NavigationPage)
-            {
-                if (!NavigationPage.GetHasNavigationBar(page)) return;
-            }
-        }
-        catch { }
+        if (!IsNavigationBarVisible(page))
+            return;
 
         var title = page.Title;
         if (string.IsNullOrEmpty(title)) return;
@@ -1237,6 +2007,7 @@ public class VisualTreeWalker
     /// </summary>
     private void TryPopulateSyntheticBounds(string id, object marker, ElementInfo info)
     {
+        info.IdentityToken = GetStableIdentity(marker);
         try
         {
             var bounds = ResolveSyntheticBounds(marker);
@@ -1270,22 +2041,65 @@ public class VisualTreeWalker
 
     private ElementInfo? CreateBackButtonInfo(Page page, string parentId)
     {
+        if (!IsNavigationBarVisible(page))
+            return null;
+
         var (nav, title) = ResolveBackNavigation(page);
         if (nav == null) return null;
 
-        var marker = new BackButtonMarker { Navigation = nav, Title = title };
+        var marker = new BackButtonMarker
+        {
+            Navigation = nav,
+            Title = title,
+            Behavior = GetEffectiveBackButtonBehavior(page),
+            Page = page
+        };
         var id = GenerateObjectId(marker, "BackButton");
         return new ElementInfo
         {
             Id = id,
+            IdentityToken = GetStableIdentity(marker),
             ParentId = parentId,
             Type = "BackButton",
             FullType = "Microsoft.Maui.DevFlow.Agent.Core.BackButton",
             AutomationId = "BackButton",
             Text = $"← {title}",
-            IsVisible = true,
-            IsEnabled = true,
+            IsVisible = marker.Behavior?.IsVisible ?? true,
+            IsEnabled = marker.Behavior?.IsEnabled ?? true,
         };
+    }
+
+    private static bool IsNavigationBarVisible(Page page)
+    {
+        try
+        {
+            if (page.Parent is Shell || FindAncestor<Shell>(page) is not null)
+                return Shell.GetNavBarIsVisible(page);
+            if (page.Parent is NavigationPage || FindAncestor<NavigationPage>(page) is not null)
+                return NavigationPage.GetHasNavigationBar(page);
+        }
+        catch
+        {
+        }
+
+        return true;
+    }
+
+    private static BackButtonBehavior? GetEffectiveBackButtonBehavior(Page page)
+    {
+        var behavior = Shell.GetBackButtonBehavior(page);
+        if (behavior is not null)
+            return behavior;
+
+        Element? current = page.Parent;
+        while (current is not null)
+        {
+            if (current is Shell shell)
+                return Shell.GetBackButtonBehavior(shell);
+            current = current.Parent;
+        }
+
+        return null;
     }
 
     private (INavigation? Nav, string Title) ResolveBackNavigation(Page page)
@@ -1346,6 +2160,8 @@ public class VisualTreeWalker
         var info = new ElementInfo
         {
             Id = id,
+            IdentityToken = GetStableIdentity(element),
+            WindowId = _currentWindowId,
             ParentId = parentId,
             Type = cometResolved?.Type ?? element.GetType().Name,
             FullType = cometResolved?.FullType ?? element.GetType().FullName ?? element.GetType().Name,
@@ -1398,7 +2214,11 @@ public class VisualTreeWalker
 
             // Try to extract text from Comet views via IText interface
             if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
-                info.Text = iText.Text;
+            {
+                info.Text = element is Entry entry
+                    ? SensitiveValueRedactor.Redact(iText.Text, entry.IsPassword)
+                    : iText.Text;
+            }
         }
 
         // Extract text from common controls (including Shell elements)
@@ -1406,7 +2226,7 @@ public class VisualTreeWalker
         {
             Label l => l.Text,
             Button b => b.Text,
-            Entry e => e.Text,
+            Entry e => SensitiveValueRedactor.Redact(e.Text, e.IsPassword),
             Editor ed => ed.Text,
             SearchBar sb => sb.Text,
             Span s => s.Text,
@@ -1535,6 +2355,7 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
         _syntheticBounds.Clear();
     }
 }

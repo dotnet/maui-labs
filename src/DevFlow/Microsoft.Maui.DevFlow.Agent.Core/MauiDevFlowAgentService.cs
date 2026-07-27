@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -38,12 +39,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             static () => DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
     }
 
+    private readonly NativeElementRegistrationRegistry? _nativeElementRegistry;
+    private readonly IDisposable? _nativeElementSubscription;
+
     /// <summary>
     /// Creates a new MAUI-backed agent service.
     /// </summary>
     public MauiDevFlowAgentService(AgentOptions? options = null)
+        : this(options, nativeElementRegistry: null, nativeElementSubscription: null)
+    {
+    }
+
+    internal MauiDevFlowAgentService(
+        AgentOptions? options,
+        NativeElementRegistrationRegistry? nativeElementRegistry,
+        IDisposable? nativeElementSubscription)
         : base(options)
     {
+        _nativeElementRegistry = nativeElementRegistry;
+        _nativeElementSubscription = nativeElementSubscription;
         _treeWalker = CreateTreeWalker();
     }
 
@@ -80,6 +94,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     /// <inheritdoc />
     protected override bool IsThemeSupported => true;
+
+    /// <inheritdoc />
+    protected override void PopulateCapabilities(Dictionary<string, object> capabilities)
+    {
+        capabilities["ui.tree"] = Capability(2, supported: true,
+            ["css-selector", "type", "text", "accessibility-id", "native-owner", "capture-epoch", "registry-generation", "window-id"],
+            reason: null);
+        capabilities["ui.hit-test"] = Capability(2, supported: true,
+            ["native-first", "capture-epoch", "window-logical-coordinates"],
+            reason: null);
+        capabilities["ui.actions"] = Capability(2, supported: true,
+            ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection"],
+            reason: null);
+        capabilities["ui.screenshot"] = Capability(2, supported: true,
+            SupportsNativeElementScreenshots
+                ? ["element", "native-element", "fullscreen", "selector", "capture-epoch"]
+                : ["element", "fullscreen", "selector", "capture-epoch"],
+            reason: null);
+    }
 
     /// <inheritdoc />
     protected override string AppDisplayName
@@ -128,7 +161,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     }
 
     /// <inheritdoc />
-    protected override void DisposeBackendResources() => Sensors.Dispose();
+    protected override void DisposeBackendResources()
+    {
+        StopCaptureInvalidationHooks();
+        _nativeElementSubscription?.Dispose();
+        Sensors.Dispose();
+    }
+
+    protected override Task StopBackendAsync()
+    {
+        StopCaptureInvalidationHooks();
+        return Task.CompletedTask;
+    }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -235,7 +279,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     private Task? _pendingCaptureUiTask;
 
     private readonly object _pendingCaptureUiGate = new();
-
+    private Task<List<ElementInfo>>? _pendingNativeProbeTask;
+    private readonly object _pendingNativeProbeGate = new();
+    private readonly object _captureStateGate = new();
+    private readonly object _captureInvalidationHookGate = new();
+    private readonly object _knownNativeWindowHandlesGate = new();
+    private readonly SortedDictionary<long, UiCaptureContext> _captureLeases = new();
+    private readonly Dictionary<int, IReadOnlyList<IntPtr>> _knownNativeWindowHandles = [];
+    private readonly ConditionalWeakTable<BindableObject, CaptureInvalidationHookState>
+        _captureInvalidationHookStates = new();
+    private readonly List<WeakReference<BindableObject>> _captureInvalidationTargets = [];
+    private const int MaxCaptureLeases = 128;
+    private const int MaxCapturedElementIdentities = 100_000;
+    private readonly SemaphoreSlim _uiMutationGate = new(1, 1);
+    private long _captureEpochSequence;
+    private long _uiMutationGeneration;
+    private long _aggregateExternalMutationGeneration;
+    private readonly Dictionary<int, long> _windowExternalMutationGenerations = [];
+    private int _uiMutationInProgress;
+    private UiCaptureContext _latestCapture;
     private Shell? _hookedShell;
 
     private DateTime? _navigationStartedAtUtc;
@@ -252,6 +314,52 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         public int Generation { get; set; }
         public HashSet<string> HookKeys { get; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed class CaptureInvalidationHookState
+    {
+        public int? WindowId { get; set; }
+    }
+
+    private readonly record struct UiCaptureContext(
+        long Epoch,
+        long RegistryGeneration,
+        long MutationGeneration,
+        long ExternalMutationGeneration,
+        int? WindowId,
+        Dictionary<string, CapturedElementIdentity>? ElementIdentities);
+
+    private sealed class CapturedElementIdentity
+    {
+        private readonly object? _strongIdentity;
+        private readonly WeakReference<object>? _weakIdentity;
+
+        public CapturedElementIdentity(object identity, bool retainStrongly)
+        {
+            if (retainStrongly)
+                _strongIdentity = identity;
+            else
+                _weakIdentity = new WeakReference<object>(identity);
+        }
+
+        public bool TryGetTarget([NotNullWhen(true)] out object? identity)
+        {
+            if (_strongIdentity is not null)
+            {
+                identity = _strongIdentity;
+                return true;
+            }
+
+            if (_weakIdentity?.TryGetTarget(out identity) == true)
+                return true;
+
+            identity = null;
+            return false;
+        }
+    }
+
+    private sealed class CaptureMetadataRequest : CaptureBoundRequest
+    {
     }
 
     private sealed class PageLifecycleState
@@ -308,6 +416,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// </summary>
     protected virtual VisualTreeWalker CreateTreeWalker() => new VisualTreeWalker();
 
+    internal NativeElementRegistrationRegistry? NativeElementRegistry => _nativeElementRegistry;
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
     protected override string PlatformName => DeviceInfo.Current.Platform.ToString();
 
@@ -343,10 +452,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             int.TryParse(depthStr, out maxDepth);
 
         var windowIndex = ParseWindowIndex(request);
+        var capture = BeginUiCapture(windowIndex);
         var tree = await CaptureUiOrNativeAsync(
             () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
             hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
             windowIndex);
+        StampCaptureMetadata(tree, capture);
+        if (!CommitUiCapture(capture))
+            return BuildCaptureChangedResponse(capture);
         return HttpResponse.Json(tree);
     }
 
@@ -356,9 +469,37 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
 
+        var capture = BeginUiCapture(windowIndex: null);
+        await DispatchAsync(() =>
+        {
+            RefreshCaptureInvalidationHooks(windowIndex: null);
+            return true;
+        });
+        if (IsRegisteredNativeElementId(id))
+        {
+            var registeredElement = await DispatchAsync(() => _treeWalker.GetNativeElementInfoById(id));
+            if (registeredElement != null)
+            {
+                registeredElement.WindowId ??=
+                    _treeWalker.GetRegisteredNativeWindowId(id, _app);
+                StampCaptureMetadata(registeredElement, capture);
+                if (!CommitUiCapture(capture))
+                    return BuildCaptureChangedResponse(capture);
+            }
+            return registeredElement != null
+                ? HttpResponse.Json(registeredElement)
+                : HttpResponse.NotFound($"Element '{id}' not found");
+        }
+
         if (IsNativeElementId(id) && _treeWalker.SupportsNativeElements)
         {
             var nativeElement = await Task.Run(() => _treeWalker.GetNativeElementInfoById(id));
+            if (nativeElement != null)
+            {
+                StampCaptureMetadata(nativeElement, capture);
+                if (!CommitUiCapture(capture))
+                    return BuildCaptureChangedResponse(capture);
+            }
             return nativeElement != null ? HttpResponse.Json(nativeElement) : HttpResponse.NotFound($"Element '{id}' not found");
         }
 
@@ -375,6 +516,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return null;
         });
 
+        if (element is ElementInfo elementInfo)
+        {
+            StampCaptureMetadata(elementInfo, capture);
+            if (!CommitUiCapture(capture))
+                return BuildCaptureChangedResponse(capture);
+        }
         return element != null ? HttpResponse.Json(element) : HttpResponse.NotFound($"Element '{id}' not found");
     }
 
@@ -387,9 +534,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             try
             {
+                var capture = BeginUiCapture(windowIndex: null);
                 var results = await CaptureUiOrNativeAsync(
                     () => _treeWalker.QueryCss(_app, selector),
                     hwnds => _treeWalker.QueryNative(hwnds, selector: selector));
+                StampCaptureMetadata(results, capture);
+                if (!CommitUiCapture(capture))
+                    return BuildCaptureChangedResponse(capture);
                 return HttpResponse.Json(results);
             }
             catch (FormatException ex)
@@ -405,9 +556,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (type == null && automationId == null && text == null)
             return HttpResponse.Error("At least one query parameter required: type, automationId, text, or selector");
 
+        var simpleCapture = BeginUiCapture(windowIndex: null);
         var simpleResults = await CaptureUiOrNativeAsync(
             () => _treeWalker.Query(_app, type, automationId, text),
             hwnds => _treeWalker.QueryNative(hwnds, type, automationId, text));
+        StampCaptureMetadata(simpleResults, simpleCapture);
+        if (!CommitUiCapture(simpleCapture))
+            return BuildCaptureChangedResponse(simpleCapture);
         return HttpResponse.Json(simpleResults);
     }
 
@@ -417,7 +572,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         int? windowIndex = null)
     {
         if (!_treeWalker.SupportsNativeElements)
-            return await DispatchAsync(uiCallback);
+        {
+            return await DispatchAsync(() =>
+            {
+                var result = uiCallback();
+                RefreshCaptureInvalidationHooks(windowIndex);
+                return result;
+            });
+        }
 
         // Gate: if a previous CaptureUiOrNativeAsync's UI dispatch is still
         // pending (the dispatcher is blocked), skip enqueuing another one and
@@ -431,18 +593,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             try
             {
-                var hwnds = _app is null
-                    ? Array.Empty<IntPtr>()
-                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex);
-                return await Task.Run(() =>
+                var hwnds = GetCachedKnownNativeWindowHandles(windowIndex);
+                var gatedNativeTask = TryStartNativeProbe(async () =>
                 {
+                    await Task.CompletedTask;
                     try { return nativeCallback(hwnds); }
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Native UI probe failed (gated): {ex.GetBaseException().Message}");
                         return new List<ElementInfo>();
                     }
-                }).ConfigureAwait(false);
+                });
+                return await AwaitNativeProbeAsync(gatedNativeTask).ConfigureAwait(false);
             }
             catch
             {
@@ -460,9 +622,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             try
             {
-                hwndSource.TrySetResult(_app is null
+                var hwnds = _app is null
                     ? Array.Empty<IntPtr>()
-                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex));
+                    : _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex);
+                CacheKnownNativeWindowHandles(windowIndex, hwnds);
+                hwndSource.TrySetResult(hwnds);
             }
             catch (Exception ex)
             {
@@ -470,10 +634,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 hwndSource.TrySetResult(Array.Empty<IntPtr>());
             }
 
-            return uiCallback();
+            var result = uiCallback();
+            RefreshCaptureInvalidationHooks(windowIndex);
+            return result;
         });
 
-        var nativeTask = Task.Run(async () =>
+        var nativeTask = TryStartNativeProbe(async () =>
         {
             Task delayTask;
             try
@@ -539,24 +705,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
 
-            // Also bound the native await: NativeUiProbeTimeoutMs only guards the HWND
-            // discovery wait inside nativeTask; nativeCallback itself (a UIA tree walk)
-            // is unbounded and can block for minutes on a frozen app.
-            var nativeWinner = await Task.WhenAny(nativeTask, Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
             probeCts.Cancel();
-            return nativeWinner == nativeTask
-                ? await nativeTask.ConfigureAwait(false)
-                : new List<ElementInfo>();
+            return await AwaitNativeProbeAsync(nativeTask).ConfigureAwait(false);
         }
 
         probeCts.Cancel();
 
         var uiResult = await uiTask.ConfigureAwait(false);
-        // Bound the final native await for the same reason as above.
-        var finalNativeWinner = await Task.WhenAny(nativeTask, Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
-        var nativeResult = finalNativeWinner == nativeTask
-            ? await nativeTask.ConfigureAwait(false)
-            : new List<ElementInfo>();
+        var nativeResult = await AwaitNativeProbeAsync(nativeTask).ConfigureAwait(false);
         if (nativeResult.Count == 0)
             return uiResult;
 
@@ -566,19 +722,871 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         return merged;
     }
 
+    private void CacheKnownNativeWindowHandles(
+        int? windowIndex,
+        IReadOnlyList<IntPtr> handles)
+    {
+        lock (_knownNativeWindowHandlesGate)
+            _knownNativeWindowHandles[windowIndex ?? -1] = handles.ToArray();
+    }
+
+    private IReadOnlyList<IntPtr> GetCachedKnownNativeWindowHandles(int? windowIndex)
+    {
+        lock (_knownNativeWindowHandlesGate)
+            return _knownNativeWindowHandles.TryGetValue(windowIndex ?? -1, out var handles)
+                ? handles
+                : Array.Empty<IntPtr>();
+    }
+
+    private Task<List<ElementInfo>>? TryStartNativeProbe(
+        Func<Task<List<ElementInfo>>> probe)
+    {
+        lock (_pendingNativeProbeGate)
+        {
+            if (_pendingNativeProbeTask is { IsCompleted: false })
+                return null;
+
+            var task = Task.Run(probe);
+            _pendingNativeProbeTask = task;
+            _ = task.ContinueWith(
+                completed =>
+                {
+                    lock (_pendingNativeProbeGate)
+                    {
+                        if (ReferenceEquals(_pendingNativeProbeTask, completed))
+                            _pendingNativeProbeTask = null;
+                    }
+
+                    if (completed.IsFaulted)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[Microsoft.Maui.DevFlow] Native UI probe failed: {completed.Exception?.GetBaseException().Message}");
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return task;
+        }
+    }
+
+    private static async Task<List<ElementInfo>> AwaitNativeProbeAsync(
+        Task<List<ElementInfo>>? nativeTask)
+    {
+        if (nativeTask is null)
+            return [];
+
+        var winner = await Task.WhenAny(
+            nativeTask,
+            Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
+        return winner == nativeTask
+            ? await nativeTask.ConfigureAwait(false)
+            : [];
+    }
+
+    private void RefreshCaptureInvalidationHooks(int? windowIndex)
+    {
+        if (_app is not IVisualTreeElement appElement)
+            return;
+
+        var targets = new Dictionary<BindableObject, int?>(ReferenceEqualityComparer.Instance);
+        if (_app.Windows.Count == 0)
+        {
+            CollectCaptureInvalidationTargets(appElement, windowId: 0, targets);
+        }
+        else if (windowIndex.HasValue)
+        {
+            if (windowIndex.Value < 0 || windowIndex.Value >= _app.Windows.Count)
+                return;
+            CollectCaptureInvalidationTargets(
+                _app.Windows[windowIndex.Value],
+                windowIndex.Value,
+                targets);
+        }
+        else
+        {
+            for (var index = 0; index < _app.Windows.Count; index++)
+            {
+                CollectCaptureInvalidationTargets(
+                    _app.Windows[index],
+                    index,
+                    targets);
+            }
+        }
+
+        lock (_captureInvalidationHookGate)
+        {
+            for (var index = _captureInvalidationTargets.Count - 1; index >= 0; index--)
+            {
+                if (!_captureInvalidationTargets[index].TryGetTarget(out var target))
+                {
+                    _captureInvalidationTargets.RemoveAt(index);
+                    continue;
+                }
+
+                if (!_captureInvalidationHookStates.TryGetValue(target, out var state))
+                {
+                    _captureInvalidationTargets.RemoveAt(index);
+                    continue;
+                }
+
+                if (targets.ContainsKey(target)
+                    || windowIndex.HasValue && state.WindowId != windowIndex)
+                {
+                    continue;
+                }
+
+                target.PropertyChanged -= OnCaptureInvalidationTargetPropertyChanged;
+                if (target is Element element)
+                {
+                    element.ChildAdded -= OnCaptureInvalidationTargetChildChanged;
+                    element.ChildRemoved -= OnCaptureInvalidationTargetChildChanged;
+                }
+                _captureInvalidationHookStates.Remove(target);
+                _captureInvalidationTargets.RemoveAt(index);
+            }
+
+            foreach (var entry in targets)
+            {
+                if (_captureInvalidationHookStates.TryGetValue(entry.Key, out var state))
+                {
+                    state.WindowId = entry.Value;
+                    continue;
+                }
+
+                _captureInvalidationHookStates.Add(
+                    entry.Key,
+                    new CaptureInvalidationHookState { WindowId = entry.Value });
+                _captureInvalidationTargets.Add(new WeakReference<BindableObject>(entry.Key));
+                entry.Key.PropertyChanged += OnCaptureInvalidationTargetPropertyChanged;
+                if (entry.Key is Element element)
+                {
+                    element.ChildAdded += OnCaptureInvalidationTargetChildChanged;
+                    element.ChildRemoved += OnCaptureInvalidationTargetChildChanged;
+                }
+            }
+        }
+    }
+
+    private static void CollectCaptureInvalidationTargets(
+        IVisualTreeElement element,
+        int windowId,
+        Dictionary<BindableObject, int?> targets)
+    {
+        if (element is BindableObject bindableObject)
+        {
+            if (targets.ContainsKey(bindableObject))
+                return;
+            targets.Add(bindableObject, windowId);
+        }
+
+        if (element is View view)
+        {
+            foreach (var gestureRecognizer in view.GestureRecognizers)
+            {
+                if (gestureRecognizer is BindableObject bindableGestureRecognizer)
+                    targets.TryAdd(bindableGestureRecognizer, windowId);
+            }
+        }
+
+        if (element is Page page)
+        {
+            foreach (var toolbarItem in page.ToolbarItems)
+                targets.TryAdd(toolbarItem, windowId);
+        }
+
+        foreach (var child in element.GetVisualChildren())
+            CollectCaptureInvalidationTargets(child, windowId, targets);
+    }
+
+    private void OnCaptureInvalidationTargetPropertyChanged(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (_disposed || sender is not BindableObject target)
+            return;
+
+        lock (_captureInvalidationHookGate)
+        {
+            if (_captureInvalidationHookStates.TryGetValue(target, out var state))
+                InvalidateUiCaptureForWindow(state.WindowId);
+        }
+    }
+
+    private void OnCaptureInvalidationTargetChildChanged(object? sender, ElementEventArgs args)
+    {
+        if (_disposed || sender is not BindableObject target)
+            return;
+
+        lock (_captureInvalidationHookGate)
+        {
+            if (_captureInvalidationHookStates.TryGetValue(target, out var state))
+                InvalidateUiCaptureForWindow(state.WindowId);
+        }
+    }
+
+    private void StopCaptureInvalidationHooks()
+    {
+        lock (_captureInvalidationHookGate)
+        {
+            foreach (var weakTarget in _captureInvalidationTargets)
+            {
+                if (!weakTarget.TryGetTarget(out var target))
+                    continue;
+
+                target.PropertyChanged -= OnCaptureInvalidationTargetPropertyChanged;
+                if (target is Element element)
+                {
+                    element.ChildAdded -= OnCaptureInvalidationTargetChildChanged;
+                    element.ChildRemoved -= OnCaptureInvalidationTargetChildChanged;
+                }
+                _captureInvalidationHookStates.Remove(target);
+            }
+            _captureInvalidationTargets.Clear();
+        }
+    }
+
     private static bool IsNativeElementId(string? elementId)
         => elementId?.StartsWith("native:", StringComparison.Ordinal) == true;
+
+    private static bool IsRegisteredNativeElementId(string? elementId)
+        => elementId?.StartsWith("native:registered:", StringComparison.Ordinal) == true;
+
+    private UiCaptureContext BeginUiCapture(int? windowIndex)
+    {
+        lock (_captureStateGate)
+        {
+            return new UiCaptureContext(
+                Interlocked.Increment(ref _captureEpochSequence),
+                _nativeElementRegistry?.Generation ?? 0,
+                _uiMutationGeneration,
+                GetExternalMutationGenerationNoLock(windowIndex),
+                windowIndex,
+                new Dictionary<string, CapturedElementIdentity>(StringComparer.Ordinal));
+        }
+    }
+
+    private bool CommitUiCapture(UiCaptureContext capture)
+    {
+        lock (_captureStateGate)
+        {
+            if (_uiMutationInProgress != 0
+                || capture.RegistryGeneration != (_nativeElementRegistry?.Generation ?? 0)
+                || capture.MutationGeneration != _uiMutationGeneration
+                || capture.ExternalMutationGeneration
+                    != GetExternalMutationGenerationNoLock(capture.WindowId))
+            {
+                return false;
+            }
+
+            _captureLeases[capture.Epoch] = capture;
+            var capturedIdentityCount = _captureLeases.Values.Sum(
+                lease => lease.ElementIdentities?.Count ?? 0);
+            while (_captureLeases.Count > MaxCaptureLeases
+                || _captureLeases.Count > 1
+                    && capturedIdentityCount > MaxCapturedElementIdentities)
+            {
+                var oldestEpoch = _captureLeases.Keys.First();
+                capturedIdentityCount -=
+                    _captureLeases[oldestEpoch].ElementIdentities?.Count ?? 0;
+                _captureLeases.Remove(oldestEpoch);
+            }
+
+            _latestCapture = _captureLeases.Count > 0
+                ? _captureLeases.Values.Last()
+                : default;
+            return true;
+        }
+    }
+
+    private bool DidUiChangeDuringCapture(UiCaptureContext capture)
+    {
+        lock (_captureStateGate)
+        {
+            return _uiMutationInProgress != 0
+                || capture.RegistryGeneration != (_nativeElementRegistry?.Generation ?? 0)
+                || capture.MutationGeneration != _uiMutationGeneration
+                || capture.ExternalMutationGeneration
+                    != GetExternalMutationGenerationNoLock(capture.WindowId);
+        }
+    }
+
+    private UiCaptureContext GetLatestUiCapture()
+    {
+        lock (_captureStateGate)
+            return _latestCapture;
+    }
+
+    private void InvalidateUiCapture()
+    {
+        lock (_captureStateGate)
+        {
+            _uiMutationGeneration++;
+            _captureLeases.Clear();
+            _latestCapture = default;
+        }
+    }
+
+    private void InvalidateUiCaptureForWindow(int? windowId)
+    {
+        lock (_captureStateGate)
+        {
+            _aggregateExternalMutationGeneration++;
+            if (windowId.HasValue)
+            {
+                _windowExternalMutationGenerations[windowId.Value] =
+                    _windowExternalMutationGenerations.GetValueOrDefault(windowId.Value) + 1;
+            }
+
+            foreach (var epoch in _captureLeases
+                .Where(entry => entry.Value.WindowId is null
+                    || entry.Value.WindowId == windowId)
+                .Select(entry => entry.Key)
+                .ToArray())
+            {
+                _captureLeases.Remove(epoch);
+            }
+
+            _latestCapture = _captureLeases.Count > 0
+                ? _captureLeases.Values.Last()
+                : default;
+        }
+    }
+
+    private long GetExternalMutationGenerationNoLock(int? windowId)
+        => windowId.HasValue
+            ? _windowExternalMutationGenerations.GetValueOrDefault(windowId.Value)
+            : _aggregateExternalMutationGeneration;
+
+    private long GetExternalMutationGeneration(int? windowId)
+    {
+        lock (_captureStateGate)
+            return GetExternalMutationGenerationNoLock(windowId);
+    }
+
+    private bool IsUiCaptureCurrent(UiCaptureContext capture)
+    {
+        lock (_captureStateGate)
+        {
+            return capture.Epoch > 0
+                && _uiMutationInProgress == 0
+                && capture.RegistryGeneration == (_nativeElementRegistry?.Generation ?? 0)
+                && capture.MutationGeneration == _uiMutationGeneration
+                && capture.ExternalMutationGeneration
+                    == GetExternalMutationGenerationNoLock(capture.WindowId)
+                && _captureLeases.TryGetValue(capture.Epoch, out var lease)
+                && lease.Equals(capture);
+        }
+    }
+
+    private bool TryGetUiCapture(long epoch, out UiCaptureContext capture)
+    {
+        lock (_captureStateGate)
+            return _captureLeases.TryGetValue(epoch, out capture);
+    }
+
+    private HttpResponse? ValidateUiCapture(CaptureBoundRequest request)
+    {
+        if (request.CaptureEpoch is null && request.RegistryGeneration is null)
+            return null;
+        if (request.CaptureEpoch is null)
+        {
+            return HttpResponse.Error(
+                "captureEpoch is required when registryGeneration is supplied.",
+                statusCode: 400,
+                reason: "capture-epoch-required");
+        }
+
+        UiCaptureContext latest;
+        long currentRegistryGeneration;
+        bool isCurrent;
+        lock (_captureStateGate)
+        {
+            latest = _latestCapture;
+            currentRegistryGeneration = _nativeElementRegistry?.Generation ?? 0;
+            var captureToValidate = latest;
+            if (request.CaptureEpoch is long requestedEpoch
+                && _captureLeases.TryGetValue(requestedEpoch, out var requestedCapture))
+            {
+                captureToValidate = requestedCapture;
+            }
+
+            isCurrent = _uiMutationInProgress == 0
+                && captureToValidate.Epoch > 0
+                && captureToValidate.RegistryGeneration == currentRegistryGeneration
+                && captureToValidate.MutationGeneration == _uiMutationGeneration
+                && captureToValidate.ExternalMutationGeneration
+                    == GetExternalMutationGenerationNoLock(captureToValidate.WindowId)
+                && request.CaptureEpoch == captureToValidate.Epoch
+                && (request.RegistryGeneration is null || request.RegistryGeneration == currentRegistryGeneration);
+        }
+        if (isCurrent)
+            return null;
+
+        return BuildStaleCaptureResponse(
+            request.CaptureEpoch,
+            request.RegistryGeneration,
+            latest,
+            currentRegistryGeneration);
+    }
+
+    private (HttpResponse? Error, UiCaptureContext Capture) ReserveUiCapture(CaptureBoundRequest request)
+    {
+        if (request.CaptureEpoch is null && request.RegistryGeneration is null)
+            return (null, default);
+        if (request.CaptureEpoch is null)
+        {
+            return (HttpResponse.Error(
+                "captureEpoch is required when registryGeneration is supplied.",
+                statusCode: 400,
+                reason: "capture-epoch-required"), default);
+        }
+
+        UiCaptureContext latest;
+        long currentRegistryGeneration;
+        lock (_captureStateGate)
+        {
+            latest = _latestCapture;
+            currentRegistryGeneration = _nativeElementRegistry?.Generation ?? 0;
+            var currentMutationGeneration = Volatile.Read(ref _uiMutationGeneration);
+            var captureToValidate = latest;
+            if (request.CaptureEpoch is long requestedEpoch
+                && _captureLeases.TryGetValue(requestedEpoch, out var requestedCapture))
+            {
+                captureToValidate = requestedCapture;
+            }
+
+            var isCurrent = captureToValidate.Epoch > 0
+                && captureToValidate.RegistryGeneration == currentRegistryGeneration
+                && captureToValidate.MutationGeneration == currentMutationGeneration
+                && captureToValidate.ExternalMutationGeneration
+                    == GetExternalMutationGenerationNoLock(captureToValidate.WindowId)
+                && (request.CaptureEpoch is null || request.CaptureEpoch == captureToValidate.Epoch)
+                && (request.RegistryGeneration is null || request.RegistryGeneration == currentRegistryGeneration);
+            if (isCurrent)
+            {
+                _captureLeases.Remove(captureToValidate.Epoch);
+                _latestCapture = _captureLeases.Count > 0
+                    ? _captureLeases.Values.Last()
+                    : default;
+                return (null, captureToValidate);
+            }
+        }
+
+        return (BuildStaleCaptureResponse(
+            request.CaptureEpoch,
+            request.RegistryGeneration,
+            latest,
+            currentRegistryGeneration), default);
+    }
+
+    private async Task<HttpResponse?> ValidateCapturedElementIdentityAsync(
+        UiCaptureContext capture,
+        string? elementId)
+    {
+        if (capture.Epoch <= 0 || string.IsNullOrWhiteSpace(elementId))
+            return null;
+
+        if (capture.ElementIdentities?.ContainsKey(elementId) != true)
+        {
+            return BuildStaleCaptureResponse(
+                capture.Epoch,
+                capture.RegistryGeneration,
+                capture,
+                _nativeElementRegistry?.Generation ?? 0);
+        }
+
+        if (IsRegisteredNativeElementId(elementId))
+        {
+            var registeredElement = await DispatchAsync(() =>
+                _treeWalker.GetNativeElementById(elementId));
+            return registeredElement is not null
+                ? null
+                : BuildStaleCaptureResponse(
+                    capture.Epoch,
+                    capture.RegistryGeneration,
+                    capture,
+                    _nativeElementRegistry?.Generation ?? 0);
+        }
+
+        if (capture.ElementIdentities is null
+            || !capture.ElementIdentities.TryGetValue(elementId, out var capturedReference))
+        {
+            return BuildStaleCaptureResponse(
+                capture.Epoch,
+                capture.RegistryGeneration,
+                capture,
+                _nativeElementRegistry?.Generation ?? 0);
+        }
+
+        if (!capturedReference.TryGetTarget(out var capturedIdentity))
+        {
+            return BuildStaleCaptureResponse(
+                capture.Epoch,
+                capture.RegistryGeneration,
+                capture,
+                _nativeElementRegistry?.Generation ?? 0);
+        }
+
+        object? resolvedElement;
+        if (IsRegisteredNativeElementId(elementId))
+        {
+            resolvedElement = await DispatchAsync(() => _treeWalker.GetNativeElementById(elementId));
+        }
+        else if (IsNativeElementId(elementId))
+        {
+            resolvedElement = await Task.Run(() => _treeWalker.GetNativeElementById(elementId));
+        }
+        else
+        {
+            resolvedElement = await DispatchAsync(() => _treeWalker.GetElementById(elementId, _app));
+        }
+
+        if (resolvedElement is not null
+            && _treeWalker.AreElementIdentitiesEqual(
+                capturedIdentity,
+                _treeWalker.GetElementIdentity(resolvedElement)))
+        {
+            return null;
+        }
+
+        return BuildStaleCaptureResponse(
+            capture.Epoch,
+            capture.RegistryGeneration,
+            capture,
+            _nativeElementRegistry?.Generation ?? 0);
+    }
+
+    private async Task<(HttpResponse? Error, UiCaptureContext Capture)> ValidateAndConsumeUiCaptureAsync(
+        CaptureBoundRequest request,
+        params string?[] elementIds)
+    {
+        var reservation = ReserveUiCapture(request);
+        if (reservation.Error is not null)
+            return reservation;
+
+        foreach (var elementId in elementIds.Distinct(StringComparer.Ordinal))
+        {
+            if (await ValidateCapturedElementIdentityAsync(reservation.Capture, elementId) is { } identityError)
+                return (identityError, reservation.Capture);
+        }
+
+        return (null, reservation.Capture);
+    }
+
+    private async Task<HttpResponse?> PrepareUiMutationAsync(
+        HttpRequest request,
+        CaptureBoundRequest body,
+        params string?[] elementIds)
+    {
+        if (request.MutationState is UiCaptureContext)
+            return null;
+
+        var validation = await ValidateAndConsumeUiCaptureAsync(body, elementIds);
+        if (validation.Error is not null)
+            return validation.Error;
+
+        if (validation.Capture.Epoch > 0)
+            request.MutationState = validation.Capture;
+        return null;
+    }
+
+    private object? ResolveCapturedElement(
+        UiCaptureContext capture,
+        string elementId,
+        Func<string, object?> resolver)
+    {
+        if (capture.Epoch <= 0)
+            return resolver(elementId);
+
+        if (capture.ElementIdentities?.ContainsKey(elementId) != true)
+            return null;
+
+        if (IsRegisteredNativeElementId(elementId))
+            return resolver(elementId);
+
+        if (capture.ElementIdentities is null
+            || !capture.ElementIdentities.TryGetValue(elementId, out var capturedReference)
+            || !capturedReference.TryGetTarget(out var capturedIdentity))
+        {
+            return null;
+        }
+
+        var resolvedElement = resolver(elementId);
+        return resolvedElement is not null
+            && _treeWalker.AreElementIdentitiesEqual(
+                capturedIdentity,
+                _treeWalker.GetElementIdentity(resolvedElement))
+                ? resolvedElement
+                : null;
+    }
+
+    private object? ResolveCapturedNativeElement(
+        UiCaptureContext capture,
+        string elementId)
+        => ResolveCapturedElement(
+            capture,
+            elementId,
+            _treeWalker.GetNativeElementById);
+
+    private bool IsDetachedNativeElementId(string elementId)
+        => IsNativeElementId(elementId) && !IsRegisteredNativeElementId(elementId);
+
+    private Task<object?> ResolveScreenshotElementAsync(
+        UiCaptureContext capture,
+        string elementId)
+    {
+        object? Resolve()
+            => ResolveCapturedElement(
+                capture,
+                elementId,
+                id => IsNativeElementId(id)
+                    ? _treeWalker.GetNativeElementById(id)
+                    : _treeWalker.GetElementById(id, _app));
+
+        return IsDetachedNativeElementId(elementId)
+            ? Task.Run(Resolve)
+            : DispatchAsync(Resolve);
+    }
+
+    private async Task StoreScreenshotIdentityAsync(
+        UiCaptureContext capture,
+        string elementId,
+        object resolvedElement)
+    {
+        var identity = IsDetachedNativeElementId(elementId)
+            ? await Task.Run(() => _treeWalker.GetElementIdentity(resolvedElement))
+            : _treeWalker.GetElementIdentity(resolvedElement);
+        StoreCapturedIdentity(capture, elementId, identity);
+    }
+
+    private async Task<ScreenshotCaptureOutcome> CaptureResolvedElementScreenshotAsync(
+        string elementId,
+        object resolvedElement,
+        int? windowIndex)
+    {
+        if (IsDetachedNativeElementId(elementId))
+        {
+            var elementInfo = await Task.Run(
+                () => _treeWalker.GetNativeElementInfoById(elementId));
+            var bytes = await Task.Run(
+                () => CaptureNativeElementScreenshotAsync(resolvedElement, elementInfo));
+            return new ScreenshotCaptureOutcome
+            {
+                Data = bytes,
+                Density = GetNativeElementDisplayDensity(elementInfo) ?? 1.0
+            };
+        }
+
+        return await DispatchAsync<ScreenshotCaptureOutcome>(async () =>
+        {
+            var nativeElementInfo = resolvedElement is VisualElement
+                ? null
+                : _treeWalker.GetNativeElementInfoById(elementId);
+            var bytes = resolvedElement is VisualElement visualElement
+                ? await CaptureElementScreenshotAsync(visualElement)
+                : await CaptureNativeElementScreenshotAsync(
+                    resolvedElement,
+                    nativeElementInfo);
+            return new ScreenshotCaptureOutcome
+            {
+                Data = bytes,
+                Failure = bytes == null ? DescribeScreenshotFailure() : null,
+                Density = GetNativeElementDisplayDensity(nativeElementInfo)
+                    ?? GetWindowDisplayDensity(GetWindow(nativeElementInfo?.WindowId ?? windowIndex))
+            };
+        }) ?? new ScreenshotCaptureOutcome();
+    }
+
+    private static double? GetNativeElementDisplayDensity(ElementInfo? elementInfo)
+    {
+        if (elementInfo?.NativeProperties?.TryGetValue(
+                "displayDensity",
+                out var densityValue) == true
+            && double.TryParse(
+                densityValue,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var density)
+            && double.IsFinite(density)
+            && density > 0)
+        {
+            return density;
+        }
+
+        return null;
+    }
+
+    private static UiCaptureContext GetReservedCapture(HttpRequest request)
+        => request.MutationState is UiCaptureContext capture ? capture : default;
+
+    private HttpResponse BuildStaleCaptureResponse(
+        long? requestedEpoch,
+        long? requestedRegistryGeneration,
+        UiCaptureContext latest,
+        long currentRegistryGeneration)
+        => HttpResponse.Error(
+            "The UI snapshot is stale. Capture the tree or hit-test again before acting.",
+            statusCode: 409,
+            reason: "stale-capture-epoch",
+            details: new
+            {
+                requestedEpoch,
+                requestedRegistryGeneration,
+                currentEpoch = latest.Epoch,
+                currentRegistryGeneration,
+                currentMutationGeneration = Volatile.Read(ref _uiMutationGeneration),
+                currentExternalMutationGeneration =
+                    GetExternalMutationGeneration(latest.WindowId),
+                currentWindowId = latest.WindowId
+            });
+
+    private HttpResponse BuildCaptureChangedResponse(UiCaptureContext capture)
+        => HttpResponse.Error(
+            "The UI changed while it was being captured. Retry the tree, query, or hit-test request.",
+            statusCode: 409,
+            reason: "capture-changed-during-read",
+            details: new
+            {
+                captureEpoch = capture.Epoch,
+                capturedRegistryGeneration = capture.RegistryGeneration,
+                currentRegistryGeneration = _nativeElementRegistry?.Generation ?? 0,
+                capturedMutationGeneration = capture.MutationGeneration,
+                currentMutationGeneration = Volatile.Read(ref _uiMutationGeneration),
+                capturedExternalMutationGeneration = capture.ExternalMutationGeneration,
+                currentExternalMutationGeneration =
+                    GetExternalMutationGeneration(capture.WindowId),
+                mutationInProgress = Volatile.Read(ref _uiMutationInProgress) != 0,
+                windowId = capture.WindowId
+            });
+
+    private static long? ParseLongQueryParameter(HttpRequest request, string name)
+        => request.QueryParams.TryGetValue(name, out var value)
+            && long.TryParse(value, out var parsed)
+                ? parsed
+                : null;
+
+    protected override async Task<HttpResponse> ExecuteUiMutationAsync(
+        HttpRequest request,
+        Func<HttpRequest, Task<HttpResponse>> handler)
+    {
+        if (!await _uiMutationGate.WaitAsync(TimeSpan.FromSeconds(5)))
+        {
+            return HttpResponse.Error(
+                "Another UI mutation is still running. Retry after it completes.",
+                statusCode: 409,
+                reason: "ui-mutation-busy",
+                details: new { retryable = true });
+        }
+
+        lock (_captureStateGate)
+            _uiMutationInProgress = 1;
+        HttpResponse? response = null;
+        try
+        {
+            response = await handler(request);
+            return response;
+        }
+        finally
+        {
+            lock (_captureStateGate)
+            {
+                if (response is { StatusCode: >= 200 and < 300 })
+                {
+                    _uiMutationGeneration++;
+                    _captureLeases.Clear();
+                    _latestCapture = default;
+                }
+                _uiMutationInProgress = 0;
+            }
+            _uiMutationGate.Release();
+        }
+    }
+
+    private void StampCaptureMetadata(IEnumerable<ElementInfo> elements, UiCaptureContext capture)
+    {
+        foreach (var element in elements)
+            StampCaptureMetadata(element, capture);
+    }
+
+    private void StoreCapturedIdentity(
+        UiCaptureContext capture,
+        string elementId,
+        object identity)
+    {
+        capture.ElementIdentities?[elementId] = new CapturedElementIdentity(
+            identity,
+            _treeWalker.ShouldRetainElementIdentityStrongly(identity));
+    }
+
+    private void StampCaptureMetadata(ElementInfo element, UiCaptureContext capture)
+    {
+        element.CaptureEpoch = capture.Epoch;
+        element.RegistryGeneration = capture.RegistryGeneration;
+        element.WindowId = capture.WindowId ?? element.WindowId;
+        if (element.IdentityToken is not null)
+        {
+            StoreCapturedIdentity(capture, element.Id, element.IdentityToken);
+        }
+        if (element.Children is null)
+            return;
+
+        foreach (var child in element.Children)
+            StampCaptureMetadata(child, capture);
+    }
 
     protected override async Task<HttpResponse> HandleHitTest(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
-        if (!request.QueryParams.TryGetValue("x", out var xStr) || !double.TryParse(xStr, out var x))
+        if (!request.QueryParams.TryGetValue("x", out var xStr) || !TryParseCoordinate(xStr, out var x))
             return HttpResponse.Error("x coordinate is required");
-        if (!request.QueryParams.TryGetValue("y", out var yStr) || !double.TryParse(yStr, out var y))
+        if (!request.QueryParams.TryGetValue("y", out var yStr) || !TryParseCoordinate(yStr, out var y))
             return HttpResponse.Error("y coordinate is required");
 
-        var windowIndex = ParseWindowIndex(request);
+        var windowIndex = ParseWindowIndex(request) ?? 0;
+        var capture = BeginUiCapture(windowIndex);
+        var nativeHits = new List<ElementInfo>();
+        if (_treeWalker.SupportsNativeElements)
+        {
+            var knownWindowHandles = await DispatchAsync(() =>
+                _treeWalker.GetKnownNativeWindowHandles(_app, windowIndex));
+            var nativeHitTask = TryStartNativeProbe(async () =>
+            {
+                await Task.CompletedTask;
+                try
+                {
+                    return _treeWalker.HitTestNativeElements(knownWindowHandles, x, y);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Microsoft.Maui.DevFlow] Native hit test failed: {ex.GetBaseException().Message}");
+                    return [];
+                }
+            });
+            if (nativeHitTask is null)
+            {
+                return HttpResponse.Error(
+                    "Native hit testing is busy. Retry after the current native probe completes.",
+                    statusCode: 409,
+                    reason: "native-probe-busy",
+                    details: new { retryable = true });
+            }
+            var nativeHitWinner = await Task.WhenAny(
+                nativeHitTask,
+                Task.Delay(NativeUiProbeTimeoutMs, CancellationToken.None)).ConfigureAwait(false);
+            if (nativeHitWinner != nativeHitTask)
+            {
+                return HttpResponse.Error(
+                    "Native hit testing timed out. Retry after the current native probe completes.",
+                    statusCode: 409,
+                    reason: "native-probe-busy",
+                    details: new { retryable = true });
+            }
+            nativeHits = await nativeHitTask.ConfigureAwait(false);
+            StampCaptureMetadata(nativeHits, capture);
+        }
 
         var result = await DispatchAsync(() =>
         {
@@ -587,6 +1595,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
             // Ensure tree is walked so element IDs are assigned and synthetic bounds are populated
             _treeWalker.WalkTree(_app!, 0, windowIndex);
+            RefreshCaptureInvalidationHooks(windowIndex);
 
             // Build active Shell context to filter out inactive ShellItem subtrees
             var activeShellItemIds = BuildActiveShellItemIds(window);
@@ -610,25 +1619,69 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             }
 
             var elements = new List<object>();
+            var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Detect modal pages — elements behind the topmost modal should be excluded
             var modalPage = window.Navigation?.ModalStack?.LastOrDefault();
 
-            // Check synthetic elements first — they represent visible nav chrome
-            // (nav bar, tab bar, flyout button) that sits on top of MAUI content.
+            // Exact registered native controls take precedence over synthetic chrome.
+            foreach (var nativeInfo in _treeWalker.HitTestRegisteredNativeElements(x, y, windowIndex))
+            {
+                if (modalPage is not null
+                    && !_treeWalker.IsRegisteredNativeElementUnderPage(nativeInfo.Id, modalPage))
+                    continue;
+
+                StampCaptureMetadata(nativeInfo, capture);
+
+                elements.Add(new Dictionary<string, object?>
+                {
+                    ["id"] = nativeInfo.Id,
+                    ["type"] = nativeInfo.Type,
+                    ["role"] = nativeInfo.Role,
+                    ["bounds"] = nativeInfo.Bounds,
+                    ["windowBounds"] = nativeInfo.WindowBounds,
+                    ["native"] = true,
+                    ["ownerId"] = nativeInfo.OwnerId
+                });
+                seenElementIds.Add(nativeInfo.Id);
+            }
+
+            foreach (var nativeHit in nativeHits)
+            {
+                if (!seenElementIds.Add(nativeHit.Id))
+                    continue;
+
+                elements.Add(new Dictionary<string, object?>
+                {
+                    ["id"] = nativeHit.Id,
+                    ["type"] = nativeHit.Type,
+                    ["role"] = nativeHit.Role,
+                    ["text"] = nativeHit.Text,
+                    ["bounds"] = nativeHit.Bounds,
+                    ["windowBounds"] = nativeHit.WindowBounds,
+                    ["native"] = true,
+                    ["origin"] = nativeHit.Origin,
+                    ["capabilities"] = nativeHit.Capabilities
+                });
+            }
+
             var syntheticHits = _treeWalker.HitTestSynthetics(x, y);
             foreach (var (synId, marker, bounds) in syntheticHits)
             {
-                // If modal is active, only include synthetics belonging to the modal page
                 if (modalPage != null && !IsSyntheticForPage(marker, modalPage))
                     continue;
+
+                StoreCapturedIdentity(
+                    capture,
+                    synId,
+                    _treeWalker.GetElementIdentity(marker));
 
                 var synInfo = new Dictionary<string, object?>
                 {
                     ["id"] = synId,
                     ["type"] = _treeWalker.GetSyntheticTypeName(marker),
                     ["bounds"] = bounds,
-                    ["windowBounds"] = bounds, // synthetic bounds are already window-absolute
+                    ["windowBounds"] = bounds,
                     ["synthetic"] = true,
                 };
                 var text = _treeWalker.GetSyntheticText(marker);
@@ -651,6 +1704,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 var id = _treeWalker.GetIdForElement(vte);
                 if (id == null) continue;
 
+                StoreCapturedIdentity(
+                    capture,
+                    id,
+                    _treeWalker.GetElementIdentity(hit));
+
                 var info = new Dictionary<string, object?> { ["id"] = id, ["type"] = hit.GetType().Name };
                 if (hit is VisualElement ve)
                 {
@@ -671,13 +1729,30 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 elements.Add(info);
             }
 
-            return (object?)new { x, y, window = windowIndex ?? 0, elements };
+            return (object?)new
+            {
+                x,
+                y,
+                window = windowIndex,
+                captureEpoch = capture.Epoch,
+                registryGeneration = capture.RegistryGeneration,
+                elements
+            };
         });
 
+        if (result != null && !CommitUiCapture(capture))
+            return BuildCaptureChangedResponse(capture);
         return result != null
             ? HttpResponse.Json(result)
-            : HttpResponse.Error($"Window {windowIndex ?? 0} not found");
+            : HttpResponse.Error($"Window {windowIndex} not found");
     }
+
+    internal static bool TryParseCoordinate(string value, out double coordinate)
+        => double.TryParse(
+            value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out coordinate);
 
     /// <summary>
     /// Builds a set of active ShellItem objects for filtering hit test results.
@@ -747,6 +1822,74 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
+        var requestedWindowIndex = ParseWindowIndex(request);
+        var requestedEpoch = ParseLongQueryParameter(request, "captureEpoch");
+        var requestedRegistryGeneration = ParseLongQueryParameter(request, "registryGeneration");
+        var captureRequest = new CaptureMetadataRequest
+        {
+            CaptureEpoch = requestedEpoch,
+            RegistryGeneration = requestedRegistryGeneration
+        };
+        var captureValidation = ValidateUiCapture(captureRequest);
+        if (captureValidation != null)
+            return captureValidation;
+
+        var capture = requestedEpoch.HasValue
+            && TryGetUiCapture(requestedEpoch.Value, out var leasedCapture)
+                ? leasedCapture
+                : BeginUiCapture(requestedWindowIndex);
+        var windowIndex = requestedEpoch.HasValue && requestedWindowIndex is null
+            ? capture.WindowId
+            : requestedWindowIndex;
+        if (requestedEpoch.HasValue
+            && requestedWindowIndex.HasValue
+            && capture.WindowId.HasValue
+            && capture.WindowId != requestedWindowIndex.Value)
+        {
+            return HttpResponse.Error(
+                $"Capture epoch {capture.Epoch} belongs to window {capture.WindowId}, not window {requestedWindowIndex.Value}.",
+                statusCode: 409,
+                reason: "capture-window-mismatch",
+                details: new
+                {
+                    captureEpoch = capture.Epoch,
+                    captureWindowId = capture.WindowId,
+                    requestedWindowId = requestedWindowIndex.Value
+                });
+        }
+
+        HttpResponse CompleteScreenshot(byte[] data)
+        {
+            if (requestedEpoch.HasValue)
+            {
+                if (!IsUiCaptureCurrent(capture))
+                {
+                    return BuildStaleCaptureResponse(
+                        requestedEpoch,
+                        requestedRegistryGeneration,
+                        GetLatestUiCapture(),
+                        _nativeElementRegistry?.Generation ?? 0);
+                }
+            }
+            else if (capture.RegistryGeneration != (_nativeElementRegistry?.Generation ?? 0)
+                || !CommitUiCapture(capture))
+            {
+                return BuildCaptureChangedResponse(capture);
+            }
+
+            var response = HttpResponse.Png(data);
+            response.Headers["X-DevFlow-Capture-Epoch"] = capture.Epoch.ToString();
+            response.Headers["X-DevFlow-Registry-Generation"] = capture.RegistryGeneration.ToString();
+            if (capture.WindowId.HasValue)
+                response.Headers["X-DevFlow-Window-Id"] = capture.WindowId.Value.ToString();
+            return response;
+        }
+
+        HttpResponse CompleteScreenshotFailure(HttpResponse failure)
+            => DidUiChangeDuringCapture(capture)
+                ? BuildCaptureChangedResponse(capture)
+                : failure;
+
         int? maxWidth = null;
         if (request.QueryParams.TryGetValue("maxWidth", out var mwStr) && int.TryParse(mwStr, out var mw) && mw > 0)
             maxWidth = mw;
@@ -759,28 +1902,26 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                      && !scaleParam.Equals("full", StringComparison.OrdinalIgnoreCase);
         }
 
-        // Resolve the target window and its display density on the UI thread
-        var windowIndex = ParseWindowIndex(request);
-        var density = await DispatchAsync(() =>
-        {
-            var w = GetWindow(windowIndex);
-            return GetWindowDisplayDensity(w);
-        });
-
         // Check for fullscreen mode (captures all windows including dialogs)
         if (request.QueryParams.TryGetValue("fullscreen", out var fs) &&
             fs.Equals("true", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                var pngData = await CaptureFullScreenAsync();
+                var pngData = await CaptureFullScreenAsync(windowIndex);
                 if (pngData != null)
-                    return HttpResponse.Png(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
-                return HttpResponse.Error("Full-screen capture not supported on this platform");
+                {
+                    var density = await DispatchAsync(
+                        () => GetWindowDisplayDensity(GetWindow(windowIndex)));
+                    return CompleteScreenshot(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
+                }
+                return CompleteScreenshotFailure(
+                    HttpResponse.Error("Full-screen capture not supported on this platform"));
             }
             catch (Exception ex)
             {
-                return HttpResponse.Error($"Full-screen screenshot failed: {ex.Message}");
+                return CompleteScreenshotFailure(
+                    HttpResponse.Error($"Full-screen screenshot failed: {ex.Message}"));
             }
         }
 
@@ -792,35 +1933,51 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             try
             {
-                var element = await DispatchAsync(() =>
-                {
-                    var el = _treeWalker.GetElementById(elementId, _app);
-                    return el as VisualElement;
-                });
+                var screenshotCapture = requestedEpoch.HasValue ? capture : default;
+                var resolvedElement = await ResolveScreenshotElementAsync(
+                    screenshotCapture,
+                    elementId);
 
-                if (element == null)
-                    return HttpResponse.Error($"Element '{elementId}' not found or not a VisualElement");
-
-                var outcome = await DispatchAsync<ScreenshotCaptureOutcome>(async () =>
+                if (resolvedElement == null)
                 {
-                    var bytes = await CaptureElementScreenshotAsync(element);
-                    // Diagnose in the same UI-thread turn as the failed capture so the
-                    // reported window/app state matches the state at capture time.
-                    return new ScreenshotCaptureOutcome
+                    if (requestedEpoch.HasValue)
                     {
-                        Data = bytes,
-                        Failure = bytes == null ? DescribeScreenshotFailure() : null
-                    };
-                });
+                        return BuildStaleCaptureResponse(
+                            requestedEpoch,
+                            requestedRegistryGeneration,
+                            capture,
+                            _nativeElementRegistry?.Generation ?? 0);
+                    }
+
+                    return CompleteScreenshotFailure(
+                        HttpResponse.Error($"Element '{elementId}' not found"));
+                }
+
+                if (!requestedEpoch.HasValue)
+                    await StoreScreenshotIdentityAsync(capture, elementId, resolvedElement);
+
+                var outcome = await CaptureResolvedElementScreenshotAsync(
+                    elementId,
+                    resolvedElement,
+                    windowIndex);
 
                 if (outcome?.Data == null)
-                    return BuildScreenshotFailureResponse(outcome?.Failure, $"Capture returned null for element '{elementId}'");
+                    return CompleteScreenshotFailure(
+                        BuildScreenshotFailureResponse(
+                            outcome?.Failure,
+                            $"Capture returned null for element '{elementId}'"));
 
-                return HttpResponse.Png(ResizePngIfNeeded(outcome.Data, maxWidth, density, autoScale));
+                return CompleteScreenshot(
+                    ResizePngIfNeeded(
+                        outcome.Data,
+                        maxWidth,
+                        outcome.Density,
+                        autoScale));
             }
             catch (Exception ex)
             {
-                return HttpResponse.Error($"Element screenshot failed: {ex.Message}");
+                return CompleteScreenshotFailure(
+                    HttpResponse.Error($"Element screenshot failed: {ex.Message}"));
             }
         }
 
@@ -836,33 +1993,49 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 });
 
                 if (matchId == null)
-                    return HttpResponse.Error($"No elements matching selector '{selector}'");
+                    return CompleteScreenshotFailure(
+                        HttpResponse.Error($"No elements matching selector '{selector}'"));
 
-                var element = await DispatchAsync(() =>
+                var screenshotCapture = requestedEpoch.HasValue ? capture : default;
+                var resolvedElement = await ResolveScreenshotElementAsync(
+                    screenshotCapture,
+                    matchId);
+
+                if (resolvedElement == null)
                 {
-                    var el = _treeWalker.GetElementById(matchId, _app);
-                    return el as VisualElement;
-                });
-
-                if (element == null)
-                    return HttpResponse.Error($"Element '{matchId}' not found or not a VisualElement");
-
-                var outcome = await DispatchAsync<ScreenshotCaptureOutcome>(async () =>
-                {
-                    var bytes = await CaptureElementScreenshotAsync(element);
-                    // Diagnose in the same UI-thread turn as the failed capture so the
-                    // reported window/app state matches the state at capture time.
-                    return new ScreenshotCaptureOutcome
+                    if (requestedEpoch.HasValue)
                     {
-                        Data = bytes,
-                        Failure = bytes == null ? DescribeScreenshotFailure() : null
-                    };
-                });
+                        return BuildStaleCaptureResponse(
+                            requestedEpoch,
+                            requestedRegistryGeneration,
+                            capture,
+                            _nativeElementRegistry?.Generation ?? 0);
+                    }
+
+                    return CompleteScreenshotFailure(
+                        HttpResponse.Error($"Element '{matchId}' not found"));
+                }
+
+                if (!requestedEpoch.HasValue)
+                    await StoreScreenshotIdentityAsync(capture, matchId, resolvedElement);
+
+                var outcome = await CaptureResolvedElementScreenshotAsync(
+                    matchId,
+                    resolvedElement,
+                    windowIndex);
 
                 if (outcome?.Data == null)
-                    return BuildScreenshotFailureResponse(outcome?.Failure, $"Capture returned null for element '{matchId}'");
+                    return CompleteScreenshotFailure(
+                        BuildScreenshotFailureResponse(
+                            outcome?.Failure,
+                            $"Capture returned null for element '{matchId}'"));
 
-                return HttpResponse.Png(ResizePngIfNeeded(outcome.Data, maxWidth, density, autoScale));
+                return CompleteScreenshot(
+                    ResizePngIfNeeded(
+                        outcome.Data,
+                        maxWidth,
+                        outcome.Density,
+                        autoScale));
             }
             catch (FormatException ex)
             {
@@ -870,7 +2043,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             }
             catch (Exception ex)
             {
-                return HttpResponse.Error($"Element screenshot failed: {ex.Message}");
+                return CompleteScreenshotFailure(
+                    HttpResponse.Error($"Element screenshot failed: {ex.Message}"));
             }
         }
 
@@ -920,18 +2094,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return new ScreenshotCaptureOutcome
                 {
                     Data = bytes,
-                    Failure = bytes == null ? DescribeScreenshotFailure() : null
+                    Failure = bytes == null ? DescribeScreenshotFailure() : null,
+                    Density = GetWindowDisplayDensity(window)
                 };
             });
 
             if (outcome?.Data == null)
-                return BuildScreenshotFailureResponse(outcome?.Failure, "Failed to capture screenshot");
+                return CompleteScreenshotFailure(
+                    BuildScreenshotFailureResponse(
+                        outcome?.Failure,
+                        "Failed to capture screenshot"));
 
-            return HttpResponse.Png(ResizePngIfNeeded(outcome.Data, maxWidth, density, autoScale));
+            return CompleteScreenshot(
+                ResizePngIfNeeded(
+                    outcome.Data,
+                    maxWidth,
+                    outcome.Density,
+                    autoScale));
         }
         catch (Exception ex)
         {
-            return HttpResponse.Error($"Screenshot failed: {ex.Message}");
+            return CompleteScreenshotFailure(
+                HttpResponse.Error($"Screenshot failed: {ex.Message}"));
         }
     }
 
@@ -954,11 +2138,22 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     }
 
     /// <summary>
+    /// Captures a registered or platform-native element that is not a MAUI
+    /// <see cref="VisualElement"/>. Platform agents override this for their native view types.
+    /// </summary>
+    protected virtual Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+        => Task.FromResult<byte[]?>(null);
+
+    protected virtual bool SupportsNativeElementScreenshots => false;
+
+    /// <summary>
     /// Captures a full-screen screenshot including all windows (dialogs, popups, etc.).
     /// Override in platform-specific subclasses for native support.
     /// Returns null if not supported.
     /// </summary>
-    protected virtual Task<byte[]?> CaptureFullScreenAsync()
+    protected virtual Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
     {
         return Task.FromResult<byte[]?>(null);
     }
@@ -985,6 +2180,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         public byte[]? Data { get; init; }
         public ScreenshotCaptureFailure? Failure { get; init; }
+        public double Density { get; init; } = 1.0;
     }
 
     protected override async Task<HttpResponse> HandleProperty(HttpRequest request)
@@ -994,11 +2190,23 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return HttpResponse.Error("Element ID required");
         if (!request.RouteParams.TryGetValue("name", out var propName))
             return HttpResponse.Error("Property name required");
+        if (IsNativeElementId(id))
+        {
+            return HttpResponse.Error(
+                "Generic property reflection is not supported for native elements. Use the element metadata and advertised capabilities instead.",
+                statusCode: 400,
+                reason: "native-property-not-supported");
+        }
 
         var value = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(id, _app);
             if (el == null) return (object?)null;
+            if (el is Entry { IsPassword: true }
+                && propName.Equals(nameof(Entry.Text), StringComparison.OrdinalIgnoreCase))
+            {
+                return SensitiveValueRedactor.RedactedValue;
+            }
 
             // Support dot-path notation (e.g., "Shadow.Radius")
             var parts = propName.Split('.');
@@ -1121,15 +2329,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return HttpResponse.Error("Element ID required");
         if (!request.RouteParams.TryGetValue("name", out var propName))
             return HttpResponse.Error("Property name required");
+        if (IsNativeElementId(id))
+        {
+            return HttpResponse.Error(
+                "Generic property mutation is not supported for native elements. Use a native action advertised by the element capabilities instead.",
+                statusCode: 400,
+                reason: "native-property-not-supported");
+        }
 
         var body = request.BodyAs<SetPropertyRequest>();
         if (body?.Value == null)
             return HttpResponse.Error("value is required");
+        if (await PrepareUiMutationAsync(request, body, id) is { } staleCapture)
+            return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
+        var reservedCapture = GetReservedCapture(request);
         var result = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(id, _app);
+            var el = ResolveCapturedElement(
+                reservedCapture,
+                id,
+                elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
 
             var type = el.GetType();
@@ -1254,11 +2475,40 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<ActionRequest>();
         if (body?.ElementId == null)
             return HttpResponse.Error("elementId is required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
+        var reservedCapture = GetReservedCapture(request);
         if (IsNativeElementId(body.ElementId))
         {
-            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementTap(body.ElementId!));
+            string nativeResult;
+            if (IsRegisteredNativeElementId(body.ElementId))
+            {
+                nativeResult = await DispatchAsync<string>(
+                    async () =>
+                    {
+                        var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                        return nativeElement is null
+                            ? $"Native element '{body.ElementId}' is stale"
+                            : await _treeWalker.TryRegisteredNativeElementTapAsync(body.ElementId!, nativeElement);
+                    })
+                    ?? $"Native element '{body.ElementId}' could not be invoked";
+            }
+            else
+            {
+                var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                if (nativeElement is null)
+                {
+                    nativeResult = $"Native element '{body.ElementId}' is stale";
+                }
+                else
+                {
+                    nativeResult = await TryNativeElementTapAsync(body.ElementId!, nativeElement)
+                        ?? await Task.Run(() => _treeWalker.TryNativeElementTap(body.ElementId!, nativeElement));
+                }
+            }
+
             PublishUiOperationSpan(
                 "action.tap",
                 startedAtUtc,
@@ -1269,21 +2519,24 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return nativeResult == "ok" ? HttpResponse.Ok("Tapped") : HttpResponse.Error(nativeResult);
         }
 
-        var result = await DispatchAsync(() =>
+        var result = await DispatchAsync<string>(async () =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, _app);
+            var el = ResolveCapturedElement(
+                reservedCapture,
+                body.ElementId,
+                elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
 
             switch (el)
             {
                 case Button btn:
-                    if (TryScheduleNativeTapFirst(btn))
+                    if (await TryNativeTapFirstAsync(btn))
                         return "ok";
                     try { btn.SendClicked(); }
                     catch { if (btn is VisualElement ve && !TryNativeTap(ve)) return $"Native tap failed on Button"; }
                     return "ok";
                 case ImageButton imgBtn:
-                    if (TryScheduleNativeTapFirst(imgBtn))
+                    if (await TryNativeTapFirstAsync(imgBtn))
                         return "ok";
                     try { imgBtn.SendClicked(); }
                     catch { if (imgBtn is VisualElement ve && !TryNativeTap(ve)) return $"Native tap failed on ImageButton"; }
@@ -1301,8 +2554,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     ((IMenuItemController)ti).Activate();
                     return "ok";
                 case VisualTreeWalker.BackButtonMarker back:
-                    back.Navigation.PopAsync();
-                    return "ok";
+                    return await VisualTreeWalker.ActivateBackButtonMarkerAsync(back);
                 case VisualTreeWalker.FlyoutButtonMarker flyoutBtn:
                     flyoutBtn.Shell.FlyoutIsPresented = true;
                     return "ok";
@@ -1391,7 +2643,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 default:
                     return $"Unhandled type: {el.GetType().FullName}";
             }
-        });
+        }) ?? "Element tap failed";
 
         PublishUiOperationSpan(
             "action.tap",
@@ -1494,18 +2746,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// a native tap before MAUI invokes the managed click event inline.
     /// </summary>
     /// <remarks>
-    /// When an override returns <c>true</c>, the native invocation is typically queued onto the
-    /// platform dispatcher (e.g. <c>BeginInvoke</c>/<c>TryEnqueue</c>) rather than completed
-    /// synchronously. The HTTP caller receives <c>"ok"</c> as soon as the work is queued, so any
-    /// follow-up command (a screenshot or another query) may race against the dialog actually
-    /// appearing. Tests should use <c>maui_wait</c> or explicit polling after a tap that is
-    /// expected to surface a dialog. Faults inside the dispatched invocation are silent from the
-    /// caller's perspective and only surface in the agent's debug output.
+    /// Implementations must complete only after the native invocation callback has run, so capture
+    /// invalidation and subsequent actions cannot race queued platform work.
     /// </remarks>
-    protected virtual bool TryScheduleNativeTapFirst(VisualElement ve)
-    {
-        return false;
-    }
+    protected virtual Task<bool> TryNativeTapFirstAsync(VisualElement ve)
+        => Task.FromResult(false);
+
+    protected virtual Task<string?> TryNativeElementTapAsync(string elementId, object nativeElement)
+        => Task.FromResult<string?>(null);
 
     /// <summary>
     /// Attempts to tap a native platform view via handler for non-VisualElement IView types (e.g. Comet views).
@@ -1560,11 +2808,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<FillRequest>();
         if (body?.ElementId == null || body.Text == null)
             return HttpResponse.Error("elementId and text are required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
+        var reservedCapture = GetReservedCapture(request);
         if (IsNativeElementId(body.ElementId))
         {
-            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementSetValue(body.ElementId!, body.Text!));
+            var nativeResult = IsRegisteredNativeElementId(body.ElementId)
+                ? await DispatchAsync(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementSetValue(body.ElementId!, nativeElement, body.Text!);
+                })
+                : await Task.Run(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementSetValue(body.ElementId!, nativeElement, body.Text!);
+                });
             PublishUiOperationSpan(
                 "action.fill",
                 startedAtUtc,
@@ -1590,7 +2855,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         var result = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, _app);
+            var el = ResolveCapturedElement(
+                reservedCapture,
+                body.ElementId,
+                elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
 
             switch (el)
@@ -1642,11 +2910,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<ActionRequest>();
         if (body?.ElementId == null)
             return HttpResponse.Error("elementId is required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
+        var reservedCapture = GetReservedCapture(request);
         if (IsNativeElementId(body.ElementId))
         {
-            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementSetValue(body.ElementId!, string.Empty));
+            var nativeResult = IsRegisteredNativeElementId(body.ElementId)
+                ? await DispatchAsync(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementSetValue(body.ElementId!, nativeElement, string.Empty);
+                })
+                : await Task.Run(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementSetValue(body.ElementId!, nativeElement, string.Empty);
+                });
             var nativeSuccess = nativeResult == "ok";
             PublishUiOperationSpan(
                 "action.clear",
@@ -1672,7 +2957,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         var success = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, _app);
+            var el = ResolveCapturedElement(
+                reservedCapture,
+                body.ElementId,
+                elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return false;
 
             switch (el)
@@ -1720,11 +3008,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<ActionRequest>();
         if (body?.ElementId == null)
             return HttpResponse.Error("elementId is required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
+        var reservedCapture = GetReservedCapture(request);
         if (IsNativeElementId(body.ElementId))
         {
-            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementFocus(body.ElementId!));
+            var nativeResult = IsRegisteredNativeElementId(body.ElementId)
+                ? await DispatchAsync(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementFocus(body.ElementId!, nativeElement);
+                })
+                : await Task.Run(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementFocus(body.ElementId!, nativeElement);
+                });
             var nativeSuccess = nativeResult == "ok";
             PublishUiOperationSpan(
                 "action.focus",
@@ -1738,7 +3043,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         var success = await DispatchAsync(() =>
         {
-            var el = _treeWalker.GetElementById(body.ElementId, _app);
+            var el = ResolveCapturedElement(
+                reservedCapture,
+                body.ElementId,
+                elementId => _treeWalker.GetElementById(elementId, _app));
             if (el is not VisualElement ve) return false;
             ve.Focus();
             return true;
@@ -1932,15 +3240,21 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<KeyActionRequest>();
         if (body == null || (string.IsNullOrWhiteSpace(body.Key) && string.IsNullOrWhiteSpace(body.Text)))
             return HttpResponse.Error("key or text is required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
         var keyValue = body.Key ?? body.Text ?? string.Empty;
+        var reservedCapture = GetReservedCapture(request);
         var result = await DispatchAsync(() =>
         {
             object? el = null;
             if (!string.IsNullOrWhiteSpace(body.ElementId))
             {
-                el = _treeWalker.GetElementById(body.ElementId, _app);
+                el = ResolveCapturedElement(
+                    reservedCapture,
+                    body.ElementId,
+                    elementId => _treeWalker.GetElementById(elementId, _app));
                 if (el == null)
                     return "Element not found";
             }
@@ -2029,6 +3343,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<GestureActionRequest>();
         if (body == null || string.IsNullOrWhiteSpace(body.Type))
             return HttpResponse.Error("type is required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var gestureType = body.Type.Trim().ToLowerInvariant();
 
@@ -2037,16 +3353,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             "tap" => await HandleTap(new HttpRequest
             {
                 Method = "POST",
-                Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
+                MutationState = request.MutationState,
+                Body = JsonSerializer.Serialize(new ActionRequest
+                {
+                    ElementId = body.ElementId
+                })
             }),
             "longpress" or "long-press" => await HandleTap(new HttpRequest
             {
                 Method = "POST",
-                Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
+                MutationState = request.MutationState,
+                Body = JsonSerializer.Serialize(new ActionRequest
+                {
+                    ElementId = body.ElementId
+                })
             }),
             "swipe" => await HandleScroll(new HttpRequest
             {
                 Method = "POST",
+                MutationState = request.MutationState,
                 Body = JsonSerializer.Serialize(new ScrollRequest
                 {
                     ElementId = body.ElementId,
@@ -2061,6 +3386,210 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         };
     }
 
+    protected override async Task<HttpResponse> HandleBatch(HttpRequest request)
+    {
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
+
+        var body = request.BodyAs<BatchRequest>();
+        if (body?.Actions == null || body.Actions.Count == 0)
+            return HttpResponse.Error("actions are required");
+
+        var reservation = ReserveUiCapture(body);
+        if (reservation.Error is not null)
+            return reservation.Error;
+        foreach (var elementId in body.Actions
+            .Select(action => action.ElementId)
+            .Distinct(StringComparer.Ordinal))
+        {
+            if (await ValidateCapturedElementIdentityAsync(reservation.Capture, elementId) is { } identityError)
+                return identityError;
+        }
+
+        var results = new List<object>(body.Actions.Count);
+        var allSucceeded = true;
+
+        try
+        {
+            foreach (var action in body.Actions)
+            {
+                var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
+                HttpResponse response;
+
+                if (await ValidateCapturedElementIdentityAsync(
+                    reservation.Capture,
+                    action.ElementId) is { } identityError)
+                {
+                    response = identityError;
+                }
+                else
+                {
+
+                    switch (actionName)
+                    {
+                        case "tap":
+                            response = await HandleTap(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new ActionRequest
+                                {
+                                    ElementId = action.ElementId
+                                })
+                            });
+                            break;
+                        case "fill":
+                            response = await HandleFill(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new FillRequest
+                                {
+                                    ElementId = action.ElementId,
+                                    Text = action.Text ?? string.Empty
+                                })
+                            });
+                            break;
+                        case "clear":
+                            response = await HandleClear(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new ActionRequest
+                                {
+                                    ElementId = action.ElementId
+                                })
+                            });
+                            break;
+                        case "focus":
+                            response = await HandleFocus(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new ActionRequest
+                                {
+                                    ElementId = action.ElementId
+                                })
+                            });
+                            break;
+                        case "navigate":
+                            response = await HandleNavigate(new HttpRequest
+                            {
+                                Method = "POST",
+                                Body = JsonSerializer.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
+                            });
+                            break;
+                        case "resize":
+                            response = await HandleResize(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ResizeRequest(action.Width, action.Height)) });
+                            break;
+                        case "scroll":
+                            response = await HandleScroll(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new ScrollRequest
+                                {
+                                    ElementId = action.ElementId,
+                                    DeltaX = action.DeltaX,
+                                    DeltaY = action.DeltaY,
+                                    ItemIndex = action.ItemIndex,
+                                    GroupIndex = action.GroupIndex,
+                                    ScrollToPosition = action.ScrollToPosition,
+                                    Animated = action.Animated
+                                })
+                            });
+                            break;
+                        case "back":
+                            response = await HandleBack(new HttpRequest { Method = "POST" });
+                            break;
+                        case "key":
+                            response = await HandleKey(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new KeyActionRequest
+                                {
+                                    ElementId = action.ElementId,
+                                    Key = action.Key,
+                                    Text = action.Text
+                                })
+                            });
+                            break;
+                        case "gesture":
+                            response = await HandleGesture(new HttpRequest
+                            {
+                                Method = "POST",
+                                MutationState = reservation.Capture,
+                                Body = JsonSerializer.Serialize(new GestureActionRequest
+                                {
+                                    ElementId = action.ElementId,
+                                    Type = action.Type ?? action.Action,
+                                    Direction = action.Direction,
+                                    Distance = action.Distance,
+                                    DurationMs = action.DurationMs
+                                })
+                            });
+                            break;
+                        case "set-property":
+                        case "set_property":
+                            response = await HandleSetProperty(new HttpRequest
+                            {
+                                Method = "PUT",
+                                MutationState = reservation.Capture,
+                                RouteParams = new Dictionary<string, string>
+                                {
+                                    ["id"] = action.ElementId ?? string.Empty,
+                                    ["name"] = action.Property ?? string.Empty
+                                },
+                                Body = JsonSerializer.Serialize(new SetPropertyRequest
+                                {
+                                    Value = action.Value ?? string.Empty
+                                })
+                            });
+                            break;
+                        case "invoke-action":
+                        case "invoke_action":
+                            response = await HandleInvokeAction(new HttpRequest
+                            {
+                                Method = "POST",
+                                RouteParams = new Dictionary<string, string>
+                                {
+                                    ["name"] = action.Name ?? string.Empty
+                                },
+                                Body = JsonSerializer.Serialize(new InvokeActionRequest { Args = action.Args })
+                            });
+                            break;
+                        default:
+                            response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
+                            break;
+                    }
+                }
+
+                var succeeded = response.StatusCode < 400;
+                allSucceeded &= succeeded;
+                results.Add(new
+                {
+                    action = actionName,
+                    success = succeeded,
+                    statusCode = response.StatusCode,
+                    response = response.Body
+                });
+
+                if (!succeeded && !body.ContinueOnError)
+                    break;
+            }
+
+            return HttpResponse.Json(new
+            {
+                success = allSucceeded,
+                results
+            });
+        }
+        finally
+        {
+            InvalidateUiCapture();
+        }
+    }
+
     protected override async Task<HttpResponse> HandleScroll(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
@@ -2068,12 +3597,37 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<ScrollRequest>();
         if (body == null)
             return HttpResponse.Error("Request body is required");
+        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
+            return staleCapture;
 
         var position = ParseScrollToPosition(body.ScrollToPosition);
         var startedAtUtc = DateTime.UtcNow;
+        var reservedCapture = GetReservedCapture(request);
         if (IsNativeElementId(body.ElementId))
         {
-            var nativeResult = await Task.Run(() => _treeWalker.TryNativeElementScroll(body.ElementId!, body.DeltaX, body.DeltaY));
+            var nativeResult = IsRegisteredNativeElementId(body.ElementId)
+                ? await DispatchAsync(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementScroll(
+                            body.ElementId!,
+                            nativeElement,
+                            body.DeltaX,
+                            body.DeltaY);
+                })
+                : await Task.Run(() =>
+                {
+                    var nativeElement = ResolveCapturedNativeElement(reservedCapture, body.ElementId!);
+                    return nativeElement is null
+                        ? $"Native element '{body.ElementId}' is stale"
+                        : _treeWalker.TryNativeElementScroll(
+                            body.ElementId!,
+                            nativeElement,
+                            body.DeltaX,
+                            body.DeltaY);
+                });
             PublishUiOperationSpan(
                 "action.scroll",
                 startedAtUtc,
@@ -2093,7 +3647,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 object? targetObj = null;
                 if (!string.IsNullOrEmpty(body.ElementId))
                 {
-                    targetObj = _treeWalker.GetElementById(body.ElementId, _app);
+                    targetObj = ResolveCapturedElement(
+                        reservedCapture,
+                        body.ElementId,
+                        elementId => _treeWalker.GetElementById(elementId, _app));
                     if (targetObj == null) return "Element not found";
                 }
 
@@ -2122,7 +3679,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             // Priority 2: Scroll element into view
             if (!string.IsNullOrEmpty(body.ElementId))
             {
-                var el = _treeWalker.GetElementById(body.ElementId, _app);
+                var el = ResolveCapturedElement(
+                    reservedCapture,
+                    body.ElementId,
+                    elementId => _treeWalker.GetElementById(elementId, _app));
                 if (el == null) return "Element not found";
 
                 if (el is VisualElement ve)
@@ -2930,7 +4490,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return;
 
         var now = DateTime.UtcNow;
-        var route = Shell.Current?.CurrentState?.Location?.ToString();
+        var route = GetCurrentRouteLocation();
         var state = _pageLifecycleStates.GetOrCreateValue(page);
         state.AppearingAtUtc = now;
         state.Route = route;

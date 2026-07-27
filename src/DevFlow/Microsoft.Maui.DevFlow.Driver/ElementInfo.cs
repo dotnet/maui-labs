@@ -22,6 +22,30 @@ public class ElementInfo
     [JsonPropertyName("framework")]
     public string Framework { get; set; } = "maui";
 
+    [JsonPropertyName("origin")]
+    public string? Origin { get; set; }
+
+    [JsonPropertyName("ownerId")]
+    public string? OwnerId { get; set; }
+
+    [JsonPropertyName("discriminator")]
+    public string? Discriminator { get; set; }
+
+    [JsonPropertyName("boundsQuality")]
+    public string? BoundsQuality { get; set; }
+
+    [JsonPropertyName("captureEpoch")]
+    public long CaptureEpoch { get; set; }
+
+    [JsonPropertyName("registryGeneration")]
+    public long RegistryGeneration { get; set; }
+
+    [JsonPropertyName("windowId")]
+    public int? WindowId { get; set; }
+
+    [JsonPropertyName("capabilities")]
+    public List<string>? Capabilities { get; set; }
+
     [JsonPropertyName("automationId")]
     public string? AutomationId { get; set; }
 
@@ -167,10 +191,21 @@ public class ElementInfo
         if (Gestures is { Count: > 0 } && !traits.Contains("interactive"))
             traits.Add("interactive");
 
+        if (Capabilities?.Contains("invoke") == true
+            || Capabilities?.Contains("set-value") == true)
+        {
+            if (!traits.Contains("interactive"))
+                traits.Add("interactive");
+        }
+
         if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "window" || IsFocused)
+            traits.Add("focusable");
+        else if (Capabilities?.Contains("focus") == true)
             traits.Add("focusable");
 
         if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView")
+            traits.Add("scrollable");
+        else if (Capabilities?.Contains("scroll") == true)
             traits.Add("scrollable");
 
         if (role == "heading")

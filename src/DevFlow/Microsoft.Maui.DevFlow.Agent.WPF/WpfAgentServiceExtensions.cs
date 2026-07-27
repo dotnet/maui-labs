@@ -57,12 +57,19 @@ public static class WpfAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var service = new WpfAgentService(options);
+        var nativeElementRegistry = new NativeElementRegistrationRegistry();
+        var nativeElementDiagnosticSubscriber =
+            new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
+        var service = new WpfAgentService(
+            options,
+            nativeElementRegistry,
+            nativeElementDiagnosticSubscriber);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
             service.SetBrokerRegistration(brokerReg);
         }
+        builder.Services.AddSingleton(nativeElementRegistry);
         builder.Services.AddSingleton<DevFlowAgentService>(service);
         builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 

@@ -280,6 +280,16 @@ public class AgentHttpServer : IDisposable
         headerBuilder.Append($"Content-Type: {response.ContentType}\r\n");
         headerBuilder.Append($"Content-Length: {(response.BodyBytes ?? bodyBytes).Length}\r\n");
         headerBuilder.Append("Access-Control-Allow-Origin: *\r\n");
+        foreach (var header in response.Headers)
+        {
+            if (header.Key.Contains('\r') || header.Key.Contains('\n')
+                || header.Value.Contains('\r') || header.Value.Contains('\n'))
+            {
+                continue;
+            }
+
+            headerBuilder.Append($"{header.Key}: {header.Value}\r\n");
+        }
         headerBuilder.Append("Connection: close\r\n");
         headerBuilder.Append("\r\n");
 
@@ -443,6 +453,8 @@ public class HttpRequest
     public Dictionary<string, string> Headers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string? Body { get; set; }
 
+    internal object? MutationState { get; set; }
+
     private static readonly JsonSerializerOptions _readOptions = new() { PropertyNameCaseInsensitive = true };
 
     public T? BodyAs<T>() where T : class
@@ -456,6 +468,7 @@ public class HttpResponse
     public string ContentType { get; set; } = "application/json";
     public string? Body { get; set; }
     public byte[]? BodyBytes { get; set; }
+    public Dictionary<string, string> Headers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static HttpResponse Json(object data) => new()
     {
