@@ -1,0 +1,35 @@
+<Project>
+
+  <ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="DevFlowXaml" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
+    <Analyzer Include="$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll"
+              Condition="Exists('$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll')" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <_DevFlowXamlPrepareTargets
+        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'
+          or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'
+          or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'
+          or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">_MauiInjectXamlCssAdditionalFiles</_DevFlowXamlPrepareTargets>
+  </PropertyGroup>
+
+  <Target Name="_DevFlowPromoteXamlSourceMaps"
+          DependsOnTargets="$(_DevFlowXamlPrepareTargets)"
+          AfterTargets="$(_DevFlowXamlPrepareTargets)"
+          BeforeTargets="GenerateMSBuildEditorConfigFileCore"
+          Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
+    <ItemGroup>
+      <AdditionalFiles Include="@(MauiXaml)"
+                       KeepDuplicates="false"
+                       DevFlowXaml="true"
+                       Condition="'$(_DevFlowXamlPrepareTargets)' == '' and '@(MauiXaml)' != ''" />
+      <AdditionalFiles DevFlowXaml="true"
+                       Condition="'%(AdditionalFiles.GenKind)' == 'Xaml'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

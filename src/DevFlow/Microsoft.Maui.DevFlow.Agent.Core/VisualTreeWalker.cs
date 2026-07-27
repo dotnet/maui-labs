@@ -12,11 +12,12 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 /// IDs are derived from element properties (Element.Id, AutomationId, platform stamps)
 /// rather than cached maps — the tree is walked fresh each time.
 /// </summary>
-public class VisualTreeWalker
+public partial class VisualTreeWalker
 {
     // Per-walk state — fully rebuilt on each WalkTree call
     private readonly HashSet<string> _usedIds = new();
     private readonly Dictionary<Guid, string> _elementIdToExternalId = new();
+    private readonly Dictionary<string, IVisualTreeElement> _externalIdToElement = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, (BoundsInfo Bounds, object Marker)> _syntheticBounds = new();
 
     /// <summary>
@@ -39,6 +40,7 @@ public class VisualTreeWalker
         // Walk tree fresh, searching for matching ID
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _externalIdToElement.Clear();
         _syntheticBounds.Clear();
 
         if (app is not IVisualTreeElement appElement) return null;
@@ -291,6 +293,7 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _externalIdToElement.Clear();
         _syntheticBounds.Clear();
         var results = new List<ElementInfo>();
         if (app is not IVisualTreeElement appElement)
@@ -307,6 +310,7 @@ public class VisualTreeWalker
                 if (info != null)
                     results.Add(info);
             }
+            ApplySourceMap(results);
             return results;
         }
 
@@ -317,6 +321,7 @@ public class VisualTreeWalker
                 results.Add(info);
         }
 
+        ApplySourceMap(results);
         return results;
     }
 
@@ -594,7 +599,10 @@ public class VisualTreeWalker
     {
         // Check if we've already generated an ID for this Element.Id in this walk
         if (element is Element el && _elementIdToExternalId.TryGetValue(el.Id, out var cachedId))
+        {
+            _externalIdToElement[cachedId] = element;
             return cachedId;
+        }
 
         string id;
         if (element is VisualElement ve && !string.IsNullOrEmpty(ve.AutomationId))
@@ -647,6 +655,7 @@ public class VisualTreeWalker
         _usedIds.Add(id);
         if (element is Element elFinal)
             _elementIdToExternalId[elFinal.Id] = id;
+        _externalIdToElement[id] = element;
         return id;
     }
 
@@ -1535,6 +1544,7 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _externalIdToElement.Clear();
         _syntheticBounds.Clear();
     }
 }

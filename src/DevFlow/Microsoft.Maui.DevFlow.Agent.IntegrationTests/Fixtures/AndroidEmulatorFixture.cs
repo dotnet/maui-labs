@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
@@ -21,6 +22,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     string? _diagnosticsDir;
     string? _serialNumber;
     int _apiLevel;
+    int _deviceAgentPort;
     string _sdkRoot = null!;
 
     public override string Platform => "android";
@@ -29,6 +31,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     {
         _sdkRoot = ResolveSdkRoot();
         _apiLevel = GetTargetApiLevel();
+        _deviceAgentPort = AgentPort;
         var avdName = GetTargetAvdName(_apiLevel);
 
         // If the caller pinned a non-emulator (i.e. physical) device that is already
@@ -60,8 +63,9 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             var apkPath = FindApk();
             await InstallApkAsync(apkPath);
 
-            await AdbCheckedAsync($"forward tcp:{AgentPort} tcp:{AgentPort}", timeoutSeconds: 15);
             await LaunchAppAsync();
+            _deviceAgentPort = await WaitForDeviceAgentPortAsync();
+            await ConfigureAgentPortForwardAsync();
         });
 
         StartAppMonitor();
@@ -199,13 +203,17 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         if (await IsAgentForwardEstablishedAsync())
             return;
 
-        Console.WriteLine($"[AndroidFixture] Re-establishing missing ADB forward tcp:{AgentPort} tcp:{AgentPort}.");
+        Console.WriteLine(
+            $"[AndroidFixture] Re-establishing missing ADB forward " +
+            $"tcp:{AgentPort} tcp:{_deviceAgentPort}.");
 
         // Best-effort remove first so a stale or partial mapping (e.g. left
         // behind by a previous adb-server crash) doesn't block the re-add.
         try { await AdbAsync($"forward --remove tcp:{AgentPort}", timeoutSeconds: 5); } catch { }
 
-        await AdbCheckedAsync($"forward tcp:{AgentPort} tcp:{AgentPort}", timeoutSeconds: 15);
+        await AdbCheckedAsync(
+            $"forward tcp:{AgentPort} tcp:{_deviceAgentPort}",
+            timeoutSeconds: 15);
 
         // Verify the mapping actually landed - `adb forward` can return 0 while
         // the daemon is in an inconsistent state, and silently failing here
@@ -213,7 +221,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         if (!await IsAgentForwardEstablishedAsync())
         {
             throw new InvalidOperationException(
-                $"adb forward tcp:{AgentPort} tcp:{AgentPort} reported success on '{_serialNumber}' " +
+                $"adb forward tcp:{AgentPort} tcp:{_deviceAgentPort} reported success on '{_serialNumber}' " +
                 "but the mapping is not visible in `adb forward --list`.");
         }
     }
@@ -227,7 +235,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             return false;
 
         var expectedLocal = $"tcp:{AgentPort}";
-        var expectedRemote = $"tcp:{AgentPort}";
+        var expectedRemote = $"tcp:{_deviceAgentPort}";
 
         foreach (var rawLine in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
@@ -266,6 +274,64 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         }
 
         return false;
+    }
+
+    async Task<int> WaitForDeviceAgentPortAsync()
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(45);
+        var pattern = new Regex(
+            @"(?:Broker assigned port|Agent started on port|HTTP server started on port)\s+(\d+)",
+            RegexOptions.CultureInvariant);
+        while (DateTime.UtcNow < deadline)
+        {
+            var pid = await TryGetAppPidAsync();
+            if (string.IsNullOrWhiteSpace(pid))
+            {
+                await Task.Delay(500);
+                continue;
+            }
+
+            var (output, _, exitCode) = await AdbAsync(
+                $"logcat -d --pid={pid.Trim()} -s DOTNET:I",
+                timeoutSeconds: 10);
+            if (exitCode == 0)
+            {
+                var matches = pattern.Matches(output);
+                if (matches.Count > 0
+                    && int.TryParse(
+                        matches[^1].Groups[1].Value,
+                        out var assignedPort)
+                    && assignedPort is > 0 and <= 65535)
+                {
+                    Console.WriteLine(
+                        $"[AndroidFixture] Device agent is listening on broker-assigned port {assignedPort}.");
+                    return assignedPort;
+                }
+            }
+
+            await Task.Delay(500);
+        }
+
+        Console.WriteLine(
+            $"[AndroidFixture] No broker port was observed in logcat; using requested port {AgentPort}.");
+        return AgentPort;
+    }
+
+    async Task ConfigureAgentPortForwardAsync()
+    {
+        try
+        {
+            await AdbAsync(
+                $"forward --remove tcp:{AgentPort}",
+                timeoutSeconds: 5);
+        }
+        catch
+        {
+        }
+
+        await AdbCheckedAsync(
+            $"forward tcp:{AgentPort} tcp:{_deviceAgentPort}",
+            timeoutSeconds: 15);
     }
 
     async Task<string?> TryGetAppPidAsync(int timeoutSeconds = 5)

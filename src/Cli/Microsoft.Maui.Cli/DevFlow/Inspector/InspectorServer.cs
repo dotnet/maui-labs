@@ -21,6 +21,12 @@ public sealed class InspectorServer : IDisposable
     private readonly string _agentHost;
     private readonly int _agentPort;
     private readonly AgentClient _client;
+    private readonly string? _policyStartPath;
+    private LayoutDiagnosticsPolicy _layoutDiagnosticsPolicy;
+    private LayoutDiagnosticsPolicy _projectLayoutDiagnosticsPolicy;
+    private LayoutInspectionResult? _latestLayoutDiagnostics;
+    private DateTime _latestLayoutDiagnosticsAt;
+    private readonly SemaphoreSlim _diagnosticsDeltaGate = new(1, 1);
     private readonly object _cacheLock = new();
     // Lifetime cancellation source; cancelled in Dispose() so broker-mode WS proxies
     // (which never call Start() to create _cts) still see shutdown.
@@ -28,6 +34,8 @@ public sealed class InspectorServer : IDisposable
     private byte[]? _cachedScreenshot;
     private string? _cachedScreenshotElementId;
     private DateTime _screenshotCacheTime;
+    private readonly Dictionary<string, (byte[] Bytes, DateTime CreatedAt)>
+        _screenshotFrames = new(StringComparer.Ordinal);
     private string? _rootPageId;
     // The window-absolute offset of the screenshotted root page element.
     // Used to translate between viewport coordinates (relative to the screenshot)
@@ -35,6 +43,8 @@ public sealed class InspectorServer : IDisposable
     private double _rootOffsetX;
     private double _rootOffsetY;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan LayoutDiagnosticsCacheDuration =
+        TimeSpan.FromMilliseconds(250);
 
     // Cap request bodies to avoid local DoS via huge POST payloads.
     private const long MaxRequestBodyBytes = 1_048_576; // 1 MB
@@ -48,12 +58,20 @@ public sealed class InspectorServer : IDisposable
     /// </summary>
     public int AgentPort => _agentPort;
 
-    public InspectorServer(int port, string agentHost, int agentPort)
+    public InspectorServer(
+        int port,
+        string agentHost,
+        int agentPort,
+        string? policyStartPath = null)
     {
         _port = port;
         _agentHost = agentHost;
         _agentPort = agentPort;
         _client = new AgentClient(agentHost, agentPort);
+        _policyStartPath = policyStartPath;
+        _layoutDiagnosticsPolicy = LayoutDiagnosticsPolicyLoader.Load(policyStartPath);
+        _projectLayoutDiagnosticsPolicy =
+            LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(policyStartPath);
     }
 
     private void InvalidateScreenshotCache()
@@ -255,7 +273,7 @@ public sealed class InspectorServer : IDisposable
         // inspector tab leaves a hanging relay task on the broker.
         try
         {
-            var agentToClient = RelayLoopAsync(agentWs, clientWs, ct);
+            var agentToClient = RelayAgentEventsWithDiagnosticsAsync(agentWs, clientWs, ct);
             var clientToAgent = RelayLoopAsync(clientWs, agentWs, ct);
             await Task.WhenAny(agentToClient, clientToAgent);
             // Cancel the linked CTS so the surviving relay task unblocks via
@@ -298,6 +316,95 @@ public sealed class InspectorServer : IDisposable
             }
         }
         catch { }
+    }
+
+    private async Task RelayAgentEventsWithDiagnosticsAsync(
+        System.Net.WebSockets.WebSocket source,
+        System.Net.WebSockets.WebSocket destination,
+        CancellationToken cancellationToken)
+    {
+        const int MaxAssembledMessageBytes = 4 * 1024 * 1024;
+        var buffer = new byte[8192];
+        using var assembled = new MemoryStream();
+        var assembledMessageType =
+            System.Net.WebSockets.WebSocketMessageType.Text;
+        using var sendGate = new SemaphoreSlim(1, 1);
+        await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
+            CaptureLayoutDiagnosticsDeltaAsync,
+            async (delta, ct) =>
+            {
+                var payload = JsonSerializer.SerializeToUtf8Bytes(
+                    delta,
+                    DevFlowCliJsonContext.Default.LayoutDiagnosticsDelta);
+                await SendWebSocketMessageAsync(
+                    destination,
+                    sendGate,
+                    new ArraySegment<byte>(payload),
+                    System.Net.WebSockets.WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    ct);
+            },
+            cancellationToken);
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested
+                && source.State == System.Net.WebSockets.WebSocketState.Open
+                && destination.State == System.Net.WebSockets.WebSocketState.Open)
+            {
+                var result = await source.ReceiveAsync(buffer, cancellationToken);
+                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
+                    break;
+
+                if (assembled.Length == 0)
+                    assembledMessageType = result.MessageType;
+                assembled.Write(buffer, 0, result.Count);
+                if (assembled.Length > MaxAssembledMessageBytes)
+                    break;
+                if (!result.EndOfMessage)
+                    continue;
+                var payload = assembled.ToArray();
+                assembled.SetLength(0);
+                await SendWebSocketMessageAsync(
+                    destination,
+                    sendGate,
+                    new ArraySegment<byte>(payload),
+                    assembledMessageType,
+                    endOfMessage: true,
+                    cancellationToken);
+
+                if (assembledMessageType
+                    == System.Net.WebSockets.WebSocketMessageType.Text)
+                {
+                    diagnosticsDebouncer.Signal();
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static async Task SendWebSocketMessageAsync(
+        System.Net.WebSockets.WebSocket destination,
+        SemaphoreSlim sendGate,
+        ArraySegment<byte> payload,
+        System.Net.WebSockets.WebSocketMessageType messageType,
+        bool endOfMessage,
+        CancellationToken cancellationToken)
+    {
+        await sendGate.WaitAsync(cancellationToken);
+        try
+        {
+            await destination.SendAsync(
+                payload,
+                messageType,
+                endOfMessage,
+                cancellationToken);
+        }
+        finally
+        {
+            sendGate.Release();
+        }
     }
 
     public void Start()
@@ -409,6 +516,10 @@ public sealed class InspectorServer : IDisposable
                     "/" or "" => await HandleRootAsync(),
                     "/api/state" => await HandleStateAsync(),
                     "/screenshot.png" => await HandleScreenshotAsync(),
+                    var framePath when framePath.StartsWith(
+                        "/screenshot/",
+                        StringComparison.Ordinal) =>
+                        HandleScreenshotFrame(framePath),
                     "/devflow.js" => HandleEmbeddedFile("devflow.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
@@ -421,6 +532,9 @@ public sealed class InspectorServer : IDisposable
                     "/api/back" => await HandleProxyBackAsync(),
                     "/api/fill" => await HandleProxyFillAsync(request.Body),
                     "/api/key" => await HandleProxyKeyAsync(request.Body),
+                    "/api/diagnostics/suppress" => HandleDiagnosticSuppression(request.Body, remove: false),
+                    "/api/diagnostics/unsuppress" => HandleDiagnosticSuppression(request.Body, remove: true),
+                    "/api/diagnostics/agent-payload" => HandleDiagnosticAgentPayload(request.Body),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
                 _ => (405, "text/plain", Encoding.UTF8.GetBytes("Method Not Allowed"))
@@ -439,7 +553,10 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleRootAsync()
     {
-        var tree = await _client.GetTreeAsync();
+        var tree = await _client.GetTreeAsync(
+            maxDepth: 0,
+            window: null,
+            includeNative: false);
 
         // Find the root page element (first child of Window with content).
         // On Mac Catalyst, the default screenshot captures the full screen but element
@@ -474,24 +591,74 @@ public sealed class InspectorServer : IDisposable
     /// </summary>
     private async Task<(int, string, byte[])> HandleStateAsync()
     {
-        var tree = await _client.GetTreeAsync();
+        List<ElementInfo> tree = [];
+        var treeRevision = string.Empty;
+        LayoutInspectionResult? diagnostics = null;
+        string? rootPageId = null;
+        var rootOffsetX = 0d;
+        var rootOffsetY = 0d;
+        byte[]? screenshot = null;
+        var coherentFrame = false;
 
-        var rootPageId = FindRootPageId(tree);
-        var (rootOffsetX, rootOffsetY) = GetRootPageOffset(tree, rootPageId);
-        lock (_cacheLock)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
-            _rootPageId = rootPageId;
-            _rootOffsetX = rootOffsetX;
-            _rootOffsetY = rootOffsetY;
-            // Do NOT invalidate the screenshot cache here. The 200ms TTL on
-            // GetCachedScreenshotAsync exists precisely so that the
-            // 500ms AJAX poll plus any concurrent root-page request can
-            // share one capture. Forcing a refresh on every state call
-            // defeats that and triples per-second screenshot load. The
-            // cache key already includes elementId, so root/state requests
-            // with different rootPageIds don't poison each other.
+            var treeSnapshot = await _client.GetTreeSnapshotAsync(
+                includeNative: false);
+            tree = treeSnapshot?.Elements ?? [];
+            treeRevision = treeSnapshot?.Revision ?? string.Empty;
+            lock (_cacheLock)
+            {
+                diagnostics =
+                    DateTime.UtcNow - _latestLayoutDiagnosticsAt
+                        < LayoutDiagnosticsCacheDuration
+                    && _latestLayoutDiagnostics?.Snapshot.TreeRevision
+                        == treeRevision
+                        ? _latestLayoutDiagnostics
+                        : null;
+            }
+            diagnostics ??= await CaptureLayoutDiagnosticsAsync("wait");
+            if (diagnostics is not null
+                && !string.Equals(
+                    treeRevision,
+                    diagnostics.Snapshot.TreeRevision,
+                    StringComparison.Ordinal))
+            {
+                InvalidateScreenshotCache();
+                continue;
+            }
+
+            rootPageId = FindRootPageId(tree);
+            (rootOffsetX, rootOffsetY) =
+                GetRootPageOffset(tree, rootPageId);
+            lock (_cacheLock)
+            {
+                _rootPageId = rootPageId;
+                _rootOffsetX = rootOffsetX;
+                _rootOffsetY = rootOffsetY;
+            }
+
+            InvalidateScreenshotCache();
+            screenshot = await GetCachedScreenshotAsync(rootPageId);
+            if (string.IsNullOrEmpty(treeRevision))
+            {
+                coherentFrame = true;
+                break;
+            }
+
+            var postScreenshotTree =
+                await _client.GetTreeSnapshotAsync(includeNative: false);
+            if (string.Equals(
+                treeRevision,
+                postScreenshotTree?.Revision,
+                StringComparison.Ordinal))
+            {
+                coherentFrame = true;
+                break;
+            }
         }
-        var screenshot = await GetCachedScreenshotAsync(rootPageId);
+
+        if (!coherentFrame)
+            diagnostics = null;
         var hasScreenshot = screenshot?.Length > 0;
 
         double viewportWidth = 800, viewportHeight = 600;
@@ -503,16 +670,338 @@ public sealed class InspectorServer : IDisposable
         }
 
         var elementsHtml = HtmlRenderer.RenderElements(tree, 1, rootOffsetX, rootOffsetY);
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var screenshotUrl = "screenshot.png";
+        lock (_cacheLock)
+        {
+            _latestLayoutDiagnostics = diagnostics;
+            _latestLayoutDiagnosticsAt = DateTime.UtcNow;
+            if (hasScreenshot)
+            {
+                var now = DateTime.UtcNow;
+                foreach (var expired in _screenshotFrames
+                    .Where(frame => now - frame.Value.CreatedAt
+                        > TimeSpan.FromSeconds(10))
+                    .Select(frame => frame.Key)
+                    .ToList())
+                {
+                    _screenshotFrames.Remove(expired);
+                }
+                while (_screenshotFrames.Count >= 8)
+                {
+                    var oldest = _screenshotFrames.MinBy(
+                        frame => frame.Value.CreatedAt).Key;
+                    _screenshotFrames.Remove(oldest);
+                }
+
+                var frameId = Guid.NewGuid().ToString("N");
+                _screenshotFrames[frameId] = (screenshot!, now);
+                screenshotUrl = $"screenshot/{frameId}.png";
+            }
+        }
 
         var json = JsonSerializer.Serialize(new
         {
-            screenshotUrl = $"screenshot.png?t={timestamp}",
+            screenshotUrl,
             elements = elementsHtml,
             viewportWidth,
-            viewportHeight
+            viewportHeight,
+            rootOffsetX,
+            rootOffsetY,
+            diagnostics
         });
 
+        return (200, "application/json", Encoding.UTF8.GetBytes(json));
+    }
+
+    private async Task<LayoutInspectionResult?> CaptureLayoutDiagnosticsAsync(string stabilityMode)
+    {
+        try
+        {
+            return await _client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+            {
+                Profile = "agent",
+                MinimumSeverity = "info",
+                IncludeEvidence = true,
+                Scope = new LayoutInspectionScope { IncludeNativeElements = false },
+                Suppressions = GetLayoutSuppressions(),
+                Stability = new LayoutStabilityOptions
+                {
+                    Mode = stabilityMode,
+                    StableFrames = 2,
+                    QuietPeriodMs = 50,
+                    TimeoutMs = 1000
+                }
+            });
+        }
+        catch (LayoutDiagnosticsException ex) when (ex.Retryable)
+        {
+            lock (_cacheLock)
+                return _latestLayoutDiagnostics;
+        }
+    }
+
+    private async Task<LayoutDiagnosticsDelta?> CaptureLayoutDiagnosticsDeltaAsync()
+    {
+        if (!await _diagnosticsDeltaGate.WaitAsync(0))
+            return null;
+        try
+        {
+            var current = await CaptureLayoutDiagnosticsAsync("immediate");
+            if (current is null)
+                return null;
+
+            LayoutInspectionResult? previous;
+            lock (_cacheLock)
+            {
+                previous = _latestLayoutDiagnostics;
+                _latestLayoutDiagnostics = current;
+                _latestLayoutDiagnosticsAt = DateTime.UtcNow;
+            }
+            return LayoutDiagnosticsDeltaBuilder.Build(previous, current);
+        }
+        finally
+        {
+            _diagnosticsDeltaGate.Release();
+        }
+    }
+
+    private sealed class DiagnosticsDeltaDebouncer : IAsyncDisposable
+    {
+        private static readonly TimeSpan DebounceDelay =
+            TimeSpan.FromMilliseconds(100);
+        private readonly System.Threading.Channels.Channel<byte> _signals =
+            System.Threading.Channels.Channel.CreateBounded<byte>(
+                new System.Threading.Channels.BoundedChannelOptions(1)
+                {
+                    SingleReader = true,
+                    SingleWriter = false,
+                    FullMode = System.Threading.Channels.BoundedChannelFullMode.DropWrite
+                });
+        private readonly Func<Task<LayoutDiagnosticsDelta?>> _capture;
+        private readonly Func<LayoutDiagnosticsDelta, CancellationToken, Task> _send;
+        private readonly CancellationToken _cancellationToken;
+        private readonly Task _worker;
+
+        public DiagnosticsDeltaDebouncer(
+            Func<Task<LayoutDiagnosticsDelta?>> capture,
+            Func<LayoutDiagnosticsDelta, CancellationToken, Task> send,
+            CancellationToken cancellationToken)
+        {
+            _capture = capture;
+            _send = send;
+            _cancellationToken = cancellationToken;
+            _worker = RunAsync();
+        }
+
+        public void Signal() => _signals.Writer.TryWrite(0);
+
+        public async ValueTask DisposeAsync()
+        {
+            _signals.Writer.TryComplete();
+            try
+            {
+                await _worker;
+            }
+            catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested)
+            {
+            }
+        }
+
+        private async Task RunAsync()
+        {
+            while (await _signals.Reader.WaitToReadAsync(_cancellationToken))
+            {
+                while (_signals.Reader.TryRead(out _))
+                {
+                }
+
+                await Task.Delay(DebounceDelay, _cancellationToken);
+                while (_signals.Reader.TryRead(out _))
+                {
+                }
+
+                var delta = await _capture();
+                if (delta is not null)
+                    await _send(delta, _cancellationToken);
+            }
+        }
+    }
+
+    private List<LayoutSuppression> GetLayoutSuppressions()
+    {
+        lock (_cacheLock)
+            return _layoutDiagnosticsPolicy.Suppressions.ToList();
+    }
+
+    private (int, string, byte[]) HandleDiagnosticSuppression(
+        string? body,
+        bool remove)
+    {
+        var request = JsonSerializer.Deserialize<InspectorDiagnosticRequest>(
+            body ?? "{}",
+            DevFlowCliJsonContext.Default.InspectorDiagnosticRequest);
+        if (string.IsNullOrWhiteSpace(request?.FindingId))
+            return (400, "text/plain", Encoding.UTF8.GetBytes("findingId is required"));
+
+        LayoutFinding? finding;
+        lock (_cacheLock)
+        {
+            finding = _latestLayoutDiagnostics?.Findings.FirstOrDefault(candidate =>
+                candidate.Id.Equals(request.FindingId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (finding is null)
+            return (404, "text/plain", Encoding.UTF8.GetBytes("Finding not found"));
+        var suppressionKey = string.IsNullOrWhiteSpace(finding.SuppressionKey)
+            ? finding.Id
+            : finding.SuppressionKey;
+
+        LayoutDiagnosticsPolicy updatedProjectPolicy;
+        if (remove)
+        {
+            var userMatches = LayoutDiagnosticsPolicyLoader.LoadUserPolicy()
+                .Suppressions
+                .Where(suppression =>
+                    LayoutDiagnosticsSuppressionMatcher.Matches(suppression, finding))
+                .ToList();
+            try
+            {
+                updatedProjectPolicy = LayoutDiagnosticsPolicyLoader.UpdateProjectPolicy(
+                    _policyStartPath,
+                    projectPolicy =>
+                    {
+                        var exactProjectMatches = projectPolicy.Suppressions
+                            .Where(suppression =>
+                                suppression.Fingerprint?.Equals(
+                                    suppressionKey,
+                                    StringComparison.OrdinalIgnoreCase) == true)
+                            .ToList();
+                        var broadProjectMatches = projectPolicy.Suppressions
+                            .Where(suppression =>
+                                suppression.Fingerprint?.Equals(
+                                    suppressionKey,
+                                    StringComparison.OrdinalIgnoreCase) != true
+                                && LayoutDiagnosticsSuppressionMatcher.Matches(
+                                    suppression,
+                                    finding))
+                            .ToList();
+
+                        if (exactProjectMatches.Count == 0
+                            || broadProjectMatches.Count > 0
+                            || userMatches.Count > 0)
+                        {
+                            var provenance = new List<string>();
+                            if (exactProjectMatches.Count > 0)
+                                provenance.Add("project-exact");
+                            if (broadProjectMatches.Count > 0)
+                                provenance.Add("project-broad");
+                            if (userMatches.Count > 0)
+                                provenance.Add("user");
+                            throw new LayoutSuppressionConflictException(provenance);
+                        }
+
+                        projectPolicy.Suppressions.RemoveAll(suppression =>
+                            suppression.Fingerprint?.Equals(
+                                suppressionKey,
+                                StringComparison.OrdinalIgnoreCase) == true);
+                    });
+            }
+            catch (LayoutSuppressionConflictException ex)
+            {
+                return JsonResponse(
+                    409,
+                    new
+                    {
+                        success = false,
+                        findingId = request.FindingId,
+                        suppressed = true,
+                        projectRemovable = false,
+                        provenance = ex.Provenance,
+                        message = ex.Provenance.Count == 0
+                            ? "No project-owned exact suppression exists for this finding."
+                            : "This finding is also suppressed by a user or broad project policy. Edit that policy to unsuppress it."
+                    });
+            }
+        }
+        else
+        {
+            updatedProjectPolicy = LayoutDiagnosticsPolicyLoader.UpdateProjectPolicy(
+                _policyStartPath,
+                projectPolicy =>
+                {
+                    if (projectPolicy.Suppressions.Any(suppression =>
+                        suppression.Fingerprint?.Equals(
+                            suppressionKey,
+                            StringComparison.OrdinalIgnoreCase) == true))
+                    {
+                        return;
+                    }
+
+                    projectPolicy.Suppressions.Add(new LayoutSuppression
+                    {
+                        Fingerprint = suppressionKey,
+                        Reason = string.IsNullOrWhiteSpace(request.Reason)
+                            ? "Suppressed in DevFlow Inspector"
+                            : request.Reason
+                    });
+                });
+        }
+
+        var updatedCombinedPolicy =
+            LayoutDiagnosticsPolicyLoader.Load(_policyStartPath);
+        lock (_cacheLock)
+        {
+            _projectLayoutDiagnosticsPolicy = updatedProjectPolicy;
+            _layoutDiagnosticsPolicy =
+                updatedCombinedPolicy;
+            _latestLayoutDiagnostics = null;
+            _latestLayoutDiagnosticsAt = default;
+        }
+
+        return JsonResponse(
+            200,
+            new
+            {
+                success = true,
+                findingId = request.FindingId,
+                suppressed = !remove,
+                projectRemovable = !remove,
+                provenance = remove ? Array.Empty<string>() : ["project-exact"]
+            });
+    }
+
+    private static (int, string, byte[]) JsonResponse(int statusCode, object value)
+    {
+        var json = JsonSerializer.Serialize(value);
+        return (statusCode, "application/json", Encoding.UTF8.GetBytes(json));
+    }
+
+    private sealed class LayoutSuppressionConflictException(
+        IReadOnlyList<string> provenance) : Exception
+    {
+        public IReadOnlyList<string> Provenance { get; } = provenance;
+    }
+
+    private (int, string, byte[]) HandleDiagnosticAgentPayload(string? body)
+    {
+        var request = JsonSerializer.Deserialize<InspectorDiagnosticRequest>(
+            body ?? "{}",
+            DevFlowCliJsonContext.Default.InspectorDiagnosticRequest);
+        if (string.IsNullOrWhiteSpace(request?.FindingId))
+            return (400, "text/plain", Encoding.UTF8.GetBytes("findingId is required"));
+
+        LayoutFinding? finding;
+        lock (_cacheLock)
+        {
+            finding = _latestLayoutDiagnostics?.Findings.FirstOrDefault(candidate =>
+                candidate.Id.Equals(request.FindingId, StringComparison.OrdinalIgnoreCase));
+        }
+        if (finding is null)
+            return (404, "text/plain", Encoding.UTF8.GetBytes("Finding not found"));
+
+        var json = JsonSerializer.Serialize(
+            finding,
+            DevFlowCliJsonContext.Default.LayoutFinding);
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
     }
 
@@ -575,6 +1064,20 @@ public sealed class InspectorServer : IDisposable
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
+    }
+
+    private (int, string, byte[]) HandleScreenshotFrame(string path)
+    {
+        var fileName = path["/screenshot/".Length..];
+        if (!fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            return (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"));
+        var frameId = fileName[..^".png".Length];
+        lock (_cacheLock)
+        {
+            if (_screenshotFrames.TryGetValue(frameId, out var frame))
+                return (200, "image/png", frame.Bytes);
+        }
+        return (404, "text/plain", Encoding.UTF8.GetBytes("Screenshot frame expired"));
     }
 
     private (int, string, byte[]) HandleEmbeddedFile(string fileName, string contentType)
@@ -894,6 +1397,21 @@ public sealed class InspectorServer : IDisposable
             const int MaxAssembledMessageBytes = 4 * 1024 * 1024; // 4 MB
             var buffer = new byte[8192];
             using var assembled = new MemoryStream();
+            using var sendGate = new SemaphoreSlim(1, 1);
+            await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
+                CaptureLayoutDiagnosticsDeltaAsync,
+                async (delta, cancellationToken) =>
+                {
+                    var deltaPayload = JsonSerializer.SerializeToUtf8Bytes(
+                        delta,
+                        DevFlowCliJsonContext.Default.LayoutDiagnosticsDelta);
+                    await SendWebSocketFrameAsync(
+                        clientStream,
+                        sendGate,
+                        deltaPayload,
+                        cancellationToken);
+                },
+                linkedCt);
             while (!linkedCt.IsCancellationRequested && agentWs.State == System.Net.WebSockets.WebSocketState.Open)
             {
                 System.Net.WebSockets.WebSocketReceiveResult result;
@@ -914,7 +1432,12 @@ public sealed class InspectorServer : IDisposable
                     {
                         var payload = assembled.ToArray();
                         assembled.SetLength(0);
-                        await SendWebSocketFrameAsync(clientStream, payload, linkedCt);
+                        await SendWebSocketFrameAsync(
+                            clientStream,
+                            sendGate,
+                            payload,
+                            linkedCt);
+                        diagnosticsDebouncer.Signal();
                     }
                 }
             }
@@ -926,8 +1449,15 @@ public sealed class InspectorServer : IDisposable
         }
     }
 
-    private static async Task SendWebSocketFrameAsync(NetworkStream stream, byte[] payload, CancellationToken ct)
+    private static async Task SendWebSocketFrameAsync(
+        NetworkStream stream,
+        SemaphoreSlim sendGate,
+        byte[] payload,
+        CancellationToken ct)
     {
+        await sendGate.WaitAsync(ct);
+        try
+        {
         // Build a text frame (FIN + opcode 0x1)
         var frame = new List<byte> { 0x81 }; // FIN + text
         if (payload.Length < 126)
@@ -948,6 +1478,11 @@ public sealed class InspectorServer : IDisposable
         frame.AddRange(payload);
         await stream.WriteAsync(frame.ToArray(), ct);
         await stream.FlushAsync(ct);
+        }
+        finally
+        {
+            sendGate.Release();
+        }
     }
 
     // ── HTTP parsing helpers ──
@@ -1104,6 +1639,15 @@ public sealed class InspectorServer : IDisposable
         await stream.WriteAsync(Encoding.UTF8.GetBytes(header), ct);
         await stream.WriteAsync(body, ct);
         await stream.FlushAsync(ct);
+    }
+
+    internal sealed class InspectorDiagnosticRequest
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("findingId")]
+        public string? FindingId { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("reason")]
+        public string? Reason { get; set; }
     }
 
     internal sealed class HttpRequestInfo

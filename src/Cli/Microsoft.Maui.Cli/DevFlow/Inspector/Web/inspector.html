@@ -11,10 +11,48 @@
   <link rel="stylesheet" href="devflow.css">
 </head>
 <body>
-  <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
-    {{SCREENSHOT}}
-    {{ELEMENTS}}
-  </div>
+  <main id="inspector-main">
+    <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
+      {{SCREENSHOT}}
+      <div id="diagnostic-overlays" aria-hidden="true"></div>
+      {{ELEMENTS}}
+    </div>
+  </main>
+
+  <aside id="diagnostics-panel">
+    <header>
+      <div>
+        <strong>Layout diagnostics</strong>
+        <div id="diagnostics-summary">Loading...</div>
+      </div>
+      <div class="diagnostics-controls">
+        <select id="diagnostics-filter" aria-label="Outcome filter">
+          <option value="actionable">Actionable</option>
+          <option value="all">All findings</option>
+          <option value="incomplete">Incomplete</option>
+          <option value="passes">Passes</option>
+        </select>
+        <select id="diagnostics-severity" aria-label="Minimum severity">
+          <option value="all">All severities</option>
+          <option value="minor">Minor+</option>
+          <option value="moderate">Moderate+</option>
+          <option value="serious">Serious+</option>
+          <option value="critical">Critical</option>
+        </select>
+        <select id="diagnostics-confidence" aria-label="Minimum confidence">
+          <option value="all">All confidence</option>
+          <option value="low">Low+</option>
+          <option value="medium">Medium+</option>
+          <option value="high">High+</option>
+          <option value="exact">Exact</option>
+        </select>
+        <input id="diagnostics-rule" type="search" placeholder="Filter rule">
+        <label><input id="diagnostics-suppressed" type="checkbox"> Suppressed</label>
+      </div>
+    </header>
+    <div id="diagnostics-coverage"></div>
+    <div id="diagnostics-list"></div>
+  </aside>
 
   <script src="devflow.js"></script>
 </body>

@@ -246,14 +246,139 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Get the visual tree from the running app.
     /// </summary>
-    public async Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, int? window = null)
+    public Task<List<ElementInfo>> GetTreeAsync(
+        int maxDepth = 0,
+        int? window = null)
+        => GetTreeAsync(maxDepth, window, includeNative: true);
+
+    public async Task<List<ElementInfo>> GetTreeAsync(
+        int maxDepth,
+        int? window,
+        bool includeNative)
     {
         var parts = new List<string>();
         if (maxDepth > 0) parts.Add($"depth={maxDepth}");
         if (window != null) parts.Add($"window={window}");
+        if (!includeNative) parts.Add("native=false");
         var url = parts.Count > 0 ? $"{UiApi}/tree?{string.Join("&", parts)}" : $"{UiApi}/tree";
         return await GetAsync<List<ElementInfo>>(url) ?? new();
     }
+
+    public async Task<ElementTreeSnapshot?> GetTreeSnapshotAsync(
+        int maxDepth = 0,
+        int? window = null,
+        bool includeNative = true)
+    {
+        var parts = new List<string> { "envelope=true" };
+        if (maxDepth > 0) parts.Add($"depth={maxDepth}");
+        if (window != null) parts.Add($"window={window}");
+        if (!includeNative) parts.Add("native=false");
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(() =>
+                _http.GetAsync(
+                    $"{_baseUrl}{UiApi}/tree?{string.Join("&", parts)}"));
+            if (!response.IsSuccessStatusCode)
+                return null;
+            var body = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                return new ElementTreeSnapshot
+                {
+                    Elements = DriverJson.Deserialize<List<ElementInfo>>(body)
+                        ?? []
+                };
+            }
+
+            return DriverJson.Deserialize<ElementTreeSnapshot>(body);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Analyze the current rendered UI for clipping, overflow, text truncation,
+    /// overlap, and occlusion findings.
+    /// </summary>
+    public Task<LayoutInspectionResult?> AnalyzeLayoutAsync(
+        LayoutInspectionRequest request)
+        => AnalyzeLayoutAsync(request, CancellationToken.None);
+
+    public async Task<LayoutInspectionResult?> AnalyzeLayoutAsync(
+        LayoutInspectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(
+                HttpMethod.Post,
+                async () =>
+                {
+                    using var content = DriverJson.CreateJsonContent(
+                        DriverJson.SerializeToNode(request));
+                    return await _http.PostAsync(
+                        $"{_baseUrl}{UiApi}/diagnostics/layout",
+                        content,
+                        cancellationToken);
+                });
+            var responseBody = await response.Content.ReadAsStringAsync(
+                cancellationToken);
+            if (response.IsSuccessStatusCode)
+                return DriverJson.Deserialize<LayoutInspectionResult>(responseBody);
+            if ((int)response.StatusCode is 404 or 501)
+                return null;
+
+            var message = $"Layout diagnostics request failed with HTTP {(int)response.StatusCode}.";
+            string? errorType = null;
+            try
+            {
+                var error = DriverJson.ParseElement(responseBody);
+                if (error.TryGetProperty("error", out var errorMessage))
+                    message = errorMessage.GetString() ?? message;
+                if (error.TryGetProperty("reason", out var reason))
+                    errorType = reason.GetString();
+                else if (error.TryGetProperty("type", out var type))
+                    errorType = type.GetString();
+            }
+            catch (JsonException)
+            {
+            }
+
+            throw new LayoutDiagnosticsException(
+                (int)response.StatusCode,
+                message,
+                errorType,
+                retryable: (int)response.StatusCode is 429 or 503
+                    || (int)response.StatusCode >= 500);
+        }
+        catch (LayoutDiagnosticsException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            throw new LayoutDiagnosticsException(
+                0,
+                $"Unable to complete the layout diagnostics request: {ex.Message}",
+                "layout-diagnostics-unavailable",
+                retryable: true,
+                innerException: ex);
+        }
+    }
+
+    /// <summary>
+    /// Get the layout diagnostic rules and support levels advertised by the agent.
+    /// </summary>
+    public Task<LayoutRuleCatalog?> GetLayoutDiagnosticRulesAsync()
+        => GetAsync<LayoutRuleCatalog>($"{UiApi}/diagnostics/layout/rules");
 
     /// <summary>
     /// Get a single element by ID.
@@ -824,7 +949,9 @@ public class AgentClient : IDisposable
         catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
     }
 
-    private async Task<T?> PostJsonAsync<T>(string path, JsonNode body) where T : class
+    private async Task<T?> PostJsonAsync<T>(
+        string path,
+        JsonNode body) where T : class
     {
         try
         {

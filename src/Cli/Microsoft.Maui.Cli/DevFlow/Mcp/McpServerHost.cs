@@ -31,6 +31,7 @@ public static class McpServerHost
 			.WithStdioServerTransport()
 			.WithTools<ScreenshotTool>()
 			.WithTools<TreeTool>()
+			.WithTools<LayoutDiagnosticsTool>()
 			.WithTools<LogsTool>()
 			.WithTools<NetworkTool>()
 			.WithTools<InteractionTools>()

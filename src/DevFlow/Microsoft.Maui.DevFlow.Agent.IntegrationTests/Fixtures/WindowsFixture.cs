@@ -16,7 +16,11 @@ public sealed class WindowsFixture : AppFixtureBase
         await WithBuildLockAsync(async () =>
         {
             var projectPath = GetSampleProjectPath();
-            await BuildSampleAsync(projectPath, "net10.0-windows10.0.19041.0");
+            var applicationId = $"com.microsoft.maui.devflow.integration{AgentPort}";
+            await BuildSampleAsync(
+                projectPath,
+                "net10.0-windows10.0.19041.0",
+                $"-p:ApplicationId={applicationId}");
 
             var exePath = FindExecutable();
             var psi = new ProcessStartInfo(exePath)

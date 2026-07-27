@@ -133,19 +133,28 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     public Func<string, Task<string>>? CdpCommandHandler
     {
-        get => _cdpWebViews.Count > 0 ? _cdpWebViews[0].CommandHandler : null;
+        get
+        {
+            lock (_cdpWebViewsLock)
+                return _cdpWebViews.Count > 0
+                    ? _cdpWebViews[0].CommandHandler
+                    : null;
+        }
         set
         {
-            if (value == null)
+            lock (_cdpWebViewsLock)
             {
+                if (value == null)
+                {
+                    if (_cdpWebViews.Count > 0)
+                        _cdpWebViews.RemoveAt(0);
+                    return;
+                }
                 if (_cdpWebViews.Count > 0)
-                    _cdpWebViews.RemoveAt(0);
-                return;
+                    _cdpWebViews[0].CommandHandler = value;
+                else
+                    _cdpWebViews.Add(new CdpWebViewInfo { Index = 0, CommandHandler = value, ReadyCheck = () => true });
             }
-            if (_cdpWebViews.Count > 0)
-                _cdpWebViews[0].CommandHandler = value;
-            else
-                _cdpWebViews.Add(new CdpWebViewInfo { Index = 0, CommandHandler = value, ReadyCheck = () => true });
         }
     }
 
@@ -153,21 +162,33 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// Deprecated: use RegisterCdpWebView() for multi-WebView support.</summary>
     public Func<bool>? CdpReadyCheck
     {
-        get => _cdpWebViews.Count > 0 ? _cdpWebViews[0].ReadyCheck : null;
+        get
+        {
+            lock (_cdpWebViewsLock)
+                return _cdpWebViews.Count > 0
+                    ? _cdpWebViews[0].ReadyCheck
+                    : null;
+        }
         set
         {
-            if (_cdpWebViews.Count > 0 && value != null)
-                _cdpWebViews[0].ReadyCheck = value;
+            lock (_cdpWebViewsLock)
+            {
+                if (_cdpWebViews.Count > 0 && value != null)
+                    _cdpWebViews[0].ReadyCheck = value;
+            }
         }
     }
 
     private readonly List<CdpWebViewInfo> _cdpWebViews = new();
+    private readonly object _cdpWebViewsLock = new();
     private int _nextWebViewIndex = 0;
 
     /// <summary>Register a CDP-capable WebView with the agent.</summary>
     public int RegisterCdpWebView(Func<string, Task<string>> commandHandler, Func<bool> readyCheck,
         string? automationId = null, string? elementId = null, string? url = null)
     {
+        lock (_cdpWebViewsLock)
+        {
         // Shell route changes can recreate the same logical BlazorWebView multiple times.
         // Reuse the existing slot for the same AutomationId/ElementId so callers don't get
         // stranded on a stale index 0 bridge after navigating away and back.
@@ -198,53 +219,75 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             ReadyCheck = readyCheck,
         });
         return index;
+        }
     }
 
     /// <summary>Unregister a CDP WebView by index.</summary>
     public void UnregisterCdpWebView(int index)
     {
-        _cdpWebViews.RemoveAll(w => w.Index == index);
+        lock (_cdpWebViewsLock)
+            _cdpWebViews.RemoveAll(w => w.Index == index);
     }
 
     /// <summary>Update metadata for a registered WebView.</summary>
     public void UpdateCdpWebView(int index, string? automationId = null, string? elementId = null, string? url = null)
     {
-        var wv = _cdpWebViews.FirstOrDefault(w => w.Index == index);
-        if (wv == null) return;
-        if (automationId != null) wv.AutomationId = automationId;
-        if (elementId != null) wv.ElementId = elementId;
-        if (url != null) wv.Url = url;
+        lock (_cdpWebViewsLock)
+        {
+            var wv = _cdpWebViews.FirstOrDefault(w => w.Index == index);
+            if (wv == null) return;
+            if (automationId != null) wv.AutomationId = automationId;
+            if (elementId != null) wv.ElementId = elementId;
+            if (url != null) wv.Url = url;
+        }
     }
 
     private CdpWebViewInfo? ResolveCdpWebView(string? webviewId)
     {
-        if (_cdpWebViews.Count == 0) return null;
+        var webViews = GetCdpWebViewsSnapshot();
+        if (webViews.Length == 0) return null;
         if (string.IsNullOrEmpty(webviewId))
         {
             // Prefer the most recently registered ready bridge, falling back to the newest
             // bridge overall. This avoids defaulting to a stale, no-longer-visible WebView
             // after Shell recreates a page.
-            return _cdpWebViews.LastOrDefault(w => w.IsReady) ?? _cdpWebViews.Last();
+            return webViews.LastOrDefault(w => w.IsReady) ?? webViews[^1];
         }
 
         // Try index
         if (int.TryParse(webviewId, out var idx))
         {
-            var byIndex = _cdpWebViews.FirstOrDefault(w => w.Index == idx);
+            var byIndex = webViews.FirstOrDefault(w => w.Index == idx);
             if (byIndex != null) return byIndex;
         }
 
         // Try AutomationId
-        var byAutomationId = _cdpWebViews.LastOrDefault(w =>
+        var byAutomationId = webViews.LastOrDefault(w =>
             !string.IsNullOrEmpty(w.AutomationId) && w.AutomationId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
         if (byAutomationId != null) return byAutomationId;
 
         // Try ElementId
-        var byElementId = _cdpWebViews.LastOrDefault(w =>
+        var byElementId = webViews.LastOrDefault(w =>
             !string.IsNullOrEmpty(w.ElementId) && w.ElementId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
         if (byElementId != null) return byElementId;
 
         return null;
+    }
+
+    private CdpWebViewInfo[] GetCdpWebViewsSnapshot()
+    {
+        lock (_cdpWebViewsLock)
+        {
+            return _cdpWebViews.Select(webView => new CdpWebViewInfo
+            {
+                Index = webView.Index,
+                AutomationId = webView.AutomationId,
+                ElementId = webView.ElementId,
+                Url = webView.Url,
+                CommandHandler = webView.CommandHandler,
+                ReadyCheck = webView.ReadyCheck
+            }).ToArray();
+        }
     }
 
     public bool IsRunning => _server.IsRunning;
@@ -256,6 +299,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _options = options ?? new AgentOptions();
         _server = new AgentHttpServer(_options.Port);
         _treeWalker = CreateTreeWalker();
+        _treeWalker.SourceMapProvider = SourceMapping.XamlSourceMapRegistry.Instance;
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         Sensors = new SensorManager();
         _profilerCollector = CreateProfilerCollector();
@@ -465,6 +509,11 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _server.MapGet("/api/v1/ui/elements/{id}", HandleElement);
         _server.MapGet("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
+        if (_options.EnableLayoutDiagnostics)
+        {
+            _server.MapGet("/api/v1/ui/diagnostics/layout/rules", HandleLayoutDiagnosticRules);
+            _server.MapPost("/api/v1/ui/diagnostics/layout", HandleLayoutDiagnostics);
+        }
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", HandleSetProperty);
         _server.MapPost("/api/v1/ui/actions/tap", HandleTap);
@@ -598,6 +647,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var packageId = TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown";
         var appVersion = TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown";
         var appBuild = TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown";
+        var cdpWebViews = GetCdpWebViewsSnapshot();
         var result = await DispatchAsync(() =>
         {
             var window = GetWindow(windowIndex);
@@ -644,8 +694,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 capabilities = new
                 {
                     ui = true,
+                    layoutDiagnostics = _options.EnableLayoutDiagnostics,
                     screenshots = true,
-                    webview = _cdpWebViews.Any(v => v.IsReady),
+                    webview = cdpWebViews.Any(v => v.IsReady),
                     network = true,
                     logs = true,
                     sensors = true,
@@ -655,8 +706,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     theme = true,
                 },
                 running = _app != null,
-                cdpReady = _cdpWebViews.Any(v => v.IsReady),
-                cdpWebViewCount = _cdpWebViews.Count,
+                cdpReady = cdpWebViews.Any(v => v.IsReady),
+                cdpWebViewCount = cdpWebViews.Length,
                 profiler = BuildProfilerCapabilitiesPayload(),
                 profilerSession = _profilerSessions.CurrentSession,
                 extensions = BuildExtensionsMarker()
@@ -684,6 +735,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private Task<HttpResponse> HandleCapabilities(HttpRequest request)
     {
+        var cdpWebViews = GetCdpWebViewsSnapshot();
         var version = typeof(DevFlowAgentService).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
 
@@ -692,8 +744,34 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.tree"] = new { version = 1, features = new[] { "css-selector", "type", "text", "accessibility-id" } };
         capabilities["ui.actions"] = new { version = 1, features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties" } };
         capabilities["ui.screenshot"] = new { version = 1, features = new[] { "element", "fullscreen", "selector" } };
+        if (_options.EnableLayoutDiagnostics)
+        {
+            capabilities["ui.layoutDiagnostics"] = new
+            {
+                version = 1,
+                schemaVersion = "1.0",
+                ruleSetVersion = "1.0",
+                features = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
+                    .Concat(cdpWebViews.Any(view => view.IsReady)
+                        ? ["blazor-dom"]
+                        : Array.Empty<string>())
+                    .ToArray(),
+                watch = new
+                {
+                    supported = true,
+                    transport = "polling"
+                },
+                blazor = new
+                {
+                    supported = cdpWebViews.Any(view => view.IsReady),
+                    readyWebViewCount = cdpWebViews.Count(view => view.IsReady)
+                },
+                profiles = new[] { "agent", "strict", "exhaustive", "ci" },
+                rules = _treeWalker.GetLayoutRuleSupport()
+            };
+        }
 
-        if (_cdpWebViews.Count > 0)
+        if (cdpWebViews.Length > 0)
             capabilities["webview"] = new { version = 1, features = new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" } };
 
         capabilities["profiler"] = new { version = 1, features = BuildProfilerFeatureList() };
@@ -834,11 +912,36 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             int.TryParse(depthStr, out maxDepth);
 
         var windowIndex = ParseWindowIndex(request);
+        var envelope = request.QueryParams.TryGetValue("envelope", out var envelopeValue)
+            && bool.TryParse(envelopeValue, out var parsedEnvelope)
+            && parsedEnvelope;
+        var includeNative = !request.QueryParams.TryGetValue("native", out var native)
+            || !bool.TryParse(native, out var parsedNative)
+            || parsedNative;
+        if (!includeNative)
+        {
+            var managedTree = await DispatchAsync(() =>
+                _treeWalker.WalkTree(_app, maxDepth, windowIndex));
+            return envelope
+                ? HttpResponse.Json(new
+                {
+                    revision = VisualTreeRevision.ComputeTree(managedTree),
+                    elements = managedTree
+                })
+                : HttpResponse.Json(managedTree);
+        }
+
         var tree = await CaptureUiOrNativeAsync(
             () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
             hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
             windowIndex);
-        return HttpResponse.Json(tree);
+        return envelope
+            ? HttpResponse.Json(new
+            {
+                revision = VisualTreeRevision.ComputeTree(tree),
+                elements = tree
+            })
+            : HttpResponse.Json(tree);
     }
 
     private async Task<HttpResponse> HandleElement(HttpRequest request)
@@ -857,7 +960,17 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         {
             var el = _treeWalker.GetElementById(id, _app);
             if (el is IVisualTreeElement vte)
-                return (object?)_treeWalker.WalkElement(vte, null, 1, 2);
+            {
+                var info = _treeWalker.WalkElement(vte, null, 1, 2);
+                if (info is not null && _treeWalker.HasActiveSourceMaps)
+                {
+                    var fullTree = _treeWalker.WalkTree(_app, 0, null);
+                    var sources = VisualTreeWalker.CollectSourceById(fullTree);
+                    if (sources.Count > 0)
+                        VisualTreeWalker.ApplySourceById(info, sources);
+                }
+                return (object?)info;
+            }
 
             // Synthetic elements: build detail from marker
             if (el != null)
@@ -3163,6 +3276,65 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         return func();
     }
 
+    protected async Task<T> DispatchAsync<T>(
+        Func<T> func,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_dispatcher is { IsDispatchRequired: true })
+        {
+            var dispatcher = _dispatcher;
+            var tcs = new TaskCompletionSource<T>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            using var registration = cancellationToken.Register(() =>
+                tcs.TrySetCanceled(cancellationToken));
+            dispatcher.Dispatch(() =>
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    tcs.TrySetCanceled(cancellationToken);
+                    return;
+                }
+                try
+                {
+                    tcs.TrySetResult(func());
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            });
+            return await tcs.Task;
+        }
+
+        if (IsMainThreadDispatchRequired())
+        {
+            var dispatchTask = DispatchViaMainThreadAsync(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return func();
+            });
+            try
+            {
+                return await dispatchTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                _ = dispatchTask.ContinueWith(
+                    task => _ = task.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted
+                        | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+                throw;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return func();
+    }
+
     private async Task<T> DispatchViaMauiDispatcherAsync<T>(Func<T> func)
     {
         var dispatcher = _dispatcher ?? throw new InvalidOperationException("Dispatcher is not available.");
@@ -5090,7 +5262,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         [NotNullWhen(true)] out CdpWebViewInfo? webView,
         [NotNullWhen(false)] out HttpResponse? error)
     {
-        if (_cdpWebViews.Count == 0)
+        if (GetCdpWebViewsSnapshot().Length == 0)
         {
             webView = null;
             error = HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
@@ -5553,7 +5725,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
     {
-        var webviews = _cdpWebViews.Select(w => new
+        var webviews = GetCdpWebViewsSnapshot().Select(w => new
         {
             id = !string.IsNullOrWhiteSpace(w.AutomationId)
                 ? w.AutomationId
