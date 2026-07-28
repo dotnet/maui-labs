@@ -178,6 +178,29 @@ public class NativeElementRegistryTests
     }
 
     [Fact]
+    public void Register_WithoutStableKey_AfterEviction_ReusesTheIdForTheSameInstance()
+    {
+        // The Android path: no native handle, so ids hang off the managed instance via the
+        // ConditionalWeakTable. That table outlives eviction, and it should -- an evicted view
+        // that is still alive and walked again is the same element and keeps its id.
+        var registry = CreateRegistry();
+
+        registry.BeginWalk();
+        var view = new FakeView();
+        var original = registry.Register(view, parentId: null);
+
+        registry.BeginWalk();
+        for (var i = 0; i < 513; i++)
+            registry.Register(new FakeView($"live{i}"), parentId: null);
+
+        registry.BeginWalk();
+        Assert.Null(registry.Resolve(original));
+
+        Assert.Equal(original, registry.Register(view, parentId: null));
+        Assert.Same(view, registry.Resolve(original));
+    }
+
+    [Fact]
     public void Register_HandleRecycledAfterEviction_DoesNotInheritTheOldId()
     {
         var registry = CreateRegistry();
