@@ -204,9 +204,6 @@ public static class MauiProgram
 				.Build();
 		});
 
-		// Semantic search using AppContentIndexer — OS handles embeddings internally.
-		builder.Services.AddSingleton<ISemanticSearchService, AppContentIndexerSearchService>();
-
 		return builder;
 	}
 #pragma warning restore CA1416
