@@ -94,8 +94,12 @@
     <MicrosoftAgentsAIHostingVersion>1.5.0-preview.260507.1</MicrosoftAgentsAIHostingVersion>
     <!-- DeviceRunners (device test runner OSS replacement) -->
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
+    <!-- Windows App SDK AI package with stable structured output APIs -->
+    <MicrosoftWindowsAppSDKAIVersion>2.3.4</MicrosoftWindowsAppSDKAIVersion>
+    <MicrosoftWindowsAppSDKFoundationVersion>2.3.5</MicrosoftWindowsAppSDKFoundationVersion>
+    <MicrosoftWindowsAppSDKInteractiveExperiencesVersion>2.1.3</MicrosoftWindowsAppSDKInteractiveExperiencesVersion>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
-    <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
+    <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.5.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>

@@ -6,12 +6,12 @@ using Xunit;
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 /// <summary>
-/// Single wrapper for all Phi Silica tests — handles both structured output and tool calling.
-/// Pipeline: PhiSilicaToolsAndSchemaClient → PhiSilicaChatClient
+/// Phi Silica client with the sample's prompt-based tool-calling adapter.
+/// Structured output is handled natively by <see cref="PhiSilicaChatClient"/>.
 /// </summary>
 public class PhiSilicaWrappedClient : DelegatingChatClient
 {
-public PhiSilicaWrappedClient() : base(new PhiSilicaToolsAndSchemaClient(new PhiSilicaChatClient())) { }
+	public PhiSilicaWrappedClient() : base(new PhiSilicaToolCallingClient(new PhiSilicaChatClient())) { }
 }
 public class PhiSilicaChatClientCancellationTests : ChatClientCancellationTestsBase<PhiSilicaChatClient>
 {
@@ -189,13 +189,13 @@ public class PhiSilicaChatClientResponseTests : ChatClientResponseTestsBase<PhiS
 public class PhiSilicaChatClientStreamingTests : ChatClientStreamingTestsBase<PhiSilicaChatClient>
 {
 }
-public class PhiSilicaChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<PhiSilicaWrappedClient>
+public class PhiSilicaChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<PhiSilicaChatClient>
 {
-	[Fact(Skip = "Phi Silica does not support JSON format without a schema — PhiSilicaToolsAndSchemaClient requires a schema to rewrite.")]
+	[Fact(Skip = "The Windows structured output API requires a JSON schema.")]
 	public override Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 		=> base.GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow();
 
-	[Fact(Skip = "Phi Silica does not support JSON format without a schema — PhiSilicaToolsAndSchemaClient requires a schema to rewrite.")]
+	[Fact(Skip = "The Windows structured output API requires a JSON schema.")]
 	public override Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 		=> base.GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow();
 }

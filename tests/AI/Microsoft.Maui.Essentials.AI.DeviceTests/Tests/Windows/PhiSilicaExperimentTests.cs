@@ -91,7 +91,7 @@ public class PhiSilicaExperimentTests
 	public async Task Enum_StructuredOutput_ValidValue_ReturnsCorrectEnum()
 	{
 		// Test: Ask about a fruit that IS in the enum
-		var client = new PhiSilicaWrappedClient();
+		var client = new PhiSilicaChatClient();
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.User, "The user wants a banana. Select the matching fruit.")
@@ -129,7 +129,7 @@ public class PhiSilicaExperimentTests
 	public async Task Enum_StructuredOutput_InvalidValue_HandlesGracefully()
 	{
 		// Test: Ask about something NOT in the enum (Bread is not a fruit)
-		var client = new PhiSilicaWrappedClient();
+		var client = new PhiSilicaChatClient();
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.User, "The user wants bread. Select the matching fruit from the enum. If none match, set SelectedFruit to null.")

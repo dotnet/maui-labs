@@ -14,7 +14,7 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);MAUIAI0001;CA1416</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;NU1608</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
     <!-- Required for DeviceRunners dotnet test integration -->
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
@@ -30,7 +30,7 @@
     <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
   </PropertyGroup>
 
-  <!-- Windows: self-contained publish to bundle WinAppSDK experimental runtime -->
+  <!-- Windows: self-contained publish to bundle the Windows App SDK runtime -->
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
     <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
@@ -51,17 +51,21 @@
     <PackageReference Include="DeviceRunners.Testing.Targets" />
   </ItemGroup>
 
-  <!-- Windows Phi Silica: requires experimental WindowsAppSDK for WinRT AI APIs -->
+  <!-- Windows language model APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.0.0-experimental6" />
+    <!-- Override transitive WASDK 1.8 from MAUI with explicit 2.3.x subpackages -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Windows Phi Silica: link to sample's helper so tests can use it -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <Compile Include="..\..\..\samples\EssentialsAISample\Services\PhiSilicaToolsAndSchemaClient.cs"
-             Link="Services\PhiSilicaToolsAndSchemaClient.cs" />
+    <Compile Include="..\..\..\samples\EssentialsAISample\Services\PhiSilicaToolCallingClient.cs"
+             Link="Services\PhiSilicaToolCallingClient.cs" />
   </ItemGroup>
 
   <ItemGroup>

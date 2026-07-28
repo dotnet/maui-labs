@@ -7,36 +7,37 @@ using Microsoft.Extensions.AI;
 namespace EssentialsAISample.Services;
 
 /// <summary>
-/// Single wrapper for PhiSilicaChatClient that handles structured output AND tool calling.
-/// Temporary until the LanguageModel API supports these natively.
+/// Adds prompt-based tool calling to <see cref="PhiSilicaChatClient"/>.
 ///
-/// Handles all combinations:
-/// - Tools only → structured JSON tool call schema
-/// - ResponseFormat only → schema injected as prompt instructions
-/// - Tools + ResponseFormat → combined schema (tool_call OR user's structured response)
-/// - Neither → pass through
+/// The Windows language model API supports structured JSON natively, but it does not
+/// expose tool calling. This adapter translates tool requests and responses while
+/// delegating schema-only requests directly to <see cref="PhiSilicaChatClient"/>.
 ///
-/// Usage: new PhiSilicaToolsAndSchemaClient(new PhiSilicaChatClient())
+/// Usage: new PhiSilicaToolCallingClient(new PhiSilicaChatClient())
 /// </summary>
-public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
+public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 {
 	private const string MoreStepsKey = "__more_steps";
 	private const string CalledToolsKey = "__called_tools";
 
-	public PhiSilicaToolsAndSchemaClient(IChatClient inner) : base(inner) { }
+	public PhiSilicaToolCallingClient(IChatClient inner) : base(inner) { }
 
 	public override async Task<ChatResponse> GetResponseAsync(
 		IEnumerable<ChatMessage> messages,
 		ChatOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
-		var (rewritten, newOptions) = Rewrite(messages, options);
+		if (options?.Tools is not { Count: > 0 })
+			return await base.GetResponseAsync(messages, options, cancellationToken);
+
+		var tools = options.Tools.OfType<AIFunction>().ToList();
+		if (tools.Count != options.Tools.Count)
+			return await base.GetResponseAsync(messages, options, cancellationToken);
+
+		var (rewritten, newOptions) = RewriteForTools(messages, options, tools);
 		var response = await base.GetResponseAsync(rewritten, newOptions, cancellationToken);
 		StripCodeFences(response);
-
-		if (options?.Tools is { Count: > 0 })
-			ConvertToolCallResponse(response);
-
+		ConvertToolCallResponse(response);
 		return response;
 	}
 
@@ -45,112 +46,21 @@ public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
 		ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
-		if (options?.Tools is { Count: > 0 })
+		if (options?.Tools is not { Count: > 0 })
 		{
-			// Tool path: delegate to non-streaming for reliability
-			var response = await GetResponseAsync(messages, options, cancellationToken);
-			foreach (var msg in response.Messages)
-				yield return new ChatResponseUpdate { Role = msg.Role, Contents = [.. msg.Contents] };
-			yield break;
-		}
-
-		// Schema or plain streaming with smart code fence detection
-		bool hadSchema = options?.ResponseFormat is ChatResponseFormatJson;
-		var (rewritten, newOptions) = Rewrite(messages, options);
-
-		if (!hadSchema)
-		{
-			await foreach (var update in base.GetStreamingResponseAsync(rewritten, newOptions, cancellationToken))
+			await foreach (var update in base.GetStreamingResponseAsync(messages, options, cancellationToken))
 				yield return update;
 			yield break;
 		}
 
-		// Smart buffer: peek at first tokens for code fences
-		var buffer = new List<ChatResponseUpdate>();
-		var initialText = new StringBuilder();
-		bool fenceDetected = false, decided = false;
-
-		await foreach (var update in base.GetStreamingResponseAsync(rewritten, newOptions, cancellationToken))
-		{
-			if (!decided)
-			{
-				buffer.Add(update);
-				foreach (var c in update.Contents)
-					if (c is TextContent tc && tc.Text is not null) initialText.Append(tc.Text);
-				if (initialText.ToString().TrimStart().Length >= 3)
-				{
-					decided = true;
-					if (initialText.ToString().TrimStart().StartsWith("```", StringComparison.Ordinal))
-						fenceDetected = true;
-					else { foreach (var b in buffer) yield return b; buffer.Clear(); }
-				}
-			}
-			else if (fenceDetected)
-			{
-				buffer.Add(update);
-				foreach (var c in update.Contents)
-					if (c is TextContent tc && tc.Text is not null) initialText.Append(tc.Text);
-			}
-			else yield return update;
-		}
-
-		if (fenceDetected || !decided)
-		{
-			var full = new StringBuilder();
-			ChatRole? role = null;
-			foreach (var u in buffer) { role ??= u.Role; foreach (var c in u.Contents) if (c is TextContent tc && tc.Text is not null) full.Append(tc.Text); }
-			yield return new ChatResponseUpdate { Role = role ?? ChatRole.Assistant, Contents = [new TextContent(StripText(full.ToString()))] };
-		}
+		// Buffer tool requests so split JSON fragments are parsed as one response.
+		var response = await GetResponseAsync(messages, options, cancellationToken);
+		foreach (var message in response.Messages)
+			yield return new ChatResponseUpdate { Role = message.Role, Contents = [.. message.Contents] };
 	}
 
 	// ═══════════════════════════════════════════════════════════
-	// REWRITE — single entry point for all cases
-	// ═══════════════════════════════════════════════════════════
-
-	private (IEnumerable<ChatMessage>, ChatOptions?) Rewrite(
-		IEnumerable<ChatMessage> messages, ChatOptions? options)
-	{
-		bool hasTools = options?.Tools is { Count: > 0 };
-		var tools = hasTools ? options!.Tools!.OfType<AIFunction>().ToList() : null;
-		bool hasSchema = options?.ResponseFormat is ChatResponseFormatJson;
-
-		if (hasTools && tools?.Count > 0)
-			return RewriteForTools(messages, options!, tools);
-
-		if (hasSchema)
-			return RewriteForSchema(messages, options!);
-
-		return (messages, options);
-	}
-
-	// ═══════════════════════════════════════════════════════════
-	// SCHEMA-ONLY REWRITE
-	// ═══════════════════════════════════════════════════════════
-
-	private static (IEnumerable<ChatMessage>, ChatOptions) RewriteForSchema(
-		IEnumerable<ChatMessage> messages, ChatOptions options)
-	{
-		if (options.ResponseFormat is not ChatResponseFormatJson { Schema: { } schema })
-			return (messages, options);
-
-		var prompt = new ChatMessage(ChatRole.System, $$"""
-			IMPORTANT: Your response must be a single valid JSON object with real values.
-			Do NOT wrap the response in markdown code fences or backticks.
-			Do NOT include "$schema", "type", "properties", "required", or "description" keys from the schema definition.
-			Do NOT echo the schema back. Only output the data.
-			For enum values, use EXACTLY the values listed in the schema.
-
-			JSON schema for the expected response:
-			{{schema}}
-			""");
-
-		var newOptions = options.Clone();
-		newOptions.ResponseFormat = null;
-		return ([prompt, .. messages], newOptions);
-	}
-
-	// ═══════════════════════════════════════════════════════════
-	// TOOL CALLING REWRITE (builds schema prompt directly, no intermediate ResponseFormat)
+	// TOOL CALLING REWRITE
 	// ═══════════════════════════════════════════════════════════
 
 	private (IEnumerable<ChatMessage>, ChatOptions) RewriteForTools(
@@ -252,7 +162,8 @@ public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
 				"I have the tool result above. I need to make another tool call."));
 		}
 
-		// Clone options: remove tools AND ResponseFormat (we handle both via prompt)
+		// The tool protocol still uses prompt-constrained JSON because the Windows
+		// API has no native tool/function-calling abstraction.
 		var newOptions = options.Clone();
 		newOptions.Tools = null;
 		newOptions.ResponseFormat = null;
@@ -354,7 +265,7 @@ public sealed class PhiSilicaToolsAndSchemaClient : DelegatingChatClient
 			else if (type == "response" && r.TryGetProperty("response", out var rp))
 				return new TextResp(rp.GetRawText());
 		}
-		catch (Exception) { }
+		catch (JsonException) { }
 		return null;
 	}
 

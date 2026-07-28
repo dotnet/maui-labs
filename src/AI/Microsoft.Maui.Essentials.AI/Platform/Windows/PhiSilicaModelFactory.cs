@@ -21,13 +21,16 @@ internal static class PhiSilicaModelFactory
 	{
 		var readyState = LanguageModel.GetReadyState();
 
-		if (readyState is AIFeatureReadyState.DisabledByUser or AIFeatureReadyState.NotSupportedOnCurrentSystem)
+		if (readyState is not AIFeatureReadyState.Ready and not AIFeatureReadyState.NotReady)
 		{
 			var message = readyState switch
 			{
 				AIFeatureReadyState.NotSupportedOnCurrentSystem => "Not supported on current system",
 				AIFeatureReadyState.DisabledByUser => "Disabled by user",
-				_ => "Unknown reason"
+				AIFeatureReadyState.CapabilityMissing => "The systemAIModels package capability is missing",
+				AIFeatureReadyState.NotCompatibleWithSystemHardware => "Not compatible with system hardware",
+				AIFeatureReadyState.OSUpdateNeeded => "An operating system update is required",
+				_ => readyState.ToString()
 			};
 			throw new NotSupportedException($"Phi Silica (Windows Copilot Runtime) is not available: {message}");
 		}
@@ -37,7 +40,11 @@ internal static class PhiSilicaModelFactory
 			var operation = await LanguageModel.EnsureReadyAsync();
 
 			if (operation.Status is not AIFeatureReadyResultState.Success)
-				throw new NotSupportedException("Phi Silica (Windows Copilot Runtime) is not available");
+			{
+				throw new NotSupportedException(
+					$"Phi Silica (Windows Copilot Runtime) could not be prepared: {operation.Status}",
+					operation.ExtendedError);
+			}
 		}
 
 		if (LanguageModel.GetReadyState() is not AIFeatureReadyState.Ready)

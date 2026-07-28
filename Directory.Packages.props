@@ -95,6 +95,11 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
+    <!-- Windows language model APIs -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Base" Version="2.0.4" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.AI" Version="$(MicrosoftWindowsAppSDKAIVersion)" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="$(MicrosoftWindowsAppSDKFoundationVersion)" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="$(MicrosoftWindowsAppSDKInteractiveExperiencesVersion)" />
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="$(MicrosoftWindowsSDKBuildToolsWinAppVersion)" />
   </ItemGroup>

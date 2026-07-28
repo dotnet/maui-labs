@@ -82,32 +82,75 @@ public sealed class PhiSilicaChatClient : IChatClient
 			throw new ArgumentException("At least one message with content is required.", nameof(chatMessages));
 
 		ValidateOptions(options);
-
-		using var context = string.IsNullOrEmpty(systemPrompt)
-			? model.CreateContext()
-			: model.CreateContext(systemPrompt, new ContentFilterOptions());
-
 		var modelOptions = ConvertToLanguageModelOptions(options);
 
-		// Use StreamingResponseHandler without a chunker — the Windows AI API
-		// already provides incremental deltas via the Progress callback.
-		var handler = new StreamingResponseHandler();
+		if (options?.ResponseFormat is ChatResponseFormatJson { Schema: { } schema })
+		{
+			// Structured output has no LanguageModelContext overload, so include the
+			// system prompt in the self-contained prompt sent to the model.
+			var structuredPrompt = string.IsNullOrEmpty(systemPrompt)
+				? prompt
+				: $"System: {systemPrompt}{Environment.NewLine}{prompt}";
+			var operation = model.GenerateStructuredJsonResponseAsync(
+				structuredPrompt,
+				schema.GetRawText(),
+				modelOptions);
 
-		var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
+			await foreach (var update in StreamOperationAsync(
+				operation,
+				GetStructuredResponseError,
+				cancellationToken))
+			{
+				yield return update;
+			}
+		}
+		else
+		{
+			using var context = string.IsNullOrEmpty(systemPrompt)
+				? model.CreateContext()
+				: model.CreateContext(systemPrompt, new ContentFilterOptions());
+			var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
+
+			await foreach (var update in StreamOperationAsync(
+				operation,
+				static _ => null,
+				cancellationToken))
+			{
+				yield return update;
+			}
+		}
+	}
+
+	private static async IAsyncEnumerable<ChatResponseUpdate> StreamOperationAsync<TResult>(
+		IAsyncOperationWithProgress<TResult, string> operation,
+		Func<TResult, Exception?> getResultError,
+		[EnumeratorCancellation] CancellationToken cancellationToken)
+	{
+		// The Windows AI APIs already provide incremental deltas via Progress.
+		var handler = new StreamingResponseHandler();
 
 		operation.Progress = (_, progress) =>
 		{
 			if (!string.IsNullOrEmpty(progress))
-			{
 				handler.ProcessContent(progress);
-			}
 		};
 
 		operation.Completed = (op, status) =>
 		{
 			if (status == AsyncStatus.Completed)
 			{
-				handler.Complete();
+				try
+				{
+					var error = getResultError(op.GetResults());
+					if (error is null)
+						handler.Complete();
+					else
+						handler.CompleteWithError(error);
+				}
+				catch (Exception ex)
+				{
+					handler.CompleteWithError(ex);
+				}
 			}
 			else if (status == AsyncStatus.Error)
 			{
@@ -119,19 +162,26 @@ public sealed class PhiSilicaChatClient : IChatClient
 			}
 		};
 
-		var registration = cancellationToken.Register(() => operation.Cancel());
+		using var registration = cancellationToken.Register(operation.Cancel);
 		try
 		{
 			await foreach (var update in handler.ReadAllAsync(cancellationToken))
-			{
 				yield return update;
-			}
 		}
 		finally
 		{
 			operation.Cancel();
-			registration.Dispose();
 		}
+	}
+
+	private static Exception? GetStructuredResponseError(GenerateStructuredJsonResponseResult result)
+	{
+		if (result.Status is GenerateStructuredJsonResponseStatus.Complete)
+			return null;
+
+		return result.ExtendedError
+			?? new InvalidOperationException(
+				$"The Windows language model failed to generate structured JSON: {result.Status}.");
 	}
 
 	/// <inheritdoc />
