@@ -25,4 +25,14 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Agent.Native only multi-targets platform TFMs, so it cannot be referenced from this net10.0
+         project. Link the registry source instead: its id bookkeeping is platform-agnostic (the one
+         platform-specific bit, the ObjC stable key, is injectable) and is worth covering here
+         because the alternative is relying on device integration runs, where the GC timing that
+         drives this code is nondeterministic. -->
+    <Compile Include="..\Microsoft.Maui.DevFlow.Agent.Native\NativeElementRegistry.cs"
+             Link="Native\NativeElementRegistry.cs" />
+  </ItemGroup>
+
 </Project>
