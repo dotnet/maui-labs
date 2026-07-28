@@ -28,6 +28,11 @@ on:
         type: string
         default: 'maui ios maccatalyst macos maui-tizen'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
+      workload-version:
+        required: false
+        type: string
+        default: '10.0.203'
+        description: 'Workload version to install (pinned for reproducibility)'
       os:
         required: false
         type: string
@@ -90,12 +95,12 @@ jobs:
       # matches the later cibuild invocation.
       - name: Install workloads (Windows)
         if: inputs.install-workloads && matrix.os == 'windows-latest'
-        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version 10.0.203
+        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
         shell: cmd
 
       - name: Install workloads (Unix)
         if: inputs.install-workloads && matrix.os != 'windows-latest'
-        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version 10.0.203
+        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && matrix.os == 'windows-latest'

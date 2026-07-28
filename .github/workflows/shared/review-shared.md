@@ -86,7 +86,7 @@ task(
   description="Reviewer 1: deep reasoning review",
   agent_type="general-purpose",
   mode="background",
-  model="claude-opus-4.6",
+  model="claude-opus-4.8",
   prompt="<full diff + PR description + instruction to follow .github/agents/expert-reviewer.agent.md>"
 )
 

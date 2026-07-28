@@ -111,7 +111,17 @@ extends:
             # DevFlow packages are built on Windows, including Apple library TFMs.
             - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI and Apple workloads
-            - script: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net10.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
+                )
+                & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -281,7 +291,17 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
-            - script: eng\common\dotnet.cmd build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net10.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
+                )
+                & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
