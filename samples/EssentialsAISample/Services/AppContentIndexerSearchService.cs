@@ -1,5 +1,4 @@
 #if WINDOWS
-using System.Collections.Concurrent;
 using Microsoft.Windows.Search.AppContentIndex;
 
 namespace EssentialsAISample.Services;

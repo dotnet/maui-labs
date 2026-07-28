@@ -5,4 +5,8 @@
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! chatMessages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaChatClient.PhiSilicaChatClient() -> void
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaChatClient.PhiSilicaChatClient(Microsoft.Windows.AI.Text.LanguageModel! model) -> void
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaImageGenerator
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaImageGenerator.GenerateAsync(Microsoft.Extensions.AI.ImageGenerationRequest! request, Microsoft.Extensions.AI.ImageGenerationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ImageGenerationResponse!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaImageGenerator.PhiSilicaImageGenerator() -> void
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.PhiSilicaImageGenerator.PhiSilicaImageGenerator(Microsoft.Windows.AI.Imaging.ImageGenerator! generator) -> void
 [MAUIAI0001]static Microsoft.Extensions.AI.PhiSilicaExtensions.AsIChatClient(this Microsoft.Windows.AI.Text.LanguageModel! model) -> Microsoft.Extensions.AI.IChatClient!

@@ -58,17 +58,17 @@
     <PackageReference Include="DeviceRunners.XHarness.Maui" />
   </ItemGroup>
 
-  <!-- Windows Phi Silica: requires experimental WindowsAppSDK for WinRT AI APIs -->
+  <!-- Windows Phi Silica: Copilot Runtime WinRT AI APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.0.0-experimental6" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Windows Phi Silica: link to sample's helper so tests can use it -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <Compile Include="..\..\..\samples\EssentialsAISample\Services\PhiSilicaToolsAndSchemaClient.cs"
-             Link="Services\PhiSilicaToolsAndSchemaClient.cs" />
+    <Compile Include="..\..\..\samples\EssentialsAISample\Services\PhiSilicaToolCallingClient.cs"
+             Link="Services\PhiSilicaToolCallingClient.cs" />
   </ItemGroup>
 
   <ItemGroup>

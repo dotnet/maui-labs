@@ -10,7 +10,10 @@
     <UseMaui>true</UseMaui>
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
-    <NoWarn>$(NoWarn);MAUIAI0001</NoWarn>
+    <!-- MAUIAI0001: Microsoft.Maui.Essentials.AI is experimental.
+         MEAI001: IImageGenerator and friends are preview APIs in Microsoft.Extensions.AI.
+         Both are opt-in [Experimental] gates, not suppressed diagnostics. -->
+    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001</NoWarn>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
     <!-- Disable multi-RID builds to workaround a parallel build issue -->
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
@@ -28,7 +31,7 @@
     <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
   </PropertyGroup>
 
-  <!-- Windows: self-contained publish to bundle WinAppSDK experimental runtime -->
+  <!-- Windows: self-contained publish to bundle the WinAppSDK runtime -->
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
     <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
@@ -72,21 +75,17 @@
     <PackageReference Include="OpenAI" />
   </ItemGroup>
 
-  <!-- Windows Phi Silica: requires experimental WindowsAppSDK for WinRT AI APIs -->
+  <!-- Windows Phi Silica: Copilot Runtime WinRT AI APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.0.0-experimental6" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- AppContentIndexer semantic search (ships separately from the umbrella package) -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.Search" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
-  </ItemGroup>
-
-  <!-- Exclude Windows-only services from non-Windows TFMs -->
-  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
-    <Compile Remove="Services\AppContentIndexerSearchService.cs" />
-    <Compile Remove="Services\PhiSilicaToolsAndSchemaClient.cs" />
   </ItemGroup>
 
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">

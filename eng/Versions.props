@@ -24,11 +24,11 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>10.0.6</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.6</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
     <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
     <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
@@ -71,15 +71,22 @@
   <PropertyGroup Label="EssentialsAI">
     <EssentialsAIPreviewVersionIteration>1</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
-    <MicrosoftExtensionsAIVersion>10.5.2</MicrosoftExtensionsAIVersion>
-    <MicrosoftExtensionsAIAbstractionsVersion>10.5.2</MicrosoftExtensionsAIAbstractionsVersion>
+    <MicrosoftExtensionsAIVersion>10.3.0</MicrosoftExtensionsAIVersion>
+    <MicrosoftExtensionsAIAbstractionsVersion>10.3.0</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->
-    <MicrosoftAgentsAIVersion>1.5.0</MicrosoftAgentsAIVersion>
-    <MicrosoftAgentsAIWorkflowsVersion>1.5.0</MicrosoftAgentsAIWorkflowsVersion>
-    <MicrosoftAgentsAIWorkflowsGeneratorsVersion>1.5.0</MicrosoftAgentsAIWorkflowsGeneratorsVersion>
-    <MicrosoftAgentsAIHostingVersion>1.5.0-preview.260507.1</MicrosoftAgentsAIHostingVersion>
+    <MicrosoftAgentsAIVersion>1.0.0-rc2</MicrosoftAgentsAIVersion>
+    <MicrosoftAgentsAIWorkflowsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsVersion>
+    <MicrosoftAgentsAIWorkflowsGeneratorsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsGeneratorsVersion>
+    <MicrosoftAgentsAIHostingVersion>1.0.0-preview.260225.1</MicrosoftAgentsAIHostingVersion>
     <!-- DeviceRunners (device test runner OSS replacement) -->
     <DeviceRunnersVersion>0.1.0-preview.6</DeviceRunnersVersion>
+    <!-- Windows App SDK: Copilot Runtime (Phi Silica) WinRT AI APIs.
+         Pinned to the 2.2.x line: Microsoft.WindowsAppSDK.Search (AppContentIndexer) pins
+         Microsoft.WindowsAppSDK.AI to an exact version, and 2.2.x is also the last line that
+         ships Microsoft.Windows.AI.Speech. -->
+    <MicrosoftWindowsAppSDKVersion>2.2.2-experimental9</MicrosoftWindowsAppSDKVersion>
+    <!-- Windows App SDK Search: AppContentIndexer (not part of the umbrella package) -->
+    <MicrosoftWindowsAppSDKSearchVersion>2.2.6-experimental</MicrosoftWindowsAppSDKSearchVersion>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>

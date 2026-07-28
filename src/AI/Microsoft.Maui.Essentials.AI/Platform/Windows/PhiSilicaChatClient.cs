@@ -3,7 +3,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI.ContentSafety;
+using Microsoft.Windows.AI.Imaging;
 using Microsoft.Windows.AI.Text;
+using Microsoft.Windows.AI.Text.Experimental;
 using Windows.Foundation;
 
 namespace Microsoft.Maui.Essentials.AI;
@@ -25,6 +27,12 @@ public sealed class PhiSilicaChatClient : IChatClient
 
 	/// <summary>Whether this instance owns the <see cref="LanguageModel"/> and is responsible for disposing it.</summary>
 	private readonly bool _ownsModel;
+
+	/// <summary>
+	/// Lazily-initialized on-device image description model, created only when a request actually
+	/// carries image content.
+	/// </summary>
+	private Task<ImageDescriptionGenerator>? _imageDescriptionTask;
 
 	/// <summary>
 	/// Lazily-initialized metadata describing the implementation.
@@ -77,15 +85,11 @@ public sealed class PhiSilicaChatClient : IChatClient
 
 		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
 
-		var prompt = ConvertToPrompt(history);
+		var prompt = await ConvertToPromptAsync(history);
 		if (history.Count == 0 && string.IsNullOrEmpty(systemPrompt))
 			throw new ArgumentException("At least one message with content is required.", nameof(chatMessages));
 
 		ValidateOptions(options);
-
-		using var context = string.IsNullOrEmpty(systemPrompt)
-			? model.CreateContext()
-			: model.CreateContext(systemPrompt, new ContentFilterOptions());
 
 		var modelOptions = ConvertToLanguageModelOptions(options);
 
@@ -93,8 +97,84 @@ public sealed class PhiSilicaChatClient : IChatClient
 		// already provides incremental deltas via the Progress callback.
 		var handler = new StreamingResponseHandler();
 
-		var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
+		// A JSON schema turns this into a constrained generation. GenerateStructuredJsonResponseAsync
+		// lives on LanguageModelExperimental and has no LanguageModelContext overload, so the system
+		// prompt is folded into the prompt text.
+		var jsonSchema = (options?.ResponseFormat as ChatResponseFormatJson)?.Schema?.GetRawText();
 
+		LanguageModelContext? context = null;
+		IDisposable? experimentalModel = null;
+		Action cancel;
+		try
+		{
+			if (jsonSchema is not null)
+			{
+				var structuredPrompt = string.IsNullOrEmpty(systemPrompt)
+					? prompt
+					: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
+
+				// CS8305: schema-constrained generation is only exposed on the experimental
+				// LanguageModelExperimental surface in Windows App SDK 2.2.x. There is no stable
+				// equivalent on this SDK line, so the warning is acknowledged rather than avoided.
+#pragma warning disable CS8305
+				var structuredModel = new LanguageModelExperimental(model);
+				experimentalModel = structuredModel;
+
+				var structuredOperation = structuredModel.GenerateStructuredJsonResponseAsync(
+					structuredPrompt,
+					jsonSchema,
+					LanguageModelOptionsExperimental.GetForLanguageModelOptions(modelOptions));
+
+				WireUp(structuredOperation, handler, cancellationToken);
+				cancel = structuredOperation.Cancel;
+#pragma warning restore CS8305
+			}
+			else
+			{
+				context = string.IsNullOrEmpty(systemPrompt)
+					? model.CreateContext()
+					: model.CreateContext(systemPrompt, new ContentFilterOptions());
+
+				var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
+				WireUp(operation, handler, cancellationToken);
+				cancel = operation.Cancel;
+			}
+
+			var registration = cancellationToken.Register(cancel);
+			try
+			{
+				await foreach (var update in handler.ReadAllAsync(cancellationToken))
+				{
+					yield return update;
+				}
+			}
+			finally
+			{
+				cancel();
+				registration.Dispose();
+			}
+		}
+		finally
+		{
+			context?.Dispose();
+			experimentalModel?.Dispose();
+		}
+	}
+
+	/// <summary>
+	/// Bridges a WinRT async operation that reports incremental text into the
+	/// <see cref="StreamingResponseHandler"/> pipeline.
+	/// </summary>
+	/// <remarks>
+	/// Both <c>GenerateResponseAsync</c> and <c>GenerateStructuredJsonResponseAsync</c> return
+	/// <see cref="IAsyncOperationWithProgress{TResult, TProgress}"/> with a <see cref="string"/>
+	/// progress type, but their result types differ, so this is generic over the result.
+	/// </remarks>
+	private static void WireUp<TResult>(
+		IAsyncOperationWithProgress<TResult, string> operation,
+		StreamingResponseHandler handler,
+		CancellationToken cancellationToken)
+	{
 		operation.Progress = (_, progress) =>
 		{
 			if (!string.IsNullOrEmpty(progress))
@@ -118,20 +198,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 				handler.CompleteWithError(new OperationCanceledException(cancellationToken));
 			}
 		};
-
-		var registration = cancellationToken.Register(() => operation.Cancel());
-		try
-		{
-			await foreach (var update in handler.ReadAllAsync(cancellationToken))
-			{
-				yield return update;
-			}
-		}
-		finally
-		{
-			operation.Cancel();
-			registration.Dispose();
-		}
 	}
 
 	/// <inheritdoc />
@@ -162,19 +228,49 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// <inheritdoc />
 	void IDisposable.Dispose()
 	{
+		// The image description model is always created by this instance, so it is always disposed.
+		if (_imageDescriptionTask is { } imageDescriptionTask)
+			DisposeWhenReady(imageDescriptionTask);
+
 		if (_ownsModel)
-		{
-			if (_modelTask.IsCompletedSuccessfully)
-				_modelTask.Result.Dispose();
-			else
-				_modelTask.ContinueWith(
-					t => { if (t.IsCompletedSuccessfully) t.Result.Dispose(); },
-					TaskContinuationOptions.ExecuteSynchronously);
-		}
+			DisposeWhenReady(_modelTask);
 	}
 
-	private static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
-		IEnumerable<ChatMessage> chatMessages,
+	private static void DisposeWhenReady<T>(Task<T> task)
+		where T : IDisposable
+	{
+		if (task.IsCompletedSuccessfully)
+			task.Result.Dispose();
+		else
+			task.ContinueWith(
+				t => { if (t.IsCompletedSuccessfully) t.Result.Dispose(); },
+				TaskContinuationOptions.ExecuteSynchronously);
+	}
+
+	/// <summary>
+	/// Produces a text description of an image using the on-device Windows image description model.
+	/// </summary>
+	/// <param name="image">The image content to describe.</param>
+	/// <returns>A caption describing the image.</returns>
+	/// <exception cref="InvalidOperationException">Thrown when the image could not be described.</exception>
+	private async Task<string> DescribeImageAsync(DataContent image)
+	{
+		var generator = await (_imageDescriptionTask ??= PhiSilicaModelFactory.CreateImageDescriptionGeneratorAsync());
+
+		using var buffer = await PhiSilicaImageBuffers.DecodeAsync(image.Data);
+
+		var result = await generator.DescribeAsync(
+			buffer,
+			ImageDescriptionKind.DetailedDescription,
+			new ContentFilterOptions());
+
+		if (result.Status is not ImageDescriptionResultStatus.Complete)
+			throw new InvalidOperationException($"Image description failed: {result.Status}");
+
+		return result.Description;
+	}
+
+	private static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(		IEnumerable<ChatMessage> chatMessages,
 		ChatOptions? options = null)
 	{
 		var messages = chatMessages.ToList();
@@ -195,7 +291,16 @@ public sealed class PhiSilicaChatClient : IChatClient
 		return (string.Empty, messages);
 	}
 
-	private static string ConvertToPrompt(IEnumerable<ChatMessage> history)
+	/// <summary>
+	/// Flattens the conversation into the single prompt string the language model accepts.
+	/// </summary>
+	/// <remarks>
+	/// Phi Silica is a text-only model, so image content cannot be passed through the way a cloud
+	/// multimodal model would accept it. Instead each image is run through the on-device Windows
+	/// image description model and the resulting caption is spliced into the prompt in place of the
+	/// image. Everything stays local; nothing is uploaded.
+	/// </remarks>
+	private async Task<string> ConvertToPromptAsync(IEnumerable<ChatMessage> history)
 	{
 		var promptParts = new List<string>();
 
@@ -214,6 +319,11 @@ public sealed class PhiSilicaChatClient : IChatClient
 				if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
 				{
 					promptParts.Add($"{rolePrefix}{textContent.Text}");
+				}
+				else if (content is DataContent data && data.HasTopLevelMediaType("image"))
+				{
+					var description = await DescribeImageAsync(data);
+					promptParts.Add($"{rolePrefix}[Image: {description}]");
 				}
 				else if (content is FunctionCallContent functionCall)
 				{
@@ -257,7 +367,12 @@ public sealed class PhiSilicaChatClient : IChatClient
 			languageModelOptions.Temperature = temp;
 
 		if (options.TopK is { } topK)
+		{
+			if (topK < 0)
+				throw new ArgumentOutOfRangeException(nameof(options), "TopK must be non-negative.");
+
 			languageModelOptions.TopK = (uint)topK;
+		}
 
 		if (options.TopP is { } topP)
 			languageModelOptions.TopP = topP;
