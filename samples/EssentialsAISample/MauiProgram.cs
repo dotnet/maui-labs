@@ -167,14 +167,24 @@ public static class MauiProgram
 		// Register the base Phi Silica client
 		builder.Services.AddSingleton<PhiSilicaChatClient>();
 
+		// Semantic search via the OS AppContentIndexer (embedding + chunking handled by Windows)
+		builder.Services.AddSingleton<ISemanticSearchService, AppContentIndexerSearchService>();
+
+		// On-device image generation (text to image, image to image, and inpainting)
+		builder.Services.AddSingleton<IImageGenerator, PhiSilicaImageGenerator>();
+
 		// Register the Phi Silica client as IChatClient to allow direct use
 		builder.Services.AddSingleton<IChatClient>(sp =>
 		{
 			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
+			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
 			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 			return phiClient
 				.AsBuilder()
-				.Use(cc => new PhiSilicaToolsAndSchemaClient(cc))
+				// Handles HostedImageGenerationTool, so asking the model to draw something
+				// runs the on-device image model and returns the image inline.
+				.UseImageGeneration(imageGenerator)
+				.Use(cc => new PhiSilicaToolCallingClient(cc))
 				.UseLogging(loggerFactory)
 				.Build();
 		});
@@ -183,10 +193,12 @@ public static class MauiProgram
 		builder.Services.AddKeyedSingleton<IChatClient>("local-model", (sp, _) =>
 		{
 			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
+			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
 			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 			return phiClient
 				.AsBuilder()
-				.Use(cc => new PhiSilicaToolsAndSchemaClient(cc))
+				.UseImageGeneration(imageGenerator)
+				.Use(cc => new PhiSilicaToolCallingClient(cc))
 				.UseLogging(loggerFactory)
 				.Build();
 		});
@@ -195,17 +207,16 @@ public static class MauiProgram
 		builder.Services.AddKeyedSingleton<IChatClient>("cloud-model", (sp, _) =>
 		{
 			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
+			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
 			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 			return phiClient
 				.AsBuilder()
-				.Use(cc => new PhiSilicaToolsAndSchemaClient(cc))
+				.UseImageGeneration(imageGenerator)
+				.Use(cc => new PhiSilicaToolCallingClient(cc))
 				.Use(cc => new BufferedChatClient(cc))
 				.UseLogging(loggerFactory)
 				.Build();
 		});
-
-		// Semantic search using AppContentIndexer — OS handles embeddings internally.
-		builder.Services.AddSingleton<ISemanticSearchService, AppContentIndexerSearchService>();
 
 		return builder;
 	}
