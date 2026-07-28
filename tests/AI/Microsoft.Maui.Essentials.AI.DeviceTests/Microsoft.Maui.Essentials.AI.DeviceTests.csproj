@@ -14,7 +14,7 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;NU1608</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;CA1416</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
     <!-- Required for DeviceRunners dotnet test integration -->
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
@@ -53,11 +53,8 @@
 
   <!-- Windows language model APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <!-- Override transitive WASDK 1.8 from MAUI with explicit 2.3.x subpackages -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.Base" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <!-- Use umbrella package for now to avoid version conflicts with MAUI's transitive 1.8 dep -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>

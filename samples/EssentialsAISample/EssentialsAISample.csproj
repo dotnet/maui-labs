@@ -10,7 +10,7 @@
     <UseMaui>true</UseMaui>
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
-    <NoWarn>$(NoWarn);MAUIAI0001;NU1608</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001</NoWarn>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
     <!-- Disable multi-RID builds to workaround a parallel build issue -->
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
@@ -74,11 +74,8 @@
 
   <!-- Windows language model APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <!-- Override transitive WASDK 1.8 from MAUI with explicit 2.3.x subpackages -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.Base" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <!-- Use umbrella package for now to avoid version conflicts with MAUI's transitive 1.8 dep -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>

@@ -10,9 +10,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsBindingProject>true</IsBindingProject>
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
-         older OS versions with runtime guards. Suppress to avoid errors in Release builds.
-         NU1608: Package version mismatches from MAUI's transitive 1.8 WASDK vs our newer 2.3.x subpackages (intentional override). -->
-    <NoWarn>$(NoWarn);CA1416;NU1608</NoWarn>
+         older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
     <!-- Prevent MSBuild from overriding the MaxVersionTested set in Package.appxmanifest
          (needed for the systemAIModels capability declaration to survive restore) -->
     <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
@@ -46,11 +45,8 @@
   </ItemGroup>
   <!-- Windows language model APIs -->
   <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
-    <!-- Override transitive WASDK 1.8 from MAUI with explicit 2.3.x subpackages -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.Base" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <!-- Use umbrella package for now to avoid version conflicts with MAUI's transitive 1.8 dep -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
