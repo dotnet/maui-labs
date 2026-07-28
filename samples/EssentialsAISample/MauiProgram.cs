@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using EssentialsAISample.AI;
 using EssentialsAISample.Pages;
 using EssentialsAISample.Services;
