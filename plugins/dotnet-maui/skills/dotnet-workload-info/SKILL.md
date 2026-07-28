@@ -1,10 +1,7 @@
 ---
 name: dotnet-workload-info
 description: >-
-  Discover .NET SDK versions, workload sets, manifest versions, and workload dependencies (Xcode, JDK, Android SDK) from live NuGet APIs.
-  USE FOR: .NET SDK requirements/versions, workload set versions, workload manifest versions, Xcode version requirements, JDK version requirements, Android SDK packages, MAUI NuGet package versions.
-  DO NOT USE FOR: Installing workloads (use `dotnet workload install`), general MAUI debugging, app build failures.
-  Triggers on questions like "What Xcode is required for .NET 10?" or "What's the latest workload set?"
+  Discover MAUI workload metadata from live NuGet APIs. USE FOR: workload manifest lookup, WorkloadDependencies.json, v3-flatcontainer, CLI-to-NuGet version conversion, Xcode/JDK/Android SDK requirements, CI sdkmanager packages, `packageid:Microsoft.Maui.Controls`. DO NOT USE FOR: installing workloads, build debugging, or app version edits.
 ---
 
 # .NET Workload Info Discovery
@@ -67,7 +64,8 @@ The returned workloadVersion is the CLI version to use with --version flag.
 To convert this to the NuGet package version (needed for Steps 3-4):
 
 CLI 10.0.103 → NuGet 10.103.0 (remove middle .0., combine)
-The NuGet package is: Microsoft.NET.Workloads.{band} where band = CLI version (e.g., Microsoft.NET.Workloads.10.0.100)
+Do not use the CLI version as the NuGet package version in flat-container URLs.
+The NuGet package is `Microsoft.NET.Workloads.{band}` where `{band}` is the SDK band derived from the CLI version (for example, CLI 10.0.103 → package `Microsoft.NET.Workloads.10.0.100`, NuGet version `10.103.0`).
 
 
 ### Step 3: Download Workload Set Manifest
@@ -82,6 +80,7 @@ Format: `"{workload_id}": "{manifestVersion}/{sdkBand}"`
 ### Step 4: Download Workload Manifest
 
 Build package id: `{WorkloadId}.Manifest-{sdkBand}` (e.g., `Microsoft.NET.Sdk.iOS.Manifest-10.0.100`)
+Use the same SDK band discovered in Step 1 or extracted from the workload set entry. Do not hardcode `10.0.100` when the current SDK band is `10.0.200`, `10.0.300`, or another band.
 
 ```bash
 curl -o manifest.nupkg "https://api.nuget.org/v3-flatcontainer/{packageid}/{version}/{packageid}.{version}.nupkg"
@@ -100,6 +99,29 @@ unzip -p manifest.nupkg data/WorkloadDependencies.json
   }
 }
 ```
+
+After extracting `androidsdk.packages`, show how to install them in CI:
+
+```bash
+sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+```
+
+Use the exact package IDs from `WorkloadDependencies.json`; do not copy the sample
+API level or build-tools version blindly.
+
+When the user asks for CI-ready Android SDK package discovery, include this
+minimum flow in the answer:
+
+1. Download `Microsoft.NET.Workloads.{sdkBand}` and read
+   `data/microsoft.net.workloads.workloadset.json` (`workloadset.json`).
+2. Read the `microsoft.net.sdk.android` entry to get
+   `{manifestVersion}/{manifestSdkBand}`.
+3. Download `Microsoft.NET.Sdk.Android.Manifest-{manifestSdkBand}` at that
+   manifest version and read `data/WorkloadDependencies.json`.
+4. Extract `androidsdk.packages`, including `platform-tools`,
+   `platforms;android-*`, `build-tools;*`, and `cmdline-tools;*`. Filter by
+   `"optional": "false"` when the manifest marks packages optional.
+5. Feed the extracted package IDs to `sdkmanager --install`.
 
 **iOS/macOS** (`microsoft.net.sdk.ios`):
 ```json
@@ -121,6 +143,11 @@ MAUI packages may be newer than workload versions. Query for latest:
 curl -s "https://azuresearch-usnc.nuget.org/query?q=packageid:Microsoft.Maui.Controls&prerelease=false" | \
   jq '.data[0].versions | map(select(.version | startswith("{MAJOR}."))) | last'
 ```
+
+When the user asks for the NuGet search API or an exact package ID filter, use
+`https://azuresearch-usnc.nuget.org/query?q=packageid:<PackageId>` and show the
+`packageid:` filter. Do not answer with only the flat-container or registration
+endpoints; those are useful follow-up APIs but they are not the search API.
 
 Key packages: `Microsoft.Maui.Controls`, `Microsoft.Maui.Essentials`, `Microsoft.Maui.Graphics`
 

@@ -36,6 +36,10 @@ parameters:
   displayName: 'Publish macOS AppKit packages to NuGet.org'
   type: boolean
   default: false
+- name: publishAIExtensionsNuget
+  displayName: 'Publish AI Extensions packages to NuGet.org'
+  type: boolean
+  default: false
 - name: publishEssentialsAINuget
   displayName: 'Publish EssentialsAI packages to NuGet.org'
   type: boolean
@@ -62,7 +66,7 @@ extends:
   parameters:
     pool:
       name: NetCore1ESPool-Internal
-      image: windows.vs2026preview.scout.amd64
+      image: windows.vs2026.amd64
       os: windows
     # Required for publishing to external feeds like nuget.org
     settings:
@@ -93,7 +97,7 @@ extends:
             displayName: DevFlow - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -105,9 +109,19 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI and Apple workloads
-            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net10.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
+                )
+                & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -121,7 +135,7 @@ extends:
             displayName: Cli - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -130,10 +144,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -141,11 +152,11 @@ extends:
                 $(_OfficialBuildArgs)
               displayName: Build and Test Cli
 
-          - job: AppProjectReference
-            displayName: AppProjectReference - Windows
+          - job: AI
+            displayName: AI Extensions - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -154,10 +165,28 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\AIExtensions\AIExtensions.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Test AI Extensions
+
+          - job: AppProjectReference
+            displayName: AppProjectReference - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -173,7 +202,7 @@ extends:
             displayName: Linux GTK4 - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -182,10 +211,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -213,6 +239,11 @@ extends:
             - script: |
                 eng/common/dotnet.sh --info
               displayName: Provision .NET SDK via Arcade
+              env:
+                # Hosted macOS sets DOTNET_INSTALL_DIR to /Users/runner/.dotnet.
+                # Force Arcade to provision repo-local .dotnet because the next
+                # step invokes .dotnet/dotnet directly.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
@@ -226,6 +257,9 @@ extends:
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
               displayName: Build EssentialsAI (macOS)
+              env:
+                # Use the same SDK root that received the workload installation.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - task: CopyFiles@2
               displayName: Copy Native Binaries
               inputs:
@@ -239,7 +273,7 @@ extends:
             dependsOn: EssentialsAI_macOS
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -255,9 +289,19 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
-            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net10.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
+                )
+                & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -283,10 +327,7 @@ extends:
                 Release:
                   _BuildConfig: Release
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: |
                 sudo apt-get update
                 sudo apt-get install -y \
@@ -313,7 +354,7 @@ extends:
             displayName: WPF - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -324,7 +365,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui --version 10.0.203
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -340,7 +381,7 @@ extends:
             displayName: macOS AppKit - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -351,7 +392,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui macos --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -379,7 +420,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -402,7 +443,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -434,7 +475,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -449,7 +490,7 @@ extends:
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/CliPackages'
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.StartupProfiling.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.ProfilingHelper.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
             displayName: Filter Cli packages
 
         - job: PublishNuGet
@@ -458,7 +499,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -490,7 +531,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -513,7 +554,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -545,7 +586,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -568,7 +609,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -587,6 +628,61 @@ extends:
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 
+    # Publish AI Extensions packages to NuGet.org
+    - ${{ if eq(parameters.publishAIExtensionsNuget, true) }}:
+      - stage: publish_ai_extensions_nuget
+        displayName: 'Publish AI Extensions to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare AI Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish AI Packages
+              targetPath: '$(Pipeline.Workspace)/AIPackages'
+              artifactName: AIPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/AIPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.AI.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
+            displayName: Filter AI packages
+
+        - job: PublishNuGet
+          displayName: 'Push AI to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: AIPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/AIPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push AI to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/AIPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/AIPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
     # Publish WPF packages to NuGet.org
     - ${{ if eq(parameters.publishWpfNuget, true) }}:
       - stage: publish_wpf_nuget
@@ -600,7 +696,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -623,7 +719,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -655,7 +751,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -678,7 +774,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob
@@ -710,7 +806,7 @@ extends:
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -733,7 +829,7 @@ extends:
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob

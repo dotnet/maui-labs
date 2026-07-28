@@ -1,8 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow;
+using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.Cli.DevFlow.Broker;
+using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
+using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -150,8 +153,8 @@ public class DevFlowCliIntegrationTests
                 {
                     Id = "agent-1",
                     Project = "/src/App.csproj",
-                    Tfm = "net10.0-android",
-                    Platform = "Android",
+                    Tfm = "net10.0-windows10.0.19041.0",
+                    Platform = "Windows",
                     AppName = "SampleApp",
                     Port = 9223,
                     Version = "0.1.0-preview",
@@ -159,6 +162,8 @@ public class DevFlowCliIntegrationTests
                 }
             ]);
         };
+        DevFlowCommands.IsAndroidAdbLikelyAvailable = () => throw new InvalidOperationException("Non-Android diagnostics must not probe adb.");
+        DevFlowCommands.CreateAndroidPortForwarder = () => throw new InvalidOperationException("Non-Android diagnostics must not create an Android port forwarder.");
 
         try
         {
@@ -178,6 +183,151 @@ public class DevFlowCliIntegrationTests
             Assert.Equal("SampleApp", agent.GetProperty("appName").GetString());
             Assert.Equal(JsonValueKind.Array, json.GetProperty("projects").ValueKind);
             Assert.Empty(json.GetProperty("projects").EnumerateArray());
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DiagnoseJson_WhenAndroidAgentIsRegistered_ReportsForwardingState()
+    {
+        var cli = new CliTestHarness(mockAgentPort: 9223);
+        var tempDir = Directory.CreateTempSubdirectory("maui-devflow-diagnose-");
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+        var runner = new FakeAdbRunner(forwardPorts: [9223], reversePorts: [19223]);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "android-agent",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-android",
+                Platform = "Android",
+                AppName = "SampleApp",
+                Port = 9223,
+                Version = "0.1.0-preview",
+                ConnectedAt = DateTime.UnixEpoch
+            }
+        ]);
+        DevFlowCommands.IsAndroidAdbLikelyAvailable = () => true;
+        DevFlowCommands.CreateAndroidPortForwarder = () =>
+        {
+            var provider = new FakeAndroidProvider
+            {
+                SdkPath = "/android-sdk",
+                IsSdkInstalled = true,
+                Devices =
+                [
+                    new Device
+                    {
+                        Id = "emulator-5554",
+                        Name = "Pixel",
+                        Platforms = ["android"],
+                        Type = DeviceType.Emulator,
+                        State = DeviceState.Connected,
+                        IsEmulator = true,
+                        IsRunning = true
+                    }
+                ]
+            };
+
+            return new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+        };
+
+        try
+        {
+            Directory.SetCurrentDirectory(tempDir.FullName);
+
+            var result = await cli.InvokeRawAsync("devflow", "diagnose", "--json", "--device", "emulator-5554");
+
+            Assert.Equal(0, result.ExitCode);
+            var json = result.ParseJsonOutput();
+            var android = json.GetProperty("android");
+            Assert.Equal("emulator-5554", android.GetProperty("selected_serial").GetString());
+            Assert.True(android.GetProperty("broker_reverse_present").GetBoolean());
+            var forward = Assert.Single(android.GetProperty("agent_forwards").EnumerateArray());
+            Assert.Equal(9223, forward.GetProperty("port").GetInt32());
+            Assert.True(forward.GetProperty("present_after").GetBoolean());
+            Assert.Contains("-s emulator-5554 reverse --list", runner.Commands);
+            Assert.Contains("-s emulator-5554 forward --list", runner.Commands);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DiagnoseHuman_WhenBrokerUsesCustomPort_ReportsCustomBrokerReversePort()
+    {
+        var cli = new CliTestHarness(mockAgentPort: 9223);
+        var tempDir = Directory.CreateTempSubdirectory("maui-devflow-diagnose-");
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19225);
+        DevFlowCommands.ListBrokerAgentsAsync = brokerPort =>
+        {
+            Assert.Equal(19225, brokerPort);
+            return Task.FromResult<AgentRegistration[]?>(
+            [
+                new AgentRegistration
+                {
+                    Id = "android-agent",
+                    Project = "/src/App.csproj",
+                    Tfm = "net10.0-android",
+                    Platform = "Android",
+                    AppName = "SampleApp",
+                    Port = 9223,
+                    Version = "0.1.0-preview",
+                    ConnectedAt = DateTime.UnixEpoch
+                }
+            ]);
+        };
+        DevFlowCommands.IsAndroidAdbLikelyAvailable = () => true;
+        DevFlowCommands.CreateAndroidPortForwarder = () =>
+        {
+            var provider = new FakeAndroidProvider
+            {
+                SdkPath = "/android-sdk",
+                IsSdkInstalled = true,
+                Devices =
+                [
+                    new Device
+                    {
+                        Id = "emulator-5554",
+                        Name = "Pixel",
+                        Platforms = ["android"],
+                        Type = DeviceType.Emulator,
+                        State = DeviceState.Connected,
+                        IsEmulator = true,
+                        IsRunning = true
+                    }
+                ]
+            };
+
+            return new AndroidDevFlowPortForwarder(
+                provider,
+                "/android-sdk/platform-tools/adb",
+                new FakeAdbRunner(forwardPorts: [9223], reversePorts: [19225]));
+        };
+
+        try
+        {
+            Directory.SetCurrentDirectory(tempDir.FullName);
+
+            var result = await cli.InvokeRawAsync("devflow", "diagnose", "--no-json", "--device", "emulator-5554");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("Broker reverse:   ready (tcp:19225)", result.StdOut);
+            Assert.DoesNotContain("Broker reverse:   ready (tcp:19223)", result.StdOut);
         }
         finally
         {
@@ -583,5 +733,245 @@ public class DevFlowCliIntegrationTests
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
         Assert.Equal("POST", request.Method);
         Assert.Contains("Browser.getVersion", request.Body);
+    }
+
+    // ── issue #343: multi-agent ambiguity refusal + resolved-target labeling ──
+
+    [Fact]
+    public async Task UiTree_WithSentinelPort_RefusesAndExitsNonZero()
+    {
+        // --agent-port 0 simulates the ambiguous multi-agent case (SelectAgentPort sentinel).
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeRawAsync("devflow", "ui", "tree", "--agent-port", "0", "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        var combined = result.StdOut + result.StdErr;
+        Assert.Contains("--agent-port", combined);
+        Assert.Contains("Multiple", combined);
+        // The command must not have reached the agent.
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/tree");
+    }
+
+    [Fact]
+    public async Task UiScreenshot_WithSentinelPort_RefusesAndExitsNonZero()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeRawAsync("devflow", "ui", "screenshot", "--agent-port", "0", "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        var combined = result.StdOut + result.StdErr;
+        Assert.Contains("--agent-port", combined);
+    }
+
+    [Fact]
+    public async Task UiStatus_WithMultipleAgents_LabelsResolvedTargetOnStderr()
+    {
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "TargetApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            },
+            new AgentRegistration
+            {
+                Id = "agent-ios",
+                Project = "/src/Other.csproj",
+                Tfm = "net10.0-ios",
+                Platform = "iOS",
+                AppName = "OtherApp",
+                Port = server.Port + 1,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "status", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            // stdout stays clean JSON; the target label is written to stderr only.
+            var json = result.ParseJsonOutput();
+            Assert.True(json.GetProperty("running").GetBoolean());
+            Assert.Contains("target:", result.StdErr);
+            Assert.Contains("TargetApp", result.StdErr);
+            Assert.DoesNotContain("target:", result.StdOut);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
+
+    [Fact]
+    public async Task UiStatus_WithSingleAgent_DoesNotLabel()
+    {
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "OnlyApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "status", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.DoesNotContain("target:", result.StdErr);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
+
+    [Fact]
+    public async Task DeviceInfo_WithMultipleAgents_LabelsResolvedTargetOnStderr()
+    {
+        // device info goes through the SimpleGetAsync raw-HTTP path (not CreateAgentClientAsync),
+        // so this guards that those commands now label which app produced the output too (#343 #1).
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "TargetApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            },
+            new AgentRegistration
+            {
+                Id = "agent-ios",
+                Project = "/src/Other.csproj",
+                Tfm = "net10.0-ios",
+                Platform = "iOS",
+                AppName = "OtherApp",
+                Port = server.Port + 1,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "device", "device-info", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            // stdout stays the raw agent JSON; the target label is written to stderr only.
+            Assert.Contains("target:", result.StdErr);
+            Assert.Contains("TargetApp", result.StdErr);
+            Assert.DoesNotContain("target:", result.StdOut);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
+
+    [Fact]
+    public async Task ExtensionsList_WithMultipleAgents_LabelsResolvedTargetOnStderr()
+    {
+        // `extensions list` constructs its AgentClient via the shared CreateAgentClientAsync
+        // helper (issue #343), so it must inherit the same resolved-target labeling as the
+        // other output-producing commands.
+        var server = new MockAgentServer();
+        await server.StartAsync();
+        await using var serverHandle = server;
+        var cli = new CliTestHarness(server.Port);
+
+        DevFlowCommands.ResolveRunningBrokerPortAsync = () => Task.FromResult<int?>(19223);
+        DevFlowCommands.ListBrokerAgentsAsync = _ => Task.FromResult<AgentRegistration[]?>(
+        [
+            new AgentRegistration
+            {
+                Id = "agent-mac",
+                Project = "/src/App.csproj",
+                Tfm = "net10.0-maccatalyst",
+                Platform = "MacCatalyst",
+                AppName = "TargetApp",
+                Port = server.Port,
+                Version = "0.1.0-preview"
+            },
+            new AgentRegistration
+            {
+                Id = "agent-ios",
+                Project = "/src/Other.csproj",
+                Tfm = "net10.0-ios",
+                Platform = "iOS",
+                AppName = "OtherApp",
+                Port = server.Port + 1,
+                Version = "0.1.0-preview"
+            }
+        ]);
+
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "extensions", "list", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("target:", result.StdErr);
+            Assert.Contains("TargetApp", result.StdErr);
+            Assert.DoesNotContain("target:", result.StdOut);
+        }
+        finally
+        {
+            DevFlowCommands.ResetBrokerClientForTests();
+        }
+    }
+
+    [Fact]
+    public async Task Batch_WithSentinelPort_RefusesBeforeRunningAnyCommand()
+    {
+        // Regression guard: BatchAsync injects one resolved port into every sub-command, so an
+        // ambiguous target (sentinel 0) must fail fast before the loop rather than throwing
+        // mid-iteration and aborting the batch in a way that bypasses --continue-on-error.
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeRawAsync("devflow", "batch", "--agent-port", "0");
+
+        Assert.Equal(1, result.ExitCode);
+        var combined = result.StdOut + result.StdErr;
+        Assert.Contains("--agent-port", combined);
+        Assert.Contains("Multiple", combined);
+        // The batch must never have reached the agent for any sub-command.
+        Assert.Empty(server.RecordedRequests);
     }
 }

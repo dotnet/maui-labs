@@ -115,4 +115,27 @@ public class AgentOptions
     /// Default: false to avoid broad attachment overhead.
     /// </summary>
     public bool EnableDetailedUiHooks { get; set; } = false;
+
+    /// <summary>
+    /// Custom routes registered under /api/v1/ext/{namespace}/...
+    /// </summary>
+    public IList<AgentExtension> Extensions { get; } = new List<AgentExtension>();
+
+    public AgentExtension RegisterExtension(
+        string @namespace,
+        string description,
+        int version = 1,
+        IEnumerable<string>? features = null)
+        => RegisterExtension(@namespace, description, $"{version}.0.0", features);
+
+    public AgentExtension RegisterExtension(
+        string @namespace,
+        string description,
+        string version,
+        IEnumerable<string>? features = null)
+    {
+        var extension = new AgentExtension(@namespace, description, version, features);
+        Extensions.Add(extension);
+        return extension;
+    }
 }

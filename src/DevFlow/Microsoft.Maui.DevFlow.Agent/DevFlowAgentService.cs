@@ -530,50 +530,91 @@ public class PlatformAgentService : DevFlowAgentService
         return false;
     }
 
+    protected override bool TryScheduleNativeTapFirst(VisualElement ve)
+    {
+        try
+        {
+#if WINDOWS
+            if (ve.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase buttonBase)
+            {
+                var peer =
+                    Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(buttonBase) ??
+                    Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(buttonBase);
+                if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
+                {
+                    // Wrap the dispatched lambda so a stale/disabled element doesn't
+                    // surface as CoreApplication.UnhandledErrorDetected and crash the
+                    // host app. The TryEnqueue bool only reports whether the work
+                    // item was queued, not whether the invoke itself succeeded.
+                    return buttonBase.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        try { invokeProvider.Invoke(); }
+                        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
+                                                      or InvalidOperationException
+                                                      or UnauthorizedAccessException)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WinUI native invoke skipped: {ex.GetBaseException().Message}");
+                        }
+                    });
+                }
+            }
+#endif
+        }
+        catch { }
+
+        return false;
+    }
+
 #if MACOS
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         try
         {
-            // Get the window - try KeyWindow first, then find any visible window via MAUI
-            var window = NSApplication.SharedApplication.KeyWindow;
-            if (window == null)
-            {
-                var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
-                if (mauiWindow?.Handler?.PlatformView is NSWindow nsWindow)
-                    window = nsWindow;
-            }
+            // Resolve the window without depending on the app being frontmost.
+            // NSApplication.KeyWindow is null when the app is not the active application,
+            // so prefer the NSWindow that actually owns the element being captured.
+            var window = ResolveCaptureWindow(rootElement);
 
             // If a modal sheet is attached, capture it instead of the main window
             if (window?.AttachedSheet is NSWindow sheet)
                 window = sheet;
 
-            // Use CGWindowListCreateImage for composited capture including layer-backed controls
             if (window != null)
             {
+                // Primary: CGWindowListCreateImage gives a composited capture including
+                // layer-backed controls and WebView content. This can return null when the
+                // window is not frontmost / fully occluded (the window server may have purged
+                // its backing store), so we fall through to occlusion-independent paths below.
                 var pngBytes = CaptureWindowViaCG(window);
                 if (pngBytes != null)
                     return pngBytes;
-            }
 
-            // Fallback: DataWithPdfInsideRect (misses layer-backed controls like NSButton, NSSlider)
-            var contentView = window?.ContentView;
-            if (contentView != null)
-            {
-                var bounds = contentView.Bounds;
-                if (bounds.Width > 0 && bounds.Height > 0)
+                var contentView = window.ContentView;
+                if (contentView != null)
                 {
-                    var pdfData = contentView.DataWithPdfInsideRect(bounds);
-                    if (pdfData != null)
+                    // Occlusion-independent fallback: CacheDisplay re-renders the view
+                    // hierarchy directly, so it works even when the window is not frontmost.
+                    var cached = CaptureNSView(contentView);
+                    if (cached != null)
+                        return cached;
+
+                    // Last resort: DataWithPdfInsideRect (misses layer-backed controls like NSButton, NSSlider)
+                    var bounds = contentView.Bounds;
+                    if (bounds.Width > 0 && bounds.Height > 0)
                     {
-                        var image = new NSImage(pdfData);
-                        var tiffData = image.AsTiff();
-                        if (tiffData != null)
+                        var pdfData = contentView.DataWithPdfInsideRect(bounds);
+                        if (pdfData != null)
                         {
-                            var bitmapRep = new NSBitmapImageRep(tiffData);
-                            var pngData = bitmapRep.RepresentationUsingTypeProperties(
-                                NSBitmapImageFileType.Png, new NSDictionary());
-                            return pngData?.ToArray();
+                            using var image = new NSImage(pdfData);
+                            var tiffData = image.AsTiff();
+                            if (tiffData != null)
+                            {
+                                using var bitmapRep = new NSBitmapImageRep(tiffData);
+                                using var pngProperties = new NSDictionary();
+                                var pngData = bitmapRep.RepresentationUsingTypeProperties(
+                                    NSBitmapImageFileType.Png, pngProperties);
+                                return pngData?.ToArray();
+                            }
                         }
                     }
                 }
@@ -582,6 +623,99 @@ public class PlatformAgentService : DevFlowAgentService
         catch { }
 
         return await base.CaptureScreenshotAsync(rootElement);
+    }
+
+    /// <summary>
+    /// Resolves the NSWindow to capture without requiring the app to be frontmost.
+    /// Prefers the window that owns the element being captured (via its NSView), then the
+    /// MAUI application window's platform view, then key/main windows, and finally any
+    /// visible on-screen window.
+    /// </summary>
+    private static NSWindow? ResolveCaptureWindow(VisualElement rootElement)
+    {
+        // 1. The NSWindow that actually hosts the element's native view (focus-independent).
+        if (rootElement.Handler?.PlatformView is NSView elementView && elementView.Window is NSWindow ownerWindow)
+            return ownerWindow;
+
+        // 2. The MAUI application window's platform view.
+        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+        if (NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView) is NSWindow mauiNsWindow)
+            return mauiNsWindow;
+
+        // 3. Key / main window (only non-null when the app is active).
+        var app = NSApplication.SharedApplication;
+        if (app.KeyWindow is NSWindow keyWindow)
+            return keyWindow;
+        if (app.MainWindow is NSWindow mainWindow)
+            return mainWindow;
+
+        // 4. Any visible, on-screen window owned by the app (fall back to the first window).
+        var appWindows = app.DangerousWindows;
+        if (appWindows != null)
+        {
+            NSWindow? firstWindow = null;
+            foreach (var candidate in appWindows)
+            {
+                if (candidate == null)
+                    continue;
+                firstWindow ??= candidate;
+                if (candidate.IsVisible && candidate.WindowNumber > 0)
+                    return candidate;
+            }
+
+            return firstWindow;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts an NSWindow from a MAUI platform view, which may be an NSWindow directly,
+    /// an NSView (use its Window), an NSWindowController, or an NSViewController.
+    /// </summary>
+    private static NSWindow? NSWindowFromPlatformView(object? platformView) => platformView switch
+    {
+        NSWindow window => window,
+        NSView view => view.Window,
+        NSWindowController controller => controller.Window,
+        NSViewController viewController => viewController.View?.Window,
+        _ => null
+    };
+
+    /// <summary>
+    /// On macOS, reports an actionable cause when a screenshot fails because the app window
+    /// is not the frontmost application (a common reason CGWindowListCreateImage returns null).
+    /// </summary>
+    protected override ScreenshotCaptureFailure? DescribeScreenshotFailure()
+    {
+        try
+        {
+            var app = NSApplication.SharedApplication;
+
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            var nsWindow = NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView)
+                ?? app.KeyWindow ?? app.MainWindow;
+
+            var appActive = app.Active;
+            var windowVisible = nsWindow == null || nsWindow.IsVisible;
+
+            if (!appActive || !windowVisible)
+            {
+                return new ScreenshotCaptureFailure(
+                    "Failed to capture screenshot because the app window is not frontmost (the app is not the active application). " +
+                    "Bring the app to the foreground and retry.",
+                    "window-not-frontmost",
+                    retryable: true,
+                    suggestions: new[]
+                    {
+                        "Bring the MAUI app window to the foreground (click it or use the app switcher / Cmd+Tab), then retry.",
+                        "Ensure the app window is visible and not minimized."
+                    });
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)

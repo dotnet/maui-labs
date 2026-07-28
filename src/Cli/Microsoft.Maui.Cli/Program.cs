@@ -55,7 +55,14 @@ public class Program
 
 		try
 		{
-			return await parseResult.InvokeAsync();
+			var exitCode = await parseResult.InvokeAsync();
+
+			// DevFlow command handlers swallow exceptions and signal failure via a flag
+			// instead of a non-zero return; translate that into a non-zero process exit.
+			if (exitCode == 0 && Microsoft.Maui.Cli.DevFlow.DevFlowCommands.ErrorOccurred)
+				exitCode = 1;
+
+			return exitCode;
 		}
 		catch (Exception exception)
 		{
@@ -101,11 +108,15 @@ public class Program
 		rootCommand.Add(DoctorCommand.Create());
 		rootCommand.Add(DeviceCommand.Create());
 		rootCommand.Add(ProfileCommand.Create());
+		rootCommand.Add(ProjectCommands.Create());
 		rootCommand.Add(VersionCommand.Create());
 
 		// Platform-specific command groups
 		rootCommand.Add(AndroidCommands.Create());
 		rootCommand.Add(AppleCommands.Create());
+
+		// Port diagnostics
+		rootCommand.Add(PortCommands.Create());
 
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));

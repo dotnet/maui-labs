@@ -1,13 +1,7 @@
 ---
 name: devflow-automation
 description: >-
-  Automate .NET MAUI app state via explicitly registered DevFlow Actions. USE
-  FOR: discovering and invoking [DevFlowAction] shortcuts, logging in test
-  users, seeding data, navigating to deep screens, bypassing long UI flows to
-  reach target state quickly. DO NOT USE FOR: calling arbitrary methods,
-  invoking DI services or framework types, basic UI interaction (tap/fill/scroll
-  - use DevFlow MCP tools directly), visual tree inspection, screenshot capture,
-  connectivity issues, or build/deployment problems.
+  Automate MAUI app state through DevFlow Actions. USE FOR: `[DevFlowAction]` shortcuts, login, seed data, deep screens. DO NOT USE FOR: arbitrary methods, DI internals, UI MCP tools, connectivity, or build/deploy issues.
 ---
 
 # DevFlow Automation - Actions
@@ -15,6 +9,13 @@ description: >-
 DevFlow Actions are named shortcuts that a .NET MAUI app explicitly exposes for automation with `[DevFlowAction]`. Use them to reach useful app states quickly, such as logging in a test user, seeding data, toggling a feature flag, or navigating to a deep screen.
 
 Actions are opt-in. DevFlow does not expose arbitrary reflection invoke; if you need a new shortcut, add an attributed method in app debug/test code, let Hot Reload apply it, then list and invoke the action.
+
+## Optional Session Feedback Nudge
+
+If action discovery or invocation exposed repeated DevFlow friction, missing
+observability, or several workarounds to reach app state, ask whether the user
+wants to run `maui-devflow-session-review` to summarize product feedback. Do not
+run it automatically.
 
 ## Start by Listing Actions
 

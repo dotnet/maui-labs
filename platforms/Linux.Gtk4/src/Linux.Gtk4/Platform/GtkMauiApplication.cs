@@ -11,6 +11,7 @@ public abstract class GtkMauiApplication : IPlatformApplication
 {
 	private const string DefaultApplicationId = "com.maui.linux";
 	private const string MauiApplicationIdMetadataKey = "MauiApplicationId";
+
 	private Gtk.Application _gtkApp = null!;
 	private IApplication _mauiApp = null!;
 	private GtkMauiContext _applicationContext = null!;
@@ -33,6 +34,9 @@ public abstract class GtkMauiApplication : IPlatformApplication
 
 	public void Run(string[] args)
 	{
+		// Fail fast with a friendly message before any GirCore GTK initialization.
+		GtkRuntime.EnsureSupported();
+
 		var applicationId = string.IsNullOrWhiteSpace(ApplicationId) ? null : ApplicationId;
 		_gtkApp = Gtk.Application.New(applicationId, Gio.ApplicationFlags.DefaultFlags);
 

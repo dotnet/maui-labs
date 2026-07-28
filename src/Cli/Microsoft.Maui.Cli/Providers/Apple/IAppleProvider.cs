@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Maui.Cli.Models;
+using Xamarin.MacDev;
 
 namespace Microsoft.Maui.Cli.Providers.Apple;
 
@@ -98,6 +99,80 @@ public interface IAppleProvider
 	/// <param name="bundleIdentifier">App bundle identifier.</param>
 	/// <param name="containerType">Container type (e.g., "app", "data", "groups"). Null for default (app).</param>
 	string? GetAppContainer(string udid, string bundleIdentifier, string? containerType = null);
+
+	/// <summary>
+	/// Grants, revokes, or resets a privacy permission on a simulator.
+	/// Wraps <see cref="SimulatorService.Privacy"/>.
+	/// </summary>
+	/// <param name="action">One of <c>grant</c>, <c>revoke</c>, or <c>reset</c>.</param>
+	/// <param name="udid">Simulator UDID or name.</param>
+	/// <param name="permission">The privacy permission (service) to operate on.</param>
+	/// <param name="bundleIdentifier">Optional bundle identifier to scope the change; null applies to all apps.</param>
+	bool SetPrivacy(string action, string udid, PrivacyPermission permission, string? bundleIdentifier = null);
+
+	/// <summary>
+	/// Sets the UI appearance (light/dark) of a simulator. Wraps <see cref="SimulatorService.SetAppearance"/>.
+	/// </summary>
+	bool SetAppearance(string udid, SimulatorAppearance appearance);
+
+	/// <summary>
+	/// Gets the current UI appearance of a simulator. Wraps <see cref="SimulatorService.GetAppearance"/>.
+	/// Returns null when the value cannot be determined.
+	/// </summary>
+	SimulatorAppearance? GetAppearance(string udid);
+
+	/// <summary>
+	/// Overrides status-bar values on a simulator. Wraps <see cref="SimulatorService.StatusBar"/>.
+	/// </summary>
+	bool OverrideStatusBar(string udid, StatusBarOverrides overrides);
+
+	/// <summary>
+	/// Clears all status-bar overrides on a simulator. Wraps <see cref="SimulatorService.StatusBar"/>.
+	/// </summary>
+	bool ClearStatusBar(string udid);
+
+	/// <summary>
+	/// Opens a URL on a simulator. Wraps <see cref="SimulatorService.OpenUrl"/>.
+	/// </summary>
+	bool OpenUrl(string udid, string url);
+
+	/// <summary>
+	/// Sends a push notification to a simulator. The payload may be inline JSON or a file path.
+	/// Wraps <see cref="SimulatorService.Push"/>.
+	/// </summary>
+	bool PushNotification(string udid, string bundleIdentifier, string payloadJsonOrPath);
+
+	/// <summary>
+	/// Sets the simulated GPS location on a simulator. Wraps <see cref="SimulatorService.Location"/>.
+	/// </summary>
+	bool SetLocation(string udid, double latitude, double longitude);
+
+	/// <summary>
+	/// Clears the simulated GPS location on a simulator. Wraps <see cref="SimulatorService.Location"/>.
+	/// </summary>
+	bool ClearLocation(string udid);
+
+	/// <summary>
+	/// Runs a GPX route simulation on a simulator. Wraps <see cref="SimulatorService.Location"/>.
+	/// </summary>
+	bool RunLocation(string udid, string gpxPath);
+
+	/// <summary>
+	/// Adds media files (photos, videos) to a simulator's media library. Wraps <see cref="SimulatorService.AddMedia"/>.
+	/// </summary>
+	bool AddMedia(string udid, IEnumerable<string> paths);
+
+	/// <summary>
+	/// Takes a screenshot of a simulator and saves it to <paramref name="outputPath"/>.
+	/// Wraps <see cref="SimulatorService.ScreenCapture"/>.
+	/// </summary>
+	bool Screenshot(string udid, string outputPath, ScreenshotFormat format = ScreenshotFormat.Png);
+
+	/// <summary>
+	/// Starts a video recording of a simulator. Dispose the returned handle to stop recording.
+	/// Wraps <see cref="SimulatorService.ScreenCapture"/>. Returns null when recording cannot be started.
+	/// </summary>
+	IDisposable? StartRecording(string udid, string outputPath, RecordingOptions? options = null);
 
 	/// <summary>
 	/// Gets the health status of Apple tooling (Xcode, CLT, simulators).

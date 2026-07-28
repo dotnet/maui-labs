@@ -1,11 +1,7 @@
 ---
 name: android-slim-bindings
 description: >-
-  Create and update slim/native platform interop bindings for Android in .NET MAUI and .NET for Android projects.
-  Guides through creating Java/Kotlin wrappers, configuring Gradle projects, resolving Maven dependencies,
-  generating C# bindings, and integrating native Android libraries using the Native Library Interop (NLI) approach.
-  USE FOR: Android bindings, AAR/JAR integration, Kotlin interop, Maven dependencies, bridging native Android SDKs to .NET.
-  DO NOT USE FOR: iOS/macOS bindings (use ios-slim-bindings), general MAUI app development, NuGet package issues.
+  Create Android slim bindings for MAUI/.NET Android. USE FOR: slim Android binding, Kotlin/Java wrappers, build.gradle.kts, Maven, AAR/JAR, AndroidMavenLibrary, AndroidLibrary, @JvmStatic, XA4241/XA4242, Xamarin.AndroidX/Kotlin NuGets. DO NOT USE FOR: iOS/macOS bindings, general MAUI apps, or NuGet packaging.
 ---
 
 # When to use this skill
@@ -136,10 +132,10 @@ dotnet new androidbinding -n MyBinding.Android.Binding
 ```
 
 Key `.csproj` elements:
-- `< reference the built AARAndroidLibrary>` 
-- `< NuGet packages for transitive dependenciesPackageReference>` 
-- `<AndroidMavenLibrary Bind=" Maven deps without NuGet equivalentfalse">` 
-- `< compile-time only dependenciesAndroidIgnoredJavaDependency>` 
+- `<AndroidLibrary>` — reference the built AAR
+- `<PackageReference>` — NuGet packages for transitive dependencies
+- `<AndroidMavenLibrary Bind="false">` — Maven deps without a NuGet equivalent
+- `<AndroidIgnoredJavaDependency>` — compile-time only dependencies
 
 Configure `Transforms/Metadata.xml` for namespace renaming and parameter names.
 

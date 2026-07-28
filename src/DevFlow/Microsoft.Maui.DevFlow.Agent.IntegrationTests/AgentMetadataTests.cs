@@ -92,6 +92,6 @@ public class AgentMetadataTests : IntegrationTestBase
         Assert.NotNull(status!.Capabilities);
         Assert.Equal(
             status.Capabilities!.Jobs,
-            capabilities.GetProperty("jobs").GetProperty("supported").GetBoolean());
+            capabilities.GetProperty("capabilities").GetProperty("device.jobs").GetProperty("supported").GetBoolean());
     }
 }

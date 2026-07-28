@@ -1,15 +1,7 @@
 ---
 name: maui-devflow-debug
 description: >-
-  Run build, deploy, inspect, and fix loops for .NET MAUI apps that already have
-  MAUI DevFlow integrated. USE FOR: launching MAUI apps, selecting devices or
-  emulators, waiting for or recovering agent connections, broker/port/adb
-  connectivity issues, visual tree inspection, screenshots, UI interaction,
-  Blazor WebView CDP debugging, reading DevFlow logs, and iterative app
-  debugging. DO NOT USE FOR: first-time DevFlow package setup (use
-  maui-devflow-onboard), or generic desktop automation unrelated to MAUI. INVOKES:
-  maui devflow CLI, dotnet CLI, Android adb/android tools, and Apple simctl
-  tools.
+  Run DevFlow inspect-and-fix loops for MAUI apps. USE FOR: launch, device selection, agent recovery, broker/port/adb, tree/screenshot, Blazor CDP, iterative UI debugging. DO NOT USE FOR: first-time setup or non-MAUI automation. INVOKES: `maui devflow`, `dotnet`, `adb`, `simctl`.
 ---
 
 # DevFlow Debug
@@ -31,6 +23,13 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 
 - If DevFlow packages or `MauiProgram.cs` registration are missing, use `maui-devflow-onboard`.
 - If the failure is a generic build or SDK issue with no DevFlow angle, use normal .NET/MAUI diagnostics.
+
+## Optional Session Feedback Nudge
+
+If you have retried the same MAUI DevFlow workflow several times, tried multiple
+workarounds, or are ending a long DevFlow-assisted debugging session, ask
+whether the user wants to run `maui-devflow-session-review` to summarize friction
+for MAUI DevFlow product feedback. Do not run it automatically.
 
 ## Core Loop
 

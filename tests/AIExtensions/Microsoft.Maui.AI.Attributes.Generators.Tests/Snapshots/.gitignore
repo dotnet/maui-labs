@@ -1,0 +1,2 @@
+# Verify writes .received.* on snapshot mismatch; these are never committed.
+*.received.*

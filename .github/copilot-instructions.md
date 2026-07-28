@@ -269,7 +269,7 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
             displayName: {Product} - Windows
             pool:
               name: NetCore1ESPool-Internal
-              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+              demands: ImageOverride -equals windows.vs2026.amd64
             strategy:
               matrix:
                 Release:
@@ -284,9 +284,10 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
                 useGlobalJson: true
             # CUSTOMIZE: If the product needs MAUI workloads, add these steps
             # before the build (copy from the DevFlow job):
-            #   - Provision .NET SDK via Arcade (eng\common\dotnet.cmd --info)
-            #   - Install MAUI workloads (.dotnet\dotnet workload install maui ...)
-            #   - Install Android SDK dependencies
+            #   - Install MAUI workloads through Arcade's wrapper
+            #     (eng\common\dotnet.cmd workload install maui ...)
+            #   - Install Android SDK dependencies through eng/common/dotnet.ps1
+            #     in a pwsh step so quoted paths remain a single argument
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -319,7 +320,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
           timeoutInMinutes: 15
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             outputs:
@@ -343,7 +344,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal
-            image: windows.vs2026preview.scout.amd64
+            image: windows.vs2026.amd64
             os: windows
           templateContext:
             type: releaseJob

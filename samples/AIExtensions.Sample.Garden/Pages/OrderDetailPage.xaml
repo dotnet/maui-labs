@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Pages.OrderDetailPage"
+             x:DataType="vm:OrderDetailViewModel"
+             Title="Order Details"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="Auto,*"
+          BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
+        <!-- Header -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0"
+                Padding="16,8"
+                SafeAreaEdges="Container">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Button Text="&#xF36A;"
+                        FontFamily="FluentFilled"
+                        FontSize="{StaticResource FontSizeTitle}"
+                        Padding="8,4"
+                        BackgroundColor="Transparent"
+                        TextColor="{StaticResource White}"
+                        VerticalOptions="Center"
+                        Clicked="OnBackClicked" />
+                <Label Grid.Column="1"
+                       Text="Order Details"
+                       FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                       TextColor="{StaticResource White}"
+                       VerticalOptions="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Order detail content -->
+        <ScrollView Grid.Row="1" Padding="16">
+            <VerticalStackLayout Spacing="16" MaximumWidthRequest="600"
+                                 HorizontalOptions="Center">
+
+                <!-- Order summary card -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 16"
+                        Padding="20">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="{Binding PlacedAt}"
+                               FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold" />
+                        <Label FontSize="{StaticResource FontSizeBody}"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}">
+                            <Label.Text>
+                                <MultiBinding StringFormat="{}{0} items">
+                                    <Binding Path="ItemCount" />
+                                </MultiBinding>
+                            </Label.Text>
+                        </Label>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Line items -->
+                <Label Text="Items"
+                       FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold" />
+
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Lines}" Spacing="6">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:OrderLineViewModel">
+                            <Border BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                                    Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 10"
+                                    Padding="12,10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnProductTapped"
+                                                          CommandParameter="{Binding .}" />
+                                </Border.GestureRecognizers>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <Label Text="{Binding Emoji}"
+                                           FontFamily="FluentFilled"
+                                           FontSize="20"
+                                           TextColor="{StaticResource Primary}"
+                                           VerticalOptions="Center" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding ItemDescription}"
+                                           FontSize="{StaticResource FontSizeBody}"
+                                           VerticalOptions="Center" />
+                                    <Label Grid.Column="2"
+                                           Text="{Binding SubtotalLabel}"
+                                           FontSize="{StaticResource FontSizeBody}"
+                                           FontAttributes="Bold"
+                                           VerticalOptions="Center"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- Total and reorder -->
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}" />
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <Label Text="{Binding Total, StringFormat='Total: {0}'}"
+                           FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                           VerticalOptions="Center"
+                           TextColor="{StaticResource Primary}" />
+                    <Button Grid.Column="1"
+                            Text="Reorder"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="{StaticResource White}"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            Command="{Binding ReorderCommand}" />
+                </Grid>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+
+</ContentPage>

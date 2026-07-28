@@ -1,0 +1,29 @@
+scenarios:
+  - name: "Use SafeAreaEdges for .NET 10 safe area layout"
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      I need to update an iOS/Mac Catalyst MAUI page for safe area handling in
+      .NET 10. Review this against current .NET MAUI APIs. The old suggestion I
+      got was to call On<iOS>().SetUseSafeArea(true). What should I use instead
+      in XAML?
+    assertions:
+      - type: "output_contains"
+        value: "SafeAreaEdges"
+      - type: "output_matches"
+        pattern: "Container|All|SoftInput"
+      - type: "output_matches"
+        pattern: "(?i)instead|replace|legacy|old|obsolete|deprecated|removed"
+    rubric:
+      - "Recommends the current SafeAreaEdges API for .NET 10+"
+      - "Does not recommend the old iOS-only SetUseSafeArea pattern"
+      - "Mentions checking the target framework before applying the replacement"
+    timeout: 240

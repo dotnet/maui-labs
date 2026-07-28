@@ -39,6 +39,7 @@ public class PhiSilicaChatClientFunctionCallingTests : ChatClientFunctionCalling
 	/// This is a reusable pattern — not specific to any particular tool.
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public override async Task GetResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
 		int timeCallCount = 0;
@@ -85,6 +86,7 @@ public class PhiSilicaChatClientFunctionCallingTests : ChatClientFunctionCalling
 	/// Streaming version with generic SLM dependency guidance.
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public override async Task GetStreamingResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
 		int timeCallCount = 0;

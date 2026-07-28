@@ -1,0 +1,366 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Views.ChatView"
+             x:Name="ThisView"
+             x:DataType="vm:ChatViewModel"
+             local:ViewModelBinder.Type="{x:Type vm:ChatViewModel}">
+
+    <ContentView.Resources>
+        <local:IsNotNullConverter x:Key="IsNotNullConverter" />
+    </ContentView.Resources>
+
+    <Grid RowDefinitions="*,Auto" RowSpacing="0"
+          SafeAreaEdges="SoftInput">
+
+        <!-- Chat messages — full width so scrollbar is at edge, content padded -->
+        <CollectionView Grid.Row="0"
+                        x:Name="MessagesView"
+                        AutomationId="MessagesView"
+                        ItemsSource="{Binding Messages}"
+                        Margin="0,8,0,0"
+                        BackgroundColor="Transparent"
+                        VerticalOptions="Fill">
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout Orientation="Vertical" ItemSpacing="6" />
+            </CollectionView.ItemsLayout>
+
+            <CollectionView.ItemTemplate>
+                <views:ChatMessageTemplateSelector>
+                    <views:ChatMessageTemplateSelector.UserTemplate>
+                        <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                            <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+                                <Border BackgroundColor="{AppThemeBinding Light={StaticResource UserBubbleLight}, Dark={StaticResource UserBubbleDark}}"
+                                        Padding="12,8"
+                                        HorizontalOptions="End"
+                                        MaximumWidthRequest="560"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 12">
+                                    <Label Text="{Binding Text}"
+                                           FontSize="{StaticResource FontSizeBody}"
+                                           TextColor="{AppThemeBinding Light={StaticResource UserBubbleTextLight}, Dark={StaticResource UserBubbleTextDark}}" />
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </views:ChatMessageTemplateSelector.UserTemplate>
+
+                    <views:ChatMessageTemplateSelector.AssistantTemplate>
+                        <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                            <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+                                <Border BackgroundColor="{AppThemeBinding Light={StaticResource AssistantBubbleLight}, Dark={StaticResource AssistantBubbleDark}}"
+                                        Padding="12,8"
+                                        HorizontalOptions="Start"
+                                        MaximumWidthRequest="560"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 12">
+                                    <Border.Shadow>
+                                        <Shadow Brush="Black" Offset="0,1" Radius="3" Opacity="0.08" />
+                                    </Border.Shadow>
+                                    <Label Text="{Binding Text}" FontSize="{StaticResource FontSizeBody}" />
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </views:ChatMessageTemplateSelector.AssistantTemplate>
+
+                    <views:ChatMessageTemplateSelector.ToolTemplate>
+                        <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                            <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+                                <VerticalStackLayout Spacing="0" HorizontalOptions="Start">
+                                    <!-- Tool name row — tap to expand -->
+                                    <HorizontalStackLayout Spacing="4" Padding="4,2">
+                                        <HorizontalStackLayout.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding ToggleExpandCommand}" />
+                                        </HorizontalStackLayout.GestureRecognizers>
+                                        <Label Text="{Binding ExpandIcon}"
+                                               FontFamily="FluentFilled"
+                                               FontSize="{StaticResource FontSizeCaption}"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}"
+                                               VerticalOptions="Center"
+                                               WidthRequest="14" />
+                                        <Label Text="{Binding Icon}"
+                                               FontFamily="FluentFilled"
+                                               FontSize="{StaticResource FontSizeCaption}"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}"
+                                               IsVisible="{Binding HasIcon}"
+                                               VerticalOptions="Center" />
+                                        <Label Text="{Binding Text}"
+                                               FontSize="{StaticResource FontSizeCaption}"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}"
+                                               FontAttributes="Italic"
+                                               VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+
+                                    <!-- Expandable details: args + result -->
+                                    <Border IsVisible="{Binding IsExpanded}"
+                                            Margin="18,4,0,4"
+                                            Padding="10,8"
+                                            MaximumHeightRequest="300"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SurfaceDark}}"
+                                            Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 8">
+                                        <ScrollView>
+                                            <VerticalStackLayout Spacing="6">
+                                                <Label Text="Arguments"
+                                                       FontSize="{StaticResource FontSizeCaption}"
+                                                       FontAttributes="Bold"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}"
+                                                       IsVisible="{Binding ToolArgs, Converter={StaticResource IsNotNullConverter}}" />
+                                                <Label Text="{Binding ToolArgs}"
+                                                       FontSize="{StaticResource FontSizeCaption}"
+                                                       FontFamily="monospace"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}"
+                                                       IsVisible="{Binding ToolArgs, Converter={StaticResource IsNotNullConverter}}"
+                                                       LineBreakMode="WordWrap" />
+                                                <Label Text="Result"
+                                                       FontSize="{StaticResource FontSizeCaption}"
+                                                       FontAttributes="Bold"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}"
+                                                       IsVisible="{Binding ToolResult, Converter={StaticResource IsNotNullConverter}}" />
+                                                <Label Text="{Binding ToolResult}"
+                                                       FontSize="{StaticResource FontSizeCaption}"
+                                                       FontFamily="monospace"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}"
+                                                       IsVisible="{Binding ToolResult, Converter={StaticResource IsNotNullConverter}}"
+                                                       LineBreakMode="WordWrap" />
+                                            </VerticalStackLayout>
+                                        </ScrollView>
+                                    </Border>
+                                </VerticalStackLayout>
+                            </Grid>
+                        </DataTemplate>
+                    </views:ChatMessageTemplateSelector.ToolTemplate>
+
+                    <views:ChatMessageTemplateSelector.SystemTemplate>
+                        <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                            <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+                                <Grid HorizontalOptions="Center">
+                                    <Label Text="{Binding Text}"
+                                           FontSize="{StaticResource FontSizeCaption}"
+                                           TextColor="{StaticResource Primary}"
+                                           FontAttributes="Bold"
+                                           HorizontalOptions="Center"
+                                           Padding="8,4" />
+                                </Grid>
+                            </Grid>
+                        </DataTemplate>
+                    </views:ChatMessageTemplateSelector.SystemTemplate>
+
+                    <views:ChatMessageTemplateSelector.ErrorTemplate>
+                        <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                            <Grid HorizontalOptions="Fill" MaximumWidthRequest="840" Padding="16,0">
+                                <Grid HorizontalOptions="Start">
+                                    <Label Text="{Binding Text}"
+                                           FontSize="{StaticResource FontSizeCaption}"
+                                           TextColor="{StaticResource Danger}"
+                                           Padding="4,2" />
+                                </Grid>
+                            </Grid>
+                        </DataTemplate>
+                    </views:ChatMessageTemplateSelector.ErrorTemplate>
+                </views:ChatMessageTemplateSelector>
+            </CollectionView.ItemTemplate>
+
+            <!-- Empty view — welcome screen (ScrollView needed for long tool list) -->
+            <CollectionView.EmptyView>
+                <ScrollView>
+                    <Grid Padding="24" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12"
+                          MaximumWidthRequest="840" HorizontalOptions="Center">
+                    <Label Grid.Row="0"
+                           Text="&#xF788;"
+                           FontFamily="FluentFilled"
+                           FontSize="{StaticResource FontSizeHero}"
+                           TextColor="{StaticResource Primary}"
+                           HorizontalOptions="Center" />
+                    <Label Grid.Row="1"
+                           Text="Welcome to Sage, your personal garden shopper"
+                           FontSize="{StaticResource FontSizeTitle}"
+                           FontAttributes="Bold"
+                           HorizontalTextAlignment="Center" />
+                    <Label Grid.Row="2"
+                           Text="Tap a chip below to get started, or browse the catalog. The assistant can use these tools:"
+                           FontSize="{StaticResource FontSizeBody}"
+                           HorizontalTextAlignment="Center"
+                           LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                    <FlexLayout Grid.Row="3"
+                                BindableLayout.ItemsSource="{Binding AvailableTools}"
+                                Wrap="Wrap"
+                                JustifyContent="Center"
+                                AlignItems="Start"
+                                AlignContent="Start">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ToolInfoViewModel">
+                                <Border Margin="4"
+                                        Padding="10,8"
+                                        FlexLayout.Basis="{OnIdiom Phone=150, Tablet=240, Desktop=240}"
+                                        FlexLayout.Grow="1"
+                                        FlexLayout.Shrink="1"
+                                        MinimumWidthRequest="{OnIdiom Phone=120, Tablet=220, Desktop=220}"
+                                        MaximumWidthRequest="{OnIdiom Phone=190, Tablet=300, Desktop=300}"
+                                        HeightRequest="92"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource ToolCardBackgroundLight}, Dark={StaticResource ToolCardBackgroundDark}}"
+                                        Stroke="{AppThemeBinding Light={StaticResource ToolCardStrokeLight}, Dark={StaticResource ToolCardStrokeDark}}"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 8">
+                                    <Grid RowDefinitions="Auto,*" RowSpacing="2">
+                                        <Label Text="{Binding Name}"
+                                               MaxLines="1"
+                                               LineBreakMode="TailTruncation"
+                                               FontAttributes="Bold"
+                                               FontSize="{StaticResource FontSizeBody}"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                                        <Label Grid.Row="1"
+                                               Text="{Binding Description}"
+                                               FontSize="{StaticResource FontSizeCaption}"
+                                               MaxLines="3"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </FlexLayout>
+                </Grid>
+                </ScrollView>
+            </CollectionView.EmptyView>
+        </CollectionView>
+
+        <!-- Input area — full width container, content centered -->
+        <VerticalStackLayout Grid.Row="1"
+                             IsVisible="{Binding IsInputVisible}"
+                             Spacing="0"
+                             BackgroundColor="Transparent"
+                             MaximumWidthRequest="840"
+                             HorizontalOptions="Center">
+
+            <!-- Suggestion chips with fade edges -->
+            <Grid Padding="0,8,0,0">
+                <ScrollView Orientation="Horizontal"
+                            HorizontalScrollBarVisibility="Never"
+                            Padding="24,0">
+                    <HorizontalStackLayout BindableLayout.ItemsSource="{Binding SuggestionPrompts}"
+                                           Spacing="6">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Border BackgroundColor="{AppThemeBinding Light={StaticResource ChipBackgroundLight}, Dark={StaticResource ChipBackgroundDark}}"
+                                        Stroke="{AppThemeBinding Light={StaticResource ChipStrokeLight}, Dark={StaticResource ChipStrokeDark}}"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 16"
+                                        Padding="0">
+                                    <Button Text="{Binding}"
+                                            FontSize="{StaticResource FontSizeBody}"
+                                            TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                                            BackgroundColor="Transparent"
+                                            BorderWidth="0"
+                                            Padding="14,8"
+                                            Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.RunSuggestionCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </HorizontalStackLayout>
+                </ScrollView>
+
+                <!-- Left fade -->
+                <BoxView HorizontalOptions="Start"
+                         WidthRequest="24"
+                         InputTransparent="True"
+                         Background="{AppThemeBinding
+                             Light={LinearGradientBrush StartPoint='0,0.5', EndPoint='1,0.5',
+                                 {GradientStop Color='#F2F5F0', Offset=0},
+                                 {GradientStop Color='#00F2F5F0', Offset=1}},
+                             Dark={LinearGradientBrush StartPoint='0,0.5', EndPoint='1,0.5',
+                                 {GradientStop Color='#1A1A18', Offset=0},
+                                 {GradientStop Color='#001A1A18', Offset=1}}}" />
+
+                <!-- Right fade -->
+                <BoxView HorizontalOptions="End"
+                         WidthRequest="24"
+                         InputTransparent="True"
+                         Background="{AppThemeBinding
+                             Light={LinearGradientBrush StartPoint='0,0.5', EndPoint='1,0.5',
+                                 {GradientStop Color='#00F2F5F0', Offset=0},
+                                 {GradientStop Color='#F2F5F0', Offset=1}},
+                             Dark={LinearGradientBrush StartPoint='0,0.5', EndPoint='1,0.5',
+                                 {GradientStop Color='#001A1A18', Offset=0},
+                                 {GradientStop Color='#1A1A18', Offset=1}}}" />
+            </Grid>
+
+            <!-- Text entry row — borderless entry inside our own border -->
+            <Grid Padding="12,8,12,12"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Border StrokeShape="RoundRectangle 20"
+                        Stroke="{AppThemeBinding Light={StaticResource InputStrokeLight}, Dark={StaticResource InputStrokeDark}}"
+                        StrokeThickness="1"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackgroundLight}, Dark={StaticResource InputBackgroundDark}}"
+                        Padding="0">
+                    <Entry AutomationId="ChatInput"
+                           Text="{Binding InputText}"
+                           IsEnabled="{Binding IsNotBusy}"
+                           Placeholder="Ask about products..."
+                           ReturnType="Send"
+                           ReturnCommand="{Binding SendCommand}"
+                           FontSize="{StaticResource FontSizeBody}"
+                           BackgroundColor="Transparent"
+                           Margin="16,0" />
+                </Border>
+                <Button Grid.Column="1"
+                        Text="Send"
+                        AutomationId="SendButton"
+                        Command="{Binding SendCommand}"
+                        IsEnabled="{Binding IsNotBusy}"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="{StaticResource White}"
+                        FontSize="{StaticResource FontSizeBody}"
+                        CornerRadius="20"
+                        Padding="16,8"
+                        VerticalOptions="Center" />
+            </Grid>
+        </VerticalStackLayout>
+
+        <!-- Approval area -->
+        <Border Grid.Row="1"
+                Padding="12,8,12,12"
+                IsVisible="{Binding IsApprovalPending}"
+                BackgroundColor="{AppThemeBinding Light={StaticResource ApprovalBackgroundLight}, Dark={StaticResource ApprovalBackgroundDark}}"
+                Margin="12,8"
+                StrokeShape="RoundRectangle 12"
+                StrokeThickness="0"
+                MaximumWidthRequest="840">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <Label Text="{Binding ApprovalText}"
+                       FontSize="{StaticResource FontSizeBody}"
+                       FontAttributes="Bold"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation" />
+                <Button Grid.Column="1"
+                        Text="Approve"
+                        AutomationId="ApproveButton"
+                        Command="{Binding ApproveCommand}"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="{StaticResource White}"
+                        FontSize="{StaticResource FontSizeBody}"
+                        CornerRadius="8"
+                        Padding="16,8"
+                        VerticalOptions="Center" />
+                <Button Grid.Column="2"
+                        Text="Reject"
+                        AutomationId="RejectButton"
+                        Command="{Binding RejectCommand}"
+                        BackgroundColor="{StaticResource Danger}"
+                        TextColor="{StaticResource White}"
+                        FontSize="{StaticResource FontSizeBody}"
+                        CornerRadius="8"
+                        Padding="16,8"
+                        VerticalOptions="Center" />
+            </Grid>
+        </Border>
+
+    </Grid>
+
+</ContentView>

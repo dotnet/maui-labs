@@ -43,6 +43,67 @@ public class AndroidAppDriver : AppDriverBase
         await RunAdbAsync($"shell input keyevent {keycode}");
     }
 
+    public override async Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
+    {
+        if (scope == ThemeSetScope.App)
+            return await base.SetThemeAsync(theme, scope).ConfigureAwait(false);
+
+        if (scope == ThemeSetScope.System || await ShouldUseHostThemeAsync().ConfigureAwait(false))
+            return await SetHostThemeAsync(theme).ConfigureAwait(false);
+
+        return await base.SetThemeAsync(theme, ThemeSetScope.App).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ShouldUseHostThemeAsync()
+    {
+        try
+        {
+            var status = await GetStatusAsync().ConfigureAwait(false);
+            if (status?.DeviceType?.Equals("Virtual", StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+            if (status?.DeviceType?.Equals("Physical", StringComparison.OrdinalIgnoreCase) == true)
+                return false;
+        }
+        catch
+        {
+        }
+
+        if (Serial?.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        try
+        {
+            var qemu = await RunAdbWithOutputAsync("shell getprop ro.kernel.qemu").ConfigureAwait(false);
+            return qemu.Trim().Equals("1", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<ThemeResult> SetHostThemeAsync(DevFlowTheme theme)
+    {
+        var mode = theme switch
+        {
+            DevFlowTheme.Light => "no",
+            DevFlowTheme.Dark => "yes",
+            _ => "auto",
+        };
+
+        await RunAdbAsync($"shell cmd uimode night {mode}").ConfigureAwait(false);
+
+        return new ThemeResult
+        {
+            Theme = theme,
+            RequestedTheme = theme,
+            EffectiveTheme = theme,
+            Source = "system",
+            Success = true,
+            Message = $"Android system theme set to {theme.ToProtocolString()}.",
+        };
+    }
+
     // ──────────────────────────────────────────────
     // Dialog Detection & Dismissal via UIAutomator
     // ──────────────────────────────────────────────

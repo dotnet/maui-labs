@@ -1,0 +1,18 @@
+{
+  Diagnostics: [
+    {
+      Location: : (6,1)-(6,26),
+      Message: [AIToolSource(typeof(Sample.Svc))] references a type with no [ExportAIFunction] members.,
+      Severity: Warning,
+      WarningLevel: 1,
+      Descriptor: {
+        Id: MAUIAI003,
+        Title: MAUIAI003,
+        MessageFormat: [AIToolSource(typeof(Sample.Svc))] references a type with no [ExportAIFunction] members.,
+        Category: Microsoft.Maui.AI.Attributes,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

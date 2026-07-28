@@ -16,6 +16,8 @@
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);MAUIAI0001;CA1416</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
+    <!-- Required for DeviceRunners dotnet test integration -->
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -46,16 +48,7 @@
     <PackageReference Include="DeviceRunners.UITesting.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Maui" />
-  </ItemGroup>
-
-  <!-- XHarness support for CI/headless runs -->
-  <PropertyGroup Condition="'$(TestingMode)' == 'XHarness'">
-    <DefineConstants>$(DefineConstants);MODE_XHARNESS</DefineConstants>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(TestingMode)' == 'XHarness'">
-    <PackageReference Include="DeviceRunners.XHarness.Xunit" />
-    <PackageReference Include="DeviceRunners.XHarness.Maui" />
+    <PackageReference Include="DeviceRunners.Testing.Targets" />
   </ItemGroup>
 
   <!-- Windows Phi Silica: Copilot Runtime WinRT AI APIs -->

@@ -54,3 +54,13 @@ jobs:
       pack: true
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+
+  # Step 3: Run device tests on Mac Catalyst via DeviceRunners + dotnet test.
+  device-tests-maccatalyst:
+    uses: ./.github/workflows/_device-tests.yml
+    with:
+      project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
+      project-name: essentialsai
+      target-framework: net10.0-maccatalyst
+      filter: 'RequiresModel!=true'
+      xcode-version: '26.3'

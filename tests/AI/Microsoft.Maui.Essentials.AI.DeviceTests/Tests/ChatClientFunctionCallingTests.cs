@@ -14,6 +14,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	protected virtual IChatClient EnableFunctionCalling(T client) => client;
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_CallsFunctionAndReturnsResult()
 	{
 		bool functionWasCalled = false;
@@ -48,6 +49,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_HandlesMultipleFunctionCalls()
 	{
 		int weatherCallCount = 0;
@@ -88,6 +90,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_CallsFunctionAndStreamsUpdates()
 	{
 		bool functionWasCalled = false;
@@ -127,6 +130,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_StreamsToolCallContent()
 	{
 		var weatherTool = AIFunctionFactory.Create(
@@ -162,6 +166,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_StreamsToolResultContent()
 	{
 		var weatherTool = AIFunctionFactory.Create(
@@ -197,6 +202,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ToolResultHasCorrectRole()
 	{
 		// Verifies that streaming updates containing FunctionResultContent
@@ -233,6 +239,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_StreamsToolCallBeforeToolResult()
 	{
 		var weatherTool = AIFunctionFactory.Create(
@@ -277,6 +284,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_HandlesMultipleFunctionCalls()
 	{
 		int weatherCallCount = 0;
@@ -321,6 +329,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_FunctionWithComplexParameters()
 	{
 		bool functionWasCalled = false;
@@ -351,6 +360,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_FunctionWithComplexParameters()
 	{
 		bool functionWasCalled = false;
@@ -385,6 +395,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
 		int timeCallCount = 0;
@@ -457,6 +468,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
 		int timeCallCount = 0;
@@ -530,6 +542,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_FunctionWithEnumParameter_CallsToolCorrectly()
 	{
 		// This test verifies that enum parameters are properly preserved in the JSON schema
@@ -593,6 +606,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_FunctionWithEnumParameter_CallsToolCorrectly()
 	{
 		// This test verifies enum parameters work correctly in streaming scenarios
@@ -659,6 +673,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_MultiTurnConversationWithToolCalling_SucceedsOnFollowUp()
 	{
 		var weatherTool = AIFunctionFactory.Create(
@@ -704,6 +719,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_MultiTurnConversationWithToolCalling_SucceedsOnFollowUp()
 	{
 		var weatherTool = AIFunctionFactory.Create(
@@ -749,6 +765,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_HistoryBuiltFromStreamedContent_SucceedsOnFollowUp()
 	{
 		// This test simulates the exact pattern ChatViewModel uses:
@@ -822,6 +839,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_HistoryBuiltFromStreamedContent_ToolResultsPreservedInContext()
 	{
 		// Verifies tool results from streamed turn 1 are available in turn 2's context.
@@ -885,6 +903,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_MultiTurnConversationWithToolCalling_ToolResultsPreservedInContext()
 	{
 		// Use a distinctive, unlikely-to-be-hallucinated temperature value
@@ -925,6 +944,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextContent()
 	{
 		// Verifies that no text content with the literal value "null" leaks through
@@ -962,6 +982,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithToolCalling_StreamOrderIsToolsBeforeResponse()
 	{
 		// Records the exact order of content types in a tool-calling stream
@@ -1022,6 +1043,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithToolCalling_StreamOrderPreservedThroughFICC()
 	{
 		// Tests the stream order through a FunctionInvokingChatClient middleware chain.
@@ -1079,6 +1101,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_InformationalOnlyFunctionCalls_NotInvokedByFICC()
 	{
 		// The native Apple Intelligence framework invokes tools itself (via AIFunctionToolAdapter).
@@ -1117,6 +1140,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_MultiTurnWithToolCalling_ContentOrderPreserved()
 	{
 		// Verifies that conversation history built from streaming preserves the
@@ -1193,6 +1217,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextBeforeToolCalls()
 	{
 		// Captures the EXACT raw sequence of all content items during a tool-calling stream.
@@ -1270,6 +1295,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ViewModelSimulation_ThinkingBubbleRemovedBeforeToolCalls()
 	{
 		// Simulates the ChatViewModel's exact state machine to reproduce the "null thinking bubble" bug.
@@ -1406,6 +1432,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ViewModelSimulation_NoNullTextInStream_RawClient()
 	{
 		// Same as above but uses the RAW client (no middleware) to isolate whether

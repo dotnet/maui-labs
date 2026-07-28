@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Pages.CartPage"
+             x:DataType="vm:CartViewModel"
+             Title="Cart"
+             Shell.PresentationMode="ModalAnimated"
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="None"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="Auto,*"
+          BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
+        <!-- Standard header: [back] [icon] [title] ... [mode pill] -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Primary}"
+                StrokeThickness="0"
+                Padding="16,8"
+                SafeAreaEdges="Container">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                    <Button Text="&#xF36A;"
+                            FontFamily="FluentFilled"
+                            FontSize="{StaticResource FontSizeTitle}"
+                            Padding="8,4"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource White}"
+                            VerticalOptions="Center"
+                            Clicked="OnCloseClicked" />
+                    <Label Text="&#xF26B;"
+                           FontFamily="FluentFilled"
+                           FontSize="{StaticResource FontSizeTitle}"
+                           TextColor="{StaticResource White}" VerticalOptions="Center" />
+                    <Label Text="Cart"
+                           FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
+                           TextColor="{StaticResource White}"
+                           VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Border Grid.Column="1"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 13"
+                        Padding="0"
+                        HeightRequest="26">
+                    <Button Text="{Binding CartModeLabel}"
+                            FontSize="{StaticResource FontSizeCaption}" Padding="14,0"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                            FontAttributes="Bold"
+                            BorderWidth="0"
+                            VerticalOptions="Center"
+                            Command="{Binding CycleCartModeCommand}" />
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Cart content -->
+        <views:CartView Grid.Row="1"
+                        BindingContext="{Binding .}" />
+    </Grid>
+
+</ContentPage>

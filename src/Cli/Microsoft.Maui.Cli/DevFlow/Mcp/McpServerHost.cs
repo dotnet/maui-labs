@@ -43,11 +43,13 @@ public static class McpServerHost
 			.WithTools<RecordingTools>()
 			.WithTools<PreferencesTools>()
 			.WithTools<PlatformTools>()
+			.WithTools<ThemeTools>()
 			.WithTools<SensorTools>()
 			.WithTools<JobTools>()
 			.WithTools<FileTools>()
 			.WithTools<BatchTools>()
-			.WithTools<InvokeTools>();
+			.WithTools<InvokeTools>()
+			.WithTools<ExtensionTools>();
 
 		await builder.Build().RunAsync();
 	}

@@ -1,48 +1,42 @@
 {
   "agent": {
-    "name": "devflow-maui",
-    "version": "1.0.0",
+    "name": "Microsoft.Maui.DevFlow.Agent",
+    "version": "0.1.0-preview",
     "framework": "maui",
-    "frameworkVersion": "10.0"
+    "frameworkVersion": "10.0.0"
   },
   "capabilities": {
     "ui.tree": {
       "version": 1,
-      "features": ["css-selectors", "hit-test", "native-layer", "render-layer"]
+      "features": ["css-selector", "type", "text", "accessibility-id"]
     },
     "ui.actions": {
       "version": 1,
-      "features": [
-        "tap",
-        "fill",
-        "clear",
-        "scroll",
-        "focus",
-        "navigate",
-        "back",
-        "gesture",
-        "batch"
-      ]
+      "features": ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"]
     },
     "ui.screenshot": {
       "version": 1,
-      "features": ["fullPage", "element"]
+      "features": ["element", "fullscreen", "selector"]
     },
-    "profiler": {
+    "webview": {
       "version": 1,
-      "features": ["samples", "spans", "markers", "hotspots"]
+      "features": ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"]
+    },
+    "network": {
+      "version": 1,
+      "features": ["list", "detail", "clear", "stream"]
     },
     "logs": {
       "version": 1,
-      "features": ["stream", "query"]
+      "features": ["list", "stream"]
     },
     "device.info": {
       "version": 1,
-      "features": ["display", "battery", "connectivity", "geolocation"]
+      "features": ["app", "device", "display", "battery", "connectivity"]
     },
     "device.sensors": {
       "version": 1,
-      "features": ["accelerometer", "gyroscope", "magnetometer"]
+      "features": ["list", "start", "stop", "stream"]
     },
     "device.jobs": {
       "version": 1,
@@ -51,11 +45,33 @@
     },
     "storage.preferences": {
       "version": 1,
-      "features": ["get", "set", "delete", "clear"]
+      "features": ["list", "get", "set", "delete", "clear"]
     },
     "storage.secure": {
       "version": 1,
       "features": ["get", "set", "delete", "clear"]
+    },
+    "storage.files": {
+      "version": 1,
+      "features": ["roots", "list", "download", "upload", "delete"]
+    },
+    "profiler": {
+      "version": 1,
+      "features": ["capabilities", "sessions", "samples", "markers", "spans", "hotspots"]
+    },
+    "theme": {
+      "version": 1,
+      "supported": true,
+      "features": ["get", "set"]
+    },
+    "app.theme": {
+      "version": 1,
+      "supported": true,
+      "features": ["get", "set"]
+    },
+    "invoke": {
+      "version": 1,
+      "features": ["actions"]
     }
   }
 }
