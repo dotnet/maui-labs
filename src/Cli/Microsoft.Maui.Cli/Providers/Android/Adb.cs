@@ -209,7 +209,7 @@ public class Adb
 	{
 		Local = rule.Remote.Port,   // device
 		Remote = rule.Local.Port,   // host
-		Protocol = rule.Local.Protocol.ToString().ToLowerInvariant(),
+		Protocol = rule.Remote.Protocol.ToString().ToLowerInvariant(),   // same side as Local
 	};
 
 }
