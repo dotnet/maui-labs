@@ -419,7 +419,7 @@ public class VisualTreeWalker
                         results.Add(info);
                     }
                 }
-                AppendRegisteredNativeElements(results, maxDepth);
+                AppendRegisteredNativeElements(results, maxDepth, completeScope: false);
                 return results;
             }
 
@@ -453,7 +453,7 @@ public class VisualTreeWalker
                 }
             }
 
-            AppendRegisteredNativeElements(results, maxDepth);
+            AppendRegisteredNativeElements(results, maxDepth, completeScope: maxDepth == 0);
             return results;
         }
         finally
@@ -1070,59 +1070,73 @@ public class VisualTreeWalker
         return builder.ToString();
     }
 
-    private void AppendRegisteredNativeElements(List<ElementInfo> roots, int maxDepth)
+    private void AppendRegisteredNativeElements(
+        List<ElementInfo> roots,
+        int maxDepth,
+        bool completeScope)
     {
         if (_nativeElementRegistry is null)
             return;
 
-        _nativeElementRegistry.BeginWalk();
-        var registrations = _nativeElementRegistry.GetSnapshot();
-        if (registrations.Count == 0)
+        _nativeElementRegistry.BeginWalk(completeScope);
+        try
         {
+            var registrations = _nativeElementRegistry.GetSnapshot();
+            if (registrations.Count == 0)
+            {
+                lock (_registeredNativeGate)
+                {
+                    _registeredNativeInfos = new Dictionary<string, ElementInfo>(StringComparer.Ordinal);
+                    _elementInfoParents = new Dictionary<string, string?>(StringComparer.Ordinal);
+                }
+                return;
+            }
+
+            var infosById = new Dictionary<string, (ElementInfo Info, int Depth)>(StringComparer.Ordinal);
+            foreach (var root in roots)
+                IndexElementInfo(root, depth: 1, infosById);
+            var registeredInfos = new Dictionary<string, ElementInfo>(StringComparer.Ordinal);
+
+            foreach (var registration in registrations)
+            {
+                string? ownerId = null;
+                if (!_objectToExternalId.TryGetValue(registration.Owner, out ownerId)
+                    && registration.Owner is Element owner
+                    && _elementIdToExternalId.TryGetValue(owner.Id, out var mappedOwnerId))
+                {
+                    ownerId = mappedOwnerId;
+                }
+
+                if (ownerId is null
+                    || !infosById.TryGetValue(ownerId, out var ownerEntry))
+                {
+                    continue;
+                }
+
+                _nativeElementRegistry.MarkSeen(registration.Id);
+                if (maxDepth > 0 && ownerEntry.Depth >= maxDepth)
+                    continue;
+
+                var info = CreateRegisteredNativeElementInfo(registration, ownerId);
+                info.WindowId = ownerEntry.Info.WindowId;
+                registeredInfos[info.Id] = info;
+                ownerEntry.Info.Children ??= [];
+                ownerEntry.Info.Children.Add(info);
+            }
+
+            var elementInfoParents = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var elementInfo in FlattenElementInfos(roots))
+                elementInfoParents[elementInfo.Id] = elementInfo.ParentId;
+
             lock (_registeredNativeGate)
             {
-                _registeredNativeInfos = new Dictionary<string, ElementInfo>(StringComparer.Ordinal);
-                _elementInfoParents = new Dictionary<string, string?>(StringComparer.Ordinal);
+                _registeredNativeInfos = registeredInfos;
+                _elementInfoParents = elementInfoParents;
             }
-            return;
         }
-
-        var infosById = new Dictionary<string, (ElementInfo Info, int Depth)>(StringComparer.Ordinal);
-        foreach (var root in roots)
-            IndexElementInfo(root, depth: 1, infosById);
-        var registeredInfos = new Dictionary<string, ElementInfo>(StringComparer.Ordinal);
-
-        foreach (var registration in registrations)
+        finally
         {
-            string? ownerId = null;
-            if (!_objectToExternalId.TryGetValue(registration.Owner, out ownerId)
-                && registration.Owner is Element owner
-                && _elementIdToExternalId.TryGetValue(owner.Id, out var mappedOwnerId))
-                ownerId = mappedOwnerId;
-
-            if (ownerId is null
-                || !infosById.TryGetValue(ownerId, out var ownerEntry))
-                continue;
-
-            _nativeElementRegistry.MarkSeen(registration.Id);
-            if (maxDepth > 0 && ownerEntry.Depth >= maxDepth)
-                continue;
-
-            var info = CreateRegisteredNativeElementInfo(registration, ownerId);
-            info.WindowId = ownerEntry.Info.WindowId;
-            registeredInfos[info.Id] = info;
-            ownerEntry.Info.Children ??= [];
-            ownerEntry.Info.Children.Add(info);
-        }
-
-        var elementInfoParents = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var elementInfo in FlattenElementInfos(roots))
-            elementInfoParents[elementInfo.Id] = elementInfo.ParentId;
-
-        lock (_registeredNativeGate)
-        {
-            _registeredNativeInfos = registeredInfos;
-            _elementInfoParents = elementInfoParents;
+            _nativeElementRegistry.CompleteWalk(completeScope);
         }
     }
 

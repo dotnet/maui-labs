@@ -326,6 +326,27 @@ public class ElementInfoTests
     }
 
     [Fact]
+    public void Serialization_DeclaredCapabilitiesPreserveNonInteractiveTraitsInDriver()
+    {
+        var agentElement = new Microsoft.Maui.DevFlow.Agent.Core.ElementInfo
+        {
+            Id = "native-button",
+            Type = "NSButton",
+            Role = "button",
+            Capabilities = ["select"],
+            IsVisible = true,
+            IsEnabled = true
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(agentElement);
+        var driverElement = System.Text.Json.JsonSerializer.Deserialize<ElementInfo>(json);
+
+        Assert.NotNull(driverElement);
+        Assert.DoesNotContain("interactive", driverElement.Traits ?? []);
+        Assert.DoesNotContain("focusable", driverElement.Traits ?? []);
+    }
+
+    [Fact]
     public void Deserialization_MapsSpecStyleAndStateShape()
     {
         var json = """

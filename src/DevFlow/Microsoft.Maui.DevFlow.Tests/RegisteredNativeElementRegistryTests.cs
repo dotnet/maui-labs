@@ -79,21 +79,85 @@ public class RegisteredNativeElementRegistryTests
     }
 
     [Fact]
-    public void BeginWalk_EvictsEntriesAbsentFromCurrentAndPreviousWalk()
+    public void Unregister_StalePeer_DoesNotRemoveLatestPeer()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+        var stalePeer = new FakeNativeElement("objc:1");
+        var id = registry.Register(owner, stalePeer, "toolbar-item");
+        var latestPeer = new FakeNativeElement("objc:1");
+        registry.Register(owner, latestPeer, "toolbar-item");
+
+        Assert.False(registry.Unregister(stalePeer));
+        Assert.True(registry.TryGet(id, out var registration));
+        Assert.Same(latestPeer, registration.NativeElement);
+    }
+
+    [Fact]
+    public void CompleteWalk_EvictsEntriesAbsentFromCurrentAndPreviousWalk()
     {
         var registry = CreateStableKeyRegistry();
         var owner = new object();
 
         registry.BeginWalk();
         var staleId = registry.Register(owner, new FakeNativeElement("stale"), "toolbar-item");
+        registry.CompleteWalk();
 
         registry.BeginWalk();
         for (var index = 0; index < 513; index++)
             registry.Register(owner, new FakeNativeElement($"live:{index}"), "toolbar-item");
+        registry.CompleteWalk();
 
         registry.BeginWalk();
+        registry.CompleteWalk();
 
         Assert.False(registry.TryGet(staleId, out _));
+    }
+
+    [Fact]
+    public void CompleteWalk_DoesNotEvictElementThatReturnsInCurrentWalk()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+
+        registry.BeginWalk();
+        var id = registry.Register(owner, new FakeNativeElement("returning"), "toolbar-item");
+        registry.CompleteWalk();
+
+        registry.BeginWalk();
+        for (var index = 0; index < 513; index++)
+            registry.Register(owner, new FakeNativeElement($"live:{index}"), "toolbar-item");
+        registry.CompleteWalk();
+
+        registry.BeginWalk();
+        var latestPeer = new FakeNativeElement("returning");
+        var returnedId = registry.Register(owner, latestPeer, "toolbar-item");
+        registry.CompleteWalk();
+
+        Assert.Equal(id, returnedId);
+        Assert.True(registry.TryGet(id, out var registration));
+        Assert.Same(latestPeer, registration.NativeElement);
+    }
+
+    [Fact]
+    public void PartialWalk_DoesNotAdvanceEviction()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+
+        registry.BeginWalk();
+        var id = registry.Register(owner, new FakeNativeElement("other-window"), "toolbar-item");
+        registry.CompleteWalk();
+
+        registry.BeginWalk();
+        for (var index = 0; index < 513; index++)
+            registry.Register(owner, new FakeNativeElement($"live:{index}"), "toolbar-item");
+        registry.CompleteWalk();
+
+        registry.BeginWalk(completeScope: false);
+        registry.CompleteWalk(completeScope: false);
+
+        Assert.True(registry.TryGet(id, out _));
     }
 
     [Fact]
@@ -104,12 +168,15 @@ public class RegisteredNativeElementRegistryTests
 
         registry.BeginWalk();
         var staleId = registry.Register(owner, new FakeNativeElement("recycled"), "toolbar-item");
+        registry.CompleteWalk();
 
         registry.BeginWalk();
         for (var index = 0; index < 513; index++)
             registry.Register(owner, new FakeNativeElement($"live:{index}"), "toolbar-item");
+        registry.CompleteWalk();
 
         registry.BeginWalk();
+        registry.CompleteWalk();
         Assert.False(registry.TryGet(staleId, out _));
 
         var replacementId = registry.Register(

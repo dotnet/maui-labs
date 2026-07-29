@@ -184,29 +184,41 @@ public class ElementInfo
     {
         var traits = new List<string>();
         var role = Role;
+        var hasDeclaredCapabilities = Capabilities is { Count: > 0 };
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link")
+        if (hasDeclaredCapabilities)
+        {
+            if (Capabilities!.Contains("invoke") || Capabilities.Contains("set-value"))
+                traits.Add("interactive");
+        }
+        else if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider")
+        {
             traits.Add("interactive");
+        }
 
         if (Gestures is { Count: > 0 } && !traits.Contains("interactive"))
             traits.Add("interactive");
 
-        if (Capabilities?.Contains("invoke") == true
-            || Capabilities?.Contains("set-value") == true)
+        if (IsFocused
+            || hasDeclaredCapabilities && Capabilities!.Contains("focus")
+            || (!hasDeclaredCapabilities
+                && role is ("button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider" or "window")))
         {
-            if (!traits.Contains("interactive"))
-                traits.Add("interactive");
+            traits.Add("focusable");
         }
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "window" || IsFocused)
-            traits.Add("focusable");
-        else if (Capabilities?.Contains("focus") == true)
-            traits.Add("focusable");
-
-        if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView")
+        if (hasDeclaredCapabilities)
+        {
+            if (Capabilities!.Contains("scroll"))
+                traits.Add("scrollable");
+        }
+        else if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView"
+                 or "HorizontalScrollView" or "NestedScrollView" or "RecyclerView" or "ViewPager2"
+                 or "UIScrollView" or "UITableView" or "UICollectionView"
+                 or "NSScrollView" or "NSTableView" or "NSOutlineView")
+        {
             traits.Add("scrollable");
-        else if (Capabilities?.Contains("scroll") == true)
-            traits.Add("scrollable");
+        }
 
         if (role == "heading")
             traits.Add("header");

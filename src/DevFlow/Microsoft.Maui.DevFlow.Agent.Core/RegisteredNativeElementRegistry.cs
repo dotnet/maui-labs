@@ -51,12 +51,20 @@ internal sealed class RegisteredNativeElementRegistry
         }
     }
 
-    public void BeginWalk()
+    public void BeginWalk(bool completeScope = true)
     {
         lock (_gate)
         {
-            _walk++;
-            if (_registrations.Count > MaxTrackedElements)
+            if (completeScope)
+                _walk++;
+        }
+    }
+
+    public void CompleteWalk(bool completeScope = true)
+    {
+        lock (_gate)
+        {
+            if (completeScope && _registrations.Count > MaxTrackedElements)
                 Evict();
         }
     }
@@ -129,8 +137,13 @@ internal sealed class RegisteredNativeElementRegistry
                 _idsByStableKey.TryGetValue(stableKey, out id);
             if (id is null && _identities.TryGetValue(nativeElement, out var identity))
                 id = identity.Id;
-            if (id is null || !_registrations.ContainsKey(id))
+            if (id is null || !_registrations.TryGetValue(id, out var entry))
                 return false;
+            if (!ReferenceEquals(entry.NativeElement, nativeElement))
+            {
+                _identities.Remove(nativeElement);
+                return false;
+            }
 
             RemoveEntry(id);
             _identities.Remove(nativeElement);
