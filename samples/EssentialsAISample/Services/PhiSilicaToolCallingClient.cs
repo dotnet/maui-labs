@@ -167,7 +167,10 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 
 		if (isFollowUp)
 		{
-			prompt.AppendLine("Call the next tool using data from the tool result above.");
+			prompt.AppendLine("Use the tool result above to answer. If you still need more data, call another tool;");
+			prompt.AppendLine(hasUserSchema
+				? "otherwise set type to \"response\" and fill in the response object."
+				: "otherwise set type to \"text\" and put your answer in the text field.");
 		}
 		else
 		{
@@ -217,35 +220,25 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 	{
 		var toolNames = string.Join(",", tools.Select(t => JsonSerializer.Serialize(t.Name)));
 
-		string json;
-		if (isFollowUp)
-		{
-			// Follow-up: the model has a tool result in hand, so a tool call is the only valid move.
-			json = "{\"type\":\"object\",\"properties\":{"
-				+ "\"type\":{\"type\":\"string\",\"enum\":[\"tool_call\"]},"
-				+ "\"tool_name\":{\"type\":\"string\",\"enum\":[" + toolNames + "]},"
-				+ "\"arguments\":{\"type\":\"object\"}"
-				+ "},\"required\":[\"type\",\"tool_name\"]}";
-		}
-		else
-		{
-			// Only offer more_steps when chaining is actually possible.
-			var moreSteps = tools.Count >= 2
-				? ",\"more_steps\":{\"type\":\"boolean\",\"description\":\"Set true if you need to call another tool after this one\"}"
-				: "";
+		// The model must always be able to stop and answer. The schema is enforced by the model
+		// runtime, so a follow-up schema that only permits "tool_call" would make the tool-calling
+		// loop impossible to terminate.
+		var (answerField, typeEnum) = userSchema is { } schema
+			? (",\"response\":" + schema.GetRawText(), "[\"tool_call\",\"response\"]")
+			: (",\"text\":{\"type\":\"string\",\"description\":\"Your answer to the user\"}", "[\"tool_call\",\"text\"]");
 
-			var (answerField, typeEnum) = userSchema is { } schema
-				? (",\"response\":" + schema.GetRawText(), "[\"tool_call\",\"response\"]")
-				: (",\"text\":{\"type\":\"string\",\"description\":\"Your text response\"}", "[\"tool_call\",\"text\"]");
+		// Only offer chaining on the first round, and only when more than one tool exists.
+		var moreSteps = !isFollowUp && tools.Count >= 2
+			? ",\"more_steps\":{\"type\":\"boolean\",\"description\":\"Set true if you need to call another tool after this one\"}"
+			: "";
 
-			json = "{\"type\":\"object\",\"properties\":{"
-				+ "\"type\":{\"type\":\"string\",\"enum\":" + typeEnum + "},"
-				+ "\"tool_name\":{\"type\":\"string\",\"enum\":[" + toolNames + "]},"
-				+ "\"arguments\":{\"type\":\"object\"}"
-				+ answerField
-				+ moreSteps
-				+ "},\"required\":[\"type\"]}";
-		}
+		var json = "{\"type\":\"object\",\"properties\":{"
+			+ "\"type\":{\"type\":\"string\",\"enum\":" + typeEnum + "},"
+			+ "\"tool_name\":{\"type\":\"string\",\"enum\":[" + toolNames + "]},"
+			+ "\"arguments\":{\"type\":\"object\"}"
+			+ answerField
+			+ moreSteps
+			+ "},\"required\":[\"type\"]}";
 
 		using var document = JsonDocument.Parse(json);
 		return document.RootElement.Clone();

@@ -40,7 +40,11 @@ Two consequences of the WinRT shape are worth knowing:
 - There is no `LanguageModelContext` overload for structured generation, so the system prompt is
   prepended to the prompt text instead of being supplied as context.
 - The API is on `LanguageModelExperimental`, not `LanguageModel`. Constructing it raises `CS8305`,
-  which is acknowledged with a scoped `#pragma` at the call site.
+  which is acknowledged with a scoped `#pragma` at the call site. Disposing that wrapper also closes
+  the underlying `LanguageModel`, so one instance is cached per client rather than created per
+  request.
+- Unlike `GenerateResponseAsync`, structured generation reports no incremental progress — the
+  constrained JSON is only available from the completed result, so it is emitted as a single update.
 
 Requests without a schema continue to use `LanguageModel.GenerateResponseAsync` with a real context.
 
@@ -63,9 +67,11 @@ output path described above. The reply is parsed into `FunctionCallContent` so t
 Because the schema is enforced by the runtime, the middleware only handles orchestration:
 
 - **Enum narrowing.** `tool_name` is an `enum` of the actual tool names, so the model cannot invent one.
+- **Termination.** Every schema, including the follow-up one, keeps the `text` (or `response`) option
+  available. Because the runtime *enforces* the schema, a follow-up schema restricted to `tool_call`
+  would make the loop impossible to exit.
 - **Chaining.** `more_steps` lets the model signal that another call is needed. On the follow-up round
-  the schema drops the text escape hatch and already-called tools are removed from the enum, which
-  prevents the model from looping on the same tool.
+  already-called tools are removed from the `tool_name` enum, which discourages repeating a call.
 - **Streaming.** A partial tool call is not actionable, so requests with tools buffer the response and
   emit it once.
 
