@@ -39,7 +39,8 @@ namespace EssentialsAISample.Services;
 /// actually filled in.
 /// </para>
 /// <para>
-/// Every schema sent to the model sets <c>additionalProperties: false</c>. Without it the model
+/// Schemas are closed with <c>additionalProperties: false</c> before they reach the model. That is
+/// done by <c>PhiSilicaChatClient</c> for every constrained request, because without it the model
 /// invents property names — it produced <c>body</c>, <c>response</c> and <c>message</c> in place of
 /// a declared <c>text</c> property — and constrained decoding permits them, which silently yields
 /// empty results.
@@ -349,7 +350,9 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 	{
 		var callId = Guid.NewGuid().ToString("N")[..16];
 
-		var schema = CloseSchema(tool.JsonSchema);
+		// PhiSilicaChatClient closes the schema before constraining generation, so the tool's own
+		// schema can be passed through as-is.
+		var schema = tool.JsonSchema;
 		if (!HasProperties(schema))
 			return new FunctionCallContent(callId, tool.Name, new Dictionary<string, object?>());
 
@@ -461,44 +464,6 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 	// ═══════════════════════════════════════════════════════════
 	// SCHEMA HELPERS
 	// ═══════════════════════════════════════════════════════════
-
-	/// <summary>
-	/// Returns a copy of <paramref name="schema"/> with <c>additionalProperties: false</c> applied
-	/// to every object, which stops the model inventing property names.
-	/// </summary>
-	private static JsonElement CloseSchema(JsonElement schema)
-	{
-		var node = JsonNode.Parse(schema.GetRawText());
-		if (node is null)
-			return schema;
-
-		Close(node);
-
-		return ToElement(node);
-
-		static void Close(JsonNode? node)
-		{
-			switch (node)
-			{
-				case JsonObject obj:
-					if (obj.TryGetPropertyValue("type", out var type) &&
-						type?.GetValueKind() == JsonValueKind.String &&
-						type.GetValue<string>() == "object")
-					{
-						obj["additionalProperties"] = false;
-					}
-
-					foreach (var property in obj.ToList())
-						Close(property.Value);
-					break;
-
-				case JsonArray array:
-					foreach (var item in array)
-						Close(item);
-					break;
-			}
-		}
-	}
 
 	/// <summary>Whether a parameter schema declares any properties to fill in.</summary>
 	private static bool HasProperties(JsonElement schema) =>

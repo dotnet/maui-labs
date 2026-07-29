@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI.ContentSafety;
 using Microsoft.Windows.AI.Imaging;
@@ -111,7 +112,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 		// A JSON schema turns this into a constrained generation. GenerateStructuredJsonResponseAsync
 		// lives on LanguageModelExperimental and has no LanguageModelContext overload, so the system
 		// prompt is folded into the prompt text.
-		var jsonSchema = (options?.ResponseFormat as ChatResponseFormatJson)?.Schema?.GetRawText();
+		var jsonSchema = GetConstraintSchema(options);
 
 		LanguageModelContext? context = null;
 		Action cancel;
@@ -254,6 +255,55 @@ public sealed class PhiSilicaChatClient : IChatClient
 				handler.CompleteWithError(new OperationCanceledException(cancellationToken));
 			}
 		};
+	}
+
+	/// <summary>
+	/// Produces the JSON schema to constrain generation with, or <see langword="null"/> when the
+	/// caller did not ask for structured output.
+	/// </summary>
+	/// <remarks>
+	/// Every object in the schema is closed with <c>additionalProperties: false</c>. Constrained
+	/// decoding only forbids what the schema forbids, and an open schema lets the model answer under
+	/// a property name of its own choosing: asked to fill in a declared <c>text</c> property it has
+	/// produced <c>body</c>, <c>response</c> and <c>message</c> instead. Those replies satisfy the
+	/// schema, so nothing fails, but the declared property is missing and deserializing it yields
+	/// null. Schemas generated from a type by <c>ChatResponseFormat.ForJsonSchema</c> are open by
+	/// default, so this affects ordinary structured output and not just tool calling.
+	/// </remarks>
+	private static string? GetConstraintSchema(ChatOptions? options)
+	{
+		if ((options?.ResponseFormat as ChatResponseFormatJson)?.Schema is not { } schema)
+			return null;
+
+		var node = JsonNode.Parse(schema.GetRawText());
+		if (node is null)
+			return schema.GetRawText();
+
+		Close(node);
+
+		return node.ToJsonString();
+
+		static void Close(JsonNode? node)
+		{
+			switch (node)
+			{
+				case JsonObject obj:
+					if (obj.TryGetPropertyValue("properties", out var properties) &&
+						properties is JsonObject)
+					{
+						obj["additionalProperties"] = false;
+					}
+
+					foreach (var property in obj.ToList())
+						Close(property.Value);
+					break;
+
+				case JsonArray array:
+					foreach (var item in array)
+						Close(item);
+					break;
+			}
+		}
 	}
 
 	/// <summary>
