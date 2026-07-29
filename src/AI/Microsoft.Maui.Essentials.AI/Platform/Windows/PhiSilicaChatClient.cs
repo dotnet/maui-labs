@@ -136,11 +136,15 @@ public sealed class PhiSilicaChatClient : IChatClient
 
 				// Structured generation does not report incremental progress: the constrained JSON
 				// is only available from the completed result.
-				WireUp(structuredOperation, handler, cancellationToken, static result =>
-					result.Status is GenerateStructuredJsonResponseStatus.Complete
-						? result.Text
-						: throw new InvalidOperationException(
-							$"Structured response generation failed: {result.Status}", result.ExtendedError));
+				WireUp(structuredOperation, handler, cancellationToken, static result => result.Status switch
+				{
+					GenerateStructuredJsonResponseStatus.Complete => result.Text,
+					GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
+						throw new PhiSilicaContextWindowException(
+							"The prompt is larger than the model's context window.", result.ExtendedError),
+					_ => throw new InvalidOperationException(
+						$"Structured response generation failed: {result.Status}", result.ExtendedError)
+				});
 
 				cancel = structuredOperation.Cancel;
 #pragma warning restore CS8305
@@ -152,7 +156,17 @@ public sealed class PhiSilicaChatClient : IChatClient
 					: model.CreateContext(systemPrompt, new ContentFilterOptions());
 
 				var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
-				WireUp(operation, handler, cancellationToken);
+
+				// Text generation streams through Progress, so the result is only inspected to
+				// surface a prompt that did not fit. Other statuses are left alone: the API reports
+				// Error for benign cases such as an empty prompt, and callers rely on those
+				// completing quietly with no content.
+				WireUp(operation, handler, cancellationToken, static result =>
+					result.Status is LanguageModelResponseStatus.PromptLargerThanContext
+						? throw new PhiSilicaContextWindowException(
+							"The prompt is larger than the model's context window.", result.ExtendedError)
+						: result.Text);
+
 				cancel = operation.Cancel;
 			}
 
@@ -183,10 +197,10 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// <param name="operation">The WinRT operation to observe.</param>
 	/// <param name="handler">The pipeline to feed.</param>
 	/// <param name="cancellationToken">The token reported when the operation is cancelled.</param>
-	/// <param name="getFinalText">
-	/// Reads the response from the completed result. Used by operations that deliver their whole
-	/// response at the end instead of through <c>Progress</c>; it is only consulted when no
-	/// progress was reported.
+	/// <param name="readResult">
+	/// Validates the completed result and returns the response text, throwing when the status is not
+	/// a success. It is always called, so the status is checked either way, but the text it returns
+	/// is only emitted when the operation reported no incremental progress.
 	/// </param>
 	/// <remarks>
 	/// Both <c>GenerateResponseAsync</c> and <c>GenerateStructuredJsonResponseAsync</c> return
@@ -197,7 +211,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 		IAsyncOperationWithProgress<TResult, string> operation,
 		StreamingResponseHandler handler,
 		CancellationToken cancellationToken,
-		Func<TResult, string?>? getFinalText = null)
+		Func<TResult, string?> readResult)
 	{
 		var reportedProgress = false;
 
@@ -216,8 +230,12 @@ public sealed class PhiSilicaChatClient : IChatClient
 			{
 				try
 				{
-					if (!reportedProgress && getFinalText is not null)
-						handler.ProcessContent(getFinalText(op.GetResults()));
+					// Structured generation reports no progress and delivers everything here, while
+					// text generation has already streamed its content, so only the status matters.
+					var text = readResult(op.GetResults());
+
+					if (!reportedProgress)
+						handler.ProcessContent(text);
 				}
 				catch (Exception ex)
 				{
@@ -236,6 +254,44 @@ public sealed class PhiSilicaChatClient : IChatClient
 				handler.CompleteWithError(new OperationCanceledException(cancellationToken));
 			}
 		};
+	}
+
+	/// <summary>
+	/// Determines how much of a conversation fits in the model's context window.
+	/// </summary>
+	/// <param name="chatMessages">The conversation to measure.</param>
+	/// <param name="options">The options that would be used for the request.</param>
+	/// <param name="cancellationToken">A token to cancel the operation.</param>
+	/// <returns>
+	/// The number of characters of the flattened prompt that fit. When
+	/// <see cref="PhiSilicaPromptFit.Fits"/> is <see langword="true"/> the whole conversation fits;
+	/// otherwise it must be trimmed, summarized, or restarted before it can be sent.
+	/// </returns>
+	/// <remarks>
+	/// The context window is shared by the system prompt, the accumulated history and the new
+	/// prompt, and the API does not truncate automatically, so long conversations otherwise fail
+	/// with <see cref="PhiSilicaContextWindowException"/>.
+	/// </remarks>
+	public async Task<PhiSilicaPromptFit> GetPromptFitAsync(
+		IEnumerable<ChatMessage> chatMessages,
+		ChatOptions? options = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(chatMessages);
+
+		var model = await _modelTask;
+
+		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
+		var prompt = await ConvertToPromptAsync(history);
+
+		cancellationToken.ThrowIfCancellationRequested();
+
+		if (string.IsNullOrEmpty(systemPrompt))
+			return new PhiSilicaPromptFit(prompt.Length, (long)model.GetUsablePromptLength(prompt));
+
+		using var context = model.CreateContext(systemPrompt, new ContentFilterOptions());
+
+		return new PhiSilicaPromptFit(prompt.Length, (long)model.GetUsablePromptLength(context, prompt));
 	}
 
 	/// <inheritdoc />
