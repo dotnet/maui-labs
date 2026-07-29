@@ -52,6 +52,16 @@ public class ElementInfoRoleTests
         Assert.Contains("interactive", element.Traits!);
     }
 
+    [Fact]
+    public void DeclaredCapabilities_TakePrecedenceOverRoleInference()
+    {
+        var element = Element("NSButton");
+        element.Capabilities = ["select"];
+
+        Assert.DoesNotContain("interactive", element.Traits ?? []);
+        Assert.DoesNotContain("focusable", element.Traits ?? []);
+    }
+
     [Theory]
     [InlineData("NSButton", "button")]      // AppKit
     [InlineData("UIButton", "button")]      // UIKit

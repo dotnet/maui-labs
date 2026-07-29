@@ -13,6 +13,11 @@ public class RegisteredNativeElementRegistryTests
         public string? StableKey { get; } = stableKey;
     }
 
+    private readonly record struct FakeNativeHandle(IntPtr Value)
+    {
+        public static implicit operator IntPtr(FakeNativeHandle handle) => handle.Value;
+    }
+
     private static RegisteredNativeElementRegistry CreateStableKeyRegistry()
         => new(element => (element as FakeNativeElement)?.StableKey);
 
@@ -30,6 +35,17 @@ public class RegisteredNativeElementRegistryTests
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+    }
+
+    [Fact]
+    public void TryGetHandleValue_AppleNativeHandleConversion_ReturnsPointer()
+    {
+        var converted = RegisteredNativeElementRegistry.TryGetHandleValue(
+            new FakeNativeHandle(new IntPtr(0x1234)),
+            out var value);
+
+        Assert.True(converted);
+        Assert.Equal(0x1234, value);
     }
 
     [Fact]

@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
-#if IOS || MACCATALYST || MACOS
-using ObjCRuntime;
-#endif
+using System.Reflection;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
@@ -265,11 +263,79 @@ internal sealed class RegisteredNativeElementRegistry
 
     private static string? GetStableKey(object nativeElement)
     {
-#if IOS || MACCATALYST || MACOS
-        if (nativeElement is INativeObject native && native.Handle != IntPtr.Zero)
-            return $"objc:{((IntPtr)native.Handle).ToInt64():x}";
-#endif
-        return null;
+        if (!OperatingSystem.IsIOS()
+            && !OperatingSystem.IsMacCatalyst()
+            && !OperatingSystem.IsMacOS())
+        {
+            return null;
+        }
+
+        var handle = nativeElement.GetType()
+            .GetProperty("Handle", BindingFlags.Instance | BindingFlags.Public)
+            ?.GetValue(nativeElement);
+        return TryGetHandleValue(handle, out var value) && value != 0
+            ? $"objc:{value:x}"
+            : null;
+    }
+
+    internal static bool TryGetHandleValue(object? handle, out long value)
+    {
+        switch (handle)
+        {
+            case IntPtr pointer:
+                value = pointer.ToInt64();
+                return true;
+            case UIntPtr pointer:
+                value = unchecked((long)pointer.ToUInt64());
+                return true;
+            case long signed:
+                value = signed;
+                return true;
+            case ulong unsigned:
+                value = unchecked((long)unsigned);
+                return true;
+        }
+
+        if (handle is null)
+        {
+            value = 0;
+            return false;
+        }
+
+        var handleType = handle.GetType();
+        var conversion = handleType
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(method =>
+            {
+                if (method.Name is not ("op_Implicit" or "op_Explicit")
+                    || method.ReturnType != typeof(IntPtr))
+                {
+                    return false;
+                }
+
+                var parameters = method.GetParameters();
+                return parameters.Length == 1 && parameters[0].ParameterType == handleType;
+            });
+        if (conversion?.Invoke(null, [handle]) is IntPtr converted)
+        {
+            value = converted.ToInt64();
+            return true;
+        }
+
+        var toInt64 = handleType.GetMethod(
+            "ToInt64",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+        if (toInt64?.Invoke(handle, null) is long convertedValue)
+        {
+            value = convertedValue;
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private sealed class NativeElementIdentity(string id)
