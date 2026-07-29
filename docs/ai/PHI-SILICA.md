@@ -84,6 +84,16 @@ Every schema sent to the model sets `additionalProperties: false`, applied recur
 the model invents property names: it produced `body`, `response` and `message` in place of a declared
 `text` property. Constrained decoding permits those, so the value silently reads back as null.
 
+### Failure handling
+
+Constrained generation occasionally fails outright on a long conversation, reporting a status such
+as `ResponseInvalidJson`, even for a tool and schema that succeed on a shorter prompt. Rather than
+turn that into a hard failure, the client degrades:
+
+- if selection fails, it answers with whatever has already been gathered;
+- if argument extraction fails, it retries with the conversation reduced to the user turns and the
+  earlier tool results, which is all an argument value can come from anyway.
+
 ### Streaming
 
 A partial tool call is not actionable, so requests carrying tools resolve the response fully and then
