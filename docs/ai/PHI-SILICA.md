@@ -84,6 +84,25 @@ Every schema sent to the model sets `additionalProperties: false`, applied recur
 the model invents property names: it produced `body`, `response` and `message` in place of a declared
 `text` property. Constrained decoding permits those, so the value silently reads back as null.
 
+### Deterministic sampling
+
+Both phases run with temperature 0, top-p 1 and top-k 1. Picking a tool and extracting its arguments
+have one right answer, but the Windows AI defaults are tuned for creative writing — temperature 0.9,
+top-p 0.9, top-k 40 — and the model is
+[documented](https://learn.microsoft.com/en-us/windows/ai/apis/phi-silica-best-practices) as highly
+sensitive to randomness, with temperature 0 being deterministic on a given machine.
+
+### Context window
+
+The context window is shared by the system prompt, the accumulated history and the new prompt, and
+the API does not truncate automatically, so a long tool chain can outgrow it.
+
+`PhiSilicaChatClient.GetPromptFitAsync` reports this before a request is sent, wrapping
+`LanguageModel.GetUsablePromptLength`, which returns the character index at which the prompt stops
+fitting. When a request is sent anyway and the model reports `PromptLargerThanContext`, the client
+throws `PhiSilicaContextWindowException` so it can be told apart from an ordinary failure. Recover by
+trimming, summarizing the history, or starting a new conversation.
+
 ### Failure handling
 
 Constrained generation occasionally fails outright on a long conversation, reporting a status such
@@ -91,8 +110,11 @@ as `ResponseInvalidJson`, even for a tool and schema that succeed on a shorter p
 turn that into a hard failure, the client degrades:
 
 - if selection fails, it answers with whatever has already been gathered;
-- if argument extraction fails, it retries with the conversation reduced to the user turns and the
-  earlier tool results, which is all an argument value can come from anyway.
+- if argument extraction fails, the call is still reported but without arguments, so the caller sees
+  which tool was chosen and invoking it surfaces a clear missing-argument error.
+
+Neither path retries. A second generation on an already slow request costs more time than it
+recovers, and measurably pushed long runs past their limits.
 
 ### Streaming
 

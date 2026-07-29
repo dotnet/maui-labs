@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
 
 namespace EssentialsAISample.Services;
 
@@ -61,6 +62,22 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 	/// bounds the work instead.
 	/// </remarks>
 	private const int MaxToolCallsPerChain = 5;
+
+	/// <summary>
+	/// Sampling settings for the two constrained phases.
+	/// </summary>
+	/// <remarks>
+	/// Picking a tool and extracting its arguments are classification and extraction problems with
+	/// one right answer, not creative writing. The Windows AI defaults are tuned for the latter
+	/// (temperature 0.9, top-p 0.9, top-k 40) and the model is documented as highly sensitive to
+	/// randomness, so those defaults make tool calling needlessly unstable. Sampling is pinned to
+	/// the most deterministic setting available instead.
+	/// </remarks>
+	private const float DeterministicTemperature = 0f;
+
+	private const float DeterministicTopP = 1f;
+
+	private const int DeterministicTopK = 1;
 
 	public PhiSilicaToolCallingClient(IChatClient inner) : base(inner) { }
 
@@ -168,6 +185,12 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 			response = await RequestAsync(
 				messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
 		}
+		catch (PhiSilicaContextWindowException)
+		{
+			// The conversation no longer fits, so no further tool call is possible. Answering with
+			// what has been gathered is the only useful move left.
+			return null;
+		}
 		catch (InvalidOperationException)
 		{
 			// Constrained generation can fail outright once a chain has accumulated enough history,
@@ -268,51 +291,14 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		}
 		catch (InvalidOperationException)
 		{
-			// Constrained generation sometimes fails on the full conversation, reporting a status
-			// such as ResponseInvalidJson, while succeeding on the same tool and schema given a
-			// smaller prompt. Retry with only the material the arguments can actually come from.
-		}
-
-		if (response is null)
-		{
-			try
-			{
-				response = await RequestAsync(
-					Essentials(messages), instructions, schema, tool.Name, options, cancellationToken);
-			}
-			catch (InvalidOperationException)
-			{
-				// Give up on arguments rather than on the request; the call is still reported so the
-				// caller sees which tool was chosen.
-			}
+			// Constrained generation occasionally fails outright on a long conversation, reporting
+			// a status such as ResponseInvalidJson. Report the call without arguments rather than
+			// failing the request: the caller then sees which tool was chosen, and invoking it
+			// surfaces a clear missing-argument error. Retrying here is deliberately avoided, since
+			// a second generation on an already slow request costs more than it recovers.
 		}
 
 		return new FunctionCallContent(callId, tool.Name, ReadArguments(response));
-	}
-
-	/// <summary>
-	/// Reduces the conversation to the parts an argument value can be drawn from: what the user
-	/// asked, and what earlier tools returned. Assistant prose and the caller's own system prompt
-	/// only add length.
-	/// </summary>
-	private static List<ChatMessage> Essentials(IReadOnlyList<ChatMessage> messages)
-	{
-		var essentials = new List<ChatMessage>();
-
-		foreach (var message in messages)
-		{
-			if (message.Role == ChatRole.User)
-			{
-				essentials.Add(message);
-				continue;
-			}
-
-			var results = message.Contents.OfType<FunctionResultContent>().ToList();
-			if (results.Count > 0)
-				essentials.Add(new ChatMessage(message.Role, [.. results]));
-		}
-
-		return essentials.Count > 0 ? essentials : [.. messages];
 	}
 
 	private static Dictionary<string, object?>? ReadArguments(string? response)
@@ -377,6 +363,9 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		var requestOptions = options?.Clone() ?? new ChatOptions();
 		requestOptions.Tools = null;
 		requestOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(schema, schemaName);
+		requestOptions.Temperature = DeterministicTemperature;
+		requestOptions.TopP = DeterministicTopP;
+		requestOptions.TopK = DeterministicTopK;
 
 		var response = await base.GetResponseAsync(request, requestOptions, cancellationToken);
 
