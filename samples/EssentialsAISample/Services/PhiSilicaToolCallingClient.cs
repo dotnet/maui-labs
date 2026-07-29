@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 
 namespace EssentialsAISample.Services;
@@ -11,24 +12,55 @@ namespace EssentialsAISample.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Windows App SDK 2.3 exposes constrained JSON generation
-/// (<c>LanguageModel.GenerateStructuredJsonResponseAsync</c>, surfaced by
-/// <c>PhiSilicaChatClient</c> through <see cref="ChatOptions.ResponseFormat"/>) but there is
-/// still no function-calling API on the WinRT surface.
+/// Windows App SDK exposes schema-constrained JSON generation but no function-calling API, so tool
+/// calling has to be built on top of constrained decoding. This middleware does that in two phases,
+/// then emits <see cref="FunctionCallContent"/> so the standard <c>UseFunctionInvocation</c>
+/// middleware can execute the call.
+/// </para>
+/// <list type="number">
+/// <item><description>
+/// <b>Selection.</b> One constrained call against a schema whose only property is a
+/// <c>tool_name</c> enum listing the tools plus <c>none</c>.
+/// </description></item>
+/// <item><description>
+/// <b>Arguments.</b> If a tool was chosen, a second constrained call against that tool's own
+/// parameter schema. If <c>none</c> was chosen, the request is passed through so the model answers
+/// normally.
+/// </description></item>
+/// </list>
+/// <para>
+/// The split matters. Probing the on-device model showed that a single combined schema — one object
+/// carrying a <c>tool_call</c>/<c>text</c> discriminator, the tool name, the arguments and the
+/// answer text — makes the model unreliable: it skips prerequisite calls, invents placeholder
+/// argument values such as <c>"USER_ID"</c>, and abandons multi-step chains by asking the user for
+/// data it should have fetched. Asking one small question at a time is both more accurate and
+/// faster, and giving the argument phase the tool's real schema means required parameters are
+/// actually filled in.
 /// </para>
 /// <para>
-/// This middleware bridges that gap: it describes the available tools in the system prompt and
-/// constrains the reply to a tool-call JSON schema, then converts the result into
-/// <see cref="FunctionCallContent"/> so the standard <c>UseFunctionInvocation</c> middleware can
-/// execute it. Because the schema is enforced by the model runtime, no code-fence stripping or
-/// free-form JSON scraping is needed.
+/// Every schema sent to the model sets <c>additionalProperties: false</c>. Without it the model
+/// invents property names — it produced <c>body</c>, <c>response</c> and <c>message</c> in place of
+/// a declared <c>text</c> property — and constrained decoding permits them, which silently yields
+/// empty results.
 /// </para>
 /// <para>Usage: <c>new PhiSilicaToolCallingClient(new PhiSilicaChatClient())</c></para>
 /// </remarks>
 public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 {
-	private const string MoreStepsKey = "__more_steps";
-	private const string CalledToolsKey = "__called_tools";
+	/// <summary>Sentinel choice meaning the model wants to answer without a tool.</summary>
+	private const string NoToolName = "none";
+
+	/// <summary>
+	/// Upper bound on tool calls in a single chain, counted from the conversation history.
+	/// </summary>
+	/// <remarks>
+	/// The model decides for itself when to stop by choosing <see cref="NoToolName"/>, but a small
+	/// model does not always take that exit. Since the function invocation middleware feeds each
+	/// result back and asks again, an indecisive model would otherwise keep selecting tools until
+	/// that middleware hits its own iteration cap, which on device means minutes of stalling. This
+	/// bounds the work instead.
+	/// </remarks>
+	private const int MaxToolCallsPerChain = 5;
 
 	public PhiSilicaToolCallingClient(IChatClient inner) : base(inner) { }
 
@@ -37,15 +69,24 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		ChatOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
-		if (!HasTools(options))
+		var tools = GetFunctions(options);
+		if (tools is null)
 			return await base.GetResponseAsync(messages, options, cancellationToken);
 
-		var (rewritten, newOptions) = RewriteForTools(messages, options!);
-		var response = await base.GetResponseAsync(rewritten, newOptions, cancellationToken);
+		var conversation = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
 
-		ConvertToolCallResponse(response);
+		var selected = await SelectToolAsync(conversation, tools, options, cancellationToken);
+		if (selected is null)
+			return await AnswerAsync(conversation, options, cancellationToken);
 
-		return response;
+		var call = await BuildToolCallAsync(conversation, selected, options, cancellationToken);
+
+		// Repeating a call that has already been answered would loop forever, so treat an exact
+		// repeat as the model having nothing left to ask for.
+		if (GetCompletedCalls(conversation).Contains(Signature(call.Name, call.Arguments)))
+			return await AnswerAsync(conversation, options, cancellationToken);
+
+		return new ChatResponse(new ChatMessage(ChatRole.Assistant, [call]));
 	}
 
 	public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
@@ -53,294 +94,309 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		ChatOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
-		// Without tools there is nothing to rewrite — structured output (if requested) is handled
-		// natively by the underlying client.
-		if (!HasTools(options))
+		// Without tools there is nothing to rewrite, so stream straight through.
+		if (GetFunctions(options) is null)
 			return base.GetStreamingResponseAsync(messages, options, cancellationToken);
 
-		return StreamToolResponseAsync(messages, options!, cancellationToken);
+		return StreamToolResponseAsync(messages, options, cancellationToken);
 	}
 
 	private async IAsyncEnumerable<ChatResponseUpdate> StreamToolResponseAsync(
 		IEnumerable<ChatMessage> messages,
-		ChatOptions options,
+		ChatOptions? options,
 		[EnumeratorCancellation] CancellationToken cancellationToken)
 	{
-		// A partial tool call is not actionable, so buffer the whole thing and emit it at once.
+		// A partial tool call is not actionable, so the response is resolved before streaming.
 		var response = await GetResponseAsync(messages, options, cancellationToken);
 
 		foreach (var message in response.Messages)
 			yield return new ChatResponseUpdate { Role = message.Role, Contents = [.. message.Contents] };
 	}
 
-	private static bool HasTools(ChatOptions? options) =>
-		options?.Tools is { Count: > 0 } tools && tools.OfType<AIFunction>().Any();
-
-	// ═══════════════════════════════════════════════════════════
-	// REQUEST REWRITING
-	// ═══════════════════════════════════════════════════════════
-
-	private static (IEnumerable<ChatMessage> Messages, ChatOptions Options) RewriteForTools(
-		IEnumerable<ChatMessage> messages, ChatOptions options)
+	private static List<AIFunction>? GetFunctions(ChatOptions? options)
 	{
-		var tools = options.Tools!.OfType<AIFunction>().ToList();
+		if (options?.Tools is not { Count: > 0 })
+			return null;
 
-		// Detect follow-up state: which tools were already called, and did the model ask for more?
-		var (isFollowUp, calledToolNames) = InspectHistory(messages);
+		var functions = options.Tools.OfType<AIFunction>().ToList();
 
-		// Narrow the tool list on follow-up so the enum steers the model to something new.
-		var availableTools = isFollowUp && calledToolNames.Count > 0
-			? tools.Where(t => !calledToolNames.Contains(t.Name)).ToList()
-			: tools;
-		if (availableTools.Count == 0)
-			availableTools = tools;
-
-		var userSchema = (options.ResponseFormat as ChatResponseFormatJson)?.Schema;
-		var schema = BuildToolCallSchema(availableTools, userSchema, isFollowUp);
-
-		var systemPrompt = new ChatMessage(
-			ChatRole.System,
-			BuildSystemPrompt(availableTools, userSchema.HasValue, isFollowUp));
-
-		var allMessages = new List<ChatMessage> { systemPrompt };
-		allMessages.AddRange(messages);
-
-		// Hand the tool-call schema to the model runtime. PhiSilicaChatClient maps this onto
-		// GenerateStructuredJsonResponseAsync, so the reply is guaranteed to match the schema.
-		var newOptions = options.Clone();
-		newOptions.Tools = null;
-		newOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(
-			schema,
-			schemaName: "tool_call",
-			schemaDescription: "A tool call or a direct answer.");
-
-		return (allMessages, newOptions);
+		return functions.Count > 0 ? functions : null;
 	}
 
-	private static (bool IsFollowUp, HashSet<string> CalledToolNames) InspectHistory(IEnumerable<ChatMessage> messages)
+	// ═══════════════════════════════════════════════════════════
+	// PHASE 1: SELECTION
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Asks the model which tool to call, if any.
+	/// </summary>
+	/// <returns>The chosen tool, or <see langword="null"/> to answer without a tool.</returns>
+	private async Task<AIFunction?> SelectToolAsync(
+		IReadOnlyList<ChatMessage> messages,
+		List<AIFunction> tools,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
 	{
-		var isFollowUp = false;
-		var calledToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var completed = GetCompletedCalls(messages);
+
+		// Stop once the chain has done enough work, so an indecisive model cannot spin.
+		if (completed.Count >= MaxToolCallsPerChain)
+			return null;
+
+		// Offering the model a tool it has already used is fine — the same tool with different
+		// arguments is legitimate, for example fetching the weather for a second city. Exact
+		// repeats are caught once the arguments are known.
+		var candidates = tools;
+
+		var instructions = new StringBuilder();
+		instructions.AppendLine("Decide which tool is needed to answer the user's request.");
+		instructions.AppendLine();
+
+		foreach (var tool in candidates)
+			instructions.AppendLine($"- {tool.Name}: {tool.Description}");
+
+		instructions.AppendLine();
+		instructions.AppendLine(
+			$"Choose {NoToolName} if no tool is needed, or if the tool results above already answer the request.");
+
+		var names = candidates.Select(t => t.Name).Append(NoToolName);
+		var schema = BuildSelectionSchema(names);
+
+		var response = await RequestAsync(
+			messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
+
+		var chosen = ReadString(response, "tool_name");
+		if (string.IsNullOrEmpty(chosen) || chosen.Equals(NoToolName, StringComparison.OrdinalIgnoreCase))
+			return null;
+
+		return candidates.FirstOrDefault(t => t.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase));
+	}
+
+	/// <summary>
+	/// Signatures of the tool calls already present in the conversation, used to detect repeats.
+	/// </summary>
+	private static HashSet<string> GetCompletedCalls(IReadOnlyList<ChatMessage> messages)
+	{
+		var completed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 		foreach (var message in messages)
 		{
 			foreach (var content in message.Contents)
 			{
-				if (content is not FunctionCallContent call)
-					continue;
+				if (content is FunctionCallContent call && !string.IsNullOrEmpty(call.Name))
+					completed.Add(Signature(call.Name, call.Arguments));
+			}
+		}
 
-				if (!string.IsNullOrEmpty(call.Name))
-					calledToolNames.Add(call.Name);
+		return completed;
+	}
 
-				if (call.AdditionalProperties?.TryGetValue(MoreStepsKey, out var moreSteps) == true && moreSteps is true)
-					isFollowUp = true;
+	private static string Signature(string name, IDictionary<string, object?>? arguments)
+	{
+		if (arguments is not { Count: > 0 })
+			return name;
 
-				if (call.AdditionalProperties?.TryGetValue(CalledToolsKey, out var called) == true && called is string names)
+		var parts = arguments
+			.OrderBy(a => a.Key, StringComparer.Ordinal)
+			.Select(a => $"{a.Key}={a.Value}");
+
+		return $"{name}({string.Join(",", parts)})";
+	}
+
+	private static JsonElement BuildSelectionSchema(IEnumerable<string> toolNames)
+	{
+		var values = new JsonArray();
+		foreach (var name in toolNames)
+			values.Add(JsonValue.Create(name));
+
+		var schema = new JsonObject
+		{
+			["type"] = "object",
+			["additionalProperties"] = false,
+			["properties"] = new JsonObject
+			{
+				["tool_name"] = new JsonObject
 				{
-					foreach (var name in names.Split(',', StringSplitOptions.RemoveEmptyEntries))
-						calledToolNames.Add(name.Trim());
+					["type"] = "string",
+					["enum"] = values
 				}
-			}
-		}
+			},
+			["required"] = new JsonArray { "tool_name" }
+		};
 
-		return (isFollowUp, calledToolNames);
+		return ToElement(schema);
 	}
 
-	private static string BuildSystemPrompt(List<AIFunction> tools, bool hasUserSchema, bool isFollowUp)
+	// ═══════════════════════════════════════════════════════════
+	// PHASE 2: ARGUMENTS
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Fills in the chosen tool's parameters using the tool's own schema.
+	/// </summary>
+	private async Task<FunctionCallContent> BuildToolCallAsync(
+		IReadOnlyList<ChatMessage> messages,
+		AIFunction tool,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
 	{
-		var prompt = new StringBuilder();
+		var callId = Guid.NewGuid().ToString("N")[..16];
 
-		if (!isFollowUp)
-			prompt.AppendLine("You are a helpful assistant with access to tools.").AppendLine();
+		var schema = CloseSchema(tool.JsonSchema);
+		if (!HasProperties(schema))
+			return new FunctionCallContent(callId, tool.Name, new Dictionary<string, object?>());
 
-		prompt.AppendLine("Available tools:");
-		foreach (var tool in tools)
-		{
-			prompt.AppendLine($"- {tool.Name}: {tool.Description}");
-			prompt.AppendLine($"  Parameters: {tool.JsonSchema}");
+		var instructions =
+			$"Work out the arguments for the {tool.Name} tool ({tool.Description}). " +
+			"Use the request and any tool results above. Fill in every required argument.";
 
-			foreach (var hint in DescribeEnumParameters(tool))
-				prompt.AppendLine($"  IMPORTANT: {hint}");
-		}
+		var response = await RequestAsync(messages, instructions, schema, tool.Name, options, cancellationToken);
 
-		prompt.AppendLine();
-
-		if (isFollowUp)
-		{
-			prompt.AppendLine("Use the tool result above to answer. If you still need more data, call another tool;");
-			prompt.AppendLine(hasUserSchema
-				? "otherwise set type to \"response\" and fill in the response object."
-				: "otherwise set type to \"text\" and put your answer in the text field.");
-		}
-		else
-		{
-			prompt.AppendLine("If the user's question requires a tool, set type to \"tool_call\", set tool_name, and provide arguments.");
-			prompt.AppendLine(hasUserSchema
-				? "If you can answer directly, set type to \"response\" and fill in the response object."
-				: "If you can answer directly without a tool, set type to \"text\" and put your answer in the text field.");
-			prompt.AppendLine("Call only ONE tool at a time. After receiving the result, you may call another.");
-			prompt.AppendLine("If you will need to call another tool AFTER this one, set more_steps to true.");
-		}
-
-		prompt.AppendLine("For enum parameters, use EXACTLY one of the allowed values listed above.");
-		prompt.AppendLine("If a tool has no required parameters, use an empty arguments object {}.");
-
-		return prompt.ToString();
+		return new FunctionCallContent(callId, tool.Name, ReadArguments(response));
 	}
 
-	private static IEnumerable<string> DescribeEnumParameters(AIFunction tool)
+	private static Dictionary<string, object?>? ReadArguments(string? response)
 	{
-		JsonDocument document;
+		if (string.IsNullOrWhiteSpace(response))
+			return null;
+
 		try
 		{
-			document = JsonDocument.Parse(tool.JsonSchema.GetRawText());
-		}
-		catch (JsonException)
-		{
-			yield break;
-		}
-
-		using (document)
-		{
-			if (!document.RootElement.TryGetProperty("properties", out var properties))
-				yield break;
-
-			foreach (var property in properties.EnumerateObject())
-			{
-				if (!property.Value.TryGetProperty("enum", out var values))
-					continue;
-
-				var allowed = string.Join(", ", values.EnumerateArray().Select(v => v.GetString()));
-				yield return $"{property.Name} must be EXACTLY one of: {allowed}";
-			}
-		}
-	}
-
-	private static JsonElement BuildToolCallSchema(List<AIFunction> tools, JsonElement? userSchema, bool isFollowUp)
-	{
-		var toolNames = string.Join(",", tools.Select(t => JsonSerializer.Serialize(t.Name)));
-
-		// The model must always be able to stop and answer. The schema is enforced by the model
-		// runtime, so a follow-up schema that only permits "tool_call" would make the tool-calling
-		// loop impossible to terminate.
-		var (answerField, typeEnum) = userSchema is { } schema
-			? (",\"response\":" + schema.GetRawText(), "[\"tool_call\",\"response\"]")
-			: (",\"text\":{\"type\":\"string\",\"description\":\"Your answer to the user\"}", "[\"tool_call\",\"text\"]");
-
-		// Only offer chaining on the first round, and only when more than one tool exists.
-		var moreSteps = !isFollowUp && tools.Count >= 2
-			? ",\"more_steps\":{\"type\":\"boolean\",\"description\":\"Set true if you need to call another tool after this one\"}"
-			: "";
-
-		var json = "{\"type\":\"object\",\"properties\":{"
-			+ "\"type\":{\"type\":\"string\",\"enum\":" + typeEnum + "},"
-			+ "\"tool_name\":{\"type\":\"string\",\"enum\":[" + toolNames + "]},"
-			+ "\"arguments\":{\"type\":\"object\"}"
-			+ answerField
-			+ moreSteps
-			+ "},\"required\":[\"type\"]}";
-
-		using var document = JsonDocument.Parse(json);
-		return document.RootElement.Clone();
-	}
-
-	// ═══════════════════════════════════════════════════════════
-	// RESPONSE PARSING
-	// ═══════════════════════════════════════════════════════════
-
-	private static void ConvertToolCallResponse(ChatResponse response)
-	{
-		foreach (var message in response.Messages)
-		{
-			var text = string.Concat(message.Contents.OfType<TextContent>().Select(c => c.Text));
-			if (string.IsNullOrWhiteSpace(text))
-				continue;
-
-			switch (Parse(text))
-			{
-				case ToolCall toolCall:
-					message.Contents.Clear();
-					message.Contents.Add(CreateFunctionCall(toolCall));
-					break;
-
-				case TextAnswer answer:
-					message.Contents.Clear();
-					message.Contents.Add(new TextContent(answer.Text));
-					break;
-			}
-		}
-	}
-
-	private static FunctionCallContent CreateFunctionCall(ToolCall toolCall)
-	{
 #pragma warning disable IL3050, IL2026 // Sample code; the argument shape is not known at compile time.
-		var arguments = toolCall.Arguments is { ValueKind: JsonValueKind.Object } element
-			? JsonSerializer.Deserialize<Dictionary<string, object?>>(element.GetRawText())
-			: null;
-
-		var call = new FunctionCallContent(Guid.NewGuid().ToString("N")[..16], toolCall.Name, arguments);
+			return JsonSerializer.Deserialize<Dictionary<string, object?>>(response);
 #pragma warning restore IL3050, IL2026
-
-		call.AdditionalProperties ??= [];
-
-		if (toolCall.MoreSteps)
-			call.AdditionalProperties[MoreStepsKey] = true;
-
-		// Track which tools ran so the follow-up round can narrow the tool_name enum.
-		call.AdditionalProperties[CalledToolsKey] = toolCall.Name;
-
-		return call;
-	}
-
-	private static object? Parse(string text)
-	{
-		JsonDocument document;
-		try
-		{
-			document = JsonDocument.Parse(text);
 		}
 		catch (JsonException)
 		{
 			return null;
 		}
+	}
 
-		using (document)
+	// ═══════════════════════════════════════════════════════════
+	// ANSWERING
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Produces the final answer once no further tool is needed. The caller's own
+	/// <see cref="ChatOptions.ResponseFormat"/> is preserved so structured output still works, and
+	/// the tools are removed so this middleware is not re-entered.
+	/// </summary>
+	private async Task<ChatResponse> AnswerAsync(
+		IReadOnlyList<ChatMessage> messages,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var answerOptions = options?.Clone() ?? new ChatOptions();
+		answerOptions.Tools = null;
+
+		return await base.GetResponseAsync(messages, answerOptions, cancellationToken);
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// MODEL ACCESS
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Runs one schema-constrained request, prepending <paramref name="instructions"/> as a system
+	/// message and dropping the caller's tools and response format for the duration.
+	/// </summary>
+	private async Task<string?> RequestAsync(
+		IReadOnlyList<ChatMessage> messages,
+		string instructions,
+		JsonElement schema,
+		string schemaName,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var request = new List<ChatMessage>(messages.Count + 1)
 		{
-			var root = document.RootElement;
-			if (root.ValueKind != JsonValueKind.Object)
-				return null;
+			new(ChatRole.System, instructions)
+		};
+		request.AddRange(messages);
 
-			var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
+		var requestOptions = options?.Clone() ?? new ChatOptions();
+		requestOptions.Tools = null;
+		requestOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(schema, schemaName);
 
-			switch (type)
+		var response = await base.GetResponseAsync(request, requestOptions, cancellationToken);
+
+		return response.Text;
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// SCHEMA HELPERS
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Returns a copy of <paramref name="schema"/> with <c>additionalProperties: false</c> applied
+	/// to every object, which stops the model inventing property names.
+	/// </summary>
+	private static JsonElement CloseSchema(JsonElement schema)
+	{
+		var node = JsonNode.Parse(schema.GetRawText());
+		if (node is null)
+			return schema;
+
+		Close(node);
+
+		return ToElement(node);
+
+		static void Close(JsonNode? node)
+		{
+			switch (node)
 			{
-				case "tool_call":
-					var name = root.TryGetProperty("tool_name", out var nameElement) ? nameElement.GetString() : null;
-					if (string.IsNullOrEmpty(name))
-						return null;
+				case JsonObject obj:
+					if (obj.TryGetPropertyValue("type", out var type) &&
+						type?.GetValueKind() == JsonValueKind.String &&
+						type.GetValue<string>() == "object")
+					{
+						obj["additionalProperties"] = false;
+					}
 
-					var arguments = root.TryGetProperty("arguments", out var argumentsElement)
-						? argumentsElement.Clone()
-						: (JsonElement?)null;
-					var moreSteps = root.TryGetProperty("more_steps", out var moreStepsElement)
-						&& moreStepsElement.ValueKind == JsonValueKind.True;
+					foreach (var property in obj.ToList())
+						Close(property.Value);
+					break;
 
-					return new ToolCall(name!, arguments, moreSteps);
-
-				case "text":
-					return new TextAnswer(root.TryGetProperty("text", out var textElement) ? textElement.GetString() ?? "" : "");
-
-				case "response" when root.TryGetProperty("response", out var responseElement):
-					return new TextAnswer(responseElement.GetRawText());
-
-				default:
-					return null;
+				case JsonArray array:
+					foreach (var item in array)
+						Close(item);
+					break;
 			}
 		}
 	}
 
-	private sealed record ToolCall(string Name, JsonElement? Arguments, bool MoreSteps);
+	/// <summary>Whether a parameter schema declares any properties to fill in.</summary>
+	private static bool HasProperties(JsonElement schema) =>
+		schema.ValueKind == JsonValueKind.Object &&
+		schema.TryGetProperty("properties", out var properties) &&
+		properties.ValueKind == JsonValueKind.Object &&
+		properties.EnumerateObject().Any();
 
-	private sealed record TextAnswer(string Text);
+	private static string? ReadString(string? json, string propertyName)
+	{
+		if (string.IsNullOrWhiteSpace(json))
+			return null;
+
+		try
+		{
+			using var document = JsonDocument.Parse(json);
+
+			return document.RootElement.ValueKind == JsonValueKind.Object &&
+				document.RootElement.TryGetProperty(propertyName, out var value) &&
+				value.ValueKind == JsonValueKind.String
+					? value.GetString()
+					: null;
+		}
+		catch (JsonException)
+		{
+			return null;
+		}
+	}
+
+	private static JsonElement ToElement(JsonNode node)
+	{
+		using var document = JsonDocument.Parse(node.ToJsonString());
+		return document.RootElement.Clone();
+	}
 }
 #endif

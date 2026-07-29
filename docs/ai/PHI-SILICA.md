@@ -51,30 +51,43 @@ Requests without a schema continue to use `LanguageModel.GenerateResponseAsync` 
 ## Tool calling
 
 Windows App SDK exposes no function-calling API, so `PhiSilicaToolCallingClient`
-(`samples/EssentialsAISample/Services/`) provides it as an `IChatClient` middleware.
+(`samples/EssentialsAISample/Services/`) builds it on top of constrained decoding, in two phases:
 
-It describes the available tools in the system prompt, then constrains the reply with a tool-call
-JSON schema handed to the model through `ChatOptions.ResponseFormat` — the same native structured
-output path described above. The reply is parsed into `FunctionCallContent` so the standard
-`UseFunctionInvocation()` middleware can execute the call.
+1. **Selection.** One constrained call against a schema whose only property is a `tool_name` enum
+   listing the available tools plus `none`.
+2. **Arguments.** If a tool was chosen, a second constrained call against *that tool''s own*
+   parameter schema. If `none` was chosen the request is passed through so the model answers
+   normally, preserving any `ResponseFormat` the caller asked for.
 
-```jsonc
-{ "type": "tool_call", "tool_name": "get_weather", "arguments": { "city": "Paris" }, "more_steps": false }
-{ "type": "text", "text": "..." }
-{ "type": "response", "response": { } }   // when the caller also supplied a schema
-```
+The result is emitted as `FunctionCallContent`, so the standard `UseFunctionInvocation()` middleware
+executes the call and re-invokes the client with the result in history. Chaining therefore falls out
+of the same loop, and it can always terminate because `none` is always available.
 
-Because the schema is enforced by the runtime, the middleware only handles orchestration:
+### Why two phases
 
-- **Enum narrowing.** `tool_name` is an `enum` of the actual tool names, so the model cannot invent one.
-- **Termination.** Every schema, including the follow-up one, keeps the `text` (or `response`) option
-  available. Because the runtime *enforces* the schema, a follow-up schema restricted to `tool_call`
-  would make the loop impossible to exit.
-- **Chaining.** `more_steps` lets the model signal that another call is needed. On the follow-up round
-  already-called tools are removed from the `tool_name` enum, which discourages repeating a call.
-- **Streaming.** A partial tool call is not actionable, so requests with tools buffer the response and
-  emit it once.
+The obvious design is one combined schema: a single object carrying a `tool_call`/`text`
+discriminator, the tool name, the arguments and the answer text. Probing the on-device model showed
+that this is unreliable.
 
+- It skipped prerequisite calls and invented placeholder arguments such as `"USER_ID"`.
+- Part-way through a chain it gave up and asked the user for data it should have fetched.
+- Wording had outsized effects. Adding "if you can answer, put the answer in the text property" was
+  enough to make it *describe* a tool in prose instead of calling it.
+
+Asking one small question at a time is both more accurate and faster — selection lands in about two
+seconds — and giving the argument phase the tool''s real schema means `required` parameters are
+actually filled in.
+
+### Closed schemas
+
+Every schema sent to the model sets `additionalProperties: false`, applied recursively. Without it
+the model invents property names: it produced `body`, `response` and `message` in place of a declared
+`text` property. Constrained decoding permits those, so the value silently reads back as null.
+
+### Streaming
+
+A partial tool call is not actionable, so requests carrying tools resolve the response fully and then
+emit it, rather than streaming tokens.
 ## Image generation
 
 `PhiSilicaImageGenerator` implements `IImageGenerator` over `Microsoft.Windows.AI.Imaging.ImageGenerator`.
