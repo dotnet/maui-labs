@@ -162,8 +162,19 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		var names = candidates.Select(t => t.Name).Append(NoToolName);
 		var schema = BuildSelectionSchema(names);
 
-		var response = await RequestAsync(
-			messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
+		string? response;
+		try
+		{
+			response = await RequestAsync(
+				messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
+		}
+		catch (InvalidOperationException)
+		{
+			// Constrained generation can fail outright once a chain has accumulated enough history,
+			// reporting a status such as ResponseInvalidJson. Failing to decide is not a reason to
+			// fail the whole request, so fall back to answering with what has been gathered.
+			return null;
+		}
 
 		var chosen = ReadString(response, "tool_name");
 		if (string.IsNullOrEmpty(chosen) || chosen.Equals(NoToolName, StringComparison.OrdinalIgnoreCase))
@@ -250,9 +261,58 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 			$"Work out the arguments for the {tool.Name} tool ({tool.Description}). " +
 			"Use the request and any tool results above. Fill in every required argument.";
 
-		var response = await RequestAsync(messages, instructions, schema, tool.Name, options, cancellationToken);
+		string? response = null;
+		try
+		{
+			response = await RequestAsync(messages, instructions, schema, tool.Name, options, cancellationToken);
+		}
+		catch (InvalidOperationException)
+		{
+			// Constrained generation sometimes fails on the full conversation, reporting a status
+			// such as ResponseInvalidJson, while succeeding on the same tool and schema given a
+			// smaller prompt. Retry with only the material the arguments can actually come from.
+		}
+
+		if (response is null)
+		{
+			try
+			{
+				response = await RequestAsync(
+					Essentials(messages), instructions, schema, tool.Name, options, cancellationToken);
+			}
+			catch (InvalidOperationException)
+			{
+				// Give up on arguments rather than on the request; the call is still reported so the
+				// caller sees which tool was chosen.
+			}
+		}
 
 		return new FunctionCallContent(callId, tool.Name, ReadArguments(response));
+	}
+
+	/// <summary>
+	/// Reduces the conversation to the parts an argument value can be drawn from: what the user
+	/// asked, and what earlier tools returned. Assistant prose and the caller's own system prompt
+	/// only add length.
+	/// </summary>
+	private static List<ChatMessage> Essentials(IReadOnlyList<ChatMessage> messages)
+	{
+		var essentials = new List<ChatMessage>();
+
+		foreach (var message in messages)
+		{
+			if (message.Role == ChatRole.User)
+			{
+				essentials.Add(message);
+				continue;
+			}
+
+			var results = message.Contents.OfType<FunctionResultContent>().ToList();
+			if (results.Count > 0)
+				essentials.Add(new ChatMessage(message.Role, [.. results]));
+		}
+
+		return essentials.Count > 0 ? essentials : [.. messages];
 	}
 
 	private static Dictionary<string, object?>? ReadArguments(string? response)
