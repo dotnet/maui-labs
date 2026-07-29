@@ -78,6 +78,23 @@ Asking one small question at a time is both more accurate and faster — selecti
 seconds — and giving the argument phase the tool''s real schema means `required` parameters are
 actually filled in.
 
+### Telling the model what has already run
+
+On a follow-up turn the selection prompt names the tools that have already been called. This is what
+makes multi-tool requests work at all. Left to infer progress from the transcript, the model reads
+any tool result as "the request is answered" and either stops early or simply repeats the call it
+just made — asked for "the weather and the time" it fetched the weather twice and never called the
+time tool.
+
+The wording was chosen by measuring candidates against three follow-up cases: a second tool still
+needed, the request already satisfied, and the same tool needed again for a second subject. Only
+naming the completed calls got all three right; phrasings that merely stressed "check every part"
+kept going when they should have stopped.
+
+The argument phase gets the same treatment in reverse: when a tool is being called again it is told
+which argument sets have already been used, so it moves on to the next subject instead of
+re-extracting the first one.
+
 ### Closed schemas
 
 Every schema sent to the model sets `additionalProperties: false`, applied recursively. Without it

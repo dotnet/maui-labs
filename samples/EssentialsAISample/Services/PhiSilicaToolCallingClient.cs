@@ -166,15 +166,32 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		var candidates = tools;
 
 		var instructions = new StringBuilder();
-		instructions.AppendLine("Decide which tool is needed to answer the user's request.");
+		instructions.AppendLine("Decide which tool to call next.");
 		instructions.AppendLine();
+		instructions.AppendLine("Available tools:");
 
 		foreach (var tool in candidates)
 			instructions.AppendLine($"- {tool.Name}: {tool.Description}");
 
 		instructions.AppendLine();
-		instructions.AppendLine(
-			$"Choose {NoToolName} if no tool is needed, or if the tool results above already answer the request.");
+
+		// Naming the completed calls is what makes multi-tool requests work. Left to infer it from
+		// the transcript, the model reads any tool result as "done" and either stops early or
+		// repeats the call it just made. Told plainly what has run, it compares the request against
+		// that list and picks up whatever is still missing.
+		var completedNames = GetCompletedToolNames(messages);
+		if (completedNames.Count > 0)
+		{
+			instructions.AppendLine($"Already called: {string.Join(", ", completedNames)}.");
+			instructions.AppendLine("Do not repeat a call that has already been made.");
+			instructions.AppendLine(
+				"If the user asked for something that the completed calls do not cover, choose the tool that covers it.");
+			instructions.AppendLine($"Otherwise choose {NoToolName}.");
+		}
+		else
+		{
+			instructions.AppendLine($"Choose {NoToolName} if no tool is needed.");
+		}
 
 		var names = candidates.Select(t => t.Name).Append(NoToolName);
 		var schema = BuildSelectionSchema(names);
@@ -223,6 +240,62 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		}
 
 		return completed;
+	}
+
+	/// <summary>
+	/// The distinct tool names already called in the conversation, in the order they first appear.
+	/// </summary>
+	private static List<string> GetCompletedToolNames(IReadOnlyList<ChatMessage> messages)
+	{
+		var names = new List<string>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var message in messages)
+		{
+			foreach (var content in message.Contents)
+			{
+				if (content is FunctionCallContent call &&
+					!string.IsNullOrEmpty(call.Name) &&
+					seen.Add(call.Name))
+				{
+					names.Add(call.Name);
+				}
+			}
+		}
+
+		return names;
+	}
+
+	/// <summary>
+	/// The argument sets already used for one tool, so the argument phase can move on to whatever
+	/// the request still needs rather than re-extracting the first subject.
+	/// </summary>
+	private static List<string> GetCompletedArguments(IReadOnlyList<ChatMessage> messages, string toolName)
+	{
+		var used = new List<string>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var message in messages)
+		{
+			foreach (var content in message.Contents)
+			{
+				if (content is not FunctionCallContent call ||
+					!string.Equals(call.Name, toolName, StringComparison.OrdinalIgnoreCase) ||
+					call.Arguments is not { Count: > 0 })
+				{
+					continue;
+				}
+
+				var description = string.Join(", ", call.Arguments
+					.OrderBy(a => a.Key, StringComparer.Ordinal)
+					.Select(a => $"{a.Key}={a.Value}"));
+
+				if (seen.Add(description))
+					used.Add(description);
+			}
+		}
+
+		return used;
 	}
 
 	private static string Signature(string name, IDictionary<string, object?>? arguments)
@@ -280,14 +353,27 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		if (!HasProperties(schema))
 			return new FunctionCallContent(callId, tool.Name, new Dictionary<string, object?>());
 
-		var instructions =
+		var instructions = new StringBuilder();
+		instructions.Append(
 			$"Work out the arguments for the {tool.Name} tool ({tool.Description}). " +
-			"Use the request and any tool results above. Fill in every required argument.";
+			"Use the request and any tool results above. Fill in every required argument.");
+
+		// When the same tool is being used again, the request has more than one subject — several
+		// cities, say. Without knowing which have been done, the model re-extracts the first one and
+		// the chain stalls on a repeat.
+		var used = GetCompletedArguments(messages, tool.Name);
+		if (used.Count > 0)
+		{
+			instructions.AppendLine();
+			instructions.AppendLine($"Already done: {string.Join("; ", used)}.");
+			instructions.Append("Use the arguments for a part of the request that has not been done yet.");
+		}
 
 		string? response = null;
 		try
 		{
-			response = await RequestAsync(messages, instructions, schema, tool.Name, options, cancellationToken);
+			response = await RequestAsync(
+				messages, instructions.ToString(), schema, tool.Name, options, cancellationToken);
 		}
 		catch (InvalidOperationException)
 		{
