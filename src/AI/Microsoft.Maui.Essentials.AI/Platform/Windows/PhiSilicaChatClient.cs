@@ -35,6 +35,17 @@ public sealed class PhiSilicaChatClient : IChatClient
 	private Task<ImageDescriptionGenerator>? _imageDescriptionTask;
 
 	/// <summary>
+	/// Lazily-created experimental wrapper used for schema-constrained generation.
+	/// </summary>
+	/// <remarks>
+	/// Disposing the wrapper also closes the underlying <see cref="LanguageModel"/>, so a single
+	/// instance is cached for the lifetime of the client instead of being created per request.
+	/// </remarks>
+#pragma warning disable CS8305 // LanguageModelExperimental has no stable equivalent in this SDK line.
+	private LanguageModelExperimental? _experimentalModel;
+#pragma warning restore CS8305
+
+	/// <summary>
 	/// Lazily-initialized metadata describing the implementation.
 	/// </summary>
 	private ChatClientMetadata? _metadata;
@@ -103,7 +114,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 		var jsonSchema = (options?.ResponseFormat as ChatResponseFormatJson)?.Schema?.GetRawText();
 
 		LanguageModelContext? context = null;
-		IDisposable? experimentalModel = null;
 		Action cancel;
 		try
 		{
@@ -117,15 +127,21 @@ public sealed class PhiSilicaChatClient : IChatClient
 				// LanguageModelExperimental surface in Windows App SDK 2.2.x. There is no stable
 				// equivalent on this SDK line, so the warning is acknowledged rather than avoided.
 #pragma warning disable CS8305
-				var structuredModel = new LanguageModelExperimental(model);
-				experimentalModel = structuredModel;
+				var structuredModel = _experimentalModel ??= new LanguageModelExperimental(model);
 
 				var structuredOperation = structuredModel.GenerateStructuredJsonResponseAsync(
 					structuredPrompt,
 					jsonSchema,
 					LanguageModelOptionsExperimental.GetForLanguageModelOptions(modelOptions));
 
-				WireUp(structuredOperation, handler, cancellationToken);
+				// Structured generation does not report incremental progress: the constrained JSON
+				// is only available from the completed result.
+				WireUp(structuredOperation, handler, cancellationToken, static result =>
+					result.Status is GenerateStructuredJsonResponseStatus.Complete
+						? result.Text
+						: throw new InvalidOperationException(
+							$"Structured response generation failed: {result.Status}", result.ExtendedError));
+
 				cancel = structuredOperation.Cancel;
 #pragma warning restore CS8305
 			}
@@ -157,7 +173,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 		finally
 		{
 			context?.Dispose();
-			experimentalModel?.Dispose();
 		}
 	}
 
@@ -165,6 +180,14 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// Bridges a WinRT async operation that reports incremental text into the
 	/// <see cref="StreamingResponseHandler"/> pipeline.
 	/// </summary>
+	/// <param name="operation">The WinRT operation to observe.</param>
+	/// <param name="handler">The pipeline to feed.</param>
+	/// <param name="cancellationToken">The token reported when the operation is cancelled.</param>
+	/// <param name="getFinalText">
+	/// Reads the response from the completed result. Used by operations that deliver their whole
+	/// response at the end instead of through <c>Progress</c>; it is only consulted when no
+	/// progress was reported.
+	/// </param>
 	/// <remarks>
 	/// Both <c>GenerateResponseAsync</c> and <c>GenerateStructuredJsonResponseAsync</c> return
 	/// <see cref="IAsyncOperationWithProgress{TResult, TProgress}"/> with a <see cref="string"/>
@@ -173,12 +196,16 @@ public sealed class PhiSilicaChatClient : IChatClient
 	private static void WireUp<TResult>(
 		IAsyncOperationWithProgress<TResult, string> operation,
 		StreamingResponseHandler handler,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		Func<TResult, string?>? getFinalText = null)
 	{
+		var reportedProgress = false;
+
 		operation.Progress = (_, progress) =>
 		{
 			if (!string.IsNullOrEmpty(progress))
 			{
+				reportedProgress = true;
 				handler.ProcessContent(progress);
 			}
 		};
@@ -187,6 +214,17 @@ public sealed class PhiSilicaChatClient : IChatClient
 		{
 			if (status == AsyncStatus.Completed)
 			{
+				try
+				{
+					if (!reportedProgress && getFinalText is not null)
+						handler.ProcessContent(getFinalText(op.GetResults()));
+				}
+				catch (Exception ex)
+				{
+					handler.CompleteWithError(ex);
+					return;
+				}
+
 				handler.Complete();
 			}
 			else if (status == AsyncStatus.Error)
@@ -233,7 +271,15 @@ public sealed class PhiSilicaChatClient : IChatClient
 			DisposeWhenReady(imageDescriptionTask);
 
 		if (_ownsModel)
+		{
+			// Disposing the experimental wrapper also closes the underlying model, so it is only
+			// safe to dispose when this instance owns that model.
+#pragma warning disable CS8305
+			_experimentalModel?.Dispose();
+#pragma warning restore CS8305
+
 			DisposeWhenReady(_modelTask);
+		}
 	}
 
 	private static void DisposeWhenReady<T>(Task<T> task)
