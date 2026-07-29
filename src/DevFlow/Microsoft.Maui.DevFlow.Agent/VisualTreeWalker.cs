@@ -326,7 +326,9 @@ public class PlatformVisualTreeWalker : VisualTreeWalker
                 var itemView = toolbarItem is AppKit.NSSearchToolbarItem searchToolbarItem
                     ? searchToolbarItem.SearchField
                     : toolbarItem.View;
-                info.IsVisible = !toolbarItem.Hidden;
+                info.IsVisible = OperatingSystem.IsMacOSVersionAtLeast(15)
+                    ? !toolbarItem.Hidden
+                    : true;
                 if (itemView?.Window?.ContentView is { } contentView)
                 {
                     var bounds = itemView.ConvertRectToView(itemView.Bounds, contentView);
