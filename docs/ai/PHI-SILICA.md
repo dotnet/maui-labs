@@ -97,9 +97,17 @@ re-extracting the first one.
 
 ### Closed schemas
 
-Every schema sent to the model sets `additionalProperties: false`, applied recursively. Without it
-the model invents property names: it produced `body`, `response` and `message` in place of a declared
-`text` property. Constrained decoding permits those, so the value silently reads back as null.
+`PhiSilicaChatClient` closes every schema with `additionalProperties: false`, applied recursively,
+before constraining generation. This is not specific to tool calling: it applies to all structured
+output.
+
+Constrained decoding only forbids what the schema forbids, and schemas generated from a type by
+`ChatResponseFormat.ForJsonSchema<T>()` are open — no `required`, no `additionalProperties`. Given an
+open schema the model answers under a property name of its own choosing: asked to fill in a declared
+`text` property it produced `body`, `response` and `message` instead. Those replies satisfy the
+schema, so nothing fails and no status is reported, but the declared property is missing and
+deserializing the result yields null. Closing the schema also measurably reduced
+`ResponseInvalidJson` failures, since the decoder has less room to wander.
 
 ### Deterministic sampling
 
