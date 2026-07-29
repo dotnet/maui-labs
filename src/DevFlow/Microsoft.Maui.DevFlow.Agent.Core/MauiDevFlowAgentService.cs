@@ -39,7 +39,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             static () => DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
     }
 
-    private readonly NativeElementRegistrationRegistry? _nativeElementRegistry;
+    private readonly RegisteredNativeElementRegistry? _nativeElementRegistry;
     private readonly IDisposable? _nativeElementSubscription;
 
     /// <summary>
@@ -52,7 +52,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     internal MauiDevFlowAgentService(
         AgentOptions? options,
-        NativeElementRegistrationRegistry? nativeElementRegistry,
+        RegisteredNativeElementRegistry? nativeElementRegistry,
         IDisposable? nativeElementSubscription)
         : base(options)
     {
@@ -165,6 +165,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         StopCaptureInvalidationHooks();
         _nativeElementSubscription?.Dispose();
+        _nativeElementRegistry?.Clear();
         Sensors.Dispose();
     }
 
@@ -416,7 +417,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// </summary>
     protected virtual VisualTreeWalker CreateTreeWalker() => new VisualTreeWalker();
 
-    internal NativeElementRegistrationRegistry? NativeElementRegistry => _nativeElementRegistry;
+    internal RegisteredNativeElementRegistry? NativeElementRegistry => _nativeElementRegistry;
     /// <summary>Platform name for status reporting. Override for platforms without DeviceInfo.</summary>
     protected override string PlatformName => DeviceInfo.Current.Platform.ToString();
 

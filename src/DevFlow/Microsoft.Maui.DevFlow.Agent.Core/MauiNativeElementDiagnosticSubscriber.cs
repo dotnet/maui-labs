@@ -15,12 +15,12 @@ internal sealed class MauiNativeElementDiagnosticSubscriber :
     internal const string LegacyUnregisteredEventName = "Microsoft.Maui.NativeElements.Unregistered";
 
     private readonly object _gate = new();
-    private readonly NativeElementRegistrationRegistry _registry;
+    private readonly RegisteredNativeElementRegistry _registry;
     private readonly IDisposable _allListenersSubscription;
     private readonly List<IDisposable> _listenerSubscriptions = [];
     private bool _disposed;
 
-    public MauiNativeElementDiagnosticSubscriber(NativeElementRegistrationRegistry registry)
+    public MauiNativeElementDiagnosticSubscriber(RegisteredNativeElementRegistry registry)
     {
         _registry = registry;
         _allListenersSubscription = DiagnosticListener.AllListeners.Subscribe(this);

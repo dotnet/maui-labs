@@ -43,7 +43,7 @@ public class WpfVisualTreeWalker : VisualTreeWalker
     {
     }
 
-    internal WpfVisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+    internal WpfVisualTreeWalker(RegisteredNativeElementRegistry nativeElementRegistry)
         : base(nativeElementRegistry)
     {
     }

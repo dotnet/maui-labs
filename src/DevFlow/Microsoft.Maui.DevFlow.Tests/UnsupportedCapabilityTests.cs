@@ -95,6 +95,60 @@ public class UnsupportedCapabilityTests
     }
 
     [Fact]
+    public async Task NonMauiBackend_DoesNotAdvertiseMauiCaptureSemantics()
+    {
+        var port = GetFreePort();
+        using var service = new SupportedNonMauiAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var capabilities = (await client.GetCapabilitiesAsync()).GetProperty("capabilities");
+        var tree = capabilities.GetProperty("ui.tree");
+        var actions = capabilities.GetProperty("ui.actions");
+
+        Assert.Equal(1, tree.GetProperty("version").GetInt32());
+        Assert.DoesNotContain(
+            tree.GetProperty("features").EnumerateArray(),
+            feature => feature.GetString() == "capture-epoch");
+        if (capabilities.TryGetProperty("ui.hit-test", out var hitTest))
+            Assert.Equal(1, hitTest.GetProperty("version").GetInt32());
+        Assert.Equal(1, actions.GetProperty("version").GetInt32());
+        Assert.DoesNotContain(
+            actions.GetProperty("features").EnumerateArray(),
+            feature => feature.GetString() == "stale-capture-rejection");
+    }
+
+    [Fact]
+    public async Task MauiBackend_AdvertisesMauiCaptureSemantics()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        ((DevFlowAgentService)service).StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var capabilities = (await client.GetCapabilitiesAsync()).GetProperty("capabilities");
+        var tree = capabilities.GetProperty("ui.tree");
+        var hitTest = capabilities.GetProperty("ui.hit-test");
+        var actions = capabilities.GetProperty("ui.actions");
+
+        Assert.Equal(2, tree.GetProperty("version").GetInt32());
+        Assert.Contains(
+            tree.GetProperty("features").EnumerateArray(),
+            feature => feature.GetString() == "native-owner");
+        Assert.Equal(2, hitTest.GetProperty("version").GetInt32());
+        Assert.Equal(2, actions.GetProperty("version").GetInt32());
+        Assert.Contains(
+            actions.GetProperty("features").EnumerateArray(),
+            feature => feature.GetString() == "stale-capture-rejection");
+    }
+
+    [Fact]
     public void BrokerRegistration_IsStampedWithTheBackendFramework()
     {
         using var service = new DevFlowAgentService(new AgentOptions { Port = GetFreePort() });
@@ -104,6 +158,12 @@ public class UnsupportedCapabilityTests
 
         Assert.Equal("native", registration.Framework);
         Assert.False(string.IsNullOrWhiteSpace(registration.UiFramework));
+    }
+
+    private sealed class SupportedNonMauiAgentService(AgentOptions options) : DevFlowAgentService(options)
+    {
+        protected override bool IsUiSupported => true;
+        protected override bool IsScreenshotSupported => true;
     }
 
     private static async Task<HttpResponseMessage> WaitForServerAsync(HttpClient http, int port, string path)

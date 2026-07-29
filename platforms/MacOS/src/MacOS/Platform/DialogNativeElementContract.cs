@@ -17,7 +17,7 @@ internal static class DialogNativeElementContract
 
     /// <summary>
     /// Discriminator used for every realized dialog native element. Registration identity is
-    /// already unique per native object (see <c>NativeElementRegistrationRegistry</c>), so this
+    /// already unique per native object (see <c>RegisteredNativeElementRegistry</c>), so this
     /// is a stable, constant tag rather than a per-element index.
     /// </summary>
     public const string RealizedViewDiscriminator = "RealizedView";

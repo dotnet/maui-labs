@@ -6,12 +6,108 @@ using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
-public class NativeElementRegistrationRegistryTests
+public class RegisteredNativeElementRegistryTests
 {
+    private sealed class FakeNativeElement(string? stableKey = null)
+    {
+        public string? StableKey { get; } = stableKey;
+    }
+
+    private static RegisteredNativeElementRegistry CreateStableKeyRegistry()
+        => new(element => (element as FakeNativeElement)?.StableKey);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (string Id, WeakReference Tracker) RegisterOutOfScope(
+        RegisteredNativeElementRegistry registry,
+        object owner)
+    {
+        var nativeElement = new FakeNativeElement("objc:1");
+        return (registry.Register(owner, nativeElement, "toolbar-item"), new WeakReference(nativeElement));
+    }
+
+    private static void Collect()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    [Fact]
+    public void TryGet_AfterManagedPeerLeavesScope_KeepsRegistrationAlive()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+        var (id, tracker) = RegisterOutOfScope(registry, owner);
+
+        Collect();
+
+        Assert.True(tracker.IsAlive);
+        Assert.True(registry.TryGet(id, out var registration));
+        Assert.Same(owner, registration.Owner);
+        Assert.Same(tracker.Target, registration.NativeElement);
+    }
+
+    [Fact]
+    public void Register_FreshPeerWithSameStableKey_ReusesIdAndLatestPeer()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+        var firstId = registry.Register(owner, new FakeNativeElement("objc:1"), "toolbar-item");
+        var latestPeer = new FakeNativeElement("objc:1");
+
+        var secondId = registry.Register(owner, latestPeer, "toolbar-item");
+
+        Assert.Equal(firstId, secondId);
+        Assert.True(registry.TryGet(firstId, out var registration));
+        Assert.Same(latestPeer, registration.NativeElement);
+    }
+
+    [Fact]
+    public void BeginWalk_EvictsEntriesAbsentFromCurrentAndPreviousWalk()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+
+        registry.BeginWalk();
+        var staleId = registry.Register(owner, new FakeNativeElement("stale"), "toolbar-item");
+
+        registry.BeginWalk();
+        for (var index = 0; index < 513; index++)
+            registry.Register(owner, new FakeNativeElement($"live:{index}"), "toolbar-item");
+
+        registry.BeginWalk();
+
+        Assert.False(registry.TryGet(staleId, out _));
+    }
+
+    [Fact]
+    public void Register_StableKeyAfterEviction_GetsNewId()
+    {
+        var registry = CreateStableKeyRegistry();
+        var owner = new object();
+
+        registry.BeginWalk();
+        var staleId = registry.Register(owner, new FakeNativeElement("recycled"), "toolbar-item");
+
+        registry.BeginWalk();
+        for (var index = 0; index < 513; index++)
+            registry.Register(owner, new FakeNativeElement($"live:{index}"), "toolbar-item");
+
+        registry.BeginWalk();
+        Assert.False(registry.TryGet(staleId, out _));
+
+        var replacementId = registry.Register(
+            owner,
+            new FakeNativeElement("recycled"),
+            "toolbar-item");
+
+        Assert.NotEqual(staleId, replacementId);
+    }
+
     [Fact]
     public void Register_SameNativeObject_PreservesStableIdAndUpdatesMetadata()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new object();
         var nativeElement = new object();
 
@@ -29,7 +125,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void Register_DifferentNativeObjects_UsesDifferentIds()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new object();
 
         var firstId = registry.Register(owner, new object(), "tab");
@@ -43,7 +139,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void Register_SameNativeObjectWithNewOwner_ReplacesIdentity()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var firstOwner = new object();
         var secondOwner = new object();
         var nativeElement = new object();
@@ -60,7 +156,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void Generation_ChangesOnlyWhenRegistryStateChanges()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new object();
         var nativeElement = new object();
 
@@ -81,7 +177,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void Unregister_RemovesRegistration()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new object();
         var nativeElement = new object();
         var id = registry.Register(owner, nativeElement, "search-handler");
@@ -94,7 +190,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void Unregister_ReRegisteringRecycledObject_UsesNewId()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var firstOwner = new object();
         var secondOwner = new object();
         var nativeElement = new object();
@@ -112,7 +208,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void DiagnosticSubscriber_ForwardsRegistrationLifecycle()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         using var subscriber = new MauiNativeElementDiagnosticSubscriber(registry);
         using var listener = new DiagnosticListener(MauiNativeElementDiagnosticSubscriber.ListenerName);
         var owner = new object();
@@ -149,7 +245,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void DiagnosticSubscriber_AcceptsLegacyPayloads()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         using var subscriber = new MauiNativeElementDiagnosticSubscriber(registry);
         using var listener = new DiagnosticListener(MauiNativeElementDiagnosticSubscriber.ListenerName);
         var owner = new object();
@@ -172,7 +268,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void DiagnosticSubscriber_IgnoresMalformedRegistration()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         using var subscriber = new MauiNativeElementDiagnosticSubscriber(registry);
         using var listener = new DiagnosticListener(MauiNativeElementDiagnosticSubscriber.ListenerName);
 
@@ -193,7 +289,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void DiagnosticSubscriber_IgnoresOtherListeners()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         using var subscriber = new MauiNativeElementDiagnosticSubscriber(registry);
         using var listener = new DiagnosticListener("Other.Listener");
 
@@ -207,7 +303,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void GetSnapshot_ReturnsLiveRegistrations()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var firstOwner = new object();
         var secondOwner = new object();
         var firstNative = new object();
@@ -236,7 +332,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void WalkTree_RegisteredNativeElement_AddsSelectableNativeNode()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new ToolbarItem { Text = "Settings" };
         var nativeElement = new object();
         var id = registry.Register(owner, nativeElement, "ToolbarItem", "primary");
@@ -292,7 +388,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void HitTestRegisteredNativeElements_FiltersOverlappingControlsByWindow()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var firstOwner = new ToolbarItem { Text = "First" };
         var secondOwner = new ToolbarItem { Text = "Second" };
         var firstId = registry.Register(firstOwner, new object(), "ToolbarItem");
@@ -317,7 +413,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void HitTestRegisteredNativeElements_EqualBoundsPreferRicherCapabilities()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var toolbarOwner = new ToolbarItem { Text = "Toolbar" };
         var searchOwner = new SearchHandler();
         registry.Register(toolbarOwner, new object(), "ToolbarItem");
@@ -339,7 +435,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void WalkTree_SearchHandlerOwner_AttachesToSyntheticNode()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new SearchHandler { Placeholder = "Search" };
         var nativeElement = new object();
         var id = registry.Register(owner, nativeElement, "SearchHandler");
@@ -370,7 +466,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementSetValue_SearchHandler_UpdatesQuery()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new SearchHandler();
         var nativeElement = new object();
         var id = registry.Register(owner, nativeElement, "SearchHandler");
@@ -387,7 +483,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementSetValue_SearchHandler_PreservesSuccessWhenNativeSyncFails()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new SearchHandler();
         var nativeElement = new object();
         var id = registry.Register(owner, nativeElement, "SearchHandler");
@@ -407,7 +503,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void RegisteredShellTabOverflowItem_AdvertisesInvoke()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new ShellItem();
         var id = registry.Register(owner, new object(), "ShellTabOverflow", "TabBarItem");
         var walker = new VisualTreeWalker(registry);
@@ -457,7 +553,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_ToolbarItem_ExecutesCommand()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var invoked = false;
         var owner = new ToolbarItem
         {
@@ -476,7 +572,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_UnsupportedOwner_UsesNativeFallback()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var nativeElement = new object();
         var id = registry.Register(new object(), nativeElement, "DialogAction");
         var walker = new FallbackVisualTreeWalker(registry);
@@ -492,7 +588,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void RegisteredLogicalDialogAction_AdvertisesAndExecutesInvoke()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var invoked = false;
         var logicalAction = new MenuItem
         {
@@ -519,7 +615,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_DialogOwnedByTabbedPage_UsesNativeFallback()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var page = new ContentPage();
         var tabbedPage = (TabbedPage)RuntimeHelpers.GetUninitializedObject(typeof(TabbedPage));
         typeof(Element)
@@ -537,7 +633,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_ShellOverflowRow_UsesNativeFallback()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var id = registry.Register(new ShellSection(), new object(), "ShellTabOverflow");
         var walker = new FallbackVisualTreeWalker(registry);
 
@@ -557,7 +653,7 @@ public class NativeElementRegistrationRegistryTests
         shell.Items.Add(secondItem);
         shell.CurrentItem = firstItem;
         var targetSection = secondItem.Items[0];
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var id = registry.Register(
             targetSection,
             new object(),
@@ -577,7 +673,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_ShellFlyoutItem_SelectsItemAndClosesFlyout()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var shell = new Shell();
         var home = CreateShellItem("Home");
         var settings = CreateShellItem("Settings");
@@ -598,7 +694,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_LockedShellFlyout_DoesNotToggleOrClose()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var shell = new Shell { FlyoutBehavior = FlyoutBehavior.Locked };
         var home = CreateShellItem("Home");
         var settings = CreateShellItem("Settings");
@@ -623,7 +719,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_ShellSection_SelectsSectionAndParentItem()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var shell = new Shell();
         var shellItem = new ShellItem { Title = "Root" };
         var first = new ShellSection { Title = "First" };
@@ -648,7 +744,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public void TryNativeElementTap_ShellContent_SelectsContentAndAncestors()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var shell = new Shell();
         var shellItem = new ShellItem { Title = "Root" };
         var shellSection = new ShellSection { Title = "Section" };
@@ -675,7 +771,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public async Task TryNativeElementTap_BackButton_ExecutesConfiguredCommand()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var invoked = false;
         var page = new ContentPage();
         Shell.SetBackButtonBehavior(page, new BackButtonBehavior
@@ -694,7 +790,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public async Task TryNativeElementTap_BackButton_RejectsDisabledBehavior()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var page = new ContentPage();
         Shell.SetBackButtonBehavior(page, new BackButtonBehavior { IsEnabled = false });
         var id = registry.Register(page, new object(), "BackButton");
@@ -708,7 +804,7 @@ public class NativeElementRegistrationRegistryTests
     [Fact]
     public async Task TryNativeElementTap_BackButton_UsesShellLevelBehavior()
     {
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var invoked = false;
         var page = new ContentPage();
         var shellContent = new ShellContent { Content = page };
@@ -806,7 +902,7 @@ public class NativeElementRegistrationRegistryTests
 
     private sealed class BoundsVisualTreeWalker : VisualTreeWalker
     {
-        public BoundsVisualTreeWalker(NativeElementRegistrationRegistry registry)
+        public BoundsVisualTreeWalker(RegisteredNativeElementRegistry registry)
             : base(registry)
         {
         }
@@ -830,7 +926,7 @@ public class NativeElementRegistrationRegistryTests
 
     private sealed class FallbackVisualTreeWalker : VisualTreeWalker
     {
-        public FallbackVisualTreeWalker(NativeElementRegistrationRegistry registry)
+        public FallbackVisualTreeWalker(RegisteredNativeElementRegistry registry)
             : base(registry)
         {
         }
@@ -851,7 +947,7 @@ public class NativeElementRegistrationRegistryTests
 
     private sealed class SetValueVisualTreeWalker : VisualTreeWalker
     {
-        public SetValueVisualTreeWalker(NativeElementRegistrationRegistry registry)
+        public SetValueVisualTreeWalker(RegisteredNativeElementRegistry registry)
             : base(registry)
         {
         }

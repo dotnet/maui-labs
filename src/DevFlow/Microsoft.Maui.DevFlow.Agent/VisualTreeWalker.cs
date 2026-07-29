@@ -23,7 +23,7 @@ public class PlatformVisualTreeWalker : VisualTreeWalker
     {
     }
 
-    internal PlatformVisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+    internal PlatformVisualTreeWalker(RegisteredNativeElementRegistry nativeElementRegistry)
         : base(nativeElementRegistry)
     {
     }

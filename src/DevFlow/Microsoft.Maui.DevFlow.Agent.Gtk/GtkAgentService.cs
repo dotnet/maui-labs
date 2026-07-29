@@ -14,7 +14,7 @@ public class GtkAgentService : MauiDevFlowAgentService
 
     internal GtkAgentService(
         AgentOptions? options,
-        NativeElementRegistrationRegistry nativeElementRegistry,
+        RegisteredNativeElementRegistry nativeElementRegistry,
         IDisposable nativeElementSubscription)
         : base(options, nativeElementRegistry, nativeElementSubscription)
     {

@@ -15,7 +15,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 public class VisualTreeWalker
 {
     private const string RegisteredNativeElementPrefix = "native:registered:";
-    private readonly NativeElementRegistrationRegistry? _nativeElementRegistry;
+    private readonly RegisteredNativeElementRegistry? _nativeElementRegistry;
     private readonly object _registeredNativeGate = new();
     private Dictionary<string, ElementInfo> _registeredNativeInfos = new(StringComparer.Ordinal);
     private Dictionary<string, string?> _elementInfoParents = new(StringComparer.Ordinal);
@@ -31,7 +31,7 @@ public class VisualTreeWalker
     {
     }
 
-    internal VisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+    internal VisualTreeWalker(RegisteredNativeElementRegistry nativeElementRegistry)
     {
         _nativeElementRegistry = nativeElementRegistry;
     }
@@ -1075,6 +1075,7 @@ public class VisualTreeWalker
         if (_nativeElementRegistry is null)
             return;
 
+        _nativeElementRegistry.BeginWalk();
         var registrations = _nativeElementRegistry.GetSnapshot();
         if (registrations.Count == 0)
         {
@@ -1100,8 +1101,11 @@ public class VisualTreeWalker
                 ownerId = mappedOwnerId;
 
             if (ownerId is null
-                || !infosById.TryGetValue(ownerId, out var ownerEntry)
-                || (maxDepth > 0 && ownerEntry.Depth >= maxDepth))
+                || !infosById.TryGetValue(ownerId, out var ownerEntry))
+                continue;
+
+            _nativeElementRegistry.MarkSeen(registration.Id);
+            if (maxDepth > 0 && ownerEntry.Depth >= maxDepth)
                 continue;
 
             var info = CreateRegisteredNativeElementInfo(registration, ownerId);

@@ -57,7 +57,7 @@ public static class WpfAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var nativeElementRegistry = new NativeElementRegistrationRegistry();
+        var nativeElementRegistry = new RegisteredNativeElementRegistry();
         var nativeElementDiagnosticSubscriber =
             new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
         var service = new WpfAgentService(

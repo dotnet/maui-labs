@@ -26,7 +26,7 @@ public static class AgentServiceExtensions
 
         var hostContext = DevFlowAgentHost.Configure(options, GetMauiHostIdentity);
 
-        var nativeElementRegistry = new NativeElementRegistrationRegistry();
+        var nativeElementRegistry = new RegisteredNativeElementRegistry();
         var nativeElementDiagnosticSubscriber =
             new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
         var service = new PlatformAgentService(

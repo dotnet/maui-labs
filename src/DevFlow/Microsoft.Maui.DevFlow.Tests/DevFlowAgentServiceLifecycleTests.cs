@@ -391,7 +391,7 @@ public class DevFlowAgentServiceLifecycleTests
         var port = GetFreePort();
         using var service = new NativeScreenshotAgentService(
             new AgentOptions { Port = port },
-            new NativeElementRegistrationRegistry());
+            new RegisteredNativeElementRegistry());
         using var client = new AgentClient("localhost", port);
         var first = new Button { AutomationId = "FirstScreenshotButton", Text = "First" };
         var second = new Button { AutomationId = "SecondScreenshotButton", Text = "Second" };
@@ -710,7 +710,7 @@ public class DevFlowAgentServiceLifecycleTests
     public async Task NativeElement_GenericPropertyEndpointsAreRejected()
     {
         var port = GetFreePort();
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var nativeElement = new NativePropertyTarget { IsEnabled = true };
         var elementId = registry.Register(
             new ToolbarItem { Text = "Native" },
@@ -931,7 +931,7 @@ public class DevFlowAgentServiceLifecycleTests
     public async Task Screenshot_RegisteredNativeElement_UsesNativeCaptureHook()
     {
         var port = GetFreePort();
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new ToolbarItem { Text = "Native" };
         var nativeElement = new object();
         var nativeId = registry.Register(owner, nativeElement, "ToolbarItem");
@@ -992,7 +992,7 @@ public class DevFlowAgentServiceLifecycleTests
     public async Task Screenshot_FreshElementCapture_ReturnedEpochCanCaptureSameElementAgain()
     {
         var port = GetFreePort();
-        var registry = new NativeElementRegistrationRegistry();
+        var registry = new RegisteredNativeElementRegistry();
         var owner = new ToolbarItem { Text = "Reusable native screenshot" };
         var nativeElement = new object();
         var nativeId = registry.Register(owner, nativeElement, "ToolbarItem");
@@ -1123,7 +1123,7 @@ public class DevFlowAgentServiceLifecycleTests
     {
         public NativeScreenshotAgentService(
             AgentOptions options,
-            NativeElementRegistrationRegistry registry)
+            RegisteredNativeElementRegistry registry)
             : base(options, registry, nativeElementSubscription: null)
         {
         }

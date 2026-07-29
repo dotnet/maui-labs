@@ -24,7 +24,7 @@ public class PlatformAgentService : MauiDevFlowAgentService
 
     internal PlatformAgentService(
         AgentOptions? options,
-        NativeElementRegistrationRegistry nativeElementRegistry,
+        RegisteredNativeElementRegistry nativeElementRegistry,
         IDisposable nativeElementSubscription)
         : base(options, nativeElementRegistry, nativeElementSubscription)
     {

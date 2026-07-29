@@ -58,7 +58,7 @@ public static class GtkAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var nativeElementRegistry = new NativeElementRegistrationRegistry();
+        var nativeElementRegistry = new RegisteredNativeElementRegistry();
         var nativeElementDiagnosticSubscriber =
             new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
         var service = new GtkAgentService(

@@ -12,7 +12,7 @@ public class GtkVisualTreeWalker : VisualTreeWalker
     {
     }
 
-    internal GtkVisualTreeWalker(NativeElementRegistrationRegistry nativeElementRegistry)
+    internal GtkVisualTreeWalker(RegisteredNativeElementRegistry nativeElementRegistry)
         : base(nativeElementRegistry)
     {
     }
