@@ -11,7 +11,7 @@ test("browser and Canvas hosts use the shared readable typography baseline", () 
     "utf8",
   );
   const shell = renderShell("http://localhost:19223/inspector/app/", "App", "nonce");
-  const disconnected = renderDisconnected("App", "nonce");
+  const disconnected = renderDisconnected("App");
 
   assert.ok(fontStack.length <= 120, "Canvas font stack must pass safeFontFamily");
   assert.match(css, /--df-font-size:\s*13px;/);

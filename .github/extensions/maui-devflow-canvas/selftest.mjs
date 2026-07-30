@@ -12,7 +12,7 @@
 
 import { LiveStore } from "./store.mjs";
 import { replayTest } from "./replay.mjs";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -373,10 +373,8 @@ line("\n[11] workflow recorder — record → .md → replay");
   try { storeSrc = readFileSync(new URL("./store.mjs", import.meta.url), "utf8"); } catch { /* */ }
   try { extSrc = readFileSync(new URL("./extension.mjs", import.meta.url), "utf8"); } catch { /* */ }
 
-  check("recorder.mjs exports Recorder + RECORDABLE set", /export\b[\s\S]*Recorder/.test(recSrc) && /RECORDABLE/.test(recSrc));
+  check("recorder.mjs exports bounded broker-recording persistence", /export\b[\s\S]*Recorder/.test(recSrc) && /RECORDING_MAX_BYTES/.test(recSrc));
   check("store hooks recording into every mutation (_recordAction)", /_recordAction\s*\(/.test(storeSrc));
-  check("store resolves durable selectors (_bestSelector)", /_bestSelector\s*\(/.test(storeSrc));
-  check("store detects navigation by page label (_pageSignature)", /_pageSignature\s*\(/.test(storeSrc));
   check("snapshot() surfaces recording + recorder state", /recording:/.test(storeSrc) && /recorder:/.test(storeSrc));
   check("replay.mjs exports replayTest", /export\s+async\s+function\s+replayTest/.test(repSrc));
   check("extension exposes record.* control verbs", /record\.start/.test(extSrc) && /record\.save/.test(extSrc) && /"replay"/.test(extSrc));
@@ -434,7 +432,7 @@ line("\n[11] workflow recorder — record → .md → replay");
 
       // Replay the saved test against the live app.
       if (mdText) {
-        const report = await replayTest(store, { file: testFile });
+        const report = await replayTest(store, { file: testFile, root: tempRoot });
         check("replay executed the recorded steps", !!(report && Array.isArray(report.results) && report.results.length >= 1),
           report && report.error ? report.error : (report ? `${report.results?.length || 0} step result(s)` : "(no report)"));
         check("replay: all steps + asserts passed", !!(report && report.ok === true),
@@ -521,6 +519,9 @@ if (process.env.MAUI_SELFTEST_SKIP_MULTIBYTE) {
   }
 }
 
+const finalShotPath = store.currentShotPath();
 await releaseForcedLease();
+store.dispose();
+check("dispose removes the screenshot temp file", !finalShotPath || !existsSync(finalShotPath), finalShotPath || "(none)");
 line(`\n== ${failures === 0 ? "ALL CHECKS PASSED \u2713" : failures + " CHECK(S) FAILED \u2717"} ==\n`);
 process.exit(failures === 0 ? 0 : 1);

@@ -6,7 +6,7 @@
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { unlinkSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { DevflowDevice } from "../devflow.mjs";
 
 // Minimal valid-enough PNG (8-byte signature + padding) to pass the adapter's magic check.
@@ -152,15 +152,18 @@ test("themeGet/themeSet return {ok,data} and cache info.theme", async () => {
 
 test("screenshot writes a PNG file; elementShot returns a PNG buffer", async () => {
   const d = dev();
-  const s = await d.screenshot();
-  assert.equal(s.ok, true);
-  assert.ok(s.path.endsWith(".png"));
+  const first = await d.screenshot();
+  const second = await d.screenshot();
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(second.path, first.path);
+  assert.ok(existsSync(first.path));
   const es = await d.elementShot("btn");
   assert.equal(es.ok, true);
   assert.equal(es.mimeType, "image/png");
   assert.ok(Buffer.isBuffer(es.buffer));
-  try { unlinkSync(s.path); } catch { /* best effort */ }
   d.dispose();
+  assert.equal(existsSync(first.path), false);
 });
 
 test("listAgents returns an array; whichPort/resolvedAgent/transport", async () => {

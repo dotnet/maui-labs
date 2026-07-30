@@ -244,17 +244,16 @@ function translateTree(el, dx, dy) {
 }
 
 function alignPageRoots(roots) {
-  const tabTop = Math.min(
-    ...roots
-      .filter((r) => r.type === "Tab" && r.absBounds?.height > 0)
-      .map((r) => r.absBounds.y)
-  );
-  const navBottom = Math.max(
-    0,
-    ...roots
-      .filter((r) => /^(NavBar|Toolbar)/.test(String(r.type || "")) && r.absBounds?.height > 0)
-      .map((r) => r.absBounds.y + r.absBounds.height)
-  );
+  let tabTop = Infinity;
+  let navBottom = 0;
+  for (const root of roots) {
+    if (root.type === "Tab" && root.absBounds?.height > 0) {
+      tabTop = Math.min(tabTop, root.absBounds.y);
+    }
+    if (/^(NavBar|Toolbar)/.test(String(root.type || "")) && root.absBounds?.height > 0) {
+      navBottom = Math.max(navBottom, root.absBounds.y + root.absBounds.height);
+    }
+  }
 
   return roots.map((root) => {
     const b = root.absBounds;
@@ -323,6 +322,10 @@ export class LiveStore {
     // only publishes frames while its epoch is still current, so a late frame from
     // an earlier toggle can never clobber a newer one.
     this._themeEpoch = 0;
+    this._themeRequestSeq = 0;
+    this._agentEpoch = 0;
+    this._refreshTail = Promise.resolve();
+    this._refreshPending = 0;
     // Monotonic snapshot revision — the browser drops any snapshot older than the
     // last one it applied, so overlapping refresh/sync/settle can't flicker the UI.
     this._rev = 0;
@@ -342,7 +345,7 @@ export class LiveStore {
     this._recordingStatus = null;
   }
 
-  // ── Subscriptions (SSE) ─────────────────────────────────────────────────────
+  // ── Subscriptions ────────────────────────────────────────────────────────────
   subscribe(fn) {
     this.subscribers.add(fn);
     return () => this.subscribers.delete(fn);
@@ -398,41 +401,57 @@ export class LiveStore {
 
   // ── Refresh (tree + status + theme + screenshot, all in parallel) ───────────
   // info=false skips the status+theme fetch (mutations only need fresh tree+shot).
-  async refresh({ shot = true, info = true } = {}) {
-    this.state.busy = true;
-    this._emit();
-    try {
-      // Resolve the connection once so the parallel calls below don't each port-scan.
-      await this.device._ensureConnection().catch(() => {});
-
-      const treeP = this.device.getRoots(0);
-      const infoP = info ? this.device.refreshInfo() : Promise.resolve(this.device.info());
-      const themeP = info ? this.device.themeGet() : Promise.resolve(null);
-      const shotP = shot ? this._grabShot() : Promise.resolve(null);
-      // Keep the platform picker current — cheap broker GET, run in parallel with everything else.
-      const agentsP = info ? this.device.listAgents().catch(() => null) : Promise.resolve(null);
-      const [t, , , , agentList] = await Promise.all([treeP, infoP, themeP, shotP, agentsP]);
-
-      this.state.info = {
-        ...this.device.info(),
-        ...(t.window ? { window: t.window } : {}),
-      };
-      this.state.connected = !!this.state.info.connected;
-      this.state.activePort = this.device.whichPort();
-      if (info && agentList) this.state.agents = this._normalizeAgents(agentList);
-      if (this.state.info.theme) this._lastTheme = this.state.info.theme;
-
-      if (t.ok) {
-        this._applyRoots(t.roots);
-        this.state.lastError = null;
-      } else {
-        this.state.lastError = t.error || "tree unavailable";
-      }
-      this.state.updatedAt = nowISO();
-    } finally {
-      this.state.busy = false;
+  refresh(options = {}) {
+    const request = { ...options, agentEpoch: this._agentEpoch };
+    this._refreshPending += 1;
+    if (this._refreshPending === 1) {
+      this.state.busy = true;
       this._emit();
     }
+
+    const run = this._refreshTail.then(() => this._refreshCore(request));
+    const tracked = run.finally(() => {
+      this._refreshPending -= 1;
+      if (this._refreshPending === 0) {
+        this.state.busy = false;
+        this._emit();
+      }
+    });
+    this._refreshTail = tracked.catch(() => {});
+    return tracked;
+  }
+
+  async _refreshCore({ shot = true, info = true, agentEpoch } = {}) {
+    if (agentEpoch !== this._agentEpoch) return this.snapshot();
+
+    // Resolve the connection once so the parallel calls below don't each port-scan.
+    await this.device._ensureConnection().catch(() => {});
+
+    const treeP = this.device.getRoots(0);
+    const infoP = info ? this.device.refreshInfo() : Promise.resolve(this.device.info());
+    const themeP = info ? this.device.themeGet() : Promise.resolve(null);
+    const shotP = shot ? this._grabShot(agentEpoch) : Promise.resolve(null);
+    // Keep the platform picker current — cheap broker GET, run in parallel with everything else.
+    const agentsP = info ? this.device.listAgents().catch(() => null) : Promise.resolve(null);
+    const [t, , , , agentList] = await Promise.all([treeP, infoP, themeP, shotP, agentsP]);
+    if (agentEpoch !== this._agentEpoch) return this.snapshot();
+
+    this.state.info = {
+      ...this.device.info(),
+      ...(t.window ? { window: t.window } : {}),
+    };
+    this.state.connected = !!this.state.info.connected;
+    this.state.activePort = this.device.whichPort();
+    if (info && agentList) this.state.agents = this._normalizeAgents(agentList);
+    if (this.state.info.theme) this._lastTheme = this.state.info.theme;
+
+    if (t.ok) {
+      this._applyRoots(t.roots);
+      this.state.lastError = null;
+    } else {
+      this.state.lastError = t.error || "tree unavailable";
+    }
+    this.state.updatedAt = nowISO();
     return this.snapshot();
   }
 
@@ -481,9 +500,9 @@ export class LiveStore {
     return acc >>> 0;
   }
 
-  async _grabShot() {
+  async _grabShot(agentEpoch = this._agentEpoch) {
     const s = await this.device.screenshot();
-    if (s.ok) {
+    if (s.ok && agentEpoch === this._agentEpoch) {
       this._shotPath = s.path;
       this._lastShotAt = Date.now();
       let hash = null;
@@ -504,9 +523,9 @@ export class LiveStore {
   }
 
   // Throttled screenshot for the poll loop — avoids hammering the agent on rapid changes.
-  async _grabShotThrottled() {
+  async _grabShotThrottled(agentEpoch = this._agentEpoch) {
     if (Date.now() - this._lastShotAt < this._minShotGapMs) return null;
-    return this._grabShot();
+    return this._grabShot(agentEpoch);
   }
 
   // After a theme flip the app re-renders asynchronously, so the first screenshot can
@@ -514,16 +533,16 @@ export class LiveStore {
   // byte-identical captures) or we hit the timeout, emitting progress as it converges.
   // Guarded by `epoch`: if a newer theme change supersedes us we bail immediately, so a
   // stale settle can never clobber a newer toggle's frame.
-  async _settleThemeShot(epoch) {
+  async _settleThemeShot(epoch, agentEpoch = this._agentEpoch) {
     const delays = [150, 250, 400, 700, 1000]; // ~2.5s worst case; usually settles in 1–2 ticks
     let prevHash = this._lastShotHash;
     let stable = 0;
     for (const d of delays) {
       await sleep(d);
-      if (epoch !== this._themeEpoch) return;      // a newer toggle owns the frame now
+      if (epoch !== this._themeEpoch || agentEpoch !== this._agentEpoch) return;
       if (this.state.busy || this._polling) continue; // don't contend with a refresh/sync
-      const s = await this._grabShot();
-      if (epoch !== this._themeEpoch) return;
+      const s = await this._grabShot(agentEpoch);
+      if (epoch !== this._themeEpoch || agentEpoch !== this._agentEpoch) return;
       if (!s || !s.ok || s.hash == null) continue;
       if (s.hash === prevHash) {
         if (++stable >= 1) {                       // two identical in a row → settled
@@ -538,7 +557,7 @@ export class LiveStore {
         this._emit();                              // show progress toward the final theme
       }
     }
-    if (epoch === this._themeEpoch) this._emit();  // timed out — publish whatever we have
+    if (epoch === this._themeEpoch && agentEpoch === this._agentEpoch) this._emit();
   }
 
   // ── Live sync ───────────────────────────────────────────────────────────────
@@ -573,6 +592,15 @@ export class LiveStore {
       this._eventStream = null;
     }
     this._wsConnected = false;
+  }
+
+  dispose() {
+    this.stopLiveSync();
+    this._agentEpoch += 1;
+    this._themeEpoch += 1;
+    this._themeRequestSeq += 1;
+    this._shotPath = null;
+    this.device.dispose();
   }
 
   _openEventStream() {
@@ -610,9 +638,11 @@ export class LiveStore {
   async _syncNow() {
     // Never contend with an in-flight refresh/mutation or another sync.
     if (this.state.busy || this._polling) return;
+    const agentEpoch = this._agentEpoch;
     this._polling = true;
     try {
       const [t, theme] = await Promise.all([this.device.getRoots(0), this.device.themeGet()]);
+      if (agentEpoch !== this._agentEpoch) return;
       if (!t.ok) {
         if (this.state.connected) {
           this.state.connected = false;
@@ -642,15 +672,17 @@ export class LiveStore {
         // A theme flip MUST refresh the image (bypass the throttle), then settle to
         // the fully-rendered frame — the first shot after a flip is often mid-render.
         const epoch = ++this._themeEpoch;
-        await this._grabShot();
+        await this._grabShot(agentEpoch);
+        if (agentEpoch !== this._agentEpoch) return;
         this.state.updatedAt = nowISO();
         this._log("live-sync", { tree: treeChanged, theme: themeVal, push: this._wsConnected }, true);
         this._emit();
-        this._settleThemeShot(epoch); // fire-and-forget, epoch-guarded
+        this._settleThemeShot(epoch, agentEpoch); // fire-and-forget, epoch-guarded
         return;
       }
 
-      await this._grabShotThrottled();
+      await this._grabShotThrottled(agentEpoch);
+      if (agentEpoch !== this._agentEpoch) return;
       this.state.updatedAt = nowISO();
       this._log("live-sync", { tree: treeChanged, theme: undefined, push: this._wsConnected }, true);
       this._emit();
@@ -845,42 +877,6 @@ export class LiveStore {
     return { ok: false };
   }
 
-  // ── Recorder support (used by recorder.mjs while recording a workflow) ──────────
-  // Turn a live element id into the most DURABLE selector we can:
-  //   AutomationId > exact text > type+index (fragile) > raw id (fragile).
-  // avoidText: skip the text candidate for actions that CHANGE the element's Text
-  //   (fill / setProperty Text) — selecting an element by the very text you're about to
-  //   write is circular and won't resolve on a clean replay. type+index survives a text edit.
-  _bestSelector(id, { avoidText = false } = {}) {
-    const el = this.getElement(id);
-    if (!el) return { selectorKind: "id", selector: String(id), id: String(id), fragile: true };
-    const base = { type: el.type, id: String(el.id) };
-    if (el.automationId) {
-      return { ...base, selectorKind: "automationId", selector: el.automationId, automationId: el.automationId, text: el.text ?? null, fragile: false };
-    }
-    const text = el.text != null ? String(el.text).trim() : "";
-    if (text && !avoidText) {
-      return { ...base, selectorKind: "text", selector: text, text, automationId: null, fragile: false };
-    }
-    const index = this._typeIndexOf(el);
-    if (index >= 0) {
-      return { ...base, selectorKind: "typeIndex", selector: `${el.type}[${index}]`, index, automationId: null, text: null, fragile: true };
-    }
-    return { ...base, selectorKind: "id", selector: String(id), automationId: null, text: null, fragile: true };
-  }
-
-  // Stable index of an element among all same-type elements, in render order.
-  _typeIndexOf(el) {
-    let i = 0;
-    for (const oid of this.state.order) {
-      const cur = this._index.get(oid)?.el;
-      if (!cur || cur.type !== el.type) continue;
-      if (String(cur.id) === String(el.id)) return i;
-      i++;
-    }
-    return -1;
-  }
-
   // Resolve a recorded typeIndex selector back to a live id (used on replay).
   _resolveTypeIndex(type, index) {
     let i = 0;
@@ -893,44 +889,10 @@ export class LiveStore {
     return null;
   }
 
-  // Lightweight signature of the current page: the largest visible *Page / Shell root's
-  // identity, plus the structural tree hash. Used for navigation detection + step context.
-  _pageSignature() {
-    let best = null;
-    let bestArea = -1;
-    for (const { el } of this._index.values()) {
-      const t = String(el.type || "");
-      if (!/Page$/.test(t) && !/^Shell/.test(t)) continue;
-      if (el.isVisible === false) continue;
-      const b = el.absBounds || el.bounds || {};
-      const area = (b.width || 0) * (b.height || 0);
-      if (area > bestArea) { best = el; bestArea = area; }
-    }
-    const label = best ? (best.automationId || best.text || best.type) : (this.state.info?.appName || null);
-    return { label, hash: (this._treeHash || 0) >>> 0 };
-  }
-
-  // A Text set on an Entry/Editor/SearchBar is really a "fill"; everything else is setProperty.
-  _classifySetProp(id, name) {
-    const el = this.getElement(id);
-    const input = el && /Entry|Editor|SearchBar/i.test(String(el.type || ""));
-    return String(name) === "Text" && input ? "fill" : "setProperty";
-  }
-
-  // Turn a device selector (id string | {id} | {automationId} | {text}) into recorder target meta.
-  _selMeta(sel) {
-    if (sel == null) return null;
-    if (typeof sel === "string" || typeof sel === "number") return { id: String(sel) };
-    if (sel.id != null) return { id: String(sel.id) };
-    if (sel.automationId) return { automationId: sel.automationId };
-    if (sel.text) return { text: sel.text };
-    return null;
-  }
-
-  // Keep the fallback canvas UI in sync with the broker-owned recording.
-  async _recordAction(meta) {
+  // Keep the agent-facing snapshot in sync with the broker-owned recording.
+  async _recordAction(success) {
     if (!this._recordingStatus?.recording) return;
-    if (meta && meta.ok === false) return;
+    if (success === false) return;
     try {
       this._recordingStatus = await this.device.recordingStatus();
       this._emit();
@@ -942,56 +904,50 @@ export class LiveStore {
   // ── Mutations (act → light refresh → emit). info:false skips the status/theme
   //    round-trip since a UI action doesn't change device metadata. ───────────────
   async setProperty(id, name, value) {
-    const beforeHash = this._treeHash;
     const r = await this.device.setProperty(id, name, value);
     this._log("set-property", { id, name, value, error: r.ok ? undefined : r.error }, r.ok);
     await this.refresh({ info: false });
-    await this._recordAction({ action: this._classifySetProp(id, name), target: { id: String(id) }, name, value, beforeHash, ok: r.ok });
+    await this._recordAction(r.ok);
     return r;
   }
 
   async tap(sel) {
-    const beforeHash = this._treeHash;
     const r = await this.device.tap(sel);
     this._log("tap", { sel, error: r.ok ? undefined : r.error }, r.ok);
     await this.refresh({ info: false });
-    await this._recordAction({ action: "tap", target: this._selMeta(sel), beforeHash, ok: r.ok });
+    await this._recordAction(r.ok);
     return r;
   }
 
   async fill(sel, text) {
-    const beforeHash = this._treeHash;
     const r = await this.device.fill(sel, text);
     this._log("fill", { sel, text, error: r.ok ? undefined : r.error }, r.ok);
     await this.refresh({ info: false });
-    await this._recordAction({ action: "fill", target: this._selMeta(sel), value: text, beforeHash, ok: r.ok });
+    await this._recordAction(r.ok);
     return r;
   }
 
   async scroll(opts) {
-    const beforeHash = this._treeHash;
     const r = await this.device.scroll(opts);
     this._log("scroll", { ...opts, error: r.ok ? undefined : r.error }, r.ok);
     await this.refresh({ info: false });
-    await this._recordAction({ action: "scroll", target: opts?.element != null ? { id: String(opts.element) } : null, args: { ...opts }, beforeHash, ok: r.ok });
+    await this._recordAction(r.ok);
     return r;
   }
 
   async navigate(route) {
-    const beforeHash = this._treeHash;
     const r = await this.device.navigate(route);
     this._log("navigate", { route, error: r.ok ? undefined : r.error }, r.ok);
     await this.refresh({ info: false });
-    await this._recordAction({ action: "navigate", value: route, args: { route }, beforeHash, ok: r.ok });
+    await this._recordAction(r.ok);
     return r;
   }
 
   async back() {
-    const beforeHash = this._treeHash;
     const r = await this.device.back();
     this._log("back", { error: r.ok ? undefined : r.error }, r.ok);
     await this.refresh({ info: false });
-    await this._recordAction({ action: "back", beforeHash, ok: r.ok });
+    await this._recordAction(r.ok);
     return r;
   }
 
@@ -1044,6 +1000,9 @@ export class LiveStore {
   async selectAgent({ platform, port } = {}) {
     const target = port != null && port !== "" ? Number(port) : null;
     this._log("select-agent", { platform, port: target });
+    this._agentEpoch += 1;
+    this._themeEpoch += 1;
+    this._themeRequestSeq += 1;
     // Element ids aren't valid across a different app/agent — drop any current selection.
     this.state.selectedId = null;
     this.state.selectedElement = null;
@@ -1056,9 +1015,14 @@ export class LiveStore {
   }
 
   async setTheme(theme) {
-    const beforeHash = this._treeHash;
+    const agentEpoch = this._agentEpoch;
+    const requestSeq = ++this._themeRequestSeq;
     const epoch = ++this._themeEpoch; // tag this flip so a stale settle can't clobber it
     const r = await this.device.themeSet(theme);
+    if (agentEpoch !== this._agentEpoch || requestSeq !== this._themeRequestSeq) {
+      this._log("set-theme-superseded", { theme }, r.ok);
+      return { ...r, superseded: true };
+    }
     // themeSet already updated device._info.theme; surface the true effective theme.
     const eff = r.ok ? r.data?.effectiveTheme || r.data?.theme || this.device.info().theme : null;
     if (eff) {
@@ -1070,8 +1034,12 @@ export class LiveStore {
     // Immediate refresh for responsiveness — but the first shot often catches a mid-render
     // frame (old/partial theme). The settle loop then converges to the fully-rendered theme.
     await this.refresh({ info: false });
-    await this._recordAction({ action: "setTheme", value: theme, args: { theme }, beforeHash, ok: r.ok });
-    if (r.ok) this._settleThemeShot(epoch); // fire-and-forget, epoch-guarded
+    if (agentEpoch !== this._agentEpoch || requestSeq !== this._themeRequestSeq) {
+      this._log("set-theme-superseded", { theme }, r.ok);
+      return { ...r, effective: eff, superseded: true };
+    }
+    await this._recordAction(r.ok);
+    if (r.ok) this._settleThemeShot(epoch, agentEpoch); // fire-and-forget, epoch-guarded
     return { ...r, effective: eff };
   }
 
@@ -1081,7 +1049,6 @@ export class LiveStore {
 
   // ── Apply-and-verify: set a property, then read it back to confirm ──────────
   async applyAndVerify(id, name, value) {
-    const beforeHash = this._treeHash;
     const set = await this.device.setProperty(id, name, value);
     if (!set.ok) {
       this._log("apply-verify", { id, name, value, error: set.error }, false);
@@ -1094,7 +1061,7 @@ export class LiveStore {
       read.ok && String(actual).trim() === String(value).trim();
     this._log("apply-verify", { id, name, value, actual, verified }, verified);
     await this.refresh({ info: false });
-    await this._recordAction({ action: this._classifySetProp(id, name), target: { id: String(id) }, name, value, beforeHash, ok: true });
+    await this._recordAction(true);
     return { ok: true, verified, expected: value, actual };
   }
 }

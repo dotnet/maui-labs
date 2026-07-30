@@ -11,13 +11,18 @@
 // inspector's own clipboard behavior. The bridge nonce rides in the iframe URL *fragment*, so it
 // never reaches the broker over HTTP; every message in both directions is gated by it + event.source.
 
+import { randomBytes } from "node:crypto";
+
 const UI_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
 
 export function renderShell(inspectorUrl, appName, bridgeId) {
   const title = escapeHtml(appName || "MAUI app");
-  const nonce = String(bridgeId || "").replace(/[^A-Za-z0-9_-]/g, "");
-  const frameSrc = jsString(`${inspectorUrl}#devflowBridge=${nonce}`);
-  const bridgeLiteral = jsString(nonce);
+  const bridge = String(bridgeId || "").replace(/[^A-Za-z0-9_-]/g, "");
+  const nonce = scriptNonce();
+  const frameOrigin = new URL(String(inspectorUrl)).origin;
+  const frameSrc = jsString(`${inspectorUrl}#devflowBridge=${bridge}`);
+  const bridgeLiteral = jsString(bridge);
+  const frameOriginLiteral = jsString(frameOrigin);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,6 +45,7 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
     (function () {
       const frame = document.getElementById('frame');
       const bridgeId = ${bridgeLiteral};
+      const frameOrigin = ${frameOriginLiteral};
       // Capabilities the canvas contributes: save recordings, receive the human's selection (so the
       // agent can answer about "the selected element"), and push that selection to Copilot as context.
       const capabilities = bridgeId ? ['saveRecording', 'selection', 'copilot', 'copilotContext', 'attachData'] : [];
@@ -176,14 +182,14 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
       function announce() {
         try {
           if (frame.contentWindow && bridgeId) {
-            frame.contentWindow.postMessage({ type: 'devflow:host', v: 1, bridgeId: bridgeId, capabilities: capabilities, hostKind: 'copilot-canvas-ui', hostLabel: 'GitHub Copilot Canvas', theme: buildTheme(), profile: buildProfile() }, '*');
+            frame.contentWindow.postMessage({ type: 'devflow:host', v: 1, bridgeId: bridgeId, capabilities: capabilities, hostKind: 'copilot-canvas-ui', hostLabel: 'GitHub Copilot Canvas', theme: buildTheme(), profile: buildProfile() }, frameOrigin);
           }
         } catch (e) { /* cross-origin during teardown */ }
       }
       function sendTheme() {
         try {
           if (frame.contentWindow && bridgeId) {
-            frame.contentWindow.postMessage(Object.assign({ type: 'devflow:theme', v: 1, bridgeId: bridgeId, profile: buildProfile() }, buildTheme()), '*');
+            frame.contentWindow.postMessage(Object.assign({ type: 'devflow:theme', v: 1, bridgeId: bridgeId, profile: buildProfile() }, buildTheme()), frameOrigin);
           }
         } catch (e) { /* cross-origin during teardown */ }
       }
@@ -192,6 +198,7 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
       // a page the iframe later navigates to.
       window.addEventListener('message', function (e) {
         if (e.source !== frame.contentWindow) return;           // only our embedded inspector
+        if (e.origin !== frameOrigin) return;                   // only the original inspector origin
         const d = e.data;
         if (!d || !bridgeId || d.bridgeId !== bridgeId) return;  // nonce-authenticated
         if (d.type === 'devflow:ready') { announce(); return; }
@@ -221,7 +228,7 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
               ok: !!(result && result.ok),
               message: result && result.status ? String(result.status) : null,
               error: result && result.error ? String(result.error) : null,
-            }, '*');
+            }, frameOrigin);
           });
           return;
         }
@@ -236,7 +243,7 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
               ok: !!(result && result.ok),
               message: result && result.status ? String(result.status) : null,
               error: result && result.error ? String(result.error) : null,
-            }, '*');
+            }, frameOrigin);
           });
           return;
         }
@@ -272,9 +279,9 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
 // there is no embedded inspector document to hand a Primer palette to yet), so the panel doesn't
 // visually jar once it converges to the real inspector. It polls /inspector-ready and reloads into
 // the shared inspector the moment it resolves.
-export function renderDisconnected(appName, nonce) {
+export function renderDisconnected(appName) {
   const title = escapeHtml(appName || "MAUI app");
-  const safeNonce = String(nonce || "").replace(/[^A-Za-z0-9_-]/g, "") || "df";
+  const nonce = scriptNonce();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -282,7 +289,7 @@ export function renderDisconnected(appName, nonce) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; style-src 'unsafe-inline'; connect-src 'self'; script-src 'nonce-${safeNonce}';" />
+        content="default-src 'none'; style-src 'unsafe-inline'; connect-src 'self'; script-src 'nonce-${nonce}';" />
   <style>
     :root {
       color-scheme: light dark;
@@ -315,7 +322,7 @@ export function renderDisconnected(appName, nonce) {
       <p class="status" id="df-status">Waiting for the MAUI DevFlow agent to connect…</p>
     </div>
   </main>
-  <script nonce="${safeNonce}">
+  <script nonce="${nonce}">
     (function () {
       // Self-heal: poll /inspector-ready and reload into the shared Inspector as soon as a broker
       // and running app resolve. The 5s guard stops a
@@ -353,4 +360,8 @@ function escapeHtml(s) {
 function jsString(s) {
   // Safe string literal for inlining into the <script>: JSON-encode, then neutralize `<`.
   return JSON.stringify(String(s)).replace(/</g, "\\u003c");
+}
+
+function scriptNonce() {
+  return randomBytes(16).toString("base64url");
 }

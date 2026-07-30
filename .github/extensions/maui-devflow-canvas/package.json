@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node extension.mjs",
     "selftest": "node selftest.mjs",
-    "selftest:recorder": "node selftest-recorder.mjs",
+    "selftest:recorder": "node --test \"test/recording.test.mjs\" \"test/replay.test.mjs\"",
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {

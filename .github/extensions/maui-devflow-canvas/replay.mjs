@@ -7,17 +7,17 @@
 //
 // This is the "validate the app" half of the record -> .md -> replay loop.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { slugify } from "./recorder.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const msg = (e) => String(e?.message || e);
 
 // ── Public entry ────────────────────────────────────────────────────────────────
-// opts: { file? absolute .md path, name? scenario name, json? already-parsed test object }
+// opts: { file? .md path under root, name? scenario name, json? already-parsed test object, root? }
 export async function replayTest(store, opts = {}) {
-  const test = loadTest(store, opts);
+  const test = loadTest(opts);
   if (!test.ok) return test;
 
   const results = [];
@@ -43,16 +43,19 @@ export async function replayTest(store, opts = {}) {
 }
 
 // ── Load + parse ──────────────────────────────────────────────────────────────
-function loadTest(store, { file, name, json, root }) {
+function loadTest({ file, name, json, root }) {
   if (json && Array.isArray(json.steps)) {
     return { ok: true, name: json.name || name || "scenario", steps: json.steps };
   }
-  let path = file || null;
-  if (!path && name) {
-    if (!root) return { ok: false, error: "The workflow test directory could not be resolved." };
-    path = join(root, `${slugify(name)}.md`);
-  }
-  if (!path) return { ok: false, error: "Provide a test file path or a scenario name to replay." };
+  if (!file && !name) return { ok: false, error: "Provide a test file path or a scenario name to replay." };
+  if (!root) return { ok: false, error: "The workflow test directory could not be resolved." };
+
+  const candidate = file
+    ? (isAbsolute(file) ? file : join(root, file))
+    : join(root, `${slugify(name)}.md`);
+  const confined = confineToRoot(root, candidate);
+  if (!confined.ok) return confined;
+  const path = confined.path;
   if (!existsSync(path)) return { ok: false, error: `Test not found: ${path}` };
 
   let md;
@@ -71,6 +74,33 @@ function loadTest(store, { file, name, json, root }) {
   }
   if (!Array.isArray(parsed.steps)) return { ok: false, error: "The maui-test block has no steps[]." };
   return { ok: true, name: parsed.name || name || "scenario", steps: parsed.steps, file: path };
+}
+
+function confineToRoot(root, candidate) {
+  const rootPath = resolve(root);
+  const candidatePath = resolve(candidate);
+  if (escapesRoot(rootPath, candidatePath)) {
+    return { ok: false, error: "Test files must be inside the resolved maui-tests directory." };
+  }
+
+  if (existsSync(rootPath) && existsSync(candidatePath)) {
+    try {
+      const realRoot = realpathSync.native(rootPath);
+      const realCandidate = realpathSync.native(candidatePath);
+      if (escapesRoot(realRoot, realCandidate)) {
+        return { ok: false, error: "Test files must be inside the resolved maui-tests directory." };
+      }
+    } catch (e) {
+      return { ok: false, error: `Could not resolve test path: ${msg(e)}` };
+    }
+  }
+
+  return { ok: true, path: candidatePath };
+}
+
+function escapesRoot(root, candidate) {
+  const rel = relative(root, candidate);
+  return rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
 }
 
 // ── Per-step drive + verify ─────────────────────────────────────────────────────

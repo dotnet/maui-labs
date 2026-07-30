@@ -36,7 +36,7 @@ Copilot Canvas ──► extension.mjs ──► broker-hosted shared inspector
   Code host shell.
 - **`recorder.mjs` / `replay.mjs`** — workflow persistence and replay. Active recording is owned
   by the broker and observes successful mutations from every DevFlow host.
-- **`selftest*.mjs`** — bridge smoke test and offline proof.
+- **`selftest.mjs`** — online bridge smoke test.
 
 ### File map
 
@@ -45,7 +45,7 @@ Copilot Canvas ──► extension.mjs ──► broker-hosted shared inspector
 | `devflow.mjs` | Thin adapter over `@maui-devflow/client` |
 | `store.mjs`, `extension.mjs` | Live state and Canvas host integration |
 | `recorder.mjs`, `replay.mjs` | Workflow persistence and replay |
-| `selftest*.mjs`, `test/device.test.mjs` | Live smoke checks and offline contract tests |
+| `selftest.mjs`, `test/*.test.mjs` | Live smoke checks and offline contract tests |
 
 ## Migration from the old user extension
 
@@ -74,7 +74,7 @@ cd ../../../src/DevFlow/js && npm ci && npm run build -w @maui-devflow/client
 cd ../../../.github/extensions/maui-devflow-canvas
 npm ci
 npm test                 # adapter contract tests (offline, fake agent)
-npm run selftest:recorder  # offline recorder/replay proof
+npm run selftest:recorder  # focused recording persistence + replay safety checks
 
 # Online bridge smoke test (needs a running MAUI app with the DevFlow agent):
 npm run selftest
@@ -99,7 +99,9 @@ MAUI_DEVFLOW_FORCE_LEASE=1 npm run selftest
 
 - The Canvas uses the same global mutation lease as the browser, VS Code, MCP, and CLI.
 - Closing the Canvas releases its lease and disposes the shared client.
-- The localhost bridge requires JSON plus a per-instance nonce for all control and file writes.
+- The localhost bridge requires bounded JSON plus a per-instance nonce for all control and file writes.
+- Bridge messages target the resolved Inspector origin; the CSP script nonce is separate and rotates per response.
+- Recording Markdown is capped at 1 MiB, and replay paths are confined to the resolved `maui-tests/` directory.
 - Attach to Copilot sends bounded, text-only context; it does not attach a screenshot automatically.
 - The Inspector context menu can attach only the selected element, only the loaded workflow, both,
   or the current redacted Data snapshot.

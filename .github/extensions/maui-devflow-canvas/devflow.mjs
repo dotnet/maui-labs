@@ -3,7 +3,7 @@
 // Thin adapter over @maui-devflow/client, preserving the method names and return shapes consumed
 // by store.mjs and the rest of the extension.
 
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DevFlowClient } from "@maui-devflow/client";
@@ -54,6 +54,8 @@ export class DevflowDevice {
       mutationLeaseLabel: "GitHub Copilot Canvas",
     });
     this._eventHandle = null;
+    this._screenshotDir = null;
+    this._screenshotPath = null;
     this._info = {
       platform: opts.platform || "device",
       appName: "app",
@@ -296,8 +298,7 @@ export class DevflowDevice {
     return r.ok ? r.value : [];
   }
 
-  async screenshot(outPath) {
-    const file = outPath || join(tmpdir(), `maui-live-canvas-${Date.now()}.png`);
+  async screenshot() {
     let r;
     try {
       r = await this._client.screenshot({ scale: "auto" });
@@ -307,7 +308,12 @@ export class DevflowDevice {
     if (!r.ok) return { ok: false, error: r.error.message };
     if (!isPng(r.value)) return { ok: false, error: "screenshot returned no PNG data" };
     try {
-      writeFileSync(file, r.value);
+      if (!this._screenshotDir) {
+        this._screenshotDir = mkdtempSync(join(tmpdir(), "maui-live-canvas-"));
+        this._screenshotPath = join(this._screenshotDir, "latest.png");
+      }
+      const file = this._screenshotPath;
+      writeFileSync(file, r.value, { mode: 0o600 });
       return { ok: true, path: file, data: { via: "http" } };
     } catch (e) {
       return { ok: false, error: String(e?.message || e) };
@@ -373,6 +379,18 @@ export class DevflowDevice {
 
   dispose() {
     this._closeEventStream();
-    this._client.dispose();
+    try {
+      this._client.dispose();
+    } finally {
+      if (this._screenshotDir) {
+        try {
+          rmSync(this._screenshotDir, { recursive: true, force: true });
+        } catch {
+          /* best effort */
+        }
+        this._screenshotDir = null;
+        this._screenshotPath = null;
+      }
+    }
   }
 }

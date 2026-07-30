@@ -10,16 +10,15 @@
 // in-app DevFlow Agent (http://127.0.0.1:<port>/api/v1/...) — the same two hops the
 // `maui devflow` CLI does internally, minus the per-call process spawn.
 
-import { createReadStream, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
 import { Buffer } from "node:buffer";
 import { createHash, randomBytes } from "node:crypto";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import { LiveStore } from "./store.mjs";
-import { Recorder, slugify } from "./recorder.mjs";
+import { Recorder } from "./recorder.mjs";
 import { replayTest } from "./replay.mjs";
 import { renderShell, renderDisconnected } from "./shell.mjs";
+import { readJsonBody } from "./http.mjs";
 import { readBrokerState } from "@maui-devflow/client";
 
 // Device targeting is optional — the CLI auto-discovers the agent via the broker. Override
@@ -41,7 +40,7 @@ function deviceOpts(input = {}) {
   return o;
 }
 
-// instanceId -> { store, server, port, url, sse:Set<res> }
+// instanceId -> { store, recorder, server, port, url, bridgeId }
 const instances = new Map();
 
 // The joined Copilot session (assigned at the very bottom, after createCanvas).
@@ -53,8 +52,7 @@ function ensure(instanceId, input = {}) {
   if (!st) {
     const store = new LiveStore(deviceOpts(input));
     const recorder = new Recorder();
-    st = { store, recorder, server: null, port: 0, url: null, sse: new Set(), bridgeId: randomToken() };
-    store.subscribe((snapshot) => broadcast(st, snapshot));
+    st = { store, recorder, server: null, port: 0, url: null, bridgeId: randomToken() };
     instances.set(instanceId, st);
   }
   return st;
@@ -102,33 +100,10 @@ function wrapActions(actions) {
   }));
 }
 
-function broadcast(st, snapshot) {
-  const payload = `data: ${JSON.stringify(snapshot)}\n\n`;
-  for (const res of st.sse) {
-    try {
-      res.write(payload);
-    } catch {
-      st.sse.delete(res);
-    }
-  }
-}
-
-function readJsonBody(req) {
-  return new Promise((resolve) => {
-    let raw = "";
-    req.on("data", (c) => {
-      raw += c;
-      if (raw.length > 1e6) req.destroy();
-    });
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(raw || "{}"));
-      } catch {
-        resolve({});
-      }
-    });
-    req.on("error", () => resolve({}));
-  });
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(payload));
 }
 
 const CONTEXT_ATTACHMENT_MAX_BYTES = 20_000;
@@ -416,14 +391,7 @@ function saveBridgeRecording(st, body) {
 }
 
 function persistRecording(st, body) {
-  const md = typeof body?.markdown === "string" ? body.markdown : "";
-  if (!md) return { ok: false, error: "no markdown" };
-  const safe = slugify(typeof body?.name === "string" && body.name ? body.name : "recording");
-  const root = st.recorder.outputRoot(st.store);
-  mkdirSync(root, { recursive: true });
-  const file = join(root, `${safe}.md`);
-  writeFileSync(file, md, "utf8");
-  return { ok: true, file };
+  return st.recorder.persist(st.store, body);
 }
 
 async function startServer(instanceId, input = {}) {
@@ -453,7 +421,7 @@ async function startServer(instanceId, input = {}) {
       }
       res.end(inspectorUrl
         ? renderShell(inspectorUrl, st.store.snapshot()?.info?.appName, st.bridgeId)
-        : renderDisconnected(st.store.snapshot()?.info?.appName, st.bridgeId));
+        : renderDisconnected(st.store.snapshot()?.info?.appName));
       return;
     }
 
@@ -472,48 +440,19 @@ async function startServer(instanceId, input = {}) {
       return;
     }
 
-    if (url.pathname === "/events" && req.method === "GET") {
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-store");
-      res.setHeader("Connection", "keep-alive");
-      st.sse.add(res);
-      req.on("close", () => st.sse.delete(res));
-      res.write(`data: ${JSON.stringify(st.store.snapshot())}\n\n`);
-      return;
-    }
-
-    // Live screenshot PNG (cache-busted by ?seq=N from the browser).
-    if (url.pathname === "/shot" && req.method === "GET") {
-      const p = st.store.currentShotPath();
-      if (!p) {
-        res.statusCode = 204;
-        res.end();
-        return;
-      }
-      res.setHeader("Content-Type", "image/png");
-      res.setHeader("Cache-Control", "no-store");
-      const stream = createReadStream(p);
-      stream.on("error", () => {
-        res.statusCode = 404;
-        res.end();
-      });
-      stream.pipe(res);
-      return;
-    }
-
     if (url.pathname === "/control" && req.method === "POST") {
       if (!String(req.headers["content-type"] || "").includes("application/json")) {
-        res.statusCode = 415;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ ok: false, error: "unsupported media type" }));
+        sendJson(res, 415, { ok: false, error: "unsupported media type" });
         return;
       }
-      const body = await readJsonBody(req);
+      const parsed = await readJsonBody(req);
+      if (!parsed.ok) {
+        sendJson(res, parsed.status, { ok: false, error: parsed.error });
+        return;
+      }
+      const body = parsed.value;
       if (!body || body.bridgeId !== st.bridgeId) {
-        res.statusCode = 403;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
+        sendJson(res, 403, { ok: false, error: "unauthorized" });
         return;
       }
       let r;
@@ -522,8 +461,7 @@ async function startServer(instanceId, input = {}) {
       } catch (e) {
         r = { ok: false, error: String(e?.message || e) };
       }
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(r ?? { ok: true }));
+      sendJson(res, 200, r ?? { ok: true });
       return;
     }
 
@@ -534,20 +472,22 @@ async function startServer(instanceId, input = {}) {
     // body must carry the per-instance bridge nonce (see saveBridgeRecording).
     if (url.pathname === "/recording" && req.method === "POST") {
       if (!String(req.headers["content-type"] || "").includes("application/json")) {
-        res.statusCode = 415;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ ok: false, error: "unsupported media type" }));
+        sendJson(res, 415, { ok: false, error: "unsupported media type" });
         return;
       }
-      const body = await readJsonBody(req);
+      const parsed = await readJsonBody(req);
+      if (!parsed.ok) {
+        sendJson(res, parsed.status, { ok: false, error: parsed.error });
+        return;
+      }
+      const body = parsed.value;
       let r;
       try {
         r = saveBridgeRecording(st, body);
       } catch (e) {
         r = { ok: false, error: String(e?.message || e) };
       }
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(r ?? { ok: true }));
+      sendJson(res, 200, r ?? { ok: true });
       return;
     }
 
@@ -991,14 +931,14 @@ const canvas = createCanvas({
       name: "replay_test",
       description:
         "Replay a recorded workflow test against the running app and verify it. Pass a scenario 'name' (resolved under " +
-        "maui-tests/) or an absolute 'file' path. Returns a per-step pass/fail report with assertion results — the way to " +
+        "maui-tests/) or a 'file' path inside that directory. Returns a per-step pass/fail report with assertion results — the way to " +
         "validate the app still behaves as recorded.",
       timeoutMs: 120000,
       inputSchema: {
         type: "object",
         properties: {
           name: { type: "string", description: "Scenario name to replay (see list_tests)." },
-          file: { type: "string", description: "Absolute path to a test .md (alternative to name)." },
+          file: { type: "string", description: "Path to a test .md inside the resolved maui-tests directory (alternative to name)." },
         },
       },
       handler: async (ctx) => {
@@ -1036,11 +976,6 @@ const canvas = createCanvas({
   onClose: async (ctx) => {
     const st = instances.get(ctx.instanceId);
     if (st) {
-      try {
-        st.store.stopLiveSync();
-      } catch {
-        /* ignore */
-      }
       if (st.server) {
         try {
           st.server.close();
@@ -1048,21 +983,13 @@ const canvas = createCanvas({
           /* ignore */
         }
       }
-      for (const response of st.sse) {
-        try {
-          response.end();
-        } catch {
-          /* ignore */
-        }
-      }
-      st.sse.clear();
       try {
         await st.store.device.releaseMutationLease();
       } catch {
         /* best effort */
       }
       try {
-        st.store.device.dispose();
+        st.store.dispose();
       } catch {
         /* ignore */
       }
