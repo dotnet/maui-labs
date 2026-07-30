@@ -175,6 +175,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         return Task.CompletedTask;
     }
 
+    protected override void OnUiOperationSucceeded() => InvalidateUiCapture();
+
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     /// <summary>

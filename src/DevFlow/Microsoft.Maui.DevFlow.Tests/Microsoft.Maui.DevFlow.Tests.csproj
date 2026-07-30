@@ -36,6 +36,8 @@
               Link="ToolbarItemInvocationOutcome.cs" />
     <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\ActionSheetResultResolver.cs"
               Link="ActionSheetResultResolver.cs" />
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\ShellSearchHandlerCoordinator.cs"
+              Link="ShellSearchHandlerCoordinator.cs" />
   </ItemGroup>
 
   <ItemGroup>

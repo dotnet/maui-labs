@@ -1126,6 +1126,9 @@ public partial class DevFlowAgentService
         string? elementPath = null,
         object? tags = null)
     {
+        if (success)
+            OnUiOperationSucceeded();
+
         var endTsUtc = DateTime.UtcNow;
         var route = GetCurrentRouteLocation();
         var span = new ProfilerSpan

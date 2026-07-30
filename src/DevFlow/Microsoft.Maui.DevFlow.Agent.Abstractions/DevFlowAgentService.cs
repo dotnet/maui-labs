@@ -147,6 +147,13 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </summary>
     protected virtual Task StopBackendAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Notifies the active backend that a successful UI operation completed.
+    /// </summary>
+    protected virtual void OnUiOperationSucceeded()
+    {
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     /// <summary>

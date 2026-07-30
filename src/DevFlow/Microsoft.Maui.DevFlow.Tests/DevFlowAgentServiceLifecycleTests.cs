@@ -304,6 +304,43 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task CaptureEpoch_ExpiresAfterSuccessfulPhysicalUiOperation()
+    {
+        var port = GetFreePort();
+        using var service = new UiOperationProbeAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button
+        {
+            AutomationId = "PhysicalOperationButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var buttonInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "PhysicalOperationButton");
+
+        service.ReportSuccessfulUiOperation();
+
+        Assert.False(await client.TapAsync(
+            buttonInfo.Id,
+            buttonInfo.CaptureEpoch,
+            buttonInfo.RegistryGeneration));
+        Assert.False(invoked);
+    }
+
+    [Fact]
     public async Task CaptureEpoch_ExpiresWhenDuplicateIdIsInsertedBeforeCapturedElement()
     {
         var port = GetFreePort();
@@ -1117,6 +1154,15 @@ public class DevFlowAgentServiceLifecycleTests
         protected override bool IsJobsSupported => true;
 
         protected override bool IsJobRunSupported => false;
+    }
+
+    private sealed class UiOperationProbeAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
+    {
+        public void ReportSuccessfulUiOperation()
+            => PublishUiOperationSpan(
+                "ui.input.physical",
+                DateTime.UtcNow,
+                success: true);
     }
 
     private sealed class NativeScreenshotAgentService : MauiDevFlowAgentService
