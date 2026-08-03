@@ -22,6 +22,7 @@ namespace Microsoft.Maui.Cli.Providers.Apple;
 public sealed class StandardErrorToolsLogger : ICustomLogger
 {
 	readonly TextWriter _writer;
+	readonly bool? _verbose;
 
 	/// <summary>
 	/// Verbosity applied to loggers created without an explicit value. Set once from the global
@@ -32,13 +33,18 @@ public sealed class StandardErrorToolsLogger : ICustomLogger
 	public StandardErrorToolsLogger(TextWriter? writer = null, bool? verbose = null)
 	{
 		_writer = writer ?? Console.Error;
-		Verbose = verbose ?? DefaultVerbose;
+		_verbose = verbose;
 	}
 
 	/// <summary>
 	/// When false, <see cref="LogDebug"/> messages are suppressed.
 	/// </summary>
-	public bool Verbose { get; }
+	/// <remarks>
+	/// Read through to <see cref="DefaultVerbose"/> on every access rather than captured in the
+	/// constructor, so a logger built before the global <c>--verbose</c> flag is published still
+	/// honours it.
+	/// </remarks>
+	public bool Verbose => _verbose ?? DefaultVerbose;
 
 	public void LogError(string message, Exception? exception)
 	{

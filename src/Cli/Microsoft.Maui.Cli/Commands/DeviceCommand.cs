@@ -62,7 +62,9 @@ public static class DeviceCommand
 				{
 					if (!devices.Any())
 					{
-						formatter.WriteWarning("No devices found.");
+						formatter.WriteWarning(DeviceManager.HasProviderFor(platform)
+							? "No devices found."
+							: $"No devices found: listing '{platform}' devices is not supported yet.");
 						return 0;
 					}
 

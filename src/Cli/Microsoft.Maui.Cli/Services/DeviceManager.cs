@@ -25,12 +25,27 @@ public class DeviceManager : IDeviceManager
 	}
 
 	public async Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default)
-		=> await GetDevicesAsync(Platforms.All, cancellationToken);
+		=> await GetDevicesForPlatformAsync(Platforms.All, cancellationToken);
+
+	/// <summary>
+	/// The platforms each provider can currently produce devices for, keyed by provider.
+	/// </summary>
+	/// <remarks>
+	/// These lists are what make <c>--platform &lt;p&gt;</c> query a provider at all, so they must
+	/// stay in lockstep with the platforms each provider actually tags its devices with. Adding
+	/// Mac host support to <c>AppleProvider.GetDevices</c>, for example, means adding
+	/// <see cref="Platforms.MacCatalyst"/> here, otherwise those devices are silently dropped.
+	/// </remarks>
+	static readonly string[] s_androidProviderPlatforms = [Platforms.Android];
+	static readonly string[] s_appleProviderPlatforms = [Platforms.iOS];
 
 	/// <summary>
 	/// Collects devices, querying only the providers that can produce devices for
-	/// <paramref name="platform"/>.
+	/// <paramref name="normalizedPlatform"/>.
 	/// </summary>
+	/// <param name="normalizedPlatform">
+	/// A platform that has already been through <see cref="Platforms.Normalize"/>.
+	/// </param>
 	/// <remarks>
 	/// Provider selection is deliberately done *before* enumeration rather than by filtering
 	/// the combined result. Querying a provider is expensive and can hang: on macOS the Apple
@@ -38,15 +53,14 @@ public class DeviceManager : IDeviceManager
 	/// number of installed runtimes and blocks indefinitely when CoreSimulator is wedged.
 	/// Asking for Android devices must never pay that cost.
 	/// </remarks>
-	async Task<IReadOnlyList<Device>> GetDevicesAsync(string? platform, CancellationToken cancellationToken)
+	async Task<IReadOnlyList<Device>> GetDevicesForPlatformAsync(string normalizedPlatform, CancellationToken cancellationToken)
 	{
-		var normalized = Platforms.Normalize(platform);
 		var devices = new List<Device>();
 
-		if (QueriesAndroid(normalized))
+		if (QueriesAndroid(normalizedPlatform))
 			await AddAndroidDevicesAsync(devices, cancellationToken);
 
-		if (QueriesApple(normalized))
+		if (QueriesApple(normalizedPlatform))
 			AddAppleDevices(devices);
 
 		// TODO: Get Windows devices when WindowsProvider is implemented
@@ -55,28 +69,33 @@ public class DeviceManager : IDeviceManager
 	}
 
 	/// <summary>
-	/// Whether the Android provider can produce devices for <paramref name="platform"/>.
+	/// Whether any provider can currently produce devices for <paramref name="platform"/>.
 	/// </summary>
-	internal static bool QueriesAndroid(string? platform)
+	/// <remarks>
+	/// Mac Catalyst and Windows are valid platforms with no backing provider, so they always
+	/// yield zero devices. Callers can use this to tell "not supported yet" apart from
+	/// "the provider ran and found nothing".
+	/// </remarks>
+	public static bool HasProviderFor(string? platform)
 	{
 		var normalized = Platforms.Normalize(platform);
-		return normalized is Platforms.All or Platforms.Android;
+		return QueriesAndroid(normalized) || QueriesApple(normalized);
 	}
 
 	/// <summary>
-	/// Whether the Apple provider can produce devices for <paramref name="platform"/>.
+	/// Whether the Android provider can produce devices for the given normalized platform.
 	/// </summary>
-	/// <remarks>
-	/// The Apple provider currently only surfaces iOS simulators (see
-	/// <c>AppleProvider.GetDevices</c>), so Mac Catalyst and Windows are intentionally excluded:
-	/// running <c>simctl</c> for them costs seconds and can only ever return zero matches.
-	/// Revisit this when the provider starts reporting Mac hosts or physical devices.
-	/// </remarks>
-	internal static bool QueriesApple(string? platform)
-	{
-		var normalized = Platforms.Normalize(platform);
-		return normalized is Platforms.All or Platforms.iOS;
-	}
+	internal static bool QueriesAndroid(string normalizedPlatform)
+		=> Queries(s_androidProviderPlatforms, normalizedPlatform);
+
+	/// <summary>
+	/// Whether the Apple provider can produce devices for the given normalized platform.
+	/// </summary>
+	internal static bool QueriesApple(string normalizedPlatform)
+		=> Queries(s_appleProviderPlatforms, normalizedPlatform);
+
+	static bool Queries(string[] providerPlatforms, string normalizedPlatform)
+		=> normalizedPlatform == Platforms.All || Array.IndexOf(providerPlatforms, normalizedPlatform) >= 0;
 
 	async Task AddAndroidDevicesAsync(List<Device> devices, CancellationToken cancellationToken)
 	{
@@ -270,7 +289,7 @@ public class DeviceManager : IDeviceManager
 	public async Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default)
 	{
 		var normalized = Platforms.Normalize(platform);
-		var devices = await GetDevicesAsync(normalized, cancellationToken);
+		var devices = await GetDevicesForPlatformAsync(normalized, cancellationToken);
 
 		if (normalized == Platforms.All)
 			return devices;

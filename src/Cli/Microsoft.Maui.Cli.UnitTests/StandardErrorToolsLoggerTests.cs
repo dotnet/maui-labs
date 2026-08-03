@@ -60,10 +60,10 @@ public class StandardErrorToolsLoggerTests
 	}
 
 	[Fact]
-	public void LogDebug_IsSuppressedByDefault()
+	public void LogDebug_IsSuppressedWhenNotVerbose()
 	{
 		var writer = new StringWriter();
-		var logger = new StandardErrorToolsLogger(writer);
+		var logger = new StandardErrorToolsLogger(writer, verbose: false);
 
 		logger.LogDebug("noisy detail");
 
@@ -116,6 +116,31 @@ public class StandardErrorToolsLoggerTests
 			new StandardErrorToolsLogger(writer, verbose: false).LogDebug("noisy detail");
 
 			Assert.Equal(string.Empty, writer.ToString());
+		}
+		finally
+		{
+			StandardErrorToolsLogger.DefaultVerbose = original;
+		}
+	}
+
+	[Fact]
+	public void LogDebug_FollowsDefaultVerboseSetAfterConstruction()
+	{
+		// AppleProvider is a DI singleton, so its logger can be built before Program publishes
+		// the --verbose flag. Verbosity is read per call so that ordering does not matter.
+		var original = StandardErrorToolsLogger.DefaultVerbose;
+
+		try
+		{
+			StandardErrorToolsLogger.DefaultVerbose = false;
+
+			var writer = new StringWriter();
+			var logger = new StandardErrorToolsLogger(writer);
+
+			StandardErrorToolsLogger.DefaultVerbose = true;
+			logger.LogDebug("noisy detail");
+
+			Assert.Equal($"Debug: noisy detail{Environment.NewLine}", writer.ToString());
 		}
 		finally
 		{

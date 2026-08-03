@@ -21,6 +21,12 @@ public interface IDeviceManager
 	/// Implementations must not enumerate every provider and then filter: provider queries are
 	/// expensive (the Apple provider shells out to <c>simctl</c>) and asking for one platform
 	/// must never pay another platform's cost.
+	/// <para>
+	/// Valid platforms may have no backing provider (Mac Catalyst and Windows do not today), in
+	/// which case this returns an empty list rather than failing. Callers that want to report
+	/// "not supported yet" separately from "none found" can check
+	/// <see cref="DeviceManager.HasProviderFor"/>.
+	/// </para>
 	/// </remarks>
 	Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default);
 	Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default);

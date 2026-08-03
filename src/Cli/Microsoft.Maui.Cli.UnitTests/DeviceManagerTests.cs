@@ -777,25 +777,46 @@ public class DeviceManagerTests
 		Assert.Equal(1, fakeAndroid.GetAvdsCallCount);
 	}
 
+	// Queries* take an already-normalized platform; alias handling ("apple", "iphone", ...) is
+	// covered end-to-end by GetDevicesByPlatformAsync above.
 	[Theory]
 	[InlineData(Platforms.All, true)]
 	[InlineData(Platforms.Android, true)]
 	[InlineData(Platforms.iOS, false)]
 	[InlineData(Platforms.MacCatalyst, false)]
 	[InlineData(Platforms.Windows, false)]
-	[InlineData("apple", false)]
-	[InlineData(null, true)]
-	public void QueriesAndroid_ReturnsExpected(string? platform, bool expected)
+	public void QueriesAndroid_ReturnsExpected(string platform, bool expected)
 		=> Assert.Equal(expected, DeviceManager.QueriesAndroid(platform));
 
 	[Theory]
 	[InlineData(Platforms.All, true)]
 	[InlineData(Platforms.iOS, true)]
-	[InlineData("apple", true)]
 	[InlineData(Platforms.Android, false)]
 	[InlineData(Platforms.MacCatalyst, false)]
 	[InlineData(Platforms.Windows, false)]
-	[InlineData(null, true)]
-	public void QueriesApple_ReturnsExpected(string? platform, bool expected)
+	public void QueriesApple_ReturnsExpected(string platform, bool expected)
 		=> Assert.Equal(expected, DeviceManager.QueriesApple(platform));
+
+	[Theory]
+	[InlineData(Platforms.All, true)]
+	[InlineData(Platforms.Android, true)]
+	[InlineData(Platforms.iOS, true)]
+	[InlineData("apple", true)]
+	[InlineData(null, true)]
+	[InlineData(Platforms.MacCatalyst, false)]
+	[InlineData(Platforms.Windows, false)]
+	public void HasProviderFor_ReturnsExpected(string? platform, bool expected)
+		=> Assert.Equal(expected, DeviceManager.HasProviderFor(platform));
+
+	[Fact]
+	public void HasProviderFor_CoversEveryPlatformThatQueriesAProvider()
+	{
+		// Guards the mapping from drifting: a platform that reaches a provider must report as
+		// supported, and one that reaches none must not.
+		foreach (var platform in Platforms.Supported)
+		{
+			var reachesProvider = DeviceManager.QueriesAndroid(platform) || DeviceManager.QueriesApple(platform);
+			Assert.Equal(reachesProvider, DeviceManager.HasProviderFor(platform));
+		}
+	}
 }
