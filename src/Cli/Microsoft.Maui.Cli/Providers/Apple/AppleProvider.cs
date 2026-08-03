@@ -30,7 +30,9 @@ public class AppleProvider : IAppleProvider
 		if (!PlatformDetector.IsMacOS)
 			return;
 
-		var logger = ConsoleLogger.Instance;
+		// Deliberately not ConsoleLogger.Instance: it writes Info/Debug/Warning to stdout,
+		// which corrupts --json output. See StandardErrorToolsLogger.
+		var logger = new StandardErrorToolsLogger();
 		_xcodeManager = new XcodeManager(logger);
 		_simulatorService = new SimulatorService(logger);
 		_runtimeService = new RuntimeService(logger);

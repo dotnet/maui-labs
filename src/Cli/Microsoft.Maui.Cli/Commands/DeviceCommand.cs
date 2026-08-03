@@ -25,7 +25,11 @@ public static class DeviceCommand
 
 	static Command CreateListCommand()
 	{
-		var platformOption = new Option<string>("--platform") { Description = "Filter by platform (android, apple, windows, all)", DefaultValueFactory = _ => "all" };
+		var platformOption = new Option<string>("--platform")
+		{
+			Description = $"Only query the providers for this platform ({string.Join(", ", Platforms.Supported)})",
+			DefaultValueFactory = _ => Platforms.All
+		};
 		var command = new Command("list", "List available devices")
 		{
 			platformOption
@@ -36,19 +40,19 @@ public static class DeviceCommand
 			var deviceManager = Program.DeviceManager;
 			var formatter = Program.GetFormatter(parseResult);
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
-			var platform = Platforms.Normalize(parseResult.GetValue(platformOption) ?? "all");
+			var platform = Platforms.Normalize(parseResult.GetValue(platformOption) ?? Platforms.All);
 
-			if (platform != "all" && !Platforms.IsValid(platform))
+			if (!Platforms.IsValid(platform))
 			{
-				formatter.WriteWarning($"Unknown platform '{platform}'. Valid values: {string.Join(", ", Platforms.All)}");
+				formatter.WriteWarning($"Unknown platform '{platform}'. Valid values: {string.Join(", ", Platforms.Supported)}");
 				return 1;
 			}
 
 			try
 			{
-				var devices = platform == "all"
+				var devices = platform == Platforms.All
 					? await deviceManager.GetAllDevicesAsync(cancellationToken)
-					: await deviceManager.GetDevicesByPlatformAsync(platform!, cancellationToken);
+					: await deviceManager.GetDevicesByPlatformAsync(platform, cancellationToken);
 
 				if (useJson)
 				{

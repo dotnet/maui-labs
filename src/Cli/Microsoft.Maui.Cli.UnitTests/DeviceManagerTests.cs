@@ -654,4 +654,148 @@ public class DeviceManagerTests
 		Assert.Contains(devices, d => d.Id == "emulator-5554" && d.State == DeviceState.Booted && string.IsNullOrEmpty(d.EmulatorId));
 		Assert.Contains(devices, d => d.EmulatorId == "Pixel_6_API_35" && d.State == DeviceState.Booting);
 	}
+
+	// --- Provider scoping (issue #416) ---
+	//
+	// `--platform` must decide *which providers get queried*, not just filter the combined
+	// result. On macOS the Apple provider shells out to `xcrun simctl list devices`, which
+	// takes 8-16s and can hang indefinitely when CoreSimulator is wedged. Asking for Android
+	// devices must never pay that cost, so these tests assert on provider invocation counts
+	// rather than only on the returned devices.
+
+	static FakeAndroidProvider CreateAndroidProvider() => new()
+	{
+		Devices = new List<Device>
+		{
+			new Device { Id = "emulator-5554", Name = "Pixel 6", Platforms = new[] { "android" }, Type = DeviceType.Emulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+		}
+	};
+
+	static FakeAppleProvider CreateAppleProvider() => new()
+	{
+		Devices = new List<Device>
+		{
+			new Device { Id = "sim-udid-1234", Name = "iPhone 15 Pro", Platforms = new[] { "ios" }, Type = DeviceType.Simulator, State = DeviceState.Booted, IsEmulator = true, IsRunning = true }
+		}
+	};
+
+	[Theory]
+	[InlineData("android")]
+	[InlineData("ANDROID")]
+	public async Task GetDevicesByPlatformAsync_Android_DoesNotQueryAppleProvider(string platform)
+	{
+		var fakeAndroid = CreateAndroidProvider();
+		var fakeApple = CreateAppleProvider();
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		var devices = await manager.GetDevicesByPlatformAsync(platform);
+
+		Assert.Equal(0, fakeApple.GetDevicesCallCount);
+		Assert.Equal(1, fakeAndroid.GetDevicesCallCount);
+		Assert.Single(devices);
+		Assert.Equal("emulator-5554", devices[0].Id);
+	}
+
+	[Theory]
+	[InlineData("ios")]
+	[InlineData("apple")]
+	[InlineData("iphone")]
+	[InlineData("ipad")]
+	public async Task GetDevicesByPlatformAsync_Ios_DoesNotQueryAndroidProvider(string platform)
+	{
+		var fakeAndroid = CreateAndroidProvider();
+		var fakeApple = CreateAppleProvider();
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		var devices = await manager.GetDevicesByPlatformAsync(platform);
+
+		Assert.Equal(0, fakeAndroid.GetDevicesCallCount);
+		Assert.Equal(0, fakeAndroid.GetAvdsCallCount);
+		Assert.Equal(1, fakeApple.GetDevicesCallCount);
+		Assert.Single(devices);
+		Assert.Equal("sim-udid-1234", devices[0].Id);
+	}
+
+	[Theory]
+	[InlineData("maccatalyst")]
+	[InlineData("windows")]
+	public async Task GetDevicesByPlatformAsync_UnbackedPlatform_QueriesNoProvider(string platform)
+	{
+		var fakeAndroid = CreateAndroidProvider();
+		var fakeApple = CreateAppleProvider();
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		var devices = await manager.GetDevicesByPlatformAsync(platform);
+
+		Assert.Equal(0, fakeAndroid.GetDevicesCallCount);
+		Assert.Equal(0, fakeAndroid.GetAvdsCallCount);
+		Assert.Equal(0, fakeApple.GetDevicesCallCount);
+		Assert.Empty(devices);
+	}
+
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_All_QueriesEveryProvider()
+	{
+		var fakeAndroid = CreateAndroidProvider();
+		var fakeApple = CreateAppleProvider();
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		var devices = await manager.GetDevicesByPlatformAsync(Platforms.All);
+
+		Assert.Equal(1, fakeAndroid.GetDevicesCallCount);
+		Assert.Equal(1, fakeApple.GetDevicesCallCount);
+		Assert.Equal(2, devices.Count);
+	}
+
+	[Fact]
+	public async Task GetAllDevicesAsync_QueriesEveryProvider()
+	{
+		var fakeAndroid = CreateAndroidProvider();
+		var fakeApple = CreateAppleProvider();
+		var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+		var devices = await manager.GetAllDevicesAsync();
+
+		Assert.Equal(1, fakeAndroid.GetDevicesCallCount);
+		Assert.Equal(1, fakeApple.GetDevicesCallCount);
+		Assert.Equal(2, devices.Count);
+	}
+
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_Android_SkipsAvdEnumerationForOtherPlatforms()
+	{
+		// The AVD query is a second adb/emulator round-trip; iOS must not trigger it either.
+		var fakeAndroid = CreateAndroidProvider();
+		var manager = new DeviceManager(fakeAndroid, CreateAppleProvider());
+
+		await manager.GetDevicesByPlatformAsync(Platforms.iOS);
+
+		Assert.Equal(0, fakeAndroid.GetAvdsCallCount);
+
+		await manager.GetDevicesByPlatformAsync(Platforms.Android);
+
+		Assert.Equal(1, fakeAndroid.GetAvdsCallCount);
+	}
+
+	[Theory]
+	[InlineData(Platforms.All, true)]
+	[InlineData(Platforms.Android, true)]
+	[InlineData(Platforms.iOS, false)]
+	[InlineData(Platforms.MacCatalyst, false)]
+	[InlineData(Platforms.Windows, false)]
+	[InlineData("apple", false)]
+	[InlineData(null, true)]
+	public void QueriesAndroid_ReturnsExpected(string? platform, bool expected)
+		=> Assert.Equal(expected, DeviceManager.QueriesAndroid(platform));
+
+	[Theory]
+	[InlineData(Platforms.All, true)]
+	[InlineData(Platforms.iOS, true)]
+	[InlineData("apple", true)]
+	[InlineData(Platforms.Android, false)]
+	[InlineData(Platforms.MacCatalyst, false)]
+	[InlineData(Platforms.Windows, false)]
+	[InlineData(null, true)]
+	public void QueriesApple_ReturnsExpected(string? platform, bool expected)
+		=> Assert.Equal(expected, DeviceManager.QueriesApple(platform));
 }

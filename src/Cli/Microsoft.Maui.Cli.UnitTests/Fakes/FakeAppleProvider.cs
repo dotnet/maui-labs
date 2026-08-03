@@ -79,6 +79,9 @@ public class FakeAppleProvider : IAppleProvider
 	public List<(string Udid, string OutputPath, ScreenshotFormat Format)> ScreenshotCalls { get; } = new();
 	public List<(string Udid, string OutputPath, RecordingOptions? Options)> StartRecordingCalls { get; } = new();
 
+	/// <summary>Number of times <see cref="GetDevices"/> was invoked.</summary>
+	public int GetDevicesCallCount { get; private set; }
+
 	// --- IAppleProvider implementation ---
 
 	public List<XcodeInstallation> GetXcodeInstallations() => XcodeInstallations;
@@ -256,7 +259,11 @@ public class FakeAppleProvider : IAppleProvider
 		return Task.FromResult(InstallResult);
 	}
 
-	public List<Device> GetDevices() => Devices;
+	public List<Device> GetDevices()
+	{
+		GetDevicesCallCount++;
+		return Devices;
+	}
 
 	sealed class NoopDisposable : IDisposable
 	{

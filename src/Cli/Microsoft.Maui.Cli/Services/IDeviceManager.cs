@@ -11,6 +11,17 @@ namespace Microsoft.Maui.Cli.Services;
 public interface IDeviceManager
 {
 	Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Returns the devices for <paramref name="platform"/>, querying only the providers that
+	/// can produce them. Accepts any value handled by <see cref="Platforms.Normalize"/>,
+	/// including <see cref="Platforms.All"/>.
+	/// </summary>
+	/// <remarks>
+	/// Implementations must not enumerate every provider and then filter: provider queries are
+	/// expensive (the Apple provider shells out to <c>simctl</c>) and asking for one platform
+	/// must never pay another platform's cost.
+	/// </remarks>
 	Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default);
 	Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default);
 	Task<Device> GetRunningDeviceOrThrowAsync(CancellationToken cancellationToken = default);

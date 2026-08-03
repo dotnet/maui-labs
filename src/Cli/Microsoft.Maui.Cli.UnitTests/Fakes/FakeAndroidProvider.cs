@@ -64,16 +64,28 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<int?> InstallJdkCalls { get; } = new();
 	public bool Disposed { get; private set; }
 
+	/// <summary>Number of times <see cref="GetDevicesAsync"/> was invoked.</summary>
+	public int GetDevicesCallCount { get; private set; }
+
+	/// <summary>Number of times <see cref="GetAvdsAsync"/> was invoked.</summary>
+	public int GetAvdsCallCount { get; private set; }
+
 	// --- IAndroidProvider implementation ---
 
 	public Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default)
 		=> Task.FromResult(HealthChecks);
 
 	public Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default)
-		=> Task.FromResult(Devices);
+	{
+		GetDevicesCallCount++;
+		return Task.FromResult(Devices);
+	}
 
 	public Task<List<AvdInfo>> GetAvdsAsync(CancellationToken cancellationToken = default)
-		=> Task.FromResult(Avds);
+	{
+		GetAvdsCallCount++;
+		return Task.FromResult(Avds);
+	}
 
 	public Task<List<string>> GetDeviceProfilesAsync(CancellationToken cancellationToken = default)
 		=> Task.FromResult(DeviceProfiles);
