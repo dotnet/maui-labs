@@ -25,6 +25,7 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | Comet | `src/Comet/src/Comet.Layout.Yoga.Tests/` | multi-TFM |
 | DevFlow | `src/DevFlow/Microsoft.Maui.DevFlow.Tests/` | `net10.0` |
 | DevFlow (integration) | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/` | `net10.0` |
+| DevFlow (inspector) | `src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/` | `net10.0` |
 | WPF | `platforms/Windows.WPF/tests/HandlerTests/` | `net10.0-windows` |
 | WPF | `platforms/Windows.WPF/tests/UITests/` | `net10.0-windows` |
 
