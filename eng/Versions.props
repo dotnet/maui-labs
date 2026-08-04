@@ -84,7 +84,7 @@
     <EssentialsAIMinorVersion>0</EssentialsAIMinorVersion>
     <EssentialsAIPatchVersion>0</EssentialsAIPatchVersion>
     <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
-    <EssentialsAIPreviewVersionIteration>5</EssentialsAIPreviewVersionIteration>
+    <EssentialsAIPreviewVersionIteration>6</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
     <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->
@@ -93,7 +93,7 @@
     <MicrosoftAgentsAIWorkflowsGeneratorsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsGeneratorsVersion>
     <MicrosoftAgentsAIHostingVersion>1.0.0-preview.260225.1</MicrosoftAgentsAIHostingVersion>
     <!-- DeviceRunners (device test runner OSS replacement) -->
-    <DeviceRunnersVersion>0.1.0-preview.6</DeviceRunnersVersion>
+    <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>
