@@ -9,6 +9,35 @@ namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 public class UIAgentTests
 {
     [Fact]
+    public async Task SendMessageAsync_NullMessage_ThrowsWithoutPoisoningHistory()
+    {
+        IReadOnlyList<ChatMessage>? sentMessages = null;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            sentMessages = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse("ok", cancellationToken);
+        });
+        var agent = new UIAgent(client);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => EnumerateAsync(agent.SendMessageAsync(null!)));
+
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, "valid")));
+
+        Assert.NotNull(sentMessages);
+        Assert.Single(sentMessages);
+        Assert.Equal("valid", sentMessages[0].Text);
+
+        static async Task EnumerateAsync(IAsyncEnumerable<ContentBlock> blocks)
+        {
+            await foreach (var _ in blocks)
+            {
+            }
+        }
+    }
+
+    [Fact]
     public async Task SendMessageAsync_TextResponse_YieldsUserThenAssistantBlocks()
     {
         var client = new DelegatingStreamingChatClient();

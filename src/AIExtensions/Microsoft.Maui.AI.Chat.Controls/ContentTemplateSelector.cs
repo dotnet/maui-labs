@@ -6,10 +6,9 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// registered template's <c>When(...)</c> and choosing the highest-priority match.
 /// </summary>
 /// <remarks>
-/// The registered templates act as an allow-list: a block is only rendered if some template matches it.
-/// When nothing matches, the block renders as an empty (zero-size) view — omitting a template is how you
-/// suppress a block kind (e.g. leave out <see cref="FunctionInvocationTemplate"/> to hide tool calls). To
-/// render unexpected blocks with a catch-all instead, register a low-priority <see cref="DefaultContentTemplate"/>.
+/// Consumer templates are evaluated before the built-in fallback tier, so any explicit match wins regardless
+/// of its numeric priority. Within each tier, the highest priority wins and declaration order breaks ties.
+/// When nothing matches, the block renders as an empty (zero-size) view.
 /// </remarks>
 public class ContentTemplateSelector : DataTemplateSelector
 {
@@ -20,15 +19,26 @@ public class ContentTemplateSelector : DataTemplateSelector
 
     public IList<ContentTemplate> Templates { get; } = new List<ContentTemplate>();
 
+    internal IList<ContentTemplate> FallbackTemplates { get; } = new List<ContentTemplate>();
+
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
     {
         if (item is not ContentContext context)
             return EmptyTemplate;
 
+        return SelectBestTemplate(Templates, context)?.GetTemplate()
+            ?? SelectBestTemplate(FallbackTemplates, context)?.GetTemplate()
+            ?? EmptyTemplate;
+    }
+
+    private static ContentTemplate? SelectBestTemplate(
+        IEnumerable<ContentTemplate> templates,
+        ContentContext context)
+    {
         ContentTemplate? selectedTemplate = null;
         var highestPriority = int.MinValue;
 
-        foreach (var template in Templates)
+        foreach (var template in templates)
         {
             if (!template.When(context))
                 continue;
@@ -41,6 +51,6 @@ public class ContentTemplateSelector : DataTemplateSelector
             }
         }
 
-        return selectedTemplate?.GetTemplate() ?? EmptyTemplate;
+        return selectedTemplate;
     }
 }

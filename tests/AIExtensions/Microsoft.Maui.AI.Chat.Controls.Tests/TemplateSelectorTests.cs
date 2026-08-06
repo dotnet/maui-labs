@@ -188,6 +188,78 @@ public class TemplateSelectorTests
         Assert.NotNull(template);
     }
 
+    [Fact]
+    public void MessageListView_ZeroConfiguration_ProvidesVisibleBuiltInFallbacks()
+    {
+        var view = new MessageListView();
+        var selector = view.CreateTemplateSelector();
+        var session = SessionFactory.Create();
+
+        Assert.IsType<ChatMessageView>(
+            selector.SelectTemplate(BlockFactory.MakeText("User", "Hello"), null!).CreateContent());
+        Assert.IsType<ChatMessageView>(
+            selector.SelectTemplate(BlockFactory.MakeText("Assistant", "Hi"), null!).CreateContent());
+        Assert.IsType<ToolApprovalView>(
+            selector.SelectTemplate(BlockFactory.MakeApproval("delete_file"), null!).CreateContent());
+        Assert.IsType<MediaContentView>(
+            selector.SelectTemplate(BlockFactory.MakeMedia(), null!).CreateContent());
+        Assert.IsType<ThinkingView>(
+            selector.SelectTemplate(
+                new ContentContext(session, new ThinkingContentBlock(), view),
+                null!).CreateContent());
+        Assert.IsType<ErrorMessageView>(
+            selector.SelectTemplate(
+                new ContentContext(session, new ErrorContentBlock("error"), view),
+                null!).CreateContent());
+    }
+
+    [Fact]
+    public void MessageListView_ZeroConfiguration_HidesRawFunctionInvocationsAndUnknownBlocks()
+    {
+        var view = new MessageListView();
+        var selector = view.CreateTemplateSelector();
+        var session = SessionFactory.Create();
+
+        AssertRendersNothing(selector.SelectTemplate(BlockFactory.MakeToolCall("get_weather"), null!));
+        AssertRendersNothing(selector.SelectTemplate(
+            new ContentContext(session, new UnknownContentBlock(), view),
+            null!));
+    }
+
+    [Fact]
+    public void ConsumerTemplate_AlwaysOutranksBuiltInFallback()
+    {
+        var view = new MessageListView();
+        view.ContentTemplates.Add(new CustomTextTemplate { Priority = -20_000 });
+
+        var block = new CustomTextBlock();
+        block.AppendText("custom");
+        block.Role = ChatRole.Assistant;
+        var context = new ContentContext(SessionFactory.Create(), block, view);
+
+        var selected = view.CreateTemplateSelector().SelectTemplate(context, null!);
+
+        Assert.IsType<Editor>(selected.CreateContent());
+    }
+
+    [Fact]
+    public void UseDefaultContentTemplatesFalse_RestoresStrictAllowListRendering()
+    {
+        var view = new MessageListView { UseDefaultContentTemplates = false };
+        var context = BlockFactory.MakeText("Assistant", "Hello");
+
+        AssertRendersNothing(view.CreateTemplateSelector().SelectTemplate(context, null!));
+
+        view.ContentTemplates.Add(new TextContentTemplate
+        {
+            ViewType = typeof(Label),
+            Priority = -20_000,
+        });
+
+        var selected = view.CreateTemplateSelector().SelectTemplate(context, null!);
+        Assert.IsType<Label>(selected.CreateContent());
+    }
+
     /// <summary>
     /// Creates a selector with all standard templates registered (mirrors the default
     /// CopilotChatView template configuration).
@@ -200,5 +272,16 @@ public class TemplateSelectorTests
         selector.Templates.Add(new MediaContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new DefaultContentTemplate { ViewType = typeof(Label) });
         return selector;
+    }
+
+    private sealed class UnknownContentBlock : ContentBlock;
+
+    private sealed class CustomTextBlock : TextContentBlock;
+
+    private sealed class CustomTextTemplate : ContentTemplate
+    {
+        public CustomTextTemplate() => ViewType = typeof(Editor);
+
+        public override bool When(ContentContext context) => context.Block is CustomTextBlock;
     }
 }

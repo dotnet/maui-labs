@@ -10,6 +10,9 @@ public sealed class ThinkingView : ContentContextView
 
     public ThinkingView()
     {
+        SemanticProperties.SetDescription(this, "Assistant is thinking");
+        AutomationId = "AssistantThinking";
+
         _label = new Label
         {
             Text = "Thinking…",

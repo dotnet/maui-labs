@@ -34,6 +34,7 @@ public class MediaContentView : ContentContextView
                     Margin = new Thickness(0, 4),
                     HorizontalOptions = LayoutOptions.Start,
                 };
+                SemanticProperties.SetDescription(image, "Image attachment");
 
                 // Render from the raw bytes (efficient for large generated images).
                 var bytes = item.Data.ToArray();
@@ -44,12 +45,14 @@ public class MediaContentView : ContentContextView
             else
             {
                 // Non-image media — show as a label
-                _layout.Children.Add(new Label
+                var attachmentLabel = new Label
                 {
                     Text = $"📎 {item.MediaType ?? "file"} ({item.Data.Length} bytes)",
                     TextColor = Colors.Gray,
                     FontSize = 11,
-                });
+                };
+                SemanticProperties.SetDescription(attachmentLabel, attachmentLabel.Text);
+                _layout.Children.Add(attachmentLabel);
             }
         }
     }
