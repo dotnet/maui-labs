@@ -4,29 +4,25 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI applica
 
 > ⚠️ **Experimental** — APIs may change between releases. Not covered by the Microsoft Support Policy.
 
-## Packages
+## Fastest path
 
-| Package | Description |
-|---------|-------------|
-| **Microsoft.Maui.DevFlow.Agent** | In-app agent for .NET MAUI apps. Exposes visual tree, element interactions, screenshots, and profiling via HTTP/JSON API. |
-| **Microsoft.Maui.DevFlow.Agent.Core** | Platform-agnostic core: HTTP server, visual tree walker, CSS selector engine, network capture, profiling. |
-| **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Maui.Gtk apps. |
-| **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
-| **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
-| **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
-| **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. |
-| **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
+Install the unified `maui` CLI and initialize the bundled DevFlow skills in your app workspace:
 
-## Quick Start
-
-### 1. Install the NuGet packages
-
-```xml
-<PackageReference Include="Microsoft.Maui.DevFlow.Agent" />
-<PackageReference Include="Microsoft.Maui.DevFlow.Blazor" />  <!-- If using Blazor Hybrid -->
+```bash
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
+maui devflow init
 ```
 
-### 2. Register in MauiProgram.cs
+Add the in-app agent package to the MAUI app you want to automate:
+
+```bash
+dotnet add package Microsoft.Maui.DevFlow.Agent --prerelease
+
+# Blazor Hybrid apps only
+dotnet add package Microsoft.Maui.DevFlow.Blazor --prerelease
+```
+
+Register the agent in `MauiProgram.cs` for debug builds:
 
 ```csharp
 using Microsoft.Maui.DevFlow.Agent;
@@ -44,18 +40,53 @@ public static MauiApp CreateMauiApp()
 }
 ```
 
-### 3. Install the unified CLI tool
+Run your app, then connect to it:
+
+```bash
+maui devflow wait
+maui devflow ui tree
+maui devflow ui screenshot -o screenshot.png
+maui devflow mcp
+```
+
+## Manual setup details
+
+### NuGet package references
+
+```xml
+<PackageReference Include="Microsoft.Maui.DevFlow.Agent" />
+<PackageReference Include="Microsoft.Maui.DevFlow.Blazor" />  <!-- If using Blazor Hybrid -->
+```
+
+### MauiProgram.cs registration
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent;
+
+public static MauiApp CreateMauiApp()
+{
+    var builder = MauiApp.CreateBuilder();
+    builder.UseMauiApp<App>();
+
+    #if DEBUG
+    builder.AddMauiDevFlowAgent();
+    #endif
+
+    return builder.Build();
+}
+```
+
+### CLI installation
 
 ```bash
 dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
-### 4. Interact with your running app
+### Common commands
 
 ```bash
 # Install DevFlow skills for AI agent integration (auto-detects target directory;
 # defaults to .claude/skills/ — configurable via --target: claude, github, agent, agents, or auto)
-# (configurable via --target: claude, github, agent, agents, or auto)
 maui devflow init
 
 # Visual tree
@@ -70,6 +101,19 @@ maui devflow ui tap --automationid "MyButton"
 # Start MCP server for AI agent integration
 maui devflow mcp
 ```
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| **Microsoft.Maui.DevFlow.Agent** | In-app agent for .NET MAUI apps. Exposes visual tree, element interactions, screenshots, and profiling via HTTP/JSON API. |
+| **Microsoft.Maui.DevFlow.Agent.Core** | Platform-agnostic core: HTTP server, visual tree walker, CSS selector engine, network capture, profiling. |
+| **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Maui.Gtk apps. |
+| **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
+| **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
+| **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
+| **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. |
+| **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
 
 ### Session identity
 

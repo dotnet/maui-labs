@@ -4,6 +4,42 @@ Experimental packages and tooling for .NET MAUI. This repository hosts pre-relea
 
 > ⚠️ **These packages are experimental.** APIs may change between releases. These packages are not covered by the [.NET MAUI Support Policy](https://dotnet.microsoft.com/platform/support/policy/maui) and are provided as-is.
 
+## Fastest install path
+
+Install the unified `maui` CLI once, then let it guide the rest of your machine setup:
+
+```bash
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
+maui doctor
+```
+
+For Android development, the CLI can install and configure the JDK, Android SDK, licenses, and an emulator:
+
+```bash
+maui android install
+maui device list
+```
+
+On macOS, use the Apple commands to inspect your Xcode, simulator runtimes, and devices:
+
+```bash
+maui apple xcode list
+maui apple runtime list
+maui apple simulator list
+```
+
+For DevFlow app automation, initialize the bundled agent skills in your app workspace, then add the in-app agent package as described in [DevFlow](src/DevFlow/README.md):
+
+```bash
+maui devflow init
+```
+
+## Manual setup details
+
+If you prefer to install pieces yourself, install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), install the MAUI workload with `dotnet workload install maui`, and configure each platform's native tools directly (Xcode on macOS; Android Studio, Android SDK, and JDK for Android).
+
+The CLI can still manage individual pieces when you do not want the full interactive setup: `maui android jdk install`, `maui android sdk install`, `maui android emulator create`, and the `maui apple ...` commands on macOS.
+
 ## Products
 
 At a glance:
@@ -38,11 +74,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Cli](https://img.shields.io/nuget/v/Microsoft.Maui.Cli.svg?label=Microsoft.Maui.Cli)](https://www.nuget.org/packages/Microsoft.Maui.Cli/) | CLI global tool (`maui`) |
 
-```bash
-# Microsoft.Maui.Cli is currently released as a pre-release, so make sure to use the --prerelease flag
-dotnet tool install -g Microsoft.Maui.Cli --prerelease
-maui doctor
-```
+Start with the [fastest install path](#fastest-install-path), then run `maui <command> --help` for command-specific options.
 
 ### Comet
 
