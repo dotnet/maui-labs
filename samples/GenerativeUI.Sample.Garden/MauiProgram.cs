@@ -42,6 +42,8 @@ public static class MauiProgram
         builder.AddMauiDevFlowAgent();
 
         builder.Services.AddSingleton<ChatViewModel>();
+        // ChatViewModel is the IChatBridge the canvas/inflator raise UI intents (submit/confirm/…) to.
+        builder.Services.AddSingleton<IChatBridge>(sp => sp.GetRequiredService<ChatViewModel>());
         builder.Services.AddSingleton<MainPage>();
 
 #if DEBUG
