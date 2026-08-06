@@ -36,6 +36,8 @@ public class UIAgent : IDisposable
 
     internal UIAgentOptions Options => _options;
 
+    internal virtual object? AgentStateObject => null;
+
     public UIAgent(IChatClient chatClient)
         : this(chatClient, configure: null)
     {
@@ -178,7 +180,11 @@ public class UIAgent : IDisposable
             assistantUpdates.Add(update);
             thread?.AppendUpdate(update);
 
-            await foreach (var block in pipeline.Process(update, cancellationToken))
+            var processUpdate = ApplyStateMapper(update);
+            if (processUpdate.Contents.Count == 0 && update.Contents.Count > 0)
+                continue;
+
+            await foreach (var block in pipeline.Process(processUpdate, cancellationToken))
             {
                 yield return block;
             }
@@ -278,14 +284,18 @@ public class UIAgent : IDisposable
                 responsePipeline = new BlockMappingPipeline(_options, _logger);
             }
 
-            await foreach (var block in responsePipeline.Process(update, cancellationToken))
+            var processUpdate = ApplyStateMapper(update);
+            if (processUpdate.Contents.Count > 0 || update.Contents.Count == 0)
             {
-                AddRestoredBlock(
-                    blocks,
-                    block,
-                    currentTurnId!,
-                    isRequest: false,
-                    ref nextBlockStartsTurn);
+                await foreach (var block in responsePipeline.Process(processUpdate, cancellationToken))
+                {
+                    AddRestoredBlock(
+                        blocks,
+                        block,
+                        currentTurnId!,
+                        isRequest: false,
+                        ref nextBlockStartsTurn);
+                }
             }
 
             RestoreApprovalResponses(update, blocks, currentTurnId!);
@@ -299,6 +309,25 @@ public class UIAgent : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _options.Thread?.CompleteTurn();
+    }
+
+    internal virtual ChatResponseUpdate ApplyStateMapper(ChatResponseUpdate update)
+        => ApplyStateMapper(update, out _);
+
+    internal ChatResponseUpdate ApplyStateMapper(
+        ChatResponseUpdate update,
+        out object? stateValue)
+    {
+        stateValue = null;
+        if (_options.StateMapper is null)
+            return update;
+
+        var context = new StateMapperContext(update);
+        if (!_options.StateMapper(context))
+            return update;
+
+        stateValue = context.StateValue;
+        return context.HasHandledContent ? context.GetFilteredUpdate() : update;
     }
 
     internal async Task<FunctionResultContent> InvokeToolAsync(
