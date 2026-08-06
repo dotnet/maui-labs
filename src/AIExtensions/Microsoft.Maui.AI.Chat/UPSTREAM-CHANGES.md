@@ -23,30 +23,30 @@ as the MVP grows. When the upstream engine ships on NuGet, we want to be able to
 | `Blocks/`, `Engine/`, `Pipeline/` | **Kept** as the engine (`Microsoft.Maui.AI.Chat`), simplified — see below. |
 | `Components/` (Blazor UI), `wwwroot/` (CSS/JS) | **Removed entirely**, replaced by a native MAUI UI layer (`Microsoft.Maui.AI.Chat.Controls`). |
 | `Attributes/` (`[ToolBlock]` source-generator attrs) | **Removed** — the sample shows the hand-written `ContentBlockHandler` pattern instead. |
-| Reasoning, Activity, UI Actions, State, Persistence (Thread), Retry, Rich text | **Removed** from the engine (see section 2). |
+| Reasoning, Activity, UI Actions, State, Rich text | **Removed** from the engine (see section 2). |
 
 The engine has **no dependency** on the UI layer, Blazor, or ASP.NET.
 
 ---
 
-## 2. Removed features (the "add back" list)
+## 2. Feature status
 
-Each of these existed upstream and was cut for the MVP. Grouped by capability, with the exact
-upstream types so we know what to restore.
+These capabilities existed upstream and were initially cut for the MVP. They are grouped by
+capability with their current MAUI status.
 
-### 2a. Conversation persistence / threads  ⭐ highest priority to add back
+### 2a. Conversation persistence / threads
 The upstream engine treats an `IConversationThread` as the persistable source of truth, and
 `AgentContext` is a projection that can be re-hydrated from it. The Blazor `AgentBoundary`
 calls `AgentContext.RestoreAsync()` when a thread has stored updates.
 
 | Upstream type | Status |
 |---|---|
-| `Engine/IConversationThread.cs` | **Removed** |
-| `Engine/AgentContext.RestoreAsync(...)` | **Removed** |
-| `Engine/UIAgent.RestoreAsync(...)` | **Removed** |
-| `Pipeline/UIAgentOptions.Thread` (`IConversationThread?`) | **Removed** |
+| `Engine/IConversationThread.cs` | **Restored**, plus an explicit `Clear()` reset hook |
+| `Engine/AgentContext.RestoreAsync(...)` | **Restored** |
+| `Engine/UIAgent.RestoreAsync(...)` | **Restored** |
+| `Pipeline/UIAgentOptions.Thread` (`IConversationThread?`) | **Restored** |
 
-> **Note for adding back:** our recent refactors were done *specifically* to keep this clean —
+> **Persistence invariant:** our recent refactors were done *specifically* to keep this clean —
 > the engine's `Turns` and `UIAgent`'s `ChatMessage` history contain **only real content**, no
 > fabricated status blocks (see 2f). That preserves the "turns == projection of the thread"
 > invariant persistence depends on.
@@ -83,7 +83,7 @@ client-side and can call device APIs (GPS, etc.) directly via normal backend too
 ### 2f. Retry
 | Upstream type | Status |
 |---|---|
-| `Engine/AgentContext.RetryAsync(...)` | **Removed** |
+| `Engine/AgentContext.RetryAsync(...)` | **Restored**, preserving MAUI cancellation semantics |
 
 ### 2g. Rich text (markdown node hierarchy)
 Upstream had a structured rich-text/markdown block and a `RichText/` node tree. We simplified
@@ -199,9 +199,9 @@ Legend: ✅ kept · ✏️ renamed/changed · ❌ removed · ➕ added by us
 `RichText/` ❌ · `UIActionBlock.cs` ❌
 
 **`Engine/`**
-`AgentContext.cs` ✏️(no Restore/Retry; +Clear; error path) · `AgentState.cs` ❌ ·
-`ConversationStatus.cs` ✅ · `ConversationTurn.cs` ✅ · `IConversationThread.cs` ❌ ·
-`UIAgent.cs` ✏️(no RestoreAsync; double-invoke guard) · `UIAgentLog.cs` ✅ ·
+`AgentContext.cs` ✏️(Restore/Retry/Clear; MAUI cancellation and error paths) · `AgentState.cs` ❌ ·
+`ConversationStatus.cs` ✅ · `ConversationTurn.cs` ✏️(stable IDs) · `IConversationThread.cs` ✏️(+Clear) ·
+`UIAgent.cs` ✏️(thread persistence/restore; double-invoke guard) · `UIAgentLog.cs` ✅ ·
 `UIAgentOfT.cs` ❌
 
 **`Pipeline/`** (handlers moved to `Pipeline/Handlers/`)
@@ -211,7 +211,7 @@ Legend: ✅ kept · ✏️ renamed/changed · ❌ removed · ➕ added by us
 `HandleResult.cs` ✅ · `HandlerEntry.cs` ✅ · `IActiveEntry.cs` ✅ · `IHandlerEntry.cs` ✅ ·
 `MediaContentHandler.cs` ✅ · `ReasoningHandler.cs` ❌ · `StateMapperContext.cs` ❌ ·
 `TextBlockHandler.cs` ✅ · `UIActionHandler.cs` ❌ ·
-`UIAgentOptions.cs` ✏️(removed `StateMapper`, `Thread`, `RegisterUIAction`)
+`UIAgentOptions.cs` ✏️(restored `Thread`; removed `StateMapper`, `RegisterUIAction`)
 
 **`Attributes/`** — `ToolBlockAttribute.cs` ❌ · `ToolParameterAttribute.cs` ❌ · `ToolResultAttribute.cs` ❌
 
@@ -227,8 +227,8 @@ Convenience/robustness we'd like the core engine to gain:
 - `AgentContext.SystemPrompt` — sugar over `UIAgentOptions.ChatOptions.Instructions`.
 - `AgentContext.HasPendingApprovals` + `AutoRejectPendingApprovals()` — reject pending on new user message.
 - `UIAgentOptions.AllowMultipleToolCalls` convenience property.
-- Thread-safety on the callback lists (`ContentBlock._callbacks`, `AgentContext._*Callbacks`) —
-  use `ImmutableList` or a lock.
+- The MAUI engine deliberately remains single-thread-affine and not thread-safe. Callers serialize
+  access and enter the owning application thread before calling it.
 
 ## 9. Porting notes
 
