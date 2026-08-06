@@ -6,14 +6,23 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
-/// Configuration for a <see cref="UIAgent"/>: the <see cref="ChatOptions"/> (instructions and tools) plus any
-/// custom block handlers.
+/// Configuration for a <see cref="UIAgent"/>: the <see cref="ChatOptions"/> (instructions and tools),
+/// optional conversation persistence, and custom block handlers.
 /// </summary>
 /// <remarks>Use <see cref="AddBlockHandler{TState}"/> to plug a custom <see cref="ContentBlockHandler{TState}"/>
 /// into the pipeline.</remarks>
 public class UIAgentOptions
 {
     public ChatOptions? ChatOptions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the conversation thread that persists committed raw updates.
+    /// </summary>
+    /// <remarks>
+    /// The thread and agent are single-thread-affine and not thread-safe. Implementations own
+    /// persistence and serialization.
+    /// </remarks>
+    public IConversationThread? Thread { get; set; }
 
     internal List<IHandlerRegistration> HandlerRegistrations { get; } = new();
 

@@ -13,7 +13,7 @@ public class ConversationTurn
     private readonly List<ContentBlock> _requestBlocks = new();
     private readonly List<ContentBlock> _responseBlocks = new();
 
-    public string Id { get; internal set; } = string.Empty;
+    public string Id { get; internal set; } = Guid.NewGuid().ToString("N");
 
     public IReadOnlyList<ContentBlock> RequestBlocks => _requestBlocks;
 
