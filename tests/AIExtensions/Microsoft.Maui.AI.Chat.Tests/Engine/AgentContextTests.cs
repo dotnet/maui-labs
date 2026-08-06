@@ -67,6 +67,16 @@ public class AgentContextTests
         Assert.Equal("My message", userBlock.RawText);
     }
 
+    [Fact]
+    public async Task SendMessageAsync_NullMessage_ThrowsArgumentNullException()
+    {
+        var (agent, _) = CreateAgent();
+        var context = new AgentContext(agent);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => context.SendMessageAsync((ChatMessage)null!));
+    }
+
     // ---- Status Transitions ----
 
     [Fact]
@@ -246,5 +256,45 @@ public class AgentContextTests
 
         var userBlock = Assert.IsType<TextContentBlock>(context.Turns[0].RequestBlocks[0]);
         Assert.Equal("Hello world", userBlock.RawText);
+    }
+
+    [Fact]
+    public async Task Clear_RemovesTurnsHistoryAndError_AndReturnsToIdle()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        var messageCounts = new List<int>();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            messageCounts.Add(messages.Count());
+            return callCount == 1
+                ? ResponseEmitters.EmitErrorAfterTokens(
+                    ["partial"],
+                    new InvalidOperationException("diagnostic"),
+                    cancellationToken)
+                : ResponseEmitters.EmitTextResponse("fresh", cancellationToken);
+        });
+        var context = new AgentContext(agent);
+        var statuses = new List<ConversationStatus>();
+        context.RegisterOnStatusChanged(status => statuses.Add(status));
+
+        await context.SendMessageAsync("first");
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.NotNull(context.Error);
+        Assert.Single(context.Turns);
+
+        context.Clear();
+
+        Assert.Empty(context.Turns);
+        Assert.Null(context.Error);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal(ConversationStatus.Idle, statuses[^1]);
+
+        await context.SendMessageAsync("second");
+
+        Assert.Single(context.Turns);
+        Assert.Equal(new[] { 1, 1 }, messageCounts);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
     }
 }

@@ -34,20 +34,26 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
 
     public void Approve()
     {
-        Status = ApprovalStatus.Approved;
-        var response = ApprovalRequest.CreateResponse(approved: true);
-        NotifyChanged();
-        _tcs.TrySetResult(response);
+        Resolve(ApprovalStatus.Approved, approved: true, reason: null);
     }
 
     public void Reject(string? reason = null)
     {
-        Status = ApprovalStatus.Rejected;
-        var response = ApprovalRequest.CreateResponse(approved: false);
-        NotifyChanged();
-        _tcs.TrySetResult(response);
+        Resolve(ApprovalStatus.Rejected, approved: false, reason);
     }
 
     public Task<AIContent> GetResultAsync(CancellationToken cancellationToken = default)
         => _tcs.Task.WaitAsync(cancellationToken);
+
+    private void Resolve(ApprovalStatus status, bool approved, string? reason)
+    {
+        if (Status != ApprovalStatus.Pending)
+            return;
+
+        Status = status;
+        var response = ApprovalRequest.CreateResponse(approved, reason);
+        _tcs.TrySetResult(response);
+
+        NotifyChanged();
+    }
 }
