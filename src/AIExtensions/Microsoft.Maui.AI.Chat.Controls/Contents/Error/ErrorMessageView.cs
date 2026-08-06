@@ -10,6 +10,9 @@ public sealed class ErrorMessageView : ContentContextView
 
     public ErrorMessageView()
     {
+        SemanticProperties.SetDescription(this, "Chat error");
+        AutomationId = "ChatError";
+
         _label = new Label { TextColor = Color.FromArgb("#C75050") };
 
         Content = new Border

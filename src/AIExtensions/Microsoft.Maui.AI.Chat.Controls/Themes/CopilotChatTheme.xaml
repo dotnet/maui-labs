@@ -53,22 +53,24 @@
 
             <!-- Row 5: Input Area -->
             <Border x:Name="PART_InputArea" Grid.Row="5" Margin="12,8,12,12" Padding="6"
-                    BackgroundColor="{DynamicResource MauiAIChat.Input.Background}"
+                    BackgroundColor="{TemplateBinding EffectiveInputAreaBackgroundColor}"
                     StrokeThickness="0">
                 <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="14" />
+                    <RoundRectangle CornerRadius="{TemplateBinding InputAreaCornerRadius}" />
                 </Border.StrokeShape>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                     <Entry x:Name="PART_InputEntry"
                            Placeholder="{TemplateBinding Placeholder}"
                            AutomationId="ChatInput"
+                           SemanticProperties.Description="Chat message input"
                            Text="{TemplateBinding Text, Mode=TwoWay}"
                            FontSize="14"
                            BackgroundColor="Transparent" />
                     <Button x:Name="PART_SendButton" Grid.Column="1"
                             Text="{TemplateBinding SendButtonText}"
                             AutomationId="SendMessageButton"
-                            BackgroundColor="{DynamicResource MauiAIChat.Send.Background}"
+                            SemanticProperties.Description="Send message"
+                            BackgroundColor="{TemplateBinding EffectiveSendButtonBackgroundColor}"
                             TextColor="{DynamicResource MauiAIChat.Send.TextColor}"
                             FontSize="16"
                             WidthRequest="42" HeightRequest="42"

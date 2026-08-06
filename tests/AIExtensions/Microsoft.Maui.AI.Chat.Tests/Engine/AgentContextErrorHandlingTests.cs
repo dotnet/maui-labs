@@ -95,6 +95,45 @@ public class AgentContextErrorHandlingTests
         Assert.NotEmpty(turn.ResponseBlocks);
     }
 
+    [Fact]
+    public async Task ToolFailure_RollsBackDanglingToolCallHistory()
+    {
+        var sentMessages = new List<IReadOnlyList<ChatMessage>>();
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            sentMessages.Add(messages.ToArray());
+            callCount++;
+            return callCount == 1
+                ? ResponseEmitters.EmitToolCallResponse(
+                    "call-1",
+                    "explode",
+                    ct: cancellationToken)
+                : ResponseEmitters.EmitTextResponse("recovered", cancellationToken);
+        });
+        var explodingTool = AIFunctionFactory.Create(
+            (Func<string>)(() => throw new InvalidOperationException("tool failed")),
+            "explode");
+        var context = new AgentContext(new UIAgent(client, new ChatOptions
+        {
+            Tools = [explodingTool],
+        }));
+
+        await context.SendMessageAsync("first");
+        Assert.Equal(ConversationStatus.Error, context.Status);
+
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(2, sentMessages.Count);
+        var retryRequest = sentMessages[1];
+        Assert.Equal(2, retryRequest.Count);
+        Assert.All(retryRequest, message => Assert.Equal(ChatRole.User, message.Role));
+        Assert.DoesNotContain(
+            retryRequest.SelectMany(message => message.Contents),
+            content => content is FunctionCallContent);
+    }
+
     // ---- CancelAsync ----
 
     [Fact]
@@ -186,5 +225,235 @@ public class AgentContextErrorHandlingTests
         }
     }
 
+    [Fact]
+    public async Task CallerCancellation_CancelsTask_DiscardsResponseBlocks_AndReturnsIdle()
+    {
+        var streamStarted = new TaskCompletionSource();
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            SlowCancelableStream(streamStarted, cancellationToken));
+        var context = new AgentContext(new UIAgent(client));
+        using var callerCts = new CancellationTokenSource();
+
+        var sendTask = context.SendMessageAsync("Hello", callerCts.Token);
+        await streamStarted.Task;
+
+        callerCts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Null(context.Error);
+        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+    }
+
+    [Fact]
+    public async Task CallerCancellation_WhenClientThrowsDifferentException_StillCancelsTask()
+    {
+        var streamStarted = new TaskCompletionSource();
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            ThrowNonCancellationExceptionAfterCancellation(streamStarted, cancellationToken));
+        var context = new AgentContext(new UIAgent(client));
+        using var callerCts = new CancellationTokenSource();
+
+        var sendTask = context.SendMessageAsync("Hello", callerCts.Token);
+        await streamStarted.Task;
+        callerCts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Null(context.Error);
+        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+    }
+
+    [Fact]
+    public async Task CallerCancellation_AfterErrorTransition_ResetsIdleAndRethrowsCancellation()
+    {
+        var expectedError = new InvalidOperationException("diagnostic");
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            ResponseEmitters.EmitErrorAfterTokens([], expectedError, cancellationToken));
+        var context = new AgentContext(new UIAgent(client));
+        using var callerCts = new CancellationTokenSource();
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.Error)
+                callerCts.Cancel();
+        });
+
+        var sendTask = context.SendMessageAsync("Hello", callerCts.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Null(context.Error);
+        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+    }
+
+    [Fact]
+    public async Task GracefulCancellation_DisposesLifecycleAndAllowsNextSend()
+    {
+        var streamStarted = new TaskCompletionSource();
+        var client = new DelegatingStreamingChatClient();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            return callCount == 1
+                ? SlowCancelableStream(streamStarted, cancellationToken)
+                : ResponseEmitters.EmitTextResponse("second response", cancellationToken);
+        });
+        var context = new AgentContext(new UIAgent(client));
+
+        var firstSend = context.SendMessageAsync("first");
+        await streamStarted.Task;
+        await context.CancelAsync();
+        await firstSend;
+
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(2, context.Turns.Count);
+        Assert.Empty(context.Turns[0].ResponseBlocks);
+        Assert.NotEmpty(context.Turns[1].ResponseBlocks);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    [Fact]
+    public async Task GracefulCancellation_DoesNotCommitPartialAssistantHistory()
+    {
+        var streamStarted = new TaskCompletionSource();
+        var sentMessages = new List<IReadOnlyList<ChatMessage>>();
+        var client = new DelegatingStreamingChatClient();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            sentMessages.Add(messages.ToArray());
+            callCount++;
+            return callCount == 1
+                ? SlowCancelableStream(streamStarted, cancellationToken)
+                : ResponseEmitters.EmitTextResponse("second response", cancellationToken);
+        });
+        var context = new AgentContext(new UIAgent(client));
+
+        var firstSend = context.SendMessageAsync("first");
+        await streamStarted.Task;
+        await context.CancelAsync();
+        await firstSend;
+
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(2, sentMessages.Count);
+        var secondRequest = sentMessages[1];
+        Assert.Equal(2, secondRequest.Count);
+        Assert.Equal(ChatRole.User, secondRequest[0].Role);
+        Assert.Equal(ChatRole.User, secondRequest[1].Role);
+        Assert.DoesNotContain(
+            secondRequest.SelectMany(message => message.Contents).OfType<TextContent>(),
+            content => content.Text == "partial");
+    }
+
+    [Fact]
+    public async Task CancelWhileAwaitingApproval_RollsBackDanglingApprovalHistory()
+    {
+        var awaitingInput = new TaskCompletionSource();
+        var sentMessages = new List<IReadOnlyList<ChatMessage>>();
+        var client = new DelegatingStreamingChatClient();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            sentMessages.Add(messages.ToArray());
+            callCount++;
+            return callCount == 1
+                ? ResponseEmitters.EmitApprovalRequest(
+                    "call-1",
+                    "DeleteFile",
+                    ct: cancellationToken)
+                : ResponseEmitters.EmitTextResponse("fresh response", cancellationToken);
+        });
+        var context = new AgentContext(new UIAgent(client));
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                awaitingInput.TrySetResult();
+        });
+
+        var firstSend = context.SendMessageAsync("first");
+        await awaitingInput.Task;
+        await context.CancelAsync();
+        await firstSend;
+
+        await context.SendMessageAsync("second");
+
+        Assert.Equal(2, sentMessages.Count);
+        var secondRequest = sentMessages[1];
+        Assert.Equal(2, secondRequest.Count);
+        Assert.All(secondRequest, message => Assert.Equal(ChatRole.User, message.Role));
+        Assert.DoesNotContain(
+            secondRequest.SelectMany(message => message.Contents),
+            content => content is ToolApprovalRequestContent);
+    }
+
+    [Fact]
+    public async Task Clear_DuringStreaming_CancelsCurrentSendAndAllowsFreshConversation()
+    {
+        var streamStarted = new TaskCompletionSource();
+        var client = new DelegatingStreamingChatClient();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            return callCount == 1
+                ? SlowCancelableStream(streamStarted, cancellationToken)
+                : ResponseEmitters.EmitTextResponse("fresh response", cancellationToken);
+        });
+        var context = new AgentContext(new UIAgent(client));
+
+        var firstSend = context.SendMessageAsync("first");
+        await streamStarted.Task;
+
+        context.Clear();
+        await firstSend;
+        await context.SendMessageAsync("fresh");
+
+        Assert.Single(context.Turns);
+        Assert.NotEmpty(context.Turns[0].ResponseBlocks);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
     // ---- Integration: Error recovery flow ----
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> SlowCancelableStream(
+        TaskCompletionSource streamStarted,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = Guid.NewGuid().ToString("N"),
+            Contents = [new TextContent("partial")],
+        };
+        streamStarted.TrySetResult();
+        await Task.Delay(Timeout.Infinite, cancellationToken);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> ThrowNonCancellationExceptionAfterCancellation(
+        TaskCompletionSource streamStarted,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = Guid.NewGuid().ToString("N"),
+            Contents = [new TextContent("partial")],
+        };
+        streamStarted.TrySetResult();
+
+        try
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new InvalidOperationException("client translated cancellation");
+        }
+    }
 }

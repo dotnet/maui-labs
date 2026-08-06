@@ -100,9 +100,31 @@ public class MessageListViewTests
         var view = new MessageListView { Session = session };
 
         var error = Assert.Single(view.Items.Select(c => c.Block).OfType<ErrorContentBlock>());
-        Assert.Contains("boom", error.Message);
+        Assert.Equal(ErrorContentBlock.DefaultUserMessage, error.Message);
+        Assert.DoesNotContain("boom", error.Message, StringComparison.Ordinal);
+        Assert.Equal("boom", session.Error!.Message);
 
         // ...but the engine's turns never contained an error block (thread stays clean).
         Assert.DoesNotContain(session.Turns.SelectMany(t => t.ResponseBlocks), b => b is ErrorContentBlock);
+    }
+
+    [Fact]
+    public async Task CancellationReconciliation_PreservesPriorStickyError()
+    {
+        var client = new TestChatClient((_, _, _) =>
+            throw new InvalidOperationException("diagnostic"));
+        var session = SessionFactory.Create(client);
+        await session.SendMessageAsync("Hi");
+        var view = new MessageListView { Session = session };
+        var error = Assert.Single(view.Items, item => item.Block is ErrorContentBlock);
+
+        session.Turns[0].ClearResponseBlocks();
+        view.ReconcileItemsWithSession();
+
+        Assert.Contains(error, view.Items);
+        Assert.DoesNotContain(
+            view.Items,
+            item => item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant
+                && item.Block is not ErrorContentBlock);
     }
 }

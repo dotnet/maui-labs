@@ -1,7 +1,6 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
-using Microsoft.Maui.Controls.Xaml;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -15,8 +14,7 @@ public class ChatPageTests
     [Fact]
     public void Session_CanBeSetAndCleared()
     {
-        var control = CreateControl();
-        if (control == null) return;
+        var control = new CopilotChatView();
 
         var session = SessionFactory.Create("test");
 
@@ -30,8 +28,7 @@ public class ChatPageTests
     [Fact]
     public void Session_Swap_DoesNotThrow()
     {
-        var control = CreateControl();
-        if (control == null) return;
+        var control = new CopilotChatView();
 
         var session1 = SessionFactory.Create("First");
         var session2 = SessionFactory.Create("Second");
@@ -59,8 +56,7 @@ public class ChatPageTests
     [Fact]
     public async Task SendMessage_ClearsTextProperty()
     {
-        var control = CreateControl();
-        if (control == null) return;
+        var control = new CopilotChatView();
 
         var session = SessionFactory.Create("Reply");
         control.Session = session;
@@ -76,8 +72,7 @@ public class ChatPageTests
     [Fact]
     public void SendMessage_WhenNoSession_DoesNotThrow()
     {
-        var control = CreateControl();
-        if (control == null) return;
+        var control = new CopilotChatView();
 
         control.Text = "Hello";
 
@@ -88,8 +83,7 @@ public class ChatPageTests
     [Fact]
     public void SendMessage_WhenBusy_Blocked()
     {
-        var control = CreateControl();
-        if (control == null) return;
+        var control = new CopilotChatView();
 
         control.IsBusy = true;
 
@@ -100,8 +94,7 @@ public class ChatPageTests
     [Fact]
     public void SendMessage_WhenTextEmpty_Blocked()
     {
-        var control = CreateControl();
-        if (control == null) return;
+        var control = new CopilotChatView();
 
         var session = SessionFactory.Create("Reply");
         control.Session = session;
@@ -112,7 +105,7 @@ public class ChatPageTests
     }
 
     [Fact]
-    public async Task CancelMessage_StopsStreaming()
+    public async Task CallerCancellation_CompletesSendTaskAsCanceled()
     {
         var tcs = new TaskCompletionSource<ChatResponse>();
         var client = new TestChatClient((_, _, ct) =>
@@ -127,19 +120,7 @@ public class ChatPageTests
 
         cts.Cancel();
 
-        // Should complete without throwing (cancellation is handled gracefully)
-        await sendTask;
-    }
-
-    private static CopilotChatView? CreateControl()
-    {
-        try
-        {
-            return new CopilotChatView();
-        }
-        catch (Exception ex) when (ex is XamlParseException or InvalidOperationException)
-        {
-            return null;
-        }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
+        Assert.Equal(ConversationStatus.Idle, session.Status);
     }
 }

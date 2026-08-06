@@ -63,13 +63,32 @@ public class UIAgent : IDisposable
         _history.Clear();
     }
 
+    internal int CaptureHistoryCheckpoint() => _history.Count;
+
+    internal void RollbackHistory(int checkpoint, ChatMessage requestMessage)
+    {
+        if (checkpoint < 0)
+            throw new ArgumentOutOfRangeException(nameof(checkpoint));
+
+        if (checkpoint > _history.Count)
+            return;
+
+        var requestWasAdded = _history.Count > checkpoint;
+        _history.RemoveRange(checkpoint, _history.Count - checkpoint);
+        if (requestWasAdded)
+            _history.Add(requestMessage);
+    }
+
     public async IAsyncEnumerable<ContentBlock> SendMessageAsync(
         ChatMessage message,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(message);
 
+        cancellationToken.ThrowIfCancellationRequested();
         _history.Add(message);
+        ChatMessage[] historySnapshot = [.. _history];
         var pipeline = new BlockMappingPipeline(_options, _logger);
 
         // Process user message through pipeline
@@ -94,7 +113,7 @@ public class UIAgent : IDisposable
         var chatOptions = _options.ChatOptions;
 
         var updateIndex = 0;
-        await foreach (var update in _chatClient.GetStreamingResponseAsync(_history, chatOptions, cancellationToken).ConfigureAwait(false))
+        await foreach (var update in _chatClient.GetStreamingResponseAsync(historySnapshot, chatOptions, cancellationToken).ConfigureAwait(false))
         {
             var contentTypes = string.Join(", ", update.Contents.Select(c => c.GetType().Name));
             UIAgentLog.ReceivedUpdate(_logger, updateIndex++, update.Role?.Value, contentTypes);
@@ -115,12 +134,13 @@ public class UIAgent : IDisposable
             yield return block;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Add assistant response to history
         var response = assistantUpdates.ToChatResponse();
+        cancellationToken.ThrowIfCancellationRequested();
         foreach (var msg in response.Messages)
-        {
             _history.Add(msg);
-        }
 
         UIAgentLog.AddedToHistory(_logger, response.Messages.Count);
     }
