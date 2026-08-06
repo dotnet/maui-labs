@@ -16,6 +16,17 @@ public class UIAgentOptions
     public ChatOptions? ChatOptions { get; set; }
 
     /// <summary>
+    /// Gets or sets a mapper that may consume assistant response content and supply typed application
+    /// state for a <see cref="UIAgent{TState}"/>.
+    /// </summary>
+    /// <remarks>
+    /// Return <see langword="true"/> when the update contained state handled by the mapper. Content
+    /// must also be marked with <see cref="StateMapperContext.MarkHandled"/> to keep it out of the
+    /// visible block pipeline. The mapper and agent are single-thread-affine and not thread-safe.
+    /// </remarks>
+    public Func<StateMapperContext, bool>? StateMapper { get; set; }
+
+    /// <summary>
     /// Gets or sets the conversation thread that persists committed raw updates.
     /// </summary>
     /// <remarks>
