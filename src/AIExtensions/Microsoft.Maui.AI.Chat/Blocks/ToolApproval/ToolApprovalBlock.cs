@@ -45,6 +45,17 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
     public Task<AIContent> GetResultAsync(CancellationToken cancellationToken = default)
         => _tcs.Task.WaitAsync(cancellationToken);
 
+    internal void RestoreResponse(ToolApprovalResponseContent response)
+    {
+        if (response.RequestId != ApprovalRequest.RequestId)
+            return;
+
+        Status = response.Approved
+            ? ApprovalStatus.Approved
+            : ApprovalStatus.Rejected;
+        _tcs.TrySetResult(response);
+    }
+
     private void Resolve(ApprovalStatus status, bool approved, string? reason)
     {
         if (Status != ApprovalStatus.Pending)

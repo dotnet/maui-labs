@@ -15,6 +15,11 @@ namespace Microsoft.Maui.AI.Chat;
 /// Drives the tool/approval loop: after streaming from the <see cref="UIAgent"/> it invokes any pending
 /// backend tools and awaits <see cref="IInteractiveBlock"/>s (e.g. approvals), then feeds the results
 /// back for another round.
+/// <para>
+/// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
+/// enter the owning application thread before calling it. Status checks are misuse guards, not
+/// synchronization.
+/// </para>
 /// </remarks>
 public class AgentContext(UIAgent agent) : IDisposable
 {
@@ -23,6 +28,9 @@ public class AgentContext(UIAgent agent) : IDisposable
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
     private CancellationTokenSource? _streamingCts;
+    private ChatMessage? _retryMessage;
+    private UIAgent.HistoryCheckpoint _retryHistoryCheckpoint;
+    private bool _restoreCompleted;
     private bool _disposed;
 
     public IReadOnlyList<ConversationTurn> Turns => _turns;
@@ -32,7 +40,7 @@ public class AgentContext(UIAgent agent) : IDisposable
     public Exception? Error { get; private set; }
 
     /// <summary>
-    /// Clears all conversation turns and resets the session to idle state.
+    /// Clears all conversation turns, local and persistent history, and error state.
     /// The underlying agent and tools remain configured.
     /// </summary>
     public void Clear()
@@ -41,6 +49,9 @@ public class AgentContext(UIAgent agent) : IDisposable
         CancelAndDisposeStreaming();
         _turns.Clear();
         agent.ClearHistory();
+        _retryMessage = null;
+        _retryHistoryCheckpoint = default;
+        _restoreCompleted = false;
         Error = null;
         Status = ConversationStatus.Idle;
         NotifyStatusChanged();
@@ -60,40 +71,125 @@ public class AgentContext(UIAgent agent) : IDisposable
         if (Status == ConversationStatus.Streaming)
             throw new InvalidOperationException("A message is already being processed.");
 
-        var turn = new ConversationTurn();
+        var requestMessage = EnsureMessageId(message);
+        var turn = new ConversationTurn { Id = requestMessage.MessageId! };
         _turns.Add(turn);
         NotifyTurnAdded(turn);
 
         var historyCheckpoint = agent.CaptureHistoryCheckpoint();
+        await RunAttemptAsync(
+            requestMessage,
+            turn,
+            historyCheckpoint,
+            includeInitialRequestBlocks: true,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Restores committed conversation turns from the configured <see cref="IConversationThread"/>.
+    /// </summary>
+    /// <remarks>
+    /// Restore requires an idle, empty context and may be called only once before <see cref="Clear"/>.
+    /// It reconstructs display/history blocks only: restored approvals, tools, and other interactive
+    /// blocks are not resumed or invoked.
+    /// </remarks>
+    public async Task RestoreAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (Status != ConversationStatus.Idle)
+            throw new InvalidOperationException("RestoreAsync requires an idle context.");
+
+        if (_restoreCompleted || _turns.Count != 0)
+        {
+            throw new InvalidOperationException(
+                "RestoreAsync requires an empty context and may not be called twice. Call Clear first.");
+        }
+
+        var blocks = await agent.RestoreAsync(cancellationToken);
+        ConversationTurn? currentTurn = null;
+
+        foreach (var block in blocks)
+        {
+            if (block.StartsRestoredTurn || currentTurn is null)
+            {
+                currentTurn = new ConversationTurn
+                {
+                    Id = block.RestoredTurnId
+                        ?? block.Id
+                        ?? Guid.NewGuid().ToString("N"),
+                };
+                _turns.Add(currentTurn);
+            }
+
+            if (block.IsRestoredRequest)
+                currentTurn.AddRequestBlock(block);
+            else
+                currentTurn.AddResponseBlock(block);
+        }
+
+        _restoreCompleted = true;
+    }
+
+    /// <summary>
+    /// Retries the last failed message in its existing turn.
+    /// </summary>
+    public async Task RetryAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (Status != ConversationStatus.Error || _retryMessage is null)
+        {
+            throw new InvalidOperationException(
+                $"RetryAsync requires Status == Error, but Status is {Status}.");
+        }
+
+        var turn = _turns[^1];
+        turn.ClearResponseBlocks();
+        agent.RestoreHistory(_retryHistoryCheckpoint);
+
+        await RunAttemptAsync(
+            _retryMessage,
+            turn,
+            _retryHistoryCheckpoint,
+            includeInitialRequestBlocks: false,
+            cancellationToken);
+    }
+
+    private async Task RunAttemptAsync(
+        ChatMessage message,
+        ConversationTurn turn,
+        UIAgent.HistoryCheckpoint historyCheckpoint,
+        bool includeInitialRequestBlocks,
+        CancellationToken callerToken)
+    {
         var (streamingCts, streamingToken) = ReplaceStreamingCancellationSource();
         CancellationTokenSource? linkedCts = null;
 
         try
         {
-            if (cancellationToken.CanBeCanceled)
+            if (callerToken.CanBeCanceled)
             {
                 linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                     streamingToken,
-                    cancellationToken);
+                    callerToken);
                 streamingToken = linkedCts.Token;
             }
 
-            await StreamIntoTurnAsync(
+            var outcome = await StreamIntoTurnAsync(
                 message,
                 turn,
                 historyCheckpoint,
+                includeInitialRequestBlocks,
                 streamingToken);
 
-            if (cancellationToken.IsCancellationRequested)
+            if (outcome != AttemptOutcome.Succeeded && callerToken.IsCancellationRequested)
+            {
                 CleanupCanceledTurn(turn, historyCheckpoint, message);
-
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-        catch (Exception) when (cancellationToken.IsCancellationRequested)
-        {
-            CleanupCanceledTurn(turn, historyCheckpoint, message);
-            cancellationToken.ThrowIfCancellationRequested();
-            throw;
+                callerToken.ThrowIfCancellationRequested();
+            }
         }
         finally
         {
@@ -104,10 +200,11 @@ public class AgentContext(UIAgent agent) : IDisposable
         }
     }
 
-    private async Task StreamIntoTurnAsync(
+    private async Task<AttemptOutcome> StreamIntoTurnAsync(
         ChatMessage message,
         ConversationTurn turn,
-        int historyCheckpoint,
+        UIAgent.HistoryCheckpoint historyCheckpoint,
+        bool includeInitialRequestBlocks,
         CancellationToken cancellationToken)
     {
         Status = ConversationStatus.Streaming;
@@ -117,13 +214,19 @@ public class AgentContext(UIAgent agent) : IDisposable
         try
         {
             ChatMessage? currentMessage = message;
+            var startsThreadTurn = true;
+            var isInitialRequest = true;
 
             while (currentMessage is not null)
             {
                 var interactiveBlocks = new List<IInteractiveBlock>();
                 var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
 
-                await foreach (var block in agent.SendMessageAsync(currentMessage, cancellationToken).WithCancellation(cancellationToken))
+                await foreach (var block in agent.SendMessageAsync(
+                    currentMessage,
+                    startsThreadTurn,
+                    completesThreadTurn: false,
+                    cancellationToken).WithCancellation(cancellationToken))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
@@ -139,36 +242,36 @@ public class AgentContext(UIAgent agent) : IDisposable
                     }
 
                     if (block.Role == currentMessage.Role)
-                        turn.AddRequestBlock(block);
+                    {
+                        if (!isInitialRequest || includeInitialRequestBlocks)
+                        {
+                            turn.AddRequestBlock(block);
+                            NotifyBlockAdded(turn, block);
+                        }
+                    }
                     else
+                    {
                         turn.AddResponseBlock(block);
-
-                    NotifyBlockAdded(turn, block);
+                        NotifyBlockAdded(turn, block);
+                    }
                 }
 
+                startsThreadTurn = false;
+                isInitialRequest = false;
                 currentMessage = null;
 
-                // Remove tool blocks that were already resolved during streaming
-                // (e.g., FunctionInvokingChatClient handled the invocation internally)
                 uninvokedToolBlocks.RemoveAll(b => b.Result is not null);
 
                 if (interactiveBlocks.Count == 0 && uninvokedToolBlocks.Count == 0)
-                {
                     break;
-                }
 
-                // Build tasks for all pending work
                 var resultTasks = new List<Task<AIContent>>();
 
                 foreach (var interactive in interactiveBlocks)
-                {
                     resultTasks.Add(interactive.GetResultAsync(cancellationToken));
-                }
 
                 foreach (var toolBlock in uninvokedToolBlocks)
-                {
                     resultTasks.Add(InvokeBackendToolAsync(toolBlock, cancellationToken));
-                }
 
                 if (interactiveBlocks.Count > 0)
                 {
@@ -184,7 +287,10 @@ public class AgentContext(UIAgent agent) : IDisposable
                     var role = results.Any(r => r is not FunctionResultContent)
                         ? ChatRole.User
                         : ChatRole.Tool;
-                    currentMessage = new ChatMessage(role, [.. results]);
+                    currentMessage = new ChatMessage(role, [.. results])
+                    {
+                        MessageId = Guid.NewGuid().ToString("N"),
+                    };
                 }
 
                 Status = ConversationStatus.Streaming;
@@ -192,21 +298,28 @@ public class AgentContext(UIAgent agent) : IDisposable
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            agent.CompleteThreadTurn();
+
+            _retryMessage = null;
+            _retryHistoryCheckpoint = default;
             Status = ConversationStatus.Idle;
             NotifyStatusChanged();
+            return AttemptOutcome.Succeeded;
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
             CleanupCanceledTurn(turn, historyCheckpoint, message);
+            return AttemptOutcome.Canceled;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            // Failures surface via Status/Error only — the UI renders them. No block is
-            // added to the turn, so the persistable message thread stays clean.
             agent.RollbackHistory(historyCheckpoint, message);
+            _retryMessage = message;
+            _retryHistoryCheckpoint = historyCheckpoint;
             Error = ex;
             Status = ConversationStatus.Error;
             NotifyStatusChanged();
+            return AttemptOutcome.Failed;
         }
     }
 
@@ -223,6 +336,8 @@ public class AgentContext(UIAgent agent) : IDisposable
 
     public Task CancelAsync()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (Status is ConversationStatus.Idle or ConversationStatus.Error)
             return Task.CompletedTask;
 
@@ -265,11 +380,13 @@ public class AgentContext(UIAgent agent) : IDisposable
 
     private void CleanupCanceledTurn(
         ConversationTurn turn,
-        int historyCheckpoint,
+        UIAgent.HistoryCheckpoint historyCheckpoint,
         ChatMessage requestMessage)
     {
         turn.ClearResponseBlocks();
         agent.RollbackHistory(historyCheckpoint, requestMessage);
+        _retryMessage = null;
+        _retryHistoryCheckpoint = default;
         Error = null;
 
         if (Status != ConversationStatus.Idle)
@@ -277,6 +394,16 @@ public class AgentContext(UIAgent agent) : IDisposable
             Status = ConversationStatus.Idle;
             NotifyStatusChanged();
         }
+    }
+
+    private static ChatMessage EnsureMessageId(ChatMessage message)
+    {
+        if (!string.IsNullOrEmpty(message.MessageId))
+            return message;
+
+        var clone = message.Clone();
+        clone.MessageId = Guid.NewGuid().ToString("N");
+        return clone;
     }
 
     public IDisposable RegisterOnTurnAdded(Action<ConversationTurn> callback)
@@ -316,6 +443,13 @@ public class AgentContext(UIAgent agent) : IDisposable
         var snapshot = _blockAddedCallbacks.ToArray();
         foreach (var cb in snapshot)
             cb(turn, block);
+    }
+
+    private enum AttemptOutcome
+    {
+        Succeeded,
+        Failed,
+        Canceled,
     }
 
     private sealed class CallbackRegistration<T> : IDisposable

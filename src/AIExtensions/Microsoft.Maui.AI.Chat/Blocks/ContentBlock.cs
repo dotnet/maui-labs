@@ -27,6 +27,12 @@ public abstract class ContentBlock
 
     public string? AuthorName { get; internal set; }
 
+    internal string? RestoredTurnId { get; set; }
+
+    internal bool StartsRestoredTurn { get; set; }
+
+    internal bool IsRestoredRequest { get; set; }
+
     private readonly List<Action> _callbacks = new();
 
     public ContentBlockChangedSubscription OnChanged(Action callback)

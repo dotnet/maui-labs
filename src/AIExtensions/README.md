@@ -10,6 +10,12 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Chat engine — a block-mapping pipeline that turns `Microsoft.Extensions.AI` content into strongly-typed `ContentBlock`s, plus a stateful `AgentContext` |
 | [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | MAUI chat UI — `CopilotChatView` / `MessageListView` with a XAML content-template system for rendering blocks |
 
+`Microsoft.Maui.AI.Chat` supports caller-provided `IConversationThread` persistence, history
+restore, retry, and coherent clear/reset behavior. No storage provider is built in:
+applications own persistence and serialization. The engine and thread contracts are deliberately
+single-thread-affine and not thread-safe; callers serialize access on their owning application
+thread.
+
 - [Attributes documentation](Microsoft.Maui.AI.Attributes/README.md) — API reference, samples, and equivalence rules
 - [Chat upstream notes](Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md) — how the chat engine relates to the ASP.NET AI Components it forked from
 
