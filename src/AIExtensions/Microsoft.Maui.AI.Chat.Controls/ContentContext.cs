@@ -14,14 +14,22 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 public sealed class ContentContext
 {
     public ContentContext(AgentContext agentContext, ContentBlock block)
+        : this(agentContext, block, owner: null)
+    {
+    }
+
+    internal ContentContext(AgentContext agentContext, ContentBlock block, MessageListView? owner)
     {
         AgentContext = agentContext ?? throw new ArgumentNullException(nameof(agentContext));
         Block = block ?? throw new ArgumentNullException(nameof(block));
+        Owner = owner;
     }
 
     public AgentContext AgentContext { get; }
 
     public ContentBlock Block { get; }
+
+    internal MessageListView? Owner { get; }
 
     /// <summary>The role of this block (User, Assistant, Tool).</summary>
     public ChatRole? Role => Block.Role;

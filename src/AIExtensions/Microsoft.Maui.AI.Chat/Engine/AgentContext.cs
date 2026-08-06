@@ -37,9 +37,8 @@ public class AgentContext(UIAgent agent) : IDisposable
     /// </summary>
     public void Clear()
     {
-        _streamingCts?.Cancel();
-        _streamingCts?.Dispose();
-        _streamingCts = null;
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        CancelAndDisposeStreaming();
         _turns.Clear();
         agent.ClearHistory();
         Error = null;
@@ -54,23 +53,61 @@ public class AgentContext(UIAgent agent) : IDisposable
 
     public async Task SendMessageAsync(ChatMessage message, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(message);
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (Status == ConversationStatus.Streaming)
-        {
             throw new InvalidOperationException("A message is already being processed.");
-        }
 
         var turn = new ConversationTurn();
         _turns.Add(turn);
         NotifyTurnAdded(turn);
 
-        _streamingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var historyCheckpoint = agent.CaptureHistoryCheckpoint();
+        var (streamingCts, streamingToken) = ReplaceStreamingCancellationSource();
+        CancellationTokenSource? linkedCts = null;
 
-        await StreamIntoTurnAsync(message, turn, _streamingCts.Token);
+        try
+        {
+            if (cancellationToken.CanBeCanceled)
+            {
+                linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                    streamingToken,
+                    cancellationToken);
+                streamingToken = linkedCts.Token;
+            }
+
+            await StreamIntoTurnAsync(
+                message,
+                turn,
+                historyCheckpoint,
+                streamingToken);
+
+            if (cancellationToken.IsCancellationRequested)
+                CleanupCanceledTurn(turn, historyCheckpoint, message);
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (Exception) when (cancellationToken.IsCancellationRequested)
+        {
+            CleanupCanceledTurn(turn, historyCheckpoint, message);
+            cancellationToken.ThrowIfCancellationRequested();
+            throw;
+        }
+        finally
+        {
+            linkedCts?.Dispose();
+            if (ReferenceEquals(_streamingCts, streamingCts))
+                _streamingCts = null;
+            streamingCts.Dispose();
+        }
     }
 
     private async Task StreamIntoTurnAsync(
         ChatMessage message,
         ConversationTurn turn,
+        int historyCheckpoint,
         CancellationToken cancellationToken)
     {
         Status = ConversationStatus.Streaming;
@@ -88,6 +125,8 @@ public class AgentContext(UIAgent agent) : IDisposable
 
                 await foreach (var block in agent.SendMessageAsync(currentMessage, cancellationToken).WithCancellation(cancellationToken))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     if (block is IInteractiveBlock interactive)
                     {
                         interactiveBlocks.Add(interactive);
@@ -99,15 +138,10 @@ public class AgentContext(UIAgent agent) : IDisposable
                         uninvokedToolBlocks.Add(ficb);
                     }
 
-                    var isRequest = block.Role == currentMessage.Role;
-                    if (isRequest)
-                    {
+                    if (block.Role == currentMessage.Role)
                         turn.AddRequestBlock(block);
-                    }
                     else
-                    {
                         turn.AddResponseBlock(block);
-                    }
 
                     NotifyBlockAdded(turn, block);
                 }
@@ -143,6 +177,7 @@ public class AgentContext(UIAgent agent) : IDisposable
                 }
 
                 var results = await Task.WhenAll(resultTasks);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (results.Length > 0)
                 {
@@ -156,23 +191,19 @@ public class AgentContext(UIAgent agent) : IDisposable
                 NotifyStatusChanged();
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             Status = ConversationStatus.Idle;
-            if (cancellationToken.IsCancellationRequested)
-            {
-                turn.ClearResponseBlocks();
-            }
             NotifyStatusChanged();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
-            turn.ClearResponseBlocks();
-            Status = ConversationStatus.Idle;
-            NotifyStatusChanged();
+            CleanupCanceledTurn(turn, historyCheckpoint, message);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             // Failures surface via Status/Error only — the UI renders them. No block is
             // added to the turn, so the persistable message thread stays clean.
+            agent.RollbackHistory(historyCheckpoint, message);
             Error = ex;
             Status = ConversationStatus.Error;
             NotifyStatusChanged();
@@ -184,6 +215,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         CancellationToken cancellationToken)
     {
         var result = await agent.InvokeToolAsync(block.Call!, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         block.Result = result;
         block.InvokeNotifyChanged();
         return result;
@@ -191,10 +223,8 @@ public class AgentContext(UIAgent agent) : IDisposable
 
     public Task CancelAsync()
     {
-        if (Status == ConversationStatus.Idle || Status == ConversationStatus.Error)
-        {
+        if (Status is ConversationStatus.Idle or ConversationStatus.Error)
             return Task.CompletedTask;
-        }
 
         _streamingCts?.Cancel();
         return Task.CompletedTask;
@@ -203,16 +233,50 @@ public class AgentContext(UIAgent agent) : IDisposable
     public void Dispose()
     {
         if (_disposed)
-        {
             return;
-        }
 
         _disposed = true;
-        _streamingCts?.Cancel();
-        _streamingCts?.Dispose();
+        CancelAndDisposeStreaming();
         _turnAddedCallbacks.Clear();
         _statusChangedCallbacks.Clear();
         _blockAddedCallbacks.Clear();
+    }
+
+    private (CancellationTokenSource Source, CancellationToken Token)
+        ReplaceStreamingCancellationSource()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        _streamingCts?.Cancel();
+        _streamingCts?.Dispose();
+
+        var next = new CancellationTokenSource();
+        var token = next.Token;
+        _streamingCts = next;
+        return (next, token);
+    }
+
+    private void CancelAndDisposeStreaming()
+    {
+        _streamingCts?.Cancel();
+        _streamingCts?.Dispose();
+        _streamingCts = null;
+    }
+
+    private void CleanupCanceledTurn(
+        ConversationTurn turn,
+        int historyCheckpoint,
+        ChatMessage requestMessage)
+    {
+        turn.ClearResponseBlocks();
+        agent.RollbackHistory(historyCheckpoint, requestMessage);
+        Error = null;
+
+        if (Status != ConversationStatus.Idle)
+        {
+            Status = ConversationStatus.Idle;
+            NotifyStatusChanged();
+        }
     }
 
     public IDisposable RegisterOnTurnAdded(Action<ConversationTurn> callback)
@@ -237,27 +301,21 @@ public class AgentContext(UIAgent agent) : IDisposable
     {
         var snapshot = _statusChangedCallbacks.ToArray();
         foreach (var cb in snapshot)
-        {
             cb(Status);
-        }
     }
 
     private void NotifyTurnAdded(ConversationTurn turn)
     {
         var snapshot = _turnAddedCallbacks.ToArray();
         foreach (var cb in snapshot)
-        {
             cb(turn);
-        }
     }
 
     private void NotifyBlockAdded(ConversationTurn turn, ContentBlock block)
     {
         var snapshot = _blockAddedCallbacks.ToArray();
         foreach (var cb in snapshot)
-        {
             cb(turn, block);
-        }
     }
 
     private sealed class CallbackRegistration<T> : IDisposable

@@ -87,6 +87,7 @@ public class ToolApprovalView : ContentContextView
 
     public ToolApprovalView()
     {
+        AutomationId = "ToolApproval";
         ApproveCommand = new RelayCommand(Approve);
         RejectCommand = new RelayCommand(Reject);
     }
@@ -125,6 +126,12 @@ public class ToolApprovalView : ContentContextView
 
         if (Content is View innerView)
             innerView.IsEnabled = !IsResolved;
+
+        SemanticProperties.SetDescription(
+            this,
+            IsPending
+                ? $"Approval required for {ToolName ?? "tool"}"
+                : ResolutionText);
 
         ApplyVisualState();
         RefreshAutomationIds();

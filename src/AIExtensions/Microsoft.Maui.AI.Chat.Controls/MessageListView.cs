@@ -11,11 +11,11 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <see cref="CopilotChatView"/>, which now hosts one internally.
 /// </summary>
 /// <remarks>
-/// Bind <see cref="Session"/> to an <see cref="AgentContext"/> and add <see cref="ContentTemplate"/>s to
-/// <see cref="ContentTemplates"/> to control how each <see cref="ContentBlock"/> renders. Because it is
-/// session-driven it updates live as blocks stream in. Use it directly for a minimal chat surface, or to
-/// compare template sets side by side (e.g. a fully templated <see cref="CopilotChatView"/> next to a
-/// bare <see cref="MessageListView"/> that uses only the default templates). The single template part is
+/// Bind <see cref="Session"/> to an <see cref="AgentContext"/> for a zero-configuration chat surface with
+/// built-in text, approval, media, thinking, and error rendering. Add consumer <see cref="ContentTemplate"/>s
+/// to <see cref="ContentTemplates"/> to replace those fallbacks for matching blocks, or set
+/// <see cref="UseDefaultContentTemplates"/> to <see langword="false"/> for strict allow-list rendering.
+/// Because it is session-driven it updates live as blocks stream in. The single template part is
 /// <c>PART_Messages</c> (a <see cref="CollectionView"/>).
 /// </remarks>
 [ContentProperty(nameof(ContentTemplates))]
@@ -44,6 +44,41 @@ public partial class MessageListView : TemplatedView
                 self.RebuildTemplateSelector();
             });
 
+    public static readonly BindableProperty UseDefaultContentTemplatesProperty =
+        BindableProperty.Create(
+            nameof(UseDefaultContentTemplates),
+            typeof(bool),
+            typeof(MessageListView),
+            true,
+            propertyChanged: (b, _, _) => ((MessageListView)b).RebuildTemplateSelector());
+
+    public static readonly BindableProperty ShowAvatarsProperty =
+        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(MessageListView), false);
+
+    public static readonly BindableProperty AvatarSizeProperty =
+        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(MessageListView), 28.0);
+
+    public static readonly BindableProperty UserDisplayNameProperty =
+        BindableProperty.Create(nameof(UserDisplayName), typeof(string), typeof(MessageListView), "You");
+
+    public static readonly BindableProperty AssistantDisplayNameProperty =
+        BindableProperty.Create(nameof(AssistantDisplayName), typeof(string), typeof(MessageListView), "Assistant");
+
+    public static readonly BindableProperty ShowTimestampsProperty =
+        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(MessageListView), false);
+
+    public static readonly BindableProperty BubbleCornerRadiusProperty =
+        BindableProperty.Create(nameof(BubbleCornerRadius), typeof(double), typeof(MessageListView), 16.0);
+
+    public static readonly BindableProperty BubbleStrokeThicknessProperty =
+        BindableProperty.Create(nameof(BubbleStrokeThickness), typeof(double), typeof(MessageListView), 0.0);
+
+    public static readonly BindableProperty BubbleStrokeColorProperty =
+        BindableProperty.Create(nameof(BubbleStrokeColor), typeof(Color), typeof(MessageListView));
+
+    public static readonly BindableProperty MaxBubbleWidthProperty =
+        BindableProperty.Create(nameof(MaxBubbleWidth), typeof(double), typeof(MessageListView), 340.0);
+
     private static readonly BindablePropertyKey ItemsPropertyKey =
         BindableProperty.CreateReadOnly(
             nameof(Items),
@@ -59,11 +94,78 @@ public partial class MessageListView : TemplatedView
         set => SetValue(SessionProperty, value);
     }
 
-    /// <summary>The content templates used to render each block; the highest matching priority wins.</summary>
+    /// <summary>
+    /// Consumer content templates used to render blocks. Any matching consumer template outranks the built-in
+    /// fallback templates; numeric priority and declaration order resolve matches within this collection.
+    /// </summary>
     public IList<ContentTemplate> ContentTemplates
     {
         get => (IList<ContentTemplate>)GetValue(ContentTemplatesProperty);
         set => SetValue(ContentTemplatesProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the built-in text, approval, media, thinking, and error templates are used when no
+    /// consumer template matches. Set this to <see langword="false"/> to restore strict allow-list rendering.
+    /// </summary>
+    public bool UseDefaultContentTemplates
+    {
+        get => (bool)GetValue(UseDefaultContentTemplatesProperty);
+        set => SetValue(UseDefaultContentTemplatesProperty, value);
+    }
+
+    public bool ShowAvatars
+    {
+        get => (bool)GetValue(ShowAvatarsProperty);
+        set => SetValue(ShowAvatarsProperty, value);
+    }
+
+    public double AvatarSize
+    {
+        get => (double)GetValue(AvatarSizeProperty);
+        set => SetValue(AvatarSizeProperty, value);
+    }
+
+    public string UserDisplayName
+    {
+        get => (string)GetValue(UserDisplayNameProperty);
+        set => SetValue(UserDisplayNameProperty, value);
+    }
+
+    public string AssistantDisplayName
+    {
+        get => (string)GetValue(AssistantDisplayNameProperty);
+        set => SetValue(AssistantDisplayNameProperty, value);
+    }
+
+    public bool ShowTimestamps
+    {
+        get => (bool)GetValue(ShowTimestampsProperty);
+        set => SetValue(ShowTimestampsProperty, value);
+    }
+
+    public double BubbleCornerRadius
+    {
+        get => (double)GetValue(BubbleCornerRadiusProperty);
+        set => SetValue(BubbleCornerRadiusProperty, value);
+    }
+
+    public double BubbleStrokeThickness
+    {
+        get => (double)GetValue(BubbleStrokeThicknessProperty);
+        set => SetValue(BubbleStrokeThicknessProperty, value);
+    }
+
+    public Color? BubbleStrokeColor
+    {
+        get => (Color?)GetValue(BubbleStrokeColorProperty);
+        set => SetValue(BubbleStrokeColorProperty, value);
+    }
+
+    public double MaxBubbleWidth
+    {
+        get => (double)GetValue(MaxBubbleWidthProperty);
+        set => SetValue(MaxBubbleWidthProperty, value);
     }
 
     /// <summary>
@@ -74,13 +176,23 @@ public partial class MessageListView : TemplatedView
         (ReadOnlyObservableCollection<ContentContext>)GetValue(ItemsProperty);
 
     private readonly ObservableCollection<ContentContext> _items = [];
+    private readonly IReadOnlyList<ContentTemplate> _defaultContentTemplates =
+    [
+        new TextContentTemplate { Role = "User", Priority = -10_000 },
+        new TextContentTemplate { Role = "Assistant", Priority = -10_000 },
+        new ToolApprovalTemplate { Priority = -10_000 },
+        new MediaContentTemplate { Priority = -10_000 },
+        new ThinkingContentTemplate { Priority = -10_000 },
+        new ErrorContentTemplate { Priority = -10_000 },
+    ];
 
     private CollectionView? _messagesPart;
 
     private IDisposable? _turnAddedReg;
     private IDisposable? _statusChangedReg;
     private IDisposable? _blockAddedReg;
-    private readonly List<IDisposable> _blockSubscriptions = [];
+    private readonly Dictionary<ContentBlock, IDisposable> _blockSubscriptions =
+        new(ReferenceEqualityComparer.Instance);
 
     // Streaming coalescing: a block can raise a change per token. Applying each one immediately
     // replaces the CollectionView item (recreating the whole cell) and rebuilds custom views from
@@ -101,6 +213,7 @@ public partial class MessageListView : TemplatedView
         if (ContentTemplates is INotifyCollectionChanged ncc)
             ncc.CollectionChanged += OnContentTemplatesChanged;
 
+        SetDynamicResource(MaxBubbleWidthProperty, Themes.ChatThemeKeys.BubbleMaxWidth);
         SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.MessageListViewTemplate);
     }
 
@@ -137,10 +250,22 @@ public partial class MessageListView : TemplatedView
         if (_messagesPart is null)
             return;
 
+        _messagesPart.ItemTemplate = CreateTemplateSelector();
+    }
+
+    internal ContentTemplateSelector CreateTemplateSelector()
+    {
         var selector = new ContentTemplateSelector();
         foreach (var t in ContentTemplates)
             selector.Templates.Add(t);
-        _messagesPart.ItemTemplate = selector;
+
+        if (UseDefaultContentTemplates)
+        {
+            foreach (var t in _defaultContentTemplates)
+                selector.FallbackTemplates.Add(t);
+        }
+
+        return selector;
     }
 
     // ── Session management ──
@@ -176,7 +301,7 @@ public partial class MessageListView : TemplatedView
         _statusChangedReg = null;
         _blockAddedReg = null;
 
-        foreach (var sub in _blockSubscriptions)
+        foreach (var sub in _blockSubscriptions.Values)
             sub.Dispose();
         _blockSubscriptions.Clear();
         _dirtyBlocks.Clear();
@@ -184,24 +309,64 @@ public partial class MessageListView : TemplatedView
 
     private void OnStatusChanged(ConversationStatus status)
     {
-        // If the session was cleared (idle with no turns), rebuild to empty.
+        // Cancellation removes partial response blocks from the engine turn. Re-project only
+        // when that makes the UI projection differ, avoiding a full rebuild after normal turns.
         if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
         {
             RebuildFromSession();
             return;
         }
 
+        if (status == ConversationStatus.Idle && !ProjectionMatchesSession())
+            ReconcileItemsWithSession();
+
         // A failure surfaces via status/Error only — render a sticky error item (once).
         if (status == ConversationStatus.Error && Session?.Error is { } ex && !ReferenceEquals(ex, _shownError))
         {
             RemoveThinkingItem();
             _shownError = ex;
-            _items.Add(new ContentContext(Session, new ErrorContentBlock(ex.Message)));
+            _items.Add(CreateContentContext(new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage)));
             ScrollToLatestMessage();
             return;
         }
 
         UpdateThinkingItem();
+    }
+
+    private bool ProjectionMatchesSession()
+    {
+        if (Session is null)
+            return _items.Count == 0;
+
+        var projectedBlocks = _items
+            .Where(item => item.Block is not ThinkingContentBlock and not ErrorContentBlock)
+            .Select(item => item.Block);
+        var sessionBlocks = Session.Turns.SelectMany(turn =>
+            turn.RequestBlocks.Concat(turn.ResponseBlocks));
+
+        return projectedBlocks.SequenceEqual(sessionBlocks, ReferenceEqualityComparer.Instance);
+    }
+
+    internal void ReconcileItemsWithSession()
+    {
+        if (Session is null)
+            return;
+
+        var sessionBlocks = Session.Turns
+            .SelectMany(turn => turn.RequestBlocks.Concat(turn.ResponseBlocks))
+            .ToHashSet(ReferenceEqualityComparer.Instance);
+
+        for (int i = _items.Count - 1; i >= 0; i--)
+        {
+            var block = _items[i].Block;
+            if (block is ThinkingContentBlock or ErrorContentBlock || sessionBlocks.Contains(block))
+                continue;
+
+            _items.RemoveAt(i);
+            if (_blockSubscriptions.Remove(block, out var subscription))
+                subscription.Dispose();
+            _dirtyBlocks.Remove(block);
+        }
     }
 
     private void OnBlockAdded(ConversationTurn turn, ContentBlock block)
@@ -212,8 +377,8 @@ public partial class MessageListView : TemplatedView
         // Keep any transient thinking item as the very last row.
         RemoveThinkingItem();
 
-        _items.Add(new ContentContext(Session, block));
-        _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block))));
+        _items.Add(CreateContentContext(block));
+        SubscribeToBlock(block);
 
         UpdateThinkingItem();
         ScrollToLatestMessage();
@@ -259,7 +424,7 @@ public partial class MessageListView : TemplatedView
         {
             if (ReferenceEquals(_items[i].Block, block))
             {
-                _items[i] = new ContentContext(Session!, block);
+                _items[i] = CreateContentContext(block);
                 return;
             }
         }
@@ -267,7 +432,7 @@ public partial class MessageListView : TemplatedView
 
     private void RebuildFromSession()
     {
-        foreach (var sub in _blockSubscriptions)
+        foreach (var sub in _blockSubscriptions.Values)
             sub.Dispose();
         _blockSubscriptions.Clear();
 
@@ -285,13 +450,13 @@ public partial class MessageListView : TemplatedView
         {
             foreach (var block in turn.RequestBlocks)
             {
-                _items.Add(new ContentContext(Session, block));
-                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block))));
+                _items.Add(CreateContentContext(block));
+                SubscribeToBlock(block);
             }
             foreach (var block in turn.ResponseBlocks)
             {
-                _items.Add(new ContentContext(Session, block));
-                _blockSubscriptions.Add(block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block))));
+                _items.Add(CreateContentContext(block));
+                SubscribeToBlock(block);
             }
         }
 
@@ -299,7 +464,7 @@ public partial class MessageListView : TemplatedView
         if (Session.Status == ConversationStatus.Error && Session.Error is { } ex)
         {
             _shownError = ex;
-            _items.Add(new ContentContext(Session, new ErrorContentBlock(ex.Message)));
+            _items.Add(CreateContentContext(new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage)));
         }
 
         UpdateThinkingItem();
@@ -315,7 +480,7 @@ public partial class MessageListView : TemplatedView
 
         if (want && _thinkingItem is null)
         {
-            _thinkingItem = new ContentContext(Session!, new ThinkingContentBlock());
+            _thinkingItem = CreateContentContext(new ThinkingContentBlock());
             _items.Add(_thinkingItem);
             ScrollToLatestMessage();
         }
@@ -372,5 +537,17 @@ public partial class MessageListView : TemplatedView
 
             _messagesPart.ScrollTo(_items.Count - 1, position: ScrollToPosition.End, animate: false);
         });
+    }
+
+    private ContentContext CreateContentContext(ContentBlock block) =>
+        new(Session!, block, this);
+
+    private void SubscribeToBlock(ContentBlock block)
+    {
+        if (_blockSubscriptions.Remove(block, out var existing))
+            existing.Dispose();
+
+        _blockSubscriptions[block] =
+            block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block)));
     }
 }

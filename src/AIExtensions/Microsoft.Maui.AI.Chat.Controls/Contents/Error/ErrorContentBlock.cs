@@ -13,6 +13,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </remarks>
 public sealed class ErrorContentBlock : ContentBlock
 {
+    internal const string DefaultUserMessage = "Something went wrong. Please try again.";
+
     public ErrorContentBlock(string message)
     {
         Message = message;
