@@ -31,6 +31,7 @@
   </Folder>
   <Folder Name="/src/GenerativeUI/">
     <Project Path="src/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.OpenApi/Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+    <Project Path="src/GenerativeUI/Microsoft.Maui.AI.GenerativeUI/Microsoft.Maui.AI.GenerativeUI.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />

@@ -15,7 +15,7 @@ public enum SpecFetchMode
 /// <summary>
 /// App-owned configuration for the OpenAPI side of Generative UI. The model never sees any of this.
 /// </summary>
-public sealed class GenerativeOpenApiOptions
+public class GenerativeOpenApiOptions
 {
     /// <summary>Server root. Every call is resolved relative to it. Required.</summary>
     public Uri? BaseAddress { get; set; }

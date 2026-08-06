@@ -5,7 +5,7 @@ using GenerativeUI.Sample.Garden.ViewModels;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.AI.GenerativeUI.OpenApi;
+using Microsoft.Maui.AI.GenerativeUI;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace GenerativeUI.Sample.Garden;
@@ -29,8 +29,9 @@ public static class MauiProgram
         // (Android emulators reach the host through http://10.0.2.2).
         var baseAddress = builder.Configuration["Api:BaseAddress"] ?? "http://localhost:5225";
 
-        // The generic OpenAPI server-API stack: fetches + reduces the spec, exposes read/write tools.
-        builder.Services.AddGenerativeUiOpenApi(options =>
+        // The generic Generative UI stack: server-API tools (fetch/reduce/invoke the OpenAPI) plus
+        // the client-UI tools (canvas, inflator, registry) so the model can also render the results.
+        builder.Services.AddGenerativeUi(options =>
         {
             options.BaseAddress = new Uri(baseAddress);
         });

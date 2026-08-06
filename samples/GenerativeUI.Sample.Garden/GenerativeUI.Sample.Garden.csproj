@@ -47,7 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI.OpenApi\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+    <ProjectReference Include="..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI\Microsoft.Maui.AI.GenerativeUI.csproj" />
     <ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes\Microsoft.Maui.AI.Attributes.csproj" />
     <ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes.Generators\Microsoft.Maui.AI.Attributes.Generators.csproj"
                       OutputItemType="Analyzer"
