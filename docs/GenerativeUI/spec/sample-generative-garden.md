@@ -227,6 +227,25 @@ sample's `ChatClientBuilder(innerChatClient).UseFunctionInvocation().Build(rootP
 - Optionally seed the reduced endpoint index + UI capability catalog here (see the OpenAPI
   appendix §6 and the Extensibility appendix §4).
 
+For the tiny MVP this remains **one system prompt and one agent**. Rendering guidance is layered
+inside that prompt rather than delegated:
+
+1. **App composition contract (requirements):** one primary workflow at a time; optional compact
+   cart beside it; never catalog + orders + product detail together; product details are focused
+   single-item compositions (no pretend modal beyond the real confirm overlay).
+2. **Global design language:** calm garden-store aesthetic; rounded/image-led cards; semantic
+   typography; 4/8/12/16 spacing; exactly one primary CTA; restrained density.
+3. **Feature recipes:** strong defaults for product list/detail, cart, orders, forms, empty/error.
+4. **State/rendering doctrine:** bind changeable data, use `itemsBind`, patch state rather than
+   repainting, and call `render_ui` only when the view kind changes.
+
+This deliberately accepts repeated prompt cost for the short demo. **Future split:** a stateless
+`UiComposer` receives the rendering-only guide + relevant state/schema and returns a validated DSL
+document, while the primary agent keeps API/business intent. Main-history compaction then preserves
+the system prompt, a durable summary, recent human/assistant turns, and unresolved approvals while
+removing completed raw API results, tool pairs, and large rendered DSL documents. The server and
+`StateRoot` remain the source of truth.
+
 ### 5.5 Registered UI extensions (Garden-specific)
 
 > **Planned — not yet implemented in the Garden client.**

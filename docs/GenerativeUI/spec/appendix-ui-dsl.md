@@ -258,10 +258,13 @@ inconsistent, ad-hoc layouts. This guidance is **generic and reusable**, so it b
 **library** (seeded into the system prompt the same way the capability catalog is), with apps
 layering only *brand* specifics on top. It should **not** live only in a sample app's prompt.
 
-> **New capability (planned): a library-contributed "UI authoring guide."** The library exposes a
-> block of design doctrine that `AddGenerativeUi` seeds into the prompt, so every consuming app gets
-> consistent, on-brand output for free. Today this guidance lives in the Garden sample's prompt;
-> promoting it into the library is a tracked follow-up.
+> **MVP delivery decision:** keep one agent and put the layered authoring guide directly in the
+> app's system prompt. The Garden prompt is organized as: app composition contract → global design
+> language → feature recipes → state/rendering rules. This is intentionally simple for the short
+> demo. Later, move rendering into a stateless `UiComposer` call so these instructions are sent only
+> during rendering, and compact the main conversation history so completed API payloads/UI documents
+> do not remain forever. Promoting generic doctrine into a library-contributed guide remains the
+> reusable-product direction; it is not required for the MVP.
 
 Doctrine the guide encodes:
 
@@ -473,8 +476,10 @@ Several earlier questions are now **resolved** (marked ✅); the rest remain ope
    Do we make them themeable `StaticResource`s, at the cost of requiring the app to ship a
    `ResourceDictionary`? Also: fold `Badge` tone into the style catalog, and implement `StyleClass`
    composition.
-7. **UI authoring guide placement.** Promote the generic layout/visual-design doctrine (§7.1) from
-   the sample prompt into a **library-seeded** block, so all apps get consistent output.
+7. **UI authoring guide lifecycle.** MVP: one layered app system prompt. Future: promote generic
+   doctrine into a library-owned guide and invoke a stateless `UiComposer` only for render steps;
+   add deterministic main-history compaction (preserve system/summary/recent turns/pending approval,
+   remove completed raw tool/API/UI payloads).
 8. **Intents:** synthetic chat turns vs. structured tool-result events. How do we avoid loops /
    duplicate submissions?
 9. **Images:** allow remote URLs (`Image.source`)? Security/perf implications; do we need an
