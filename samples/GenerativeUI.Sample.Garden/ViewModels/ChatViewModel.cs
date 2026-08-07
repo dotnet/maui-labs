@@ -42,6 +42,47 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         - Pass path/query values as flat keys; put a request body under an explicit "body" key.
         - After a write, re-read the affected resource so you reflect current server state.
 
+        UI COMPOSITION CONTRACT (requirements):
+        - The canvas has ONE primary task/content focus at a time: catalog/products, one product
+          detail, cart, orders, recommendations, or a form. Never show catalog + orders + product
+          detail together.
+        - A compact cart summary MAY accompany the primary content when it helps the current task,
+          but at most two top-level areas are visible: one primary area + the compact cart. If the
+          result would feel crowded, show only the primary area and let the user ask for the cart.
+        - When the user switches from products to orders (or another primary task), replace the
+          primary composition. Product details are a focused single-item composition; do not pretend
+          a general popup/modal exists (only show_confirm is an actual overlay today).
+        - Prefer a clear title, a small amount of supporting context, then the content. Do not render
+          every field just because the API returned it; prioritize what answers the request.
+
+        GLOBAL DESIGN LANGUAGE:
+        - Calm, modern garden-store aesthetic: generous whitespace, rounded Cards, image-led content,
+          concise typography, and restrained use of the purple accent.
+        - Visual hierarchy: Title for view/product names; Subtitle or Badge for prominent prices and
+          totals; Body for useful descriptions; Caption for category, SKU, stock, dates, and metadata.
+        - Use only the spacing scale 4, 8, 12, 16 for spacing/padding. Use one primary action per
+          composition, secondary for alternatives, and danger only for destructive actions.
+        - Prefer fewer well-composed elements over dense dashboards. Do not duplicate the same value
+          in multiple controls. Keep labels short and human-readable; never show raw JSON.
+        - Use an Image hero when imageUrl exists; otherwise use the product emoji as a large visual
+          accent. Do not render a broken/empty image.
+
+        VIEW RECIPES (strong defaults):
+        - PRODUCT LIST: Title + optional short intro; a bound itemsBind List of Cards. Each card feels
+          like an image-led social product post: hero image/large emoji first, product name as Title
+          or Subtitle, price Badge, category/stock as Caption, one concise description, then at most
+          one primary and one secondary action. Do not show full product records.
+        - PRODUCT DETAIL: one focused Card; hero image/large emoji, name Title, price prominently,
+          category + stock as Caption/Badge, full useful description, then actions. Destructive
+          actions are danger-styled and require confirmation.
+        - CART: compact bound itemsBind list; each line shows name, quantity, unit/subtotal as useful,
+          and remove/change actions without marketing descriptions. Show the total prominently once.
+        - ORDERS: Title + bound order Cards showing date, total, status/item count, with details hidden
+          until requested. Do not show the catalog at the same time.
+        - FORM: one Card/Stack of labelled Fields with sensible pre-filled values, clear grouping, and
+          exactly one primary Save action; Cancel is secondary.
+        - EMPTY/ERROR: one helpful focused Card; explain what happened and the next useful action.
+
         THE CANVAS IS STATEFUL (do not repaint it every turn):
         - The canvas binds to a persistent STATE GRAPH. render_ui describes structure ONCE; after
           that, data changes flow through bindings — you do NOT re-render for data changes.
