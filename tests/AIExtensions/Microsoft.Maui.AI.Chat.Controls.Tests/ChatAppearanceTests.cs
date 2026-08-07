@@ -126,4 +126,31 @@ public class ChatAppearanceTests
         Assert.Equal(defaultInputColor, chat.EffectiveInputAreaBackgroundColor);
     }
 
+    [Fact]
+    public void MessageView_UsesSourceTimestampAndUnicodeTextElementAvatar()
+    {
+        var createdAt = new DateTimeOffset(2026, 8, 7, 12, 34, 0, TimeSpan.Zero);
+        var list = new MessageListView
+        {
+            ShowAvatars = true,
+            ShowTimestamps = true,
+            AssistantDisplayName = "🌱 Sage",
+        };
+        var block = new TextContentBlock
+        {
+            Role = ChatRole.Assistant,
+            CreatedAt = createdAt,
+        };
+        block.AppendText("Hello");
+        var message = new ChatMessageView
+        {
+            ContentContext = new ContentContext(SessionFactory.Create(), block, list),
+        };
+
+        Assert.Equal("🌱", message.AvatarText);
+        Assert.Equal(
+            createdAt.ToLocalTime().ToString("h:mm tt"),
+            message.TimestampText);
+    }
+
 }
