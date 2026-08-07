@@ -82,6 +82,13 @@ public partial class BlockPreviewView : ContentContextView
                     yield return new("State", products.AnyResultReceived ? "no matches" : "looking up…");
                 break;
 
+            case UIActionBlock action:
+                yield return new("Kind", "Automatic UI action");
+                yield return new("Tool", action.ToolName ?? "(none)");
+                yield return new("Args", FormatArguments(action.Arguments));
+                yield return new("Result", action.HasResult ? Format(action.Result?.Result) : "(running)");
+                break;
+
             case FunctionInvocationContentBlock fn:
                 yield return new("Kind", "Function call");
                 yield return new("Tool", fn.ToolName ?? "(none)");

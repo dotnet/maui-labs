@@ -33,6 +33,13 @@ internal class BlockMappingPipeline
             _handlers.Add(registration.CreateEntry());
         }
 
+        // Registered UI actions claim their function calls before approval/backend handlers.
+        if (options.UIActions.Count > 0)
+        {
+            _handlers.Add(new HandlerEntry<UIActionHandler.UIActionHandlerState>(
+                new UIActionHandler(options.UIActions, options.Services)));
+        }
+
         // Built-in approval handler (before function invocation so it claims ToolApprovalRequestContent first)
         _handlers.Add(new HandlerEntry<ToolApprovalHandler.ApprovalHandlerState>(new ToolApprovalHandler()));
 

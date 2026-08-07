@@ -358,11 +358,37 @@ public class UIAgent : IDisposable
 
     private ChatOptions? BuildChatOptions(IConversationThread? thread)
     {
-        if (thread is not { IsStateful: true, ConversationId: not null })
+        var conversationId = thread is { IsStateful: true }
+            ? thread.ConversationId
+            : null;
+        if (conversationId is null && _options.UIActions.Count == 0)
             return _options.ChatOptions;
 
         var chatOptions = _options.ChatOptions?.Clone() ?? new ChatOptions();
-        chatOptions.ConversationId = thread.ConversationId;
+        if (conversationId is not null)
+            chatOptions.ConversationId = conversationId;
+
+        if (_options.UIActions.Count > 0)
+        {
+            var tools = chatOptions.Tools is null
+                ? new List<AITool>()
+                : [.. chatOptions.Tools];
+
+            foreach (var action in _options.UIActions.Values)
+            {
+                if (tools.Any(tool => string.Equals(
+                    tool.Name,
+                    action.Name,
+                    StringComparison.Ordinal)))
+                {
+                    throw new InvalidOperationException(
+                        $"UI action '{action.Name}' conflicts with an existing chat tool.");
+                }
+                tools.Add(action.AsDeclarationOnly());
+            }
+            chatOptions.Tools = tools;
+        }
+
         return chatOptions;
     }
 
