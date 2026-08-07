@@ -7,7 +7,7 @@ namespace AIExtensions.Sample.Garden.Chat;
 /// A rich-text block for assistant replies. The <see cref="GardenFormattedTextHandler"/> parses the
 /// raw Microsoft.Extensions.AI text into a structured line/span model so the view only renders (no
 /// parsing at draw time). Derives from <see cref="TextContentBlock"/> so the plain template set (the
-/// "raw" toggle) still renders it as plain <see cref="TextContentBlock.RawText"/>.
+/// "raw" toggle) still renders it as plain <see cref="RichContentBlock.RawText"/>.
 /// </summary>
 public sealed class GardenFormattedTextBlock : TextContentBlock
 {

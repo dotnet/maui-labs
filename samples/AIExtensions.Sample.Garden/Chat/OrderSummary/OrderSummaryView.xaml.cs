@@ -9,7 +9,8 @@ namespace AIExtensions.Sample.Garden.Chat;
 /// with the order id, placed date, line items, and total — or a friendly "not found" / "looking up" state.
 /// <para>
 /// The visual tree lives entirely in XAML; this code-behind only maps the block onto bindable properties
-/// in <see cref="RefreshFromContentContext"/>. The generated <see cref="ToolBlockAttribute"/> handler
+/// in <see cref="RefreshFromContentContext"/>. The generated
+/// <see cref="Microsoft.Maui.AI.Chat.ToolBlockAttribute"/> handler
 /// only populates the block; the view remains an ordinary reusable XAML template.
 /// </para>
 /// </summary>
