@@ -45,6 +45,12 @@ public sealed class UiNode
             ? p
             : null;
 
+    /// <summary>Returns a raw type-specific/common property, or <c>null</c> when absent.</summary>
+    public JsonElement? GetProperty(string name)
+        => _element.ValueKind == JsonValueKind.Object && _element.TryGetProperty(name, out var value)
+            ? value
+            : null;
+
     public string? GetString(string name)
         => _element.ValueKind == JsonValueKind.Object &&
            _element.TryGetProperty(name, out var v)

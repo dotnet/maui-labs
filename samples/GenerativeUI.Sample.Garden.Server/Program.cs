@@ -16,6 +16,7 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+app.UseStaticFiles();
 app.MapOpenApi();
 
 // ── Products ──────────────────────────────────────────────────────────────────────────────────

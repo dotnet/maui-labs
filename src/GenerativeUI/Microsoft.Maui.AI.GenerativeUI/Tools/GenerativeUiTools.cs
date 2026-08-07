@@ -31,9 +31,15 @@ public sealed class GenerativeUiTools(
         "Render a UI-DSL document into the canvas so the user sees a bespoke view of the data. " +
         "Pass a JSON object with: 'schemaVersion' (1), 'ui' (the root node tree), optional 'data' " +
         "(object that one-way 'bind' paths resolve against), and optional 'form' (object seeding " +
-        "editable Field/Entry values). Node types: Stack, Card, Scroll, Separator, Spacer, Label, " +
-        "Image, Badge, Icon, Button, Field, Entry, List. A node is { \"type\", optional \"id\", " +
+        "editable Field/Entry values). Node types: Stack, Grid, Card, Scroll, Separator, Spacer, " +
+        "Label, Image, Badge, Icon, Button, Field, Entry, List. Grid uses a comma-separated columns/" +
+        "rows definition (e.g. \"156,*,132\"); children set column/row/span. A node is { \"type\", optional \"id\", " +
         "\"bind\" (dotted path into data), \"style\" (token or list), \"children\", and type props }. " +
+        "Inline visual props are supported: margin/padding (number or [left,top,right,bottom]), " +
+        "horizontal/vertical alignment, width/height/min/max, background (hex or linear-gradient " +
+        "object with colors+angle), opacity, shadow; Card stroke/cornerRadius; Label textColor/" +
+        "fontSize/fontWeight/maxLines/lineHeight/textAlign; Image aspect/cornerRadius; Button " +
+        "background/textColor/border/cornerRadius/padding. " +
         "For changeable lists use itemsBind plus one template child; static lists may pre-expand. " +
         "Buttons use \"intent\": \"submit\" (a form's save), \"action:<name>\", etc.")]
     public async Task<string> RenderUiAsync(

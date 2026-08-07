@@ -22,11 +22,11 @@ public sealed class GardenStore
 
     private static IEnumerable<Product> Seed() =>
     [
-        new("basil-seeds", "Basil Seeds", "Sweet Genovese basil — fast-growing, fragrant, and perfect for pesto. Sow indoors and transplant after the last frost.", 3.49m, "seeds", "\ud83c\udf3f", null, 120),
-        new("tomato-seeds", "Tomato Seeds", "Heirloom beefsteak tomatoes with rich, old-fashioned flavor. Indeterminate vines crop all season with support.", 4.25m, "seeds", "\ud83c\udf45", null, 80),
-        new("terracotta-pot", "Terracotta Pot", "Classic 8-inch terracotta pot with a drainage hole. Breathable clay keeps roots healthy and prevents overwatering.", 9.99m, "tools", "\ud83e\udea3", null, 40),
-        new("watering-can", "Watering Can", "2-gallon galvanized-steel watering can with a removable brass rose for a gentle, even shower.", 18.50m, "tools", "\ud83d\udea3", null, 15),
-        new("potting-soil", "Potting Soil", "Organic all-purpose potting mix with coco coir and perlite for excellent drainage and aeration.", 12.00m, "soil", "\ud83e\udeb4", null, 60),
+        new("basil-seeds", "Basil Seeds", "Sweet Genovese basil — fast-growing, fragrant, and perfect for pesto. Sow indoors and transplant after the last frost.", 3.49m, "seeds", "\ud83c\udf3f", "http://localhost:5225/images/products/basil-seeds.png", 120),
+        new("tomato-seeds", "Tomato Seeds", "Heirloom beefsteak tomatoes with rich, old-fashioned flavor. Indeterminate vines crop all season with support.", 4.25m, "seeds", "\ud83c\udf45", "http://localhost:5225/images/products/tomato-seeds.png", 80),
+        new("terracotta-pot", "Terracotta Pot", "Classic 8-inch terracotta pot with a drainage hole. Breathable clay keeps roots healthy and prevents overwatering.", 9.99m, "tools", "\ud83e\udea3", "http://localhost:5225/images/products/terracotta-pot.png", 40),
+        new("watering-can", "Watering Can", "2-gallon galvanized-steel watering can with a removable brass rose for a gentle, even shower.", 18.50m, "tools", "\ud83d\udea3", "http://localhost:5225/images/products/watering-can.png", 15),
+        new("potting-soil", "Potting Soil", "Organic all-purpose potting mix with coco coir and perlite for excellent drainage and aeration.", 12.00m, "soil", "\ud83e\udeb4", "http://localhost:5225/images/products/potting-soil.png", 60),
     ];
 
     // Products

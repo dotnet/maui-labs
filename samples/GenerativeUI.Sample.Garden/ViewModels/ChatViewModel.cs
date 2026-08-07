@@ -57,7 +57,14 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
 
         GLOBAL DESIGN LANGUAGE:
         - Calm, modern garden-store aesthetic: generous whitespace, rounded Cards, image-led content,
-          concise typography, and restrained use of the purple accent.
+          concise typography, and a botanical green/gold palette.
+        - For this prototype, emit ALL visual styling inline in the UI document — do not rely on
+          named app styles. Inline palette: canvas #F4F8F3→#E7F1E9; cards #FFFFFF→#EEF7F0;
+          primary text #173C34; secondary text #5D7268; stroke #C9DDD0; primary action #2F7D5B;
+          secondary accent #C89B3C; danger #C94F55; glow #64A77B at ~0.20 opacity.
+        - A gradient background is { "type":"linear", "colors":["#start","#end"], "angle":135 }.
+          Use rounded corners 18–22, one-pixel soft strokes, and a subtle shadow/glow with radius
+          16–22 and offsetY 6–8. Never use the default purple style in generated content.
         - Visual hierarchy: Title for view/product names; Subtitle or Badge for prominent prices and
           totals; Body for useful descriptions; Caption for category, SKU, stock, dates, and metadata.
         - Use only the spacing scale 4, 8, 12, 16 for spacing/padding. Use one primary action per
@@ -69,9 +76,12 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
 
         VIEW RECIPES (strong defaults):
         - PRODUCT LIST: Title + optional short intro; a bound itemsBind List of Cards. Each card feels
-          like an image-led social product post: hero image/large emoji first, product name as Title
-          or Subtitle, price Badge, category/stock as Caption, one concise description, then at most
-          one primary and one secondary action. Do not show full product records.
+          like an image-led social product post. Use one Card template with background gradient,
+          cornerRadius 20, soft green stroke/glow, and a Grid with columns "156,*,132": product Image
+          in column 0 (bind imageUrl, aspect fill, height 176, cornerRadius 18); a padded vertical
+          Stack in column 1 with wrapping name/price/category/stock/description; and a vertical Stack
+          in column 2 with equal-width View/Add buttons aligned end/center. Descriptions wrap and use
+          maxLines 3. Do not show full records or let action buttons drift beside the text.
         - PRODUCT DETAIL: one focused Card; hero image/large emoji, name Title, price prominently,
           category + stock as Caption/Badge, full useful description, then actions. Destructive
           actions are danger-styled and require confirmation.
@@ -110,7 +120,8 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         - Keep the server and the canvas state in sync: after a write_api, patch the state (or re-read
           and set_state) so the canvas matches the server.
 
-        UI-DSL nodes: Stack (orientation, spacing), Card, Scroll, Separator, Spacer, Label (text|bind,
+        UI-DSL nodes: Stack (orientation, spacing), Grid (columns/rows; child column/row/span), Card,
+        Scroll, Separator, Spacer, Label (text|bind,
         style Title/Subtitle/Body/Caption/Mono, wrap), Image (source|emoji, size), Badge (text|bind,
         tone neutral/positive/warning/danger), Icon (glyph), Button (text, style primary/secondary/
         danger, intent), Field (key, label, kind, placeholder), Entry (key), List (itemsBind + one

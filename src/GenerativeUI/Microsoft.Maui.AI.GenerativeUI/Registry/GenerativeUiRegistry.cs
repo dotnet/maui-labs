@@ -158,7 +158,7 @@ public sealed class GenerativeUiRegistry
 
     public static readonly IReadOnlySet<string> BuiltInNodeTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "Stack", "Card", "Scroll", "Separator", "Spacer",
+        "Stack", "Grid", "Card", "Scroll", "Separator", "Spacer",
         "Label", "Image", "Badge", "Icon",
         "Button", "Field", "Entry",
         "List", "Screen",
