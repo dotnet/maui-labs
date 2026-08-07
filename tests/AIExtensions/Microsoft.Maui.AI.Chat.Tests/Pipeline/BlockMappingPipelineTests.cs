@@ -28,10 +28,12 @@ public class BlockMappingPipelineTests
     public async Task Process_SingleTextUpdate_EmitsOneTextContentBlock()
     {
         var pipeline = CreatePipelineWithTextHandler();
+        var createdAt = new DateTimeOffset(2026, 8, 7, 12, 34, 0, TimeSpan.Zero);
         var update = new ChatResponseUpdate
         {
             Role = ChatRole.Assistant,
             MessageId = "msg-1",
+            CreatedAt = createdAt,
             Contents = [new TextContent("Hello")]
         };
 
@@ -42,6 +44,7 @@ public class BlockMappingPipelineTests
         Assert.Equal("Hello", block.RawText);
         Assert.Equal("msg-1", block.Id);
         Assert.Equal(ChatRole.Assistant, block.Role);
+        Assert.Equal(createdAt, block.CreatedAt);
         Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
     }
 

@@ -310,10 +310,15 @@ public partial class MessageListView : TemplatedView
         _dirtyBlocks.Clear();
     }
 
-    private void OnStatusChanged(ConversationStatus status)
+    internal void OnStatusChanged(ConversationStatus status)
     {
         if (status == ConversationStatus.Streaming)
+        {
+            var wasRetrying = _errorItem is not null || _shownError is not null;
             RemoveErrorItem();
+            if (wasRetrying && !ProjectionMatchesSession())
+                ReconcileItemsWithSession();
+        }
 
         // Cancellation removes partial response blocks from the engine turn. Re-project only
         // when that makes the UI projection differ, avoiding a full rebuild after normal turns.
