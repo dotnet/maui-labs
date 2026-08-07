@@ -111,7 +111,7 @@ node below. `type` may be a **built-in** (this appendix) or an **app-registered 
 | `type` | Inflates to | Key props |
 |---|---|---|
 | `Button` | `Button` | `text`, `intent` (see §6), `style` (`primary`\|`secondary`\|`danger`), `payload` |
-| `Field` | label + `Entry`/`Editor`/`Switch` (by `kind`) | `key` (FormState key), `label`, `kind` (`text`\|`number`\|`multiline`\|`bool`), `placeholder` |
+| `Field` | label + `Entry`/`Editor`/`Switch` (by `kind`) | `key` (`StateRoot` leaf), `label`, `kind` (`text`\|`number`\|`multiline`\|`bool`), `placeholder` |
 | `Entry` | bare `Entry` | `key`, `placeholder`, `kind` |
 
 ### 4.4 Collections

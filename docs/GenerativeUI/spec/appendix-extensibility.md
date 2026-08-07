@@ -1,6 +1,7 @@
 # Appendix: Extensibility — Styles, Controls & Screens
 
-> **Status:** Draft (v0.1) — for iteration. See the [Open Questions](#open-questions).
+> **Status:** Core registry implemented (v0.2); Garden-specific controls/screens in this appendix
+> remain planned. See the [Open Questions](#open-questions).
 > Parent: [`overview.md`](./overview.md). Related: [UI-DSL](./appendix-ui-dsl.md),
 > [Binding Model](./appendix-binding-model.md).
 
@@ -16,11 +17,14 @@ app-specific styles/controls/screens live in the app. The model only *selects* r
 supplies *declared inputs*; it never authors styling or code.
 
 > **MVP simplicity.** Each registration is just a **name/alias + a description** (plus, for
-> controls/screens, a small prop/input list). There is **no policy engine, no "renderer" concept,
-> and no structured "applies-to / must-use / do-not-use" fields** — all such guidance lives in the
-> freeform **description**. The **entire catalog is sent to the model** (seeded into the system
-> prompt), so it reads the descriptions and decides when to use what. Richer enforcement can come
-> later; see [Open Questions](#open-questions).
+> controls/screens, a small prop/input list). There is no policy engine and no structured
+> must-use/do-not-use rule language — that guidance lives in the freeform **description**. The one
+> intentional structured constraint is a style's **`appliesTo`** list, because MAUI `Style`
+> target-type safety must be enforceable. The design sends the **entire catalog** to the model so it
+> reads the descriptions and decides when to use what. Today it is available through
+> `list_ui_capabilities`; automatic **library-seeded prompt delivery is planned** (the same follow-up
+> as the generic UI authoring guide). Richer enforcement can come later; see
+> [Open Questions](#open-questions).
 
 ## 1. The three tiers
 
@@ -90,9 +94,10 @@ public sealed class SessionUi(GenerativeUiRegistry ui)
 - **Descriptions are freeform and never clipped** — the same principle applied to API descriptions
   (see the [OpenAPI appendix §3](./appendix-openapi-processor.md#3-reduction-openapireducer)). They
   carry the *when / when-not* guidance in prose, replacing structured rule fields.
-- **Send-all.** The whole catalog (names, aliases, descriptions, prop/input lists, and each style's
-  `appliesTo`) is small and app-authored, so it is **seeded to the model** wholesale; no lazy
-  discovery is required (optional `describe_*` tools remain available — §4).
+- **Send-all (design target).** The whole catalog (names, aliases, descriptions, prop/input lists,
+  and each style's `appliesTo`) is small and app-authored, so it should be sent wholesale. The
+  implemented `list_ui_capabilities` tool returns it today; automatic prompt seeding and optional
+  `describe_*` tools remain follow-ups (§4).
 
 ### 2.1 Theming & device context
 
@@ -116,11 +121,18 @@ clipped** — this is how the model knows *when* and *why* to use each extension
 
 ### 3.1 Styles
 
-A style maps a **model-facing name** to a XAML resource (`Style`, `Color`, thickness, …), and
-declares **which control types it may be applied to**. The control-type list matters because a MAUI
-`Style` is `TargetType`-specific: a `DangerButtonStyle` is only valid on a `Button`, so the model
-must not put `"danger"` on a `Picker` or `Entry`. The list is both **told to the model** (so it
-picks correctly) and **enforced by the inflator** (a mismatched token is dropped + logged, never
+There are two style sources:
+
+- **Library base tokens** (`Title`/`Subtitle`/`Body`/`Caption`/`Mono` and
+  `primary`/`secondary`/`danger`) have built-in visual treatment applied in code, so the library
+  works with zero app XAML setup.
+- **App-registered tokens** map a model-facing name to a XAML resource (`Style`, `Color`,
+  thickness, …).
+
+Both declare **which control types they may be applied to**. The control-type list matters because a
+MAUI `Style` is `TargetType`-specific: a `DangerButtonStyle` is only valid on a `Button`, so the
+model must not put `"danger"` on a `Picker` or `Entry`. The list is both **told to the model** (so
+it picks correctly) and **enforced by the inflator** (a mismatched token is dropped + logged, never
 applied blindly).
 
 ```csharp
@@ -146,10 +158,11 @@ options.Ui.AddStyle("Brand",
 - **`resourceKey`** is an **optional override**; when omitted it defaults to the `name`, so exposing
   an existing XAML resource whose `x:Key` equals the token is one line. Provide it when the token and
   the XAML key differ (e.g. token `"danger"` → key `"DangerButtonStyle"`).
-- The library **pre-registers a base set** (`Title`/`Body`/… on `Label`; `primary`/`secondary`/
-  `danger` on `Button`; badge tones on `Badge`). Apps add to it or override by name.
+- The library **pre-registers a base set** (`Title`/`Body`/… on `Label`;
+  `primary`/`secondary`/`danger` on `Button`) and applies their default visuals in code. Apps add to
+  it or override by name. Badge `tone` is currently a built-in prop, not a style registration.
 - In the DSL: `"style": "primary"` or a list `"style": ["Brand", "large"]` (composes a `Style` +
-  MAUI `StyleClass`es).
+  future MAUI `StyleClass`es; class composition is not yet implemented).
 - A token used on a control **outside its `appliesTo`** is dropped (the node renders with its default
   look) and logged — never an error. The **description** still explains *when* to use it; `appliesTo`
   constrains *where* it can go.
@@ -237,9 +250,10 @@ options.Ui.AddScreen<MonthlyOrdersReportScreen>("MonthlyOrdersReport",
 ## 4. How the model discovers extensions
 
 The **UI capability catalog** — every registered style, control, and screen, each with its **full
-description** — is **seeded into the system prompt** at session start ("send-all"). The catalog is
-app-authored, small, and stable, so seeding it wholesale is cheap and improves first-try
-correctness.
+description** — is designed to be **seeded into the system prompt** at session start ("send-all").
+The catalog is app-authored, small, and stable, so seeding it wholesale is cheap and improves
+first-try correctness. **Current implementation:** `list_ui_capabilities` exposes the whole
+catalog; automatic library seeding is planned.
 
 Optional discovery tools mirror the API side for larger catalogs or refreshes:
 
@@ -323,8 +337,8 @@ ui.Remove("AdminOrdersScreen");
    How do we avoid alias collisions across registrations?
 2. **Prop shape:** is `name + description` (+ optional `Editable`/`Type`) enough, or do we need
    `required`/`enum` for reliable validation and coercion?
-3. **Catalog delivery:** send-all is fine for small catalogs — at what size do we switch to lazy
-   `describe_*`? Do we ever need both in one session?
+3. **Catalog delivery:** implement automatic library-seeded send-all (currently tool-only). At what
+   catalog size do we switch to lazy `describe_*`, and do we ever need both in one session?
 4. **Control composition:** may controls accept children/slots (e.g. a `Panel` wrapper) in the
    MVP, or are they leaves only?
 5. **Overriding built-ins:** allow apps to replace a built-in style/control by name, or keep

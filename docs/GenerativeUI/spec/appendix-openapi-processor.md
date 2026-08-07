@@ -1,6 +1,7 @@
 # Appendix: OpenAPI Processor & Invoker
 
-> **Status:** Draft (v0.1) — for iteration. See the [Open Questions](#open-questions).
+> **Status:** Implemented (v0.2) — reducer, cache, invoker, five AI tools, in-process
+> `WebApplicationFactory` round-trip, and 51 tests. See the [Open Questions](#open-questions).
 > Parent: [`overview.md`](./overview.md).
 
 This appendix defines how the library turns a server's **OpenAPI document** into a small,
@@ -269,7 +270,7 @@ for the UI. The model never sees any of this — it's all app-owned:
 | `ConfigureHttpClient` | *(none)* | Callback to set headers/timeouts (e.g. auth) on the invoker's `HttpClient`; message handlers may also be added. Credentials live here, never in the model. |
 | `AllowedHosts` | `[ BaseAddress.Host ]` | SSRF allowlist. Requests to any other host are rejected. |
 | `SpecFetch` | `Eager` | `Eager` (background fetch at startup) or `Lazy` (on first server-API tool use). |
-| `SeedEndpointIndex` | `true` | Seed the compact endpoint index into the system prompt (see §6.2). |
+| `SeedEndpointIndex` | `true` | Request compact-index prompt seeding (adopted design; chat-prompt wiring is still a follow-up — see §6.2). |
 | `MaxResponseBytes` | `64 KB` | Cap on a response body fed back to the model; larger results are truncated with a marker. |
 | `MaxRequestBytes` | `1 MB` | Cap on a serialized request body. |
 | `RefResolutionDepth` | `5` | `$ref` expansion depth before falling back to a name reference. |
@@ -297,10 +298,12 @@ builder.Services.AddGenerativeUi(options =>
   (see §3). We manage size via **on-demand expansion** — `list_endpoints` returns lightweight rows
   (operationId + path + summary), `describe_endpoint` inlines request/response schemas **one level**,
   and deeper/nested models are pulled only when the model asks via `describe_model`.
-- **Seeding the prompt:** the compact endpoint index (operationId + method + path + summary + tags)
-  is **seeded into the system prompt by default** (`SeedEndpointIndex`), so the model starts knowing
-  the API's shape and often skips a `list_endpoints` round-trip. Full descriptions/schemas still
-  arrive intact through the describe tools, so seeding never means losing detail.
+- **Seeding the prompt (adopted design; wiring planned):** `SeedEndpointIndex` requests that the
+  compact endpoint index (operationId + method + path + summary + tags) be seeded into the system
+  prompt, so the model starts knowing the API's shape and often skips a `list_endpoints`
+  round-trip. The cache/options exist; automatic chat-prompt injection is not wired yet, so the
+  current sample starts with the discovery tool. Full descriptions/schemas still arrive intact
+  through the describe tools, so seeding never means losing detail.
 - **Pagination/large *data* results:** `read_api` **response bodies** (runtime data, not the spec)
   are size-capped (`MaxResponseBytes`); the model is told when a result was truncated and can refine
   (e.g. add a `query`/limit arg if the API supports it). This cap applies to fetched data, never to
@@ -340,7 +343,7 @@ builder.Services.AddGenerativeUi(options =>
 | describe_endpoint depth | Names-only vs. inline | **Inline request/response schema one level**; nested by name (§4). |
 | Read/write split | Split vs. single `call_api` | **Split** — static `ApprovalRequired` on `write_api` is the safety net. |
 | Write tools | Per-verb vs. one | **One `write_api`** by operationId (method comes from the spec). |
-| Seeding | Seed vs. tools-only | **Seed the compact endpoint index** by default (`SeedEndpointIndex`) (§6.2). |
+| Seeding | Seed vs. tools-only | **Adopted:** seed the compact endpoint index by default (`SeedEndpointIndex`); **implementation follow-up:** inject it into the chat prompt (§6.2). |
 | Auth/config | How the app configures transport | **`AddGenerativeUi` options** — `ConfigureHttpClient`, `AllowedHosts`, caps, fetch mode (§6.1). |
 | Content types | JSON vs. everything | **JSON-only for MVP**; multipart/binary/external-`$ref` are out of scope (§3). |
 | Response shaping | Pre-shape vs. raw | **Hand raw (capped) JSON to the model**; it shapes via the UI-DSL — no server-side view logic. |

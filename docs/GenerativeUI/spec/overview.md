@@ -174,7 +174,6 @@ through this generic surface, so the library needs no knowledge of the app's end
 | `clear_ui` | Reset the canvas + state to the welcome/empty state. |
 | `present_screen` | Hand the canvas off to a **registered full screen** (e.g. checkout, report), supplying its declared inputs. |
 | `list_ui_capabilities` | List registered styles/controls/screens (names + descriptions). |
-| `describe_control` / `describe_screen` | Full prop/input list + description for one registered control or screen. |
 
 The `render_ui` (structure) vs. `apply_patch`/`set_state`/`set_field` (data) split is what makes the
 canvas **stateful** rather than repainted every turn — see §9 and the
@@ -182,11 +181,11 @@ canvas **stateful** rather than repainted every turn — see §9 and the
 deliberately shaped like AG-UI's `STATE_SNAPSHOT`/`STATE_DELTA` (JSON Patch), with no dependency —
 see the [Protocol Alignment appendix](./appendix-protocol-alignment.md).
 
-
 The app **extends** what these tools can produce by registering styles, custom controls, and full
 screens (see §6.3). Built-in primitives cover generic UI; registrations add brand styling, bespoke
 controls (e.g. a watermarking product image), and full app-owned surfaces (e.g. the official checkout
-screen). The model discovers the catalog via a seeded summary and/or `list_ui_capabilities`/`describe_*`.
+screen). Today the model discovers the whole catalog via `list_ui_capabilities`; automatic prompt
+seeding and optional `describe_control`/`describe_screen` tools are planned.
 
 ### 6.3 Extending the vocabulary (see [Extensibility appendix](./appendix-extensibility.md))
 
@@ -219,7 +218,7 @@ A representative turn ("show me the basil seeds"):
 
 ```
 User → Chat: "show me the basil seeds"
-Model → list_endpoints("basil")                     (optional; the index is also seeded)
+Model → list_endpoints("basil")                     (optional once endpoint-index seeding is wired)
 Model → describe_endpoint("getProduct")             (optional; params + one-level schema)
 Model → read_api("getProduct", { sku: "basil-seeds" })   (server call, JSON back)
 Model → render_ui({ ui: <detail card>, data: <product json> })   (canvas updates)
@@ -228,8 +227,9 @@ Model → Chat: "Here are the basil seeds."           (short text reply)
 
 Key properties:
 
-- **Discovery is cached.** After the first exploration the model has enough context; the reduced
-  spec can also be seeded into the system prompt so most turns skip discovery.
+- **Discovery is cached.** After the first exploration the model has enough context. Automatic
+  compact-index prompt seeding is an adopted design and configured by `SeedEndpointIndex`, but its
+  chat-prompt wiring remains a follow-up; today the model starts with `list_endpoints`.
 - **UI updates are a side effect of a tool call**, not part of the chat text. The canvas is
   updated on the UI thread by `render_ui`.
 - **Writes pause for approval.** `write_api` is approval-gated (see §11).
@@ -321,7 +321,7 @@ See [Open Questions](#16-open-questions) on whether both are needed or one suffi
 
 | Setting | Purpose | Default |
 |---|---|---|
-| `Api:BaseUrl` | Server base address | `http://localhost:5225` |
+| `Api:BaseAddress` | Server base address | `http://localhost:5225` |
 | `Api:OpenApiPath` | OpenAPI document path | `/openapi/v1.json` |
 | `AI:Endpoint` / `AI:ApiKey` / `AI:DeploymentName` | Chat model config (as in Garden) | — |
 
@@ -375,22 +375,20 @@ Acceptance scenarios (each must work end to end):
 
 ## 16. Open questions
 
-These are the things to iron out before/while building. Grouped by area.
+Resolved items are marked ✅; the rest are the remaining design/implementation questions, grouped
+by area.
 
 ### Architecture & boundary
 1. Is the OpenAPI-driven generic invoker the right call, or do we also want an *optional* typed
    data-tool path generated from `.Shared` for apps that prefer strong typing? (MVP: generic
    only.)
-2. Should the reduced spec be **seeded into the system prompt** at session start, fetched
-   on-demand via tools, or both? What's the size budget?
-3. Does the library need any **server-side** piece at all for the MVP, or is "server just
-   emits OpenAPI" sufficient? (Current assumption: sufficient.)
+2. ✅ **Both:** on-demand tools are implemented; compact-index seeding is adopted/configured but
+   automatic chat-prompt injection remains an implementation follow-up.
+3. ✅ No library server piece for the MVP; the app server only emits stock OpenAPI.
 
 ### Server-API tools
-4. Read/write split vs. a single `call_api` with per-method approval — which is more reliable for
-   the model and cleaner for approval? (See OpenAPI appendix Open Questions.)
-5. How do we express **path/query/body** parameters to the model so it fills them correctly with
-   minimal errors?
+4. ✅ Read/write split: `read_api` is GET-only; `write_api` is mutating-only and approval-gated.
+5. ✅ Flat path/query args plus explicit `body`, with method/route resolved by operationId.
 6. Reduction keeps all authored semantics (descriptions + constraints) and only strips OpenAPI
    structure — are there *structural* elements (examples, response codes, schema depth) that
    actually carry usage meaning and should be kept too? (Authored **descriptions are never
