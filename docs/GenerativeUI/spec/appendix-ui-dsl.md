@@ -1,7 +1,9 @@
 # Appendix: UI-DSL & Inflator
 
-> **Status:** Draft (v0.1) — for iteration. See the [Open Questions](#open-questions).
-> Parent: [`overview.md`](./overview.md).
+> **Status:** Implemented (v0.2). See the [Open Questions](#open-questions).
+> Parent: [`overview.md`](./overview.md). Related:
+> [State & Binding Model](./appendix-binding-model.md),
+> [Protocol Alignment](./appendix-protocol-alignment.md).
 
 This appendix defines the **UI description language** the model emits and the **inflator** that
 turns it into MAUI controls. The design bias is **reliability over expressiveness**: a small,
@@ -10,31 +12,42 @@ it doesn't. The base vocabulary ships in the library; apps **register** their ow
 controls, and full screens on top of it — see the
 [Extensibility appendix](./appendix-extensibility.md).
 
+> **Convergence note.** This DSL was designed independently but is close in shape to Google's
+> **A2UI** declarative generative-UI language (component catalog + data-bound `List` templates +
+> JSON-pointer binding). We keep our own MAUI-native DSL for now and treat A2UI as a compatibility
+> north-star. See the [Protocol Alignment appendix](./appendix-protocol-alignment.md).
+
 ## 1. Design principles
 
 1. **Closed but extensible vocabulary.** A fixed set of built-in node `type`s, plus app-registered
    controls/screens known at startup. The *effective* vocabulary (built-ins + registrations) is
    validated; unknown types render a visible error placeholder, never crash.
 2. **Flat, JSON-native.** Plain JSON objects/arrays; no expressions, no code. Styling is limited to
-   **named tokens from a registered catalog** (never raw colors/XAML from the model). Easy for a
-   model to emit and for us to validate.
-3. **Declarative + data-bound.** Nodes describe *what*, not *how*. Editable nodes bind two-way to
-   `FormState`; display nodes may bind one-way to `data`.
-4. **Deterministic inflation.** One document → one deterministic UI tree. No layout ambiguity.
-5. **Forgiving.** Missing optional props use sane defaults; extra props are ignored.
-6. **App owns the look, not the model.** Brand styling, bespoke controls, and full custom screens are
+   **named tokens** (never raw colors/XAML from the model). Easy for a model to emit and validate.
+3. **Declarative + data-bound.** Nodes describe *what*, not *how*. Editable nodes bind two-way, and
+   display nodes may bind one-way, to the single persistent **`StateRoot`**
+   (see [State & Binding Model](./appendix-binding-model.md)).
+4. **Stateful, not repainted.** The canvas binds to persistent state; data changes flow through
+   bindings (`apply_patch`), so `render_ui` is for *structure*, called again only when the **kind**
+   of view changes.
+5. **Deterministic inflation.** One document → one deterministic UI tree. No layout ambiguity.
+6. **Forgiving.** Missing optional props use sane defaults; extra props are ignored.
+7. **App owns the look, not the model.** Brand styling, bespoke controls, and full custom screens are
    app-authored C#; the model only *selects* registered names and supplies declared inputs.
 
 ## 2. `render_ui` payload
 
-`render_ui` takes one document:
+`render_ui` describes **structure**; it takes one document. Its optional `data`/`form` objects are
+**merged into the persistent `StateRoot`** (not a throwaway per-render context), so bindings stay
+live and in-progress edits survive. For **data changes**, use `apply_patch`/`set_field`/`set_state`
+instead of re-calling `render_ui` (see [State & Binding Model](./appendix-binding-model.md)).
 
 ```jsonc
 {
   "schemaVersion": 1,          // required; DSL version the doc targets
-  "ui": { /* root UiNode */ }, // required; the UI tree
-  "data": { /* object */ },    // optional; values for one-way `bind` paths
-  "form": {                    // optional; seeds FormState for editable fields
+  "ui": { /* root UiNode */ }, // required; the UI structure
+  "data": { /* object */ },    // optional; merged into StateRoot for one-way `bind` paths
+  "form": {                    // optional; merged into StateRoot to seed editable fields
     "quantity": "1",
     "name": "Pears"
   },
@@ -46,12 +59,12 @@ controls, and full screens on top of it — see the
 ```
 
 - `ui` — the root node (see §3).
-- `data` — a JSON object; one-way `bind` paths resolve against it.
-- `form` — initial `FormState` values; `Field` nodes bind two-way to these keys.
+- `data` — a JSON object merged into `StateRoot`; one-way `bind` paths resolve against it.
+- `form` — editable seed values merged into `StateRoot`; `Field`/`Entry` nodes bind two-way by key.
 - `meta` — non-visual hints (title, future append/replace, etc.).
 
-> **Open question:** do we separate `render_ui` (display) and `render_form` (editable), or keep a
-> single `render_ui` that supports both via `Field` nodes + `form`? Current lean: **single tool**.
+> **Resolved:** a **single `render_ui`** tool supports both display and editable fields (via `Field`
+> nodes + `form`); there is no separate `render_form`.
 
 ## 3. Node model
 
@@ -105,11 +118,18 @@ node below. `type` may be a **built-in** (this appendix) or an **app-registered 
 
 | `type` | Inflates to | Key props |
 |---|---|---|
-| `List` | `VerticalStackLayout` of the given rows | `children` (pre-expanded row nodes) |
+| `List` (bound) | repeating layout bound to a state collection | `itemsBind` (dotted path to a `StateRoot` collection) + **one** template child |
+| `List` (static) | `VerticalStackLayout` of the given rows | `children` (pre-expanded row nodes) |
 
-> For the MVP a `List`'s rows are **pre-expanded** by the model (it emits one child node per
-> item). This trades token cost for reliability and removes runtime item-templating. A future
-> `List` may take `itemsBind` + `itemTemplate`. See [Open Questions](#open-questions).
+> **Two modes (both implemented).**
+> - **Bound list — preferred for changeable data.** `"itemsBind": "cart.items"` binds a repeating
+>   layout to `StateRoot["cart"]["items"].Children`; the single template child is repeated per item,
+>   with each row's `BindingContext` set to the item, so inner `bind`s resolve **relative to the
+>   row** (`"bind": "name"`, `"bind": "price"`). Add/remove/quantity changes made via `apply_patch`
+>   then reflect **without re-rendering**. See the [Binding Model appendix](./appendix-binding-model.md).
+> - **Static list — for one-off snapshots.** The model pre-expands one child node per item with
+>   literal values. Simple and reliable, but does **not** update on data change. Use it only when the
+>   list won't change during the turn.
 
 ### 4.5 Registered types (controls & screens)
 
@@ -127,34 +147,47 @@ as a node. Registration, prop/input lists, DI creation, and discovery are specif
 
 ## 5. Binding model
 
-Three sources of values:
+Three sources of values, all resolving against the single persistent **`StateRoot`** (see the
+[State & Binding Model appendix](./appendix-binding-model.md)):
 
 1. **Literal props** — e.g. `"text": "Products"`. Always available.
-2. **One-way `bind`** — `"bind": "product.price"` resolves a dotted path into the `data` object
-   supplied to `render_ui`. Used by display nodes (`Label`, `Image`, `Badge`).
-3. **Two-way `Field`/`Entry`** — bound to the editable `form` state. The bound `Entry` reflects
-   `set_field(key,value)` immediately, and its edits are read by `get_state()`.
+2. **One-way `bind`** — `"bind": "cart.total"` resolves a dotted path into the state graph. Used by
+   display nodes (`Label`, `Image`, `Badge`).
+3. **Two-way `Field`/`Entry`** — `"key": "quantity"` two-way-binds a leaf of the same graph. The
+   bound control reflects `set_field`/`apply_patch` immediately, and its edits are read by
+   `get_state()`.
 
-Both `data` and `form` are backed by a **generic observable tree** (there are no hand-authored view
-models — the model produces data of arbitrary shape). The inflator sets that tree as the
-`BindingContext` and compiles `bind`/`key` paths into indexer bindings against it. The full design —
-the `UiObject`/`UiObjectCollection` tree, why not `System.Dynamic`, path compilation, coercion, and
-persistence across re-inflation — is in the
-[Dynamic Binding Model appendix](./appendix-binding-model.md).
+> **Literal vs. bind — the reliability rule.** Use a **literal `text`** for values that won't change
+> during the turn (a one-off detail snapshot) — it's the most robust and the model gets it right
+> every time. Use **`bind`** for anything that *can* change (cart lines, totals, quantities,
+> anything you'll `apply_patch`) so the update reflects live without a re-render. Changeable lists
+> should use a bound `List` with `itemsBind` (§4.4). Binding a leaf that is never patched is
+> harmless; the danger is the reverse — literal text that later needs to change forces a full
+> re-render.
 
-### `form` (editable state)
+The graph is a **generic observable tree** (there are no hand-authored view models — the model
+produces data of arbitrary shape). The inflator uses it as the binding source and compiles
+`bind`/`key` paths into indexer bindings against it. The full design — the
+`UiObject`/`UiObjectCollection` tree, JSON Patch mutation, why not `System.Dynamic`, path
+compilation, coercion, and persistence across re-inflation — is in the
+[State & Binding Model appendix](./appendix-binding-model.md).
 
-- Backed by an observable `UiObject` tree (a leaf per key), so MAUI two-way bindings work without a
-  statically typed VM.
-- Seeded from the `form` object in the `render_ui` payload.
-- `set_field(key, value)` updates it on the UI thread → the on-screen control updates.
-- `get_state()` serializes it back to a JSON object for the model to send to `write_api`.
+### Editable fields
 
-### `data` resolution
+- `Field`/`Entry` with a `key` two-way-bind a leaf of the `StateRoot`, so MAUI two-way bindings work
+  without a statically typed VM.
+- Seeded from the `form` object in the `render_ui` payload (merged into the graph).
+- `set_field(key, value)` (a single-leaf replace) or `apply_patch` updates it on the UI thread → the
+  on-screen control updates.
+- `get_state(path?)` serializes the graph (or a subtree) to JSON for the model to send to
+  `write_api`.
 
-- Dotted paths (`a.b.c`) compile to indexer chains (`[a][b][c].Value`); array indexing
-  (`items.0.name`) is **out of scope** for the MVP (use pre-expanded `List` rows instead).
-- Missing paths resolve to empty string (display) and are logged.
+### Path resolution
+
+- Dotted paths (`a.b.c`) compile to indexer chains (`[a][b][c].Value`). Per-item paths inside a
+  bound `List` template resolve **relative to the row** (`"bind": "name"`); positional array
+  indexing in a top-level `bind` (`items.0.name`) is **out of scope** — use a bound `List` instead.
+- Missing paths resolve to empty (display) and are logged.
 
 ## 6. Intents (control → loop)
 
@@ -178,34 +211,72 @@ the loop **AI-driven**: buttons feed the model, which then explores/renders/call
 
 ## 7. Styles
 
-Styling is limited to **named tokens from a registered catalog** — the model never emits raw
-colors, sizes, or XAML. Each token maps to a `StaticResource` (a `Style`, `Color`, thickness, …)
-in the app theme, so output stays on-brand and predictable.
+Styling is limited to **named tokens** — the model never emits raw colors, sizes, or XAML. There
+are two kinds of token, resolved in this order:
 
-- The library pre-registers a **base set**: text styles `Title`/`Subtitle`/`Body`/`Caption`/`Mono`,
-  button styles `primary`/`secondary`/`danger`, badge tones `neutral`/`positive`/`warning`/`danger`.
-- Apps **register additional styles** (or override the base) via the registry — e.g. a `Brand`
-  accent for labels, a `hero` button treatment, a multi-line vs single-line entry variant. Each
-  registered style carries a **name** (the token the model uses), a full **description** (which
-  says where it's meant to be used), an **`appliesTo`** list of the control types it's valid on,
-  and an **optional resource key** (defaults to the name) it maps to. See the
-  [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
-- **`appliesTo` constrains where a token can go.** A MAUI `Style` is `TargetType`-specific, so a
-  `danger` button style must not land on a `Picker` or `Entry`. The list is both told to the model
-  and **enforced by the inflator**: a token applied to a control outside its `appliesTo` is dropped
-  (the node keeps its default look) and logged. A node matches if its control **is that type or
-  derives from it**.
-- `style` accepts a **single token or a list** — `"style": "primary"` or
-  `"style": ["Brand", "large"]` — so styles can compose (mapped to a `Style` plus MAUI
-  `StyleClass`es under the hood).
-- The registered style catalog (names + descriptions + `appliesTo`) is given to the model (seeded
+1. **Base tokens (library built-ins).** `Title`/`Subtitle`/`Body`/`Caption`/`Mono` (on `Label`) and
+   `primary`/`secondary`/`danger` (on `Button`) have **built-in visual treatment applied in code**
+   by the inflator's `StyleApplier`. They work with **zero app setup** — no `ResourceDictionary`
+   required — so the base look is consistent everywhere out of the box.
+2. **App-registered tokens.** Apps register additional tokens (or override a base name) that map to
+   a **`StaticResource`** (a `Style`, `Color`, thickness, …) in the app theme — e.g. a `Brand`
+   accent for labels, a `hero` button treatment. Each registration carries a **name** (the token),
+   a full **description** (where it's meant to be used), an **`appliesTo`** list of control types,
+   and an **optional resource key** (defaults to the name). See the
+   [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
+
+> **Implementation note (v0.2).** Base tokens are code-baked rather than resource-driven so the
+> library is usable without the app shipping any XAML. Making base tokens themeable resources is a
+> possible future change (see [Open Questions](#open-questions)).
+
+- **`appliesTo` constrains where a token can go**, and is **enforced by the inflator**: a MAUI
+  `Style` is `TargetType`-specific, so a `danger` button style must not land on a `Picker` or
+  `Entry`. A token applied outside its `appliesTo` is dropped (the node keeps its default look) and
+  logged. A node matches if its control **is that type or derives from it**.
+- **Badge tone** is currently a **`tone` prop** on `Badge` (`neutral`/`positive`/`warning`/`danger`)
+  with built-in colours — a convenience, *not* a registered style token. This is a small
+  inconsistency with the "everything visual is a token" principle; unifying tones into the style
+  catalog is a candidate future change.
+- `style` accepts a **single token or a list** — `"style": "primary"` or `"style": ["Brand",
+  "large"]`. List composition maps app tokens to a `Style` plus (future) MAUI `StyleClass`es;
+  `StyleClass` composition is **not yet implemented**.
+- The registered token catalog (names + descriptions + `appliesTo`) is given to the model (seeded
   and/or via `list_ui_capabilities`), so it knows a `danger` button style exists and picks it for
   destructive actions.
 
 Unknown or misapplied tokens fall back to a sensible default (`Body`/`secondary`/`neutral`) and
 are logged — never an error.
 
-Spacing/padding remain small integers interpreted as device-independent units (not a style token).
+Spacing/padding remain small integers interpreted as device-independent units (not a style token) —
+see the spacing scale in §7.1.
+
+## 7.1 Layout & visual-design guidance (for the agent)
+
+The vocabulary above says *what the model can emit*; this section says *how to compose it well*. The
+model authors no styling, but it does choose structure — and without guidance it produces
+inconsistent, ad-hoc layouts. This guidance is **generic and reusable**, so it belongs in the
+**library** (seeded into the system prompt the same way the capability catalog is), with apps
+layering only *brand* specifics on top. It should **not** live only in a sample app's prompt.
+
+> **New capability (planned): a library-contributed "UI authoring guide."** The library exposes a
+> block of design doctrine that `AddGenerativeUi` seeds into the prompt, so every consuming app gets
+> consistent, on-brand output for free. Today this guidance lives in the Garden sample's prompt;
+> promoting it into the library is a tracked follow-up.
+
+Doctrine the guide encodes:
+
+- **Visual hierarchy.** Item/section names → `Title`; prominent values (price, totals) → `Subtitle`
+  or a `Badge`; supporting text → `Body`; metadata (category, SKU, timestamps) → `Caption`.
+- **Layout patterns.** A list of things → a **bound `List`** (`itemsBind`) of `Card`s, one field per
+  meaningful attribute. A single item → a `Card` of labelled fields. A form → a vertical stack of
+  `Field`s with exactly **one** `primary` Save button.
+- **Spacing scale.** Use a small, consistent set of device-independent units — **4 / 8 / 12 / 16** —
+  for `spacing`/`padding` rather than arbitrary numbers, so rhythm stays even.
+- **Action semantics.** Exactly one `primary` call-to-action per view; `danger` for destructive
+  actions (delete/remove/clear); `secondary` for everything else.
+- **Bind vs. literal.** Bind changeable data (§5); use literal text only for static one-offs.
+- **Restraint.** Prefer fewer, well-spaced elements over dense output; let `Caption`/muted tones
+  carry secondary detail so the primary content stands out.
 
 ## 8. Validation & error handling
 
@@ -384,24 +455,31 @@ its enums from the registry. Sketch of the top level:
 
 ## Open questions
 
-1. **One tool or two?** `render_ui` (with `Field`/`form`) only, or split `render_ui` +
-   `render_form`? (Lean: one.)
-2. **Collections:** pre-expanded rows (MVP) vs. `itemsBind` + `itemTemplate`. When do we need the
-   latter (large lists, live updates)?
-3. **Data binding for display:** always bind display nodes to `data`, or allow literal-inlined
-   data for read-only displays (simpler, more tokens)?
-4. **Node set:** is the §4 catalog the right MVP set? Do we need `Grid`, `Toggle`, `Picker`,
-   `Slider`, tabs, tables now or later?
-5. **Styling:** the token set is now registry-driven (built-ins + app styles). Is the `style`
-   string-or-list shape right, and do we need any model-controlled sizing, or is app-registered
-   enough? See the [Extensibility appendix](./appendix-extensibility.md#open-questions).
-6. **Intents:** synthetic chat turns vs. structured tool-result events. How do we avoid loops /
+Several earlier questions are now **resolved** (marked ✅); the rest remain open.
+
+1. ✅ **One tool or two?** Single `render_ui` with `Field`/`form`; no `render_form`.
+2. ✅ **Collections:** both **pre-expanded static rows** and **bound `itemsBind` templates** are
+   implemented (§4.4). Bound is preferred for changeable data. Remaining sub-question: item
+   keying/diffing for large lists (see [Binding Model open questions](./appendix-binding-model.md#open-questions)).
+3. ✅ **Data binding for display:** both — literal for static one-offs, `bind` for changeable data
+   (the reliability rule in §5).
+4. ✅ **Partial updates:** done via `apply_patch` against the persistent state graph (no whole-canvas
+   repaint for data changes). Structural partial updates (patching the UI tree by node `id`) remain
+   future — see A2UI's adjacency-list model in the
+   [Protocol Alignment appendix](./appendix-protocol-alignment.md).
+5. **Node set:** is the §4 catalog complete enough? Candidates from A2UI parity: `Modal`, `Tabs`,
+   `Slider`, `ChoicePicker`/`Picker`, `DateTimeInput`, `CheckBox`.
+6. **Styling — base tokens as resources.** Base tokens are code-baked (work with zero app setup).
+   Do we make them themeable `StaticResource`s, at the cost of requiring the app to ship a
+   `ResourceDictionary`? Also: fold `Badge` tone into the style catalog, and implement `StyleClass`
+   composition.
+7. **UI authoring guide placement.** Promote the generic layout/visual-design doctrine (§7.1) from
+   the sample prompt into a **library-seeded** block, so all apps get consistent output.
+8. **Intents:** synthetic chat turns vs. structured tool-result events. How do we avoid loops /
    duplicate submissions?
-7. **Images:** allow remote URLs (`Image.source`)? Security/perf implications; do we need an
+9. **Images:** allow remote URLs (`Image.source`)? Security/perf implications; do we need an
    allowlist?
-8. **Partial updates:** MVP replaces the whole canvas. Do we need targeted updates (update node
-   by `id`) for responsiveness (e.g., updating one cart line)?
-9. **Accessibility:** how do we carry semantic/automation ids and accessibility text through the
-   DSL?
-10. **Determinism vs. richness:** how strict should validation be — reject-and-retry on any
-    unknown, or best-effort render? (Lean: best-effort with placeholders.)
+10. **Accessibility:** how do we carry semantic/automation ids and accessibility text through the
+    DSL?
+11. **Determinism vs. richness:** how strict should validation be — reject-and-retry on any unknown,
+    or best-effort render? (Lean: best-effort with placeholders.)
