@@ -234,7 +234,9 @@ inside that prompt rather than delegated:
    cart beside it; never catalog + orders + product detail together; product details are focused
    single-item compositions (no pretend modal beyond the real confirm overlay).
 2. **Global design language:** calm garden-store aesthetic; rounded/image-led cards; semantic
-   typography; 4/8/12/16 spacing; exactly one primary CTA; restrained density.
+   typography; 4/8/12/16 spacing; exactly one primary CTA; restrained density. For the MVP the model
+   emits the whole visual treatment inline: botanical green/gold palette, gradients, strokes,
+   rounded corners, typography, and subtle green glow.
 3. **Feature recipes:** strong defaults for product list/detail, cart, orders, forms, empty/error.
 4. **State/rendering doctrine:** bind changeable data, use `itemsBind`, patch state rather than
    repainting, and call `render_ui` only when the view kind changes.
@@ -262,9 +264,11 @@ These will demonstrate the three extension tiers from the
 | `CheckoutScreen` | Screen | The official cart + payment surface. Its description says to use it for any checkout; self-loads the cart via the API. |
 | `MonthlyOrdersReport` | Screen | Filterable, printable monthly report; `Inputs`: `month`, `verbosity`. Self-loads orders. |
 
-`Product.ImageUrl` already exists so `ProductImage` has something to render (emoji stays as a
-lightweight fallback). `CheckoutScreen`/`MonthlyOrdersReportScreen` would be ordinary MAUI
-`ContentView`s + VMs registered in DI and resolved by the screen descriptors.
+`Product.ImageUrl` is populated for all seeded products with original locally generated PNG artwork
+served by the Garden API's `wwwroot/images/products/` static route (emoji stays as a fallback). The
+art is reproducible via `Server/Assets/generate_product_images.py`; no external image host or
+copyrighted product photography is required. `CheckoutScreen`/`MonthlyOrdersReportScreen` would be
+ordinary MAUI `ContentView`s + VMs registered in DI and resolved by the screen descriptors.
 
 **Intended static + dynamic registration + native theming demo:**
 
@@ -302,8 +306,8 @@ Status:
 1. ✅ **"what are the products?"**
    `list_endpoints` → `read_api GET /products` → `render_ui` (titled product-card list).
 2. ✅ **"show me the basil seeds"**
-   `read_api GET /products/basil-seeds` → `render_ui` (detail card). Today it uses built-in
-   primitives; the planned **`ProductImage`** control adds the watermarked-image variant.
+   `read_api GET /products/basil-seeds` → `render_ui` (image-led detail card using the server-hosted
+   artwork). The planned **`ProductImage`** control adds the watermarked-image variant.
 3. ✅ **"add a new product called pears"**
    `render_ui` (add-product form, `form.name = "Pears"`) → user: "set the price to 3.49" →
    `set_field("price","3.49")` → user: "save for me" → `get_state` →
@@ -332,7 +336,7 @@ Status:
     control, rating prefilled) → "save" → `write_api POST /reviews` *(approval)* →
     patch the bound reviews list (or structurally show thanks).
 11. 🟡 **"build me a starter bundle"** → `read_api GET /recommendations` → `render_ui` (bundle
-    using built-in primitives/emoji). The planned `ProductImage` extension adds watermarked images.
+    using server-hosted product artwork). The planned `ProductImage` extension adds watermarking.
 12. ⬜ **"show me the June orders report"** → `present_screen("MonthlyOrdersReport", { month:"2026-06" })`
     — the full-screen report screen takes the canvas and self-loads/filters orders. The model supplies
     only the declared inputs.
@@ -387,8 +391,8 @@ watermarking**, **full-screen handoff**, **overlay presentation**, and **runtime
 3. **Recommendations:** static bundle vs. a small rules/heuristic. How much logic on the server?
 4. **Search:** does `GET /products?search=` suffice, or do we also expose a dedicated search
    endpoint? (Discovery is via `list_endpoints(query)`; `search_api` was dropped for the MVP.)
-5. **Emoji/imagery:** now that `Product` has `ImageUrl`, do we ship real hosted images to exercise
-   the `ProductImage` watermarking presenter, or keep emoji as the primary with images optional?
+5. ✅ **Imagery:** seeded products use original locally generated PNG art served by the API; emoji is
+   the fallback. `ProductImage` watermarking remains a separate extension demo.
 6. **Validation errors:** which endpoints return `ProblemDetails` (e.g. bad price) so we can
    demonstrate the model surfacing validation in the UI?
 7. **Seed parity:** exactly mirror the current catalog, or trim/expand for better demos?

@@ -22,8 +22,10 @@ controls, and full screens on top of it — see the
 1. **Closed but extensible vocabulary.** A fixed set of built-in node `type`s, plus app-registered
    controls/screens known at startup. The *effective* vocabulary (built-ins + registrations) is
    validated; unknown types render a visible error placeholder, never crash.
-2. **Flat, JSON-native.** Plain JSON objects/arrays; no expressions, no code. Styling is limited to
-   **named tokens** (never raw colors/XAML from the model). Easy for a model to emit and validate.
+2. **Flat, JSON-native.** Plain JSON objects/arrays; no expressions, XAML, or code. For this
+   prototype the model may emit **bounded inline visual properties** (colors, gradients, spacing,
+   typography, radii, shadow) so it owns the look end to end. A generated named stylesheet is the
+   intended next evolution (§7).
 3. **Declarative + data-bound.** Nodes describe *what*, not *how*. Editable nodes bind two-way, and
    display nodes may bind one-way, to the single persistent **`StateRoot`**
    (see [State & Binding Model](./appendix-binding-model.md)).
@@ -92,7 +94,8 @@ node below. `type` may be a **built-in** (this appendix) or an **app-registered 
 | `type` | Inflates to | Key props |
 |---|---|---|
 | `Stack` | `VerticalStackLayout` / `HorizontalStackLayout` | `orientation` (`vertical`\|`horizontal`, default vertical), `spacing` (number), `padding` |
-| `Card` | `Border` (rounded, subtle shadow) | `padding`, `children` |
+| `Grid` | `Grid` | `columns`/`rows` (`"156,*,132"`), `columnSpacing`, `rowSpacing`; child `column`/`row`/spans |
+| `Card` | `Border` | `padding`, `background`, `stroke`, `strokeThickness`, `cornerRadius`, `shadow`, `children` |
 | `Scroll` | `ScrollView` | single child |
 | `Separator` | thin `BoxView`/line | `orientation` |
 | `Spacer` | flexible gap | `size` |
@@ -101,16 +104,16 @@ node below. `type` may be a **built-in** (this appendix) or an **app-registered 
 
 | `type` | Inflates to | Key props |
 |---|---|---|
-| `Label` | `Label` | `text` or `bind`, `style`, `wrap` |
-| `Image` | `Image` / emoji `Label` | `source` (url) or `emoji`, `size` |
-| `Badge` | pill `Border`+`Label` | `text` or `bind`, `tone` (`neutral`\|`positive`\|`warning`\|`danger`) |
+| `Label` | `Label` | `text` or `bind`, `wrap`, `textColor`, `fontSize`, `fontWeight`, `maxLines`, `lineHeight`, `textAlign` |
+| `Image` | `Image` / emoji `Label` | `source` (url) or `bind`/`emoji`, `size`, `aspect`, `cornerRadius` |
+| `Badge` | pill `Border`+`Label` | `text` or `bind`, `tone`, plus inline background/text/stroke/radius props |
 | `Icon` | glyph `Label` (Fluent font) | `glyph`, `size` |
 
 ### 4.3 Interactive
 
 | `type` | Inflates to | Key props |
 |---|---|---|
-| `Button` | `Button` | `text`, `intent` (see §6), `style` (`primary`\|`secondary`\|`danger`), `payload` |
+| `Button` | `Button` | `text`, `intent`, `payload`, `background`, `textColor`, `borderColor`/`borderWidth`, `cornerRadius`, `padding` |
 | `Field` | label + `Entry`/`Editor`/`Switch` (by `kind`) | `key` (`StateRoot` leaf), `label`, `kind` (`text`\|`number`\|`multiline`\|`bool`), `placeholder` |
 | `Entry` | bare `Entry` | `key`, `placeholder`, `kind` |
 
@@ -209,54 +212,69 @@ the loop **AI-driven**: buttons feed the model, which then explores/renders/call
 > **Open question:** synthetic chat turns vs. direct tool re-entry vs. a structured event the
 > model receives as a tool result. Synthetic turns are simplest and most transparent for the MVP.
 
-## 7. Styles
+## 7. Inline visual styling (prototype)
 
-Styling is limited to **named tokens** — the model never emits raw colors, sizes, or XAML. There
-are two kinds of token, resolved in this order:
+> **Design change (v0.3).** The MVP lets the AI emit the complete visual treatment inline in each UI
+> document. We do **not** require app-coded Garden styles for the demo. The earlier named-token
+> mechanism remains available as a fallback/experiment, but the Garden prompt tells the model to
+> inline its colors, typography, spacing, layout, gradients, and glow.
 
-1. **Base tokens (library built-ins).** `Title`/`Subtitle`/`Body`/`Caption`/`Mono` (on `Label`) and
-   `primary`/`secondary`/`danger` (on `Button`) have **built-in visual treatment applied in code**
-   by the inflator's `StyleApplier`. They work with **zero app setup** — no `ResourceDictionary`
-   required — so the base look is consistent everywhere out of the box.
-2. **App-registered tokens.** Apps register additional tokens (or override a base name) that map to
-   a **`StaticResource`** (a `Style`, `Color`, thickness, …) in the app theme — e.g. a `Brand`
-   accent for labels, a `hero` button treatment. Each registration carries a **name** (the token),
-   a full **description** (where it's meant to be used), an **`appliesTo`** list of control types,
-   and an **optional resource key** (defaults to the name). See the
-   [Extensibility appendix §3.1](./appendix-extensibility.md#31-styles).
+Supported common inline properties:
 
-> **Implementation note (v0.2).** Base tokens are code-baked rather than resource-driven so the
-> library is usable without the app shipping any XAML. Making base tokens themeable resources is a
-> possible future change (see [Open Questions](#open-questions)).
+- layout: `margin`, `horizontal`, `vertical`, `width`/`height`, min/max sizes, `opacity`;
+- background: a hex color or linear gradient
+  `{ "type":"linear", "colors":["#start","#end"], "angle":135 }`;
+- shadow/glow:
+  `{ "color":"#64A77B", "opacity":0.2, "radius":20, "offsetX":0, "offsetY":7 }`;
+- thickness values: a number, `[horizontal,vertical]`, or `[left,top,right,bottom]`.
 
-- **`appliesTo` constrains where a token can go**, and is **enforced by the inflator**: a MAUI
-  `Style` is `TargetType`-specific, so a `danger` button style must not land on a `Picker` or
-  `Entry`. A token applied outside its `appliesTo` is dropped (the node keeps its default look) and
-  logged. A node matches if its control **is that type or derives from it**.
-- **Badge tone** is currently a **`tone` prop** on `Badge` (`neutral`/`positive`/`warning`/`danger`)
-  with built-in colours — a convenience, *not* a registered style token. This is a small
-  inconsistency with the "everything visual is a token" principle; unifying tones into the style
-  catalog is a candidate future change.
-- `style` accepts a **single token or a list** — `"style": "primary"` or `"style": ["Brand",
-  "large"]`. List composition maps app tokens to a `Style` plus (future) MAUI `StyleClass`es;
-  `StyleClass` composition is **not yet implemented**.
-- The registered token catalog (names + descriptions + `appliesTo`) is given to the model (seeded
-  and/or via `list_ui_capabilities`), so it knows a `danger` button style exists and picks it for
-  destructive actions.
+Type-specific properties:
 
-Unknown or misapplied tokens fall back to a sensible default (`Body`/`secondary`/`neutral`) and
-are logged — never an error.
+- `Card`: `padding`, `contentSpacing`, `stroke`, `strokeThickness`, `cornerRadius`;
+- `Label`: `textColor`, `fontSize`, `fontWeight`, `fontFamily`, `maxLines`, `lineHeight`,
+  `textAlign`, `wrap`;
+- `Image`: `aspect` (`fit`/`fill`), `cornerRadius`, dimensions;
+- `Badge`: inline background/text/stroke/radius/padding in addition to `tone`;
+- `Button`: background/text/border colors, border width, radius, font, padding;
+- `Grid`: explicit columns/rows and child placement, enabling stable text/action alignment.
 
-Spacing/padding remain small integers interpreted as device-independent units (not a style token) —
-see the spacing scale in §7.1.
+Values are **bounded by the inflator** (dimension, radius, font-size, opacity, and shadow caps), and
+remain declarative data—never executable code or XAML.
+
+### Future generated stylesheet
+
+Inlining proves that the model can own the complete look, but repeats values and increases document
+size. The intended next step is a model-generated stylesheet in the render payload:
+
+```jsonc
+{
+  "styles": {
+    "productCard": {
+      "background": { "type": "linear", "colors": ["#FFFFFF", "#EEF7F0"], "angle": 135 },
+      "cornerRadius": 20,
+      "stroke": "#C9DDD0",
+      "shadow": { "color": "#64A77B", "opacity": 0.2, "radius": 20, "offsetY": 7 }
+    }
+  },
+  "ui": {
+    "type": "Card",
+    "style": "productCard"
+  }
+}
+```
+
+Controls would resolve names against that **document-local generated stylesheet**. App-registered
+semantic styles/custom controls remain a later option when a host needs enforced brand consistency.
+
+The existing library base tokens (`Title`/`Body`, `primary`/`secondary`/`danger`) remain supported,
+but Garden-generated content explicitly overrides them inline.
 
 ## 7.1 Layout & visual-design guidance (for the agent)
 
-The vocabulary above says *what the model can emit*; this section says *how to compose it well*. The
-model authors no styling, but it does choose structure — and without guidance it produces
-inconsistent, ad-hoc layouts. This guidance is **generic and reusable**, so it belongs in the
-**library** (seeded into the system prompt the same way the capability catalog is), with apps
-layering only *brand* specifics on top. It should **not** live only in a sample app's prompt.
+The vocabulary above says *what the model can emit*; this section says *how to compose and style it
+well*. Because the prototype now lets the model author inline visuals as well as structure, guidance
+is even more important: without it, every render invents a different palette/layout. The generic
+principles are reusable; the Garden-specific palette and recipes live in its layered system prompt.
 
 > **MVP delivery decision:** keep one agent and put the layered authoring guide directly in the
 > app's system prompt. The Garden prompt is organized as: app composition contract → global design
@@ -472,10 +490,10 @@ Several earlier questions are now **resolved** (marked ✅); the rest remain ope
    [Protocol Alignment appendix](./appendix-protocol-alignment.md).
 5. **Node set:** is the §4 catalog complete enough? Candidates from A2UI parity: `Modal`, `Tabs`,
    `Slider`, `ChoicePicker`/`Picker`, `DateTimeInput`, `CheckBox`.
-6. **Styling — base tokens as resources.** Base tokens are code-baked (work with zero app setup).
-   Do we make them themeable `StaticResource`s, at the cost of requiring the app to ship a
-   `ResourceDictionary`? Also: fold `Badge` tone into the style catalog, and implement `StyleClass`
-   composition.
+6. **Generated stylesheet.** Define the document-local `styles` schema, inheritance/composition,
+   type validation, and precedence (`inline` > generated style > library fallback). Should generated
+   styles survive across renders or be scoped to one document? App-registered semantic styles remain
+   a separate future enforcement layer.
 7. **UI authoring guide lifecycle.** MVP: one layered app system prompt. Future: promote generic
    doctrine into a library-owned guide and invoke a stateless `UiComposer` only for render steps;
    add deterministic main-history compaction (preserve system/summary/recent turns/pending approval,
