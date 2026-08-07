@@ -1,7 +1,8 @@
 # Generative UI — Overview Spec
 
-> **Status:** Draft (v0.1) — for iteration. Nothing here is final; every section is expected to
-> change as we work through the [Open Questions](#16-open-questions).
+> **Status:** Implemented MVP (v0.2) — the OpenAPI, UI-DSL/inflator, state graph, and sample flows
+> are running end to end; remaining design work is tracked in the
+> [Open Questions](#16-open-questions).
 
 ## 1. Summary
 
@@ -94,9 +95,9 @@ We want to find out how far this can go, what breaks, and what reusable pieces f
 | **Style** | A named visual token mapped to a XAML resource, applied to a node's `style`. |
 | **Control** | An app-registered composite control exposed as a DSL node type. |
 | **Screen** | An app-registered full surface the model hands off to (e.g. checkout, report). |
-| **Dynamic data context** | The generic observable `UiObject` tree the UI binds to instead of a hand-authored view model (see the [Binding Model appendix](./appendix-binding-model.md)). |
-| **CanvasState** | Client state holding the currently rendered view + busy/empty flags. |
-| **FormState** | The editable region of the dynamic data context backing form fields (the DSL `form`). |
+| **StateRoot** | The single persistent, observable `UiObject` graph the rendered UI binds to instead of a hand-authored view model. Display bindings are one-way; editable fields are two-way; JSON Patch mutates it in place. |
+| **CanvasState** | Client state holding the currently rendered view, busy/empty/confirm state, and the persistent `StateRoot`. |
+| **State snapshot / delta** | Full JSON replacement (`set_state`) or incremental RFC 6902 JSON Patch (`apply_patch`), shaped like AG-UI `STATE_SNAPSHOT` / `STATE_DELTA`. |
 | **Intent** | A named signal a rendered control raises back into the chat loop (e.g. `submit`). |
 | **Tool source** | A class whose `[ExportAIFunction]` methods are surfaced via `AIToolContext`. |
 
@@ -112,12 +113,13 @@ We want to find out how far this can go, what breaks, and what reusable pieces f
 │  ┌── OpenApi/ ─────────────────────────┐   ┌── Ui/ ─────────────────────────────┐   │
 │  │  OpenApiCache   fetch + cache        │   │  Dsl            UiNode model+parse  │   │
 │  │  OpenApiReducer compact index        │   │  GenUiInflator  UiNode → MAUI View  │   │
-│  │  ApiInvoker     generic HTTP call    │   │  GenUiState     data + bindings     │   │
-│  │  OpenApiExplorerTools                │   │  FormState      two-way form state  │   │
+│  │  ApiInvoker     generic HTTP call    │   │  StateRoot      observable graph    │   │
+│  │  OpenApiExplorerTools                │   │  UiStatePatcher RFC 6902 deltas     │   │
 │  │    list_endpoints / describe_*       │   │  CanvasState + GenerativeCanvasView │   │
 │  │    read_api / write_api              │   │  GenerativeUiTools                  │   │
-│  │                                      │   │    render_ui / set_field / get_state│   │
-│  │                                      │   │    show_confirm / clear_ui          │   │
+│  │                                      │   │    render_ui / get_state / set_state│   │
+│  │                                      │   │    apply_patch / set_field          │   │
+│  │                                      │   │    show_confirm / clear_ui / screen │   │
 │  └──────────────────────────────────────┘   └─────────────────────────────────────┘   │
 └───────────────────────────────────┬─────────────────────────────────────────────────┘
                                      │  ① GET /openapi/v1.json  (cache + reduce)
@@ -163,14 +165,23 @@ through this generic surface, so the library needs no knowledge of the app's end
 
 | Tool | Purpose |
 |---|---|
-| `render_ui` | Render a UI-DSL document (`ui` + optional `data` + `form`) into the canvas. |
-| `set_field` | Update one field in the active bound state (drives "set the quantity to 3"). |
-| `get_state` | Read the current bound/form values (drives "save for me"). |
+| `render_ui` | Render a UI-DSL document (`ui` + optional `data`/`form`) into the canvas — **structure**. Called again only when the *kind* of view changes. |
+| `apply_patch` | Mutate the canvas **state graph** with a JSON Patch (RFC 6902) so bound UI updates in place — for data changes (remove a cart line, change a quantity). **Not** `render_ui`. |
+| `set_state` | Replace the state graph (or a subtree) with a JSON snapshot (seed/reset bound data). |
+| `get_state` | Read the current state graph (or a JSON-Pointer subtree) — read before patching, and to gather form values for a write. |
+| `set_field` | Convenience single-leaf replace (drives "set the quantity to 3"). |
 | `show_confirm` | Render a confirm overlay; resolves via button tap or the user typing "yes". |
-| `clear_ui` | Reset the canvas to the welcome/empty state. |
+| `clear_ui` | Reset the canvas + state to the welcome/empty state. |
 | `present_screen` | Hand the canvas off to a **registered full screen** (e.g. checkout, report), supplying its declared inputs. |
 | `list_ui_capabilities` | List registered styles/controls/screens (names + descriptions). |
 | `describe_control` / `describe_screen` | Full prop/input list + description for one registered control or screen. |
+
+The `render_ui` (structure) vs. `apply_patch`/`set_state`/`set_field` (data) split is what makes the
+canvas **stateful** rather than repainted every turn — see §9 and the
+[State & Binding Model appendix](./appendix-binding-model.md). `set_state`/`apply_patch` are
+deliberately shaped like AG-UI's `STATE_SNAPSHOT`/`STATE_DELTA` (JSON Patch), with no dependency —
+see the [Protocol Alignment appendix](./appendix-protocol-alignment.md).
+
 
 The app **extends** what these tools can produce by registering styles, custom controls, and full
 screens (see §6.3). Built-in primitives cover generic UI; registrations add brand styling, bespoke
@@ -266,31 +277,37 @@ The library never references the sample's models; it uses the app-supplied
 
 ## 9. State & data binding (overview)
 
-The canvas is data-bound so the model can build a form, then *live-edit and read it back*. Because
-the model authors no view models, both display and form data are backed by a **generic observable
-tree** (the [Dynamic Binding Model appendix](./appendix-binding-model.md)).
+The canvas is **stateful and data-bound**: the model builds structure once, then live-edits and
+reads back the data. Because the model authors no view models, all display and form data live in a
+**single persistent, observable state graph** — a `UiObject` tree (the
+[State & Binding Model appendix](./appendix-binding-model.md)).
 
-- **`data`** — a `UiObject` tree built from the model's `data`/API JSON; display nodes bind one-way
-  into it.
-- **`FormState`** — the editable region of that tree (a `UiObject` leaf per key). Two-way bindings
-  mean `set_field("quantity","3")` updates the on-screen `Entry`, and `get_state()` reads whatever
-  the user (or model) has entered.
-- **`CanvasState`** (singleton) exposes the current root `View` + `IsBusy`/`IsEmpty`; the
-  `GenerativeCanvasView` binds to it, and owns the persistent `form` tree across re-inflation.
+- **One `StateRoot`.** Display nodes bind one-way; editable `Field`/`Entry` nodes bind two-way — to
+  the *same* graph. (Earlier drafts split `data` and `form`; these are now unified.)
+- **Structure vs. data.** `render_ui` describes structure and merges any `data`/`form` into the
+  graph. Data changes go through **JSON Patch** (`apply_patch`), `set_state`, or `set_field` — the
+  bound UI (including `itemsBind` lists) updates **in place, without re-inflation**.
+- **`CanvasState`** (singleton) exposes the current root `View` + `IsBusy`/`IsEmpty` + the confirm
+  overlay, and **owns the persistent `StateRoot`** across re-inflation; the `GenerativeCanvasView`
+  binds to it.
 
-Binding details and the DSL are in the [UI-DSL appendix](./appendix-ui-dsl.md) and the
-[Binding Model appendix](./appendix-binding-model.md).
+This mutate-don't-repaint model, and its AG-UI-compatible snapshot/delta shapes, are detailed in the
+[State & Binding Model appendix](./appendix-binding-model.md) and
+[Protocol Alignment appendix](./appendix-protocol-alignment.md); the DSL is in the
+[UI-DSL appendix](./appendix-ui-dsl.md).
 
 ## 10. Threading & lifecycle
 
-- Tools are invoked by `FunctionInvokingChatClient` **off the UI thread**. Any canvas/form
+- Tools are invoked by `FunctionInvokingChatClient` **off the UI thread**. Any canvas/state
   mutation marshals to `MainThread`.
 - The OpenAPI processor fetches/reduces **once** at startup (or lazily on first use) and caches.
-- A "new chat" resets `CanvasState`, `FormState`, and the message history.
+- A "new chat" / `clear_ui` resets `CanvasState` (view + `StateRoot`) and the message history.
 
 ## 11. Approval & destructive actions
 
-Two layered mechanisms, reusing the existing `Microsoft.Maui.AI.Attributes` approval flow:
+Two layered mechanisms, reusing the existing `Microsoft.Maui.AI.Attributes` approval flow (which is
+built on `Microsoft.Extensions.AI`'s `ToolApprovalRequestContent`/`ToolApprovalResponseContent` —
+the same types AG-UI uses, so we are already approval-shape-compatible):
 
 1. **`write_api` is `ApprovalRequired`.** All mutating HTTP calls pause the chat and show the
    inline approve/reject banner before executing. This is the safety net.
@@ -380,13 +397,14 @@ These are the things to iron out before/while building. Grouped by area.
    clipped** — that's a fixed principle, not an open question.)
 
 ### Client-UI tools & DSL
-7. Do read-only displays bind to `data`, or is inlining data into the DSL acceptable/preferable for
-   read-only displays? (Forms clearly need binding.)
-8. How are **collections** rendered in the MVP — pre-expanded rows emitted by the model, or a
-   `List` + item-template + items-binding? (MVP leans pre-expanded for reliability.)
-9. What is the **exact node vocabulary** for the MVP, and what styling tokens are fixed?
-10. How do rendered controls signal back to the loop — synthetic chat turns (`intent`), direct
-    tool re-entry, or a dedicated event channel?
+7. ✅ Read-only display supports both: literal text for static one-offs, binding for anything that
+   can change (see the UI-DSL reliability rule).
+8. ✅ Collections support both pre-expanded static rows and a bound `itemsBind` template; bound is
+   required for live add/remove/quantity updates.
+9. Which additional nodes should follow A2UI parity next (`Modal`, `Tabs`, `Slider`,
+   `ChoicePicker`, `DateTimeInput`, `CheckBox`)?
+10. Rendered controls currently signal via synthetic chat turns (`intent`). Should a future
+    AG-UI-compatible event channel replace or complement them?
 
 ### Extensibility (styles / controls / screens) — see [Extensibility appendix](./appendix-extensibility.md#open-questions)
 10a. Uniform node `type` set (built-ins + registered) vs. explicit `Control`/`Screen` wrappers to
@@ -405,8 +423,11 @@ These are the things to iron out before/while building. Grouped by area.
      reliable/AOT-friendly for the generic `UiObject` tree?
 10g. Typed vs. stringly leaves: store typed values in the tree, or keep strings and coerce only at
      the edges (`get_state`/converters)?
-10h. Is `data` rebuilt immutably each render (only `form` observable), or are both observable so API
-     updates can patch the tree in place?
+10h. ✅ Resolved: one persistent observable `StateRoot`; JSON Patch updates data/form in place.
+10i. How do we key/diff `itemsBind` collections so patches can address stable IDs instead of
+     shifting positional indices?
+10j. Should failed patch sequences apply transactionally (all-or-nothing) and trigger an automatic
+     snapshot resync, like AG-UI?
 
 ### Interaction & UX
 11. Confirmation: keep both `write_api` approval **and** `show_confirm`, or just one?
