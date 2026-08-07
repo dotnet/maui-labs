@@ -27,4 +27,24 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.AI.Chat.Generators\Microsoft.Maui.AI.Chat.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <GetTargetPathDependsOn>$(GetTargetPathDependsOn);_ResolveChatGeneratorPath</GetTargetPathDependsOn>
+  </PropertyGroup>
+
+  <Target Name="_ResolveChatGeneratorPath" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <None Include="@(Analyzer)"
+            Condition="'%(Analyzer.NuGetPackageId)' == '' and '%(Filename)' == 'Microsoft.Maui.AI.Chat.Generators'"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+
 </Project>
