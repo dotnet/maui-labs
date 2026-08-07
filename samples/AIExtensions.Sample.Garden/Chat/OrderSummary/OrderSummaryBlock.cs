@@ -9,29 +9,21 @@ namespace AIExtensions.Sample.Garden.Chat;
 /// result). Rendered by <c>OrderSummaryView</c> as a receipt-style order card.
 /// </summary>
 /// <remarks>
-/// This is the <b>simplest</b> mapping shape in the sample — a textbook <b>one-to-one</b> tool→block: one
-/// tool call produces exactly one block. The mechanical call/result correlation lives in
-/// <see cref="OrderSummaryHandler"/>, which is precisely the code a <c>[ToolBlock]</c> source generator
-/// would emit. When that generator lands, delete <see cref="OrderSummaryHandler"/> and its registration,
-/// mark this class <c>partial</c>, and annotate it — the block and its view stay unchanged:
-/// <code>
-/// [ToolBlock("find_order")]
-/// public partial class OrderSummaryBlock : FunctionInvocationContentBlock
-/// {
-///     [ToolParameter] public string OrderId { get; set; }
-///     [ToolResult]    public Order?  Order   { get; set; }
-/// }
-/// </code>
+/// This is the <b>simplest</b> mapping shape in the sample — a textbook <b>one-to-one</b> tool→block.
+/// <see cref="ToolBlockAttribute"/> generates the mechanical call/result handler and registration.
 /// Contrast this with <see cref="ProductResultsBlock"/> (many calls aggregated into one block) and
 /// <see cref="GardenFormattedTextBlock"/> (assistant text projected into a block) — those advanced shapes
 /// are outside a 1:1 generator's scope and stay hand-written.
 /// </remarks>
-public sealed class OrderSummaryBlock : FunctionInvocationContentBlock
+[ToolBlock("find_order")]
+public sealed partial class OrderSummaryBlock : FunctionInvocationContentBlock
 {
     /// <summary>The order id the model looked up (from the <c>find_order</c> call arguments).</summary>
+    [ToolParameter(Name = "orderId")]
     public string OrderId { get; set; } = string.Empty;
 
     /// <summary>The resolved order, or <see langword="null"/> when no order matched the id.</summary>
+    [ToolResult]
     public Order? Order { get; set; }
 
     public override string ToString() =>

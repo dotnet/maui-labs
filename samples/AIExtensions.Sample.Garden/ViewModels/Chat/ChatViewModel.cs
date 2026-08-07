@@ -134,10 +134,9 @@ public sealed partial class ChatViewModel : ObservableObject,
                 // Assistant text becomes rich formatted text; product lookups aggregate into a carousel/card.
                 options.AddBlockHandler(new GardenFormattedTextHandler());
                 options.AddBlockHandler(new ProductResultsHandler());
-                // A single find_order call renders as an order receipt card. This is the simplest 1:1
-                // tool→block mapping — the whole handler is mechanical and would be deleted once a
-                // [ToolBlock] source generator can emit it (see OrderSummaryBlock for the migration).
-                options.AddBlockHandler(new OrderSummaryHandler());
+                // Registers generated 1:1 handlers such as OrderSummaryBlock. Aggregate and text
+                // projections above remain handwritten because they intentionally span multiple events.
+                options.AddGeneratedToolBlocks();
             }
         });
 
