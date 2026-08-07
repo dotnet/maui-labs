@@ -29,7 +29,8 @@
               BackgroundColor="{AppThemeBinding Light=#F7F7F7, Dark=#1B1B1B}">
 
             <!-- Transcript -->
-            <CollectionView Grid.Row="0"
+            <CollectionView x:Name="Transcript"
+                            Grid.Row="0"
                             ItemsSource="{Binding Messages}"
                             VerticalOptions="Fill">
                 <CollectionView.ItemTemplate>
@@ -43,12 +44,25 @@
                                 <RoundRectangle CornerRadius="12" />
                             </Border.StrokeShape>
                             <VerticalStackLayout Spacing="4">
-                                <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Grid.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding ToggleExpandedCommand}" />
+                                    </Grid.GestureRecognizers>
+                                    <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Chevron}"
+                                           IsVisible="{Binding IsTool}"
+                                           FontSize="16"
+                                           TextColor="{StaticResource Gray500}"
+                                           Padding="8,0,0,0"
+                                           VerticalTextAlignment="Center" />
+                                </Grid>
                                 <Label Text="{Binding Detail}"
                                        FontSize="12"
                                        FontFamily="OpenSansRegular"
                                        TextColor="{StaticResource Gray500}"
-                                       IsVisible="{Binding Detail, Converter={StaticResource NotEmpty}}" />
+                                       LineBreakMode="WordWrap"
+                                       IsVisible="{Binding IsDetailVisible}" />
                             </VerticalStackLayout>
                         </Border>
                     </DataTemplate>
@@ -65,6 +79,7 @@
 
                 <!-- Normal input -->
                 <Entry Grid.Column="1"
+                       AutomationId="ChatInput"
                        Placeholder="Ask about products, cart, orders…"
                        Text="{Binding InputText}"
                        IsVisible="{Binding IsInputVisible}"

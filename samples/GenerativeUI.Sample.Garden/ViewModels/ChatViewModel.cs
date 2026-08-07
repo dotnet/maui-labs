@@ -88,9 +88,11 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
           drift beside the text. Inline button visuals explicitly and omit the style token: View has
           transparent background, #2F7D5B text/border and borderWidth 1; Add has #2F7D5B background,
           white text, no visible border; both cornerRadius 14, width 108, height 44.
-        - PRODUCT DETAIL: one focused Card; hero image/large emoji, name Title, price prominently,
-          category + stock as Caption/Badge, full useful description, then actions. Destructive
-          actions are danger-styled and require confirmation.
+        - PRODUCT DETAIL: one focused Card; hero image, name Title, price prominently, category +
+          stock as Caption/Badge, full useful description, then actions. This is normally a static
+          snapshot: inline the actual text and image URL returned by the API rather than binding
+          fields (unless the detail is explicitly expected to live-update). Destructive actions are
+          danger-styled and require confirmation.
         - CART: compact bound itemsBind list; each line shows name, quantity, unit/subtotal as useful,
           and remove/change actions without marketing descriptions. Show the total prominently once.
         - ORDERS: Title + bound order Cards showing date, total, status/item count, with details hidden
