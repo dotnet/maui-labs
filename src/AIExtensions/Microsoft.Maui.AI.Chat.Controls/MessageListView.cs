@@ -207,6 +207,7 @@ public partial class MessageListView : TemplatedView
     // Purely visual, UI-only items — never part of the engine's turns or the message thread.
     private ContentContext? _thinkingItem;   // transient tail while streaming
     private Exception? _shownError;           // dedupe: the error currently rendered
+    private ContentContext? _errorItem;
 
     public MessageListView()
     {
@@ -311,6 +312,9 @@ public partial class MessageListView : TemplatedView
 
     private void OnStatusChanged(ConversationStatus status)
     {
+        if (status == ConversationStatus.Streaming)
+            RemoveErrorItem();
+
         // Cancellation removes partial response blocks from the engine turn. Re-project only
         // when that makes the UI projection differ, avoiding a full rebuild after normal turns.
         if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
@@ -327,7 +331,9 @@ public partial class MessageListView : TemplatedView
         {
             RemoveThinkingItem();
             _shownError = ex;
-            _items.Add(CreateContentContext(new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage)));
+            _errorItem = CreateContentContext(
+                new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage));
+            _items.Add(_errorItem);
             ScrollToLatestMessage();
             return;
         }
@@ -379,7 +385,7 @@ public partial class MessageListView : TemplatedView
         // Keep any transient thinking item as the very last row.
         RemoveThinkingItem();
 
-        _items.Add(CreateContentContext(block));
+        _items.Add(CreateContentContext(block, turn));
         SubscribeToBlock(block);
 
         UpdateThinkingItem();
@@ -426,7 +432,7 @@ public partial class MessageListView : TemplatedView
         {
             if (ReferenceEquals(_items[i].Block, block))
             {
-                _items[i] = CreateContentContext(block);
+                _items[i] = CreateContentContext(block, _items[i].Turn);
                 return;
             }
         }
@@ -442,6 +448,7 @@ public partial class MessageListView : TemplatedView
         _dirtyBlocks.Clear();
         _thinkingItem = null;
         _shownError = null;
+        _errorItem = null;
 
         if (Session is null)
         {
@@ -452,12 +459,12 @@ public partial class MessageListView : TemplatedView
         {
             foreach (var block in turn.RequestBlocks)
             {
-                _items.Add(CreateContentContext(block));
+                _items.Add(CreateContentContext(block, turn));
                 SubscribeToBlock(block);
             }
             foreach (var block in turn.ResponseBlocks)
             {
-                _items.Add(CreateContentContext(block));
+                _items.Add(CreateContentContext(block, turn));
                 SubscribeToBlock(block);
             }
         }
@@ -466,7 +473,9 @@ public partial class MessageListView : TemplatedView
         if (Session.Status == ConversationStatus.Error && Session.Error is { } ex)
         {
             _shownError = ex;
-            _items.Add(CreateContentContext(new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage)));
+            _errorItem = CreateContentContext(
+                new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage));
+            _items.Add(_errorItem);
         }
 
         UpdateThinkingItem();
@@ -499,6 +508,14 @@ public partial class MessageListView : TemplatedView
 
         _items.Remove(_thinkingItem);
         _thinkingItem = null;
+    }
+
+    private void RemoveErrorItem()
+    {
+        if (_errorItem is not null)
+            _items.Remove(_errorItem);
+        _errorItem = null;
+        _shownError = null;
     }
 
     private bool ShouldShowThinking()
@@ -541,8 +558,10 @@ public partial class MessageListView : TemplatedView
         });
     }
 
-    private ContentContext CreateContentContext(ContentBlock block) =>
-        new(Session!, block, this);
+    private ContentContext CreateContentContext(
+        ContentBlock block,
+        ConversationTurn? turn = null) =>
+        new(Session!, block, this, turn);
 
     private void SubscribeToBlock(ContentBlock block)
     {

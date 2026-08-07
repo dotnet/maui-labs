@@ -7,6 +7,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 public sealed class ErrorMessageView : ContentContextView
 {
     private readonly Label _label;
+    private readonly Button _retry;
 
     public ErrorMessageView()
     {
@@ -14,6 +15,16 @@ public sealed class ErrorMessageView : ContentContextView
         AutomationId = "ChatError";
 
         _label = new Label { TextColor = Color.FromArgb("#C75050") };
+        _retry = new Button
+        {
+            Text = "Retry",
+            AutomationId = "RetryMessageButton",
+            FontSize = 12,
+            Padding = new Thickness(10, 4),
+            HorizontalOptions = LayoutOptions.Start,
+        };
+        SemanticProperties.SetDescription(_retry, "Retry failed message");
+        _retry.Command = new Command(async () => await RetryAsync());
 
         Content = new Border
         {
@@ -24,13 +35,35 @@ public sealed class ErrorMessageView : ContentContextView
             StrokeThickness = 0,
             BackgroundColor = Color.FromArgb("#FDE8E8"),
             StrokeShape = new RoundRectangle { CornerRadius = 12 },
-            Content = _label,
+            Content = new VerticalStackLayout
+            {
+                Spacing = 6,
+                Children = { _label, _retry },
+            },
         };
     }
 
     protected override void RefreshFromContentContext()
     {
         if (ContentContext?.Block is ErrorContentBlock error)
+        {
             _label.Text = $"⚠️ {error.Message}";
+            _retry.IsVisible =
+                ContentContext.AgentContext.Status == ConversationStatus.Error;
+        }
     }
+
+    internal async Task RetryAsync()
+    {
+        if (ContentContext?.AgentContext.Status == ConversationStatus.Error)
+        {
+            _retry.IsEnabled = false;
+            await ContentContext.AgentContext.RetryAsync();
+            _retry.IsVisible =
+                ContentContext.AgentContext.Status == ConversationStatus.Error;
+            _retry.IsEnabled = true;
+        }
+    }
+
+    internal Button RetryButton => _retry;
 }
