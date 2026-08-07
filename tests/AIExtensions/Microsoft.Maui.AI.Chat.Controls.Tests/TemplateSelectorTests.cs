@@ -200,6 +200,17 @@ public class TemplateSelectorTests
     }
 
     [Fact]
+    public void SelectTemplate_UIActionBlock_MatchesUIActionTemplate()
+    {
+        var selector = new ContentTemplateSelector();
+        selector.Templates.Add(new UIActionContentTemplate());
+
+        var template = selector.SelectTemplate(BlockFactory.MakeUIAction("Refresh"), null!);
+
+        Assert.IsType<UIActionView>(template.CreateContent());
+    }
+
+    [Fact]
     public void MessageListView_ZeroConfiguration_ProvidesVisibleBuiltInFallbacks()
     {
         var view = new MessageListView();
@@ -214,6 +225,8 @@ public class TemplateSelectorTests
             selector.SelectTemplate(BlockFactory.MakeApproval("delete_file"), null!).CreateContent());
         Assert.IsType<ReasoningView>(
             selector.SelectTemplate(BlockFactory.MakeReasoning(), null!).CreateContent());
+        Assert.IsType<UIActionView>(
+            selector.SelectTemplate(BlockFactory.MakeUIAction("Refresh"), null!).CreateContent());
         Assert.IsType<MediaContentView>(
             selector.SelectTemplate(BlockFactory.MakeMedia(), null!).CreateContent());
         Assert.IsType<ThinkingView>(
