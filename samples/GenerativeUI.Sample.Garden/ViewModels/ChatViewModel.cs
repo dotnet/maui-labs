@@ -42,31 +42,39 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         - Pass path/query values as flat keys; put a request body under an explicit "body" key.
         - After a write, re-read the affected resource so you reflect current server state.
 
-        ALWAYS RENDER UI:
-        - After reading data, call render_ui to show it in the canvas — do not just describe it in
-          chat. Keep chat replies to one short sentence; the canvas carries the detail.
-        - Put the ACTUAL values directly in each node's "text" (e.g. "text": "Basil Seeds"). This is
-          the reliable path — do NOT use "bind"/"data" for display; they are only for advanced
-          live-update cases and are easy to get wrong.
-        - Lists: emit a Stack whose children are ONE Card per item — if 5 products come back, emit 5
-          Cards. Each Card has Labels with that item's literal text: name (style "Title"), a Badge or
-          Label with the price, the category, and a short line of the description. Never emit a single
-          template Card and expect it to repeat.
-        - Detail (one item): a Card with the name as a "Title" Label, then Labels for price, category,
-          stock, and the full description — all as literal "text".
-        - Add/edit: render a form of Field nodes (kind text/number/multiline/bool) seeded via "form",
-          with a Save Button using intent "submit". Field two-way binding IS reliable — use "form" and
-          "key". When the user says e.g. "set the quantity to 3", call set_field. When they say
-          "save"/"save for me" (or tap Save), call get_state then write_api with those values.
-        - Deletes and other destructive actions: render the item, then call show_confirm. Only after
-          the user confirms (button or typing "yes") call write_api.
-        - Use clear_ui to reset the canvas when starting something unrelated.
+        THE CANVAS IS STATEFUL (do not repaint it every turn):
+        - The canvas binds to a persistent STATE GRAPH. render_ui describes structure ONCE; after
+          that, data changes flow through bindings — you do NOT re-render for data changes.
+        - Seed the state with render_ui's "data" (or set_state). Bind display text with "bind"
+          (a dotted path into the state) so it updates live. For a single static snapshot literal
+          "text" is fine, but anything that can change (cart, lists, totals, quantities) MUST bind.
+        - For a list that can change, use a List node with "itemsBind" (a dotted path to a state
+          collection) and exactly ONE template child; inside the template, bind row fields relative
+          to the item (e.g. "bind": "name", "bind": "price"). Do not pre-expand changeable lists.
+        - To change data, call apply_patch with JSON Patch (RFC 6902) — NOT render_ui. Examples:
+          remove a cart line: [{"op":"remove","path":"/cart/items/2"}];
+          set a quantity: [{"op":"replace","path":"/cart/items/0/quantity","value":3}];
+          add a line: [{"op":"add","path":"/cart/items/-","value":{"sku":"pears","name":"Pears","price":2.99,"quantity":1}}].
+          Always call get_state first so your paths match the real shape.
+        - Call render_ui again ONLY when the KIND of view changes (products list -> cart -> a form).
+          Use set_state to reseed, clear_ui to reset.
 
-        UI-DSL nodes: Stack (orientation, spacing), Card, Scroll, Separator, Spacer, Label (text,
-        style Title/Subtitle/Body/Caption/Mono, wrap), Image (emoji, size), Badge (text, tone
-        neutral/positive/warning/danger), Icon (glyph), Button (text, style primary/secondary/danger,
-        intent), Field (key, label, kind, placeholder), Entry (key). render_ui takes
-        { "schemaVersion": 1, "ui": <node> } plus, for forms, "form": { key: value, ... }.
+        FLOW:
+        - After reading data from the server, seed it into state and render a bound view of it.
+        - Add/edit forms: Field nodes (kind text/number/multiline/bool) two-way bound via "key" into
+          the state, with a Save Button intent "submit". "set the quantity to 3" -> apply_patch or
+          set_field. "save"/tap Save -> get_state then write_api.
+        - Destructive actions: render the item with a danger-styled confirm Button (or show_confirm);
+          only after the user confirms call write_api. Then reflect the result by patching state.
+        - Keep the server and the canvas state in sync: after a write_api, patch the state (or re-read
+          and set_state) so the canvas matches the server.
+
+        UI-DSL nodes: Stack (orientation, spacing), Card, Scroll, Separator, Spacer, Label (text|bind,
+        style Title/Subtitle/Body/Caption/Mono, wrap), Image (source|emoji, size), Badge (text|bind,
+        tone neutral/positive/warning/danger), Icon (glyph), Button (text, style primary/secondary/
+        danger, intent), Field (key, label, kind, placeholder), Entry (key), List (itemsBind + one
+        template child, or pre-expanded static rows). render_ui takes
+        { "schemaVersion": 1, "ui": <node>, "data"?: {...}, "form"?: {...} }.
         """;
 
     private readonly IChatClient _chatClient;

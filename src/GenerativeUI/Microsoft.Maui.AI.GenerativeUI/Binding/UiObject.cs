@@ -67,6 +67,15 @@ public sealed class UiObject : INotifyPropertyChanged
     /// <summary>True when the given member already exists (does not auto-vivify).</summary>
     public bool HasMember(string key) => _members.ContainsKey(key);
 
+    /// <summary>Removes a member if present; raises the indexer change so bindings re-evaluate.</summary>
+    public bool RemoveMember(string key)
+    {
+        if (!_members.Remove(key))
+            return false;
+        OnPropertyChanged(Binding.Indexer);
+        return true;
+    }
+
     /// <summary>Enumerates existing members (does not auto-vivify).</summary>
     public IEnumerable<KeyValuePair<string, UiObject>> Members => _members;
 

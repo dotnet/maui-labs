@@ -56,11 +56,13 @@ public sealed class GenerativeUiTools(
         {
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
-                var dataRoot = doc.Data is { } data ? UiObjectBuilder.Build(data) : new UiObject();
+                // Seed the persistent state graph (data + form both live in one observable tree).
+                if (doc.Data is { } data)
+                    UiObjectBuilder.Merge(canvas.StateRoot, data);
                 if (doc.Form is { } form)
-                    UiObjectBuilder.Merge(canvas.FormRoot, form);
+                    UiObjectBuilder.Merge(canvas.StateRoot, form);
 
-                var view = inflator.Inflate(doc, dataRoot, canvas.FormRoot);
+                var view = inflator.Inflate(doc, canvas.StateRoot);
                 canvas.SetView(view);
             }).ConfigureAwait(false);
         }
@@ -74,29 +76,129 @@ public sealed class GenerativeUiTools(
 
     [ExportAIFunction("set_field")]
     [Description(
-        "Set one field in the active form to a value (drives requests like 'set the quantity to 3'). " +
-        "The on-screen Entry updates immediately. Use the Field/Entry 'key' as the field name.")]
+        "Set one field in the active form/state to a value (drives requests like 'set the quantity to 3'). " +
+        "The on-screen control updates immediately. Convenience for a single replace patch.")]
     public async Task<string> SetFieldAsync(
-        [Description("The form field key (matches a Field/Entry 'key').")] string key,
+        [Description("The field key (matches a Field/Entry 'key').")] string key,
         [Description("The new value.")] string value,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(key))
             return "Error: 'key' is required.";
 
-        await MainThread.InvokeOnMainThreadAsync(() => canvas.FormRoot[key].Value = value).ConfigureAwait(false);
+        await MainThread.InvokeOnMainThreadAsync(() => canvas.StateRoot[key].Value = value).ConfigureAwait(false);
         return $"Set {key} = {value}.";
     }
 
     [ExportAIFunction("get_state")]
     [Description(
-        "Read the current form values as a JSON object (drives 'save for me' — call this, then send " +
-        "the values to write_api). Reflects whatever the user or set_field has entered.")]
-    public async Task<string> GetStateAsync(CancellationToken cancellationToken = default)
+        "Read the current canvas state graph as JSON (form values, and any data the UI is bound to). " +
+        "Read this before patching so you use real paths, and to gather form values for a write_api call. " +
+        "Optionally pass a JSON Pointer path (e.g. '/cart/items') to read just a subtree.")]
+    public async Task<string> GetStateAsync(
+        [Description("Optional JSON Pointer to a subtree (e.g. '/cart'). Omit for the whole state.")] string? path = null,
+        CancellationToken cancellationToken = default)
     {
-        var json = await MainThread.InvokeOnMainThreadAsync(() =>
-            UiObjectBuilder.ToJson(canvas.FormRoot)?.ToJsonString() ?? "{}").ConfigureAwait(false);
-        return json;
+        return await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            var node = ResolvePointer(canvas.StateRoot, path);
+            return node is null ? "null" : UiObjectBuilder.ToJson(node)?.ToJsonString() ?? "null";
+        }).ConfigureAwait(false);
+    }
+
+    [ExportAIFunction("set_state")]
+    [Description(
+        "Replace the canvas state graph (or a subtree) with a JSON snapshot. Use to seed or fully reset " +
+        "the data a rendered view is bound to. For small changes prefer apply_patch instead.")]
+    public async Task<string> SetStateAsync(
+        [Description("The JSON state object.")] string state,
+        [Description("Optional JSON Pointer to the subtree to replace. Omit to replace the whole state.")] string? path = null,
+        CancellationToken cancellationToken = default)
+    {
+        System.Text.Json.JsonElement element;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(state);
+            element = doc.RootElement.Clone();
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return $"Error: invalid JSON — {ex.Message}.";
+        }
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            var target = string.IsNullOrEmpty(path) ? canvas.StateRoot : ResolvePointer(canvas.StateRoot, path);
+            if (target is null)
+                return;
+            foreach (var (key, _) in target.Members.ToList())
+                target.RemoveMember(key);
+            target.Children.Clear();
+            UiObjectBuilder.Populate(target, element);
+        }).ConfigureAwait(false);
+        return "State updated.";
+    }
+
+    [ExportAIFunction("apply_patch")]
+    [Description(
+        "Apply a JSON Patch (RFC 6902) to the canvas state graph so a bound view updates IN PLACE — do " +
+        "NOT call render_ui for data changes. Pass a JSON array of operations, e.g. " +
+        "[{\"op\":\"remove\",\"path\":\"/cart/items/2\"}] or " +
+        "[{\"op\":\"replace\",\"path\":\"/cart/items/0/quantity\",\"value\":3}] or " +
+        "[{\"op\":\"add\",\"path\":\"/cart/items/-\",\"value\":{\"sku\":\"pears\",\"name\":\"Pears\"}}]. " +
+        "Read get_state first so your paths are correct.")]
+    public async Task<string> ApplyPatchAsync(
+        [Description("A JSON Patch document: a JSON array of {op, path, value?, from?} operations.")] string operations,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<UiStatePatcher.PatchOperation> ops;
+        try
+        {
+            ops = UiStatePatcher.ParseOperations(operations);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: could not parse the patch — {ex.Message}.";
+        }
+
+        try
+        {
+            await MainThread.InvokeOnMainThreadAsync(() => UiStatePatcher.Apply(canvas.StateRoot, ops)).ConfigureAwait(false);
+        }
+        catch (UiPatchException ex)
+        {
+            return $"Error: patch failed — {ex.Message}. Read get_state and retry with correct paths.";
+        }
+
+        return $"Applied {ops.Count} patch operation(s).";
+    }
+
+    private static UiObject? ResolvePointer(UiObject root, string? pointer)
+    {
+        if (string.IsNullOrEmpty(pointer) || pointer == "/")
+            return root;
+        if (pointer[0] != '/')
+            return null;
+        var node = root;
+        foreach (var raw in pointer[1..].Split('/'))
+        {
+            var token = raw.Replace("~1", "/").Replace("~0", "~");
+            if (int.TryParse(token, out var i) && node.Children.Count > 0)
+            {
+                if (i < 0 || i >= node.Children.Count)
+                    return null;
+                node = node.Children[i];
+            }
+            else if (node.HasMember(token))
+            {
+                node = node[token];
+            }
+            else
+            {
+                return null;
+            }
+        }
+        return node;
     }
 
     [ExportAIFunction("show_confirm")]

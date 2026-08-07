@@ -23,8 +23,12 @@ public sealed class CanvasState : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    /// <summary>The persistent, editable form tree bound two-way by <c>Field</c>/<c>Entry</c> nodes.</summary>
-    public UiObject FormRoot { get; private set; } = new();
+    /// <summary>
+    /// The persistent, observable state graph the canvas binds to: display nodes bind one-way,
+    /// editable Field/Entry nodes bind two-way, and JSON Patch deltas mutate it in place. Survives
+    /// re-inflation until a new chat / <c>clear_ui</c>. (AG-UI-compatible shared-state shape.)
+    /// </summary>
+    public UiObject StateRoot { get; private set; } = new();
 
     /// <summary>The current root view rendered in the canvas, or <c>null</c> for the empty state.</summary>
     public View? CurrentView
@@ -75,12 +79,12 @@ public sealed class CanvasState : INotifyPropertyChanged
     /// <summary>Hides the confirm overlay.</summary>
     public void HideConfirm() => IsConfirmVisible = false;
 
-    /// <summary>Resets the canvas and form for a new conversation.</summary>
+    /// <summary>Resets the canvas and state for a new conversation.</summary>
     public void Reset()
     {
         HideConfirm();
         CurrentView = null;
-        FormRoot = new UiObject();
+        StateRoot = new UiObject();
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

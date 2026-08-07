@@ -26,24 +26,38 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
     private readonly StyleApplier _styles = new(registry);
 
     /// <summary>
-    /// Inflates a document. Display <c>bind</c> paths resolve against <paramref name="dataRoot"/>
-    /// (one-way); editable <c>key</c> paths against <paramref name="formRoot"/> (two-way).
+    /// Inflates a document against the persistent state graph <paramref name="stateRoot"/>: display
+    /// <c>bind</c> paths resolve one-way, editable <c>key</c> paths two-way; both stay live as the
+    /// state is patched.
     /// </summary>
-    public View Inflate(UiDocument document, UiObject dataRoot, UiObject formRoot)
+    public View Inflate(UiDocument document, UiObject stateRoot)
     {
         if (document.Ui is null)
             return Placeholder("Empty document (no 'ui' node).");
 
-        var ctx = new Context(dataRoot, formRoot);
+        var ctx = new Context(stateRoot);
         return InflateNode(document.Ui, ctx);
     }
 
-    private sealed class Context(UiObject data, UiObject form)
+    private sealed class Context(UiObject root, bool rowMode = false)
     {
-        public UiObject Data { get; } = data;
-        public UiObject Form { get; } = form;
+        /// <summary>The binding source. Null in row mode, where per-item BindingContext is used.</summary>
+        public UiObject? Root { get; } = root;
+
+        /// <summary>True inside an itemsBind row template — bindings resolve against BindingContext.</summary>
+        public bool RowMode { get; } = rowMode;
+
         public int Depth;
         public int Count;
+
+        /// <summary>A one-way display binding that respects row mode.</summary>
+        public Microsoft.Maui.Controls.Binding OneWay(string path)
+            => RowMode ? DslBinding.Compile(path) : DslBinding.Compile(path, source: Root);
+
+        /// <summary>A two-way editable binding that respects row mode.</summary>
+        public Microsoft.Maui.Controls.Binding TwoWay(string path, IValueConverter? converter = null)
+            => RowMode ? DslBinding.Compile(path, BindingMode.TwoWay, converter)
+                       : DslBinding.Compile(path, BindingMode.TwoWay, converter, Root);
     }
 
     private View InflateNode(UiNode node, Context ctx)
@@ -152,7 +166,7 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
     {
         var label = new Label { LineBreakMode = node.GetBool("wrap") == false ? LineBreakMode.TailTruncation : LineBreakMode.WordWrap };
         if (node.Bind is { } path)
-            label.SetBinding(Label.TextProperty, DslBinding.Compile(path, source: ctx.Data));
+            label.SetBinding(Label.TextProperty, ctx.OneWay(path));
         else
             label.Text = node.GetString("text") ?? "";
         return label;
@@ -171,7 +185,7 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
             image.HeightRequest = size;
         }
         if (node.Bind is { } path)
-            image.SetBinding(Image.SourceProperty, DslBinding.Compile(path, source: ctx.Data));
+            image.SetBinding(Image.SourceProperty, ctx.OneWay(path));
         else if (node.GetString("source") is { Length: > 0 } src)
             image.Source = src;
         return image;
@@ -189,7 +203,7 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
 
         var label = new Label { FontSize = 12, TextColor = fg, VerticalOptions = LayoutOptions.Center };
         if (node.Bind is { } path)
-            label.SetBinding(Label.TextProperty, DslBinding.Compile(path, source: ctx.Data));
+            label.SetBinding(Label.TextProperty, ctx.OneWay(path));
         else
             label.Text = node.GetString("text") ?? "";
 
@@ -235,8 +249,7 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
         if (node.GetString("label") is { Length: > 0 } labelText)
             stack.Add(new Label { Text = labelText, FontSize = 12, TextColor = Colors.Gray });
 
-        View input = MakeInput(node.GetString("kind"), key!, node.GetString("placeholder"), ctx.Form);
-        stack.Add(input);
+        stack.Add(MakeInput(node.GetString("kind"), key!, node.GetString("placeholder"), ctx));
         return stack;
     }
 
@@ -245,32 +258,31 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
         var key = node.GetString("key");
         if (string.IsNullOrEmpty(key))
             return Placeholder("Entry is missing 'key'.");
-        return MakeInput(node.GetString("kind"), key!, node.GetString("placeholder"), ctx.Form);
+        return MakeInput(node.GetString("kind"), key!, node.GetString("placeholder"), ctx);
     }
 
-    private static View MakeInput(string? kind, string key, string? placeholder, UiObject formRoot)
+    private static View MakeInput(string? kind, string key, string? placeholder, Context ctx)
     {
-        var binding = DslBinding.Compile(key, BindingMode.TwoWay, source: formRoot);
         switch (kind)
         {
             case "multiline":
                 var editor = new Editor { Placeholder = placeholder, AutoSize = EditorAutoSizeOption.TextChanges };
-                editor.SetBinding(Editor.TextProperty, binding);
+                editor.SetBinding(Editor.TextProperty, ctx.TwoWay(key));
                 return editor;
 
             case "bool":
                 var sw = new Microsoft.Maui.Controls.Switch();
-                sw.SetBinding(Microsoft.Maui.Controls.Switch.IsToggledProperty, DslBinding.Compile(key, BindingMode.TwoWay, BoolConverter.Instance, formRoot));
+                sw.SetBinding(Microsoft.Maui.Controls.Switch.IsToggledProperty, ctx.TwoWay(key, BoolConverter.Instance));
                 return sw;
 
             case "number":
                 var numeric = new Entry { Placeholder = placeholder, Keyboard = Keyboard.Numeric };
-                numeric.SetBinding(Entry.TextProperty, binding);
+                numeric.SetBinding(Entry.TextProperty, ctx.TwoWay(key));
                 return numeric;
 
             default:
                 var entry = new Entry { Placeholder = placeholder };
-                entry.SetBinding(Entry.TextProperty, binding);
+                entry.SetBinding(Entry.TextProperty, ctx.TwoWay(key));
                 return entry;
         }
     }
@@ -279,10 +291,42 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
 
     private View BuildList(UiNode node, Context ctx)
     {
+        // Data-bound list: itemsBind points at a state collection; a single template child is repeated
+        // per item (row BindingContext = the item), so add/remove reflects without re-inflation.
+        if (node.GetString("itemsBind") is { Length: > 0 } itemsPath && node.Children.Count > 0)
+            return BuildBoundList(itemsPath, node.Children[0], ctx);
+
+        // Static list: children are pre-expanded rows.
         var stack = new VerticalStackLayout { Spacing = 8 };
         foreach (var row in node.Children)
             stack.Add(InflateNode(row, ctx));
         return stack;
+    }
+
+    private View BuildBoundList(string itemsPath, UiNode template, Context ctx)
+    {
+        var container = new VerticalStackLayout { Spacing = 8 };
+
+        // Resolve the collection node in the state tree (auto-vivified, stable identity).
+        var collectionNode = ResolvePath(ctx.Root, itemsPath);
+        BindableLayout.SetItemsSource(container, collectionNode?.Children);
+        BindableLayout.SetItemTemplate(container, new DataTemplate(() =>
+        {
+            // Row mode: the item UiObject is the BindingContext; template binds resolve against it.
+            var rowCtx = new Context(root: null!, rowMode: true);
+            return InflateNode(template, rowCtx);
+        }));
+        return container;
+    }
+
+    private static UiObject? ResolvePath(UiObject? root, string dottedPath)
+    {
+        if (root is null)
+            return null;
+        var node = root;
+        foreach (var seg in dottedPath.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            node = node[seg];
+        return node;
     }
 
     // ── Registered controls & screens ───────────────────────────────────────────────────────────
@@ -342,9 +386,9 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
 
             // { "bind": "path" } → one-way into data; { "key": "formKey" } → two-way into form; else literal.
             if (value.ValueKind == System.Text.Json.JsonValueKind.Object && value.TryGetProperty("bind", out var b) && b.ValueKind == System.Text.Json.JsonValueKind.String)
-                control.SetBinding(bindable, DslBinding.Compile(b.GetString()!, source: ctx.Data));
+                control.SetBinding(bindable, ctx.OneWay(b.GetString()!));
             else if (value.ValueKind == System.Text.Json.JsonValueKind.Object && value.TryGetProperty("key", out var k) && k.ValueKind == System.Text.Json.JsonValueKind.String)
-                control.SetBinding(bindable, DslBinding.Compile(k.GetString()!, BindingMode.TwoWay, source: ctx.Form));
+                control.SetBinding(bindable, ctx.TwoWay(k.GetString()!));
             else
                 control.SetValue(bindable, LiteralValue(value, bindable.ReturnType));
         }
