@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Microsoft.Maui.AI.GenerativeUI.Dsl;
 
@@ -18,6 +19,13 @@ public sealed class UiDocument
     public JsonElement? Form { get; init; }
     public string? Title { get; init; }
     public bool Replace { get; init; } = true;
+
+    /// <summary>
+    /// Parses a document object. Throws <see cref="UiDocumentParseException"/> when the required
+    /// root <c>ui</c> node is missing (the tool surfaces this so the model can retry).
+    /// </summary>
+    public static UiDocument Parse(JsonObject document)
+        => Parse(document.ToJsonString());
 
     /// <summary>
     /// Parses a document from JSON text. Throws <see cref="UiDocumentParseException"/> on malformed

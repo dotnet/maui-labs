@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.AI.Attributes;
 using Microsoft.Maui.AI.GenerativeUI.Binding;
@@ -33,10 +34,10 @@ public sealed class GenerativeUiTools(
         "editable Field/Entry values). Node types: Stack, Card, Scroll, Separator, Spacer, Label, " +
         "Image, Badge, Icon, Button, Field, Entry, List. A node is { \"type\", optional \"id\", " +
         "\"bind\" (dotted path into data), \"style\" (token or list), \"children\", and type props }. " +
-        "For a List, pre-expand one child node per item. Prefer binding display text to 'data' over " +
-        "inlining. Buttons use \"intent\": \"submit\" (a form's save), \"action:<name>\", etc.")]
+        "For changeable lists use itemsBind plus one template child; static lists may pre-expand. " +
+        "Buttons use \"intent\": \"submit\" (a form's save), \"action:<name>\", etc.")]
     public async Task<string> RenderUiAsync(
-        [Description("The render_ui document as a JSON object (schemaVersion + ui + optional data/form/meta).")] string document,
+        [Description("The render_ui document object (schemaVersion + ui + optional data/form/meta).")] JsonObject document,
         CancellationToken cancellationToken = default)
     {
         UiDocument doc;
@@ -111,20 +112,11 @@ public sealed class GenerativeUiTools(
         "Replace the canvas state graph (or a subtree) with a JSON snapshot. Use to seed or fully reset " +
         "the data a rendered view is bound to. For small changes prefer apply_patch instead.")]
     public async Task<string> SetStateAsync(
-        [Description("The JSON state object.")] string state,
+        [Description("The state object.")] JsonObject state,
         [Description("Optional JSON Pointer to the subtree to replace. Omit to replace the whole state.")] string? path = null,
         CancellationToken cancellationToken = default)
     {
-        System.Text.Json.JsonElement element;
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(state);
-            element = doc.RootElement.Clone();
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            return $"Error: invalid JSON — {ex.Message}.";
-        }
+        var element = JsonSerializer.SerializeToElement(state);
 
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
@@ -148,13 +140,13 @@ public sealed class GenerativeUiTools(
         "[{\"op\":\"add\",\"path\":\"/cart/items/-\",\"value\":{\"sku\":\"pears\",\"name\":\"Pears\"}}]. " +
         "Read get_state first so your paths are correct.")]
     public async Task<string> ApplyPatchAsync(
-        [Description("A JSON Patch document: a JSON array of {op, path, value?, from?} operations.")] string operations,
+        [Description("A JSON Patch array of {op, path, value?, from?} operations.")] JsonArray operations,
         CancellationToken cancellationToken = default)
     {
         IReadOnlyList<UiStatePatcher.PatchOperation> ops;
         try
         {
-            ops = UiStatePatcher.ParseOperations(operations);
+            ops = UiStatePatcher.ParseOperations(operations.ToJsonString());
         }
         catch (Exception ex)
         {
@@ -232,7 +224,7 @@ public sealed class GenerativeUiTools(
         "to see available screens.")]
     public async Task<string> PresentScreenAsync(
         [Description("The registered screen name.")] string screen,
-        [Description("Optional JSON object of the screen's declared inputs.")] string? inputs = null,
+        [Description("Optional object containing the screen's declared inputs.")] JsonObject? inputs = null,
         CancellationToken cancellationToken = default)
     {
         var reg = registry.GetScreen(screen);
