@@ -24,6 +24,7 @@ public class FakeAndroidProvider : IAndroidProvider
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
 	public List<AvdInfo> Avds { get; set; } = new();
+	public List<string> DeviceProfiles { get; set; } = new();
 	public List<SdkPackage> InstalledPackages { get; set; } = new();
 	public List<SdkPackage> AvailablePackages { get; set; } = new();
 	public string? MostRecentSystemImage { get; set; }
@@ -73,6 +74,9 @@ public class FakeAndroidProvider : IAndroidProvider
 
 	public Task<List<AvdInfo>> GetAvdsAsync(CancellationToken cancellationToken = default)
 		=> Task.FromResult(Avds);
+
+	public Task<List<string>> GetDeviceProfilesAsync(CancellationToken cancellationToken = default)
+		=> Task.FromResult(DeviceProfiles);
 
 	public Task<AvdInfo> CreateAvdAsync(string name, string deviceProfile, string systemImage, bool force = false, CancellationToken cancellationToken = default)
 	{

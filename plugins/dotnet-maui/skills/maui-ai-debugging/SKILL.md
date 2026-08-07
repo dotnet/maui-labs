@@ -1,14 +1,7 @@
 ---
 name: maui-ai-debugging
 description: >-
-  Legacy end-to-end workflow for building, deploying, inspecting, and debugging
-  .NET MAUI and MAUI Blazor Hybrid apps with `maui devflow`. USE FOR: older
-  clients that still request `maui-ai-debugging`, app launch, visual tree
-  inspection, screenshots, Blazor WebView CDP debugging, simulator/emulator
-  management, and build-deploy-inspect-fix loops. DO NOT USE FOR: new DevFlow
-  setup when `maui-devflow-onboard` or `maui-devflow-debug` are available,
-  generic desktop automation, AppleScript macros, or host-level xdotool control
-  unrelated to MAUI app debugging.
+  Legacy DevFlow debug skill. USE FOR: `maui-ai-debugging`, `maui devflow`, screenshots, visual tree, Blazor CDP, simulator/emulator debugging. DO NOT USE FOR: setup, desktop automation, AppleScript, host `xdotool`.
 ---
 
 # MAUI AI Debugging

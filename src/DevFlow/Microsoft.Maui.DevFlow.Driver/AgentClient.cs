@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -18,6 +19,16 @@ public class AgentClient : IDisposable
     private const string StorageApi = $"{ApiV1}/storage";
     private const string DeviceApi = $"{ApiV1}/device";
     private const string NetworkApi = $"{ApiV1}/network";
+
+    /// <summary>
+    /// Per-address connect timeout for the loopback dial (see <see cref="ConnectLoopbackAsync"/>),
+    /// which attempts the IPv4 and IPv6 loopback addresses in turn. A loopback refusal returns an
+    /// RST almost instantly, so this only bounds the rare case of a silently-dropped connect (e.g. a
+    /// broken VPN/tunnel adapter). It is deliberately kept well under <see cref="HttpClient.Timeout"/>
+    /// so that even if the first family stalls there is ample budget left to try the other one.
+    /// </summary>
+    private static readonly TimeSpan LoopbackConnectAttemptTimeout = TimeSpan.FromSeconds(5);
+
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private bool _disposed;
@@ -62,8 +73,116 @@ public class AgentClient : IDisposable
     public AgentClient(string host = "localhost", int port = 9223)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = CreateHttpClient(host);
     }
+
+    /// <summary>
+    /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
+    /// <c>localhost</c> alias, a custom connect callback attempts both the IPv4 (<c>127.0.0.1</c>)
+    /// and IPv6 (<c>::1</c>) loopback addresses and uses whichever accepts the connection first.
+    /// </summary>
+    /// <remarks>
+    /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
+    /// may resolve <c>localhost</c> to IPv6 <c>::1</c> first and fail with "connection refused"
+    /// without falling back to IPv4 (see dotnet/maui-labs#341). Rather than forcing a single
+    /// address family — which has caused target-specific problems — this honors the OS-preferred
+    /// resolution order and falls back to the other loopback family on refusal. Explicit hosts
+    /// (a literal IP or a real hostname) are left on the default connect path unchanged.
+    /// </remarks>
+    private static HttpClient CreateHttpClient(string host)
+    {
+        if (!IsLoopbackAlias(host))
+            return new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+
+        var handler = new SocketsHttpHandler
+        {
+            ConnectCallback = ConnectLoopbackAsync
+        };
+        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
+    private static bool IsLoopbackAlias(string host)
+        => string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
+
+    private static async ValueTask<Stream> ConnectLoopbackAsync(
+        SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+    {
+        var port = context.DnsEndPoint.Port;
+        var candidates = await ResolveLoopbackCandidatesAsync(context.DnsEndPoint.Host, cancellationToken)
+            .ConfigureAwait(false);
+
+        List<Exception>? failures = null;
+        foreach (var address in candidates)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            try
+            {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attemptCts.CancelAfter(LoopbackConnectAttemptTimeout);
+                await socket.ConnectAsync(address, port, attemptCts.Token).ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                socket.Dispose();
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // The per-attempt timeout fired while the caller's token is still valid. Record a
+                // descriptive reason (rather than a bare "operation canceled", which reads like a
+                // user-initiated cancellation) before falling through to the next loopback family.
+                socket.Dispose();
+                (failures ??= new List<Exception>()).Add(new TimeoutException(
+                    $"Connect to [{address}]:{port} timed out after {LoopbackConnectAttemptTimeout.TotalSeconds:0}s."));
+            }
+            catch (Exception ex)
+            {
+                socket.Dispose();
+                (failures ??= new List<Exception>()).Add(ex);
+            }
+        }
+
+        throw failures is { Count: > 0 }
+            ? new SocketException((int)SocketError.ConnectionRefused, BuildLoopbackFailureMessage(failures))
+            : new SocketException((int)SocketError.ConnectionRefused);
+    }
+
+    private static async Task<List<IPAddress>> ResolveLoopbackCandidatesAsync(string host, CancellationToken cancellationToken)
+    {
+        var ordered = new List<IPAddress>();
+
+        try
+        {
+            // Honor the OS-preferred resolution order (e.g. macOS commonly yields ::1 first).
+            foreach (var address in await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
+            {
+                if ((address.AddressFamily == AddressFamily.InterNetwork
+                        || address.AddressFamily == AddressFamily.InterNetworkV6)
+                    && !ordered.Contains(address))
+                    ordered.Add(address);
+            }
+        }
+        catch (Exception ex) when (ex is (SocketException or OperationCanceledException) && !cancellationToken.IsCancellationRequested)
+        {
+            // DNS lookup failed (unusual for "localhost") — fall through to the explicit loopbacks below.
+        }
+
+        // Guarantee both loopback families are attempted, regardless of hosts-file quirks.
+        if (!ordered.Contains(IPAddress.Loopback))
+            ordered.Add(IPAddress.Loopback);
+        if (Socket.OSSupportsIPv6 && !ordered.Contains(IPAddress.IPv6Loopback))
+            ordered.Add(IPAddress.IPv6Loopback);
+
+        return ordered;
+    }
+
+    private static string BuildLoopbackFailureMessage(List<Exception> failures)
+        => "Could not connect to the DevFlow agent on any loopback address. "
+            + string.Join("; ", failures.Select(f => f.Message));
 
     /// <summary>
     /// Check if the agent is reachable.
@@ -328,6 +447,18 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<byte[]?> ScreenshotAsync(int? window = null, string? elementId = null, string? selector = null, int? maxWidth = null, string? scale = null)
     {
+        var result = await ScreenshotResultAsync(window, elementId, selector, maxWidth, scale);
+        return result.Success ? result.Data : null;
+    }
+
+    /// <summary>
+    /// Captures a screenshot and returns a structured <see cref="ScreenshotResult"/>. On failure,
+    /// the result carries the agent-provided error message, machine-readable reason, retryable
+    /// flag, and any actionable suggestions (e.g. the macOS app window not being frontmost),
+    /// instead of collapsing every failure into <c>null</c> as <see cref="ScreenshotAsync"/> does.
+    /// </summary>
+    public async Task<ScreenshotResult> ScreenshotResultAsync(int? window = null, string? elementId = null, string? selector = null, int? maxWidth = null, string? scale = null)
+    {
         try
         {
             var queryParams = new List<string>();
@@ -342,10 +473,58 @@ public class AgentClient : IDisposable
                 : $"{_baseUrl}{UiApi}/screenshot";
 
             using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
-            if (!response.IsSuccessStatusCode) return null;
-            return await response.Content.ReadAsByteArrayAsync();
+            if (response.IsSuccessStatusCode)
+                return ScreenshotResult.Ok(await response.Content.ReadAsByteArrayAsync());
+
+            var body = await response.Content.ReadAsStringAsync();
+            return ParseScreenshotError(body);
         }
-        catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
+    }
+
+    private static ScreenshotResult ParseScreenshotError(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return ScreenshotResult.Failure(null);
+
+        try
+        {
+            var json = DriverJson.ParseElement(body);
+            if (json.ValueKind != JsonValueKind.Object)
+                return ScreenshotResult.Failure(null);
+
+            var error = json.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String
+                ? e.GetString() : null;
+            var reason = json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String
+                ? r.GetString() : null;
+
+            var retryable = false;
+            IReadOnlyList<string>? suggestions = null;
+
+            if (json.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Object)
+            {
+                if (details.TryGetProperty("retryable", out var ret) &&
+                    (ret.ValueKind == JsonValueKind.True || ret.ValueKind == JsonValueKind.False))
+                    retryable = ret.GetBoolean();
+
+                if (details.TryGetProperty("suggestions", out var sugg) && sugg.ValueKind == JsonValueKind.Array)
+                {
+                    var list = new List<string>();
+                    foreach (var item in sugg.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String && item.GetString() is { } s)
+                            list.Add(s);
+                    }
+                    if (list.Count > 0) suggestions = list;
+                }
+            }
+
+            return ScreenshotResult.Failure(error, reason, retryable, suggestions);
+        }
+        catch
+        {
+            return ScreenshotResult.Failure(null);
+        }
     }
 
     /// <summary>

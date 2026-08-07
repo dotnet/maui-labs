@@ -21,6 +21,14 @@ public class DevFlowCommands
 {
     private static Command? _devflowCommand;
     private static bool _errorOccurred;
+    private static bool _agentLabelEmitted;
+
+    /// <summary>
+    /// True when a DevFlow command has reported an error. Read by <see cref="Program"/> to
+    /// translate swallowed command failures into a non-zero process exit code.
+    /// </summary>
+    internal static bool ErrorOccurred => _errorOccurred;
+
     private static IDevFlowOutputWriter? s_output;
     internal static Func<Task<int?>> ResolveRunningBrokerPortAsync { get; set; } = Broker.BrokerClient.GetRunningBrokerPortAsync;
     internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
@@ -35,6 +43,8 @@ public class DevFlowCommands
         ListBrokerAgentsAsync = Broker.BrokerClient.ListAgentsAsync;
         CreateAndroidPortForwarder = AndroidDevFlowPortForwarder.CreateDefault;
         IsAndroidAdbLikelyAvailable = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
+        _errorOccurred = false;
+        _agentLabelEmitted = false;
     }
 
     /// <summary>
@@ -50,9 +60,12 @@ public class DevFlowCommands
         // Alias parent's --json so all existing handler bindings work
         var jsonOption = parentJsonOption;
 
-        // Global agent connection options (available on all subcommands)
-        var agentPortOption = new Option<int>("--agent-port", "-ap") { Description = "Agent HTTP port (auto-discovered via broker, .mauidevflow, or default 9223)", DefaultValueFactory = _ => ResolveAgentPort() };
+        // Global agent connection options (available on all subcommands).
+        // agentHostOption is declared first so the agentPortOption default factory can read the
+        // effective host: the local broker only describes agents on THIS machine, so its
+        // ambiguity/refusal sentinel (issue #343) must be skipped when targeting a remote host.
         var agentHostOption = new Option<string>("--agent-host", "-ah") { Description = "Agent HTTP host", DefaultValueFactory = _ => "localhost" };
+        var agentPortOption = new Option<int>("--agent-port", "-ap") { Description = "Agent HTTP port (auto-discovered via broker, .mauidevflow, or default 9223)", DefaultValueFactory = ar => ResolveAgentPort(ar.GetValue(agentHostOption)) };
         var deviceOption = new Option<string?>("--device") { Description = "Device/emulator/simulator identifier for platform-specific DevFlow setup (currently used as an Android serial for ADB forwarding)" };
         var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform (maccatalyst, android, ios, windows)", DefaultValueFactory = _ => "maccatalyst" };
         var noJsonOption = new Option<bool>("--no-json") { Description = "Force human-readable output even when piped", DefaultValueFactory = _ => false };
@@ -830,6 +843,7 @@ public class DevFlowCommands
             var filterHost = ctx.GetValue(networkHostOption);
             var filterMethod = ctx.GetValue(networkMethodOption);
             var isJson = output.ResolveJsonMode(json, noJson);
+            EnsureAgentPortResolved(port);
             if (isJson)
                 await MauiNetworkMonitorAsync(host, port, isJson, limit, filterHost, filterMethod);
             else
@@ -1578,7 +1592,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var extensions = await client.GetExtensionsAsync();
             if (json)
             {
@@ -1615,7 +1629,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var extensions = await client.GetExtensionsAsync();
             if (!extensions.TryGetValue(ns, out var extension))
             {
@@ -1649,7 +1663,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = new AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
             var extensions = await client.GetExtensionsAsync();
             if (!extensions.TryGetValue(ns, out var extension))
             {
@@ -1706,6 +1720,8 @@ public class DevFlowCommands
 
     private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
     {
+        EnsureAgentPortResolved(port);
+
         if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
         {
             var brokerPort = await ResolveRunningBrokerPortAsync();
@@ -1715,6 +1731,8 @@ public class DevFlowCommands
                 var agent = agents?.FirstOrDefault(a => a.Port == port);
                 if (agent is not null && IsAndroidAgent(agent))
                     await EnsureAndroidForwardingForAgentsAsync([agent], deviceId: null, repair: true, emitWarnings: false, CancellationToken.None, brokerPort: brokerPort.Value);
+
+                EmitAgentLabel(host, port, agents);
             }
         }
 
@@ -1960,6 +1978,7 @@ public class DevFlowCommands
     
     private static async Task CdpStatusAsync(string host, int port, string? webview = null)
     {
+        EnsureAgentPortResolved(port);
         try
         {
             using var http = new HttpClient();
@@ -2148,6 +2167,7 @@ public class DevFlowCommands
 
     private static async Task DownloadFileToLocalPathAsync(string host, int port, string devicePath, string? root, string destinationPath, bool json)
     {
+        EnsureAgentPortResolved(port);
         try
         {
             using var http = new HttpClient();
@@ -2240,6 +2260,8 @@ public class DevFlowCommands
     {
         try
         {
+            EnsureAgentPortResolved(port);
+            await EmitAgentLabelAsync(host, port);
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(30);
             var response = await http.GetAsync($"http://{host}:{port}{path}");
@@ -2272,6 +2294,8 @@ public class DevFlowCommands
     {
         try
         {
+            EnsureAgentPortResolved(port);
+            await EmitAgentLabelAsync(host, port);
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(30);
             HttpResponseMessage response;
@@ -2302,6 +2326,8 @@ public class DevFlowCommands
     {
         try
         {
+            EnsureAgentPortResolved(port);
+            await EmitAgentLabelAsync(host, port);
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(30);
             using var content = new StringContent(
@@ -2324,6 +2350,8 @@ public class DevFlowCommands
     {
         try
         {
+            EnsureAgentPortResolved(port);
+            await EmitAgentLabelAsync(host, port);
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(30);
             var response = await http.DeleteAsync($"http://{host}:{port}{path}");
@@ -2340,6 +2368,7 @@ public class DevFlowCommands
 
     private static async Task SensorStreamAsync(string host, int port, string sensor, string speed, int duration, int throttleMs, bool json)
     {
+        EnsureAgentPortResolved(port);
         try
         {
             using var client = new System.Net.WebSockets.ClientWebSocket();
@@ -2915,7 +2944,18 @@ public class DevFlowCommands
             // Fall back to agent-based screenshot (or used for element-scoped captures)
             if (data == null)
             {
-                data = await client.ScreenshotAsync(window, id, selector, maxWidth, scale);
+                var result = await client.ScreenshotResultAsync(window, id, selector, maxWidth, scale);
+                if (!result.Success)
+                {
+                    Output.WriteError(
+                        result.Error ?? "Failed to capture screenshot",
+                        json,
+                        retryable: result.Retryable,
+                        suggestions: result.Suggestions?.ToArray());
+                    _errorOccurred = true;
+                    return;
+                }
+                data = result.Data;
             }
 
             if (data == null)
@@ -3245,6 +3285,7 @@ public class DevFlowCommands
 
     private static async Task MauiLogsFollowAsync(string host, int port, string? source, bool json, int replay)
     {
+        EnsureAgentPortResolved(port);
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
@@ -3382,6 +3423,7 @@ public class DevFlowCommands
 
     private static async Task MauiNetworkMonitorAsync(string host, int port, bool json, int limit, string? filterHost, string? filterMethod)
     {
+        EnsureAgentPortResolved(port);
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
@@ -4141,49 +4183,171 @@ public class DevFlowCommands
     /// </summary>
     /// <summary>
     /// Resolves the agent port: broker discovery → .mauidevflow config → default 9223.
+    /// When <paramref name="host"/> is an explicit remote host the local broker is skipped
+    /// entirely — it only knows about agents on this machine, so consulting it (and its
+    /// refusal sentinel, issue #343) would be wrong for a remote target.
     /// </summary>
-    private static int ResolveAgentPort()
+    private static int ResolveAgentPort(string? host = null)
     {
+        // Fast path: never query the LOCAL broker when targeting a remote host. The
+        // authoritative host gate also lives in SelectAgentPort so the decision stays unit
+        // testable; this skip just avoids the broker I/O for the remote case.
+        if (!IsLocalAgentHost(host))
+            return Broker.BrokerClient.ReadConfigPort() ?? 9223;
+
         try
         {
             var brokerPort = Broker.BrokerClient.GetRunningBrokerPort();
-            if (brokerPort.HasValue)
-            {
-                Broker.AgentRegistration? agent = null;
-                var csproj = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj").FirstOrDefault();
-                if (csproj is not null)
-                    agent = Broker.BrokerClient.ResolveAgent(brokerPort.Value, Path.GetFullPath(csproj));
+            var agents = brokerPort.HasValue ? Broker.BrokerClient.ListAgents(brokerPort.Value) : null;
 
-                agent ??= Broker.BrokerClient.ResolveAgent(brokerPort.Value);
-                if (agent is not null)
-                    return agent.Port;
+            var csproj = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj").FirstOrDefault();
+            var csprojPath = csproj is null ? null : Path.GetFullPath(csproj);
 
-                // Multiple agents, can't disambiguate — show them so the caller
-                // (human or AI agent) can re-run with --agent-port
-                var agents = Broker.BrokerClient.ListAgents(brokerPort.Value);
-                if (agents != null && agents.Length > 1)
-                {
-                    Console.Error.WriteLine("Multiple agents connected. Use --agent-port to specify which one:");
-                    Console.Error.WriteLine();
-                    Console.Error.WriteLine($"{"ID",-15}{"App",-20}{"Platform",-15}{"TFM",-25}{"Port",-7}");
-                    Console.Error.WriteLine(new string('-', 82));
-                    foreach (var a in agents)
-                        Console.Error.WriteLine($"{a.Id,-15}{a.AppName,-20}{a.Platform,-15}{a.Tfm,-25}{a.Port,-7}");
-                    Console.Error.WriteLine();
-                    Console.Error.WriteLine("Example: maui devflow ui status --agent-port <port>");
-                }
-            }
-
-            // No single match — check config file fallback
-            var configPort = Broker.BrokerClient.ReadConfigPort();
-            if (configPort.HasValue)
-                return configPort.Value;
+            return SelectAgentPort(host, agents, csprojPath, Broker.BrokerClient.ReadConfigPort());
         }
         catch { /* broker unavailable, fall through */ }
 
         return Broker.BrokerClient.ReadConfigPort() ?? 9223;
     }
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="host"/> refers to the local
+    /// machine (unset, empty, <c>localhost</c>, or a loopback address). Used to decide whether
+    /// the LOCAL broker is relevant for agent-port resolution — it never is for a remote host.
+    /// </summary>
+    /// <remarks>
+    /// The loopback check is intentionally duplicated here rather than reused from the Driver:
+    /// <c>AgentClient</c> (issue #341) owns how a host is <em>dialed</em>; this only decides
+    /// whether to consult the local broker for port <em>selection</em>. Keep the two in sync.
+    /// </remarks>
+    internal static bool IsLocalAgentHost(string? host)
+        => string.IsNullOrWhiteSpace(host)
+           || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+           || host is "127.0.0.1" or "::1" or "[::1]";
+
+    /// <summary>
+    /// Pure agent-port selection used by the <c>--agent-port</c> default value factory.
+    /// Returns the resolved agent port, or the sentinel <c>0</c> when the target is ambiguous
+    /// (broker reachable, more than one agent connected, and nothing disambiguates them).
+    /// A sentinel of <c>0</c> is never a valid TCP port and signals callers to refuse rather
+    /// than silently target an arbitrary agent (see issue #343).
+    /// </summary>
+    internal static int SelectAgentPort(Broker.AgentRegistration[]? agents, string? csprojPath, int? configPort)
+        => SelectAgentPort(host: null, agents, csprojPath, configPort);
+
+    /// <inheritdoc cref="SelectAgentPort(Broker.AgentRegistration[], string, int?)"/>
+    /// <param name="host">
+    /// The effective <c>--agent-host</c>. When it names a remote host the local-broker agent
+    /// list (and its ambiguity sentinel) is irrelevant, so resolution falls straight through to
+    /// the configured/default port — restoring the pre-#343 behavior for remote targeting.
+    /// </param>
+    internal static int SelectAgentPort(string? host, Broker.AgentRegistration[]? agents, string? csprojPath, int? configPort)
+    {
+        // Remote host → the local broker can't describe the target; never refuse on local
+        // ambiguity. Resolve as the CLI did before #343 (config port or default).
+        if (!IsLocalAgentHost(host))
+            return configPort ?? 9223;
+
+        // No broker reachable / no agents registered → config file or default port.
+        // This is the single-app / direct-port path and is never ambiguous.
+        if (agents is null || agents.Length == 0)
+            return configPort ?? 9223;
+
+        // Project (csproj) match, then single-agent auto-select.
+        var match = Broker.BrokerClient.ResolveAgent(agents, csprojPath);
+        if (match is not null)
+            return match.Port;
+
+        // Multiple agents and none disambiguated — honor an explicit .mauidevflow config port.
+        if (configPort.HasValue)
+            return configPort.Value;
+
+        // Genuinely ambiguous: refuse via the sentinel instead of guessing.
+        return 0;
+    }
+
+    /// <summary>
+    /// Refuses to proceed when the agent port could not be unambiguously resolved.
+    /// Called at the top of every agent-targeting connection helper so that, when multiple
+    /// agents are connected and no target was specified, the command fails with a clear
+    /// message instead of silently producing another app's output (issue #343).
+    /// </summary>
+    private static void EnsureAgentPortResolved(int port)
+    {
+        if (port > 0)
+            return;
+
+        _errorOccurred = true;
+        throw new CommandErrorException(BuildMultipleAgentsMessage());
+    }
+
+    /// <summary>
+    /// Builds the guidance message listing the connected agents and how to choose one.
+    /// </summary>
+    private static string BuildMultipleAgentsMessage()
+    {
+        try
+        {
+            var brokerPort = Broker.BrokerClient.GetRunningBrokerPort();
+            var agents = brokerPort.HasValue ? Broker.BrokerClient.ListAgents(brokerPort.Value) : null;
+            return Broker.BrokerClient.BuildMultiAgentTargetingMessage(agents ?? []);
+        }
+        catch
+        {
+            // best effort: broker may be unavailable — still return the base guidance
+            return Broker.BrokerClient.BuildMultiAgentTargetingMessage([]);
+        }
+    }
+
+    /// <summary>
+    /// Writes a one-line stderr label identifying which connected app produced a command's
+    /// output. Emitted only when more than one agent is connected (the case where the source
+    /// is otherwise ambiguous) and at most once per command invocation.
+    /// </summary>
+    private static void EmitAgentLabel(string host, int port, Broker.AgentRegistration[]? agents)
+    {
+        if (_agentLabelEmitted)
+            return;
+
+        if (agents is not { Length: > 1 })
+            return;
+
+        var match = agents.FirstOrDefault(a => a.Port == port);
+        if (match is null)
+            return;
+
+        _agentLabelEmitted = true;
+        Console.Error.WriteLine(
+            $"\u2192 target: {match.AppName} ({match.Platform} {match.Tfm}) \u00b7 {host}:{port} [agent {match.Id}]");
+    }
+
+    /// <summary>
+    /// Best-effort stderr labeling for command paths that issue raw HTTP directly (the
+    /// <c>Simple*Async</c> helpers) instead of going through <see cref="CreateAgentClientAsync"/>.
+    /// Resolves the connected agents via the same injectable broker seams and emits the one-line
+    /// target label when more than one agent is connected. Labeling is a usability aid, not a
+    /// correctness mechanism — correctness is enforced by <see cref="EnsureAgentPortResolved"/> —
+    /// so broker failures are swallowed and never fail the command.
+    /// </summary>
+    private static async Task EmitAgentLabelAsync(string host, int port)
+    {
+        if (_agentLabelEmitted || !IsLocalAgentHost(host))
+            return;
+
+        try
+        {
+            var brokerPort = await ResolveRunningBrokerPortAsync();
+            if (!brokerPort.HasValue)
+                return;
+
+            var agents = await ListBrokerAgentsAsync(brokerPort.Value);
+            EmitAgentLabel(host, port, agents);
+        }
+        catch
+        {
+            // best effort — never fail a command because the broker was unreachable
+        }
+    }
     private static async Task<AndroidDevFlowForwardingReport?> EnsureAndroidForwardingForAgentsAsync(
         IEnumerable<Broker.AgentRegistration> agents,
         string? deviceId,
@@ -4698,6 +4862,12 @@ public class DevFlowCommands
 
     private static async Task BatchAsync(string host, int port, int delayMs, bool continueOnError, bool human)
     {
+        // Fail fast before the loop: batch injects this single resolved port into every
+        // sub-command, so if the target is ambiguous (sentinel 0, issue #343) none of them
+        // can run. Guarding here also keeps the refusal from propagating mid-loop and
+        // aborting the batch in a way that bypasses --continue-on-error.
+        EnsureAgentPortResolved(port);
+
         var commandIndex = 0;
         var succeeded = 0;
         var failed = 0;

@@ -10,7 +10,7 @@ on:
     inputs:
       pr_number:
         description: 'PR number to review'
-        required: true
+        required: false
         type: number
   roles: [admin, maintainer, write]
 
@@ -30,7 +30,7 @@ permissions:
 
 engine:
   id: copilot
-  model: claude-opus-4.6
+  model: claude-opus-4.8
 
 network:
   allowed:

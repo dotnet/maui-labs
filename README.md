@@ -36,7 +36,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Cli` | CLI global tool (`maui`) |
+| [![NuGet: Microsoft.Maui.Cli](https://img.shields.io/nuget/v/Microsoft.Maui.Cli.svg?label=Microsoft.Maui.Cli)](https://www.nuget.org/packages/Microsoft.Maui.Cli/) | CLI global tool (`maui`) |
 
 ```bash
 # Microsoft.Maui.Cli is currently released as a pre-release, so make sure to use the --prerelease flag
@@ -77,13 +77,13 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.DevFlow.Agent` | In-app agent for MAUI automation |
-| `Microsoft.Maui.DevFlow.Agent.Core` | Platform-agnostic agent core |
-| `Microsoft.Maui.DevFlow.Agent.Gtk` | GTK/Linux agent |
-| `Microsoft.Maui.DevFlow.Blazor` | Blazor WebView CDP bridge |
-| `Microsoft.Maui.DevFlow.Blazor.Gtk` | WebKitGTK CDP bridge |
-| `Microsoft.Maui.DevFlow.Driver` | Platform driver library |
-| `Microsoft.Maui.DevFlow.Logging` | Buffered JSONL file logger |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.svg?label=Microsoft.Maui.DevFlow.Agent)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent/) | In-app agent for MAUI automation |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Core](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Core.svg?label=Microsoft.Maui.DevFlow.Agent.Core)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Core/) | Platform-agnostic agent core |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Gtk.svg?label=Microsoft.Maui.DevFlow.Agent.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Gtk/) | GTK/Linux agent |
+| [![NuGet: Microsoft.Maui.DevFlow.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.svg?label=Microsoft.Maui.DevFlow.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor/) | Blazor WebView CDP bridge |
+| [![NuGet: Microsoft.Maui.DevFlow.Blazor.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.Gtk.svg?label=Microsoft.Maui.DevFlow.Blazor.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor.Gtk/) | WebKitGTK CDP bridge |
+| [![NuGet: Microsoft.Maui.DevFlow.Driver](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Driver.svg?label=Microsoft.Maui.DevFlow.Driver)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Driver/) | Platform driver library |
+| [![NuGet: Microsoft.Maui.DevFlow.Logging](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Logging.svg?label=Microsoft.Maui.DevFlow.Logging)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Logging/) | Buffered JSONL file logger |
 
 ### AI Extensions
 
@@ -100,9 +100,9 @@ Source-generated AI tools plus a native block-based chat engine and drop-in MAUI
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.AI.Attributes` | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
-| `Microsoft.Maui.AI.Chat` | Headless block-mapping conversation engine |
-| `Microsoft.Maui.AI.Chat.Controls` | Native MAUI chat controls and XAML templates |
+| [![NuGet: Microsoft.Maui.AI.Attributes](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Attributes.svg?label=Microsoft.Maui.AI.Attributes)](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
+| [![NuGet: Microsoft.Maui.AI.Chat](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.svg?label=Microsoft.Maui.AI.Chat)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) | Headless block-mapping conversation engine |
+| [![NuGet: Microsoft.Maui.AI.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.Controls.svg?label=Microsoft.Maui.AI.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat controls and XAML templates |
 
 ### macOS AppKit Backend
 
@@ -116,9 +116,9 @@ A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit app
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Platforms.MacOS` | Core AppKit backend — handlers, hosting, MapKit |
-| `Microsoft.Maui.Platforms.MacOS.Essentials` | Essentials APIs for macOS |
-| `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid via WKWebView |
+| [![NuGet: Microsoft.Maui.Platforms.MacOS](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.MacOS.svg?label=Microsoft.Maui.Platforms.MacOS)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.MacOS/) | Core AppKit backend — handlers, hosting, MapKit |
+| [![NuGet: Microsoft.Maui.Platforms.MacOS.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.MacOS.Essentials.svg?label=Microsoft.Maui.Platforms.MacOS.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.MacOS.Essentials/) | Essentials APIs for macOS |
+| [![NuGet: Microsoft.Maui.Platforms.MacOS.BlazorWebView](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.MacOS.BlazorWebView.svg?label=Microsoft.Maui.Platforms.MacOS.BlazorWebView)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.MacOS.BlazorWebView/) | Blazor Hybrid via WKWebView |
 
 ### WPF Backend
 
@@ -131,8 +131,8 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Platforms.Windows.WPF` | Core WPF backend — handlers, hosting, Blazor WebView |
-| `Microsoft.Maui.Platforms.Windows.WPF.Essentials` | Essentials APIs for WPF |
+| [![NuGet: Microsoft.Maui.Platforms.Windows.WPF](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Windows.WPF.svg?label=Microsoft.Maui.Platforms.Windows.WPF)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Windows.WPF/) | Core WPF backend — handlers, hosting, Blazor WebView |
+| [![NuGet: Microsoft.Maui.Platforms.Windows.WPF.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Windows.WPF.Essentials.svg?label=Microsoft.Maui.Platforms.Windows.WPF.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Windows.WPF.Essentials/) | Essentials APIs for WPF |
 
 ### Essentials.AI
 
@@ -145,7 +145,7 @@ On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractio
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
+| [![NuGet: Microsoft.Maui.Essentials.AI](https://img.shields.io/nuget/v/Microsoft.Maui.Essentials.AI.svg?label=Microsoft.Maui.Essentials.AI)](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI/) | On-device AI APIs for MAUI |
 
 ### AppProjectReference
 
@@ -159,7 +159,7 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Build.AppProjectReference` | Build-time app project reference with artifact discovery |
+| [![NuGet: Microsoft.Maui.Build.AppProjectReference](https://img.shields.io/nuget/v/Microsoft.Maui.Build.AppProjectReference.svg?label=Microsoft.Maui.Build.AppProjectReference)](https://www.nuget.org/packages/Microsoft.Maui.Build.AppProjectReference/) | Build-time app project reference with artifact discovery |
 
 ## Agent Skills
 

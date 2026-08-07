@@ -1,7 +1,6 @@
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
-using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -9,10 +8,74 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class AndroidDevFlowPortForwarderTests
 {
 	[Fact]
+	public void Constructor_WithAdbPathButNullRunner_ThrowsArgumentNullException()
+	{
+		var provider = new FakeAndroidProvider();
+
+		var ex = Assert.Throws<ArgumentNullException>(() =>
+			new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", adbRunner: null));
+
+		Assert.Equal("adbRunner", ex.ParamName);
+	}
+
+	/// <summary>
+	/// Verifies that an <see cref="OperationCanceledException"/> raised while a runner call is in
+	/// flight propagates out of <see cref="AndroidDevFlowPortForwarder.EnsureAsync"/> untouched
+	/// (i.e. it isn't caught and reported as an error result). This is exercised via
+	/// <see cref="FakeAdbRunner.OnReversePort"/> throwing unconditionally, not by the pre-cancelled
+	/// <c>cts.Token</c> actually being observed - <see cref="FakeAdbRunner"/> accepts a
+	/// <see cref="CancellationToken"/> parameter on each call but never checks it, so this test does
+	/// not prove that a caller-supplied token threads through to cancel a real adb process.
+	/// </summary>
+	[Fact]
+	public async Task EnsureAsync_WhenCallerCancels_PropagatesOperationCanceledException()
+	{
+		var provider = CreateProvider(Device("emulator-5554"));
+		var runner = new FakeAdbRunner
+		{
+			OnReversePort = () => throw new OperationCanceledException()
+		};
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+		using var cts = new CancellationTokenSource();
+		cts.Cancel();
+
+		await Assert.ThrowsAsync<OperationCanceledException>(() => forwarder.EnsureAsync(
+			new AndroidDevFlowForwardingRequest
+			{
+				AgentPorts = [9223],
+				EnsureBrokerReverse = true,
+				Repair = true
+			},
+			cts.Token));
+	}
+
+	[Fact]
+	public async Task EnsureAsync_WhenAdbCallTimesOutInternally_ReportsErrorInsteadOfPropagating()
+	{
+		var provider = CreateProvider(Device("emulator-5554"));
+		var runner = new FakeAdbRunner
+		{
+			// Simulates the internal per-call timeout firing - not the caller's own token.
+			OnReversePort = () => throw new OperationCanceledException("adb reverse timed out")
+		};
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
+		{
+			AgentPorts = [9223],
+			EnsureBrokerReverse = true,
+			Repair = true
+		}, CancellationToken.None);
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.Error, report.Status);
+		Assert.Contains("adb reverse tcp:19223 tcp:19223 failed", report.Message);
+	}
+
+	[Fact]
 	public async Task EnsureAsync_WithoutSdkPath_ReportsNoAdb()
 	{
 		var provider = new FakeAndroidProvider();
-		var forwarder = new AndroidDevFlowPortForwarder(provider, null, (_, _, _) => throw new InvalidOperationException("adb should not run"));
+		var forwarder = new AndroidDevFlowPortForwarder(provider, null, adbRunner: null);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [9223] });
 
@@ -27,19 +90,15 @@ public class AndroidDevFlowPortForwarderTests
 		var provider = CreateProvider(
 			Device("emulator-5554"),
 			Device("RZ8T123456A", isEmulator: false));
-		var commands = new List<string>();
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", (_, args, _) =>
-		{
-			commands.Add(string.Join(' ', args));
-			return Task.FromResult(new ProcessResult { ExitCode = 0 });
-		});
+		var runner = new FakeAdbRunner();
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest { AgentPorts = [9223] });
 
 		Assert.Equal(AndroidDevFlowForwardingStatus.MultipleDevices, report.Status);
 		Assert.Null(report.SelectedSerial);
 		Assert.Equal("Multiple online Android devices or emulators were found. Specify --device or ANDROID_SERIAL.", report.Message);
-		Assert.Empty(commands);
+		Assert.Empty(runner.Commands);
 	}
 
 	[Fact]
@@ -50,7 +109,8 @@ public class AndroidDevFlowPortForwarderTests
 			Device("RZ8T123456A", isEmulator: false));
 		var forwardRules = new HashSet<int> { 9223 };
 		var reverseRules = new HashSet<int> { 19223 };
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner(forwardRules, reverseRules));
+		var runner = new FakeAdbRunner(forwardRules, reverseRules);
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -71,8 +131,8 @@ public class AndroidDevFlowPortForwarderTests
 		var provider = CreateProvider(Device("emulator-5554"));
 		var forwardRules = new HashSet<int> { 9223 };
 		var reverseRules = new HashSet<int> { 19223 };
-		var commands = new List<string>();
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner(forwardRules, reverseRules, commands));
+		var runner = new FakeAdbRunner(forwardRules, reverseRules);
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -83,18 +143,16 @@ public class AndroidDevFlowPortForwarderTests
 
 		Assert.Equal(AndroidDevFlowForwardingStatus.Ok, report.Status);
 		Assert.False(report.BrokerReverseAdded);
-		Assert.DoesNotContain("-s emulator-5554 reverse tcp:19223 tcp:19223", commands);
-		Assert.DoesNotContain("-s emulator-5554 forward tcp:9223 tcp:9223", commands);
+		Assert.DoesNotContain("-s emulator-5554 reverse tcp:19223 tcp:19223", runner.Commands);
+		Assert.DoesNotContain("-s emulator-5554 forward tcp:9223 tcp:9223", runner.Commands);
 	}
 
 	[Fact]
 	public async Task EnsureAsync_WithRepair_AddsMissingReverseAndForward()
 	{
 		var provider = CreateProvider(Device("emulator-5554"));
-		var forwardRules = new HashSet<int>();
-		var reverseRules = new HashSet<int>();
-		var commands = new List<string>();
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner(forwardRules, reverseRules, commands));
+		var runner = new FakeAdbRunner();
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -107,15 +165,15 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.True(report.BrokerReversePresent);
 		Assert.True(report.BrokerReverseAdded);
 		Assert.True(report.AgentForwards.Single(f => f.Port == 9223).PresentAfter);
-		Assert.Contains("-s emulator-5554 reverse tcp:19223 tcp:19223", commands);
-		Assert.Contains("-s emulator-5554 forward tcp:9223 tcp:9223", commands);
+		Assert.Contains("-s emulator-5554 reverse tcp:19223 tcp:19223", runner.Commands);
+		Assert.Contains("-s emulator-5554 forward tcp:9223 tcp:9223", runner.Commands);
 	}
 
 	[Fact]
 	public async Task EnsureAsync_WithoutRepair_ReportsMissingMappings()
 	{
 		var provider = CreateProvider(Device("emulator-5554"));
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner([], []));
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", new FakeAdbRunner());
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -135,10 +193,8 @@ public class AndroidDevFlowPortForwarderTests
 	public async Task EnsureAsync_WithCustomBrokerPort_UsesProvidedPortForReverse()
 	{
 		var provider = CreateProvider(Device("emulator-5554"));
-		var forwardRules = new HashSet<int>();
-		var reverseRules = new HashSet<int>();
-		var commands = new List<string>();
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner(forwardRules, reverseRules, commands));
+		var runner = new FakeAdbRunner();
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -151,15 +207,15 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.Equal(AndroidDevFlowForwardingStatus.Repaired, report.Status);
 		Assert.Equal(19225, report.BrokerPort);
 		Assert.True(report.BrokerReversePresent);
-		Assert.Contains("-s emulator-5554 reverse tcp:19225 tcp:19225", commands);
-		Assert.DoesNotContain("-s emulator-5554 reverse tcp:19223 tcp:19223", commands);
+		Assert.Contains("-s emulator-5554 reverse tcp:19225 tcp:19225", runner.Commands);
+		Assert.DoesNotContain("-s emulator-5554 reverse tcp:19223 tcp:19223", runner.Commands);
 	}
 
 	[Fact]
 	public async Task EnsureAsync_WithCustomBrokerPortAndMissingReverse_SuggestsCustomPort()
 	{
 		var provider = CreateProvider(Device("emulator-5554"));
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner([], []));
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", new FakeAdbRunner());
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -179,8 +235,8 @@ public class AndroidDevFlowPortForwarderTests
 		var provider = CreateProvider(Device("emulator-5554"));
 		var forwardRules = new HashSet<int> { 9223 };
 		var reverseRules = new HashSet<int> { 19223 };
-		var commands = new List<string>();
-		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", CreateAdbRunner(forwardRules, reverseRules, commands));
+		var runner = new FakeAdbRunner(forwardRules, reverseRules);
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
 
 		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
 		{
@@ -192,7 +248,7 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.Equal(AndroidDevFlowForwardingStatus.Ok, report.Status);
 		Assert.False(report.BrokerReverseChecked);
 		Assert.False(report.BrokerReversePresent);
-		Assert.DoesNotContain("-s emulator-5554 reverse --list", commands);
+		Assert.DoesNotContain("-s emulator-5554 reverse --list", runner.Commands);
 	}
 
 	static FakeAndroidProvider CreateProvider(params Device[] devices)
@@ -214,55 +270,4 @@ public class AndroidDevFlowPortForwarderTests
 			IsEmulator = isEmulator,
 			IsRunning = true
 		};
-
-	static Func<string, string[], CancellationToken, Task<ProcessResult>> CreateAdbRunner(
-		HashSet<int> forwardRules,
-		HashSet<int> reverseRules,
-		List<string>? commands = null)
-		=> (_, args, _) =>
-		{
-			commands?.Add(string.Join(' ', args));
-
-			if (args is ["-s", var forwardListSerial, "forward", "--list"])
-			{
-				var output = string.Join(Environment.NewLine, forwardRules.Select(port => $"{forwardListSerial} tcp:{port} tcp:{port}"));
-				return Task.FromResult(new ProcessResult { ExitCode = 0, StandardOutput = output });
-			}
-
-			if (args is ["-s", var reverseListSerial, "reverse", "--list"])
-			{
-				var output = string.Join(Environment.NewLine, reverseRules.Select(port => $"{reverseListSerial} tcp:{port} tcp:{port}"));
-				return Task.FromResult(new ProcessResult { ExitCode = 0, StandardOutput = output });
-			}
-
-			if (args is ["-s", _, "forward", var forwardLocal, var forwardRemote] &&
-				TryParseTcpPort(forwardLocal, out var forwardLocalPort) &&
-				TryParseTcpPort(forwardRemote, out var forwardRemotePort) &&
-				forwardLocalPort == forwardRemotePort)
-			{
-				forwardRules.Add(forwardLocalPort);
-				return Task.FromResult(new ProcessResult { ExitCode = 0 });
-			}
-
-			if (args is ["-s", _, "reverse", var reverseLocal, var reverseRemote] &&
-				TryParseTcpPort(reverseLocal, out var reverseLocalPort) &&
-				TryParseTcpPort(reverseRemote, out var reverseRemotePort) &&
-				reverseLocalPort == reverseRemotePort)
-			{
-				reverseRules.Add(reverseLocalPort);
-				return Task.FromResult(new ProcessResult { ExitCode = 0 });
-			}
-
-			return Task.FromResult(new ProcessResult { ExitCode = 1, StandardError = $"Unexpected adb command: {string.Join(' ', args)}" });
-		};
-
-	static bool TryParseTcpPort(string value, out int port)
-	{
-		const string Prefix = "tcp:";
-		if (value.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase))
-			return int.TryParse(value[Prefix.Length..], out port);
-
-		port = 0;
-		return false;
-	}
 }

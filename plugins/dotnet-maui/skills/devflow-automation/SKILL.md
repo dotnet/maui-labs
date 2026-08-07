@@ -1,13 +1,7 @@
 ---
 name: devflow-automation
 description: >-
-  Automate .NET MAUI app state via explicitly registered DevFlow Actions. USE
-  FOR: discovering and invoking [DevFlowAction] shortcuts, logging in test
-  users, seeding data, navigating to deep screens, bypassing long UI flows to
-  reach target state quickly. DO NOT USE FOR: calling arbitrary methods,
-  invoking DI services or framework types, basic UI interaction (tap/fill/scroll
-  - use DevFlow MCP tools directly), visual tree inspection, screenshot capture,
-  connectivity issues, or build/deployment problems.
+  Automate MAUI app state through DevFlow Actions. USE FOR: `[DevFlowAction]` shortcuts, login, seed data, deep screens. DO NOT USE FOR: arbitrary methods, DI internals, UI MCP tools, connectivity, or build/deploy issues.
 ---
 
 # DevFlow Automation - Actions
