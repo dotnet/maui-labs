@@ -27,6 +27,9 @@ public abstract class ContentBlock
 
     public string? AuthorName { get; internal set; }
 
+    /// <summary>Gets when the source message/update was created, when supplied by the provider.</summary>
+    public DateTimeOffset? CreatedAt { get; internal set; }
+
     internal string? RestoredTurnId { get; set; }
 
     internal bool StartsRestoredTurn { get; set; }
