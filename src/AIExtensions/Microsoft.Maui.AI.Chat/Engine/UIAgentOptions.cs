@@ -35,13 +35,37 @@ public class UIAgentOptions
     /// </remarks>
     public IConversationThread? Thread { get; set; }
 
+    /// <summary>
+    /// Gets or sets services supplied to registered UI actions through
+    /// <see cref="AIFunctionArguments.Services"/>.
+    /// </summary>
+    public IServiceProvider? Services { get; set; }
+
     internal List<IHandlerRegistration> HandlerRegistrations { get; } = new();
+    internal Dictionary<string, AIFunction> UIActions { get; } =
+        new(StringComparer.Ordinal);
 
     public void AddBlockHandler<TState>(ContentBlockHandler<TState> handler)
         where TState : new()
     {
         ArgumentNullException.ThrowIfNull(handler);
         HandlerRegistrations.Add(new HandlerRegistration<TState>(handler));
+    }
+
+    /// <summary>
+    /// Registers a client-side action. Its declaration is sent to the model and any matching call is
+    /// executed automatically by <see cref="AgentContext"/> without entering
+    /// <see cref="ConversationStatus.AwaitingInput"/>.
+    /// </summary>
+    public void RegisterUIAction(AIFunction function)
+    {
+        ArgumentNullException.ThrowIfNull(function);
+        if (!UIActions.TryAdd(function.Name, function))
+        {
+            throw new ArgumentException(
+                $"A UI action named '{function.Name}' is already registered.",
+                nameof(function));
+        }
     }
 
     internal interface IHandlerRegistration

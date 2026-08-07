@@ -219,7 +219,8 @@ public class AgentContext(UIAgent agent) : IDisposable
 
             while (currentMessage is not null)
             {
-                var interactiveBlocks = new List<IInteractiveBlock>();
+                var humanInputBlocks = new List<IInteractiveBlock>();
+                var uiActionBlocks = new List<UIActionBlock>();
                 var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
 
                 await foreach (var block in agent.SendMessageAsync(
@@ -230,9 +231,13 @@ public class AgentContext(UIAgent agent) : IDisposable
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (block is IInteractiveBlock interactive)
+                    if (block is UIActionBlock uiAction)
                     {
-                        interactiveBlocks.Add(interactive);
+                        uiActionBlocks.Add(uiAction);
+                    }
+                    else if (block is IInteractiveBlock interactive)
+                    {
+                        humanInputBlocks.Add(interactive);
                     }
                     else if (block is FunctionInvocationContentBlock ficb
                              && ficb.Call is { InformationalOnly: false }
@@ -262,18 +267,23 @@ public class AgentContext(UIAgent agent) : IDisposable
 
                 uninvokedToolBlocks.RemoveAll(b => b.Result is not null);
 
-                if (interactiveBlocks.Count == 0 && uninvokedToolBlocks.Count == 0)
+                if (humanInputBlocks.Count == 0
+                    && uiActionBlocks.Count == 0
+                    && uninvokedToolBlocks.Count == 0)
                     break;
 
                 var resultTasks = new List<Task<AIContent>>();
 
-                foreach (var interactive in interactiveBlocks)
+                foreach (var uiAction in uiActionBlocks)
+                    resultTasks.Add(uiAction.InvokeAsync(cancellationToken));
+
+                foreach (var interactive in humanInputBlocks)
                     resultTasks.Add(interactive.GetResultAsync(cancellationToken));
 
                 foreach (var toolBlock in uninvokedToolBlocks)
                     resultTasks.Add(InvokeBackendToolAsync(toolBlock, cancellationToken));
 
-                if (interactiveBlocks.Count > 0)
+                if (humanInputBlocks.Count > 0)
                 {
                     Status = ConversationStatus.AwaitingInput;
                     NotifyStatusChanged();
