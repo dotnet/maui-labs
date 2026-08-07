@@ -1,7 +1,6 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
-using Microsoft.Maui.Controls.Xaml;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -15,8 +14,6 @@ public class SuggestionListTests
     public void SuggestionPrompts_AreAccessibleFromControl()
     {
         var control = CreateControl();
-        if (control == null)
-            return; // Skip if MAUI XAML runtime unavailable in test host
 
         control.SuggestionPrompts = new List<string>
         {
@@ -33,8 +30,6 @@ public class SuggestionListTests
     public void SuggestionPrompts_EmptyByDefault()
     {
         var control = CreateControl();
-        if (control == null)
-            return;
 
         Assert.NotNull(control.SuggestionPrompts);
         Assert.Empty(control.SuggestionPrompts);
@@ -44,8 +39,6 @@ public class SuggestionListTests
     public void WelcomeMessage_ControlsWelcomeVisibilityState()
     {
         var control = CreateControl();
-        if (control == null)
-            return;
 
         control.WelcomeMessage = "How can I help you today?";
         // With a message set but no items, welcome should show
@@ -59,8 +52,6 @@ public class SuggestionListTests
     public void WelcomeMessage_WhenNull_DisablesWelcome()
     {
         var control = CreateControl();
-        if (control == null)
-            return;
 
         control.WelcomeMessage = null;
 
@@ -72,28 +63,11 @@ public class SuggestionListTests
     public void WelcomeIcon_CustomizableEmoji()
     {
         var control = CreateControl();
-        if (control == null)
-            return;
 
         control.WelcomeIcon = "🤖";
 
         Assert.Equal("🤖", control.WelcomeIcon);
     }
 
-    /// <summary>
-    /// Creates a CopilotChatView, returning null if MAUI XAML runtime is unavailable
-    /// (InitializeComponent requires the full MAUI platform host).
-    /// </summary>
-    private static CopilotChatView? CreateControl()
-    {
-        try
-        {
-            return new CopilotChatView();
-        }
-        catch (Exception ex) when (ex is XamlParseException or InvalidOperationException)
-        {
-            // MAUI XAML runtime not available in unit test host
-            return null;
-        }
-    }
+    private static CopilotChatView CreateControl() => new();
 }
