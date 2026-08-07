@@ -102,6 +102,14 @@ public class ContentContextTests
         Assert.False(ctx.IsInteractive);
     }
 
+    [Fact]
+    public void IsInteractive_False_ForAutomaticUIAction()
+    {
+        var ctx = BlockFactory.MakeUIAction("Refresh");
+
+        Assert.False(ctx.IsInteractive);
+    }
+
     // ── Approval state ──
 
     [Fact]

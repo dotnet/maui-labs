@@ -80,4 +80,18 @@ internal static class BlockFactory
         block.Role = ChatRole.Assistant;
         return new ContentContext(CreateSession(), block);
     }
+
+    public static ContentContext MakeUIAction(string toolName, bool completed = false)
+    {
+        var call = new FunctionCallContent("action-1", toolName);
+        var inner = new FunctionInvocationContentBlock { Call = call };
+        var function = AIFunctionFactory.Create(() => "complete", toolName, "Test action");
+        var block = new UIActionBlock(function, inner, services: null)
+        {
+            Role = ChatRole.Assistant,
+        };
+        if (completed)
+            block.InvokeAsync().GetAwaiter().GetResult();
+        return new ContentContext(CreateSession(), block);
+    }
 }
