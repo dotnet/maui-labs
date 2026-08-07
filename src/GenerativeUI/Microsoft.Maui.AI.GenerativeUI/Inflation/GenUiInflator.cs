@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui;
 using Microsoft.Maui.AI.GenerativeUI.Binding;
@@ -100,7 +101,7 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
         "Image" => BuildImage(node, ctx),
         "Badge" => BuildBadge(node, ctx),
         "Icon" => BuildIcon(node),
-        "Button" => BuildButton(node),
+        "Button" => BuildButton(node, ctx),
         "Field" => BuildField(node, ctx),
         "Entry" => BuildEntry(node, ctx),
         "List" => BuildList(node, ctx),
@@ -257,6 +258,10 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
         }
         if (node.Bind is { } path)
             image.SetBinding(Image.SourceProperty, ctx.OneWay(path));
+        else if (node.GetProperty("source") is { ValueKind: JsonValueKind.Object } source &&
+                 source.TryGetProperty("bind", out var sourceBind) &&
+                 sourceBind.ValueKind == JsonValueKind.String)
+            image.SetBinding(Image.SourceProperty, ctx.OneWay(sourceBind.GetString()!));
         else if (node.GetString("source") is { Length: > 0 } src)
             image.Source = src;
 
@@ -328,7 +333,7 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
 
     // ── Interactive ─────────────────────────────────────────────────────────────────────────────
 
-    private View BuildButton(UiNode node)
+    private View BuildButton(UiNode node, Context ctx)
     {
         var button = new Button { Text = node.GetString("text") ?? "" };
         if (TryColor(node.GetString("textColor"), out var textColor))
@@ -347,13 +352,21 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
             button.Padding = padding;
 
         var intentName = node.GetString("intent");
-        var payload = node.GetString("payload");
         if (!string.IsNullOrEmpty(intentName))
         {
             button.Clicked += (_, _) =>
             {
+                var source = ctx.RowMode ? button.BindingContext as UiObject : ctx.Root;
+                JsonNode? payloadNode = null;
+                if (node.GetProperty("payload") is { } payload)
+                    payloadNode = ResolvePayload(payload, source);
+                else if (ctx.RowMode && source is not null)
+                    payloadNode = UiObjectBuilder.ToJson(source);
+
                 var bridge = services.GetService(typeof(IChatBridge)) as IChatBridge;
-                _ = bridge?.RaiseIntentAsync(new UiIntent(intentName!, payload));
+                _ = bridge?.RaiseIntentAsync(new UiIntent(
+                    intentName!,
+                    payloadNode?.ToJsonString()));
             };
         }
         return button;
@@ -447,6 +460,51 @@ public sealed class GenUiInflator(GenerativeUiRegistry registry, IServiceProvide
         foreach (var seg in dottedPath.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             node = node[seg];
         return node;
+    }
+
+    /// <summary>
+    /// Resolves an intent payload at click time. Literal JSON is preserved; any nested
+    /// <c>{ "bind": "path" }</c> descriptor is replaced with the current value from the button's
+    /// binding source (the row item inside an itemsBind template).
+    /// </summary>
+    private static JsonNode? ResolvePayload(JsonElement value, UiObject? source)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                if (source is not null &&
+                    value.TryGetProperty("bind", out var bind) &&
+                    bind.ValueKind == JsonValueKind.String)
+                {
+                    var bound = ResolvePath(source, bind.GetString()!);
+                    return bound is null ? null : UiObjectBuilder.ToJson(bound);
+                }
+
+                var obj = new JsonObject();
+                foreach (var property in value.EnumerateObject())
+                    obj[property.Name] = ResolvePayload(property.Value, source);
+                return obj;
+
+            case JsonValueKind.Array:
+                var array = new JsonArray();
+                foreach (var item in value.EnumerateArray())
+                    array.Add(ResolvePayload(item, source));
+                return array;
+
+            case JsonValueKind.String:
+                return JsonValue.Create(value.GetString());
+            case JsonValueKind.Number:
+                return value.TryGetInt64(out var integer)
+                    ? JsonValue.Create(integer)
+                    : JsonValue.Create(value.GetDouble());
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+                return JsonValue.Create(value.GetBoolean());
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+            default:
+                return null;
+        }
     }
 
     // ── Registered controls & screens ───────────────────────────────────────────────────────────

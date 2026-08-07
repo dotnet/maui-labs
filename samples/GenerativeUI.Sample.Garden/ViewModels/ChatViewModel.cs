@@ -78,10 +78,16 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         - PRODUCT LIST: Title + optional short intro; a bound itemsBind List of Cards. Each card feels
           like an image-led social product post. Use one Card template with background gradient,
           cornerRadius 20, soft green stroke/glow, and a Grid with columns "156,*,132": product Image
-          in column 0 (bind imageUrl, aspect fill, height 176, cornerRadius 18); a padded vertical
+          in column 0 (set source to { "bind":"imageUrl" }, aspect fill, height 176, cornerRadius 18);
+          a padded vertical
           Stack in column 1 with wrapping name/price/category/stock/description; and a vertical Stack
           in column 2 with equal-width View/Add buttons aligned end/center. Descriptions wrap and use
-          maxLines 3. Do not show full records or let action buttons drift beside the text.
+          maxLines 3. Every row action MUST identify its product: give each button a payload such as
+          { "sku": { "bind":"sku" }, "name": { "bind":"name" } }. (The renderer also falls back to
+          the whole bound row if payload is omitted.) Do not show full records or let action buttons
+          drift beside the text. Inline button visuals explicitly and omit the style token: View has
+          transparent background, #2F7D5B text/border and borderWidth 1; Add has #2F7D5B background,
+          white text, no visible border; both cornerRadius 14, width 108, height 44.
         - PRODUCT DETAIL: one focused Card; hero image/large emoji, name Title, price prominently,
           category + stock as Caption/Badge, full useful description, then actions. Destructive
           actions are danger-styled and require confirmation.

@@ -38,10 +38,13 @@ public sealed class GenerativeUiTools(
         "Inline visual props are supported: margin/padding (number or [left,top,right,bottom]), " +
         "horizontal/vertical alignment, width/height/min/max, background (hex or linear-gradient " +
         "object with colors+angle), opacity, shadow; Card stroke/cornerRadius; Label textColor/" +
-        "fontSize/fontWeight/maxLines/lineHeight/textAlign; Image aspect/cornerRadius; Button " +
+        "fontSize/fontWeight/maxLines/lineHeight/textAlign; Image source may be a URL or " +
+        "{\"bind\":\"imageUrl\"}, plus aspect/cornerRadius; Button " +
         "background/textColor/border/cornerRadius/padding. " +
         "For changeable lists use itemsBind plus one template child; static lists may pre-expand. " +
-        "Buttons use \"intent\": \"submit\" (a form's save), \"action:<name>\", etc.")]
+        "Buttons use \"intent\": \"submit\" (a form's save), \"action:<name>\", etc. Button payload " +
+        "may be any JSON and nested {\"bind\":\"path\"} values resolve from the current row; a row " +
+        "button with no payload automatically sends its whole row.")]
     public async Task<string> RenderUiAsync(
         [Description("The render_ui document object (schemaVersion + ui + optional data/form/meta).")] JsonObject document,
         CancellationToken cancellationToken = default)

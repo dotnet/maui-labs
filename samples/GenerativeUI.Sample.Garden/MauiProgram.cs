@@ -70,7 +70,10 @@ public static class MauiProgram
         var ai = builder.Configuration.GetSection("AI");
         var endpoint = ai["Endpoint"];
         var apiKey = ai["ApiKey"];
-        var deploymentName = ai["DeploymentName"];
+        // This experiment benefits materially from the strongest available model when it authors
+        // larger structured UI documents. Fall back to the shared inexpensive deployment so the
+        // sample still runs for developers who have not configured the optional override.
+        var deploymentName = ai["ExpensiveDeploymentName"] ?? ai["DeploymentName"];
 
         if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(deploymentName))
         {
@@ -81,9 +84,11 @@ public static class MauiProgram
                   dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
+                  dotnet user-secrets --id ai-attributes-secrets set "AI:ExpensiveDeploymentName" "<optional-stronger-deployment>"
                 """);
         }
 
+        Console.WriteLine($"[GenerativeUI] Chat deployment: {deploymentName}");
         var azureClient = new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
         builder.Services.AddSingleton<IChatClient>(chatClient.AsIChatClient());
