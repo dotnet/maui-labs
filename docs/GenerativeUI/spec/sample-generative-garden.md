@@ -358,7 +358,9 @@ watermarking**, **full-screen handoff**, **overlay presentation**, and **runtime
    dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
    dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
    dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
+   dotnet user-secrets --id ai-attributes-secrets set "AI:ExpensiveDeploymentName" "<optional-stronger-deployment>"
    ```
+   The client prefers `ExpensiveDeploymentName` when present, then falls back to `DeploymentName`.
 2. **Run the server:**
    ```
    dotnet run --project samples/GenerativeUI.Sample.Garden.Server

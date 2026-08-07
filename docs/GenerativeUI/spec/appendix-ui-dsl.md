@@ -113,7 +113,7 @@ node below. `type` may be a **built-in** (this appendix) or an **app-registered 
 
 | `type` | Inflates to | Key props |
 |---|---|---|
-| `Button` | `Button` | `text`, `intent`, `payload`, `background`, `textColor`, `borderColor`/`borderWidth`, `cornerRadius`, `padding` |
+| `Button` | `Button` | `text`, `intent`, JSON `payload` (nested `{ "bind":"path" }` supported), `background`, `textColor`, `borderColor`/`borderWidth`, `cornerRadius`, `padding` |
 | `Field` | label + `Entry`/`Editor`/`Switch` (by `kind`) | `key` (`StateRoot` leaf), `label`, `kind` (`text`\|`number`\|`multiline`\|`bool`), `placeholder` |
 | `Entry` | bare `Entry` | `key`, `placeholder`, `kind` |
 
@@ -208,6 +208,23 @@ Reserved intents:
 
 The bridge is an `IChatBridge` the library raises and the app's chat VM implements. This keeps
 the loop **AI-driven**: buttons feed the model, which then explores/renders/calls as needed.
+
+`payload` may be any JSON object. Nested binding descriptors are resolved at click time:
+
+```jsonc
+{
+  "type": "Button",
+  "text": "Add",
+  "intent": "action:addToCart",
+  "payload": {
+    "sku":  { "bind": "sku" },
+    "name": { "bind": "name" }
+  }
+}
+```
+
+Inside an `itemsBind` row, a button with no explicit payload automatically sends the entire current
+row object. This guarantees that actions identify their item even if the model omits metadata.
 
 > **Open question:** synthetic chat turns vs. direct tool re-entry vs. a structured event the
 > model receives as a tool result. Synthetic turns are simplest and most transparent for the MVP.
