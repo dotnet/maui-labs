@@ -66,4 +66,18 @@ internal static class BlockFactory
         block.Role = ChatRole.Assistant;
         return new ContentContext(CreateSession(), block);
     }
+
+    public static ContentContext MakeReasoning(
+        string? text = "Considering the options...",
+        string? protectedData = null)
+    {
+        var block = new ReasoningContentBlock
+        {
+            ProtectedData = protectedData,
+        };
+        if (text is not null)
+            block.AppendText(text);
+        block.Role = ChatRole.Assistant;
+        return new ContentContext(CreateSession(), block);
+    }
 }

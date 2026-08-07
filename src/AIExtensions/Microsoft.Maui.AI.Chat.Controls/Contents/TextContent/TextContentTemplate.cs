@@ -4,7 +4,7 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Matches a <see cref="Microsoft.Maui.AI.Chat.TextContentBlock"/> (optionally filtered by role) and renders a <see cref="ChatMessageView"/> bubble.</summary>
+/// <summary>Matches a <see cref="RichContentBlock"/> (optionally filtered by role) and renders a <see cref="ChatMessageView"/> bubble.</summary>
 public class TextContentTemplate : ContentTemplate
 {
     /// <summary>
@@ -14,7 +14,7 @@ public class TextContentTemplate : ContentTemplate
 
     public override bool When(ContentContext context)
     {
-        if (context.Block is not TextContentBlock)
+        if (context.Block is not RichContentBlock)
             return false;
 
         if (Role is not null)

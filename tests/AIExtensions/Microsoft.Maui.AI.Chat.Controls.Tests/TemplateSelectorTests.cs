@@ -189,6 +189,17 @@ public class TemplateSelectorTests
     }
 
     [Fact]
+    public void SelectTemplate_ReasoningBlock_MatchesReasoningTemplate()
+    {
+        var selector = new ContentTemplateSelector();
+        selector.Templates.Add(new ReasoningContentTemplate());
+
+        var template = selector.SelectTemplate(BlockFactory.MakeReasoning(), null!);
+
+        Assert.IsType<ReasoningView>(template.CreateContent());
+    }
+
+    [Fact]
     public void MessageListView_ZeroConfiguration_ProvidesVisibleBuiltInFallbacks()
     {
         var view = new MessageListView();
@@ -201,6 +212,8 @@ public class TemplateSelectorTests
             selector.SelectTemplate(BlockFactory.MakeText("Assistant", "Hi"), null!).CreateContent());
         Assert.IsType<ToolApprovalView>(
             selector.SelectTemplate(BlockFactory.MakeApproval("delete_file"), null!).CreateContent());
+        Assert.IsType<ReasoningView>(
+            selector.SelectTemplate(BlockFactory.MakeReasoning(), null!).CreateContent());
         Assert.IsType<MediaContentView>(
             selector.SelectTemplate(BlockFactory.MakeMedia(), null!).CreateContent());
         Assert.IsType<ThinkingView>(

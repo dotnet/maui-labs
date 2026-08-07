@@ -54,8 +54,8 @@ public sealed class ContentContext
     /// <summary>Whether this block is an interactive block awaiting user input.</summary>
     public bool IsInteractive => Block is IInteractiveBlock;
 
-    /// <summary>Gets the text content if this is a TextContentBlock.</summary>
-    public string? TextContent => Block is TextContentBlock rcb ? rcb.RawText : null;
+    /// <summary>Gets the text content if this is a <see cref="RichContentBlock"/>.</summary>
+    public string? TextContent => Block is RichContentBlock rich ? rich.RawText : null;
 
     /// <summary>Approval status for ToolApprovalBlock, null otherwise.</summary>
     public ApprovalStatus? ApprovalState => Block is ToolApprovalBlock fab ? fab.Status : null;

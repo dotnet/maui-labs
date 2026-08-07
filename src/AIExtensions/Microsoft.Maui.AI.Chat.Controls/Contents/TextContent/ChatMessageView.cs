@@ -196,7 +196,9 @@ public class ChatMessageView : ContentContextView
         if (ContentContext is null)
             return;
 
-        Text = ContentContext.Block is TextContentBlock rcb ? rcb.RawText : ContentContext.Block?.ToString();
+        Text = ContentContext.Block is RichContentBlock rich
+            ? rich.RawText
+            : ContentContext.Block?.ToString();
         MessageRole = ContentContext.Role?.ToString();
         TimestampText = DateTimeOffset.Now.ToLocalTime().ToString("h:mm tt");
 
