@@ -86,6 +86,10 @@ public partial class CopilotChatView : TemplatedView
     private ContentView? _footerPart;
     private Entry? _inputEntryPart;
     private Button? _sendButtonPart;
+    private Button? _attachButtonPart;
+    private Layout? _attachmentsPart;
+    private readonly ObservableCollection<ChatAttachment> _attachments = [];
+    private readonly ReadOnlyObservableCollection<ChatAttachment> _readOnlyAttachments;
 
     public static readonly BindableProperty ContentTemplatesProperty =
         BindableProperty.Create(
@@ -123,6 +127,16 @@ public partial class CopilotChatView : TemplatedView
             typeof(Color),
             typeof(CopilotChatView));
 
+    private static readonly BindablePropertyKey AttachmentErrorPropertyKey =
+        BindableProperty.CreateReadOnly(
+            nameof(AttachmentError),
+            typeof(string),
+            typeof(CopilotChatView),
+            default(string));
+
+    public static readonly BindableProperty AttachmentErrorProperty =
+        AttachmentErrorPropertyKey.BindableProperty;
+
     private IDisposable? _statusChangedReg;
 
     public IList<ContentTemplate> ContentTemplates
@@ -150,8 +164,15 @@ public partial class CopilotChatView : TemplatedView
     public Color? EffectiveInputAreaBackgroundColor =>
         (Color?)GetValue(EffectiveInputAreaBackgroundColorProperty);
 
+    /// <summary>Gets the most recent user-facing attachment selection error.</summary>
+    public string? AttachmentError =>
+        (string?)GetValue(AttachmentErrorProperty);
+
     public CopilotChatView()
     {
+        _readOnlyAttachments = new(_attachments);
+        _attachments.CollectionChanged += (_, _) => UpdateAttachmentsView();
+
         if (ContentTemplates is System.Collections.Specialized.INotifyCollectionChanged ctNcc)
             ctNcc.CollectionChanged += OnContentTemplatesChanged;
 
@@ -173,6 +194,8 @@ public partial class CopilotChatView : TemplatedView
         // XAML-added items (via .Add()) trigger suggestion chip rebuilds.
         if (SuggestionPrompts is System.Collections.Specialized.INotifyCollectionChanged ncc)
             ncc.CollectionChanged += OnSuggestionPromptsCollectionChanged;
+        if (Suggestions is System.Collections.Specialized.INotifyCollectionChanged suggestionsNcc)
+            suggestionsNcc.CollectionChanged += OnSuggestionPromptsCollectionChanged;
 
         // XAML child items (SuggestionPrompts) may be added after OnApplyTemplate
         // due to DynamicResource-based template resolution timing. Re-evaluate once loaded.
@@ -220,11 +243,13 @@ public partial class CopilotChatView : TemplatedView
         _welcomeMessagePart = GetTemplateChild("PART_WelcomeMessage") as Label;
         _emptyViewHostPart = GetTemplateChild("PART_EmptyView") as ContentView;
         _busyIndicatorPart = GetTemplateChild("PART_BusyIndicator") as ActivityIndicator;
-        _suggestionsPart = GetTemplateChild("PART_Suggestions") as Layout;
+        AttachSuggestionsPart(GetTemplateChild("PART_Suggestions") as Layout);
         _footerPart = GetTemplateChild("PART_Footer") as ContentView;
         AttachInputParts(
             GetTemplateChild("PART_InputEntry") as Entry,
-            GetTemplateChild("PART_SendButton") as Button);
+            GetTemplateChild("PART_SendButton") as Button,
+            GetTemplateChild("PART_AttachButton") as Button,
+            GetTemplateChild("PART_Attachments") as Layout);
 
         AttachMessageListPart(GetTemplateChild("PART_MessageList") as MessageListView);
 
@@ -407,7 +432,9 @@ public partial class CopilotChatView : TemplatedView
     private void UpdateSuggestionsVisibility()
     {
         var itemCount = _messageListPart?.Items.Count ?? 0;
-        var showSuggestions = SuggestionPrompts is { Count: > 0 } && itemCount == 0;
+        var showSuggestions =
+            (SuggestionPrompts is { Count: > 0 } || Suggestions is { Count: > 0 })
+            && itemCount == 0;
 
         if (_suggestionsPart is not null)
         {
@@ -423,14 +450,41 @@ public partial class CopilotChatView : TemplatedView
             return;
 
         _suggestionsPart.Children.Clear();
-        if (SuggestionPrompts is null)
-            return;
 
-        foreach (var prompt in SuggestionPrompts)
+        if (Suggestions is not null)
         {
-            var chip = new Button
+            foreach (var suggestion in Suggestions)
             {
-                Text = prompt,
+                if (suggestion is not null)
+                    _suggestionsPart.Children.Add(CreateSuggestionView(suggestion));
+            }
+        }
+
+        if (SuggestionPrompts is not null)
+        {
+            foreach (var prompt in SuggestionPrompts)
+            {
+                if (!string.IsNullOrWhiteSpace(prompt))
+                    _suggestionsPart.Children.Add(CreateSuggestionView(new(prompt, prompt)));
+            }
+        }
+    }
+
+    private View CreateSuggestionView(ChatSuggestion suggestion)
+    {
+        View view;
+        if (SuggestionTemplate?.CreateContent() is View custom)
+        {
+            custom.BindingContext = suggestion;
+            view = custom;
+        }
+        else
+        {
+            view = new Button
+            {
+                Text = string.IsNullOrEmpty(suggestion.Icon)
+                    ? suggestion.Label
+                    : $"{suggestion.Icon} {suggestion.Label}",
                 FontSize = 12,
                 Padding = new Thickness(12, 6),
                 CornerRadius = 16,
@@ -438,15 +492,39 @@ public partial class CopilotChatView : TemplatedView
                 BackgroundColor = Color.FromArgb("#EEF2FF"),
                 TextColor = Color.FromArgb("#4338CA"),
             };
-            chip.SetDynamicResource(Button.BackgroundColorProperty, Themes.ChatThemeKeys.SuggestionBackground);
-            chip.SetDynamicResource(Button.TextColorProperty, Themes.ChatThemeKeys.SuggestionTextColor);
-            chip.Clicked += async (_, _) =>
-            {
-                if (Session is not null && !IsBusy)
-                    await Session.SendMessageAsync(prompt);
-            };
-            _suggestionsPart.Children.Add(chip);
+            view.SetDynamicResource(
+                Button.BackgroundColorProperty,
+                Themes.ChatThemeKeys.SuggestionBackground);
+            view.SetDynamicResource(
+                Button.TextColorProperty,
+                Themes.ChatThemeKeys.SuggestionTextColor);
         }
+
+        SemanticProperties.SetDescription(
+            view,
+            $"Suggested prompt: {suggestion.Label}");
+        if (view is Button button)
+        {
+            button.Clicked += async (_, _) =>
+            {
+                await SendSuggestionAsync(suggestion.Prompt);
+            };
+        }
+        else
+        {
+            view.GestureRecognizers.Add(new TapGestureRecognizer
+            {
+                Command = new Command(async () =>
+                    await SendSuggestionAsync(suggestion.Prompt)),
+            });
+        }
+        return view;
+    }
+
+    private async Task SendSuggestionAsync(string prompt)
+    {
+        if (Session is not null && !IsBusy)
+            await Session.SendMessageAsync(prompt);
     }
 
     // ── Header / Footer ──
@@ -485,20 +563,32 @@ public partial class CopilotChatView : TemplatedView
         }
     }
 
-    internal void AttachInputParts(Entry? inputEntry, Button? sendButton)
+    internal void AttachInputParts(
+        Entry? inputEntry,
+        Button? sendButton,
+        Button? attachButton = null,
+        Layout? attachments = null)
     {
         if (_inputEntryPart is not null)
             _inputEntryPart.Completed -= OnInputCompleted;
         if (_sendButtonPart is not null)
             _sendButtonPart.Clicked -= OnSendButtonClicked;
+        if (_attachButtonPart is not null)
+            _attachButtonPart.Clicked -= OnAttachButtonClicked;
 
         _inputEntryPart = inputEntry;
         _sendButtonPart = sendButton;
+        _attachButtonPart = attachButton;
+        _attachmentsPart = attachments;
 
         if (_inputEntryPart is not null)
             _inputEntryPart.Completed += OnInputCompleted;
         if (_sendButtonPart is not null)
             _sendButtonPart.Clicked += OnSendButtonClicked;
+        if (_attachButtonPart is not null)
+            _attachButtonPart.Clicked += OnAttachButtonClicked;
+
+        UpdateAttachmentsView();
     }
 
     // ── Busy ──
@@ -524,14 +614,134 @@ public partial class CopilotChatView : TemplatedView
         await SendCurrentTextAsync();
     }
 
-    private async Task SendCurrentTextAsync()
+    private async void OnAttachButtonClicked(object? sender, EventArgs e)
     {
-        if (Session is null || IsBusy || string.IsNullOrWhiteSpace(Text))
+        await PickAttachmentsFromButtonAsync();
+    }
+
+    internal async Task PickAttachmentsFromButtonAsync()
+    {
+        try
+        {
+            await PickAttachmentsAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException
+            or ArgumentOutOfRangeException
+            or IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or PermissionException)
+        {
+            SetValue(AttachmentErrorPropertyKey, ex.Message);
+        }
+    }
+
+    internal async Task PickAttachmentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        SetValue(AttachmentErrorPropertyKey, null);
+        var picker = AttachmentPicker ?? MauiChatAttachmentPicker.Default;
+        var attachments = await picker.PickAsync(
+            AttachmentFileTypes,
+            MaxAttachmentBytes,
+            cancellationToken);
+        foreach (var attachment in attachments)
+            AddAttachment(attachment);
+    }
+
+    internal async Task SendCurrentTextAsync()
+    {
+        if (Session is null || IsBusy)
             return;
 
-        var nextMessage = Text.Trim();
+        var message = TakePendingMessage();
+        if (message is null)
+            return;
+
+        await Session.SendMessageAsync(message);
+    }
+
+    internal ChatMessage? TakePendingMessage()
+    {
+        var hasText = !string.IsNullOrWhiteSpace(Text);
+        if (!hasText && _attachments.Count == 0)
+            return null;
+
+        var contents = new List<AIContent>();
+        if (hasText)
+            contents.Add(new TextContent(Text!.Trim()));
+        contents.AddRange(_attachments.Select(attachment => attachment.Content));
+
         Text = string.Empty;
-        await Session.SendMessageAsync(nextMessage);
+        _attachments.Clear();
+        return new ChatMessage(ChatRole.User, contents);
+    }
+
+    public void AddAttachment(ChatAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        _attachments.Add(attachment);
+    }
+
+    public bool RemoveAttachment(ChatAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        return _attachments.Remove(attachment);
+    }
+
+    public void ClearAttachments() => _attachments.Clear();
+
+    private void UpdateAttachmentsView()
+    {
+        if (_attachmentsPart is null)
+            return;
+
+        _attachmentsPart.Children.Clear();
+        _attachmentsPart.IsVisible = _attachments.Count > 0;
+        foreach (var attachment in _attachments)
+        {
+            var remove = new Button
+            {
+                Text = "×",
+                Padding = new Thickness(6, 0),
+                BackgroundColor = Colors.Transparent,
+                Command = new Command(() => RemoveAttachment(attachment)),
+            };
+            SemanticProperties.SetDescription(
+                remove,
+                $"Remove attachment {attachment.FileName}");
+            _attachmentsPart.Children.Add(new Border
+            {
+                Padding = new Thickness(8, 4),
+                Margin = new Thickness(2),
+                StrokeThickness = 0,
+                StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle
+                {
+                    CornerRadius = 10,
+                },
+                BackgroundColor = Color.FromArgb("#EEF2FF"),
+                Content = new HorizontalStackLayout
+                {
+                    Spacing = 4,
+                    Children =
+                    {
+                        new Label
+                        {
+                            Text = attachment.FileName,
+                            FontSize = 11,
+                            VerticalOptions = LayoutOptions.Center,
+                        },
+                        remove,
+                    },
+                },
+            });
+        }
+    }
+
+    internal void AttachSuggestionsPart(Layout? suggestions)
+    {
+        _suggestionsPart = suggestions;
+        UpdateSuggestionsVisibility();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -559,6 +769,59 @@ public partial class CopilotChatView : TemplatedView
         get => (string)GetValue(SendButtonTextProperty);
         set => SetValue(SendButtonTextProperty, value);
     }
+
+    public static readonly BindableProperty AllowAttachmentsProperty =
+        BindableProperty.Create(
+            nameof(AllowAttachments),
+            typeof(bool),
+            typeof(CopilotChatView),
+            false);
+
+    public bool AllowAttachments
+    {
+        get => (bool)GetValue(AllowAttachmentsProperty);
+        set => SetValue(AllowAttachmentsProperty, value);
+    }
+
+    public static readonly BindableProperty AttachmentPickerProperty =
+        BindableProperty.Create(
+            nameof(AttachmentPicker),
+            typeof(IChatAttachmentPicker),
+            typeof(CopilotChatView));
+
+    public IChatAttachmentPicker? AttachmentPicker
+    {
+        get => (IChatAttachmentPicker?)GetValue(AttachmentPickerProperty);
+        set => SetValue(AttachmentPickerProperty, value);
+    }
+
+    public static readonly BindableProperty AttachmentFileTypesProperty =
+        BindableProperty.Create(
+            nameof(AttachmentFileTypes),
+            typeof(FilePickerFileType),
+            typeof(CopilotChatView));
+
+    public FilePickerFileType? AttachmentFileTypes
+    {
+        get => (FilePickerFileType?)GetValue(AttachmentFileTypesProperty);
+        set => SetValue(AttachmentFileTypesProperty, value);
+    }
+
+    public static readonly BindableProperty MaxAttachmentBytesProperty =
+        BindableProperty.Create(
+            nameof(MaxAttachmentBytes),
+            typeof(long),
+            typeof(CopilotChatView),
+            10L * 1024 * 1024);
+
+    public long MaxAttachmentBytes
+    {
+        get => (long)GetValue(MaxAttachmentBytesProperty);
+        set => SetValue(MaxAttachmentBytesProperty, value);
+    }
+
+    public ReadOnlyObservableCollection<ChatAttachment> Attachments =>
+        _readOnlyAttachments;
 
     public static readonly BindableProperty SendButtonBackgroundColorProperty =
         BindableProperty.Create(
@@ -849,5 +1112,41 @@ public partial class CopilotChatView : TemplatedView
     {
         get => (IList<string>)GetValue(SuggestionPromptsProperty);
         set => SetValue(SuggestionPromptsProperty, value);
+    }
+
+    public static readonly BindableProperty SuggestionsProperty =
+        BindableProperty.Create(
+            nameof(Suggestions),
+            typeof(IList<ChatSuggestion>),
+            typeof(CopilotChatView),
+            defaultValueCreator: _ => new ObservableCollection<ChatSuggestion>(),
+            propertyChanged: (b, oldValue, newValue) =>
+            {
+                var self = (CopilotChatView)b;
+                if (oldValue is System.Collections.Specialized.INotifyCollectionChanged oldCollection)
+                    oldCollection.CollectionChanged -= self.OnSuggestionPromptsCollectionChanged;
+                if (newValue is System.Collections.Specialized.INotifyCollectionChanged newCollection)
+                    newCollection.CollectionChanged += self.OnSuggestionPromptsCollectionChanged;
+                self.UpdateSuggestionsVisibility();
+            });
+
+    public IList<ChatSuggestion> Suggestions
+    {
+        get => (IList<ChatSuggestion>)GetValue(SuggestionsProperty);
+        set => SetValue(SuggestionsProperty, value);
+    }
+
+    public static readonly BindableProperty SuggestionTemplateProperty =
+        BindableProperty.Create(
+            nameof(SuggestionTemplate),
+            typeof(DataTemplate),
+            typeof(CopilotChatView),
+            propertyChanged: (b, _, _) =>
+                ((CopilotChatView)b).UpdateSuggestionsVisibility());
+
+    public DataTemplate? SuggestionTemplate
+    {
+        get => (DataTemplate?)GetValue(SuggestionTemplateProperty);
+        set => SetValue(SuggestionTemplateProperty, value);
     }
 }

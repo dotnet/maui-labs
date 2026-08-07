@@ -21,6 +21,7 @@
     <chat:CopilotChatView Session="{Binding Session}"
                           SuggestionPrompts="{Binding SuggestionPrompts}"
                           Placeholder="Ask about products..."
+                          AllowAttachments="True"
                           MaxBubbleWidth="560"
                           HorizontalOptions="Fill">
 

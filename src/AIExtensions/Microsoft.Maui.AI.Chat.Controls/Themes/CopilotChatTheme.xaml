@@ -58,15 +58,39 @@
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="{TemplateBinding InputAreaCornerRadius}" />
                 </Border.StrokeShape>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="6"
+                      RowSpacing="4">
+                    <FlexLayout x:Name="PART_Attachments"
+                                Grid.ColumnSpan="3"
+                                IsVisible="False"
+                                Wrap="Wrap" />
+                    <Label Grid.Row="1"
+                           Grid.ColumnSpan="3"
+                           Text="{TemplateBinding AttachmentError}"
+                           TextColor="{DynamicResource MauiAIChat.Error.TextColor}"
+                           FontSize="11"
+                           SemanticProperties.Description="Attachment selection error" />
+                    <Button x:Name="PART_AttachButton"
+                            Grid.Row="2"
+                            Text="＋"
+                            IsVisible="{TemplateBinding AllowAttachments}"
+                            AutomationId="AddAttachmentButton"
+                            SemanticProperties.Description="Add attachment"
+                            BackgroundColor="Transparent"
+                            FontSize="18"
+                            WidthRequest="36" HeightRequest="42"
+                            Padding="0" />
                     <Entry x:Name="PART_InputEntry"
+                           Grid.Row="2" Grid.Column="1"
                            Placeholder="{TemplateBinding Placeholder}"
                            AutomationId="ChatInput"
                            SemanticProperties.Description="Chat message input"
                            Text="{TemplateBinding Text, Mode=TwoWay}"
                            FontSize="14"
                            BackgroundColor="Transparent" />
-                    <Button x:Name="PART_SendButton" Grid.Column="1"
+                    <Button x:Name="PART_SendButton" Grid.Row="2" Grid.Column="2"
                             Text="{TemplateBinding SendButtonText}"
                             AutomationId="SendMessageButton"
                             SemanticProperties.Description="Send message"
