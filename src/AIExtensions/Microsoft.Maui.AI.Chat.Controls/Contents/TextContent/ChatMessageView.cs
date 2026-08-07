@@ -1,6 +1,7 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Controls.Shapes;
+using System.Globalization;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
@@ -193,16 +194,18 @@ public class ChatMessageView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        if (ContentContext is null)
+        if (ContentContext is not { } context)
             return;
 
-        Text = ContentContext.Block is RichContentBlock rich
+        Text = context.Block is RichContentBlock rich
             ? rich.RawText
-            : ContentContext.Block?.ToString();
-        MessageRole = ContentContext.Role?.ToString();
-        TimestampText = DateTimeOffset.Now.ToLocalTime().ToString("h:mm tt");
+            : context.Block.ToString();
+        MessageRole = context.Role?.ToString();
+        TimestampText = (context.Block.CreatedAt ?? DateTimeOffset.Now)
+            .ToLocalTime()
+            .ToString("h:mm tt");
 
-        BindAppearance(ContentContext.Owner);
+        BindAppearance(context.Owner);
         RefreshComputedAppearance();
 
         ApplyRoleState();
@@ -280,7 +283,7 @@ public class ChatMessageView : ContentContextView
         DisplayName = displayName;
         AvatarText = string.IsNullOrWhiteSpace(displayName)
             ? null
-            : displayName.Trim()[..1].ToUpperInvariant();
+            : StringInfo.GetNextTextElement(displayName.Trim()).ToUpperInvariant();
         BubbleCornerRadii = isUser
             ? new CornerRadius(
                 topLeft: radius,

@@ -91,11 +91,18 @@ AI integration packages for `Microsoft.Extensions.AI` and .NET MAUI apps.
 
 #### AI Attributes
 
-Source-generated AI tool discovery — annotate methods or property accessors with `[ExportAIFunction]` to create AI-callable tools. Composed or auto-generated tool contexts, DI-aware parameter binding, approval gates, AOT-friendly.
+Source-generated AI tools plus a native block-based chat engine and drop-in MAUI UI.
+
+- **AOT-friendly tools** — `[ExportAIFunction]`, DI/keyed-DI parameter binding, property tools, and generated tool contexts.
+- **Headless chat engine** — streaming typed blocks, tools, approvals, automatic UI actions, reasoning, typed state, retry, and application-provided conversation persistence.
+- **Native chat controls** — zero-config `CopilotChatView`, XAML block templates, attachments, rich suggestions, retry, accessibility, and full theme/control-template replacement.
+- **Typed tool views** — `[ToolBlock]` generates simple call/result projections while custom handlers support aggregate domain blocks.
 
 | Package | Description |
 |---------|-------------|
 | `Microsoft.Maui.AI.Attributes` | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
+| `Microsoft.Maui.AI.Chat` | Headless block-mapping conversation engine |
+| `Microsoft.Maui.AI.Chat.Controls` | Native MAUI chat controls and XAML templates |
 
 ### macOS AppKit Backend
 

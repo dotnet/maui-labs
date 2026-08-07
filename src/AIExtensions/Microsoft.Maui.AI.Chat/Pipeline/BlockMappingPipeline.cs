@@ -119,6 +119,7 @@ internal class BlockMappingPipeline
                         var emitBlock = activeEntry.Block;
                         emitBlock.Role = update.Role;
                         emitBlock.AuthorName = update.AuthorName;
+                        emitBlock.CreatedAt = update.CreatedAt;
                         emitBlock.LifecycleState = BlockLifecycleState.Active;
                         ThrowIfIdMissing(emitBlock);
                         _activeStack.Add(activeEntry);

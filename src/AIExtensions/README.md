@@ -7,8 +7,8 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | Package | Description |
 |---------|-------------|
 | [`Microsoft.Maui.AI.Attributes`](Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts — `[ExportAIFunction]`, DI binding, AOT-safe |
-| [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Chat engine — a block-mapping pipeline that turns `Microsoft.Extensions.AI` content into strongly-typed `ContentBlock`s, plus a stateful `AgentContext` |
-| [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | MAUI chat UI — `CopilotChatView` / `MessageListView` with a XAML content-template system for rendering blocks |
+| [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Headless chat engine — streaming blocks, tools/approval/UI actions, typed state, thread restore/retry, reasoning, media, and `[ToolBlock]` generation |
+| [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat UI — zero-config `CopilotChatView`, virtualized `MessageListView`, XAML block templates, attachments, suggestions, retry, and theming |
 
 `Microsoft.Maui.AI.Chat` supports caller-provided `IConversationThread` persistence, history
 restore, retry, and coherent clear/reset behavior. No storage provider is built in:
@@ -17,6 +17,8 @@ single-thread-affine and not thread-safe; callers serialize access on their owni
 thread.
 
 - [Attributes documentation](Microsoft.Maui.AI.Attributes/README.md) — API reference, samples, and equivalence rules
+- [Chat engine documentation](Microsoft.Maui.AI.Chat/README.md) — engine, blocks, persistence, typed state, and ToolBlock generation
+- [Chat controls documentation](Microsoft.Maui.AI.Chat.Controls/README.md) — drop-in control, templates, attachments, and customization
 - [Chat upstream notes](Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md) — how the chat engine relates to the ASP.NET AI Components it forked from
 
 ## Samples
@@ -25,7 +27,7 @@ thread.
 |--------|-------------|
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
-| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app (navigation, cart, approvals) using the `Microsoft.Maui.AI.Chat.Controls` `CopilotChatView` — custom product cards, markdown, image generation, and a fancy/plain rendering toggle |
+| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app: custom product/order blocks, generated `[ToolBlock]`, approvals, UI state, attachments, image generation, raw-block preview, and template switching |
 
 ## CI
 

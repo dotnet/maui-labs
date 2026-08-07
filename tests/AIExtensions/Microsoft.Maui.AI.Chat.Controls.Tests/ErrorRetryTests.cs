@@ -1,4 +1,6 @@
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
+using Microsoft.Extensions.AI;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -33,5 +35,55 @@ public class ErrorRetryTests
         Assert.Null(session.Error);
         Assert.Equal(2, attempts);
         Assert.False(view.RetryButton.IsVisible);
+    }
+
+    [Fact]
+    public async Task RetryStreaming_RemovesStalePartialResponseBeforeNewBlocksArrive()
+    {
+        var session = new AgentContext(new UIAgent(new PartialFailureClient()));
+        await session.SendMessageAsync("Try");
+        var list = new MessageListView { Session = session };
+
+        Assert.Equal(3, list.Items.Count);
+        Assert.Contains(list.Items, item =>
+            item.Block is TextContentBlock { RawText: "partial" });
+        Assert.Contains(list.Items, item => item.Block is ErrorContentBlock);
+
+        session.Turns[0].ClearResponseBlocks();
+        list.OnStatusChanged(ConversationStatus.Streaming);
+
+        var remaining = Assert.Single(list.Items);
+        Assert.True(remaining.IsRequest);
+        Assert.DoesNotContain(list.Items, item =>
+            item.Block is TextContentBlock { RawText: "partial" });
+        Assert.DoesNotContain(list.Items, item => item.Block is ErrorContentBlock);
+    }
+
+    private sealed class PartialFailureClient : IChatClient
+    {
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            yield return new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                MessageId = "partial-message",
+                Contents = [new TextContent("partial")],
+            };
+            await Task.Yield();
+            throw new InvalidOperationException("failure");
+        }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose() { }
     }
 }
