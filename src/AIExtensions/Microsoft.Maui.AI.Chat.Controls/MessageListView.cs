@@ -12,7 +12,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </summary>
 /// <remarks>
 /// Bind <see cref="Session"/> to an <see cref="AgentContext"/> for a zero-configuration chat surface with
-/// built-in text, approval, media, thinking, and error rendering. Add consumer <see cref="ContentTemplate"/>s
+/// built-in text, approval, reasoning, media, thinking, and error rendering. Add consumer <see cref="ContentTemplate"/>s
 /// to <see cref="ContentTemplates"/> to replace those fallbacks for matching blocks, or set
 /// <see cref="UseDefaultContentTemplates"/> to <see langword="false"/> for strict allow-list rendering.
 /// Because it is session-driven it updates live as blocks stream in. The single template part is
@@ -105,7 +105,7 @@ public partial class MessageListView : TemplatedView
     }
 
     /// <summary>
-    /// Gets or sets whether the built-in text, approval, media, thinking, and error templates are used when no
+    /// Gets or sets whether the built-in text, approval, reasoning, media, thinking, and error templates are used when no
     /// consumer template matches. Set this to <see langword="false"/> to restore strict allow-list rendering.
     /// </summary>
     public bool UseDefaultContentTemplates
@@ -181,6 +181,7 @@ public partial class MessageListView : TemplatedView
         new TextContentTemplate { Role = "User", Priority = -10_000 },
         new TextContentTemplate { Role = "Assistant", Priority = -10_000 },
         new ToolApprovalTemplate { Priority = -10_000 },
+        new ReasoningContentTemplate { Priority = -10_000 },
         new MediaContentTemplate { Priority = -10_000 },
         new ThinkingContentTemplate { Priority = -10_000 },
         new ErrorContentTemplate { Priority = -10_000 },
@@ -521,7 +522,7 @@ public partial class MessageListView : TemplatedView
         // Hide while the assistant is actively streaming visible content (its own bubble is the indicator).
         var block = lastReal.Block;
         var isAssistantContent = block.Role == ChatRole.Assistant
-            && block is TextContentBlock or MediaContentBlock;
+            && block is RichContentBlock or ReasoningContentBlock or MediaContentBlock;
         return !isAssistantContent;
     }
 

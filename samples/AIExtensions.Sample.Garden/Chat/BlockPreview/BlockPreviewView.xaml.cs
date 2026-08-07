@@ -89,9 +89,15 @@ public partial class BlockPreviewView : ContentContextView
                 yield return new("Result", fn.HasResult ? Format(fn.Result?.Result) : "(pending)");
                 break;
 
-            case TextContentBlock text:
-                yield return new("Kind", "Text");
+            case ReasoningContentBlock reasoning:
+                yield return new("Kind", reasoning.IsEncrypted ? "Protected reasoning" : "Reasoning");
+                yield return new("Text", reasoning.IsEncrypted ? "(protected)" : reasoning.Text);
+                break;
+
+            case RichContentBlock text:
+                yield return new("Kind", "Rich text");
                 yield return new("RawText", text.RawText);
+                yield return new("Nodes", text.Content.Count.ToString());
                 break;
 
             default:

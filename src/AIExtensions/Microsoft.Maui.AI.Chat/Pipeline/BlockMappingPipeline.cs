@@ -39,6 +39,9 @@ internal class BlockMappingPipeline
         // Built-in function invocation handler
         _handlers.Add(new HandlerEntry<FunctionInvocationContentBlock>(new FunctionInvocationHandler()));
 
+        // Built-in reasoning handler (before text so reasoning is rendered separately)
+        _handlers.Add(new HandlerEntry<ReasoningContentBlock>(new ReasoningHandler()));
+
         // Built-in media handler (before text so DataContent is claimed before fallback)
         _handlers.Add(new HandlerEntry<MediaContentBlock>(new MediaContentHandler()));
 
